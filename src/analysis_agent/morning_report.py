@@ -84,6 +84,16 @@ def _combo_label(*parts: Any) -> str:
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
+def _map_unique(series: pd.Series, fn) -> pd.Series:
+    """``series.map(fn)``, но ``fn`` считается один раз на уникальное значение.
+
+    В годовой книге сотни тысяч строк и лишь тысячи разных названий: разбор
+    каждой строки заново занимал десятки секунд холодной сборки отчёта.
+    """
+    cache = {v: fn(v) for v in series.unique()}
+    return series.map(cache)
+
+
 def _safe_float(v) -> float:
     try:
         f = float(v)
@@ -677,7 +687,7 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
     if df_c.empty or "Interest" not in df_c.columns:
         return []
 
-    df_c["_interest_bucket"] = df_c["Interest"].map(interest_bucket_key)
+    df_c["_interest_bucket"] = _map_unique(df_c["Interest"], interest_bucket_key)
 
     grouped = (
         df_c.groupby("_interest_bucket", dropna=False)
@@ -735,9 +745,9 @@ def build_creative_breakdown(
     # and "2046 - Story14"), and grouping on the cell listed each spelling as a
     # separate creative, splitting one ad's deposits across rows that looked
     # identical on screen. Titles are kept so the tooltip can show the variants.
-    _parsed = df_c["Ad Title"].apply(split_ad_title)
-    df_c["_CreativeId"] = _parsed.apply(lambda t: t[0])
-    df_c["_TextName"] = _parsed.apply(lambda t: t[1])
+    _parsed = _map_unique(df_c["Ad Title"], split_ad_title)
+    df_c["_CreativeId"] = _parsed.map(lambda t: t[0])
+    df_c["_TextName"] = _parsed.map(lambda t: t[1])
 
     grouped = (
         df_c.groupby(["_CreativeId", "_TextName"], dropna=False)
@@ -745,10 +755,19 @@ def build_creative_breakdown(
             Deposits=("# FTDs", "sum"),
             Leads=("# Leads", "sum"),
             Spend=("$ Spend", "sum"),
-            Titles=("Ad Title", lambda s: sorted({str(x).strip() for x in s.dropna()})),
         )
         .reset_index()
     )
+    # Написания заголовка на группу — простым проходом: лямбда в agg строила
+    # Series на каждую из тысяч групп года.
+    _spellings: Dict[tuple, set] = {}
+    for cid, text, title in zip(df_c["_CreativeId"], df_c["_TextName"], df_c["Ad Title"]):
+        if not pd.isna(title):
+            _spellings.setdefault((cid, text), set()).add(str(title).strip())
+    grouped["Titles"] = [
+        sorted(_spellings.get((cid, text), ()))
+        for cid, text in zip(grouped["_CreativeId"], grouped["_TextName"])
+    ]
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
     grouped = grouped.sort_values(["Deposits", "Spend"], ascending=[False, False])
     if top_n is not None:
@@ -766,7 +785,7 @@ def build_creative_breakdown(
             .agg(Deposits=("# FTDs", "sum"), Leads=("# Leads", "sum"), Spend=("$ Spend", "sum"))
             .reset_index()
         )
-        for _, vr in vgrouped.iterrows():
+        for vr in vgrouped.to_dict("records"):
             gkey = (vr["_CreativeId"], vr["_TextName"])
             deposits = _safe_int(vr.get("Deposits"))
             spend = _safe_float(vr.get("Spend"))
@@ -787,7 +806,8 @@ def build_creative_breakdown(
             lst.sort(key=lambda v: (v["variant"] == "", int(v["variant"] or 0)))
 
     rows = []
-    for _, r in grouped.iterrows():
+    # Записи, а не iterrows: за год у страны тысячи креативов.
+    for r in grouped.to_dict("records"):
         creative_id = str(r.get("_CreativeId") or "").strip()
         text_name = str(r.get("_TextName") or "").strip()
         variants = variants_by_group.get((r.get("_CreativeId"), r.get("_TextName")), [])
@@ -2187,8 +2207,12 @@ def build_morning_report(
     country_sections = []
     for country in all_countries:
         acc_for_country = _accounts_for_country(country)
+        # Каждый раздел страны сам отбирает её строки. На годовой книге это
+        # десятки сравнений по всем 258 тыс. строк на страну; отобранные
+        # заранее строки те же, а повторный отбор по ним дешёвый.
+        df_country = df[df["Country Final"] == country]
         section = build_country_section(
-            df, combos, country, acc_for_country, my_cm, trend_days
+            df_country, combos, country, acc_for_country, my_cm, trend_days
         )
         country_sections.append(section)
 

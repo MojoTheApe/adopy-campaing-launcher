@@ -20,6 +20,16 @@ def fields(request):
             for part in msg.get_payload()}
 
 
+# ACL-1668: the Builder marks a chosen creative whose file is not in the loaded
+# /api/creatives list as missing and refuses to publish it, so offline fixtures
+# that write names straight into the hidden field must list those files too.
+OFFLINE_NAMES = (['offline.png', 'good.png', 'fixed.png']
+                 + ['offline-%d.png' % i for i in range(40)]
+                 + ['offline-ad-%d.png' % i for i in range(40)])
+OFFLINE_FILES = [{'filename': n, 'rel_path': n, 'folder': '', 'type': 'Image', 'size_bytes': 1}
+                 for n in OFFLINE_NAMES]
+
+
 @pytest.fixture(scope='module')
 def browser():
     with sync_playwright() as pw:
@@ -52,7 +62,7 @@ def ui(browser):
         if r.request.resource_type == 'document':
             r.fulfill(content_type='text/html', body=html)
             return
-        data = {'files': [], 'texts': [], 'profiles': [], 'waiting': False}
+        data = {'files': OFFLINE_FILES, 'texts': [], 'profiles': [], 'waiting': False}
         if path == '/preview-publish':
             f = fields(r.request)
             state['previews'].append(f)
@@ -173,18 +183,24 @@ def test_cancel_confirmation_and_active_queue_survive_repaint(ui):
     state['status'] = 'running'
     all_confirm(p)
     # Оба аккаунта уходят сразу (acl-1210); повторный «Publish all» поверх
-    # идущей очереди не добавляет ни одной работы. ACL-1355: кнопка при этом
-    # не заперта (в идущую сборку докладывают другие аккаунты), а отказ
-    # говорит, что оба аккаунта уже собираются.
+    # идущей очереди не добавляет ни одной работы. Zero unlocked campaigns
+    # disables the action; the programmatic duplicate guard still explains why.
+    # Other accounts remain enqueueable as soon as one is added.
     p.wait_for_function("CB_QUEUE.progress.stage === 'publishing'")
     _until(p, lambda: len(state['posts']) >= 2)
     assert len(state['posts']) == 2
-    said = []
-    p.once('dialog', lambda d: (said.append(d.message), d.accept()))
+    native = []
+    p.once('dialog', lambda d: (native.append(d.message), d.accept()))
     p.evaluate('cbTree.paint(); cbPublishAll()')
-    expect(p.locator('.cbd-publish-all')).to_be_enabled()
+    expect(p.locator('.cbd-publish-all')).to_be_disabled()
+    expect(p.locator('.cbd-publish-all')).to_have_text('Publish all → drafts (0)')
     expect(p.locator('#sfc-ok')).to_have_count(0)
-    assert said and 'Demo, Other are already being built' in said[0], said
+    # ACL-141: отказ — окно страницы, а не alert браузера.
+    said = p.locator('dialog.acl-dlg')
+    expect(said).to_contain_text('Demo, Other are already being built')
+    assert not native, native
+    said.locator('.acl-dlg-primary').click()
+    expect(said).to_have_count(0)
     assert len(state['posts']) == 2
     state['status'] = 'done'
     p.wait_for_function('!CB_QUEUE.active', timeout=12000)

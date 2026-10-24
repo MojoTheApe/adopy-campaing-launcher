@@ -11,7 +11,7 @@
 2. Загрузка медиа: картинка — `/act_X/adimages` (сначала ищем по md5: хэш
    картинки у Meta — её md5), видео — `/act_X/advideos` с ограниченным
    ожиданием обработки.
-3. Кампания → группа(ы) → креатив → объявление, всё PAUSED.
+3. Кампания (PAUSED) → группа(ы) → креатив → объявление (ACTIVE под кампанией на паузе, ACL-2114).
 4. Сверка чтением, поле за полем; расхождение — в отчёт, ничего не включается.
 5. Повторный запуск ничего не создаёт: у каждого объекта детерминированное
    имя и метка `acl-<tag>` (adlabels); перед созданием ищем существующий.
@@ -24,18 +24,33 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
+import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
+from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api import targeting_resolver as _tr
+from src.fb_api import instagram as _ig
+from src.fb_api import write_policy as _wpol
+
+from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
+log = logging.getLogger(__name__)
+
 PAUSED = "PAUSED"
+#: ACL-2114: наборы и объявления создаются ACTIVE под кампанией на паузе - показа нет, пока человек
+#: не включит кампанию. Только после чтения, подтвердившего PAUSED у кампании (`_confirm_campaign_paused`).
+ACTIVE = "ACTIVE"
+CHILD_STATUS = ACTIVE
+#: Что человек читает в плане, в «Check plan» и в итоге (ACL-2114).
+STATUS_NOTE = "Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on"
 OBJECTIVE = "OUTCOME_LEADS"
 OPTIMIZATION_GOAL = "OFFSITE_CONVERSIONS"
 BILLING_EVENT = "IMPRESSIONS"
@@ -90,7 +105,30 @@ ZERO_DECIMAL = frozenset({"CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW"
 IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp"})
 VIDEO_EXT = frozenset({".mp4", ".mov", ".m4v", ".avi", ".wmv", ".mkv", ".webm"})
 IMAGE_MAX_BYTES = 30 * 1024 * 1024
-VIDEO_MAX_BYTES = 200 * 1024 * 1024
+#: Видео до этого размера уходит одним запросом (как раньше); больше - кусками (ACL-1891).
+VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
+#: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
+VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
+VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
+CALLS_UPLOAD_FIXED = 3
+
+#: Запас вызовов на всё остальное в кампании при проверке бюджета кусков (ACL-1891).
+CALLS_RESERVE_OTHER = 40
+
+
+def _disk_size(path: str) -> int:
+    try:
+        return Path(path).stat().st_size
+    except (OSError, ValueError):
+        return 0
+
+
+def upload_calls(size: int) -> int:
+    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом."""
+    if size <= VIDEO_SINGLE_MAX_BYTES:
+        return 0
+    return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
 
 #: Ожидание обработки видео — с потолком по времени и по числу вызовов.
 VIDEO_WAIT_S = 300.0
@@ -104,6 +142,8 @@ RECONCILE_WAIT_S = 5.0
 UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
 #: Не чаще раза в секунду показываем процент загрузки файла.
 UPLOAD_PROGRESS_EVERY_S = 1.0
+#: Как часто (с) загрузка кусками пишет шаг «uploaded X/Y MB», чтобы панель не краснила её как зависшую (ACL-1998).
+UPLOAD_STEP_EVERY_S = 12.0
 #: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
@@ -139,6 +179,17 @@ def _wp_form_edge() -> str:
 
 class PlanError(ValueError):
     """Черновик нельзя создать через API; к Meta ничего не писали."""
+
+    #: Список проблем для дашборда (как у RPA, ACL-1437); у обычного отказа плана пуст.
+    problems: tuple = ()
+
+
+class RulesViolation(PlanError):
+    """Задание нарушает реестр правил Meta (ACL-1805): стоп до первой записи."""
+
+    def __init__(self, message: str, problems: list[dict]):
+        super().__init__(message)
+        self.problems = problems
 
 
 class CreationStopped(RuntimeError):
@@ -303,9 +354,10 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             elif template_id:
                 tpl = load_template(template_id)
                 if tpl is None:
-                    problems.append(f"Ad {i}: the form template was not found in the Forms library")
+                    problems.append(f"Ad {i}: the form template was not found in the team Forms library. If it was saved on this computer before the library was connected, upload it from the Forms tab")
                 else:
-                    clean, errs = _ft.validate(tpl)
+                    # Сохранённый шаблон: язык вне закрытого списка допустим (ACL-2053).
+                    clean, errs = _ft.validate(tpl, lenient_locale=True)
                     if errs:
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
@@ -353,6 +405,21 @@ class AccountFacts:
     currency: str
     pages: list[str]
     pixels: list[str]
+    page_names: dict[str, str] = field(default_factory=dict)
+    # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
+    page_sources: dict[str, str] = field(default_factory=dict)
+    profile_loader: Callable[["AccountFacts"], None] | None = field(default=None, repr=False, compare=False)
+    profile_loaded: bool = False
+
+    def ensure_profile(self) -> None:
+        """Дочитать Страницы профиля один раз (только чтение). Без загрузчика - ничего."""
+        if self.profile_loaded or self.profile_loader is None:
+            return
+        self.profile_loaded = True
+        self.profile_loader(self)
+
+    def page_source_of(self, page_id: str) -> str:
+        return self.page_sources.get(page_id, _pg.SOURCE_ACCOUNT)
 
 
 def preflight_account(client: GraphClient, act: str) -> AccountFacts:
@@ -372,29 +439,71 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     got = str(acc.get("account_id") or "").strip()
     if got and got != digits:
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
-    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=2)
+    started = time.monotonic()
+    merged = _pg.read_merged(client, act, always_profile=False)
+    if merged.account_truncated:
+        raise PlanError("Facebook Pages could not be fully loaded. Refresh pages before running the campaign.")
     pixels = client.get_all(f"/{act}/adspixels", {"fields": "id,name", "limit": 50}, max_pages=1)
-    return AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
-                        pages=[str(p.get("id")) for p in pages if p.get("id")],
-                        pixels=[str(p.get("id")) for p in pixels if p.get("id")])
+    facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
+                         pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                         pages=[], page_names={}, page_sources={})
+    _apply_pages(facts, merged)
+    facts.profile_loaded = merged.profile_read
+
+    def load_profile(f: AccountFacts) -> None:
+        # Страница черновика не нашлась среди страниц кабинета: смотрим Страницы профиля.
+        again = _pg.read_merged(client, act, always_profile=True)
+        if again.account_truncated:
+            raise PlanError("Facebook Pages could not be fully loaded. Refresh pages before running the campaign.")
+        _apply_pages(f, again)
+        _pg.record_counts(again, where="creator", started=started)
+
+    facts.profile_loader = load_profile
+    _pg.record_counts(merged, where="creator", started=started)
+    return facts
+
+
+def _apply_pages(facts: AccountFacts, merged: "_pg.MergedPages") -> None:
+    facts.pages = [r["id"] for r in merged.rows]
+    facts.page_names = {r["id"]: r["name"] for r in merged.rows}
+    facts.page_sources = {r["id"]: r["source"] for r in merged.rows}
+
+
+MANUAL_PAGE_NOTICE = ("No Facebook Page is available. Only the campaign (PAUSED) and ad sets (active under it) will be created; "
+                      "ads will not be created. Add a Page and ads in Ads Manager, or refresh Pages and retry "
+                      "to complete the same campaign.")
+
+
+def needs_manual_page(plan: CampaignPlan) -> bool:
+    return not plan.page_id and plan.page_source == "manual completion"
 
 
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
     notes = []
+    if plan.page_id and plan.page_id not in facts.pages:
+        facts.ensure_profile()      # ACL-2105: возможно, это Страница самого профиля
+    elif not plan.page_id and not facts.pages:
+        facts.ensure_profile()
     if plan.page_id:
         # Принадлежность проверяется и при пустом списке: пустой список — не «можно всё».
         if plan.page_id not in facts.pages:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
-                            f"this ad account can advertise from ({len(facts.pages)} found).")
-    elif len(facts.pages) == 1:
+                            f"this ad account can advertise from ({len(facts.pages)} found). "
+                            "This account cannot advertise using that Page. Refresh pages and choose again.")
+    elif facts.pages:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
-        notes.append("page_id was empty in the account map; the only page of the ad account is used")
+        notes.append("Automatic Facebook Page: the first available page of this ad account is used"
+                     if facts.page_source_of(plan.page_id) == _pg.SOURCE_ACCOUNT else
+                     "Automatic Facebook Page: the ad account has no Pages of its own; "
+                     "the first Page of the profile (with advertise rights) is used")
     else:
-        raise PlanError(f"page_id is empty in the account map and the ad account has "
-                        f"{len(facts.pages)} pages; set page_id")
+        if any(s.instant for s in getattr(plan, 'ad_sets', [])):
+            raise PlanError("Instant Forms require a Facebook Page. Refresh pages or choose a website destination.")
+        plan.page_source = "manual completion"
+        notes.append(MANUAL_PAGE_NOTICE)
     return notes
 
 
@@ -581,6 +690,17 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
     return t
 
 
+def plan_has_instagram(targetings: list[dict]) -> bool:
+    """В каком-либо наборе плана есть площадки Instagram (ACL-1896; ACL-1772 сделает их выбираемыми)."""
+    return any("instagram" in (t.get("publisher_platforms") or []) and bool(t.get("instagram_positions"))
+               for t in targetings)
+
+
+def plan_has_instagram_placements(plan: "CampaignPlan") -> bool:
+    """То же без чтения таргетинга: пока площадки зашиты в создателе, они всегда с Instagram."""
+    return "instagram" in PUBLISHER_PLATFORMS and bool(INSTAGRAM_POSITIONS)
+
+
 def placements_text(t: dict) -> str:
     """«manual: Facebook Feed, …» — что увидит человек в «Check plan»."""
     names = [POSITION_LABELS.get(("facebook", p), "Facebook " + p) for p in t.get("facebook_positions") or []]
@@ -605,7 +725,72 @@ def _labels(row: dict) -> set[str]:
     return {str(x.get("name") or "") for x in (raw or []) if isinstance(x, dict)}
 
 
-def _md5(data: bytes) -> str:
+class LargeFile:
+    """Большое видео на диске (ACL-1891): в памяти не держится, читаются только куски.
+
+    Ведёт себя как bytes ровно настолько, насколько нужно предпроверке: длина, индекс и срез
+    (заголовки mp4 читаются малыми срезами). Срез больше потолка куска - отказ, чтобы случайный
+    `data[:]` не втянул файл в память.
+    """
+
+    HASH_BLOCK = 1024 * 1024
+
+    def __init__(self, path: str, size: int,
+                 read_range: Callable[[str, int, int], bytes] | None = None):
+        self.path = path
+        self.size = int(size)
+        self._read = read_range or self._read_disk
+        self._md5: str | None = None
+        #: Самый большой единичный кусок, прочитанный с диска (для проверки памяти).
+        self.max_read = 0
+
+    @staticmethod
+    def _read_disk(path: str, offset: int, n: int) -> bytes:
+        with open(path, "rb") as fh:
+            fh.seek(offset)
+            return fh.read(n)
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __bool__(self) -> bool:
+        return self.size > 0
+
+    def read_range(self, offset: int, n: int) -> bytes:
+        if n < 0 or n > max(VIDEO_CHUNK_MAX, self.HASH_BLOCK) or offset < 0:
+            raise ValueError("read is larger than one chunk")
+        out = self._read(self.path, offset, n) if n else b""
+        self.max_read = max(self.max_read, len(out))
+        return out
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start, stop, step = key.indices(self.size)
+            if step != 1:
+                raise ValueError("only plain slices")
+            return self.read_range(start, max(0, stop - start))
+        index = key + self.size if key < 0 else key
+        if not 0 <= index < self.size:
+            raise IndexError(key)
+        return self.read_range(index, 1)[0]
+
+    def md5(self) -> str:
+        if self._md5 is None:
+            h = hashlib.md5()  # noqa: S324 - только имя/поиск, не защита
+            offset = 0
+            while offset < self.size:
+                block = self.read_range(offset, min(self.HASH_BLOCK, self.size - offset))
+                if not block:
+                    raise OSError("file ended while hashing")
+                h.update(block)
+                offset += len(block)
+            self._md5 = h.hexdigest()
+        return self._md5
+
+
+def _md5(data: "bytes | LargeFile") -> str:
+    if isinstance(data, LargeFile):
+        return data.md5()
     return hashlib.md5(data).hexdigest()  # noqa: S324 — только имя/поиск, не защита
 
 
@@ -643,6 +828,11 @@ class Outcome:
     audit: list = field(default_factory=list)
     #: ACL-1771: как найдены термины таргетинга и что ждёт подтверждения (для Check plan).
     targeting: list = field(default_factory=list)
+    #: Что показать человеку списком (ACL-1437): title/impact/action/severity/raw.
+    problems: list = field(default_factory=list)
+    manual_required: list[str] = field(default_factory=list)
+    #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
+    campaign_confirmed_paused: bool = False
 
     @property
     def mismatches(self) -> list[dict]:
@@ -670,6 +860,8 @@ class CampaignCreator:
     def __init__(self, client: GraphClient, facts: AccountFacts, resolver: TargetingResolver, *,
                  cancelled: Callable[[], bool] = lambda: False,
                  read_file: Callable[[str], bytes] | None = None,
+                 size_of: Callable[[str], int] | None = None,
+                 read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
@@ -682,6 +874,9 @@ class CampaignCreator:
         self.resolver = resolver
         self.cancelled = cancelled
         self.read_file = read_file or (lambda p: Path(p).read_bytes())
+        #: ACL-1891: размер файла на диске (None - неизвестен, читаем целиком как раньше) и чтение куска.
+        self.size_of = size_of or (lambda p: _disk_size(p) or None)
+        self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
         self.video_wait_s = video_wait_s
@@ -692,12 +887,39 @@ class CampaignCreator:
         self._creatives: dict[str, str] | None = None
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
         self._page_forms: _forms.FormsRead | None = None
+        #: Instagram-идентичность Страницы (ACL-1896): читается раз на Страницу за прогон.
+        self._ig_cache: dict[str, _ig.IgIdentity] = {}
+        #: id аккаунта Instagram, который уходит в креатив; пусто - Instagram-площадок нет.
+        self._ig_id = ""
         #: Шаблоны форм плана -> что с ними будет (ACL-1776); читается в `_check_forms`.
         self._form_steps: dict[str, _fc.FormStep] = {}
         self._form_warnings: list[str] = []
         self.progress = progress
         #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
         self.live_progress = live_progress
+
+    # -- Instagram-идентичность (ACL-1896)
+    def instagram_identity(self, plan: CampaignPlan) -> _ig.IgIdentity:
+        """Чтение (кэш на Страницу): только чтения; `unknown` не считается «есть»."""
+        got = self._ig_cache.get(plan.page_id)
+        if got is None:
+            got = self._ig_cache[plan.page_id] = _ig.read_identity(self.client, plan.act, plan.page_id)
+        return got
+
+    def _require_instagram(self, plan: CampaignPlan, targetings: list[dict], out: Outcome) -> None:
+        """Instagram-площадки без подтверждённого аккаунта Страницы - отказ ДО записи (Doc120)."""
+        self._ig_id = ""
+        if not plan.page_id or not plan_has_instagram(targetings):
+            return
+        got = self.instagram_identity(plan)
+        if got.status != _ig.FOUND:
+            raise PlanError(got.message)
+        self._ig_id = got.ig_id
+        self._step(out, f"preflight: Instagram account of the Page found ({got.source})")
+
+    def with_instagram(self, story: dict) -> dict:
+        """Креативу добавляется Instagram-идентичность, если она подтверждена (иначе ключа нет)."""
+        return {**story, _ig.IG_KEY: self._ig_id} if self._ig_id else story
 
     # -- служебное
     def _step(self, out: Outcome, text: str) -> None:
@@ -733,7 +955,7 @@ class CampaignCreator:
 
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False, form_page: str = "",
+               on_ad: bool = False, children_active: bool = False, form_page: str = "",
                upload: tuple[int, str] | None = None) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
@@ -747,6 +969,8 @@ class CampaignCreator:
             extra: dict[str, Any] = {}
             if on_ad:
                 extra["on_ad"] = True
+            if children_active:
+                extra["children_active"] = True
             if form_page:
                 extra["form_page"] = form_page
             if upload and files:
@@ -938,12 +1162,32 @@ class CampaignCreator:
         rows = self._children(parent_id, edge, "id,name,status,adlabels{name}")
         return next((r for r in rows if str(r.get("name") or "").strip() == name), None)
 
+    def _confirm_campaign_paused(self, out: Outcome, plan: CampaignPlan) -> bool:
+        """ACL-2114: перед ПЕРВОЙ записью набора/объявления - чтение: кампания точно PAUSED.
+
+        Иначе стоп без записи: ACTIVE-дочерний объект под не-паузной кампанией начал бы
+        тратить деньги. Подтверждение одно на запуск; найденные (reused) объекты сюда не
+        попадают - их статус мы не пишем.
+        """
+        if out.campaign_confirmed_paused:
+            return True
+        row = self.client.get(f"/{out.campaign_id}", {"fields": "status"})
+        got = row.get("status")
+        if got != PAUSED:
+            raise CreationStopped(
+                f"The campaign {plan.name!r} is not confirmed PAUSED (Meta reports {got or 'no status'}). "
+                "Stopped before creating any ad set or ad, which would start delivering. "
+                "Nothing else was written; check the campaign in Ads Manager.",
+                created=out.created, kind="campaign_not_paused")
+        out.campaign_confirmed_paused = True
+        return True
+
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
         """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
         row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
         if label not in _labels(row):
             raise CreationStopped(
-                f"{what} was created (PAUSED) but Meta did not keep the ACL tag ({label}) on it. "
+                f"{what} was created but Meta did not keep the ACL tag ({label}) on it. "
                 "Stopped before any further write so a re-run cannot duplicate anything. "
                 "Check it in Ads Manager.", created=out.created, kind="label_missing")
 
@@ -1006,6 +1250,10 @@ class CampaignCreator:
         vid = find()
         if vid:
             self._step(out, f"ad {ad.index}: video already in the ad account")
+        elif isinstance(data, LargeFile):
+            vid = self._video_chunked(out, plan, data, title, find, f"ad {ad.index}")
+            out.created.setdefault("videos", []).append(vid)
+            self._step(out, f"ad {ad.index}: video uploaded")
         else:
             vid = self._write(out, f"ad {ad.index}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
@@ -1013,6 +1261,112 @@ class CampaignCreator:
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"ad {ad.index}: video uploaded")
         return vid, self._wait_video(out, ad, vid)
+
+    # -- загрузка большого видео кусками (ACL-1891)
+    @staticmethod
+    def _offsets(body: dict, size: int, floor: int, what: str) -> tuple[int, int]:
+        """Смещения из ответа Meta: цифры, не назад, не за концом файла. Иначе - стоп."""
+        s_raw, e_raw = str(body.get("start_offset", "")), str(body.get("end_offset", ""))
+        if not (s_raw.isdigit() and e_raw.isdigit() and len(s_raw) <= 13 and len(e_raw) <= 13):
+            raise CreationStopped(f"{what}: Meta returned no usable upload offsets", kind="video_error")
+        start, end = int(s_raw), int(e_raw)
+        if start < floor or start > size or end < start or end > size:
+            raise CreationStopped(f"{what}: Meta reported an upload offset outside the file "
+                                  f"({start}-{end} of {size}); stopped before sending more",
+                                  kind="video_error")
+        return start, end
+
+    def _upload_call(self, out: Outcome, what: str, path: str, params: dict, files: dict | None,
+                     *, find: Callable[[], str | None] | None = None) -> dict:
+        """Один вызов фазы загрузки. Неизвестный результат - стоп (кусок повторяет сам цикл)."""
+        self._check_cancel(out)
+        try:
+            return self.client.post(path, params, files=files, filename="chunk" if files else "")
+        except WriteUnknown as exc:
+            self._step(out, f"{what}: result unknown")
+            raise CreationStopped(
+                f"{what}: the write result is unknown ({exc}). Publish again later: a finished video "
+                "is found by its tag and is not uploaded twice.", created=out.created, kind="unknown") from exc
+
+    def _video_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                       find: Callable[[], str | None], who: str) -> str:
+        """start -> transfer (куски от смещения Meta) -> finish. В памяти один кусок."""
+        path = f"/{plan.act}/advideos"
+        size = len(big)
+        what = f"{who}: video upload"
+        # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
+        waterfall = uuid.uuid4().hex
+        started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size),
+                                                       "waterfall_id": waterfall}, None)
+        sid, vid = str(started.get("upload_session_id") or ""), str(started.get("video_id") or "")
+        if not (sid.isdigit() and vid.isdigit()):
+            raise CreationStopped(f"{what}: Meta returned no upload session", created=out.created,
+                                  kind="video_error")
+        offset, end = self._offsets(started, size, 0, what)
+        self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
+        # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
+        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
+        failures = 0
+        # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
+        # Шаг «uploaded X/Y MB» - не чаще раза в UPLOAD_STEP_EVERY_S секунд, но не реже каждых 10% файла.
+        mb_total = max(size // (1024 * 1024), 1)
+        last_step_at, last_step_off = self.clock(), offset
+        while offset < size:
+            guard -= 1
+            if guard < 0:
+                raise CreationStopped(f"{what}: upload does not progress", created=out.created, kind="video_error")
+            n = min(max(end - offset, 1), VIDEO_CHUNK_MAX, size - offset)
+            chunk = big.read_range(offset, n)
+            if len(chunk) != n:
+                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                      kind="video_error")
+            params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset),
+                      "waterfall_id": waterfall}
+            try:
+                body = self._upload_call(out, what, path, params, {_wpol.UPLOAD_CHUNK_FIELD: chunk})
+            except CreationStopped as exc:
+                if exc.kind != "unknown" or failures >= 2:
+                    raise
+                # Неизвестно, дошёл ли кусок: тот же кусок с тем же смещением - запрос смещения у Meta.
+                failures += 1
+                self.client.reconciled(path)
+                continue
+            except GraphError as exc:
+                # Meta отказала: назвала нужное смещение - продолжаем с него (не с нуля), иначе стоп.
+                d = exc.details or {}
+                if failures >= 2 or not str(d.get("start_offset", "")).isdigit():
+                    raise
+                failures += 1
+                offset, end = self._offsets(d, size, offset, what)
+                self._step(out, f"{who}: resuming the upload from offset {offset}")
+                continue
+            failures = 0
+            offset, end = self._offsets(body, size, offset, what)
+            now = self.clock()
+            if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
+                                  or (offset - last_step_off) * 10 >= size):
+                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
+                last_step_at, last_step_off = now, offset
+        try:
+            done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
+                                                        "title": title, "name": title,
+                                                        "waterfall_id": waterfall}, None)
+        except CreationStopped as exc:
+            if exc.kind != "unknown":
+                raise
+            # Результат finish неизвестен: сверка чтением по метке названия, второй раз не грузим.
+            if self.reconcile_wait_s > 0:
+                self.sleep(self.reconcile_wait_s)
+            found = find()
+            if not found:
+                raise
+            self.client.reconciled(path)
+            self._step(out, f"{what}: reconciled - found by readback")
+            return str(found)
+        if done.get("success") is False:
+            raise CreationStopped(f"{what}: Meta did not finish the upload", created=out.created,
+                                  kind="video_error")
+        return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str) -> str:
         """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
@@ -1052,12 +1406,12 @@ class CampaignCreator:
     def adset_params(self, plan: CampaignPlan, ad_set: AdSetPlan, campaign_id: str, targeting: dict) -> dict:
         if ad_set.instant:
             # Instant Form (ACL-1775): показ в самой форме, цель — лиды, объект — Страница, без пикселя.
-            return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
+            return {"name": ad_set.name, "campaign_id": campaign_id, "status": CHILD_STATUS,
                     "optimization_goal": OPTIMIZATION_GOAL_FORM, "billing_event": BILLING_EVENT,
                     "destination_type": DESTINATION_ON_AD,
                     "promoted_object": {"page_id": plan.page_id},
                     "targeting": targeting, "adlabels": [{"name": plan.label}]}
-        return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
+        return {"name": ad_set.name, "campaign_id": campaign_id, "status": CHILD_STATUS,
                 "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
                 "destination_type": DESTINATION,
                 "promoted_object": {"pixel_id": plan.pixel_id, "custom_event_type": CUSTOM_EVENT},
@@ -1085,8 +1439,8 @@ class CampaignCreator:
     def _story(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict) -> dict:
         """Спецификация креатива; `instant` передаётся только Instant Form (сайт - как раньше)."""
         if ad_set.instant:
-            return self.story_spec(plan, ad, media, instant=True)
-        return self.story_spec(plan, ad, media)
+            return self.with_instagram(self.story_spec(plan, ad, media, instant=True))
+        return self.with_instagram(self.story_spec(plan, ad, media))
 
     # -- общие проверки кампании и группы (сверка после записи и предпроверка найденных)
     @staticmethod
@@ -1107,10 +1461,15 @@ class CampaignCreator:
         check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
+        # ACL-2050: новый макет Advantage+ - Meta может молча включить автоплощадки. Поле не вернули
+        # (старый API / нет прав) - не блокируем, а отмечаем в диагностике; ENABLED - блокирует.
+        state = _advantage_info(camp).get("advantage_placement_state")
+        if state is not None:
+            check("advantage_placement_state", "DISABLED", state)
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
-                      campaign_id: str) -> list[dict]:
+                      campaign_id: str, *, reused: bool = False) -> list[dict]:
         obj = f"ad set {ad_set.name}"
         checks: list[dict] = []
 
@@ -1118,7 +1477,7 @@ class CampaignCreator:
             self._mk_check(checks, obj, f, e, a)
 
         check("name", ad_set.name, row.get("name"))
-        check("status", PAUSED, row.get("status"))
+        check("status", _child_status_expected(row.get("status"), reused), row.get("status"))
         check("campaign_id", campaign_id, str(row.get("campaign_id") or ""))
         check("tag", plan.label, plan.label if plan.label in _labels(row) else "")
         po = row.get("promoted_object") or {}
@@ -1156,6 +1515,13 @@ class CampaignCreator:
         check("instagram_positions", targeting.get("instagram_positions") or [],
               t.get("instagram_positions") or [])
         check("devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
+        # ACL-2050: одна понятная строка, если Meta не сохранила ручные площадки (автоплощадки/другой список).
+        # Порядок списков не важен (как в проверках выше): сводка нужна, только если набор реально отличается.
+        want_pl, got_pl = placements_text(targeting), placements_text(t)
+        if targeting.get("publisher_platforms") and any(
+                not _same(targeting.get(k) or [], t.get(k) or [])
+                for k in ("publisher_platforms", "facebook_positions", "instagram_positions", "device_platforms")):
+            check("placements_summary", want_pl, got_pl)
         return checks
 
     # -- найденные кампания и группы против плана (до любой записи под ними)
@@ -1175,7 +1541,7 @@ class CampaignCreator:
             if not hit:
                 continue
             row = self.client.get(f"/{hit['id']}", {"fields": ADSET_FIELDS})
-            diffs = _describe_diffs(self._adset_checks(plan, ad_set, targeting, row, campaign_id))
+            diffs = _describe_diffs(self._adset_checks(plan, ad_set, targeting, row, campaign_id, reused=True))
             if diffs:
                 found.append({"object": f"ad set {ad_set.name!r}", "kind": "adset", "differences": diffs})
         return found
@@ -1186,6 +1552,7 @@ class CampaignCreator:
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
         self._creatives = None
+        self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
             self._run(plan, out)
@@ -1193,21 +1560,57 @@ class CampaignCreator:
             out.error, out.stop_kind = str(exc), exc.kind
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
+            out.problems = list(exc.problems)
         except WritesBlocked as exc:
             out.error, out.stop_kind = f"Not written: {exc}", "blocked"
         except GraphStop as exc:
-            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+            out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
+    def load_media(self, path: str, kind: str) -> "bytes | LargeFile":
+        """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
+        if kind == "video":
+            size = self.size_of(path)
+            if size and size > VIDEO_SINGLE_MAX_BYTES:
+                return LargeFile(path, size, self.read_range)
+        return self.read_file(path)
+
+    def check_profile_page(self, plan: CampaignPlan) -> None:
+        """Страница из профиля (не из кабинета) должна пройти проверку пригодности (ACL-2105).
+
+        Один validate-only creative для кабинета/Страницы/ссылки; объектов не создаёт.
+        Отказ или неизвестный ответ - PlanError до любых объектов/загрузок/форм.
+        """
+        pid = plan.page_id
+        if not pid or self.facts.page_source_of(pid) != _pg.SOURCE_PROFILE:
+            return
+        name = self.facts.page_names.get(pid, pid)
+        if plan.act != self.facts.act:
+            raise PlanError(f"The Page {name!r} ({pid}) validation account differs from the verified ad account. "
+                            "Nothing was created.")
+        cache = self.__dict__.setdefault("_profile_page_checks", {})
+        key = (plan.act, pid, plan.link)
+        if key not in cache:
+            cache[key] = _pg.check_usable(self.client, pid, self.facts.page_names.get(pid, ""),
+                                          act=plan.act, link=plan.link)
+        if cache[key]:
+            raise PlanError(f"The Page {name!r} ({pid}) belongs to the profile, not to this ad account, and "
+                            f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
+                            "to the ad account in Business Manager. Nothing was created.")
+
     def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
+        self.check_profile_page(plan)
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
         self._step(out, "preflight: targeting resolved")
+        self._require_instagram(plan, targetings, out)
         self._page_forms = None
         self._form_steps = {}
         self._form_warnings = []
@@ -1222,7 +1625,7 @@ class CampaignCreator:
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
-                    data = self.read_file(ad.path)
+                    data = self.load_media(ad.path, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
@@ -1231,7 +1634,16 @@ class CampaignCreator:
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
         self._step(out, "preflight: creatives read")
+        # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
+        budget = getattr(self.client, "max_calls", None)
+        chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
+        if isinstance(budget, int) and chunk_calls and chunk_calls + CALLS_RESERVE_OTHER > budget:
+            raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks, more than "
+                            f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                            "Nothing was created.")
         self._check_planned(plan, targetings)
+        self._check_meta_rules(plan, targetings)
+        self._step(out, "preflight: Meta rules registry")
         return targetings, files
 
     def _check_forms(self, plan: CampaignPlan) -> None:
@@ -1365,7 +1777,9 @@ class CampaignCreator:
 
         def ok(edge: str, params: dict, what: str, on_ad: bool = False) -> None:
             try:
-                _wp.check(plan.act, "POST", f"/{plan.act}/{edge}", params, on_ad=on_ad)
+                # ACL-2114: ACTIVE у набора/объявления проверяется как при записи (кампания будет PAUSED).
+                _wp.check(plan.act, "POST", f"/{plan.act}/{edge}", params, on_ad=on_ad,
+                          children_active=edge in _wp.CHILD_EDGES)
             except _wp.WriteRefused as exc:
                 raise PlanError(f"{what}: {exc}") from exc
 
@@ -1383,6 +1797,8 @@ class CampaignCreator:
                         raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
         for ad_set, targeting in zip(plan.ad_sets, targetings):
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
+            if needs_manual_page(plan):
+                continue  # No creative/ad write is planned until a Page is available.
             for ad in ad_set.ads:
                 ad = self._planned(ad, FORM_ID_PLACEHOLDER)
                 media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
@@ -1393,7 +1809,53 @@ class CampaignCreator:
                                    "adlabels": [{"name": plan.label}]}, f"ad {ad.index} creative",
                    on_ad=ad_set.instant)
                 ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
-                           "status": PAUSED, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
+                           "status": CHILD_STATUS, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
+
+    def meta_rule_jobs(self, plan: CampaignPlan, targetings: list[dict]) -> list[tuple[str, dict]]:
+        """По заданию на объявление - ровно те значения, что уйдут в POST (ACL-1805)."""
+        camp = self.campaign_params(plan)
+        jobs = []
+        for ad_set, targeting in zip(plan.ad_sets, targetings):
+            aset = self.adset_params(plan, ad_set, "0", targeting)
+            for ad in ad_set.ads:
+                media = ({"video_id": "0", "thumb": "x"} if ad.kind == "video" else {"image_hash": "0"})
+                story = self._story(plan, ad, ad_set, media)
+                data = story.get("video_data") or story.get("link_data") or {}
+                cta = data.get("call_to_action") or {}
+                jobs.append((f"ad set {ad_set.name!r}, ad {ad.index}", {
+                    "objective": camp["objective"], "bid_strategy": camp["bid_strategy"],
+                    "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
+                    "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
+                    "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
+                    "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
+        return jobs
+
+    def _check_meta_rules(self, plan: CampaignPlan, targetings: list[dict]) -> None:
+        """Реестр правил Meta (ACL-1781) над точными значениями запроса - до первой записи.
+
+        Нарушение - `RulesViolation`, к Meta ничего не ушло. Реестр не загрузился
+        или проверка упала - пропускаем с записью в лог (кампанию это не блокирует).
+        """
+        try:
+            from src.campaign_bridge import meta_rules
+
+            ruleset = meta_rules.load_rules()
+            found: dict[str, Any] = {}
+            for where, job in self.meta_rule_jobs(plan, targetings):
+                for v in meta_rules.check_job(job, ruleset):
+                    found.setdefault(f"{v.rule_id}|{v.message_en}", (where, v))
+        except Exception:
+            log.exception("Meta rules check failed; the campaign is not blocked by it")
+            return
+        if not found:
+            return
+        problems = [{"title": v.message_en, "impact": "Meta would refuse this campaign.",
+                     "action": "Fix the value in the campaign settings and publish again.",
+                     "severity": "blocking", "step": "meta_rules",
+                     "raw": f"{where}; rule {v.rule_id}; source: {v.source_url}"}
+                    for where, v in found.values()]
+        text = " ".join(f"Meta rules: {p['title']}" for p in problems)
+        raise RulesViolation(text, problems)
 
     def plan_only(self, plan: CampaignPlan) -> Outcome:
         """Пробный запуск (ревью M3): предпроверка и план, НИ ОДНОЙ записи.
@@ -1402,6 +1864,7 @@ class CampaignCreator:
         `post` не зовётся ни разу.
         """
         self._creatives = None
+        self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         differences: list | None = None
         files: dict | None = None
@@ -1420,12 +1883,12 @@ class CampaignCreator:
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
-                for ad in ad_set.ads:
+                for ad in ([] if needs_manual_page(plan) else ad_set.ads):
                     data = files[ad.path]
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
                     ad = self._planned(ad, "<form to be created>")
-                    ads.append({"name": ad.name, "status": PAUSED, "format": ad.kind,
+                    ads.append({"name": ad.name, "status": CHILD_STATUS, "format": ad.kind,
                                 "file": Path(ad.path).name, "bytes": len(data),
                                 "library_name": (video_title(plan.tag, data) if ad.kind == "video"
                                                  else image_name(ad.path, data)),
@@ -1445,10 +1908,13 @@ class CampaignCreator:
                 name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
+            out.problems = list(exc.problems)
         except GraphStop as exc:
-            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+            out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.problems = [graph_problem(exc)]
         out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
@@ -1492,7 +1958,7 @@ class CampaignCreator:
             interests = [[i.get("name") or i.get("id") for bucket in g.values() if isinstance(bucket, list)
                           for i in bucket] for g in (t.get("flexible_spec") or [])]
             sets.append({
-                "name": ad_set.name, "status": PAUSED,
+                "name": ad_set.name, "status": CHILD_STATUS,
                 "countries": list((t.get("geo_locations") or {}).get("countries") or []),
                 "language": plan.language, "locales": list(t.get("locales") or []),
                 "age": f"{ad_set.age_min}-{ad_set.age_max}",
@@ -1502,7 +1968,7 @@ class CampaignCreator:
                 "creative_enhancements": "off: " + ", ".join(CREATIVE_FEATURES_OPT_OUT),
                 "optimization": f"{OPTIMIZATION_GOAL} · {CUSTOM_EVENT} on the website pixel",
                 "ads": [{
-                    "index": ad.index, "name": ad.name, "status": PAUSED, "format": ad.kind,
+                    "index": ad.index, "name": ad.name, "status": CHILD_STATUS, "format": ad.kind,
                     "file": Path(ad.path).name, "bytes": len(files.get(ad.path, b"")),
                     "headline": ad.title, "primary_text": ad.body, "description": ad.description,
                     "link": plan.link, "cta": CTA_TYPE,
@@ -1529,7 +1995,8 @@ class CampaignCreator:
                             item["form_note"] = (f"form will be created: {step.form_name}" if step.action == "create"
                                                  else f"form found on the Page, reused: {step.form_name}")
         summary = {
-            "campaign": plan.name, "status": PAUSED, "objective": OBJECTIVE,
+            "campaign": plan.name, "status": PAUSED, "children_status": CHILD_STATUS,
+            "status_note": STATUS_NOTE, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
             "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
@@ -1543,6 +2010,17 @@ class CampaignCreator:
         if self._form_steps:
             # Только у планов с шаблонами форм: сайтовый план не меняется ни байтом (ACL-1775).
             summary["forms"] = [st.as_dict() for st in self._form_steps.values()]
+        if needs_manual_page(plan):
+            summary["manual_required"] = [MANUAL_PAGE_NOTICE]
+            for row in summary["ad_sets"]:
+                row["ads_not_created"] = True
+                row["pending_ad_count"] = len(row["ads"])
+                row["ads"] = []
+        if plan.page_id and self.facts.page_source_of(plan.page_id) == _pg.SOURCE_PROFILE:
+            # ACL-2105: только для Страниц профиля, чтобы сайтовый план остался прежним (золотой файл).
+            summary["page_origin"] = _pg.SOURCE_PROFILE
+        if self.facts.page_names.get(plan.page_id, plan.page_id) != plan.page_id:
+            summary["page_name"] = self.facts.page_names[plan.page_id]
         return summary
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
@@ -1583,11 +2061,15 @@ class CampaignCreator:
                 adset_id = self._write(
                     out, f"ad set {ad_set.name!r}", f"/{plan.act}/adsets",
                     self.adset_params(plan, ad_set, out.campaign_id, targeting),
-                    lambda: (self._find_child(out.campaign_id, "adsets", ad_set.name) or {}).get("id"))
+                    lambda: (self._find_child(out.campaign_id, "adsets", ad_set.name) or {}).get("id"),
+                    children_active=self._confirm_campaign_paused(out, plan))
                 out.created.setdefault("adsets", []).append(adset_id)
                 self._verify_label(out, f"The ad set {ad_set.name!r}", adset_id, plan.label)
-                self._step(out, f"ad set {ad_set.name!r}: created PAUSED, tag kept")
+                self._step(out, f"ad set {ad_set.name!r}: created ACTIVE (campaign PAUSED), tag kept")
             out.adset_ids.append(adset_id)
+
+            if needs_manual_page(plan):
+                continue
 
             have = {str(r.get("name") or "").strip(): str(r["id"])
                     for r in self._children(adset_id, "ads", "id,name")}
@@ -1631,8 +2113,9 @@ class CampaignCreator:
                 ad_id = self._write(
                     out, f"ad {ad.index}", f"/{plan.act}/ads",
                     {"name": ad.name, "adset_id": adset_id, "creative": {"creative_id": creative_id},
-                     "status": PAUSED, "adlabels": [{"name": plan.label}]},
-                    lambda: (self._find_child(adset_id, "ads", ad.name) or {}).get("id"))
+                     "status": CHILD_STATUS, "adlabels": [{"name": plan.label}]},
+                    lambda: (self._find_child(adset_id, "ads", ad.name) or {}).get("id"),
+                    children_active=self._confirm_campaign_paused(out, plan))
                 out.ad_ids.append(ad_id)
                 out.created.setdefault("ads", []).append(ad_id)
                 rec.update({"ad_id": ad_id, "creative_id": creative_id})
@@ -1640,10 +2123,13 @@ class CampaignCreator:
                 if not ad_label_checked:
                     self._verify_label(out, f"The ad {ad.index}", ad_id, plan.label)
                     ad_label_checked = True
-                self._step(out, f"ad {ad.index}: created PAUSED")
+                self._step(out, f"ad {ad.index}: created ACTIVE (campaign PAUSED)")
 
         # 4. Сверка.
         out.readback = self.readback(plan, out, targetings, files)
+        if needs_manual_page(plan):
+            out.manual_required = [MANUAL_PAGE_NOTICE]
+            self._step(out, "Manual completion required: add a Facebook Page and ads in Ads Manager")
         n = len(out.mismatches)
         self._step(out, "readback: all fields match" if not n else f"readback: {n} mismatch(es)")
 
@@ -1670,6 +2156,19 @@ class CampaignCreator:
 
         camp = self.client.get(f"/{out.campaign_id}", {"fields": CAMPAIGN_FIELDS})
         checks += self._campaign_checks(plan, camp)
+        # ACL-2050: диагностика (не блокирует): что Meta сказала про автоаудиторию и правила ставок.
+        info = _advantage_info(camp)
+        diag: dict[str, Any] = {"advantage_state": info.get("advantage_state"),
+                                "advantage_placement_state": info.get("advantage_placement_state"),
+                                "advantage_audience_state": info.get("advantage_audience_state"),
+                                "adsets_with_value_rules": 0}
+        diag["placement_state_verified"] = bool(info.get("advantage_placement_state"))
+        if not diag["placement_state_verified"]:
+            out.warnings.append("Meta did not return advantage_placement_state; placement mode was not verified "
+                                "(check in Ads Manager).")
+        if info.get("advantage_audience_state") == "ENABLED":
+            out.warnings.append("Meta reports advantage_audience_state=ENABLED at campaign level; the ad sets "
+                                "were sent with Advantage+ audience off (verify in Ads Manager).")
 
         # ACL-1775: форма принадлежит Странице - читаем список форм ещё раз, уже после записи.
         page_forms = (_forms.read_page_forms(self.client, plan.page_id)
@@ -1678,11 +2177,18 @@ class CampaignCreator:
         for ad_set, adset_id, targeting in zip(plan.ad_sets, out.adset_ids, targetings):
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
-            checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id)
+            checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id,
+                                         reused=adset_id in (out.reused.get("adsets") or []))
+            if row.get("value_rules_applied") or row.get("value_rule_set_id"):
+                diag["adsets_with_value_rules"] += 1
+                out.warnings.append(f"Meta applied bid value rules to {obj}; the builder did not set them.")
+
+            if needs_manual_page(plan):
+                continue  # Readback covers only the objects this run promised to create.
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
-                          "creative{id,adlabels{name},object_story_spec,degrees_of_freedom_spec}",
+                          "creative{id,adlabels{name},instagram_user_id,object_story_spec,degrees_of_freedom_spec}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
             by_name: dict[str, list[dict]] = {}
             for a in ads:
@@ -1701,7 +2207,8 @@ class CampaignCreator:
                 got = rows[0]
                 if rec.get("ad_id"):
                     check(aobj, "ad_id", rec["ad_id"], str(got.get("id") or ""))
-                check(aobj, "status", PAUSED, got.get("status"))
+                check(aobj, "status", _child_status_expected(got.get("status"), bool(rec.get("reused"))),
+                      got.get("status"))
                 check(aobj, "adset_id", adset_id, str(got.get("adset_id") or ""))
                 tag(aobj, got)
                 creative = got.get("creative") or {}
@@ -1714,6 +2221,11 @@ class CampaignCreator:
                           (feats.get(feature) or {}).get("enroll_status"))
                 spec = creative.get("object_story_spec") or {}
                 check(aobj, "page", plan.page_id, str(spec.get("page_id") or ""))
+                if self._ig_id:
+                    # ACL-1896: Instagram-идентичность прочитана обратно; Meta отдаёт её в спецификации
+                    # или полем креатива (живая проверка скажет, где именно).
+                    check(aobj, "instagram_user_id", self._ig_id,
+                          str(spec.get(_ig.IG_KEY) or creative.get(_ig.IG_KEY) or ""))
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
                     vd = spec.get("video_data") or {}
@@ -1762,15 +2274,19 @@ class CampaignCreator:
             for aobj, ad, h in image_ads:
                 check(aobj, "image_file", image_name(ad.path, files[ad.path]), names.get(h, ""))
         mismatches = [c for c in checks if not c["ok"]]
-        return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches}
+        return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
+                "diagnostics": diag}
 
 
-CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name}"
+# ACL-2050: advantage_state_info и value_rules_* - только чтение, для сверки площадок после записи.
+CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,bid_strategy,adlabels{name},"
+                   "advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state}")
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,adlabels{name}")
+                "promoted_object,targeting,start_time,end_time,adlabels{name},"
+                "value_rules_applied,value_rule_set_id")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
-_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule"}
+_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule", "placements_summary"}
 _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
                  "languages": "languages", "detailed_targeting": "detailed targeting",
                  "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
@@ -1778,6 +2294,23 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set",
                  "bid_strategy": "bid strategy"}
+
+
+def graph_problem(exc: BaseException) -> dict:
+    """Отказ Meta записью списка проблем дашборда: каталог ошибок (ACL-1786) или сырой текст."""
+    x = _catalog.explain(getattr(exc, "code", None), getattr(exc, "subcode", None), str(exc))
+    code = f"{x.code}/{x.subcode}" if x.subcode else str(x.code or "")
+    raw = str(exc)
+    if not x.known:
+        return {"title": raw or "Meta refused the request (no details given).", "impact": "", "action": "",
+                "severity": "blocking", "step": "graph_error", "raw": raw}
+    return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
+            "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
+
+
+def _advantage_info(camp: dict) -> dict:
+    info = camp.get("advantage_state_info")
+    return info if isinstance(info, dict) else {}
 
 
 def _show(value: Any) -> str:
@@ -1838,6 +2371,16 @@ def _flex_ids(spec: Any) -> list[list[str]]:
 def _not_read(expected: Any, actual: Any) -> bool:
     """Meta поле не вернула (None), хотя от него что-то ждали → в отчёте «Not read»."""
     return actual is None and expected not in (None, "", [])
+
+
+def _child_status_expected(actual: Any, reused: bool) -> str:
+    """Ожидаемый `status` набора/объявления (ACL-2114): созданные этим запуском - ACTIVE.
+
+    Найденные с прошлого запуска мы не трогали: ACTIVE и PAUSED оба верны (прошлые запуски
+    создавали их PAUSED). `effective_status` не сверяем: под кампанией на паузе он
+    CAMPAIGN_PAUSED - это ожидаемо, а не расхождение.
+    """
+    return actual if reused and actual in (ACTIVE, PAUSED) else CHILD_STATUS
 
 
 def _same(expected: Any, actual: Any) -> bool:

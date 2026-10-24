@@ -8,6 +8,7 @@ import pytest
 from scripts import acl_board as board
 from src.analysis_agent import ad_text_registry as ar, account_spend as spend
 from src.web import app as web, ad_copy as copy_source
+from tests.profile_lease_fakes import fake_profile
 
 
 @pytest.fixture
@@ -138,7 +139,7 @@ def test_process_detection_failure_does_not_start_a_profile(monkeypatch):
     def fail(*args):
         raise RuntimeError("process inventory unavailable")
     provider = NS(attach_existing_only=lambda *a, **kw: None, profile_is_running=fail)
-    monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id="demo", folder_id="folder"))
+    monkeypatch.setattr(spend, "_entry_for", lambda a: NS(profile_id=fake_profile("Demo"), folder_id="folder"))
     monkeypatch.setattr(spend, "_mlx_profile_dir", lambda *a: Path("LONG"))
     monkeypatch.setattr(browser, "MultiloginDirectCDPProvider", lambda: provider)
     monkeypatch.setattr(browser, "get_browser_provider", lambda name: pytest.fail("Unexpected browser startup"))
@@ -176,4 +177,5 @@ def test_row_states_render_with_account_actions_and_matching_drill_width(ready, 
     # `ncols=11` проверялось здесь же: это была ширина книжной строки
     # раскрытия. 12.09 книжная детализация ушла со стрелки — у живого дерева
     # colspan берётся из самой строки.
-    assert "amapReadSpend(this)" in html and "amapUnlink(" in html
+    assert "amapReadSpend(this)" not in html and "amapUnlink(" in html
+    assert "amap-list" in html

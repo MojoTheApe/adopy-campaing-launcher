@@ -1,0 +1,149 @@
+name: Verify published release tag
+
+# Manual isolated acceptance of an already published stable release. It reuses
+# the authorized delivery driver's Windows verification steps unchanged, but it
+# never resolves, authorizes, publishes or records a delivery: an operator decides
+# whether the uploaded evidence goes to `record-delivery --evidence-file`.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published stable release tag to verify, e.g. acl-release-2026-10-21.1064"
+        required: true
+        type: string
+      previous_tag:
+        description: "Its previous stable publication (the update baseline), e.g. acl-release-2026-10-20.1034"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Shared with complete-delivery.yml: never verify while a publication moves the channel.
+concurrency:
+  group: acl-stable-delivery
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve the published release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      merge_sha: ${{ steps.request.outputs.merge_sha }}
+      request_artifact: ${{ steps.request.outputs.request_artifact }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install updater trust dependencies
+        run: python -m pip install cryptography==50.0.1
+      - id: request
+        name: Read the published manifest through the updater trust path
+        env:
+          TAG: ${{ inputs.tag }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
+          ACL_RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
+          ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
+          ACL_RELEASE_SIGNATURES: ${{ (vars.ACL_REQUIRE_RELEASE_SIGNATURE == 'true' || vars.ACL_ENFORCE_RELEASE_SIGNATURES == 'true') && 'enforce' || '' }}
+          NATIVE_RUN: ${{ github.run_id }}
+          NATIVE_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p delivery/channel-config
+          python - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          tag, previous = os.environ['TAG'], os.environ['PREVIOUS_TAG']
+          for value in (tag, previous):
+              if not re.fullmatch(r'acl-release-[0-9A-Za-z][0-9A-Za-z._-]{0,63}', value):
+                  raise SystemExit('Published acl-release-* tags are required')
+          os.environ['ACL_CONFIG_DIR'] = str(Path('delivery/channel-config').resolve())
+          from src.web import release_updates as updates
+          channel = updates.channel()
+          if not channel:
+              raise SystemExit('The configured read-only published update channel is unavailable')
+          manifest, release = updates.fetch_latest(channel)
+          # The Windows harness verifies only the channel's latest stable release.
+          if (release.get('draft') or release.get('prerelease') or release.get('tag_name') != tag
+                  or manifest.get('tag') != tag):
+              raise SystemExit(f'{tag} is not the latest published stable release')
+          # The harness updates from the signed manifest's previous_tag; it must be the given one.
+          if manifest.get('previous_tag') != previous:
+              raise SystemExit(f'{tag} records previous release {manifest.get("previous_tag")}, not {previous}')
+          sha = manifest['commit']
+          tree = subprocess.run(['git', 'rev-parse', sha + '^{tree}'], check=True,
+                                capture_output=True, text=True).stdout.strip()
+          target = json.loads(Path('tracker/config.json').read_text(encoding='utf-8'))['delivery_policy']['delivery_target']
+          request = {'eligible': True, 'source': 'explicit-published-tag', 'tag': tag,
+                     'merge_sha': sha, 'tree_sha': tree, 'issues': [], 'target': target}
+          for name in ('request.json', 'release-request.json'):
+              Path('delivery', name).write_text(json.dumps(request, indent=2) + '\n', encoding='utf-8')
+          artifact = 'acl-tag-request-' + os.environ['NATIVE_RUN'] + '-' + os.environ['NATIVE_ATTEMPT']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('merge_sha=' + sha + '\nrequest_artifact=' + artifact + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.request.outputs.request_artifact }}
+          path: delivery/*.json
+          retention-days: 30
+
+  # The steps below are the complete-delivery.yml `verify` job, unchanged.
+  verify:
+    name: Verify published Windows package
+    needs: resolve
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      ACL_NO_TELEMETRY: "1"
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.merge_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.resolve.outputs.request_artifact }}
+          path: delivery
+      - name: Install updater trust and isolated acceptance dependencies
+        run: python -m pip install cryptography==50.0.1 psutil==7.2.2
+      - name: Download actual published packages and verify installation, update, restart and recovery
+        env:
+          ACL_RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
+          ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
+          ACL_RELEASE_SIGNATURES: ${{ (vars.ACL_REQUIRE_RELEASE_SIGNATURE == 'true' || vars.ACL_ENFORCE_RELEASE_SIGNATURES == 'true') && 'enforce' || '' }}
+        run: python packaging/windows/test_update_cycle.py --published-request delivery/release-request.json
+      - name: Emit the successful native delivery receipt
+        shell: pwsh
+        run: |
+          python scripts/acl_delivery_evidence.py --request delivery/release-request.json --report packaging/windows/.artifacts/update-cycle-logs/report.json --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" --output delivery/evidence.json --artifact-name "acl-delivery-evidence-${{ github.run_id }}-${{ github.run_attempt }}"
+          if ($LASTEXITCODE -ne 0) { throw "Native delivery acceptance receipt failed." }
+      - name: Keep isolated package acceptance and delivery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-delivery-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            delivery/request.json
+            delivery/evidence.json
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Keep acceptance logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-delivery-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: packaging/windows/.artifacts/update-cycle-logs/
+          retention-days: 30
+          if-no-files-found: warn

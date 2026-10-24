@@ -33,7 +33,7 @@ TARGET = ["Spend", "Leads", "FTDs", "CPL", "CPA", "CR"]
 
 def test_the_target_lists_are_the_owners_decision():
     assert list(mc.METRIC_HEADERS) == TARGET
-    assert list(mc.HOME_ACCOUNT_HEADERS) == ["Spend", "Account spend", "Leads", "FTDs", "CPL", "CPA", "CR"]
+    assert list(mc.HOME_ACCOUNT_HEADERS) == ["Spend", "Leads", "FTDs", "CPL", "CPA", "CR"]
 
 
 def test_the_three_formulas():
@@ -192,7 +192,7 @@ def test_the_home_account_table_head_is_the_home_list():
     cols = _th(head)
     metrics = [c for c in cols if c in mc.HOME_ACCOUNT_HEADERS]
     assert metrics == list(mc.HOME_ACCOUNT_HEADERS)
-    assert cols[0] == "Account" and cols.index("Spend") == 1 and cols.index("Account spend") == 2
+    assert cols[0] == "Account" and cols.index("Spend") == 1 and cols.index("Campaign list") == 2
 
 
 def _render_fragment(section: str, rows: list[dict]) -> str:
@@ -265,7 +265,7 @@ def test_home_country_grid_head_is_the_six_metrics():
     html = _home([_country("Colombia", 100, 10, 2)])
     head = html[html.index('class="amap-grid-head"'): html.index("</div>", html.index('class="amap-grid-head"'))]
     spans = [re.sub(r"<[^>]+>", "", x).strip() for x in re.findall(r"<span[^>]*>(.*?)</span>", head, re.S)]
-    assert spans == ["", "Country", "Account read"] + TARGET + ["Accounts", ""]
+    assert spans == ["", "Country", ""] + TARGET + ["Accounts", ""]
 
 
 def test_home_totals_row_sums_and_computes_ratios_from_the_sums():
@@ -378,8 +378,8 @@ def test_totals_account_read_says_how_many_accounts_were_read():
     t = _amap_totals(countries, live)
     assert (t["read_count"], t["accounts"], t["mixed"], t["read"]) == (2, 3, True, None)
     html = _home(countries, live=live)
-    tip = re.search(r'id="amap-totals".*?title="([^"]*)"', html, re.S).group(1)
-    assert "2 of 3 accounts read" in tip and "mixed currencies" in tip
+    assert 'mixed currencies' not in html and 'accounts read' not in html
+    assert 'numbers from the stats workbook' in html
 
 
 def test_the_campaign_managers_header_names_both_levels_and_the_section_is_last():

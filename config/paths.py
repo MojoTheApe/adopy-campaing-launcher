@@ -83,6 +83,24 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+def config_identity(directory: str | os.PathLike | None = None) -> str:
+    """Чей это ACL: короткий отпечаток каталога настроек, а не сам путь.
+
+    На одной машине могут жить два человека — два пользователя Windows или
+    удалённый стол, — и у каждого свой %LOCALAPPDATA%, а порт общий. Лаунчер
+    видел на 9090 «какой-то ACL» и открывал его как свой: второй человек
+    молча попадал в дешборд первого, с чужими аккаунтами (ACL-1309, 24.09).
+
+    Отпечаток, а не путь: `/health` доступен любому процессу на машине, и
+    путь в нём выдал бы имя чужой учётной записи. Для сравнения «мой или
+    нет» хватает хэша.
+    """
+    import hashlib
+
+    path = os.path.normcase(os.path.realpath(str(directory or get_local_config_dir())))
+    return hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
+
+
 # --- One settings folder for every launch path (ACL-1680) -------------------
 # A process started from Claude Desktop runs inside its MSIX package, where
 # Windows hands it a *virtualised* %LOCALAPPDATA%:
@@ -547,8 +565,11 @@ def update_machine_env(values: dict[str, str]) -> str:
     for line in lines:
         match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
         key = match.group(1) if match else None
-        if key in pending:
-            out.append(_dotenv_line(key, pending.pop(key)))
+        if key in values:
+            if key in pending:
+                out.append(_dotenv_line(key, pending.pop(key)))
+            # Remove obsolete duplicate assignments for this updated key: dotenv
+            # uses the last value, so a later old token would survive Disconnect.
         else:
             out.append(line)
     if pending and out and out[-1].strip():
@@ -568,6 +589,38 @@ def _read_env_value(path: str | Path, key: str) -> str | None:
         return None if value is None else str(value)
     except Exception:
         return None
+
+
+_STALE_GRAPH_PIN = re.compile(
+    rb"^(?P<head>[ \t]*(?:export[ \t]+)?META_GRAPH_API_VERSION[ \t]*=[ \t]*)"
+    rb"(?P<q>[\"']?)v22\.0(?P=q)(?P<tail>[ \t]*(?:#[^\r\n]*)?)(?P<eol>\r\n|\n|\r|)$",
+    re.I,
+)
+
+
+def _clear_stale_graph_pin(path: Path) -> str:
+    """Blank a `META_GRAPH_API_VERSION=v22.0` line in place, byte for byte (ACL-2123).
+
+    Only that one line changes: BOM, encoding, line endings, other lines and an
+    inline comment survive. An unreadable file is left alone (never raises);
+    returns a log note or "".
+    """
+    try:
+        lines = Path(path).read_bytes().splitlines(keepends=True)
+        hit = False
+        for n, line in enumerate(lines):
+            m = _STALE_GRAPH_PIN.match(line)
+            if m:
+                lines[n] = m.group("head") + m.group("tail") + m.group("eol")
+                hit = True
+        if not hit:
+            return ""
+        _atomic_write(path, b"".join(lines))
+    except Exception as exc:
+        return f"META_GRAPH_API_VERSION pin check skipped ({type(exc).__name__}); .env left untouched"
+    if os.environ.get("META_GRAPH_API_VERSION", "").strip().lower() == "v22.0":
+        os.environ.pop("META_GRAPH_API_VERSION", None)
+    return "unsupported META_GRAPH_API_VERSION=v22.0 pin cleared; version now comes from meta.json"
 
 
 def migrate_legacy_env(*, create_from_example: bool = False) -> str:
@@ -590,9 +643,17 @@ def migrate_legacy_env(*, create_from_example: bool = False) -> str:
     if local.exists():
         engine = (_read_env_value(local, "FB_RPA_ENGINE") or "").strip().lower()
         if not engine:
-            update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
-            suffix = "legacy blank RPA engine normalized to recorded_flow"
+            try:
+                update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
+                suffix = "legacy blank RPA engine normalized to recorded_flow"
+            except (OSError, UnicodeError) as exc:  # e.g. a cp1251 .env: leave it as is
+                suffix = f"RPA engine normalization skipped ({type(exc).__name__}); .env left untouched"
             note = f"{note}; {suffix}" if note else suffix
+        # ACL-2123: v22.0 pinned from the old .env.example; the Graph API version
+        # now comes from config/meta_rules/meta.json, so the stale pin is cleared.
+        cleared = _clear_stale_graph_pin(local)
+        if cleared:
+            note = f"{note}; {cleared}" if note else cleared
     return note
 
 

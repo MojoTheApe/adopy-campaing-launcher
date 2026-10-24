@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -82,7 +83,7 @@ def env(monkeypatch, request):
     monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_write_draft_status", lambda *a, **k: None)
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: label.rstrip("b"))  # Doc19b — тот же профиль
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label.rstrip("b")))  # Doc19b — тот же профиль
     monkeypatch.setattr(pj, "_start_stuck_watch", lambda *a, **k: None)
     monkeypatch.setenv("ACL_CANCEL_DEADLINE_S", "0.3")
     threads: list[threading.Thread] = []
@@ -718,12 +719,12 @@ def test_the_profile_lock_is_unchanged_by_an_abandon(env):
         return _ok_result(draft)
 
     FakePublisher.behaviour = stuck
-    lock = profile_lock("Doc19")
+    lock = profile_lock(fake_profile("Doc19"))
     first = env.start("Doc19")
     assert entered.wait(5)
     pj.cancel_job(first)
     assert _until(lambda: pj.get_job(first)["status"] == "cancelled", timeout=3)
-    assert profile_lock("Doc19") is lock, "two robots must never drive one browser"
+    assert profile_lock(fake_profile("Doc19")) is lock, "two robots must never drive one browser"
 
 
 def test_the_takeover_and_teach_loops_send_the_heartbeat(monkeypatch):
@@ -735,19 +736,19 @@ def test_the_takeover_and_teach_loops_send_the_heartbeat(monkeypatch):
     def beat():
         beats.append(1)
         pacing.release_takeover()
-        pacing._TEACH_WAITING = False
+        pacing.end_teach_wait()
 
     monkeypatch.setattr(job_cancel, "heartbeat", beat)
     pacing.request_takeover()
     try:
         assert pacing.wait_for_human_release(None, max_wait_s=5) is True
         assert len(beats) == 1
-        pacing._TEACH_WAITING = True
+        pacing.begin_teach_wait("website_click")
         assert pacing.wait_for_teach_resume(5) is True
         assert len(beats) == 2
     finally:
         pacing.release_takeover()
-        pacing._TEACH_WAITING = False
+        pacing.end_teach_wait()
 
 
 def test_a_job_queued_before_the_abandon_gives_its_slot_back(env):

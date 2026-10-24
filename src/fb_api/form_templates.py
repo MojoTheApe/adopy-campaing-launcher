@@ -10,8 +10,17 @@
 ни в запросе. Страница, не принявшая условия, - остановка с просьбой к
 человеку принять их в Meta.
 
-Хранение - `form_templates.json` в машинной папке (`get_local_config_dir()`),
-как у остальных библиотек: не в гите, у каждого байера своя.
+Хранение (ACL-2054). Библиотека шаблонов общая на всю команду - третий вид
+`team_library` (`form_templates.json` в приватном репозитории данных, ключ
+записи - id шаблона): правка сразу в репозиторий с проверкой sha, удаление
+мягкое (`deleted` + Restore). На машине лежит копия для чтения
+(`form_templates_library.json`), по ней работает публикация. Не настроена
+библиотека (нет ACL_LIBRARY_REPO / ACL_LIBRARY_TOKEN) - всё как раньше: файл
+`form_templates.json` в машинной папке (`get_local_config_dir()`).
+
+Запись, не прошедшая `validate` (старая, поправленная руками, с полем из
+будущей версии), не выбрасывается и не стирается следующей записью: она
+остаётся как есть, в списке помечается invalid, в публикацию не попадает.
 """
 from __future__ import annotations
 
@@ -34,15 +43,33 @@ MAX_LABEL = 80
 MAX_OPTION = 60
 MAX_THANKS = 300
 MAX_LINK_TEXT = 70
+MAX_INTRO_TITLE = 60
+MAX_FOLLOW_UP_URL = 1000
 MAX_TEMPLATES = 200
 
 #: Контактные поля шаблона -> тип вопроса Graph.
-CONTACT_TYPES: dict[str, str] = {"name": "FULL_NAME", "email": "EMAIL", "phone": "PHONE"}
+#: ACL-2053: имя и фамилия отдельными полями (FIRST_NAME/LAST_NAME) рядом с полным именем.
+CONTACT_TYPES: dict[str, str] = {"name": "FULL_NAME", "email": "EMAIL", "phone": "PHONE",
+                                 "first_name": "FIRST_NAME", "last_name": "LAST_NAME"}
 #: Тип пользовательского вопроса шаблона.
 SHORT, CHOICE = "short_answer", "multiple_choice"
 QUESTION_KINDS = (SHORT, CHOICE)
 
 DEFAULT_LOCALE = "EN_US"
+#: ACL-2053: языки Instant Form, которые принимает Graph при создании формы (enum `locale` в
+#: справочнике Page/leadgen_forms). Язык задаёт лишь встроенные подписи Meta, не текст формы.
+#: Зеркало - `FORM_LOCALES` в report.html (сверяет тест).
+LOCALES: tuple[str, ...] = (
+    "AR_AR", "CS_CZ", "DA_DK", "DE_DE", "EL_GR", "EN_GB", "EN_US", "ES_ES", "ES_LA", "FI_FI", "FR_FR",
+    "HE_IL", "HI_IN", "HU_HU", "ID_ID", "IT_IT", "JA_JP", "KO_KR", "NB_NO", "NL_NL", "PL_PL", "PT_BR",
+    "PT_PT", "RO_RO", "RU_RU", "SV_SE", "TH_TH", "TR_TR", "VI_VN", "ZH_CN", "ZH_HK", "ZH_TW",
+)
+#: Тип формы -> `is_optimized_for_quality` (More volume = false, Higher intent = true).
+FORM_TYPES: dict[str, bool] = {"more_volume": False, "higher_intent": True}
+DEFAULT_FORM_TYPE = "more_volume"
+#: Сохранённые шаблоны могут нести язык вне списка (до ACL-2053 годился любой XX_YY): они
+#: продолжают грузиться и не стираются при перезаписи файла. Список - для нового ввода.
+_LOCALE_RE = re.compile(r"^[A-Z]{2}_[A-Z]{2}$")
 DEFAULT_LINK_TEXT = "Privacy Policy"
 DEFAULT_THANKS_TITLE = "Thank you"
 DEFAULT_BUTTON_TEXT = "Visit website"
@@ -50,7 +77,6 @@ DEFAULT_BUTTON_TEXT = "Visit website"
 ROBOT_NAME_RE = re.compile(r" · ACL [0-9a-f]{6}$")
 
 _HTTPS_RE = re.compile(r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$", re.I)
-_LOCALE_RE = re.compile(r"^[A-Z]{2}_[A-Z]{2}$")
 _ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 _lock = threading.RLock()
@@ -71,9 +97,10 @@ def _multiline(value: Any) -> str:
     return "\n".join(" ".join(line.split()) for line in text.split("\n"))
 
 
-def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
+def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], list[str]]:
     """Шаблон -> (чистый шаблон, ошибки). Без ошибок шаблон годен для формы.
 
+    `lenient_locale` - для уже сохранённых шаблонов: годится любой язык вида XX_YY.
     Ничего не угадывает: пустое обязательное поле - ошибка, лишний вопрос
     сверх потолка - ошибка (не обрезается молча).
     """
@@ -95,6 +122,13 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     out["intro"] = _multiline(src.get("intro"))
     if len(out["intro"]) > MAX_INTRO:
         errors.append(f"Intro is longer than {MAX_INTRO} characters")
+    # Новые поля (ACL-2053) кладём в чистый шаблон ТОЛЬКО со значением не по умолчанию:
+    # так у старых шаблонов содержание, хэш и имя формы остаются прежними.
+    intro_title = _s(src.get("intro_title"))
+    if len(intro_title) > MAX_INTRO_TITLE:
+        errors.append(f"Intro title is longer than {MAX_INTRO_TITLE} characters")
+    if intro_title:
+        out["intro_title"] = intro_title
 
     contacts = src.get("contact_fields")
     contacts = contacts if isinstance(contacts, (list, tuple)) else []
@@ -102,12 +136,22 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     for key in contacts:
         key = _s(key).lower()
         if key not in CONTACT_TYPES:
-            errors.append(f"Unknown contact field {key!r} (use name, email or phone)")
+            errors.append(f"Unknown contact field {key!r} (use name, first_name, last_name, email or phone)")
         elif key not in chosen:
             chosen.append(key)
-    out["contact_fields"] = [k for k in CONTACT_TYPES if k in chosen]
-    if not out["contact_fields"]:
-        errors.append("Choose at least one contact field (name, email or phone)")
+    # Порядок - как выбран (у сохранённых шаблонов он уже name, email, phone).
+    # Без имени/фамилии - старый канонический порядок (иначе хэш и тело запроса поплывут
+    # и на Странице появится дубль формы); с ними порядок задаёт автор.
+    if "first_name" in chosen or "last_name" in chosen:
+        out["contact_fields"] = chosen
+    else:
+        out["contact_fields"] = [k for k in ("name", "email", "phone") if k in chosen]
+    if not chosen:
+        errors.append("Choose at least one contact field (name, first name, last name, email or phone)")
+    if "name" in chosen and ("first_name" in chosen or "last_name" in chosen):
+        errors.append("Choose either full name or first and last name, not both")
+    if src.get("questions_first") is True or _s(src.get("questions_first")).lower() == "true":
+        out["questions_first"] = True
 
     questions = src.get("questions")
     questions = questions if isinstance(questions, (list, tuple)) else []
@@ -150,10 +194,21 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     if len(out["privacy_link_text"]) > MAX_LINK_TEXT:
         errors.append(f"Privacy link text is longer than {MAX_LINK_TEXT} characters")
 
+    follow_up = str(src.get("follow_up_action_url") or "").strip()
+    if follow_up:
+        out["follow_up_action_url"] = follow_up
+        if not is_https_url(follow_up):
+            errors.append("Follow-up URL must start with https://")
+        elif len(follow_up) > MAX_FOLLOW_UP_URL:
+            errors.append(f"Follow-up URL is longer than {MAX_FOLLOW_UP_URL} characters")
+
     out["thank_you_title"] = _s(src.get("thank_you_title")) or DEFAULT_THANKS_TITLE
     out["thank_you_text"] = _multiline(src.get("thank_you_text"))
+    # Экран «спасибо» у Graph необязателен; без текста его можно опустить только
+    # при ссылке follow-up (живая форма байера так и устроена).
     if not out["thank_you_text"]:
-        errors.append("Thank-you screen text is required")
+        if not follow_up:
+            errors.append("Thank-you screen text is required")
     elif len(out["thank_you_text"]) > MAX_THANKS:
         errors.append(f"Thank-you screen text is longer than {MAX_THANKS} characters")
     out["website_url"] = str(src.get("website_url") or "").strip()
@@ -162,9 +217,15 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     out["button_text"] = _s(src.get("button_text")) or DEFAULT_BUTTON_TEXT
 
     locale = _s(src.get("locale")).upper().replace("-", "_") or DEFAULT_LOCALE
-    if not _LOCALE_RE.match(locale):
-        errors.append("Locale must look like EN_US")
+    if not (locale in LOCALES or (lenient_locale and _LOCALE_RE.match(locale))):
+        errors.append(f"Unknown locale: {locale} (choose a language from the list)")
     out["locale"] = locale
+
+    form_type = _s(src.get("form_type")).lower() or DEFAULT_FORM_TYPE
+    if form_type not in FORM_TYPES:
+        errors.append("Form type must be More volume or Higher intent")
+    elif form_type != DEFAULT_FORM_TYPE:
+        out["form_type"] = form_type
     return out, errors
 
 
@@ -181,14 +242,15 @@ def form_name(tpl: dict[str, Any]) -> str:
 
 
 def expected_questions(tpl: dict[str, Any]) -> list[dict[str, Any]]:
-    """Вопросы для Graph: контакты, затем пользовательские (CUSTOM)."""
-    out: list[dict[str, Any]] = [{"type": CONTACT_TYPES[k]} for k in tpl["contact_fields"]]
+    """Вопросы для Graph: контакты, затем пользовательские (CUSTOM); `questions_first` - наоборот."""
+    contacts: list[dict[str, Any]] = [{"type": CONTACT_TYPES[k]} for k in tpl["contact_fields"]]
+    custom: list[dict[str, Any]] = []
     for i, q in enumerate(tpl["questions"], start=1):
         item: dict[str, Any] = {"type": "CUSTOM", "key": f"question_{i}", "label": q["label"]}
         if q["type"] == CHOICE:
             item["options"] = [{"key": f"q{i}_option_{j}", "value": v} for j, v in enumerate(q["options"], start=1)]
-        out.append(item)
-    return out
+        custom.append(item)
+    return custom + contacts if tpl.get("questions_first") else contacts + custom
 
 
 def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
@@ -199,27 +261,77 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
         "question_page_custom_headline": tpl["headline"],
         "privacy_policy": {"url": tpl["privacy_url"], "link_text": tpl["privacy_link_text"]},
         "locale": tpl["locale"],
+        # Настройки формы (ACL-2053). «Больше объёма» = false; показ только целевым зрителям.
+        # `allow_organic_lead` не шлём: при создании Graph его не принимает (есть лишь
+        # устаревший allow_organic_lead_retrieval), «без органики» задаёт block_display_*.
+        "is_optimized_for_quality": FORM_TYPES[tpl.get("form_type") or DEFAULT_FORM_TYPE],
+        "block_display_for_non_targeted_viewer": True,
     }
+    if tpl.get("follow_up_action_url"):
+        params["follow_up_action_url"] = tpl["follow_up_action_url"]
     if tpl.get("intro"):
-        params["context_card"] = {"title": tpl["headline"], "style": "PARAGRAPH_STYLE",
-                                  "content": [tpl["intro"]]}
-    thanks: dict[str, Any] = {"title": tpl["thank_you_title"], "body": tpl["thank_you_text"]}
-    if tpl.get("website_url"):
-        thanks.update({"button_type": "VIEW_WEBSITE", "button_text": tpl["button_text"],
-                       "website_url": tpl["website_url"]})
-    else:
-        # button_type обязателен; без ссылки на сайт - «без кнопки» (Meta: NONE).
-        thanks["button_type"] = "NONE"
-    params["thank_you_page"] = thanks
+        params["context_card"] = {"title": tpl.get("intro_title") or tpl["headline"],
+                                  "style": "PARAGRAPH_STYLE", "content": [tpl["intro"]]}
+    if tpl.get("thank_you_text") or tpl.get("website_url"):
+        thanks: dict[str, Any] = {"title": tpl["thank_you_title"]}
+        if tpl.get("thank_you_text"):
+            thanks["body"] = tpl["thank_you_text"]
+        if tpl.get("website_url"):
+            thanks.update({"button_type": "VIEW_WEBSITE", "button_text": tpl["button_text"],
+                           "website_url": tpl["website_url"]})
+        else:
+            # button_type обязателен; без ссылки на сайт - «без кнопки» (Meta: NONE).
+            thanks["button_type"] = "NONE"
+        params["thank_you_page"] = thanks
     return params
 
 
 # ───────────────────────── хранилище ─────────────────────────
 
+
+#: Метки автора и времени (added_by, added_at, updated_by, updated_at) лежат рядом
+#: с содержанием, но validate их отбрасывает - на хэш формы они не влияют.
+COPY_NAME = "form_templates_library.json"
+KIND = "form_templates"
+
+_CONTACT_LABEL = {"name": "Name", "email": "Email", "phone": "Phone"}
+
+
+class TemplateError(ValueError):
+    """Шаблон не сохранён; `errors` - список по-английски."""
+
+    def __init__(self, errors: list[str]):
+        super().__init__("; ".join(errors))
+        self.errors = errors
+
+
+class TemplateConflict(TemplateError):
+    """The editor no longer matches the stored template; no write was made."""
+
+
+class LibraryUnavailable(TemplateError):
+    """Общая библиотека недоступна: ничего не сохранено."""
+
+
 def library_path() -> Path:
+    """Локальный файл шаблонов машины (до командной библиотеки и без неё)."""
     from config.paths import get_local_config_dir
 
     return Path(get_local_config_dir()) / "form_templates.json"
+
+
+def _copy_path() -> Path:
+    return library_path().with_name(COPY_NAME)
+
+
+def _tl():
+    from src.analysis_agent import team_library
+
+    return team_library
+
+
+def _team() -> bool:
+    return _tl().configured()
 
 
 @contextmanager
@@ -231,36 +343,140 @@ def _transaction():
             yield
 
 
-def _read(strict: bool = False) -> list[dict[str, Any]]:
-    path = library_path()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-    except (OSError, ValueError):
-        if strict:
-            raise
-        return []
-    rows = data.get("templates") if isinstance(data, dict) else None
-    out = []
-    for row in rows if isinstance(rows, list) else []:
-        clean, errors = validate(row)
-        if clean["id"] and not errors:
-            out.append(clean)
-    return out
+def _empty() -> dict[str, Any]:
+    return {"version": 1, "templates": {}, "deleted": {}}
 
 
-def _write(rows: list[dict[str, Any]]) -> None:
+def _atomic_json(path: Path, data: dict[str, Any]) -> None:
     from config.paths import _atomic_write
 
-    _atomic_write(library_path(), json.dumps({"templates": rows}, ensure_ascii=False, indent=2,
-                                             sort_keys=True).encode("utf-8"))
+    _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
+
+
+def _lower_keys(snap: dict[str, Any]) -> dict[str, Any]:
+    """Ключи записей - id в нижнем регистре (как всегда читал validate); при совпадении первая запись."""
+    for part in ("templates", "deleted"):
+        fixed: dict[str, Any] = {}
+        for key, rec in snap[part].items():
+            fixed.setdefault(key.strip().lower() if isinstance(key, str) else key, rec)
+        snap[part] = fixed
+    # Побеждает активная запись: удалённая с тем же ключом не показывается.
+    for key in [k for k in snap["deleted"] if k in snap["templates"]]:
+        del snap["deleted"][key]
+    return snap
+
+
+def snapshot() -> dict[str, Any]:
+    """Локальные шаблоны машины в формате репозитория - для первого наполнения."""
+    with _transaction():
+        snap, _ = _local_read()
+    return {"version": 1, "templates": snap["templates"], "deleted": snap["deleted"]}
+
+
+def _name_of(rec: Any) -> str:
+    return _s(rec.get("name")) if isinstance(rec, dict) else ""
+
+
+# ── копия библиотеки на машине ──
+
+def _read_copy() -> dict[str, Any]:
+    try:
+        data = json.loads(_copy_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return _empty()
+    if not isinstance(data, dict) or not isinstance(data.get("templates"), dict):
+        return _empty()
+    if not isinstance(data.get("deleted"), dict):
+        data["deleted"] = {}
+    return _lower_keys(data)
+
+
+def _apply_library(lib: dict[str, Any]) -> None:
+    """Свежая версия библиотеки становится копией для чтения на этой машине."""
+    with _transaction():
+        _atomic_json(_copy_path(), lib)
+
+
+def _register() -> None:
+    _tl().on_update(KIND, _apply_library, lambda: _read_copy().get("library_synced_at", ""))
+
+
+_register()
+
+
+# ── локальный файл машины ──
+
+def _local_read(strict: bool = False) -> tuple[dict[str, Any], list[Any]]:
+    """Локальный файл -> (снимок {templates: {id: запись}, deleted}, строки без id).
+
+    Строки не чистятся: битые и без id возвращаются как есть, чтобы запись
+    файла не стёрла их. `strict` - нечитаемый файл не заменяется пустым.
+    """
+    try:
+        data = json.loads(library_path().read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        data = {}
+    except (OSError, ValueError) as exc:
+        if strict:
+            raise OSError("The local form template file could not be read") from exc
+        data = {}
+    snap = _empty()
+    extras: list[Any] = []
+    rows = data.get("templates") if isinstance(data, dict) else None
+    for row in rows if isinstance(rows, list) else []:
+        rid = row.get("id") if isinstance(row, dict) else None
+        rid = rid.strip().lower() if isinstance(rid, str) else rid
+        if isinstance(rid, str) and rid and rid not in snap["templates"]:
+            snap["templates"][rid] = row
+        else:
+            extras.append(row)
+    deleted = data.get("deleted") if isinstance(data, dict) else None
+    if isinstance(deleted, dict):
+        snap["deleted"] = deleted
+    snap["_extras"] = extras      # для проверки имён; в файл не пишется
+    return _lower_keys(snap), extras
+
+
+def _local_write(snap: dict[str, Any], extras: list[Any]) -> None:
+    rows = sorted(snap["templates"].values(), key=lambda r: _name_of(r).casefold()) + list(extras)
+    _atomic_json(library_path(), {"templates": rows, "deleted": snap["deleted"]})
+
+
+def _local_rows() -> list[Any]:
+    with _transaction():
+        snap, extras = _local_read()
+    return list(snap["templates"].values()) + extras
+
+
+# ── чтение ──
+
+def pull(force: bool = False) -> dict[str, Any]:
+    return _tl().pull(KIND, force=force)
+
+
+def library_status() -> dict[str, Any]:
+    return _tl().status(KIND)
+
+
+def _snapshot(force: bool = False) -> dict[str, Any]:
+    """Снимок для чтения: копия библиотеки, а без библиотеки - файл машины."""
+    if _team():
+        pull(force=force)
+        with _transaction():
+            return _read_copy()
+    with _transaction():
+        return _local_read()[0]
 
 
 def load() -> list[dict[str, Any]]:
-    """Все шаблоны (битые строки и битый файл молча пропускаются: страница не падает)."""
-    with _lock:
-        return _read()
+    """Годные к публикации шаблоны. Битые записи не исчезают, но и не отдаются."""
+    out = []
+    for key, rec in _snapshot()["templates"].items():
+        clean, errors = validate(rec, lenient_locale=True)
+        if not errors and clean["id"] == key:
+            out.append(clean)
+    out.sort(key=lambda t: t["name"].casefold())
+    return out
 
 
 def get(template_id: str) -> dict[str, Any] | None:
@@ -268,42 +484,279 @@ def get(template_id: str) -> dict[str, Any] | None:
     return next((t for t in load() if t["id"] == tid), None)
 
 
-class TemplateError(ValueError):
-    """Шаблон не сохранён; `errors` - список по-английски."""
+def summary(tpl: dict[str, Any]) -> str:
+    contacts = ", ".join(_CONTACT_LABEL[k] for k in tpl.get("contact_fields") or [] if k in _CONTACT_LABEL)
+    n = len(tpl.get("questions") or [])
+    return f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
 
-    def __init__(self, errors: list[str]):
-        super().__init__("; ".join(errors))
-        self.errors = errors
+
+def _revision(rec: Any) -> str:
+    """Fingerprint the complete stored row, including unknown fields and metadata.
+
+    This is an edit precondition, separate from the publishing content hash.
+    It is computed from the snapshot actually sent to the editor, never from a
+    fresh read during save (which would silently accept an already stale edit).
+    """
+    payload = json.dumps(rec, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _row(key: str, rec: Any) -> dict[str, Any]:
+    clean, errors = validate(rec, lenient_locale=True)
+    if not errors and clean["id"] != key:
+        errors = ["The template id does not match its library entry"]
+    meta = rec if isinstance(rec, dict) else {}
+    if _ID_RE.match(key):
+        clean["id"] = key
+    return {
+        "id": key, "name": clean["name"] or key or "(no name)", "locale": clean["locale"], "summary": summary(clean),
+        "author": str(meta.get("updated_by") or meta.get("added_by") or ""),
+        "changed_at": str(meta.get("updated_at") or meta.get("added_at") or ""),
+        "added_by": str(meta.get("added_by") or ""), "updated_by": str(meta.get("updated_by") or ""),
+        "invalid": bool(errors), "errors": errors, "template": clean, "revision": _revision(rec),
+    }
+
+
+def recently_deleted(snap: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    snap = snap if snap is not None else _snapshot()
+    rows = []
+    for key, rec in snap["deleted"].items():
+        row = _row(key, rec.get("data"))
+        row.update({"deleted_by": str(rec.get("deleted_by") or ""), "deleted_at": str(rec.get("deleted_at") or "")})
+        rows.append(row)
+    rows.sort(key=lambda r: r["deleted_at"], reverse=True)
+    return rows[:100]
+
+
+def listing(force: bool = False) -> dict[str, Any]:
+    """Всё, что нужно вкладке Forms: строки (с invalid), удалённые, состояние, перенос."""
+    snap = _snapshot(force)
+    rows = [_row(k, r) for k, r in snap["templates"].items()]
+    if not _team():
+        # Строки локального файла без id: показываем (invalid), не трогаем.
+        with _transaction():
+            extras = _local_read()[1]
+        for rec in extras:
+            row = _row("", rec)
+            row["errors"] = row["errors"] + ["The row has no id, so it cannot be edited here"]
+            row["invalid"] = True
+            row["id"] = ""
+            rows.append(row)
+    rows.sort(key=lambda r: r["name"].casefold())
+    return {"rows": rows, "deleted": recently_deleted(snap), "library": library_status(),
+            "migration": migration_status(snap)}
+
+
+# ── правки: в репозиторий библиотеки или, без неё, в файл машины ──
+
+def _mutate(change, message: str):
+    tl = _tl()
+    inner = change
+
+    def change(lib):                       # noqa: F811 - обёртка: ключи всегда в нижнем регистре
+        _lower_keys(lib)
+        return inner(lib)
+
+    if tl.configured():
+        try:
+            return tl.transact(KIND, change, message)[1]
+        except tl.WriteUncertain as exc:
+            raise LibraryUnavailable([str(exc)]) from exc
+        except tl.LibraryError as exc:
+            raise LibraryUnavailable([f"{exc} Nothing was saved."]) from exc
+    with _transaction():
+        snap, extras = _local_read(strict=True)
+        result = change(snap)
+        _local_write(snap, extras)
+        return result
+
+
+def _taken(lib: dict[str, Any], name: str, own: str = "") -> bool:
+    own = own.lower()
+    rows = [(k, r) for k, r in lib["templates"].items()] + [(None, r) for r in lib.get("_extras", [])]
+    return any(k != own and _name_of(r).casefold() == name.casefold() for k, r in rows)
+
+
+def _free_id(lib: dict[str, Any]) -> str:
+    while True:
+        tid = uuid.uuid4().hex[:12]
+        if tid not in lib["templates"] and tid not in lib["deleted"]:
+            return tid
+
+
+def _stamp(rec: dict[str, Any], was: Any = None) -> dict[str, Any]:
+    """Метки автора и времени поверх содержания шаблона."""
+    tl = _tl()
+    was = was if isinstance(was, dict) else {}
+    if was.get("added_at") or was.get("added_by"):
+        rec["added_by"], rec["added_at"] = str(was.get("added_by") or ""), str(was.get("added_at") or "")
+        rec["updated_by"], rec["updated_at"] = tl.author(), tl.now()
+    else:
+        rec["added_by"], rec["added_at"] = tl.author(), tl.now()
+    return rec
 
 
 def save(raw: Any) -> dict[str, Any]:
-    """Сохранить шаблон (новый - с новым id; с id - заменить). Ошибки - `TemplateError`."""
+    """Save a new template or a revision-bound edit; never overwrite a stale editor.
+
+    Existing ids require `_expected_revision` from that row in `listing()`.
+    The precondition is checked again on every file-SHA retry. It is transport
+    metadata only: neither stored content nor publishing hashes include it.
+    """
     clean, errors = validate(raw)
+    if errors and isinstance(raw, dict) and not [e for e in errors if not e.startswith("Unknown locale")]:
+        # Язык вне списка допустим лишь тому шаблону, у которого он уже сохранён.
+        old = next((t for t in load() if t["id"] == clean["id"]), None)
+        if old and old["locale"] == clean["locale"]:
+            clean, errors = validate(raw, lenient_locale=True)
     if errors:
         raise TemplateError(errors)
-    with _transaction():
-        rows = _read(strict=True)
-        if not clean["id"]:
-            clean["id"] = uuid.uuid4().hex[:12]
-        same = [t for t in rows if t["name"].casefold() == clean["name"].casefold() and t["id"] != clean["id"]]
-        if same:
+
+    expected = raw.get("_expected_revision") if isinstance(raw, dict) else None
+
+    def change(lib):
+        tid = clean["id"]
+        if tid and tid in lib["deleted"] and tid not in lib["templates"]:
+            raise TemplateError(["This template was deleted. Restore it from Recently deleted instead of editing it"])
+        was = lib["templates"].get(tid)
+        if tid in lib["templates"]:
+            if not isinstance(expected, str) or not expected:
+                raise TemplateConflict(["Reopen this template before saving it. Nothing was saved."])
+            if expected != _revision(was):
+                raise TemplateConflict(["This template changed since you opened it. Nothing was saved. "
+                                        "Keep your edits, then reopen the template to compare the latest version."])
+        elif expected:
+            raise TemplateConflict(["This template is no longer available. Nothing was saved. Refresh the Forms tab."])
+        if _taken(lib, clean["name"], tid):
             raise TemplateError([f"A template named {clean['name']!r} already exists"])
-        rows = [t for t in rows if t["id"] != clean["id"]]
-        if len(rows) >= MAX_TEMPLATES:
+        if tid not in lib["templates"] and len(lib["templates"]) >= MAX_TEMPLATES:
             raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
-        rows.append(clean)
-        rows.sort(key=lambda t: t["name"].casefold())
-        _write(rows)
-    return clean
+        tid = tid or _free_id(lib)
+        out = {**clean, "id": tid}
+        # Поля записи, которых редактор не знает (поле из будущей версии), едут дальше.
+        merged = {**(was if isinstance(was, dict) else {}), **out}
+        lib["templates"][tid] = _stamp(merged, was)
+        return out
+
+    return _mutate(change, f"Save form template {clean['name']}")
 
 
 def delete(template_id: str) -> bool:
-    """Убрать шаблон ИЗ БИБЛИОТЕКИ (локально). Формы на Страницах не трогаются никогда."""
-    tid = str(template_id or "").strip().lower()
-    with _transaction():
-        rows = _read(strict=True)
-        left = [t for t in rows if t["id"] != tid]
-        if len(left) == len(rows):
+    """Убрать шаблон в Recently deleted. Формы на Страницах не трогаются никогда."""
+    tid = str(template_id or "").strip()
+
+    def change(lib):
+        key = tid if tid in lib["templates"] else tid.lower()
+        if key not in lib["templates"]:
             return False
-        _write(left)
-    return True
+        lib["deleted"][key] = {"data": lib["templates"].pop(key),
+                               "deleted_by": _tl().author(), "deleted_at": _tl().now()}
+        return True
+
+    return bool(tid) and _mutate(change, f"Delete form template {tid}")
+
+
+def restore(template_id: str) -> dict[str, Any]:
+    tid = str(template_id or "").strip()
+
+    def change(lib):
+        rec = lib["deleted"].get(tid)
+        if rec is None:
+            raise TemplateError(["This template is not in Recently deleted. It may have been restored on another machine"])
+        data = dict(rec["data"])
+        name = _name_of(data)
+        if name and _taken(lib, name, tid):
+            raise TemplateError([f"A template named {name!r} already exists. Rename or delete it first"])
+        if len(lib["templates"]) >= MAX_TEMPLATES:
+            raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
+        data["updated_by"], data["updated_at"] = _tl().author(), _tl().now()
+        del lib["deleted"][tid]
+        lib["templates"][tid] = data
+        return validate(data, lenient_locale=True)[0]
+
+    return _mutate(change, f"Restore form template {tid}")
+
+
+def duplicate(template_id: str) -> dict[str, Any]:
+    tid = str(template_id or "").strip().lower()
+
+    def change(lib):
+        if tid not in lib["templates"]:
+            raise TemplateError(["Template not found. It may have been removed on another machine"])
+        clean, errors = validate(lib["templates"][tid], lenient_locale=True)
+        if errors:
+            raise TemplateError(["Fix the template before duplicating it"] + errors)
+        name = clean["name"]
+        for n in range(1, 1000):
+            suffix = " (copy)" if n == 1 else f" (copy {n})"
+            name = clean["name"][:MAX_NAME - len(suffix)].rstrip() + suffix
+            if not _taken(lib, name):
+                break
+        if len(lib["templates"]) >= MAX_TEMPLATES:
+            raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
+        new = {**clean, "id": _free_id(lib), "name": name}
+        lib["templates"][new["id"]] = _stamp(dict(new))
+        return new
+
+    return _mutate(change, f"Duplicate form template {tid}")
+
+
+# ── перенос локальных шаблонов в общую библиотеку ──
+
+def _plan_migration(local_rows: list[Any], lib: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Что из локального файла можно загрузить, и что и почему пропускается."""
+    in_lib: dict[str, str | None] = {}
+    for rec in lib["templates"].values():
+        clean, errors = validate(rec, lenient_locale=True)
+        in_lib[_name_of(rec).casefold()] = None if errors else content_hash(clean)
+    adds: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    used = set(lib["templates"]) | set(lib["deleted"])
+    gone = {_name_of(rec.get("data")).casefold() for rec in lib["deleted"].values() if isinstance(rec, dict)}
+    for row in local_rows:
+        clean, errors = validate(row, lenient_locale=True)
+        name = clean["name"] or _name_of(row) or "(no name)"
+        key = name.casefold()
+        if errors:
+            skipped.append({"name": name, "reason": "Invalid template: " + errors[0]})
+        elif key in in_lib:
+            same = in_lib[key] == content_hash(clean)
+            skipped.append({"name": name, "reason": "Already in the team library" if same else
+                            "A template with this name and different content is already in the team library"})
+        elif key in gone:
+            skipped.append({"name": name, "reason": "Deleted in the team library — restore it from Recently deleted instead"})
+        elif len(lib["templates"]) + len(adds) >= MAX_TEMPLATES:
+            skipped.append({"name": name, "reason": f"The team library is full ({MAX_TEMPLATES} templates)"})
+        else:
+            if not clean["id"] or clean["id"] in used:
+                clean["id"] = ""
+                while not clean["id"] or clean["id"] in used:
+                    clean["id"] = uuid.uuid4().hex[:12]
+            used.add(clean["id"])
+            adds.append(clean)
+            in_lib[key] = content_hash(clean)     # второй локальный с тем же именем уже не загрузится
+    return adds, skipped
+
+
+def migration_status(snap: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Сколько локальных шаблонов можно предложить загрузить в общую библиотеку."""
+    if not _team():
+        return {"available": False, "uploadable": 0, "skipped": []}
+    adds, skipped = _plan_migration(_local_rows(), snap if snap is not None else _snapshot())
+    return {"available": True, "uploadable": len(adds), "skipped": skipped}
+
+
+def migrate_local() -> dict[str, Any]:
+    """Загрузить локальные шаблоны одним коммитом. Локальный файл остаётся нетронутым."""
+    if not _team():
+        raise TemplateError(["The team library is not connected on this machine"])
+    rows = _local_rows()
+    tl = _tl()
+
+    def change(lib):
+        adds, skipped = _plan_migration(rows, lib)
+        for clean in adds:
+            lib["templates"][clean["id"]] = {**clean, "added_by": tl.author(), "added_at": tl.now()}
+        return {"uploaded": len(adds), "skipped": skipped}
+
+    return _mutate(change, "Upload local form templates")
