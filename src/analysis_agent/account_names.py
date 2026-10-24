@@ -61,7 +61,10 @@ def _snapshot() -> list[list[str]]:
     if _CACHE["stamp"] == stamp:
         return _CACHE["rules"]
     rules: list[list[str]] = []
-    if stamp[1] is not None:
+    if stamp[1] is None:
+        _LOG.warning("account_name_rules.json not found at %s; explicit account-name rules are off "
+                     "- reinstall or update ACL", _RULES_PATH)
+    else:
         try:
             rules = _parse(json.loads(_RULES_PATH.read_text(encoding="utf-8")))
         except (OSError, ValueError, TypeError) as exc:
@@ -69,6 +72,20 @@ def _snapshot() -> list[list[str]]:
             rules = []
     _CACHE["stamp"], _CACHE["rules"] = stamp, rules
     return rules
+
+
+def rules_status() -> dict:
+    """Doctor/health view: {'ok', 'path', 'rules', 'error'}. Reads the file fresh, never raises."""
+    out = {"ok": False, "path": str(_RULES_PATH), "rules": 0, "error": ""}
+    try:
+        rules = _parse(json.loads(_RULES_PATH.read_text(encoding="utf-8")))
+    except FileNotFoundError:
+        out["error"] = "config/account_name_rules.json is missing - reinstall or update ACL"
+    except (OSError, ValueError, TypeError) as exc:
+        out["error"] = f"config/account_name_rules.json cannot be loaded: {exc}"
+    else:
+        out.update(ok=True, rules=len(rules))
+    return out
 
 
 def _first_word(name) -> str:
