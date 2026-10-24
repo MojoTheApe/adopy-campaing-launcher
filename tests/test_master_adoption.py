@@ -191,8 +191,33 @@ def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consis
         selected_action = 'MojoTheApe/task-tracker@' + provider['revision']
     else:
         selected_action = 'MojoTheApe/master-repo@' + descriptor['standard']['revision']
-    assert [step['uses'] for step in steps
-            if step.get('uses', '').startswith(('MojoTheApe/master-repo@', 'MojoTheApe/task-tracker@'))] == [selected_action]
+    remote_providers = [step['uses'] for step in steps
+                        if step.get('uses', '').startswith(('MojoTheApe/master-repo@', 'MojoTheApe/task-tracker@'))]
+    if descriptor.get('workflow_provider_transport') is None:
+        assert remote_providers == [selected_action]
+    else:
+        assert provider is not None
+        assert descriptor['workflow_provider_transport'] == 'private-checkout'
+        assert remote_providers == []
+        assert len(steps) == 3
+        checkout = 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'
+        assert steps[0]['uses'] == steps[1]['uses'] == checkout
+        assert steps[0]['with'] == {
+            'repository': 'MojoTheApe/task-tracker',
+            'ref': provider['revision'],
+            'path': 'trusted/provider',
+            'ssh-key': '${{ secrets.TRACKER_PROVIDER_READ_KEY }}',
+            'ssh-strict': True,
+            'persist-credentials': False,
+        }
+        assert steps[1]['with'] == {
+            'path': 'trusted/consumer', 'persist-credentials': False,
+        }
+        assert steps[2]['shell'] == 'bash'
+        assert steps[2]['run'] == (
+            'python3 -I trusted/provider/scripts/workflow_provider.py '
+            'validate --root trusted/consumer --allow-draft'
+        )
     assert not descriptor['workflow']['staging'] and not rules.policy(config)['staging']['enabled']
     assert descriptor['workflow']['stage_branch'] == rules.policy(config)['staging']['branch'] == 'stage'
     assert 'stage' not in config['workflow']

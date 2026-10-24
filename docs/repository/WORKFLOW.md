@@ -8,15 +8,15 @@ Shared contract references retain canonical bodies; `_ACL` documents preserve th
 ## Executable workflow provider — ACL-2156
 
 The owner selected the standalone Task Tracker provider1 from its reviewed stable
-3.14.0 source, immutable commit `e204d17ebe5dbabeb4ca1f5011276d4106f1bcc4`.
-`delivery.json.workflow_provider`, the engine lock and descriptor Action name the
-same executable source. Master1.8.0 stays the unchanged pinned documentation
+3.14.1 source, immutable commit `771d55f3317397e7d56471aa966f0a9de37d1a2e`.
+`delivery.json.workflow_provider`, the engine lock and immutable private-provider checkout name the
+same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed. Master1.8.0 stays the unchanged pinned documentation
 reference; this route needs no Master write or companion publication.
 
 Use the exact official Tracker source and its isolated
 `scripts/workflow_provider.py` entry point for future supported rendering. Read
 [the local provider adoption](STANDALONE_PROVIDER_ACL.md) and
-[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/e204d17ebe5dbabeb4ca1f5011276d4106f1bcc4/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/771d55f3317397e7d56471aa966f0a9de37d1a2e/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 Preserve all local rules below, true pristine ancestry, independent review and
 full applicable checks. The native configuration, adopted execution3, capacities,
 target, required checks, IDs, existing owners and original task scope are unchanged.

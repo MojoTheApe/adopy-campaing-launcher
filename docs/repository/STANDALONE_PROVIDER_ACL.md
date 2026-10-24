@@ -7,21 +7,26 @@ a global skill change or a live Tracker service deployment.
 
 ## Exact source and unchanged controls
 
-Use published [Task Tracker v3.14.0](https://github.com/MojoTheApe/task-tracker/releases/tag/v3.14.0),
-actual merged commit `e204d17ebe5dbabeb4ca1f5011276d4106f1bcc4`.
+Use published [Task Tracker v3.14.1](https://github.com/MojoTheApe/task-tracker/releases/tag/v3.14.1),
+actual merged commit `771d55f3317397e7d56471aa966f0a9de37d1a2e`.
 `delivery.json.workflow_provider` schema1, the descriptor Tracker pin,
 `tracker/engine.json` and `.github/workflows/delivery-check.yml` identify that
-same source. The Action runs the immutable official provider in isolated Python;
-it authenticates the complete source-owned export instead of trusting a
+same source. The explicit `workflow_provider_transport: private-checkout` is
+retained in the descriptor and genuine source-rendered baseline inputs. The
+source-owned workflow fetches the immutable official provider first, then ACL in
+a separate sibling directory. Its fixed isolated Python entry validates ACL only
+as data and authenticates the complete source-owned export instead of trusting a
 consumer-rehashed manifest. Local work uses a clean official exact-source
 checkout and `scripts/workflow_provider.py`; see the immutable
-[provider procedure](https://github.com/MojoTheApe/task-tracker/blob/e204d17ebe5dbabeb4ca1f5011276d4106f1bcc4/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+[provider procedure](https://github.com/MojoTheApe/task-tracker/blob/771d55f3317397e7d56471aa966f0a9de37d1a2e/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 
 Master1.8.0 at `fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` remains the identical
 `standard` reference. The descriptor's verification procedure now names the
 equivalent trusted Task Tracker provider validation and retains ACL's adoption
-audit. Use the clean immutable official source with ACL as `--root`; the Action
-supplies its own independently pinned source identity. Actual required GitHub
+audit. Use the clean immutable official source with ACL as `--root`; the private checkout
+uses the official source verification for clean origin, full HEAD and every
+tracked source blob. Its fixed local CLI deliberately omits `--expected-revision`,
+which belongs to the separate remote Action path. Actual required GitHub
 check names are unchanged. Do not execute a candidate validator or require a
 Master publication for this selected route.
 
@@ -32,6 +37,30 @@ remain. The guarded ACL adapter, native state, installer, product behavior,
 employee data and complete local runtime/engineering knowledge are preserved.
 Source pins do not activate task context, completion, retry, CI evidence, pause
 or another optional policy. Existing draft adoption and readiness guards remain.
+
+## Public ACL and private Task Tracker
+
+ACL is public; Task Tracker remains private. The ordinary private remote Action
+sharing setting cannot serve this public consumer and remains at its original
+`none`. Use the provider-owned private-checkout workflow without local extra
+steps. Both official checkout invocations retain their exact pinned commit and
+`persist-credentials: false`; provider SSH uses strict host verification. The
+provider and consumer stay in `trusted/provider` and `trusted/consumer`. Only the
+verified provider entry executes, after provider authentication has been removed;
+the job never imports, installs or executes consumer code or uploads private
+source artifacts.
+
+The repository operator must separately authorize and provision the dedicated
+read-only Task Tracker deploy key through ACL Actions secret
+`TRACKER_PROVIDER_READ_KEY`. It grants trusted ACL workflow writers effective read
+access to the private provider's complete code/history; do not reuse developer,
+release or update credentials. Source selection alone does not prove that grant
+was authorized or provisioned. Public fork and Dependabot PRs without the secret
+fail closed; no privileged PR event or skipped validation substitutes for a
+successful actual trusted-branch descriptor run. Verify that actual run before
+source admission. Normal independent review, every required check and full
+published-package acceptance remain mandatory. No private key or internal report
+belongs in this repository.
 
 ## Honest template ancestry and local adaptations
 
@@ -47,7 +76,8 @@ its inputs additionally identify the executable provider.
 
 The ordinary three-way migration found exactly two genuine local overlaps:
 
-- The descriptor workflow changes only the selected trusted Action. Preserve its
+- The descriptor workflow selects only the complete source-owned immutable
+  private-checkout transport. Preserve its
   master/main/stage push events, PR behavior, concurrency, credential settings
   and draft validation.
 - `WORKFLOW.md` keeps the full ACL-specific rules and adds this provider route.
