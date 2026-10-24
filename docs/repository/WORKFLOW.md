@@ -17,6 +17,12 @@ Initial source ACL-1924 used old-stage admission before its recorded idle transi
 Retired master clients and one-time activation pauses are historical only;
 package publication and employee updates retain their separate release rules.
 
+## Initial task-context selection: activation pending
+
+[ACL-2099](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1099) selects the released context1 policy (`task_context: {"schema_version": 1}`) in the matching descriptor and Tracker config objects and the truthful template baseline. It re-lands the ACL-1994 selection on the current pinned Master/Tracker pair. The [selected Tracker guide](TRACKER.md#selected-task-context) and [task-context reference](TASK_CONTEXT.md) describe the readiness, strict terminal journal and independent Approved-compatibility commands of that policy.
+
+Selection is not adoption. The shared state stays execution3 without a task-context layer until the genuine one-member selection package is delivered and verified and a separately owned safe idle `task-context adopt` completes. Preserve the existing execution3 5/5/5 limits, one integration reservation, Stage-off package target, instruction-only exception and every owner, queue, historical receipt and archive record. Until that adoption succeeds, use the current route below; these documents do not claim active task-context state. Follow the sequence in [EARLY_ADOPTION.md](EARLY_ADOPTION.md#separate-selection-package-then-owned-idle-activation) and [DELIVERY_POLICY.md](DELIVERY_POLICY.md#one-policy-selection-package-before-activation).
+
 ## Select the route by actual changed files
 
 Read [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS_ACL.md). Once its explicit policy
