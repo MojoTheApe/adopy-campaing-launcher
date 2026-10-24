@@ -1,3 +1,4 @@
+{% import "_metrics.html" as mx %}
 {# Одна страна в карте аккаунтов: таблица, подсказка о пустых строках и
    способы добавить аккаунт. Отдельным файлом, потому что этот же блок
    показывается дважды — списком на Home и в одиночку на вкладке страны.
@@ -27,6 +28,7 @@
         <div class="hc-mount" data-hc-mount></div>
       </section>
       {%- endif %}
+      <div class="amap-table-scroll" tabindex="0" role="region" aria-label="Accounts in {{ mc.country | e }} — scroll horizontally for more columns">
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
@@ -94,6 +96,8 @@
                   до чтения раскрывать нечего, и обещать обратное незачем. -#}
               <span class="amap-caret-off">·</span>
               {{ r.account }}
+              {%- set pv = compare.account(mc.country, r.account) if compare else false -%}
+              {%- if compare %}{{ mx.flag(compare_state(r if r.has_data else none, pv)) }}{% endif %}
               {# Числа подставлены по совпадению хвоста имён — говорим, по
                  какому именно. Молчаливое совпадение выглядит так же, как
                  собственные данные аккаунта, и проверить его было бы нечем. #}
@@ -103,7 +107,9 @@
                  привязку, а не искать данные. #}
               {% if r.elsewhere %}<span class="amap-alias" title="This account has spend in the workbook, but filed under another country. Either the link is wrong, or the account really works there.">↗ {% for c, s in r.elsewhere.items() %}{{ c }} {{ s | fmt_usd }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
             </td>
-            <td class="num">{% if r.has_data %}{{ r.spend | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            {#- ACL-110: сравнение — одна раскладка на шесть метрик строки. -#}
+            {%- set cc = metric_compare(r if r.has_data else none, pv) if compare else none -%}
+            <td class="num">{% if r.has_data %}{{ r.spend | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}{% if cc %}{{ mx.cmp_cell(cc[0]) }}{% endif %}</td>
             {#- Число живёт в своей колонке, кнопки — в своей. Раньше кнопка
                 чтения стояла внутри числовой колонки, а «убрать» уезжало за
                 правый край таблицы: контрол, которого не видно, всё равно что
@@ -156,11 +162,11 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
                 делитель ноль — прочерк, CR 0.0% при лидах — число. Нет данных
                 у аккаунта вовсе — приглушённый прочерк, как раньше. -#}
             {%- set mv = metric_values(r.spend, r.leads, r.deposits) if r.has_data else none -%}
-            <td class="num">{% if r.has_data and mv[1] != '—' %}{{ mv[1] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and mv[2] != '—' %}{{ mv[2] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and mv[3] != '—' %}{{ mv[3] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and mv[4] != '—' %}{{ mv[4] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and mv[5] != '—' %}{{ mv[5] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[1] != '—' %}{{ mv[1] }}{% else %}<span class="nodata">—</span>{% endif %}{% if cc %}{{ mx.cmp_cell(cc[1]) }}{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[2] != '—' %}{{ mv[2] }}{% else %}<span class="nodata">—</span>{% endif %}{% if cc %}{{ mx.cmp_cell(cc[2]) }}{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[3] != '—' %}{{ mv[3] }}{% else %}<span class="nodata">—</span>{% endif %}{% if cc %}{{ mx.cmp_cell(cc[3]) }}{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[4] != '—' %}{{ mv[4] }}{% else %}<span class="nodata">—</span>{% endif %}{% if cc %}{{ mx.cmp_cell(cc[4]) }}{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[5] != '—' %}{{ mv[5] }}{% else %}<span class="nodata">—</span>{% endif %}{% if cc %}{{ mx.cmp_cell(cc[5]) }}{% endif %}</td>
             {#- Пусто и «clear» — разное. Пусто значит «никто не смотрел»,
                 clear — «смотрели, предупреждений не было». Второе не то же
                 самое, что «активен»: страница молчит и когда всё хорошо, и
@@ -248,12 +254,17 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               <button type="button" class="amap-x"
                       title="Take {{ r.account }} out of {{ mc.country }}. The country stays; the account keeps its Multilogin profile, its proxy and its history, and moves to Available accounts."
                       aria-label="Take {{ r.account }} out of {{ mc.country }}"
-                      onclick="amapUnlink({{ r.account | tojson | forceescape }},'country',{{ mc.key | tojson | forceescape }})">×</button>
+                      onclick="amapUnlink({{ r.account | tojson | forceescape }},'country',{{ mc.key | tojson | forceescape }},this)">×</button>
+              <button type="button" class="amap-x amap-x-acl"
+                      title="Remove {{ r.account }} from ACL on this computer: its row in this computer's account map goes and it leaves every country. The shared sheet, its history, its campaigns in Meta and its Multilogin profile stay."
+                      aria-label="Remove {{ r.account }} from ACL"
+                      onclick="amapRemoveFromAcl({{ r.account | tojson | forceescape }},this)">Remove from ACL</button>
             </td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
+      </div>
       {%- if campaign_table_api is defined and campaign_table_api() %}
       <section class="hc hc-after" data-hc-after></section>
       {%- endif %}
@@ -265,3 +276,9 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
       <div class="amap-empty">No accounts placed in this country yet.</div>
       {% endif %}
       {% with amap_value = mc.key %}{% include "_account_map_add.html" %}{% endwith %}
+
+      {% if compare %}{% set earlier_accounts = compare.accounts_gone(mc.country, mc.rows or []) %}{% if earlier_accounts %}
+      <div class="cmp-table-scroll"><table aria-label="Earlier-only accounts in {{ mc.country | e }}"><thead><tr><th>Account · earlier only</th>{{ mx.headers() }}</tr></thead><tbody>
+      {% for r in earlier_accounts %}<tr class="cmp-gone-row"><td>{{ r.account }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=r, gone=true) }}</tr>{% endfor %}
+      </tbody></table></div>
+      {% endif %}{% endif %}
