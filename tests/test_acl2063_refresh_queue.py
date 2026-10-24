@@ -89,6 +89,21 @@ def test_old_or_failed_snapshot_is_not_fresh(env):
     assert not ar.is_fresh("nobody", now=NOW)
 
 
+@pytest.mark.parametrize("state", ["ok", "partial", "empty"])
+def test_latest_failed_attempt_keeps_a_recent_success_from_hiding_retry(env, state):
+    cached = ci.Snapshot(account="A", state=state, finished_at_utc=_iso(NOW - 60))
+    env.snaps["A"] = cached
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 10),
+                         "error": "The profile was opened by hand"}
+    assert not ar.is_fresh("A", now=NOW)
+    q = _queue(env)
+    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
+    assert env.snaps["A"] is cached and env.read == []
+    assert q.request("A", "retry", force=True) == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read == [("A", "retry")]
+
+
 @pytest.mark.parametrize("trigger", ["attention", "schedule"])
 def test_recent_successful_empty_account_does_not_open_again(env, trigger):
     def empty():

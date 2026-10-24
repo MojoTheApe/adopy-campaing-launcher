@@ -31,6 +31,9 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 from src.analysis_agent import account_spend_api as api  # noqa: E402
 from src.analysis_agent import campaign_inventory as ci  # noqa: E402
+from src.analysis_agent import account_refresh as refresh  # noqa: E402
+from src.analysis_agent.account_refresh_state import RefreshStore  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from tests._retry_once import goto, launch_chromium  # noqa: E402
 from tests.test_acl1798_campaign_inventory import ad, adset, camp, snapshot  # noqa: E402
 
@@ -44,9 +47,10 @@ AMAP_CSS = REPORT[REPORT.index("    .amap table { width: 100%"): REPORT.index(" 
 
 
 def account_row(account):
-    """Строка списка аккаунтов страны (ячейка с аккаунтом, спенд, кнопка чтения)."""
+    """Current production cell shape: the list text has its own child span."""
     return (f'<tr><td class="amap-acc"><span class="amap-caret-off">·</span>{account}</td>'
-            f'<td class="amap-list" data-account="{account}">$0.00</td><td class="amap-actions"><button class="amap-btn amap-read">Read spend</button></td></tr>')
+            f'<td class="amap-list" data-account="{account}"><span class="nodata">list not read</span></td>'
+            '<td class="amap-actions"><button type="button" class="amap-x">Remove mapping</button></td></tr>')
 
 
 class Site:
@@ -55,6 +59,23 @@ class Site:
     def __init__(self, web, monkeypatch):
         self.web, self.requests, self.fail_children, self.reads = web, [], 0, []
         self.warm, self.warm_posts = None, []
+        self.admissions = []
+        monkeypatch.setenv('ACL_AUTO_REFRESH', '0')
+        monkeypatch.setattr(refresh, 'dashboard_accounts', lambda: list(ACCOUNTS))
+        monkeypatch.setattr(web, '_mlx_batch_refusal', lambda *args: None)
+
+        def unexpected_read(account, trigger):
+            self.reads.append((account, trigger))
+            raise AssertionError('Cached component tests must not open a profile')
+
+        self.q = refresh.RefreshQueue(unexpected_read,
+            store=RefreshStore(Path(ci._store_path()).parent / 'refresh'),
+            accounts=refresh.dashboard_accounts)
+        # Explicit boundary: exercise real local admission/state routes without
+        # starting an external worker. The scheduled-worker scenarios live in2063.
+        monkeypatch.setattr(self.q, 'start', lambda: None)
+        monkeypatch.setattr(refresh, '_QUEUE', self.q)
+        self.client = TestClient(web.app, base_url='http://127.0.0.1:9095')
         monkeypatch.setattr(web, "_inventory_bi", lambda a, c, f, t, s: ({"campaigns": {}, "ads": {}}, ""))
         # цель и бенчмарк — из настроек машины; в тесте их нет, и таблица должна сказать об этом тире с причиной
         monkeypatch.setattr(web, "_inventory_goal_context", lambda c: {
@@ -72,11 +93,9 @@ class Site:
                 + AMAP_CSS +
                 "</style></head><body style='margin:24px'>" + comp +
                 '<div class="amap"><details class="amap-country" data-country="Kuwait" open>'
-                '<div class="amap-toolbar"><button type="button" class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)">'
-                'Read campaigns in Kuwait</button></div>'
                 '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait"><nav class="hc-tabs" data-hc-tabs></nav>'
                 '<div class="hc-mount" data-hc-mount></div></section>'
-                f'<table class="amap-grid"><thead><tr><th>Account</th><th class="num">Spend</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
+                f'<table class="amap-grid"><thead><tr><th>Account</th><th>Campaign list</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
                 '<section class="hc hc-after" data-hc-after></section>'
                 "</details></div>"
                 "<script>window.AMAP_CAMPAIGN_TABLE = true; function amapPeriod() { return {from: '" + D + "', to: '" + D + "', span: ''}; }\n" + MOUNT_JS + "</script>"
@@ -88,6 +107,18 @@ class Site:
         self.requests.append((req.method, u.path))
         if u.path == "/":
             return route.fulfill(status=200, content_type="text/html", body=self.html())
+        if u.path.startswith('/static/'):
+            asset = (ROOT / 'src/web' / u.path.lstrip('/')).resolve()
+            if asset.is_relative_to(ROOT / 'src/web/static') and asset.is_file():
+                return route.fulfill(content_type='application/javascript', body=asset.read_bytes())
+        if u.path in {'/account-refresh/page-open', '/account-refresh/request', '/account-refresh/state'}:
+            assert req.method == ('GET' if u.path.endswith('/state') else 'POST')
+            response = self.client.request(req.method, u.path,
+                content=req.post_data_buffer,
+                headers={'Content-Type': req.headers.get('content-type', '')})
+            self.admissions.append((req.method, u.path, response.status_code))
+            return route.fulfill(status=response.status_code,
+                content_type='application/json', body=response.content)
         if u.path.startswith("/warm/") and getattr(self, "warm", None):
             W = self.warm
             if u.path == "/warm/state":
@@ -243,11 +274,12 @@ def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
         assert b["title"] in ("ACL-1773",) or b["title"].startswith("Commands unavailable"), b["title"]
         assert b["id"] and b["level"] and b["account"] and b["action"]
     assert {b["title"] for b in info if b["action"] == "copy"} == {"ACL-1773"}
-    posts_before = len([r for r in site.requests if r[0] != "GET"])
+    posts_before = [r for r in site.requests if r[0] != 'GET' and r[1].startswith('/campaign-commands/')]
     page.locator(".hc-cmd").first.click(force=True)
     page.locator(".hc-switch").first.click(force=True)
     page.wait_for_timeout(200)
-    assert len([r for r in site.requests if r[0] != "GET"]) == posts_before == 0
+    assert [r for r in site.requests if r[0] != 'GET' and r[1].startswith('/campaign-commands/')] == posts_before == []
+    assert not site.reads and not site.warm_posts
 
 
 def test_column_preset_and_visibility_persist(page):
@@ -299,19 +331,24 @@ def test_clicking_the_row_toggles_but_buttons_and_keys_behave(page, site):
     assert acc.get_attribute("aria-expanded") == "false"
     page.click(f'{row_of("Acc")} .amap-caret')                                   # стрелка раскрывает
     assert acc.get_attribute("aria-expanded") == "true"
-    page.click(f'{row_of("Acc")} button.amap-read', force=True)                  # свои кнопки строки не раскрывают и не сворачивают
+    page.click(f'{row_of("Acc")} button.amap-x', force=True)                     # свои кнопки строки не раскрывают и не сворачивают
     assert acc.get_attribute("aria-expanded") == "true"
     acc.focus()
     page.keyboard.press("Enter")
     assert acc.get_attribute("aria-expanded") == "false"
     page.keyboard.press("Space")
     assert acc.get_attribute("aria-expanded") == "true"
-    assert not [r for r in site.requests[before:] if r[0] != "GET"]               # раскрытие ничего не читает
+    assert all(method == 'GET' or (method == 'POST' and path == '/account-refresh/request')
+               for method, path in site.requests[before:])
+    assert not site.reads and not site.warm_posts
 
 
 def test_showing_the_block_never_reads_meta(page, site):
     page.wait_for_timeout(300)
-    assert [r for r in site.requests if r[0] != "GET"] == []
+    assert all(method == 'GET' or (method == 'POST' and path in
+               {'/account-refresh/page-open', '/account-refresh/request'})
+               for method, path in site.requests)
+    assert not site.reads and not site.warm_posts
     assert not [r for r in site.requests if r[1] == "/campaign-inventory/read"]
 
 
@@ -334,7 +371,11 @@ def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
         open_acc(pg, "Acc")
         pg.wait_for_selector('.hc-table tbody tr')
         assert pg.locator('[data-hc=needs]').is_hidden()
-        assert not [r for r in site.requests if r[0] == 'POST']
+        assert all(method == 'GET' or (method == 'POST' and path in
+                   {'/account-refresh/page-open', '/account-refresh/request'})
+                   for method, path in site.requests)
+        assert site.admissions and all(status == 409 for method, _, status in site.admissions if method == 'POST')
+        assert site.q.state()['queued'] == [] and site.reads == []
         browser.close()
 
 

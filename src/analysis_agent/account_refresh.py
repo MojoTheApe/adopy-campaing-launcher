@@ -77,6 +77,11 @@ def is_fresh(account: str, *, now: float | None = None) -> bool:
     # Неполное чтение после сбоя не считается удачей даже при сохранённых кампаниях.
     if classify(snap) != "ok":
         return False
+    # Неудачная последняя попытка сохраняет хороший снимок для показа, но
+    # его возраст не должен скрывать ошибку и Retry. Новая удача очищает attempt.
+    attempt = campaign_inventory.get_attempt(account)
+    if attempt and attempt.get("state") == "failed":
+        return False
     done = _parse_utc(snap.finished_at_utc)
     if done is None:
         return False
