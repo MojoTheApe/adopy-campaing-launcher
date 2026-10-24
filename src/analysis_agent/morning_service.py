@@ -213,6 +213,8 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
                 raise bi_stats.BIUnavailable("BI and the stats archive are unavailable and there is no Stats workbook")
             return bi_compare.annotate_source(_read_workbook_cached(excel_path), "workbook"), "excel", " ".join(notes)
         bi = bi_stats.assign_cm(window, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
+        if bi.attrs.get("unmapped_cm_rows"):
+            notes.append("BI coverage is incomplete: some rows have no mapped campaign manager and remain outside the selected team.")
         book = _read_workbook_cached(excel_path) if os.path.isfile(excel_path) else None
         return merge_bi_with_history(bi, book), "bi", " ".join(notes)
 
@@ -222,6 +224,8 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
     from_bi = stored[stored[bi_compare.SOURCE_COLUMN] == "bi"].drop(columns=["CM"])
     from_book = stored[stored[bi_compare.SOURCE_COLUMN] == "workbook"].drop(columns=["CM_ID"])
     from_bi = bi_stats.assign_cm(from_bi, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
+    if from_bi.attrs.get("unmapped_cm_rows"):
+        notes.append("BI coverage is incomplete: some saved rows have no mapped campaign manager and remain outside the selected team.")
     rows = pd.concat([from_book, from_bi], ignore_index=True, sort=False)
     if window is None:
         print(f"[morning_service] {notes[0]}", file=sys.stderr)

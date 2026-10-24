@@ -526,7 +526,7 @@ def _build_account_map_view(
     closed must stop appearing even while last week's numbers are still in the
     file.
 
-    Numbers come from the workbook, per account per country — leads, deposits,
+    Numbers come from the selected statistics source, per account per country — leads, deposits,
     spend, CPL, CPA, CR are already computed there, so nothing is recalculated
     here and the map cannot disagree with the rest of the page.
     """
@@ -894,8 +894,10 @@ def _build_account_map_view(
         mc["note_key"] = _account_notes.country_key(mc.get("country") or "")
 
     available = _with_assets(buckets["shown"])
+    from src.analysis_agent import bi_compare
     return {
         "countries": countries,
+        "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),
         # ACL-1656: «Campaign managers» внизу Home.
@@ -1078,7 +1080,7 @@ def _home_kpis(report: dict) -> list[dict]:
         cmp_ = home_you_vs_others(report.get("countries", []), report.get("my_cm", ""))
         if not cmp_["countries_used"]:
             return []
-        return home_kpi_tiles(cmp_)
+        return home_kpi_tiles(cmp_, money=lambda value: source_display.money(value, report.get("source_info")))
     except Exception:  # pragma: no cover - плитки не должны ронять отчёт
         return []
 
@@ -1417,15 +1419,18 @@ def _campaign_table_api() -> bool:
 
 
 templates.env.globals["campaign_table_api"] = _campaign_table_api
-templates.env.filters["fmt_usd"] = fmt_usd
+from src.web import source_display
+templates.env.filters["fmt_usd"] = source_display.source_money
 templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
 # ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
 # заголовки, и ячейки — таблицы не могут разойтись друг с другом.
-templates.env.globals["metric_values"] = metric_columns.metric_values
+templates.env.globals["source_comparison_cell"] = source_display.comparison_cell
+templates.env.globals["source_comparison_info"] = source_display.comparison_info
+templates.env.globals["metric_values"] = source_display.metric_values
 # ACL-110: «было X и изменение» под значением, когда включено сравнение периодов.
-templates.env.globals["metric_compare"] = period_compare.metric_compare
-templates.env.globals["value_compare"] = period_compare.value_compare
+templates.env.globals["metric_compare"] = source_display.metric_compare
+templates.env.globals["value_compare"] = source_display.value_compare
 templates.env.globals["compare_state"] = period_compare.state_for
 # Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
 # status are hidden for now. True brings them back (template: _account_map_country.html).
@@ -4746,10 +4751,15 @@ def account_attribution(
     except Exception as exc:  # pragma: no cover - кривая книга не должна ронять дерево
         return JSONResponse({"ok": False, "error": f"Workbook numbers failed: {exc}"}, status_code=500)
 
+    from src.analysis_agent import bi_compare
+    source = bi_compare.provenance(frame=frame) if bi_compare.SOURCE_COLUMN in frame else _report.get("source_info")
+
     def _shown(m: dict) -> dict:
         # ACL-1652: те же шесть значений, что в таблицах; прочерк — это null,
         # его рисует сам экран (`nodata`). CR 0.0% при лидах — настоящее число.
         spend, _l, _f, cpl, cpa, cr = metric_columns.metric_values(m["spend"], m["leads"], m["deposits"])
+        ratios = metric_columns.ratios(m["spend"], m["leads"], m["deposits"])
+        spend, cpl, cpa = (source_display.money(value, source) for value in (m["spend"], ratios["cpl"], ratios["cpa"]))
         dash = metric_columns.DASH
         return {
             "spend": spend,
@@ -4766,6 +4776,7 @@ def account_attribution(
         "date_from": date_from,
         "date_to": date_to,
         "alias": alias,
+        "source": source,
         "campaigns": {k: _shown(v) for k, v in got["campaigns"].items()},
         "ads": {c: {a: _shown(v) for a, v in per.items()} for c, per in got["ads"].items()},
     })

@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 from typing import Any, Dict, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
@@ -37,7 +38,13 @@ def currency_code(value: Any) -> str:
 
 def timezone_name(value: Any) -> str:
     value = text(value)
-    return "UTC" if value in {"UTC", "Etc/UTC", "GMT", "Etc/GMT"} else value
+    if not value:
+        return ""
+    try:
+        zone = ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ""
+    return "UTC" if value in {"UTC", "Etc/UTC", "GMT", "Etc/GMT"} else zone.key
 
 
 def configured_metadata(source: str) -> Dict[str, str]:

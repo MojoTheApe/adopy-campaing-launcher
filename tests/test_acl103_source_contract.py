@@ -16,6 +16,7 @@ from tests.test_acl103_bi_stats import CM_MAP, ROW_KNOWN, _raw
 
 @pytest.fixture(autouse=True)
 def isolated_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "machine-config"))
     for name, value in {
         "BI_MYSQL_HOST": "bi.invalid", "BI_MYSQL_USER": "synthetic-reader",
         "BI_MYSQL_PASSWORD": "synthetic-password", "BI_CURRENCY": "USD",
@@ -226,3 +227,72 @@ def test_old_api_display_sign_does_not_fabricate_an_iso_code(monkeypatch, tmp_pa
     row = endpoint(monkeypatch, frame, {reading.account: restored.to_dict()})["rows"][0]
     assert row["comparison_state"] == "unknown_currency" and not row["currency_mismatch"]
     assert row["account_spend"] == 14.0 and row["gap"] is None
+
+
+def test_matching_invalid_timezone_text_does_not_become_a_known_day_basis(monkeypatch):
+    monkeypatch.setenv("BI_TIMEZONE", "Europe/Not_A_Timezone")
+    frame = bi_stats.to_workbook_frame(_raw([ROW_KNOWN]), CM_MAP)
+    reading = {"state": "ok", "spend": 14.0, "currency": "USD",
+               "timezone": "Europe/Not_A_Timezone", "day_boundary": "calendar_day"}
+    row = endpoint(monkeypatch, frame, {"FacebookDoc101": reading})["rows"][0]
+    assert row["comparison_state"] == "unknown_day_boundary" and row["gap"] is None
+
+
+@pytest.mark.parametrize("currency,label", [("EUR", "EUR 13"), ("", "currency unknown 13")])
+def test_source_metric_template_does_not_invent_usd(currency, label):
+    rendered = web.templates.env.from_string(
+        '{% import "_metrics.html" as mx with context %}'
+        '{{ mx.cells(12.5, 5, 1) }} {{ 12.5 | fmt_usd }}'
+    ).render(report={"source_info": {"currency_code": currency}})
+    assert label in rendered
+    assert "$" not in rendered
+
+
+@pytest.mark.parametrize("currency,label", [("EUR", "EUR 13"), ("", "currency unknown 13")])
+def test_actual_tree_source_money_keeps_known_and_unknown_units(monkeypatch, currency, label):
+    from src.analysis_agent import bi_compare
+    from tests.test_tree_attribution import _book
+    frame = bi_compare.annotate_source(_book(), "bi")
+    frame[bi_compare.METADATA_COLUMNS["currency_code"]] = currency
+    monkeypatch.setattr(web, "get_cached_report", lambda: ({}, frame, []))
+    monkeypatch.setattr(web, "workbook_alias_for", lambda *args: "FacebookX")
+    body = json.loads(web.account_attribution("FacebookX", "Kuwait", "2026-09-02", "2026-09-04").body)
+    assert body["source"]["currency_code"] == currency
+    assert body["campaigns"]["KW_camp_A"]["spend"] == label.replace("13", "190")
+    assert "$" not in json.dumps(body["campaigns"])
+
+
+def test_template_units_are_request_local_and_account_display_is_separate():
+    template = web.templates.env.from_string('{{ 12.5|fmt_usd }} / {{ 14|fmt_currency("$") }}')
+    assert template.render(report={"source_info": {"currency_code": "EUR"}}) == "EUR 13 / $14.00"
+    assert template.render(report={"source_info": {"currency_code": ""}}) == "currency unknown 13 / $14.00"
+    assert template.render(report={}) == "$13 / $14.00"
+
+
+def test_unknown_cm_coverage_is_visible_without_taking_other_teams(monkeypatch, tmp_path):
+    from tests.test_acl103_bi_stats import ROW_FOREIGN
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_KNOWN, ROW_FOREIGN]))
+    report, frame, warnings = morning_service.load_morning_report(
+        excel_path=str(tmp_path / "absent.xlsx"), my_cm="Evgeni Sedin", skip_gsheet=True)
+    assert list(frame["Account Alias"]) == ["FacebookDoc101"]
+    assert any("coverage is incomplete" in note for note in warnings)
+
+
+@pytest.mark.parametrize("current,previous,label,change", [
+    ("EUR", "EUR", "EUR 100", "+100%"),
+    ("EUR", "USD", "$100", "—"),
+    ("", "", "currency unknown 100", "—"),
+])
+def test_prebuilt_period_money_uses_earlier_unit_and_only_comparable_change(current, previous, label, change):
+    from types import SimpleNamespace
+    from src.web import period_compare
+    info = lambda code: {"currency_code": code, "timezone": "UTC", "day_boundary": "calendar_day"}
+    cells = period_compare.metric_compare({"spend": 200, "leads": 20, "deposits": 4},
+                                          {"spend": 100, "leads": 10, "deposits": 2})
+    template = web.templates.env.from_string('{% import "_metrics.html" as mx with context %}{{ mx.cmp_cell(cell) }}')
+    context = {"report": {"source_info": info(current)},
+               "compare": SimpleNamespace(_report={"source_info": info(previous)})}
+    shown = template.render(cell=cells[0], **context)
+    assert label in shown and f'>{change}</span>' in shown
+    count = template.render(cell=cells[1], **context)
+    assert ">10</span>" in count and ">+100%</span>" in count

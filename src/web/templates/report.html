@@ -3948,6 +3948,8 @@
     .hk-you { margin-top: var(--adopy-space-2); font-size: var(--adopy-text-kpi); line-height: var(--adopy-leading-tight);
       font-weight: var(--adopy-weight-semibold); color: var(--adopy-link); font-variant-numeric: tabular-nums lining-nums;
       letter-spacing: -0.02em; overflow-wrap: anywhere; }
+    .hk-unit-unknown .hk-tile:is([data-kpi="cpa"], [data-kpi="cpl"], [data-kpi="spend"]) .hk-you {
+      font-size: var(--adopy-text-title); }
     .hk-you small, .hk-others small { font-size: var(--adopy-text-xs); font-weight: var(--adopy-weight-regular);
       color: var(--adopy-text-muted); margin-left: var(--adopy-space-2); letter-spacing: 0; }
     .hk-others { display: flex; justify-content: space-between; gap: var(--adopy-space-2); margin-top: var(--adopy-space-2);
@@ -4051,7 +4053,7 @@
     {%- endif %}
     <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
     {%- if compare_note %}<p class="cmp-note" role="status">{{ compare_note }}</p>{% endif %}
-    {%- if compare and compare.empty %}<p class="cmp-note" role="status">The workbook has no rows for {{ compare.label }}, so every row is new.</p>{% endif %}
+    {%- if compare and compare.empty %}<p class="cmp-note" role="status">The selected statistics have no rows for {{ compare.label }}, so every row is new.</p>{% endif %}
   </div>
   {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
       Это не свойство продукта, а положение зрителя, и меняется оно чаще,
@@ -4105,7 +4107,7 @@
       <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
       {%- if report.source_info %}
       <div><dt>Figures:</dt>
-      <dd id="acl-source-info" data-source-name="{{ report.source_info.description }}" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} · incomplete metadata{% endif %}</dd></div>
+      <dd id="acl-source-info" data-source-name="{{ report.source_info.description }}" data-source-currency="{{ report.source_info.currency_code }}" data-source-prev-currency="{{ source_comparison_info().currency_code }}" data-source-comparable="{{ 'true' if source_comparison_info().comparable else 'false' }}" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} · incomplete metadata{% endif %}</dd></div>
       {%- endif %}
       <div><dt>Version:</dt>
       <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
@@ -4372,7 +4374,7 @@ async function dashRefresh(ev) {
 {%- set book_covers_period = namespace(value=(not account_map) or
       (not account_map.date_from and not account_map.date_to)) %}
 {#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
-{% import "_metrics.html" as mx %}
+{% import "_metrics.html" as mx with context %}
 {#- ACL-1800: командная таблица кампаний — компонент для областей под строками аккаунтов (стили, шаблон, hcMount). Секции на Home у неё нет. -#}
 {% if campaign_table_api is defined and campaign_table_api() %}{% include "_campaign_table.html" %}{% endif %}
 {% if account_map %}
@@ -4389,7 +4391,7 @@ async function dashRefresh(ev) {
   <p style="color: var(--muted)" data-empty-owner="manager">
     No rows for {{ period_owner.manager }} in
     <b>{{ period.date_from or 'the start' }}{% if period.date_to and period.date_to != period.date_from %} → {{ period.date_to }}{% elif not period.date_to %} onward{% endif %}</b>,
-    while the workbook has rows for other managers on these dates. Nothing to review for you here; the file itself is not the problem.
+    while the selected statistics have rows for other managers on these dates. Nothing to review for you here; the source itself is not the problem.
     Pick another period, or read the spend straight from an account below; the account map stays on this page.
   </p>
 </div>
@@ -4398,10 +4400,10 @@ async function dashRefresh(ev) {
 <div class="page-top" id="workbook-period-notice" role="status">
   {% if account_map and not book_covers_period.value %}
   <p style="color: var(--muted)">
-    {% if account_map.dates %}The workbook has no rows for{% else %}The workbook has no rows with readable dates for{% endif %}
+    {% if account_map.dates %}The selected statistics have no rows for{% else %}The selected statistics have no rows with readable dates for{% endif %}
     <b>{% if account_map.date_from %}{{ account_map.date_from }}{% if account_map.date_to and account_map.date_to != account_map.date_from %} → {{ account_map.date_to }}{% elif not account_map.date_to %} onward{% endif %}{% else %}dates through {{ account_map.date_to }}{% endif %}</b>.
     {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
-    Nobody has rows for these dates, so the workbook itself may need updating.
+    Nobody has rows for these dates, so the statistics source may need updating.
     Pick another period, or read the spend straight from an account below.
   </p>
   {% else %}
@@ -4795,7 +4797,7 @@ async function dashRefresh(ev) {
       Данных нет — полосы нет, а не нули. -#}
   {% if home_kpis %}
   {% set home_period = compare.home_tiles(report) if compare else {} %}
-  <section class="hk-row" id="home-kpis" aria-label="Your results compared with other buyers, all countries">
+  <section class="hk-row{% if report.source_info and not report.source_info.currency_code %} hk-unit-unknown{% endif %}" id="home-kpis" aria-label="Your results compared with other buyers, all countries">
     <div class="hk-head"><h2 class="hk-title">You vs Others</h2>
       <span class="hk-sub">All countries · selected period · others exclude {{ report.my_cm or 'the selected buyer' }}</span></div>
     <div class="hk-grid">
@@ -4931,7 +4933,7 @@ async function dashRefresh(ev) {
     {% include "_account_map_country.html" %}
   {%- else %}
   <div class="amap-empty">
-    {{ c.country }} is not on the account map yet — the workbook has rows for it,
+    {{ c.country }} is not on the account map yet — the selected source has rows for it,
     but nobody has placed an account here.
   </div>
   <div class="amap-add">
@@ -9086,10 +9088,27 @@ function aclCountryBuilder(country) {
 // правя одно, правь другое. Делитель ноль даёт «—», доллары целыми с
 // округлением вверх, CR с одним знаком (0.0% при лидах — настоящее число).
 var ACL_METRIC_HEADERS = ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'];
+function aclSourceMoney(value) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  var e = typeof document !== 'undefined' ? document.getElementById('acl-source-info') : null;
+  var unit = e ? (e.dataset.sourceCurrency || '') : 'USD';
+  var prefix = unit === 'USD' ? '$' : (unit || 'currency unknown') + ' ';
+  return prefix + (Math.ceil(Number(value)) || 0).toLocaleString('en-US');
+}
+
+function aclSourceComparisonCell(cell) {
+  var e = typeof document !== 'undefined' ? document.getElementById('acl-source-info') : null;
+  if (!cell || !e || String(cell.prev).charAt(0) !== '$') return cell;
+  var unit = e.dataset.sourcePrevCurrency || '';
+  var copy = Object.assign({}, cell, {prev: (unit === 'USD' ? '$' : (unit || 'currency unknown') + ' ') + String(cell.prev).slice(1)});
+  if (e.dataset.sourceComparable !== 'true') Object.assign(copy, {delta: '—', dir: '', tone: ''});
+  return copy;
+}
+
 function acl6Metrics(spend, leads, ftds) {
   var num = function(v) { v = Number(v); return isFinite(v) ? v : null; };
   var s = num(spend) || 0, l = num(leads) || 0, f = num(ftds) || 0;
-  var money = function(v) { return v === null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US'); };
+  var money = function(v) { return typeof aclSourceMoney === 'function' ? aclSourceMoney(v) : (v === null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US')); };
   return [
     money(s),
     String(Math.trunc(l)),
@@ -9299,7 +9318,7 @@ function amapCalendar(btn) {
   var open = document.querySelector('.amap-cal');
   if (open) { if (open._amapClose) open._amapClose(true); else open.remove(); return; }
   var have = amapDates();
-  if (!have.length) { aclInlineError(btn, 'The workbook has no dates to choose from.'); return; }
+  if (!have.length) { aclInlineError(btn, 'The statistics source has no dates to choose from.'); return; }
   aclInlineError(btn, '');
 
   /* Выбор живёт в черновике, пока не нажали Update. Раньше второй клик по дате
@@ -9430,7 +9449,7 @@ function amapCalendar(btn) {
          любой день, а книга отстаёт на день-два почти всегда. Тонкой цифрой
          показываем, что дешборд про этот день ничего не знает. */
       h += '<button type="button" class="' + cls + (has ? '' : ' thin') + '" data-day="' + key + '"'
-        + (has ? '' : ' title="no rows in the workbook for this day"') + '>' + day + '</button>';
+        + (has ? '' : ' title="no source rows for this day"') + '>' + day + '</button>';
     }
     return h + '</div></div>';
   }
@@ -9449,7 +9468,7 @@ function amapCalendar(btn) {
       var live = hasData(p);
       h += '<button type="button" data-preset="' + p.key + '"'
         + ' class="' + (active === p.key ? 'on' : '') + (live ? '' : ' thin') + '"'
-        + (live ? '' : ' title="the workbook has no rows here — the dashboard numbers will be empty, but the spend can still be read from the account"')
+        + (live ? '' : ' title="the statistics source has no rows here — the dashboard numbers will be empty, but the spend can still be read from the account"')
         + '><i></i>' + p.label + '</button>';
     });
     h += '<button type="button" data-preset="custom" class="' + (active === 'custom' ? 'on' : '')
@@ -9464,7 +9483,7 @@ function amapCalendar(btn) {
       + '</div>'
       + cmpHtml()
       + '<div class="amap-cal-foot">'
-      + '<span>' + have.length + ' days in the workbook'
+      + '<span>' + have.length + ' days in the statistics source'
         + (last < amapIso(new Date()) ? ', last ' + last : '') + '</span>'
       + '<button type="button" class="amap-btn" data-cancel="1">Cancel</button>'
       + '<button type="button" class="amap-btn primary" data-apply="1">Update</button>'
@@ -9875,7 +9894,7 @@ function amapRefreshCountryLines(per) {
       var totNow = fresh.querySelector('#amap-totals .amap-cell-read');
       if (totWas && totNow) totWas.innerHTML = totNow.innerHTML;
       var count = map.querySelector('.amap-head > .amap-note');
-      if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from the stats workbook';
+      if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from ' + AMAP_SOURCE;
       if (typeof amapWatchOpen === 'function') amapWatchOpen();
     });
 }
@@ -10377,8 +10396,8 @@ function amapTreeName(s) {
   }
 }
 
-var AMAP_SOURCE = (function () { var e = document.getElementById('acl-source-info'); return (e && e.dataset.sourceName) || 'the stats workbook'; })();
-var AMAP_SHARED_TIP = 'The workbook cannot tell ads with the same name apart; '
+var AMAP_SOURCE = (function () { var e = document.getElementById('acl-source-info'); return (e && e.dataset.sourceName) || 'the selected statistics'; })();
+var AMAP_SHARED_TIP = 'The source data cannot tell ads with the same name apart; '
                     + 'these are the totals for all of them';
 
 function amapOwn(obj, key) {
@@ -10421,18 +10440,18 @@ function amapFillAttribution(box, objects, data) {
       var camp = keys.campName[o.parent_id] || '';
       var n = amapTreeName(o.name);
       if (!camp) why = 'The campaign of this ad is not known';
-      else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
+      else if (keys.campCount[camp] > 1) why = 'Two campaigns share this name — the source data cannot tell them apart';
       else {
         got = amapOwn(amapOwn(data.ads, camp), n);
         shared = keys.adCount[camp + '\u0001' + n] || 0;
       }
-      if (!got && !why) why = 'No rows for this ad in the stats workbook for these dates';
+      if (!got && !why) why = 'No rows for this ad in the selected source for these dates';
     } else {
       var cn = amapTreeName(o.name);
-      if (keys.campCount[cn] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
+      if (keys.campCount[cn] > 1) why = 'Two campaigns share this name — the source data cannot tell them apart';
       else got = amapOwn(data.campaigns, cn);
       if (!got && !why) {
-        why = 'No rows for this campaign in the stats workbook for these dates';
+        why = 'No rows for this campaign in the selected source for these dates';
         /* ACL-1377: у Meta числа есть, а в книге строк нет (прогревочные
            MaxWarmup на Doc19). Прочерки тогда — не поломка, и это сказано
            тихой пометкой у уровня строки. */
@@ -10470,8 +10489,8 @@ function amapFillAttribution(box, objects, data) {
       if (nkind) {
         var tag = document.createElement('small');
         tag.className = 'amap-tree-nowb';
-        tag.textContent = ' · not in workbook';
-        tag.title = 'Meta shows this campaign, but the stats workbook has no rows for it '
+        tag.textContent = ' · not in source';
+        tag.title = 'Meta shows this campaign, but the selected source has no rows for it '
                   + 'for these dates (for example a warm-up campaign). The dashes are not an error.';
         nkind.appendChild(tag);
       }
@@ -10485,8 +10504,8 @@ function amapFillAttribution(box, objects, data) {
   if (!data || !data.ok) {
     var note = document.createElement('div');
     note.className = 'amap-tree-note amap-tree-attr-err';
-    note.textContent = (data && data.error) || 'Workbook numbers could not be loaded';
-    note.title = 'The numbers from the stats workbook are missing because they could '
+    note.textContent = (data && data.error) || 'Source numbers could not be loaded';
+    note.title = 'The numbers from the selected source are missing because they could '
                + 'not be read — not because this account has none.';
     /* Рядом с числами, к которым относится, а не под свёрнутым журналом:
        остальные оговорки дерева встают до него, а эта приходит позже, когда
@@ -10509,7 +10528,7 @@ function amapLoadAttribution(row, box, objects) {
     + '&span=' + encodeURIComponent(pick.span || '');
   fetch('/account-attribution?' + q)
     .then(function (r) { return r.json(); })
-    .catch(function () { return {ok: false, error: 'Workbook numbers could not be loaded'}; })
+    .catch(function () { return {ok: false, error: 'Source numbers could not be loaded'}; })
     .then(function (data) { if (box.isConnected) amapFillAttribution(box, objects, data); });
 }
 
@@ -10788,7 +10807,7 @@ function amapPaintTree(row, s) {
        даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
     head.textContent += ' · Meta numbers for ' + s.date_from
       + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
-      + ', workbook numbers for the dates on screen';
+      + ', source numbers for the dates on screen';
     head.classList.add('old');
   }
   if (head) box.appendChild(head);
@@ -19752,7 +19771,7 @@ window.cwWorkbench = (function () {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function money(v) { return v == null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US'); }
+  function money(v) { return typeof aclSourceMoney === 'function' ? aclSourceMoney(v) : (v == null ? '—' : '$' + (Math.ceil(v) || 0).toLocaleString('en-US')); }
   function pct(v) { return v == null ? '—' : v.toFixed(1) + '%'; }
   function fmt(name, v) { return name === 'cr' ? pct(v) : money(v); }
 
@@ -19885,6 +19904,7 @@ window.cwWorkbench = (function () {
 
   /* Строка таблицы с шестью метриками; `fmt6` — acl6Metrics страницы. */
   function periodCell(c) {
+    if (typeof aclSourceComparisonCell === 'function') c = aclSourceComparisonCell(c);
     return c ? '<small class="cmp"><span class="cmp-prev" title="Earlier period">' + esc(c.prev)
       + '</span><span class="cmp-delta ' + esc(c.dir || '') + ' ' + esc(c.tone || '') + '">' + esc(c.delta) + '</span></small>' : '';
   }

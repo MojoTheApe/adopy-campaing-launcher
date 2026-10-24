@@ -12,7 +12,7 @@ Code: `src/analysis_agent/bi_stats.py` (`COLUMN_MAP`, `normalize`, `assign_cm`),
 | Workbook column | BI column | Type after load | Notes |
 |---|---|---|---|
 | (CM name) | `CM_ID` | text, `Unknown` when empty | Code mapped to a name by `config/bi_cm_map.json`; see CM rules |
-| Date | `DATE` | date | Day as delivered by BI; no time zone in the table |
+| Date | `DATE` | date | Daily label as delivered; source timezone is explicit metadata or unknown |
 | Account Alias | `ACCOUNT_ALIAS` | text | The key used to compare with account readings |
 | Adset Name | `ADSET_NAME` | text | |
 | Ad Title | `AD_TITLE` | text | |
@@ -36,10 +36,11 @@ full on every read (no date bound), then reduced to the workbook schema.
 - A code in `bi_cm_map.json` becomes that manager's name.
 - `Unknown` takes the manager the same account has in its other BI rows (a foreign code on a
   shared account is not assigned to us).
-- Any other unmapped code (other teams, Taboola) is dropped by default, because the workbook
-  never held those rows. `BI_STATS_ALL_CMS=1` keeps them as `CM <code>`.
+- Remaining unmapped codes stay outside the selected-team mapping and are excluded by
+  default; absence from that mapping does not prove their real team. `BI_STATS_ALL_CMS=1` keeps them as `CM <code>`.
 - `bi_cm_map.json` is derived from a six-day overlap with the workbook and is to be confirmed
-  by BI.
+  by BI. Excluded unresolved CM rows remain outside the selected team, with a visible
+  incomplete-coverage warning; inference alone does not prove every excluded row is foreign.
 
 ## Currency and day boundary (103e)
 
@@ -67,6 +68,9 @@ metadata remains unknown. This is supported behavior, not evidence those columns
   to implement this safe state; authentic retained/schema/configuration evidence can supply facts.
 - SQLite preserves row source and metadata. Additive migration retains old rows and workbook
   version receipts; old metadata-less rows stay unknown, rather than inheriting today's settings.
+- Source table/Net/attribution/Workbench and Home amounts use their retained ISO unit (or
+  explicit currency unknown); separate account money and Builder USD budgets are unchanged.
+  Monetary period changes require comparable units/day bases; count changes remain available.
 - The header, tooltips and API describe the selected period's actual workbook/BI/mixed rows,
   including during archive failure fallback. Archive is storage, not a new upstream provider.
 

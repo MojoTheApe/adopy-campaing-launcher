@@ -73,5 +73,10 @@ def test_the_two_spends_say_where_they_came_from():
     """Рядом стоят два спенда — из книги и с кабинета. Порознь их путают."""
     t = TPL.read_text(encoding="utf-8")
     head = t[t.index("<thead>"): t.index("</thead>")]
-    assert "workbook" in head, "не сказано, что первый спенд — из книги"
+    from src.web.app import templates
+    # ACL-103: source can be BI, workbook or mixed, so a static workbook assertion is wrong.
+    for description in ("the Stats workbook", "the BI data", "the selected source data"):
+        shown = templates.env.from_string(head).render(amap={"source_info": {"description": description}})
+        assert f"Spend from {description} for the chosen period" in shown
+        assert "ad account itself" in shown
     assert "ad account itself" in head, "не сказано, что второй прочитан с кабинета"

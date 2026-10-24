@@ -170,9 +170,11 @@ def assign_cm(df: pd.DataFrame, cm_map: Dict[str, str], *, keep_unmapped: bool =
         by_alias = known.groupby("alias")["cm"].agg(lambda s: s.value_counts().index[0])
         inherit = codes.eq(UNKNOWN) & names.isna()
         names = names.where(~inherit, df["Account Alias"].map(by_alias))
+    unresolved = int(names.isna().sum())
     if not keep_unmapped:
         df, codes, names = df[names.notna()].copy(), codes[names.notna()], names[names.notna()]
     df["CM"] = names.fillna("CM " + codes)
+    df.attrs["unmapped_cm_rows"] = unresolved if not keep_unmapped else 0
     return df
 
 
