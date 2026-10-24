@@ -533,6 +533,8 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     if entry is None:
         raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    if not profile:
+        raise ProfileLeaseError(f"{account} has no profile_id in the account map.")
     return physical_profile_key(profile)
 
 

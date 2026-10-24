@@ -105,10 +105,14 @@ def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _account_refresh_off_the_live_machine(tmp_path_factory, monkeypatch):
+def _account_refresh_off_the_live_machine(tmp_path_factory):
     from src.analysis_agent import account_refresh_state
     root = tmp_path_factory.mktemp("account_refresh_machine") / "coordination"
-    monkeypatch.setattr(account_refresh_state, "machine_root", lambda: root)
+    # A private patch avoids moving the shared monkeypatch fixture before the
+    # existing RPA reset/undo boundary (which must restore mocks before reset).
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(account_refresh_state, "machine_root", lambda: root)
+        yield
 
 
 # Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
