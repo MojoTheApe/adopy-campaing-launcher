@@ -204,7 +204,11 @@ def test_health_names_the_running_version(monkeypatch):
 
     monkeypatch.setattr(web, "_installed_release", lambda: {"tag": "2026-09-20"})
     body = json.loads(asyncio.run(web.health()).body)
-    assert body == {"app": "ACL", "ok": True, "version": "2026-09-20"}
+    # `config` — чей это дешборд (ACL-1309); его проверяет
+    # tests/test_the_dashboard_says_whose_it_is.py.
+    from config.paths import config_identity
+
+    assert body == {"app": "ACL", "ok": True, "version": "2026-09-20", "config": config_identity()}
 
 
 def test_an_older_latest_release_is_not_an_update(github):
