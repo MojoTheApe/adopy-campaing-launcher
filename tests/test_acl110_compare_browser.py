@@ -65,6 +65,14 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         req = r.request
         u = urlparse(req.url)
         requests.append((req.method, u.hostname, u.path))
+        # Only ordinary page opening admits the local coordinator. This fixture
+        # never starts a profile worker; comparison/date navigation stays view-only.
+        if u.hostname == 'acl.test' and u.path == '/account-refresh/page-open':
+            assert req.method == 'POST'
+            return r.fulfill(json={'ok': True, 'sweep': 'disabled', 'queued': 0})
+        if u.hostname == 'acl.test' and u.path == '/account-refresh/state':
+            assert req.method == 'GET'
+            return r.fulfill(json={'ok': True, 'rows': {}, 'accounts': {}, 'queued': []})
         assert req.method == 'GET', (req.method, u.path)
         if req.resource_type == 'document' or u.path == '/account-map':
             query = parse_qs(u.query)
@@ -189,5 +197,8 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         assert p.locator('html').get_attribute('data-theme') == theme
         assert not errors, errors
         assert all(host in ('acl.test', 'unpkg.com') for _, host, _ in requests)
+        assert all(method == 'GET' or (method, host, path) ==
+                   ('POST', 'acl.test', '/account-refresh/page-open')
+                   for method, host, path in requests)
     finally:
         ctx.close()

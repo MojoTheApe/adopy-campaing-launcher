@@ -524,6 +524,8 @@ def test_a_read_session_restarts_the_idle_time_of_the_kept_window(monkeypatch):
 
     touched = []
     monkeypatch.setattr(pj, "touch_kept", touched.append)
+    monkeypatch.setattr(api._as, "_entry_for", lambda account: SimpleNamespace(
+        profile_id=_key(account)))
 
     @contextmanager
     def inner(account, *, commands=False):

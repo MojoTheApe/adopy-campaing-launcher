@@ -214,7 +214,9 @@ def assert_action_clearance(page, scope):
 def test_full_routes_keep_footer_and_builder_clear_of_table_actions(integrated, width, theme, route):
     page, scope, host = integrated(width, theme, route)
     assert_action_clearance(page, scope)
-    for container in ([scope.locator(".amap-toolbar")] + ([page.locator("#view-home .amap-head")] if route == "home" else [])):
+    # ACL-2063 removed the country manual-read toolbar. Keep the same clearance
+    # and focus assertions on the actual grouped campaign controls.
+    for container in ([host.locator(".hc-toolbar")] + ([page.locator("#view-home .amap-head")] if route == "home" else [])):
         outer = container.bounding_box()
         for control in container.locator("button,input,select").all():
             if not control.is_visible():
