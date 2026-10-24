@@ -266,6 +266,26 @@ def test_initial_mlx_refusal_survives_local_status_and_recovers_only_on_action(d
     assert site.requests.count(('POST', '/account-refresh/page-open')) == 1
 
 
+@pytest.mark.parametrize('trigger', ['attention', 'retry'])
+def test_later_mlx_admission_refusal_survives_local_status(dashboard, monkeypatch, trigger):
+    site, page = dashboard
+    goto(page, 'http://acl.test/'); wait_ready(page)
+    page.evaluate('window.aclAccountRefresh.load()')
+    monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: site.web.JSONResponse(
+        {'ok': False, 'code': 'mlx_session_lost', 'error': 'Multilogin session lost. Reopen Multilogin.'}, status_code=409))
+    page.evaluate('(trigger) => window.aclAccountRefresh.request("Acc", trigger)', trigger)
+    banner = page.locator('#account-refresh-status')
+    assert banner.is_visible() and 'Multilogin' in banner.inner_text()
+    page.evaluate('window.aclAccountRefresh.load()')
+    assert banner.is_visible() and 'Multilogin' in banner.inner_text()
+    assert site.reads == [] and site.errors == []
+    assert site.requests.count(('POST', '/account-refresh/page-open')) == 1
+    monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: None)
+    page.evaluate('window.aclAccountRefresh.request("Acc", "retry")')
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    assert site.reads == [('Acc', 'retry')] and banner.is_hidden()
+
+
 def test_hand_edit_pause_refuses_write_shows_message_and_refreshes_account(dashboard, monkeypatch, tmp_path):
     from types import SimpleNamespace
     from src.web import campaign_commands as cc
