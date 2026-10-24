@@ -49,6 +49,7 @@
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
+  <script>{% include "_acl_dialog.js" %}</script>
   <script>
     // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
     // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
@@ -425,7 +426,9 @@
     /* Период: рамка с подписью, вписанной в верхнюю границу. Под подписью
        тот же фон, что у поля и шапки, — иначе в тёмной теме проступило бы
        светлое пятно. */
-    .period-pick { grid-area: period; display: flex; align-items: center; }
+    .period-pick { grid-area: period; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 0; }
+    .period-pick > .period-btn { flex: 0 0 100%; }
+    .period-pick > .cmp-note { flex-basis: 100%; }
     .period-btn {
       position: relative;
       display: flex; align-items: center; gap: 10px;
@@ -1723,11 +1726,14 @@
        заголовок группы, аккаунты под ней, свободные внизу отдельно. */
     .amap { margin-top: var(--space-lg); }
     .amap-head {
-      display: flex; align-items: baseline; gap: var(--space-md);
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); min-width: 0;
       margin-bottom: var(--space-sm);
     }
     .amap-head h3 { margin: 0; }
-    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); white-space: nowrap; }
+    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); overflow-wrap: anywhere; }
+    .amap-head > .amap-add { min-width: 0; max-width: 100%; }
+    .amap-head > .amap-add > :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .amap-head > .amap-add > select { flex: 1 1 12rem; }
     .amap-country {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       background: var(--bg-elev); margin-bottom: var(--space-md);
@@ -1851,6 +1857,29 @@
     .report-msg.good { color: var(--good); }
     .report-msg.bad { color: var(--bad); }
 
+    /* ACL-141: свои окна вместо alert/confirm/prompt браузера (templates/_acl_dialog.js).
+       Рамку, фон, тень, кнопки и поле даёт общий стиль `dialog` — здесь только
+       раскладка и цвет основной кнопки. */
+    .acl-dlg { padding: var(--space-lg); max-width: 30rem; width: 90vw; box-sizing: border-box; overflow-x: hidden; }
+    .acl-dlg-title { margin: 0 0 var(--space-sm); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+    .acl-dlg-text { margin: 0 0 var(--space-sm); font-size: var(--adopy-text-table); color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+    .acl-dlg-label { display: block; margin: var(--space-sm) 0 0.25rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .acl-dlg-input { width: 100%; box-sizing: border-box; }
+    .acl-dlg-input:focus {
+      outline: none; border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
+    }
+    .acl-dlg-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-md); }
+    .acl-dlg .acl-dlg-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    .acl-dlg .acl-dlg-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+    .acl-dlg-danger .acl-dlg-primary,
+    .acl-dlg-danger .acl-dlg-primary:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
+    .acl-dlg-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .acl-inline-err {
+      display: inline-block; margin-left: var(--space-sm); font-size: var(--adopy-text-sm);
+      color: var(--bad); font-weight: 500; line-height: 1.4; vertical-align: middle; max-width: 40rem;
+    }
+
     .amap-cell-act { display: flex; justify-content: flex-end; }
     .amap-nocov > summary.amap-row { background: color-mix(in srgb, var(--bad) 9%, var(--bg-subtle)); }
     .amap-nocov-count b { color: var(--bad); }
@@ -1892,11 +1921,27 @@
     /* Одинаковая сетка во всех странах: без table-layout:fixed каждая таблица
        считает ширины по своему содержимому, и колонки соседних стран не
        совпадают — читается как съехавшая вёрстка, потому что она и съехала. */
-    .amap table.amap-grid { table-layout: fixed; }
+    /* Keep the shared Home / Manage account grid readable in narrow panes.
+       Only the data section scrolls; its toolbar, explanation and form stay outside. */
+    .amap-table-scroll {
+      max-width: 100%; min-width: 0; overflow-x: auto;
+      overscroll-behavior-x: contain; scrollbar-gutter: stable;
+      border-bottom: 1px solid var(--border);
+    }
+    .amap-table-scroll:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: -2px;
+    }
+    .amap table.amap-grid { table-layout: fixed; min-width: 1120px; }
     .amap table.amap-grid td, .amap table.amap-grid th {
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .amap td.amap-acc { white-space: normal; }
+    .amap table.amap-grid td.amap-acc {
+      white-space: normal; overflow-wrap: anywhere;
+      text-overflow: clip;
+    }
+    .amap table.amap-grid th {
+      white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+    }
     .amap-caret {
       background: none; border: 0; color: var(--muted); cursor: pointer;
       font-size: var(--adopy-text-sm); padding: 0 0.3rem 0 0; line-height: 1;
@@ -2116,6 +2161,28 @@
     .amap-cal-grid button.has:hover { border-color: var(--accent); }
     .amap-cal-grid button.sel { background: var(--accent); color: var(--on-accent); }
     .amap-cal-grid button.inrange { background: var(--accent-soft); }
+    /* ACL-110: сравнение периодов */
+    .amap-cmp { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 0.9rem 0; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .amap-cmp select, .amap-cmp input[type=date] { font: inherit; color: var(--text); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px; padding: 0.2rem 0.4rem; }
+    .amap-cmp-note { color: var(--muted); }
+    .cmp-chip { display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%; padding: 0.15rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; font-size: var(--adopy-text-sm); color: var(--muted); white-space: normal; }
+    .cmp-chip a { color: var(--muted); text-decoration: none; padding: 0.2rem; }
+    .cmp-note { margin: 0.25rem 0 0; font-size: var(--adopy-text-sm); color: var(--bad); }
+    small.cmp { display: flex; justify-content: flex-end; gap: 0.35rem; font-size: var(--adopy-text-xs); font-weight: 400; color: var(--muted); line-height: 1.25; }
+    .cmp-delta.up, .cmp-delta.down { font-weight: 600; }
+    .cmp-delta.good { color: var(--good); }
+    .cmp-delta.bad { color: var(--bad); }
+    .cmp-flag { display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 4px; font-size: var(--adopy-text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    .cmp-flag.new { color: var(--good); border: 1px solid var(--good); }
+    .cmp-flag.gone { color: var(--muted); border: 1px solid var(--border); }
+    tr.cmp-gone-row td { opacity: 0.75; font-style: italic; }
+    .cmp-only-country { margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; }
+    .cmp-only-country > summary { cursor: pointer; font-weight: 600; }
+    .cmp-only-country h4 { margin: 1rem 0 0.4rem; }
+    .cmp-table-scroll { max-width: 100%; overflow-x: auto; }
+    .cmp-table-scroll table { min-width: 38rem; }
+    .cmp-table-scroll td:first-child { white-space: normal; overflow-wrap: anywhere; }
+    .cmp-recs { margin-left: 0.5rem; font-size: var(--adopy-text-xs); color: var(--muted); font-weight: 400; }
     .amap-cal-foot {
       display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
       color: var(--muted); font-size: var(--adopy-text-sm);
@@ -2391,7 +2458,8 @@
     .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
     /* Read all (ACL-353): панелька над таблицей страны; сама кнопка — тот же
        amap-btn, ей ничего особенного не нужно. */
-    .amap-toolbar { display: flex; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar .amap-btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
     .amap-x {
       background: none; border: 0; color: var(--border-strong);
       cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
@@ -3651,6 +3719,10 @@
         var(--border) var(--sidebar-w), transparent var(--sidebar-w));
     }
     .main-content { padding-left: var(--adopy-page-padding); padding-right: var(--adopy-page-padding); }
+    /* The closed Builder tab is fixed above the page. Keep actions outside its
+       strip even after focusing the far-right cell of an internally scrolled table.
+       An open non-overlay drawer already reserves its own complete width. */
+    body:not(.cbd-open) .main-content { padding-right: calc(var(--adopy-page-padding) + var(--cbd-handle-w)); }
     @media (max-width: 860px) {
       .dashboard-shell { background: none; }
     }
@@ -3840,6 +3912,8 @@
     .sb-asset:hover { background: var(--adopy-surface-hover); }
     .sb-asset:focus-visible, .sb-more summary:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: 1px; }
     .sb-asset-name { overflow-wrap: anywhere; }
+    .sb-asset.sb-asset-compare { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+    .sb-asset-compare > .cmp { grid-column: 1 / -1; margin: 0; text-align: right; white-space: normal; }
     .sb-asset.active { color: var(--adopy-link); font-weight: var(--adopy-weight-semibold); background: var(--adopy-surface);
       box-shadow: inset 2px 0 0 var(--adopy-primary); }
     .sb-asset.active .sb-ftd { color: var(--adopy-link); }
@@ -3971,7 +4045,13 @@
       </span>
       <svg class="period-caret" viewBox="0 0 12 8" width="11" height="8" aria-hidden="true"><path d="M1 1.5h10L6 6.5Z"/></svg>
     </button>
+    {%- if compare %}
+    <span class="cmp-chip" title="Every number below also shows the earlier value and the change">vs {{ compare.label }}
+      <a href="javascript:void(0)" onclick="amapApply(_amapPick.from, _amapPick.to, _amapPick.span, {mode: ''})" aria-label="Stop comparing" title="Stop comparing">×</a></span>
+    {%- endif %}
     <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+    {%- if compare_note %}<p class="cmp-note" role="status">{{ compare_note }}</p>{% endif %}
+    {%- if compare and compare.empty %}<p class="cmp-note" role="status">The workbook has no rows for {{ compare.label }}, so every row is new.</p>{% endif %}
   </div>
   {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
       Это не свойство продукта, а положение зрителя, и меняется оно чаще,
@@ -4124,6 +4204,7 @@ async function dashRefresh(ev) {
   var prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Refreshing…';
+  aclInlineError(btn, '');
   try {
     var r = await fetch('/refresh', {
       method: 'POST',
@@ -4134,10 +4215,9 @@ async function dashRefresh(ev) {
     try { data = await r.json(); } catch (_e) { data = null; }
     if (!r.ok || (data && data.ok === false)) {
       var err = (data && data.error) ? data.error : ('HTTP ' + r.status);
-      btn.textContent = 'Error';
-      alert('Refresh failed: ' + err);
       btn.disabled = false;
       btn.textContent = prev;
+      aclInlineError(btn, 'Refresh failed: ' + err);
       return false;
     }
     btn.textContent = 'Reloading…';
@@ -4146,7 +4226,7 @@ async function dashRefresh(ev) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = prev;
-    alert('Refresh failed: ' + (e && e.message ? e.message : e));
+    aclInlineError(btn, 'Refresh failed: ' + (e && e.message ? e.message : e));
   }
   return false;
 }
@@ -4195,11 +4275,16 @@ async function dashRefresh(ev) {
     if (btn.disabled) return;
     var name = btn.dataset.target || 'the latest release';
     var fixed = btn.dataset.fixed || '';
-    if (!confirm('Update ACM to ' + name + '?\n\n'
-      + (fixed ? 'What changed:\n' + fixed + '\n\n' : '')
+    aclConfirm((fixed ? 'What changed:\n' + fixed + '\n\n' : '')
       + 'The dashboard will restart and this page will reload by itself. '
-      + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.')) return;
+      + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.',
+      { title: 'Update ACM to ' + name + '?', okLabel: 'Update' }).then(function (yes) {
+      if (yes && !btn.disabled) aclApplyUpdate();
+    });
+  });
 
+  function aclApplyUpdate() {
+    aclInlineError(btn, '');
     btn.disabled = true;
     btn.textContent = 'Updating…';
     fetch('/acl/update/apply', {
@@ -4212,7 +4297,7 @@ async function dashRefresh(ev) {
         if (!data || data.ok !== true) {
           btn.disabled = false;
           btn.textContent = 'Update ACM';
-          alert('Update not started: ' + ((data && data.error) || 'unknown error'));
+          aclInlineError(btn, 'Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
         aclWaitForRestart();
@@ -4222,7 +4307,7 @@ async function dashRefresh(ev) {
         // success, not failure, so wait rather than reporting an error.
         aclWaitForRestart();
       });
-  });
+  }
 
   // Итог последней установки пишет помощник обновления (ACL-1240). Показываем
   // один раз: ключ — время, когда он закончил.
@@ -4230,7 +4315,7 @@ async function dashRefresh(ev) {
     if (!a || !a.finished_at || !a.result || a.result === 'updated') return;
     var key = 'acl-update-seen:' + a.finished_at;
     try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* без памяти — покажем снова */ }
-    alert(a.result === 'rollback_failed'
+    aclAlert(a.result === 'rollback_failed'
       ? 'The update failed and ACM could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
       : a.result === 'rolled_back'
       ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACM went back to '
@@ -4252,7 +4337,7 @@ async function dashRefresh(ev) {
       if (Date.now() - started > LIMIT_MS) {
         btn.disabled = false;
         btn.textContent = 'Update ACM';
-        alert('ACM did not come back within 10 minutes. Open it again from the desktop '
+        aclAlert('ACM did not come back within 10 minutes. Open it again from the desktop '
           + 'shortcut. If the new version did not start, the previous one is restored '
           + 'automatically; use Report a problem if it still does not open.');
         return;
@@ -4368,6 +4453,7 @@ async function dashRefresh(ev) {
     <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
+    {% if compare and s.ftds %}<div style="margin:0 var(--space-sm) var(--space-sm);text-align:right">{{ mx.ftd_pair(compare.asset_counts(c.country, {'name':'', 'you_ftds':s.ftds.you, 'ftds':s.ftds.all})) }}</div>{% endif %}
     <div class="sidebar-sections">
       {#- 22.10 (владелец): сверху «All assets», под ним виды страны (Workbench, Manage, 1 Assets…),
           ниже — ассеты по брендам. Виды интереснее списка брендов, поэтому они выше и не свёрнуты. -#}
@@ -4375,8 +4461,8 @@ async function dashRefresh(ev) {
       {% if wb_assets %}
       <div class="sb-assets" role="group" aria-label="All assets in {{ c.country }}">
         {% for a in wb_assets[:1] %}
-        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
-          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        <button type="button" class="sb-asset{% if compare %} sb-asset-compare{% endif %}" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}{% if compare %}{{ mx.flag(compare.asset_counts(c.country, a).state) }}{% endif %}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span>{% if compare %}{{ mx.ftd_pair(compare.asset_counts(c.country, a)) }}{% endif %}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -4397,8 +4483,8 @@ async function dashRefresh(ev) {
       {% if wb_assets | length > 1 %}
       <div class="sb-assets sb-assets-brands" role="group" aria-label="Assets in {{ c.country }}">
         {% for a in wb_assets[1:] %}
-        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
-          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        <button type="button" class="sb-asset{% if compare %} sb-asset-compare{% endif %}" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}{% if compare %}{{ mx.flag(compare.asset_counts(c.country, a).state) }}{% endif %}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span>{% if compare %}{{ mx.ftd_pair(compare.asset_counts(c.country, a)) }}{% endif %}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -4708,6 +4794,7 @@ async function dashRefresh(ev) {
       страны: взвешенные, пиры без выбранного байера, мало данных — подпись).
       Данных нет — полосы нет, а не нули. -#}
   {% if home_kpis %}
+  {% set home_period = compare.home_tiles(report) if compare else {} %}
   <section class="hk-row" id="home-kpis" aria-label="Your results compared with other buyers, all countries">
     <div class="hk-head"><h2 class="hk-title">You vs Others</h2>
       <span class="hk-sub">All countries · selected period · others exclude {{ report.my_cm or 'the selected buyer' }}</span></div>
@@ -4715,8 +4802,8 @@ async function dashRefresh(ev) {
       {% for t in home_kpis %}
       <div class="hk-tile" data-kpi="{{ t.key }}">
         <div class="hk-label"><span>{{ t.label }}</span><span class="hk-chip">You</span></div>
-        <div class="hk-you">{{ t.you }}{% if t.you_note %}<small>{{ t.you_note }}</small>{% endif %}</div>
-        <div class="hk-others"><span>Others{% if t.others_note %} <small>{{ t.others_note }}</small>{% endif %}</span><b>{{ t.others }}</b></div>
+        <div class="hk-you">{{ t.you }}{% if compare %}{{ mx.cmp_cell(home_period[t.key].you) }}{% endif %}{% if t.you_note %}<small>{{ t.you_note }}</small>{% endif %}</div>
+        <div class="hk-others"><span>Others{% if t.others_note %} <small>{{ t.others_note }}</small>{% endif %}</span><b>{{ t.others }}{% if compare %}{{ mx.cmp_cell(home_period[t.key].others) }}{% endif %}</b></div>
         <div class="hk-cap{% if t.cls %} {{ t.cls }}{% endif %}">{{ t.caption }}</div>
       </div>
       {% endfor %}
@@ -4762,7 +4849,7 @@ async function dashRefresh(ev) {
    Trend, Combos, Targeting, Creatives, Optimization) остаются на своих адресах; отсюда на них ведут ссылки. #}
 {% if c.workbench %}
 <div id="view-country-{{ cid }}-workbench" class="view-panel cw-panel" data-country="{{ cid }}" data-cw-country="{{ c.country }}" data-cw-from="{{ (period or {}).date_from }}" data-cw-to="{{ (period or {}).date_to }}">
-  <script type="application/json" id="cw-data-{{ cid }}">{{ c.workbench | tojson }}</script>
+  <script type="application/json" id="cw-data-{{ cid }}">{{ (compare.workbench(c.country, c.workbench) if compare else c.workbench) | tojson }}</script>
   <script type="application/json" id="cw-goal-{{ cid }}">{{ ((cw_goals or {}).get(c.country | lower)) | tojson }}</script>
   <header class="cw-head">
     <p class="cw-crumb" data-cw="crumb">{{ c.country }}</p>
@@ -4811,15 +4898,24 @@ async function dashRefresh(ev) {
         hx-swap="afterend"
         hx-trigger="click"
         {% endif %}>
-      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
-      <td class="num">{{ row.net | fmt_usd }}</td>
+      {%- set cpv = compare.cm(c.country, row.cm) if compare else false %}
+      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}{% if compare %}{{ mx.flag(compare_state(row, cpv)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=cpv) }}
+      <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, cpv.get('net') if cpv else none)) }}{% endif %}</td>
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
-        {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
+        {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}{% if compare %}{{ mx.cmp_cell(value_compare(row.roi, cpv.get('roi') if cpv else none, 'ratio')) }}{% endif %}
       </td>
       <td style="color:var(--muted);font-size:var(--adopy-text-sm)">{% if row.deposits > 0 %}▸{% endif %}</td>
     </tr>
   {% endfor %}
+  {#- ACL-110: менеджеры, которые были в прошлом периоде и пропали из этого. -#}
+  {% if compare %}{% for g in compare.cm_gone(c.country, c.cm_comparison | map(attribute='cm')) %}
+    <tr class="cmp-gone-row">
+      <td>{{ g.cm or '(unknown)' }}{{ mx.flag('gone') }}</td>
+      {{ mx.cells(0, 0, 0, prev=g, gone=true) }}
+      <td class="num">—{{ mx.cmp_cell(value_compare(none, g.get('net'))) }}</td><td class="num">—{{ mx.cmp_cell(value_compare(none, g.get('roi'), 'ratio')) }}</td><td></td>
+    </tr>
+  {% endfor %}{% endif %}
   </tbody>
 </table>
 
@@ -4860,6 +4956,15 @@ async function dashRefresh(ev) {
     на аккаунт вместо двух. -#}
 
 </div>
+{% if compare %}
+{% for group in compare.open_accounts_gone(c.country, c.open_recs or {}) %}
+<p class="cmp-recs">Open recommendations · {{ group.account }}: {{ group.diff.now }} now, {{ group.diff.before }} earlier · {{ group.diff.gone | join(', ') }} {{ mx.flag('gone', 'the earlier open recommendations') }}</p>
+{% endfor %}
+{% set earlier_tables = compare.earlier_only_tables(c) %}
+{% if earlier_tables %}<details class="cmp-only-country"><summary>Earlier-only breakdown rows</summary>
+{% for table in earlier_tables %}{% include "_period_compare_gone_table.html" %}{% endfor %}
+</details>{% endif %}
+{% endif %}
 <details class="manage-builder" id="manage-builder-{{ cid }}">
   {#- Билдер — не панель, а страница: свои слоты, аккордеон аккаунтов,
       предпросмотр и публикация. Свёрнут, иначе у Manage не видно дна;
@@ -4931,6 +5036,10 @@ async function dashRefresh(ev) {
     <div class="cb-acc-header" data-acc-id="{{ acc_id }}">
       <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
       <span class="cb-acc-title">{{ acc_label }}</span>
+      {#- ACL-110: что изменилось в рекомендациях на открытие против сравниваемого периода. -#}
+      {%- if compare %}{% set rd = compare.open_recs_diff(c.country, acc_label, recs) %}
+      <span class="cmp-recs" title="Open recommendations in the selected period compared with {{ compare.label }}{% if rd.new %}. New: {{ rd.new | join(', ') }}{% endif %}{% if rd.gone %}. Gone: {{ rd.gone | join(', ') }}{% endif %}">vs {{ rd.before }}: {{ rd.now }} now{% if rd.new %} · {{ rd.new | length }} new{% endif %}{% if rd.gone %} · {{ rd.gone | length }} gone{% endif %}</span>
+      {%- endif %}
       <span class="cb-acc-meta">
         {% if pf.missing_map_fields %}
           <span class="cb-pf-err" style="font-size:var(--adopy-text-sm)">⚠ missing: {{ pf.missing_map_fields | join(', ') }}</span>
@@ -5161,7 +5270,7 @@ async function dashRefresh(ev) {
 {% if c.asset_variants %}
 {# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
    autoescaper from entity-encoding the quotes, which broke JSON.parse. #}
-<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson }}</script>
+<script type="application/json" id="asset-variants-{{ cid }}">{{ (compare.asset_variants(c.country, c.asset_variants) if compare else c.asset_variants) | tojson }}</script>
 {% endif %}
 <table>
   <thead><tr>
@@ -5171,11 +5280,12 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody id="asset-tbody-{{ cid }}">
   {% for row in c.asset_summary %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'asset_summary', row) if compare else false %}
     <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
         title="Show the breakdown by landing page">
-      <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
-      <td class="num">{{ row.net | fmt_usd }}</td>
+      <td>{{ row.offer }} <span class="asset-caret">▸</span>{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
+      <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, breakdown_prev.get('net') if breakdown_prev else none)) }}{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -5195,10 +5305,11 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.variants %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'variants', row) if compare else false %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
-      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else '')) }}
-      <td class="num">{{ row.net | fmt_usd }}</td>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else ''), prev=breakdown_prev) }}
+      <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, breakdown_prev.get('net') if breakdown_prev else none)) }}{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -5233,7 +5344,7 @@ async function dashRefresh(ev) {
           <td>{{ row.device or '—' }}</td>
           <td>{{ row.interest or '—' }}</td>
           <td>{{ row.creative or '—' }}</td>
-          {{ mx.pair_cells(metric_values(row.spend_recent, row.leads_recent, row.deposits_recent), metric_values(row.spend_total, row.leads_total, row.deposits_total)) }}
+          {{ mx.pair_cells(metric_values(row.spend_recent, row.leads_recent, row.deposits_recent), metric_values(row.spend_total, row.leads_total, row.deposits_total), recent_compare=(metric_compare({'spend': row.spend_recent, 'leads': row.leads_recent, 'deposits': row.deposits_recent}, compare.trend_metrics(c.country, row, '_recent')) if compare else none), period_compare=(metric_compare({'spend': row.spend_total, 'leads': row.leads_total, 'deposits': row.deposits_total}, compare.trend_metrics(c.country, row, '_total')) if compare else none)) }}
         </tr>
       {% endfor %}
       </tbody>
@@ -5253,6 +5364,7 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'top_combos', row) if compare else false %}
     <tr>
       {#- ACL-1652 (вариант A): одна ячейка на всю комбинацию, чтобы шесть метрик
           встали в стандартные колонки. Cat — значок рядом с именем. -#}
@@ -5260,8 +5372,8 @@ async function dashRefresh(ev) {
         <div class="l1">{{ row.offer or '—' }} · {{ row.device or '—' }} · {{ row.age or '—' }}
           <span class="combo-chip {{ 'cat-strong' if row.category == 'Strong' else 'cat-interesting' }}">{{ row.category }}</span></div>
         <div class="l2">{{ row.interest or '—' }} · {{ row.creative or '—' }}</div>
-      </td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      {% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -5279,9 +5391,10 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.targeting %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'targeting', row) if compare else false %}
     <tr>
-      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -5301,18 +5414,20 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'creatives', row) if compare else false %}
     {# ACL-1593: группа раскрывается в строки вариантов (сумма = строка группы). #}
     <tr title="{{ row.ad_title }}"{% if row.has_variants %} class="creative-group" style="cursor:pointer" onclick="var n=this.nextElementSibling;while(n&&n.classList.contains('creative-variant')){n.hidden=!n.hidden;n=n.nextElementSibling;}"{% endif %}>
-      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}</td>
+      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
       <td>{{ row.text_name or '—' }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
     </tr>
     {% if row.has_variants %}
     {% for v in row.variants %}
+    {% set variant_prev = compare.creative_variant(c.country, row, v) if compare else false %}
     <tr class="creative-variant" hidden>
-      <td style="padding-left:1.5em">{{ v.label }}</td>
+      <td style="padding-left:1.5em">{{ v.label }}{% if compare %}{{ mx.flag(compare_state(v, variant_prev)) }}{% endif %}</td>
       <td>{{ row.text_name or '—' }}</td>
-      {{ mx.cells(v.spend, v.leads, v.deposits) }}
+      {{ mx.cells(v.spend, v.leads, v.deposits, prev=variant_prev) }}
     </tr>
     {% endfor %}
     {% endif %}
@@ -5325,13 +5440,14 @@ async function dashRefresh(ev) {
 </div>
 
 
-{% set has_close = c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false %}
+{% set close_accounts = compare.close_accounts(c.country, c.close_recs or {}) if compare else (c.close_recs or {}).keys() | sort %}
+{% set has_close = close_accounts | length > 0 if compare else (c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false) %}
 <div id="view-country-{{ cid }}-optimization" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_optimization }} Optimization <span class="hint">click ad set row to drill into ads</span></h2>
 {% if has_close %}
-{% for label in c.close_recs.keys() | sort %}
-  {% set recs = c.close_recs[label] %}
-  {% if recs %}
+{% for label in close_accounts %}
+  {% set recs = (c.close_recs or {}).get(label, []) %}
+  {% if recs or (compare and compare.adset_gone(c.country, label, [])) %}
     <p><strong>{{ label }}</strong></p>
     <table>
       <thead><tr>
@@ -5349,11 +5465,20 @@ async function dashRefresh(ev) {
             hx-swap="afterend"
             hx-trigger="click"
             {% endif %}>
-          <td class="adset">{{ r.adset_name[:60] }}</td>
-          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else '')) }}
+          {%- set apv = compare.adset(c.country, label, r.adset_name) if compare else false %}
+          <td class="adset">{{ r.adset_name[:60] }}{% if compare %}{{ mx.flag(compare_state(r, apv), 'the close recommendations of the earlier period') }}{% endif %}</td>
+          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else ''), prev=apv) }}
           <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
         </tr>
       {% endfor %}
+      {#- ACL-110: ad sets, которые просили закрыть в прошлом периоде и которых нет в этом. -#}
+      {% if compare %}{% for g in compare.adset_gone(c.country, label, recs | map(attribute='adset_name')) %}
+        <tr class="cmp-gone-row">
+          <td class="adset">{{ g.adset_name[:60] }}{{ mx.flag('gone', 'the close recommendations of the earlier period') }}</td>
+          {{ mx.cells(0, 0, 0, prev=g, gone=true) }}
+          <td></td>
+        </tr>
+      {% endfor %}{% endif %}
       </tbody>
     </table>
   {% endif %}
@@ -5619,6 +5744,165 @@ async function dashRefresh(ev) {
 </div>
 
 <script>
+/* Серверная копия черновиков билдера (ACL-1681).
+ *
+ * localStorage — свой у каждого профиля Chrome и у каждого адреса
+ * (127.0.0.1 и localhost — разные сайты); после краха он пуст, а работа
+ * была. Поэтому три документа — `keep` (карточки кампаний), `jobs` (память
+ * заданий публикации) и `ui` (ящик открыт / растянут) — дублируются на
+ * машине дашборда: GET/POST /api/builder-state, файл в папке ACL.
+ *
+ * У каждого документа метка времени последнего изменения (мс). При загрузке
+ * сравниваем свою с серверной: новее серверная — раскладываем её (модуль
+ * сам откладывает проигравшую локальную копию), новее наша — отправляем.
+ * Пока ответ сервера не получен, ничего не отправляем: пустой localStorage
+ * после краха не должен затереть серверную копию.
+ *
+ * Сервер недоступен — всё работает как раньше, на одном localStorage.
+ */
+window.cbSrv = (function () {
+  var URL = '/api/builder-state';
+  var SYNC_KEY = 'acl.builder.sync';
+  var DEBOUNCE_MS = 800;
+  var regs = {};          // имя → {snapshot, legacyAt, apply}
+  var last = {};          // имя → последний замеченный снимок (строкой)
+  var dirty = {};         // имя → ждёт отправки
+  var timers = {};
+  var generations = {};   // имя → поколение локального изменения
+  var inFlight = {};      // обычные записи последовательны; token отсекает старые ответы
+  var ready = false;      // серверные копии получены и сверены
+  var docs = {};          // что ответил сервер (модуль может зарегистрироваться позже ответа)
+  var pulling = false;
+  var meta = { at: {}, base: {} };
+
+  try {
+    var m = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null');
+    if (m && typeof m === 'object') { meta.at = m.at || {}; meta.base = m.base || {}; }
+  } catch (e) { /* без памяти — сверимся с сервером заново */ }
+
+  function persist() {
+    try { localStorage.setItem(SYNC_KEY, JSON.stringify(meta)); } catch (e) { /* не помним */ }
+  }
+  function stamp(name) { return +meta.at[name] || 0; }
+  function setStamp(name, at, base) {
+    meta.at[name] = at;
+    if (base !== undefined) meta.base[name] = base;
+    persist();
+  }
+  function snap(name) { return JSON.stringify(regs[name].snapshot()); }
+
+  function post(name, keepalive) {
+    /* pagehide не ждёт callback старой записи: последняя копия уходит сразу
+       через keepalive. Сервер сравнивает saved_at даже при обратном порядке. */
+    if (inFlight[name] && !keepalive) return;
+    var reg = regs[name];
+    var at = stamp(name);
+    var generation = generations[name] || 0;
+    var body = JSON.stringify({ name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() });
+    var request = {};
+    inFlight[name] = request;
+    dirty[name] = false;
+    return fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: !!keepalive })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (inFlight[name] !== request) return;
+        if (!j || j.ok !== true || !j.doc) { dirty[name] = true; return; }
+        /* Ответ подтверждает серверную базу именно этой записи. Он не меняет
+           метку и содержимое более нового локального поколения. */
+        meta.base[name] = j.doc.saved_at; persist();
+        if (j.accepted || (generations[name] || 0) !== generation) return;
+        /* Сервер новее (писали с другого адреса/вкладки): берём его. */
+        reg.apply(j.doc);
+        last[name] = snap(name);
+        setStamp(name, j.doc.saved_at, j.doc.saved_at);
+      })
+      .catch(function () { if (inFlight[name] === request) dirty[name] = true; })
+      .then(function () {
+        if (inFlight[name] !== request) return;
+        inFlight[name] = false;
+        /* Дебаунс мог истечь, пока ждали ответ. Отправляем только последний
+           снимок, уже с подтверждённой базой; отказ сети сам себя не повторяет. */
+        if (dirty[name] && (generations[name] || 0) !== generation && !timers[name]) {
+          post(name);
+        }
+      });
+  }
+
+  function reconcile(name, doc) {
+    var reg = regs[name];
+    var at = stamp(name);
+    if (!at) {                       // черновик до ACL-1681: возраст — по содержимому
+      var legacy = reg.legacyAt();
+      if (legacy) { at = legacy; setStamp(name, at); }
+    }
+    if (!doc) {
+      if (at) post(name);
+    } else if (doc.saved_at > at) {
+      reg.apply(doc);
+      last[name] = snap(name);
+      setStamp(name, doc.saved_at, doc.saved_at);
+    } else if (doc.saved_at < at) {
+      meta.base[name] = doc.saved_at; persist();
+      post(name);
+    } else {
+      meta.base[name] = doc.saved_at; persist();
+    }
+  }
+
+  function pull() {
+    if (pulling || ready) return;
+    pulling = true;
+    fetch(URL, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      pulling = false;
+      if (!j || j.ok !== true || !j.docs || typeof j.docs !== 'object') return;
+      ready = true;
+      docs = j.docs;
+      Object.keys(regs).forEach(function (name) { reconcile(name, docs[name] || null); });
+    }).catch(function () { pulling = false; });
+  }
+
+  function schedule(name) {
+    if (timers[name]) clearTimeout(timers[name]);
+    timers[name] = setTimeout(function () { timers[name] = null; if (ready && regs[name]) post(name); }, DEBOUNCE_MS);
+  }
+
+  return {
+    /* Модуль сообщает: у меня есть документ `name`. Вызывать после того, как
+       локальное состояние уже разложено. */
+    register: function (name, reg) {
+      regs[name] = reg;
+      last[name] = snap(name);
+      if (typeof fetch !== 'function') return;
+      if (ready) reconcile(name, docs[name] || null);
+      else pull();
+    },
+    /* Локальная запись состоялась: если содержимое изменилось — метка
+       времени и отправка (после первой сверки с сервером; до неё изменение
+       выглядит как «новее» и уйдёт вместе со сверкой, если оно и вправду новее). */
+    note: function (name) {
+      if (!regs[name]) return;
+      var now = snap(name);
+      if (now === last[name]) return;
+      last[name] = now;
+      generations[name] = (generations[name] || 0) + 1;
+      setStamp(name, Math.max(Date.now(), stamp(name) + 1));
+      dirty[name] = true;
+      if (ready) schedule(name); else pull();
+    },
+    /* Страница закрывается: отправить немедленно, не дожидаясь паузы. */
+    flush: function () {
+      if (!ready) return;
+      Object.keys(dirty).forEach(function (n) {
+        if (dirty[n] && regs[n]) { if (timers[n]) { clearTimeout(timers[n]); timers[n] = null; } post(n, true); }
+      });
+    },
+    ready: function () { return ready; },
+    stamp: stamp
+  };
+})();
+</script>
+
+<script>
 /* Ящик билдера: открыть, закрыть, помнить.
  *
  * Ни одного обработчика на документе тут нет и не должно быть. Прежняя
@@ -5654,12 +5938,14 @@ window.cbDrawer = (function () {
      Тогда ящик просто не помнит состояние — но работает. */
   function remember(open) {
     try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('ui');
   }
   function remembered() {
     try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
   }
   function rememberSize() {
     try { localStorage.setItem(SIZE_KEY, mode === 'custom' ? String(custom) : mode); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('ui');
   }
   /* Мусор в записи — не повод падать: берём обычную ширину. */
   function readSize() {
@@ -5802,6 +6088,27 @@ window.cbDrawer = (function () {
   apply(remembered());
   setCount(0);
 
+  /* ACL-1681: открыт ли ящик и растянут ли он — тоже на сервере, чтобы после
+     краха Chrome или смены адреса он встал как был. */
+  if (window.cbSrv) window.cbSrv.register('ui', {
+    snapshot: function () { return { open: isOpen(), expanded: isExpanded() }; },
+    legacyAt: function () { return 0; },
+    apply: function (doc) {
+      var d = doc.data || {};
+      set(d.open === true, false);
+      /* Ширина: на сервере только «растянут ли» (>= WIDE_AT); точную ширину
+         custom держит браузер, а тут режим — wide или обычный. */
+      if ((d.expanded === true) !== isExpanded()) {
+        mode = d.expanded === true ? 'wide' : 'normal';
+        applySize();
+      }
+      try {
+        localStorage.setItem(KEY, d.open === true ? '1' : '0');
+        localStorage.setItem(SIZE_KEY, mode === 'custom' ? String(custom) : mode);
+      } catch (e) { /* не помним */ }
+    }
+  });
+
   return {
     open: function () { return set(true); },
     close: function () { return set(false); },
@@ -5853,6 +6160,11 @@ window.cbKeep = (function () {
     if (!raw) return null;
     var parsed;
     try { parsed = JSON.parse(raw); } catch (e) { return null; }
+    return validate(parsed);
+  }
+
+  /* Годен ли документ: и из localStorage, и с сервера (ACL-1681) — те же правила. */
+  function validate(parsed) {
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
     var fresh = {}, now = Date.now();
     Object.keys(parsed.forms).forEach(function (k) {
@@ -5864,6 +6176,7 @@ window.cbKeep = (function () {
 
   function write() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('keep');
   }
 
   /* Ключ ставится, пока форма ещё стоит в своём блоке: гостя в ящике, она
@@ -5977,8 +6290,8 @@ window.cbKeep = (function () {
     write();
   }
 
-  function restore() {
-    var stored = read();
+  function restore(given) {
+    var stored = given || read();
     if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
     state = stored;
     restoring = true;
@@ -6004,7 +6317,7 @@ window.cbKeep = (function () {
     return made;
   }
 
-  window.addEventListener('pagehide', save);
+  window.addEventListener('pagehide', function () { save(); if (window.cbSrv) window.cbSrv.flush(); });
   var timer = null;
   function saveSoon() {
     if (timer) clearTimeout(timer);
@@ -6044,7 +6357,40 @@ window.cbKeep = (function () {
     var made = restore();
     watchStructure();
     if (made && window.cbTree) window.cbTree.paint();
+    serverCopy();
     return made;
+  }
+
+  /* ACL-1681: серверная копия черновиков. localStorage — быстрый кэш; если
+     на сервере копия новее (краш Chrome, другой адрес или профиль), она
+     раскладывается заново, а прежняя локальная откладывается в
+     `acl.builder.v2.older` — молча ничего не теряется. */
+  function serverCopy() {
+    if (!window.cbSrv) return;
+    window.cbSrv.register('keep', {
+      snapshot: function () { return state; },
+      legacyAt: function () {
+        return Object.keys(state.forms).reduce(function (m, k) { return Math.max(m, state.forms[k].touched || 0); }, 0);
+      },
+      apply: function (doc) {
+        var incoming = validate(doc.data);
+        if (!incoming) return;
+        if (Object.keys(state.forms).length && JSON.stringify(state.forms) !== JSON.stringify(incoming.forms)) {
+          try { localStorage.setItem(KEY + '.older', JSON.stringify(state)); } catch (e) { /* не помним */ }
+        }
+        restoring = true;
+        forms().forEach(function (form) {
+          Array.prototype.slice.call(form.querySelectorAll('.cb-slot')).reverse().forEach(function (slot) {
+            window.cbRemoveSlot(slot);
+          });
+        });
+        restoring = false;
+        state = incoming;
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
+        var made = restore(incoming);
+        if (made && window.cbTree) window.cbTree.paint();
+      }
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
@@ -6058,6 +6404,7 @@ window.cbKeep = (function () {
     readSlot: readSlot,
     writeSlot: writeSlot,
     all: function () { return state.forms; },
+    validate: validate,
     staleMs: STALE_MS,
     forget: function () { state = { v: VERSION, forms: {} }; write(); }
   };
@@ -7659,7 +8006,7 @@ window.cbTree = (function () {
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
                : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
-               : q.state === 'waiting_memory' ? 'queued — waiting for memory'
+               : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory')
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -7772,10 +8119,14 @@ window.cbTree = (function () {
       var found = findCampaign(id);
       if (!found) return;
       var what = found.camp.name ? '"' + found.camp.name + '"' : 'this unnamed campaign';
-      if (!window.confirm('Remove ' + what + ' from the builder?')) return;
-      if (id === openId) closeCampaign();
-      window.cbRemoveSlot(found.camp.slot);
-      paint();
+      window.aclConfirm('', { title: 'Remove ' + what + ' from the builder?', okLabel: 'Remove', danger: true })
+        .then(function (yes) {
+          var still = yes && findCampaign(id);   // за время вопроса дерево могли перерисовать
+          if (!still) return;
+          if (id === openId) closeCampaign();
+          window.cbRemoveSlot(still.camp.slot);
+          paint();
+        });
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
     } else if (act === 'connect' || act === 'connect-picked') {
@@ -7789,7 +8140,7 @@ window.cbTree = (function () {
       if (!borrowConnect(chosenCountryName)) {
         openConnect = '';
         paint();
-        window.alert('This country is not on the account map yet — add it first with «+ Country».');
+        window.aclAlert('Add it first with «+ Country».', { title: 'This country is not on the account map yet' });
         return;
       }
       paint();
@@ -8255,14 +8606,19 @@ window.cbBuild = (function () {
     return Math.floor(t.pct);
   }
 
-  function save() {
+  function snapshot() {
     var out = {};
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
       out[id] = { account: j.account, country: j.country || '', names: j.names, at: j.at, lost: !!j.lost,
                   track: j.track || {} };
     });
-    try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* не помним — не страшно */ }
+    return out;
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* не помним — не страшно */ }
+    if (window.cbSrv) window.cbSrv.note('jobs');
   }
 
   function repaint() {
@@ -8341,22 +8697,15 @@ window.cbBuild = (function () {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
     }
-    // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
-    var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
     }
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
-    if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
-      var reserve = Number(q.reserve_mb) || 0;
-      var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
-      return { state: 'build-wait', sign: '',
-               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
-                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
-                    + (ahead ? ' (' + ahead + ' ahead)' : '') };
-    }
+    // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
+    var memory = cbMemoryWait(q);
+    if (memory) return { state: 'build-wait', sign: '', why: memory };
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
@@ -8396,6 +8745,12 @@ window.cbBuild = (function () {
       return p.status === 'cancelled' ? { state: 'build-bad', sign: '', why: stoppedText(p) } : null;
     }
 
+    // ACL-1142: the robot of THIS job waits for the user's click (teach mode) —
+    // amber, named by the account's own dot; other accounts keep their own state.
+    if (active && !c.result && p.teach && p.teach.waiting && p.status === 'running' && c.name === p.current) {
+      return { state: 'build-attn', sign: '',
+               why: 'Waiting for your click in the Multilogin window of this account — press "I clicked Website" in the banner' };
+    }
     var r = c.result;
     if (active && c.blocker) return { state: 'build-attn', sign: '', why: String(c.blocker) };
     if (r) {
@@ -8426,7 +8781,8 @@ window.cbBuild = (function () {
       }
       return { state: 'build-run', sign: '', pct: pct,
                why: doing ? 'Building: ' + doing + (c.ok === false ? ' — failed, retrying' : '')
-                          : 'Building: starting' };
+                           : (p.started_ahead ? 'Started ahead: its profile was already open'
+                                              : 'Building: starting') };
     }
     if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
     if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
@@ -8453,13 +8809,14 @@ window.cbBuild = (function () {
     return best ? classify(best, name, ads) : null;
   }
 
-  (function restore() {
-    var raw = {};
-    try { raw = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { raw = {}; }
-    var now = Date.now();
-    Object.keys(raw).forEach(function (id) {
+  /* Разложить запомненные задания по `jobs`. Возвращает номера новых.
+     Задание, которое уже есть здесь, заменяется только более свежим (`at`). */
+  function adopt(raw) {
+    var now = Date.now(), added = [];
+    Object.keys(raw || {}).forEach(function (id) {
       var s = raw[id];
       if (!s || typeof s !== 'object' || !(now - (s.at || 0) < KEEP_MS)) return;
+      if (jobs[id] && !(s.at > jobs[id].at)) return;
       var track = {};
       if (s.track && typeof s.track === 'object') {
         Object.keys(s.track).forEach(function (n) {
@@ -8471,8 +8828,36 @@ window.cbBuild = (function () {
       jobs[id] = { account: String(s.account || ''), country: String(s.country || ''),
                    names: Array.isArray(s.names) ? s.names.map(String) : [],
                    at: s.at, lost: !!s.lost, p: null, restored: true, track: track };
+      added.push(id);
     });
+    return added;
+  }
+
+  (function restore() {
+    var raw = {};
+    try { raw = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { raw = {}; }
+    adopt(raw);
     save();
+    /* ACL-1681: серверная копия. Задания не затираются, а складываются:
+       чужое (с другого адреса/профиля) задание — тоже задание. */
+    /* На сервер идёт без `track` (процент пересчитывается из опроса): иначе
+       каждое его изменение было бы записью на диск. */
+    if (window.cbSrv) window.cbSrv.register('jobs', {
+      snapshot: function () {
+        var out = snapshot();
+        Object.keys(out).forEach(function (id) { delete out[id].track; });
+        return out;
+      },
+      legacyAt: function () {
+        return Object.keys(jobs).reduce(function (m, id) { return Math.max(m, jobs[id].at || 0); }, 0);
+      },
+      apply: function (doc) {
+        var added = adopt(doc.data);
+        try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* не помним */ }
+        added.forEach(function (id) { if (!jobs[id].lost) poll(id); });
+        repaint();
+      }
+    });
     function start() {
       Object.keys(jobs).forEach(function (id) { if (!jobs[id].lost) poll(id); });
       repaint();
@@ -8740,16 +9125,17 @@ function assetVariantToggle(tr, cid) {
   });
   var render = function(r, cls) {
     var name = r.variant ? esc(r.variant) : '— (no landing)';
-    var m = acl6Metrics(r.spend, r.leads, r.deposits);
-    return '<tr class="' + (cls || '') + '"><td>' + name + '</td>'
+    var m = r._period_state === 'gone' ? ['—', '—', '—', '—', '—', '—'] : acl6Metrics(r.spend, r.leads, r.deposits);
+    return '<tr class="' + (cls || '') + '"><td>' + name + (r._period_state === 'new' || r._period_state === 'gone' ? '<span class="cmp-flag ' + r._period_state + '">' + r._period_state + '</span>' : '') + '</td>'
       + m.map(function(x, i) {
-          return '<td class="num' + (i === 2 && r.deposits > 0 ? ' good' : '') + '">' + x + '</td>';
+          return '<td class="num' + (i === 2 && r.deposits > 0 ? ' good' : '') + '">' + x + (r._period ? '<small class="cmp"><span class="cmp-prev">' + esc(r._period[i].prev) + '</span><span class="cmp-delta">' + esc(r._period[i].delta) + '</span></small>' : '') + '</td>';
         }).join('') + '</tr>';
   };
-  var total = rows.reduce(function(a, r) {
+  var total = rows.filter(function(r) { return r._period_state !== 'gone'; }).reduce(function(a, r) {
     a.leads += r.leads || 0; a.deposits += r.deposits || 0; a.spend += r.spend || 0;
     return a;
   }, { variant: 'Total', leads: 0, deposits: 0, spend: 0 });
+  if (rows.length && rows[0]._period_total) total._period = rows[0]._period_total;
   var body = rows.map(function(r) { return render(r); }).join('')
     || '<tr><td colspan="7" style="color:var(--muted)">No landing data</td></tr>';
   var detail = document.createElement('tr');
@@ -8843,6 +9229,8 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
 
 // ── Календарь периода для карты аккаунтов ────────────────────────────
 var _amapPick = { from: '{{ pd.date_from }}', to: '{{ pd.date_to }}', span: '{{ pd.span }}' };
+/* ACL-110: с чем сравниваем выбранный период. mode: '' | 'prev' | 'custom'. */
+var _amapCmp = { mode: {{ ((compare_pick or {}).mode or '') | tojson }}, from: {{ ((compare_pick or {}).date_from or '') | tojson }}, to: {{ ((compare_pick or {}).date_to or '') | tojson }} };
 
 function amapDates() {
   var el = document.getElementById('amap-dates');
@@ -8911,12 +9299,14 @@ function amapCalendar(btn) {
   var open = document.querySelector('.amap-cal');
   if (open) { if (open._amapClose) open._amapClose(true); else open.remove(); return; }
   var have = amapDates();
-  if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
+  if (!have.length) { aclInlineError(btn, 'The workbook has no dates to choose from.'); return; }
+  aclInlineError(btn, '');
 
   /* Выбор живёт в черновике, пока не нажали Update. Раньше второй клик по дате
      грузил период немедленно: увидеть, что выбрал, было негде, а закрыть окно
      после первого клика — значило потерять его молча. */
   var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
+  var cmpDraft = { mode: _amapCmp.mode || '', from: _amapCmp.from || '', to: _amapCmp.to || '' };
   var last = have[have.length - 1];
   var first = have[0];
   /* Открываемся на месяце выбранного периода, а не на последнем месяце книги:
@@ -8961,6 +9351,33 @@ function amapCalendar(btn) {
   box._amapClose = amapCalClose;
   document.addEventListener('mousedown', amapCalOutside, true);
   document.addEventListener('keydown', amapCalEsc, true);
+
+  /* ACL-110: «Compare with» — предыдущий период той же длины или свой диапазон. */
+  function cmpPrevText() {
+    if (draft.span === 'all' || !draft.from) return '';
+    var s = new Date(draft.from + 'T00:00:00'), e = new Date((draft.to || draft.from) + 'T00:00:00');
+    var n = Math.round((e - s) / 86400000) + 1;
+    var pe = new Date(s.getTime() - 86400000), ps = new Date(pe.getTime() - (n - 1) * 86400000);
+    return amapIso(ps) + (n > 1 ? ' – ' + amapIso(pe) : '');
+  }
+  function cmpHtml() {
+    var off = draft.span === 'all' || !draft.from;
+    var m = off ? '' : cmpDraft.mode;
+    var noPick = off ? 'disabled' : '';   /* только когда нет периода, не по книге */
+    var h = '<div class="amap-cmp"><label>Compare with <select data-cmp-mode="1" ' + noPick + '>'
+      + '<option value=""' + (m === '' ? ' selected' : '') + '>Nothing</option>'
+      + '<option value="prev"' + (m === 'prev' ? ' selected' : '') + '>Previous period</option>'
+      + '<option value="custom"' + (m === 'custom' ? ' selected' : '') + '>Custom range</option>'
+      + '</select></label>';
+    if (m === 'prev') h += '<span class="amap-cmp-note">' + cmpPrevText() + '</span>';
+    if (m === 'custom') {
+      h += '<input type="date" data-cmp-from="1" value="' + cmpDraft.from + '" aria-label="Comparison start">'
+        + '<span class="amap-cal-arrow">–</span>'
+        + '<input type="date" data-cmp-to="1" value="' + cmpDraft.to + '" aria-label="Comparison end">';
+    }
+    if (off) h += '<span class="amap-cmp-note">pick a date range to compare</span>';
+    return h + '</div>';
+  }
 
   function hasData(p) {
     if (p.key === 'all') return true;
@@ -9045,6 +9462,7 @@ function amapCalendar(btn) {
           : '<span class="amap-cal-arrow">–</span><span class="amap-cal-field">' + b + '</span>')
       + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
       + '</div>'
+      + cmpHtml()
       + '<div class="amap-cal-foot">'
       + '<span>' + have.length + ' days in the workbook'
         + (last < amapIso(new Date()) ? ', last ' + last : '') + '</span>'
@@ -9087,11 +9505,22 @@ function amapCalendar(btn) {
         draw();
       };
     });
+    var cm = box.querySelector('[data-cmp-mode]');
+    if (cm) cm.onchange = function () { cmpDraft.mode = cm.value; draw(); };
+    var cf = box.querySelector('[data-cmp-from]'), ct = box.querySelector('[data-cmp-to]');
+    if (cf) cf.onchange = function () { cmpDraft.from = cf.value; if (!cmpDraft.to || cmpDraft.to < cf.value) { cmpDraft.to = cf.value; if (ct) ct.value = cf.value; } };
+    if (ct) ct.onchange = function () { cmpDraft.to = ct.value; };
     box.querySelector('[data-close]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-cancel]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-apply]').onclick = function () {
       // Начали период и не закончили — концом считается его начало: один день.
-      amapApply(draft.from, draft.to || draft.from, draft.span);
+      var off = draft.span === 'all' || !draft.from;
+      if (!off && cmpDraft.mode === 'custom' && !cmpDraft.from) {
+        alert('Pick the start of the comparison range, or choose another way to compare.');
+        return;
+      }
+      amapApply(draft.from, draft.to || draft.from, draft.span,
+                off ? { mode: '' } : { mode: cmpDraft.mode, from: cmpDraft.from, to: cmpDraft.to || cmpDraft.from });
     };
   }
   draw();
@@ -9101,17 +9530,28 @@ function amapCalendar(btn) {
    перезагружается целиком. Подменять фрагменты по одному значило бы держать
    на экране числа за разные периоды, пока догружаются остальные, — и в этот
    момент любые два соседних блока выглядели бы одинаково достоверно. */
-function amapApply(from, to, span) {
+function amapApply(from, to, span, cmp) {
   var cal = document.querySelector('.amap-cal');
   /* Тем же закрытием, что Cancel: тот же адрес с якорем — это переход по
      якорю без перезагрузки, и кнопка осталась бы «открытой» (ACL-1778). */
   if (cal) { if (cal._amapClose) cal._amapClose(false); else cal.remove(); }
   _amapPick = { from: from, to: to, span: span || '' };
+  /* Сравнение остаётся в адресе, пока его не выключили: выбранный период и
+     сравниваемый — одна пара, и смена периода не должна её терять. */
+  cmp = cmp || (span === 'all' ? { mode: '' } : _amapCmp);
+  _amapCmp = { mode: cmp.mode || '', from: cmp.from || '', to: cmp.to || '' };
   var q = [];
   if (span === 'all') q.push('span=all');
   else {
     if (from) q.push('date_from=' + encodeURIComponent(from));
     if (to) q.push('date_to=' + encodeURIComponent(to));
+    if (_amapCmp.mode) {
+      q.push('compare=' + encodeURIComponent(_amapCmp.mode));
+      if (_amapCmp.mode === 'custom') {
+        q.push('cmp_from=' + encodeURIComponent(_amapCmp.from));
+        q.push('cmp_to=' + encodeURIComponent(_amapCmp.to || _amapCmp.from));
+      }
+    }
   }
   var hash = window.location.hash || '';
   window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
@@ -9387,9 +9827,13 @@ function amapAwaitSplit(account, per, tries) {
 
 function amapRefreshCountryLines(per) {
   // Reuse server-rendered summaries, preserving existing forms and DOM listeners.
+  var cmp = typeof _amapCmp === 'undefined' ? {} : _amapCmp;
+  var comparison = cmp.mode ? '&compare=' + encodeURIComponent(cmp.mode) : '';
+  if (cmp.mode === 'custom') comparison += '&cmp_from=' + encodeURIComponent(cmp.from)
+    + '&cmp_to=' + encodeURIComponent(cmp.to || cmp.from);
   return fetch('/account-map?date_from=' + encodeURIComponent(per.from)
                + '&date_to=' + encodeURIComponent(per.to)
-               + '&span=' + encodeURIComponent(per.span), { credentials: 'same-origin' })
+               + '&span=' + encodeURIComponent(per.span) + comparison, { credentials: 'same-origin' })
     .then(function (r) {
       if (!r.ok) throw new Error('Could not refresh the country totals');
       return r.text();
@@ -11192,6 +11636,7 @@ function amapOpenProfile(btn) {
   var account = cell && cell.dataset.account;
   if (!account) return;
   var read = btn.parentNode.querySelector('.amap-read');
+  aclInlineError(btn, '');
   btn.disabled = true;
   btn.textContent = 'opening…';
   var body = new FormData();
@@ -11238,7 +11683,7 @@ function amapOpenProfile(btn) {
       stopWatch();
       btn.disabled = false;
       btn.textContent = 'open profile';
-      alert('Could not open the profile: ' + (e && e.message || e));
+      aclInlineError(btn, 'Could not open the profile: ' + (e && e.message || e));
     });
 }
 
@@ -11270,10 +11715,10 @@ function goalMenu(chip, goal) {
     goalCloseMenu();
     // Цель — не страна. Удаление снимает цель и не трогает ни аккаунты, ни
     // историю, ни раздел страны; сказать это до нажатия, а не после.
-    if (!confirm('Stop tracking a goal for ' + goal.country + '?\n\n'
-      + 'Its accounts, history and country section stay exactly as they are — '
-      + 'it just stops being a target.')) return;
-    goalSend({ action: 'delete', country: goal.country });
+    aclConfirm('Its accounts, history and country section stay exactly as they are — '
+      + 'it just stops being a target.',
+      { title: 'Stop tracking a goal for ' + goal.country + '?', okLabel: 'Stop tracking', danger: true })
+      .then(function (yes) { if (yes) goalSend({ action: 'delete', country: goal.country }); });
   };
   m.appendChild(edit); m.appendChild(del);
   document.body.appendChild(m);
@@ -11329,13 +11774,15 @@ async function goalSend(body) {
   });
   var d = null; try { d = await r.json(); } catch (e) {}
   if (d && d.ok) { goalCloseMenu(); location.reload(); return; }
-  alert((d && d.error) ? d.error : ('Could not save (HTTP ' + r.status + ')'));
+  // Ошибка правки — под кнопкой Save открытой формы; у удаления формы нет — окно.
+  aclInlineError(document.getElementById('gf-save'),
+    (d && d.error) ? d.error : ('Could not save (HTTP ' + r.status + ')'));
 }
 
 // ── Account map: placing accounts in countries ───────────────────────
 // Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
 // перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
-async function amapSend(body, msgEl) {
+async function amapSend(body, msgEl, errorAnchor) {
   if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
   var r = await fetch('/account-links', {
     method: 'POST',
@@ -11351,9 +11798,9 @@ async function amapSend(body, msgEl) {
   // молча. Подтверждение спрашивается один раз и с текстом, который
   // объясняет, что именно НЕ произойдёт — кампании продолжат работать.
   if (data && data.needs_confirm) {
-    if (confirm(data.error + '\n\nTake it out anyway?')) {
+    if (await aclConfirm(data.error, { title: 'Take it out anyway?', okLabel: 'Take it out', danger: true })) {
       body.confirm = true;
-      return amapSend(body, msgEl);
+      return amapSend(body, msgEl, errorAnchor);
     }
     if (msgEl) msgEl.textContent = '';
     return false;
@@ -11361,8 +11808,10 @@ async function amapSend(body, msgEl) {
   if (msgEl) {
     msgEl.textContent = (data && data.error) ? data.error : ('error ' + r.status);
     msgEl.className = 'amap-msg bad';
+  } else if (errorAnchor) {
+    aclInlineError(errorAnchor, (data && data.error) ? data.error : ('HTTP ' + r.status));
   } else {
-    alert((data && data.error) ? data.error : ('Could not save (HTTP ' + r.status + ')'));
+    aclAlert((data && data.error) ? data.error : ('HTTP ' + r.status), { title: 'Could not save' });
   }
   return false;
 }
@@ -11538,14 +11987,52 @@ function amapLink(select, kind, value) {
   amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
 }
 
-function amapUnlink(account, kind, value) {
-  amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null);
+async function amapUnlink(account, kind, value, anchor) {
+  /* ACL-142: «×» убирает аккаунт из ОДНОЙ страны, а выглядит как «удалить».
+     Спрашиваем и говорим, что останется; удаление из ACL — отдельная кнопка. */
+  if (!await aclConfirm('Take ' + account + ' out of ' + value + '?' + String.fromCharCode(10, 10)
+    + 'The ' + kind + ' stays. The account stays in ACL with its Multilogin profile, proxy, '
+    + 'history and campaigns, and moves to Available accounts.', { okLabel: 'Take out', danger: true })) return;
+  if (anchor) anchor.disabled = true;
+  aclInlineError(anchor, '');
+  try {
+    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor);
+  } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
+  finally {
+    if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }
+  }
 }
 
+/* ACL-142: второе, ОТДЕЛЬНОЕ действие — убрать аккаунт из ACL на этой машине. */
+async function amapRemoveFromAcl(account, anchor) {
+  if (!await aclConfirm('Remove ' + account + ' from ACL on this computer?\n\n'
+    + 'This deletes its row in this computer\'s account map (the Multilogin profile link and '
+    + 'the ad account number) and takes it out of every country.\n\n'
+    + 'Nothing is deleted anywhere else: the shared sheet, the account\'s history, its '
+    + 'campaigns in Meta and its Multilogin profile stay as they are. You can connect it again later.',
+    { okLabel: 'Remove from ACL', danger: true })) return;
+  if (anchor) anchor.disabled = true;
+  aclInlineError(anchor, '');
+  try {
+    var r = await fetch('/account-map-remove', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ account_name: account, also_unlink: true })
+    });
+    var d = null; try { d = await r.json(); } catch (e) {}
+    if (!d || !d.ok) { aclInlineError(anchor, (d && d.error) || 'Could not remove the account'); return; }
+    location.reload();
+  } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
+  finally {
+    if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }
+  }
+}
+
+
 function amapClose(kind, value, label) {
-  if (!confirm('Retire ' + (label || value) + '?\n\nIts accounts move to Available accounts. '
-    + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
-  amapSend({ action: 'close', kind: kind, value: value }, null);
+  aclConfirm('Its accounts move to Available accounts. '
+    + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.',
+    { title: 'Retire ' + (label || value) + '?', okLabel: 'Retire', danger: true })
+    .then(function (yes) { if (yes) amapSend({ action: 'close', kind: kind, value: value }, null); });
 }
 
 // ── Available accounts: выбрать и убрать (ACL-1319) ───────────────────
@@ -11613,7 +12100,7 @@ function amapAvailShowInactive(cb) {
 function amapAvailMsg(box, text, bad) {
   var msg = box && box.querySelector('.amap-avail-msg');
   if (msg) { msg.textContent = text || ''; msg.className = 'amap-msg amap-avail-msg' + (bad ? ' bad' : ''); }
-  else if (bad && text) alert(text);
+  else if (bad && text) aclAlert(text);
 }
 
 function amapAvailRemove(btn) {
@@ -11622,11 +12109,12 @@ function amapAvailRemove(btn) {
   var names = amapAvailVisiblePicks(box).filter(function (cb) { return cb.checked; })
     .map(function (cb) { return cb.value; });
   if (!names.length) return;
-  if (names.length > 1 && !confirm('Remove ' + names.length + ' accounts from Available accounts?\n\n'
-      + 'They are only hidden from this list on this machine. Nothing is deleted — '
+  if (names.length < 2) return amapAvailSave(box, names, true);
+  return aclConfirm('They are only hidden from this list on this machine. Nothing is deleted — '
       + 'profiles, the account map, placements and history stay. '
-      + 'You can bring them back from "Hidden accounts".')) return;
-  return amapAvailSave(box, names, true);
+      + 'You can bring them back from "Hidden accounts".',
+    { title: 'Remove ' + names.length + ' accounts from Available accounts?', okLabel: 'Remove' })
+    .then(function (yes) { if (yes) return amapAvailSave(box, names, true); });
 }
 
 function amapAvailRestore(btn, name) {
@@ -12156,6 +12644,133 @@ function amapHint(row, d) {
   else hint.textContent = 'never opened here — the ad account will be read from it';
 }
 
+/* ACL-142: «Read from the open account» в окне подключения. Модель без DOM —
+   её проверяет Node. Прочитанное из профиля — ПРЕДЛОЖЕНИЕ: Ads Manager открывает
+   кабинет по умолчанию, а у профиля их может быть несколько. Поэтому значение,
+   пришедшее из чтения и не тронутое рукой, требует явного подтверждения;
+   исправленное вручную подтверждения не требует — его выбрал человек. */
+function amapAccountModel() {
+  var m = { value: '', detected: null, reading: false, error: '', confirmed: false };
+  m.startRead = function () { m.reading = true; m.error = ''; m.confirmed = false; };
+  m.finishRead = function (found) {
+    m.reading = false; m.confirmed = false;
+    if (found && found.ok && found.act) {
+      m.detected = { act: String(found.act), name: found.account_name || '',
+                     needs: found.needs_confirmation !== false };
+      m.value = m.detected.act; m.confirmed = false; m.error = '';
+    } else {
+      m.error = (found && found.error) || 'unknown';
+    }
+  };
+  m.edit = function (v) { m.value = String(v == null ? '' : v); };
+  m.untouchedRead = function () {
+    return !!m.detected && m.detected.needs && m.value.trim() === m.detected.act;
+  };
+  m.canSubmit = function () { return !m.reading && (!m.untouchedRead() || m.confirmed); };
+  m.result = function () { return m.canSubmit() ? m.value.trim() : null; };
+  return m;
+}
+
+function amapReadOpenAccount(profile, instance) {
+  var d = profile._details || {};
+  var probe = new FormData();
+  probe.append('profile_id', profile.profile_id);
+  probe.append('folder_id', profile.folder_id || d.folder_id || '');
+  probe.append('instance', instance);
+  return amapFetchJson('/account-probe/ad-account',
+    { method: 'POST', body: probe, credentials: 'same-origin' }, AMAP_PROBE_WAIT_MS)
+    .catch(function (e) {
+      return { ok: false, error: (e && e.timeout) ? AMAP_OPEN_TIMEOUT_MSG : String(e && e.message || e) };
+    });
+}
+
+/* Окно на странице вместо prompt(): в prompt() нельзя ни кнопки, ни подписи.
+   Резолвится строкой (номер, ссылка или пусто — «подключить без номера») либо
+   null, если человек отказался. */
+function amapAskAccount(read, opened) {
+  if (amapAskAccount.active) return Promise.resolve(null);
+  amapAskAccount.active = true;
+  return new Promise(function (resolve) {
+    var m = amapAccountModel();
+    var before = document.activeElement;
+    var dlg = document.createElement('dialog');
+    dlg.className = 'amap-account-dialog acl-dlg';
+    var h = document.createElement('h3'); h.textContent = 'Ad account';
+    h.className = 'acl-dlg-title'; h.id = 'amap-account-dialog-title';
+    dlg.setAttribute('aria-labelledby', h.id);
+    var info = document.createElement('p'); info.className = 'amap-ad-info';
+    var warn = document.createElement('p'); warn.className = 'amap-ad-warn';
+    var readBtn = document.createElement('button');
+    readBtn.type = 'button'; readBtn.className = 'amap-btn acl-dlg-btn'; readBtn.textContent = 'Read from the open account';
+    var input = document.createElement('input');
+    input.type = 'text'; input.className = 'amap-ad-input acl-dlg-input'; input.size = 34;
+    input.id = 'amap-account-dialog-input';
+    var inputLabel = document.createElement('label'); inputLabel.className = 'acl-dlg-label';
+    inputLabel.htmlFor = input.id; inputLabel.textContent = 'Ads Manager link or account number';
+    input.placeholder = 'act_… or the Ads Manager link';
+    var label = document.createElement('label'); label.className = 'amap-ad-confirm';
+    var tick = document.createElement('input'); tick.type = 'checkbox';
+    var tickText = document.createElement('span');
+    tickText.textContent = ' This is the ad account I want to connect';
+    label.append(tick, tickText);
+    var ok = document.createElement('button'); ok.type = 'button'; ok.className = 'amap-btn acl-dlg-btn acl-dlg-primary'; ok.textContent = 'Connect';
+    var cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'amap-btn acl-dlg-btn acl-dlg-quiet'; cancel.textContent = 'Cancel';
+    var row = document.createElement('p'); row.className = 'acl-dlg-actions'; row.append(cancel, ok);
+    dlg.append(h, info, readBtn, inputLabel, input, warn, label, row);
+
+    function paint() {
+      readBtn.disabled = m.reading;
+      input.disabled = m.reading;
+      tick.disabled = m.reading;
+      readBtn.textContent = m.reading ? 'Reading…' : 'Read from the open account';
+      input.value = m.value;
+      var d = m.detected;
+      if (m.reading) info.textContent = 'Asking the open profile for its ad account…';
+      else if (m.error) info.textContent = 'Could not read it from the profile: ' + m.error
+        + (opened === false ? ' The profile did not open with automation. If its window is open by hand, '
+          + 'close it in Multilogin and press Connect again.' : '')
+        + ' Paste the Ads Manager link or the account number — or leave this empty to connect now '
+        + 'and fill the number in later.';
+      else if (d) info.textContent = 'The open profile says its ad account is: '
+        + (d.name ? d.name + ' · ' : '') + d.act;
+      else info.textContent = 'Press the button to read the ad account from the open profile, or type it.';
+      var show = m.untouchedRead();
+      label.hidden = !show;
+      warn.textContent = show ? 'Ads Manager opens the profile’s default ad account. If this profile can see '
+        + 'several, this may not be the one you want — check it, or type the right number.' : '';
+      ok.disabled = !m.canSubmit();
+      ok.textContent = m.value.trim() ? 'Connect' : 'Connect without a number';
+    }
+    function doRead() {
+      if (done || m.reading) return;
+      m.startRead(); paint();
+      Promise.resolve(read()).then(function (found) { if (done) return; m.finishRead(found); tick.checked = false; paint(); },
+        function (e) { if (done) return; m.finishRead({ ok: false, error: String(e && e.message || e) }); tick.checked = false; paint(); });
+    }
+    readBtn.onclick = doRead;
+    input.oninput = function () { m.edit(input.value); paint(); };
+    tick.onchange = function () { m.confirmed = tick.checked; paint(); };
+    var done = false;
+    function finish(v) {
+      if (done) return; done = true; amapAskAccount.active = false;
+      try { dlg.close(); } catch (e) {} dlg.remove();
+      if (before && typeof before.focus === 'function' && document.contains(before)) before.focus();
+      resolve(v);
+    }
+    ok.onclick = function () { finish(m.result()); };
+    cancel.onclick = function () { finish(null); };
+    dlg.addEventListener('cancel', function (event) { event.preventDefault(); finish(null); });
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' && !event.isComposing && m.canSubmit()) { event.preventDefault(); ok.click(); }
+    });
+    document.body.appendChild(dlg);
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    if (typeof cancel.focus === 'function') cancel.focus();
+    doRead();
+  });
+}
+/* } ACL-142 account dialog */
+
 async function amapConnect(box, profile, instance, btn, opened) {
   var country = box.getAttribute('data-amap-country');
   var msg = box.querySelector('.amap-msg');
@@ -12165,14 +12780,16 @@ async function amapConnect(box, profile, instance, btn, opened) {
      аккаунтов в карте записаны книжными именами, и связь с книгой идёт по
      имени, поэтому новые под именем профиля своих чисел не увидят. */
   var name = d.suggested_name || profile.name || '';
-  name = (prompt('Ad account name:', name) || '').trim();
+  name = ((await aclPrompt('', { title: 'Connect ' + (profile.name || 'this profile'),
+    label: 'Ad account name', value: name, okLabel: 'Next' })) || '').trim();
   if (!name) return;
   var act = (d.ad_account_id || '').trim();
   if (!act && profile._openTimedOut) {
     /* Профиль не ответил: второй раз спрашивать у него то же самое значит ждать
        ещё минуту. Номер впишет человек — или останется пустым, как и раньше. */
-    var typed0 = prompt(AMAP_OPEN_TIMEOUT_MSG + '\n\nThe profile will still be saved here. '
-      + 'Paste the Ads Manager link or the account number \u2014 or leave this empty to fill it in later:', '');
+    var typed0 = await aclPrompt(AMAP_OPEN_TIMEOUT_MSG + '\n\nThe profile will still be saved here. '
+      + 'Paste the Ads Manager link or the account number \u2014 or leave this empty to fill it in later.',
+      { title: 'Ad account number', label: 'Ads Manager link or account number', okLabel: 'Connect' });
     if (typed0 === null) return;
     act = (typed0 || '').trim();
   } else if (!act) {
@@ -12185,43 +12802,12 @@ async function amapConnect(box, profile, instance, btn, opened) {
        Прочитанное всё равно показываем: у профиля может быть несколько
        кабинетов, открывается тот, что по умолчанию. Подставить молча значит
        время от времени брать не тот, и на экране об этом ничего не скажет. */
-    msg.textContent = 'asking the open profile…';
-    msg.className = 'amap-msg';
-    var probe = new FormData();
-    probe.append('profile_id', profile.profile_id);
-    probe.append('folder_id', profile.folder_id || d.folder_id || '');
-    probe.append('instance', instance);
-    var found = null;
-    try {
-      found = await amapFetchJson('/account-probe/ad-account',
-        { method: 'POST', body: probe, credentials: 'same-origin' }, AMAP_PROBE_WAIT_MS);
-    } catch (e) {
-      found = { ok: false, error: (e && e.timeout) ? AMAP_OPEN_TIMEOUT_MSG : String(e && e.message || e) };
-    }
+    /* ACL-142: окно на странице с кнопкой «Read from the open account».
+       Чтение стартует само при открытии (как и раньше), но результат
+       показывается на подтверждение и правится; пустое — подключить без
+       номера, как и прежде. */
     msg.textContent = '';
-
-    var head, seed;
-    if (found && found.ok) {
-      head = 'The open profile says its ad account is:'
-        + (found.account_name ? '\n' + found.account_name : '');
-      seed = found.act;
-    } else {
-      /* Пустой ответ больше не отменяет подключение. Номер нужен, чтобы
-         читать спенд и заливать кампании, — но не чтобы держать аккаунт в
-         карте: без него аккаунт подключится, а билдер честно покажет
-         «⚠ missing: ad_account_id» и даст вписать позже.
-
-         Прежнее «пусто = отмена» загоняло в тупик ровно там, где человек
-         впервые видит новый профиль: номер знает открытый профиль, а открыть
-         его дешборд соглашался только у подключённого аккаунта. */
-      head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
-        + (opened === false ? '\n\nThe profile did not open with automation. If its window '
-            + 'is open by hand, close it in Multilogin and press Connect again.' : '')
-        + '\n\nPaste the Ads Manager link or the account number — or leave this '
-        + 'empty to connect now and fill the number in later:';
-      seed = '';
-    }
-    var typed = prompt(head, seed);
+    var typed = await amapAskAccount(function () { return amapReadOpenAccount(profile, instance); }, opened);
     if (typed === null) return;          // Cancel — человек передумал
     act = (typed || '').trim();          // пусто — подключаем без номера
   }
@@ -12540,14 +13126,20 @@ function mlSignin(cid) {
       if (matched.length === 1) {
         var mp = matched[0];
         usedProfileIds[mp.profile_id] = true;
-        _mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null);
-        autoLinked.push((mp.name||'?') + ' → ' + accLabel);
+        autoLinked.push(_mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null, profilesDiv)
+          .then(function(saved) { return saved ? (mp.name||'?') + ' → ' + accLabel : null; }));
       }
     });
 
     if (autoLinked.length) {
-      profilesDiv.innerHTML = '<span style="color:var(--good);font-size:var(--adopy-text-sm)">'
-        + '✓ Linked automatically: ' + autoLinked.map(aclEscHtml).join(', ') + '</span>';
+      profilesDiv.textContent = 'Linking matched profiles…';
+      Promise.all(autoLinked).then(function(results) {
+        var linked = results.filter(function(name) { return name !== null; });
+        profilesDiv.innerHTML = linked.length
+          ? '<span style="color:var(--good);font-size:var(--adopy-text-sm)">'
+            + '✓ Linked automatically: ' + linked.map(aclEscHtml).join(', ') + '</span>'
+          : '';
+      });
       return;
     }
 
@@ -12618,11 +13210,12 @@ function mlManualSave(cid) {
       + '<span style="color:var(--warn);font-size:var(--adopy-text-sm)">⚠ This overwrites the current IDs in ad_account_map.csv</span>';
     _safeConfirm('Save IDs manually?', bodyHtml, function() {
       if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Saving…</span>';
-      _mlSaveIds(accLabel, folderId, profileId, 'A', null);
-      // Show success after short delay
-      setTimeout(function() {
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>';
-      }, 800);
+      var errorAnchor = statusEl || document.getElementById('ml-manual-profile-' + cid);
+      _mlSaveIds(accLabel, folderId, profileId, 'A', null, errorAnchor).then(function(saved) {
+        if (statusEl) statusEl.innerHTML = saved
+          ? '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>'
+          : '';
+      });
     }, { confirmLabel: 'Save' });
   }
 
@@ -12671,7 +13264,8 @@ function mlManualSave(cid) {
 function mlSearchByTerm(cid, instance) {
   var input = document.getElementById('ml-search-manual-' + cid);
   var term = input ? input.value.trim() : '';
-  if (!term) { alert('Type something to search for'); return; }
+  if (!term) { aclInlineError(input, 'Type something to search for'); return; }
+  aclInlineError(input, '');
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
   var statusEl = document.getElementById('ml-status-' + cid);
   if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Searching for "' + aclEscHtml(term) + '"…</span>';
@@ -12846,7 +13440,7 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
     .filter(Boolean);
 
   if (!accTitles.length) {
-    alert('No accounts found on this page.');
+    aclInlineError(btn, 'No accounts found on this page.');
     return;
   }
 
@@ -12905,10 +13499,12 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
   }, 50);
 }
 
-function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
+function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAnchor) {
+  var anchor = errorAnchor || triggerBtn;
+  aclInlineError(anchor, '');
   if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = 'Saving…'; }
 
-  fetch('/account-map-patch', {
+  return fetch('/account-map-patch', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -12922,8 +13518,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   .then(function(data) {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
     if (!data.ok) {
-      alert('Save failed: ' + (data.error || 'unknown error'));
-      return;
+      aclInlineError(anchor, 'Save failed: ' + (data.error || 'unknown error'));
+      return false;
     }
     // Update all Multilogin status rows for this account
     var accId = accLabel.replace(/[\s.]/g, '_');
@@ -12950,10 +13546,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     document.querySelectorAll('[id^="ml-status-"]').forEach(function(s) {
       s.innerHTML += ' <span style="color:var(--good)">· saved to ' + aclEscHtml(accLabel) + ' ✓</span>';
     });
+    return true;
   })
   .catch(function(e) {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
-    alert('Network error: ' + e.message);
+    aclInlineError(anchor, 'Network error: ' + e.message);
+    return false;
   });
 }
 
@@ -12993,6 +13591,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   var _cbCreativesMissPending = null;
   var _cbCreativesLastAt = 0;
   var _cbCreativesSig = '';
+  var _cbCreativesLoaded = false;  // ACL-1668: список пришёл — «файла нет» можно утверждать
   window.CB_CREATIVES_REFRESH_COUNT = 0;  // счётчик запросов (для тестов)
 
   // minGapMs — минимальный интервал с прошлого запроса; 0 = без троттлинга.
@@ -13015,7 +13614,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         _cbCreativesSig = sig;
         var prev = CREATIVES;
         CREATIVES = files;
+        _cbCreativesLoaded = true;
         if (changed) cbpRenderChangedSlots(prev, files);
+        cbMarkMissingCreatives();
         return changed;
       })
       .catch(function(){ return false; })
@@ -13044,6 +13645,72 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     return _cbCreativesMissPending;
   }
+
+  // ACL-1668: выбранный в строке файл пропал из папки (удалён или переименован).
+  // Выбранный = скрытое поле creative_file; набранный, но не выбранный текст не в счёт.
+  // Пока список не загружен, ничего не утверждаем.
+  function cbCreativeChosen(row) {
+    var hid = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+    return ((hid && hid.value) || '').trim();
+  }
+  function cbCreativeMissing(v) {
+    return !!v && _cbCreativesLoaded && !CREATIVES.some(function(f) {
+      return f.filename === v || f.rel_path === v;
+    });
+  }
+  // Имя остаётся в поле; рядом появляется надпись цветом ошибки темы.
+  function cbMarkMissingCreatives() {
+    document.querySelectorAll('.cb-ad-row').forEach(function(row) {
+      var wrap = row.querySelector('.cb-creative-sel-wrap');
+      if (!wrap) return;
+      var missing = cbCreativeMissing(cbCreativeChosen(row));
+      row.classList.toggle('cb-file-missing', missing);
+      var note = wrap.querySelector('.cb-file-missing-note');
+      if (missing && !note) {
+        note = document.createElement('div');
+        note.className = 'cb-file-missing-note';
+        note.setAttribute('role', 'alert');
+        note.style.cssText = 'color:var(--bad);font-size:var(--adopy-text-sm)';
+        note.textContent = 'File missing \u2014 pick again';
+        wrap.appendChild(note);
+      } else if (!missing && note) {
+        note.remove();
+      }
+    });
+  }
+  // Строки с пропавшим файлом внутри scope (форма или карточка): [{slot, ad, file}].
+  window.cbMissingCreatives = function(scope) {
+    cbMarkMissingCreatives();
+    var out = [];
+    (scope || document).querySelectorAll('.cb-ad-row.cb-file-missing').forEach(function(row) {
+      var slot = row.closest('.cb-slot');
+      out.push({slot: slot, ad: Array.prototype.indexOf.call(row.parentNode.querySelectorAll('.cb-ad-row'), row) + 1,
+                file: cbCreativeChosen(row)});
+    });
+    return out;
+  };
+  // Блок для подтверждения публикации: красный список; '' если всё на месте.
+  window.cbMissingCreativesHtml = function(missing) {
+    if (!missing.length) return '';
+    var title = window.cbSlotTitle || function() { return 'Campaign'; };
+    return '<div class="cb-warn-block cb-missing-files" style="color:var(--bad)">File missing \u2014 pick again. Nothing was sent:<br>'
+      + missing.map(function(m) {
+          return aclEscHtml((m.slot ? title(m.slot) : 'Campaign') + ' \u2014 Ad ' + m.ad + ': ' + m.file);
+        }).join('<br>') + '</div>';
+  };
+
+  // Refusal belongs beside the live action, including when the drawer hides
+  // the form's own Publish button. Keep the named row markers and send nothing.
+  window.cbRefuseMissingCreatives = function(missing, form) {
+    var actions = [form && form.querySelector('.cb-publish-btn'), document.querySelector('.cbd-publish-all')];
+    actions.forEach(function(button) { if (button) aclInlineError(button, ''); });
+    if (!missing.length) return false;
+    var anchor = actions.filter(function(button) {
+      return button && button.isConnected && button.getClientRects().length;
+    })[0] || form || document.querySelector('form.open-account-form');
+    aclInlineError(anchor, 'Not sent: a chosen creative file is missing \u2014 pick it again.');
+    return true;
+  };
 
   function cbCreativeSig(f) {
     return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
@@ -13170,6 +13837,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbMarkMissingCreatives();
       });
     });
   };
@@ -13250,6 +13918,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   function cbRenderPreviews(slot) {
+    cbMarkMissingCreatives();
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
     var cards = [];
@@ -13740,6 +14409,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbMarkMissingCreatives();
       });
     });
   };
@@ -15498,7 +16168,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   // Ключ — страна и аккаунт: один аккаунт бывает привязан к нескольким
   // странам (account_links), и у каждой страны своя форма и свои кампании;
   // отметки — тоже у формы, не у имени аккаунта.
-  var forms = [], running = [], campaigns = 0, listed = [];
+  var forms = [], running = [], campaigns = 0, listed = [], missingFiles = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
     var slots = form.querySelectorAll('.cb-slot');
     if (!slots.length) return;
@@ -15508,12 +16178,19 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
     if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
     if (cbAccountBusy(cbFormKey(form))) { running.push(cbFormTitle(form)); return; }
     forms.push(form);
+    // ACL-1668: пропавший выбранный файл — по отмеченным карточкам или по всем.
+    if (window.cbMissingCreatives) window.cbMissingCreatives(form).forEach(function (m) {
+      if (!mine || mine.indexOf(m.slot) !== -1) missingFiles.push(m);
+    });
     campaigns += mine ? mine.length : slots.length;
     // Живые аккаунты: какие именно кампании уйдут, видно до нажатия.
     if (mine) listed.push('<strong>' + aclEscHtml(cbFormTitle(form)) + '</strong>: '
       + aclEscHtml(mine.map(cbSlotTitle).join(', ')));
   });
-  if (!forms.length && !running.length) { window.alert('Nothing is being assembled yet.'); return; }
+  if (!forms.length && !running.length) {
+    aclInlineError(document.querySelector('.cbd-publish-all'), 'Nothing is being assembled yet.');
+    return;
+  }
   if (!forms.length) { cbSayAlreadyBuilding(running); return; }
 
   var names = forms.map(cbFormTitle);
@@ -15556,7 +16233,8 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       ? '<b>' + aclEscHtml(cbPublishMode().split(' — ')[0]) + '</b> ' + aclEscHtml(cbPublishMode().split(' — ').slice(1).join(' — '))
       // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
       : '<b>Draft</b> — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook',
-    noticesHtml: (pfBlocksHtml ? pfBlocksHtml : '')
+    noticesHtml: (window.cbMissingCreativesHtml ? window.cbMissingCreativesHtml(missingFiles) : '')
+      + (pfBlocksHtml ? pfBlocksHtml : '')
       + (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
       + (noteHtml || '')
   });
@@ -15566,9 +16244,11 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     parts.body,
     function () {
+      if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, null); return; }
+      if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
-      if (!go.length) { window.alert('No account is ready to run. Fix the listed accounts or tick "Run anyway".'); return; }
+      if (!go.length) { aclAlert('Fix the listed accounts or tick "Run anyway".', { title: 'No account is ready to run' }); return; }
       var got = _runPublishQueue(go, onProgress || function () {},
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
@@ -15658,7 +16338,7 @@ function cbPfWarnings(slots) {
 var CB_PF_UNAVAILABLE = 'Pre-flight audit unavailable — reload the page';
 function cbPfUnavailable() {
   window.CB_PF_GATE = { blocked: true, bad: [], reason: CB_PF_UNAVAILABLE };
-  window.alert(CB_PF_UNAVAILABLE);
+  aclAlert(CB_PF_UNAVAILABLE);
 }
 
 /* Ворота Publish: клиентские ошибки блокируют сразу; при API — серверные проверки
@@ -15892,6 +16572,7 @@ window.cbCheckPlan = function (picked, out, btn) {
 };
 
 /* Имя карточки для подтверждения. */
+window.cbSlotTitle = cbSlotTitle;
 function cbSlotTitle(slot) {
   return ((slot.querySelector('.cb-name-hidden') || {}).value || '').trim() || 'Untitled campaign';
 }
@@ -15946,6 +16627,26 @@ function cbReviewWait(q) {
   if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+/* ACL-1642: очередь ждёт память — сколько свободно, сколько просит новый профиль
+   и что поможет; задание за такой головой — «ждёт за ней». null — ждёт не память. */
+function cbMemoryWait(q) {
+  q = q || {};
+  var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+  var tail = ahead ? ' (' + ahead + ' ahead)' : '';
+  if (q.behind_memory) return 'Waiting behind a job that waits for memory' + tail;
+  if (q.hold !== 'memory_low' && q.hold !== 'below_reserve') return null;
+  var hint = '. Close a Multilogin profile you don\'t need.';
+  if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
+  var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  var reserve = Number(q.reserve_mb) || 0;
+  var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
+  /* Разбор складывается в «needs»: остаток — профили, что ещё стартуют или растут. */
+  var extra = Math.max(0, need - Number(q.profile_mb) - reserve);
+  return 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, a new profile needs ' + gb(need)
+    + ' GB (profile ~' + gb(q.profile_mb) + ' GB + '
+    + (extra >= 51 ? gb(extra) + ' GB for profiles still starting or growing + ' : '')
+    + String(+gb(reserve)) + ' GB reserve)' + tail + hint;
 }
 /* ACL-2113: окна, оставленные для удобства, уступают место сами, простояв N минут. */
 function cbIdleWait(q) {
@@ -16165,7 +16866,7 @@ function cbNewRun(notify) {
       // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
       // нет ворот — нет повтора.
       if (typeof window.cbPreflightGate !== 'function' || !e.form) {
-        window.alert('Pre-flight audit unavailable — reload the page');
+        aclAlert('Pre-flight audit unavailable — reload the page');
         return false;
       }
       var all = Array.prototype.slice.call(e.form.querySelectorAll('.cb-slot'));
@@ -16688,7 +17389,8 @@ window.cbHighlightField = function(field) {
 function cbQueueUncertain() {
   var q = window.CB_QUEUE;
   if (!q || !q.uncertain) return false;
-  alert('The status of the previous run in this tab is unknown (the dashboard may have restarted). Reload the page (F5) and press Publish again.');
+  aclAlert('The dashboard may have restarted. Reload the page (F5) and press Publish again.',
+    { title: 'The status of the previous run in this tab is unknown' });
   return true;
 }
 
@@ -16740,9 +17442,9 @@ function cbAccountBusy(key) {
 }
 
 function cbSayAlreadyBuilding(labels) {
-  alert(labels.join(', ') + (labels.length > 1 ? ' are' : ' is') + ' already being built in this tab. '
-    + 'Wait for that run to finish (or press Stop on it) before publishing '
-    + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.');
+  aclAlert('Wait for that run to finish (or press Stop on it) before publishing '
+    + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.',
+    { title: labels.join(', ') + (labels.length > 1 ? ' are' : ' is') + ' already being built in this tab' });
 }
 
 /* Помощники режима — здесь, рядом с cbPublish: тестовые срезы билдера берут
@@ -16822,6 +17524,14 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
+  // ACL-1668: выбранный файл удалён или переименован — собирать нечего.
+  var missingFiles = window.cbMissingCreatives
+    ? window.cbMissingCreatives(onlySlot || form).filter(function(m) {
+        return !ticked.length || ticked.indexOf(m.slot) !== -1;
+      })
+    : [];
+  if (missingFiles.length) bodyHtml = window.cbMissingCreativesHtml(missingFiles) + bodyHtml;
+
   if (lostTargeting.length) {
     var names = lostTargeting.map(aclEscHtml).join(', ');
     bodyHtml = '<div class="cb-warn-block">⚠ Targeting not selected: <b>' + names + '</b>'
@@ -16845,8 +17555,10 @@ window.cbPublish = function(form) {
   _safeConfirm(cbApiMode()
       ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
       : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
+    if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, form); return; }
+    if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], form);
     if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
-    if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
+    if (mine && !anyway) { aclAlert('Fix it, or tick "Run anyway".', { title: accLabel + ' is not ready' }); return; }
     if (onlySlot || ticked.length) {
       var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
@@ -17118,7 +17830,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
-          : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
+          : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory')
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
@@ -17182,6 +17894,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       html += '</div>';
       if (r.backend === 'api') html += cbApiReadbackHtml(r);
+      else if (r.page_id && r.page_origin) html += '<div class="cb-status-steps">Facebook Page: '
+        + aclEscHtml(r.page_name || r.page_id) + ' (' + aclEscHtml(r.page_id) + ') · from '
+        + aclEscHtml(r.page_origin) + '</div>';
       if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
         + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {
@@ -17237,53 +17952,61 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     });
   }
 
-  var _teachBannerShown = false;
+  /* ACL-1142: the teach wait belongs to ONE job. The poll answer carries
+     `teach` for this job, so the banner names the account it waits for and its
+     button releases only that job — two builds at once never share an answer. */
+  function _teachBannerId() { return 'rpa-teach-banner-' + jobId; }
 
-  function _checkTeachMode() {
-    fetch('/rpa-teach/status')
-      .then(function(r) { return r.json(); })
-      .then(function(s) {
-        var banner = document.getElementById('rpa-teach-banner');
-        if (s.waiting) {
-          if (!banner) {
-            banner = document.createElement('div');
-            banner.id = 'rpa-teach-banner';
-            banner.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'
-              + 'z-index:9999;background:#1e3a5f;color:#fff;border:2px solid #3b82f6;'
-              + 'border-radius:10px;padding:1rem 1.5rem;max-width:480px;text-align:center;'
-              + 'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-size:0.92rem;line-height:1.5';
-            banner.innerHTML = '<strong style="font-size:1rem">We need your click</strong><br>'
-              + 'The RPA could not select <b>Website</b> on its own.<br>'
-              + 'Click <b>Website</b> in the open browser menu, then press the button below.<br><br>'
-              + '<button onclick="rpaTeachResume()" style="padding:0.5rem 1.2rem;'
-              + 'background:#3b82f6;color:#fff;border:none;border-radius:6px;'
-              + 'cursor:pointer;font-weight:700;font-size:0.9rem">I clicked Website — continue</button>'
-              + '<button onclick="document.getElementById(\'rpa-teach-banner\').remove()" '
-              + 'style="margin-left:0.7rem;padding:0.5rem 0.8rem;background:transparent;'
-              + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:var(--adopy-text-body)">Hide</button>';
-            document.body.appendChild(banner);
-          }
-          _teachBannerShown = true;
-        } else if (banner) {
-          banner.remove();
-          _teachBannerShown = false;
-        }
-      })
-      .catch(function() {});
+  function _removeTeachBanner() {
+    var old = document.getElementById(_teachBannerId());
+    if (old) old.remove();
   }
 
-  window.rpaTeachResume = function() {
-    var banner = document.getElementById('rpa-teach-banner');
+  function _renderTeachBanner(teach) {
+    var banner = document.getElementById(_teachBannerId());
+    if (!(teach && teach.waiting)) { if (banner) banner.remove(); return; }
+    if (banner) return;
+    var stack = document.getElementById('rpa-teach-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'rpa-teach-stack';
+      stack.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'
+        + 'z-index:9999;display:flex;flex-direction:column;gap:0.6rem;align-items:center';
+      document.body.appendChild(stack);
+    }
+    var account = teach.account_label ? aclEscHtml(teach.account_label) : 'this account';
+    banner = document.createElement('div');
+    banner.id = _teachBannerId();
+    banner.setAttribute('data-job-id', jobId);
+    banner.style.cssText = 'background:#1e3a5f;color:#fff;border:2px solid #3b82f6;'
+      + 'border-radius:10px;padding:1rem 1.5rem;max-width:480px;text-align:center;'
+      + 'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-size:0.92rem;line-height:1.5';
+    banner.innerHTML = '<strong style="font-size:1rem">We need your click — ' + account + '</strong><br>'
+      + 'The RPA could not select <b>Website</b> on its own in <b>' + account + '</b>.<br>'
+      + 'Click <b>Website</b> in the open browser menu of that account, then press the button below.<br><br>'
+      + '<button type="button" data-act="resume" style="padding:0.5rem 1.2rem;'
+      + 'background:#3b82f6;color:#fff;border:none;border-radius:6px;'
+      + 'cursor:pointer;font-weight:700;font-size:0.9rem">I clicked Website — continue</button>'
+      + '<button type="button" data-act="hide" '
+      + 'style="margin-left:0.7rem;padding:0.5rem 0.8rem;background:transparent;'
+      + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:var(--adopy-text-body)">Hide</button>';
+    banner.querySelector('[data-act="resume"]').addEventListener('click', function () { rpaTeachResume(jobId); });
+    banner.querySelector('[data-act="hide"]').addEventListener('click', function () { banner.remove(); });
+    stack.appendChild(banner);
+  }
+
+  window.rpaTeachResume = function(forJobId) {
+    var banner = document.getElementById('rpa-teach-banner-' + forJobId);
     if (banner) {
       banner.innerHTML = '<span style="color:#93c5fd">⏳ Resuming the RPA…</span>';
     }
-    fetch('/rpa-teach/resume', { method: 'POST' })
+    fetch('/rpa-teach/resume?job_id=' + encodeURIComponent(forJobId), { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (banner) banner.remove();
-        if (!d.ok) { alert('Resume error: ' + (d.error || '?')); }
+        if (!d.ok) { aclAlert(d.error || '?', { title: 'Could not resume the RPA' }); }
       })
-      .catch(function(e) { alert('Error: ' + e.message); });
+      .catch(function(e) { aclAlert(e.message, { title: 'Could not resume the RPA' }); });
   };
 
   // Scroll to the status panel ONCE, when polling starts. Scrolling on
@@ -17316,12 +18039,11 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         }
         if (job.status !== 'done' && job.status !== 'cancelled') {
-          _checkTeachMode();
+          _renderTeachBanner(job.teach);
           // Poll faster while cancelling so Stop feels responsive.
           setTimeout(poll, job.status === 'cancelling' ? 600 : 2000);
         } else {
-          var banner = document.getElementById('rpa-teach-banner');
-          if (banner) banner.remove();
+          _removeTeachBanner();
           if (publishBtn) publishBtn.disabled = false;
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});
@@ -17846,18 +18568,19 @@ function aclPickerSearch(inst, text) {
   /* Группой — то же, что по одной: у кого есть запись на машине, у того
      она убирается; остальные уходят с глаз. Выбирают их вперемешку, и
      разбираться, какой строке что положено, человек не должен. */
-  function removeMany(picked) {
+  async function removeMany(picked) {
     if (!picked.length) return;
     var labels = picked.map(function (x) { return x.label; });
     var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
     var mapped = picked.filter(function (x) { return x.removable; }).map(function (x) { return x.label; });
     var sheet = picked.filter(function (x) { return !x.removable; }).map(function (x) { return x.label; });
-    if (!window.confirm('Take ' + labels.length + ' account(s) out of this list?'
+    if (!await aclConfirm('Take ' + labels.length + ' account(s) out of this list?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
         + (mapped.length ? mapped.length + ' had a row on this machine — it is dropped.' + String.fromCharCode(10) : '')
         + (sheet.length ? sheet.length + ' came from the shared sheet with nothing stored here — '
             + 'they are put out of sight and can be brought back.' + String.fromCharCode(10) : '')
-        + String.fromCharCode(10) + 'Nothing in the shared sheet changes.')) return;
+        + String.fromCharCode(10) + 'Nothing in the shared sheet changes.',
+        { okLabel: 'Take out', danger: true })) return;
 
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
@@ -17916,11 +18639,11 @@ function aclPickerSearch(inst, text) {
      пришедшего из общей таблицы её нет, убирать нечего — строка уходит с
      глаз. Для человека результат один: аккаунта больше нет в списке, и
      общая таблица не тронута ни в том, ни в другом случае. */
-  function drop(btn) {
+  async function drop(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
     var hasRow = btn.dataset.removable === '1';
-    if (!window.confirm(hasRow
+    if (!await aclConfirm(hasRow
         ? 'Remove "' + label + '" from the map of THIS machine?'
           + String.fromCharCode(10, 10)
           + 'The account stays in the shared sheet with all its history — this '
@@ -17929,7 +18652,9 @@ function aclPickerSearch(inst, text) {
           + String.fromCharCode(10, 10)
           + 'It comes from the shared sheet and nothing is stored for it here, '
           + 'so there is nothing to delete — it is put out of sight on this '
-          + 'machine and can be brought back.')) return;
+          + 'machine and can be brought back.',
+        { okLabel: hasRow ? 'Remove' : 'Take out', danger: true })) return;
+    if (!btn.isConnected) return;
     btn.disabled = true;
     var done = function (ok, err) {
       btn.disabled = false;
@@ -18266,12 +18991,113 @@ function aclPickerSearch(inst, text) {
   if ((location.hash || '').indexOf('accounts') !== -1) document.addEventListener('DOMContentLoaded', load);
 })();
 
+// ── ACL-2038: подключение общей библиотеки одним полем для токена ───────
+// Токен живёт только в поле ввода: после отправки поле очищается, сервер его не
+// возвращает, в текст страницы, адрес и консоль он не попадает.
+window.aclTeamLibrary = (function () {
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Unexpected answer.' }; }); });
+  }
+  function dialog() {
+    var old = document.getElementById('tl-connect'); if (old) old.remove();
+    var box = document.createElement('div');
+    box.id = 'tl-connect'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Connect team library');
+    box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999';
+    box.innerHTML = '<div style="background:var(--bg-elev,#fff);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:1.1rem 1.2rem;width:min(30rem,92vw)">'
+      + '<h3 style="margin:0 0 .5rem">Connect team library</h3>'
+      + '<p style="margin:0 0 .7rem;color:var(--muted);font-size:var(--adopy-text-sm)">Paste the library token you were given. It is checked once, saved only on this computer, and never shown again.</p>'
+      + '<input id="tl-token" type="password" autocomplete="new-password" spellcheck="false" style="width:100%" aria-label="Library token">'
+      + '<p id="tl-msg" role="status" style="min-height:1.4em;margin:.6rem 0"></p>'
+      + '<div style="display:flex;gap:.5rem;justify-content:flex-end">'
+      + '<button type="button" id="tl-cancel" class="amap-btn">Cancel</button>'
+      + '<button type="button" id="tl-go" class="amap-btn primary">Connect</button></div></div>';
+    document.body.appendChild(box);
+    var input = box.querySelector('#tl-token'), msg = box.querySelector('#tl-msg'), go = box.querySelector('#tl-go');
+    var cancel = box.querySelector('#tl-cancel');
+    input.focus();
+    function close() { input.value = ''; box.remove(); }
+    cancel.onclick = close;
+    go.onclick = function () {
+      if (go.dataset.done) { close(); window.location.reload(); return; }
+      var token = input.value; input.value = '';
+      go.disabled = true; msg.style.color = 'var(--muted)'; msg.textContent = 'Checking the token…';
+      post('/api/team-library/connect', { token: token }).then(function (j) {
+        token = '';
+        go.disabled = false;
+        if (j && j.ok) {
+          var incomplete = j.seeded === false || !!j.seed_error;
+          msg.style.color = incomplete ? 'var(--danger)' : 'var(--good)';
+          msg.textContent = (j.message || 'Connected.') + (j.seed_error ? ' ' + j.seed_error : '');
+          if (incomplete) {
+            input.focus();
+          } else {
+            input.style.display = 'none'; cancel.style.display = 'none';
+            go.textContent = 'Done'; go.dataset.done = '1';
+          }
+        } else {
+          msg.style.color = 'var(--danger)'; msg.textContent = (j && j.error) || 'Could not connect.';
+        }
+      }).catch(function () { go.disabled = false; msg.style.color = 'var(--danger)'; msg.textContent = 'Could not reach the dashboard.'; });
+    };
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go.click(); if (e.key === 'Escape') close(); });
+  }
+  // Кнопка рядом со строкой состояния: Connect, пока токена нет, и Disconnect, когда он есть.
+  function decorate(statusEl, lib) {
+    if (!statusEl) return;
+    statusEl.querySelectorAll('.tl-action').forEach(function (old) { old.remove(); });
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'amap-btn tl-action'; b.style.marginLeft = '.6rem';
+    if (!(lib || {}).connected) {
+      b.textContent = 'Connect team library'; b.onclick = dialog;
+    } else {
+      b.textContent = 'Disconnect';
+      b.title = 'Remove the token from this computer. Your local targets and ad texts stay.';
+      b.onclick = function () {
+        function showError(text) {
+          if (typeof window.aclInlineError === 'function') { window.aclInlineError(statusEl, text); return; }
+          var message = statusEl.querySelector('.tl-error');
+          if (!message) {
+            message = document.createElement('span'); message.className = 'tl-error';
+            message.setAttribute('role', 'alert'); message.style.color = 'var(--danger)';
+            statusEl.appendChild(message);
+          }
+          message.textContent = text;
+        }
+        function disconnect() {
+          post('/api/team-library/disconnect').then(function (j) {
+            if (j && j.ok) window.location.reload();
+            else showError((j && j.error) || 'Could not disconnect.');
+          }).catch(function () { showError('Could not reach the dashboard.'); });
+        }
+        var question = 'Disconnect the team library on this computer? Your local targets and ad texts stay.';
+        if (typeof window.aclConfirm === 'function') {
+          window.aclConfirm(question, {title: 'Disconnect team library', okLabel: 'Disconnect'})
+            .then(function (confirmed) { if (confirmed) disconnect(); });
+        } else {
+          _safeConfirm('Disconnect team library', question, disconnect, {confirmLabel: 'Disconnect'});
+        }
+      };
+    }
+    statusEl.appendChild(b);
+    if ((lib || {}).connected) {
+      var retry = document.createElement('button'); retry.type = 'button';
+      retry.className = 'amap-btn tl-action'; retry.style.marginLeft = '.6rem';
+      retry.textContent = 'Add local items'; retry.title = 'Add missing items from this computer, or retry an incomplete import.';
+      retry.onclick = dialog; statusEl.appendChild(retry);
+    }
+  }
+  return { open: dialog, decorate: decorate };
+})();
+
 // ── Таргеты: общая библиотека ────────────────────────────────────────────
 // Targeting library UI. Keep selected records as data, never in CSS selectors.
 (function () {
   var profiles = [], editing = '', pending = false;
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function tlDecorate(statusEl, lib) { if (typeof window !== 'undefined' && window.aclTeamLibrary) window.aclTeamLibrary.decorate(statusEl, lib); }
   function say(text, error) { el('tg-msg').textContent = text || ''; el('tg-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function busy(value) {
     pending = value;
@@ -18292,6 +19118,7 @@ function aclPickerSearch(inst, text) {
     var state = libraryState(data.library);
     el('tg-status').textContent = state[0];
     el('tg-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
+    tlDecorate(el('tg-status'), data.library);
     var html = '';
     var duplicates = data.duplicates || {};
     if ((duplicates.names || []).length) html += '<p style="color:var(--danger)">Same name twice: ' + esc(duplicates.names.join(', ')) + '</p>';
@@ -18367,7 +19194,12 @@ function aclPickerSearch(inst, text) {
     var name = t.getAttribute('data-tg-edit');
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-tg-del');
-    if (name) { if (confirm('Remove «' + name + '» for the whole team? It stays in Recently deleted and can be restored.')) send({action:'delete', name:name}); return; }
+    if (name) {
+      aclConfirm('It stays in Recently deleted and can be restored.',
+        { title: 'Remove «' + name + '» for the whole team?', okLabel: 'Remove', danger: true })
+        .then(function (yes) { if (yes && !pending) send({action:'delete', name:name}); });
+      return;
+    }
     name = t.getAttribute('data-tg-restore');
     if (name) { send({action:'restore', name:name}); return; }
     if (t.getAttribute('data-view') === 'targets') load();
@@ -18454,6 +19286,7 @@ function aclPickerSearch(inst, text) {
     if (seen[was]) el('at-lang-filter').value = was;
   }
 
+  function tlDecorate(statusEl, lib) { if (typeof window !== 'undefined' && window.aclTeamLibrary) window.aclTeamLibrary.decorate(statusEl, lib); }
   // Где сейчас библиотека — та же строка состояния, что у таргетов.
   function libraryState(lib) {
     lib = lib || {};
@@ -18498,6 +19331,7 @@ function aclPickerSearch(inst, text) {
       var state = libraryState(d.library);
       el('at-status').textContent = state[0];
       el('at-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
+      tlDecorate(el('at-status'), d.library);
       var duplicates = d.duplicates || {};
       var warning = '';
       if ((duplicates.names || []).length) warning += 'Same title twice: ' + duplicates.names.join(', ') + '. ';
@@ -18565,7 +19399,12 @@ function aclPickerSearch(inst, text) {
     var name = t.getAttribute('data-at-edit');
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-at-del');
-    if (name) { if (confirm('Remove «' + name + '» for the whole team? It stays in Recently deleted and can be restored.')) send({action:'delete', name:name}); return; }
+    if (name) {
+      aclConfirm('It stays in Recently deleted and can be restored.',
+        { title: 'Remove «' + name + '» for the whole team?', okLabel: 'Remove', danger: true })
+        .then(function (yes) { if (yes && !pending) send({action:'delete', name:name}); });
+      return;
+    }
     name = t.getAttribute('data-at-restore');
     if (name) { send({action:'restore', name:name}); return; }
     if (t.getAttribute('data-view') === 'ad-texts') load(false);
@@ -18824,10 +19663,16 @@ function aclPickerSearch(inst, text) {
     id = t.getAttribute('data-fm-del');
     if (id) {
       var row = rowById(id);
+      if (!row) return;
+      var confirmedScope = scope;
       var where = scope === 'local' ? 'from this computer' : 'for the whole team';
-      if (confirm('Delete «' + (row ? row.name : id) + '» ' + where + '? It stays in Recently deleted and can be restored. Forms already created on Pages are not touched.')) {
-        act('/api/form-templates/delete', {id: id}, 'Deleted. It is in Recently deleted if you need it back.');
-      }
+      aclConfirm('It stays in Recently deleted and can be restored. Forms already created on Pages are not touched.',
+        { title: 'Delete «' + row.name + '» ' + where + '?', okLabel: 'Delete', danger: true })
+        .then(function (yes) {
+          // The library may have refreshed while the asynchronous question was open.
+          if (!yes || pending || !t.isConnected || rowById(id) !== row || scope !== confirmedScope) return;
+          act('/api/form-templates/delete', {id: id}, 'Deleted. It is in Recently deleted if you need it back.');
+        });
       return;
     }
     id = t.getAttribute('data-fm-restore');
@@ -18929,7 +19774,7 @@ window.cwWorkbench = (function () {
 
   /* Плитка KPI: «Вы», «Другие», разница. Разница есть только при достаточных
      когортах с обеих сторон; иначе строка объясняет, чего не хватает. */
-  function kpiTile(name, cmp) {
+  function kpiTile(name, cmp, period) {
     var m = cmp.metrics[name], th = cmp.thresholds;
     var you = valueText(name, m.you, m.you_state, cmp.you);
     var oth = valueText(name, m.others, m.others_state, cmp.others);
@@ -18948,20 +19793,25 @@ window.cwWorkbench = (function () {
     }
     return '<div class="cw-kpi" data-kpi="' + name + '">'
       + '<div class="cw-kpi-label"><span>' + LABEL[name] + '</span><span>You vs Others</span></div>'
-      + '<div class="cw-kpi-you">' + esc(you) + (yn ? '<small>' + esc(yn) + '</small>' : '') + '</div>'
-      + '<div class="cw-kpi-peer"><span>Others <b>' + esc(oth) + '</b>' + (on ? ' <small>' + esc(on) + '</small>' : '')
+      + '<div class="cw-kpi-you">' + esc(you) + periodCell(period && period.you[{cpl: 3, cpa: 4, cr: 5}[name]]) + (yn ? '<small>' + esc(yn) + '</small>' : '') + '</div>'
+      + '<div class="cw-kpi-peer"><span>Others <b>' + esc(oth) + periodCell(period && period.others[{cpl: 3, cpa: 4, cr: 5}[name]]) + '</b>' + (on ? ' <small>' + esc(on) + '</small>' : '')
       + '</span><span>' + cmp.others.buyers + ' buyer' + (cmp.others.buyers === 1 ? '' : 's') + '</span></div>'
       + '<div class="cw-kpi-delta' + cls + '">' + esc(delta) + '</div></div>';
   }
 
-  function volumeTile(cmp) {
+  function volumeTile(cmp, period) {
     var y = cmp.you.ftds, o = cmp.others.ftds, tot = y + o;
+    var un = period && period.unattributed && period.unattributed[0];
     return '<div class="cw-kpi" data-kpi="ftds">'
       + '<div class="cw-kpi-label"><span>FTDs</span><span>Volume</span></div>'
-      + '<div class="cw-kpi-you">' + y + '<small>of ' + tot + ' attributed</small></div>'
-      + '<div class="cw-kpi-peer"><span>Others <b>' + o + '</b></span><span>' + money(cmp.you.spend) + ' you · ' + money(cmp.others.spend) + ' others</span></div>'
+      + '<div class="cw-kpi-you">' + y + periodCell(period && period.you[2]) + '<small>of ' + tot + ' attributed</small>' + periodCell(period && period.attributed) + '</div>'
+      + '<div class="cw-kpi-peer"><span>Others <b>' + o + periodCell(period && period.others[2]) + '</b></span><span>' + money(cmp.you.spend) + ' you'
+      + (period ? periodCell(period.you[0]) : ' · ') + money(cmp.others.spend) + ' others'
+      + periodCell(period && period.others[0]) + '</span></div>'
       + '<div class="cw-kpi-delta">'
-      + (cmp.unattributed.spend > 0 ? money(cmp.unattributed.spend) + ' spend has no CM and is in neither group' : 'Peers exclude the selected buyer')
+      + (cmp.unattributed.spend > 0 || (un && un.prev !== '—')
+        ? money(cmp.unattributed.spend) + ' spend has no CM and is in neither group' + periodCell(un)
+        : 'Peers exclude the selected buyer')
       + '</div></div>';
   }
 
@@ -19034,9 +19884,36 @@ window.cwWorkbench = (function () {
   }
 
   /* Строка таблицы с шестью метриками; `fmt6` — acl6Metrics страницы. */
+  function periodCell(c) {
+    return c ? '<small class="cmp"><span class="cmp-prev" title="Earlier period">' + esc(c.prev)
+      + '</span><span class="cmp-delta ' + esc(c.dir || '') + ' ' + esc(c.tone || '') + '">' + esc(c.delta) + '</span></small>' : '';
+  }
   function metricCells(r, fmt6) {
-    var f = fmt6(r.spend, r.leads, r.ftds);
-    return f.map(function (t) { return '<td class="cw-num">' + esc(t) + '</td>'; }).join('');
+    var f = r._period_gone ? ['—', '—', '—', '—', '—', '—'] : fmt6(r.spend, r.leads, r.ftds);
+    return f.map(function (t, i) { return '<td class="cw-num">' + esc(t)
+      + (i === 0 && r._period_state === 'new' ? '<span class="cmp-flag new">new</span>' : '')
+      + periodCell(r._period && r._period[i]) + '</td>'; }).join('');
+  }
+  function periodCounts(c) {
+    return c ? '<small class="cmp" aria-label="Earlier FTDs and change"><span class="cmp-prev">You ' + esc(c.you.prev) + ' · ' + esc(c.you.delta)
+      + '</span><span class="cmp-prev">All ' + esc(c.all.prev) + ' · ' + esc(c.all.delta) + '</span></small>' : '';
+  }
+  function youTag(r) {
+    var p = r._period_you && r._period_you[2];
+    if ((!r.you || !(r.you.spend > 0)) && !r._period_you_visible) return '';
+    var current = r._period_gone || !r.you || r.you.ftds == null ? '—' : r.you.ftds;
+    return '<span class="cw-tag cw-you">You · ' + esc(current) + ' FTD' + periodCell(p) + '</span>';
+  }
+  function periodGoneTable(rows, label) {
+    if (!rows || !rows.length) return '';
+    var h = '<div class="cw-scroll"><table class="cw-table cmp-readonly"><caption>' + esc(label) + ' · earlier only</caption><thead><tr><th>Row</th>'
+      + ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'].map(function (v) { return '<th>' + v + '</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var name = r.name || r.landing || r.target || r.pack || r.cm || [r.device, r.age, r.target, r.landing].filter(Boolean).join(' · ') || '—';
+      h += '<tr class="cmp-gone-row"><td>' + esc(name) + '<span class="cmp-flag gone">gone</span>' + youTag(Object.assign({}, r, {_period_gone: true})) + '</td>'
+        + metricCells(Object.assign({}, r, {_period_gone: true}), fmt6) + '</tr>';
+    });
+    return h + '</tbody></table></div>';
   }
   /* CW-PURE-END */
 
@@ -19062,10 +19939,6 @@ window.cwWorkbench = (function () {
 
   function q(panel, name) { return panel.querySelector('[data-cw="' + name + '"]'); }
 
-  function youTag(r) {
-    if (!r.you || !(r.you.spend > 0)) return '';
-    return '<span class="cw-tag cw-you">You · ' + r.you.ftds + ' FTD</span>';
-  }
   function head(cols) {
     return '<thead><tr>' + cols.map(function (c) { return '<th' + (c.num ? ' class="cw-num"' : '') + '>' + esc(c.t) + '</th>'; }).join('') + '</tr></thead>';
   }
@@ -19126,6 +19999,10 @@ window.cwWorkbench = (function () {
               + youTag(v) + '<span class="cw-detail">' + esc(v.raw) + '</span></td>' + metricCells(v, fmt6)
               + '<td>' + (v.pack ? useBtn('creative', 'Use version', ix, ' data-vx="' + vx + '"') : '') + '</td></tr>';
           });
+          (r._period_gone_versions || []).forEach(function(v) {
+            h += '<tr class="cmp-gone-row"><td>' + esc(v.raw || v.version || 'No version in title') + '<span class="cmp-flag gone">gone</span>' + youTag(Object.assign({}, v, {_period_gone: true})) + '</td>'
+              + metricCells(Object.assign({}, v, {_period_gone: true}), fmt6) + '<td></td></tr>';
+          });
         }
       });
     } else if (tab === 'buyers') {
@@ -19164,12 +20041,15 @@ window.cwWorkbench = (function () {
 
     q(panel, 'chips').innerHTML = d.data.assets.map(function (a) {
       return '<button type="button" class="cw-chip" data-cw-asset="' + esc(a.name) + '" aria-pressed="' + (a.name === st.asset) + '">'
-        + esc(a.label) + '<small>' + a.you_ftds + ' / ' + a.ftds + ' FTDs</small></button>';
+        + esc(a.label) + (a._period_ftds && a._period_ftds.state === 'new' ? '<span class="cmp-flag new">new</span>' : '')
+        + '<small>' + a.you_ftds + ' / ' + a.ftds + ' FTDs</small>' + periodCounts(a._period_ftds) + '</button>';
+    }).join('') + (d.data._period_assets_gone || []).map(function(a) {
+      return '<span class="cw-sub cmp-readonly">' + esc(a.label) + ' · ' + esc(a.you_ftds) + ' / ' + esc(a.ftds) + ' earlier FTDs <span class="cmp-flag gone">gone</span></span>';
     }).join('') + (d.data.assets_total > d.data.assets.length - 1
       ? '<span class="cw-sub" style="align-self:center">Top ' + (d.data.assets.length - 1) + ' of ' + d.data.assets_total + ' assets by FTDs</span>' : '');
 
     var cmp = sl.compare;
-    q(panel, 'kpis').innerHTML = volumeTile(cmp) + kpiTile('cpl', cmp) + kpiTile('cpa', cmp) + kpiTile('cr', cmp)
+    q(panel, 'kpis').innerHTML = volumeTile(cmp, sl._period_compare) + kpiTile('cpl', cmp, sl._period_compare) + kpiTile('cpa', cmp, sl._period_compare) + kpiTile('cr', cmp, sl._period_compare)
       + refsHtml(d.goal, sl.reference)
       + (cmp.status === 'ok' ? '' : '<div class="cw-notice">' + esc(cmp.status === 'no_buyer'
         ? 'No buyer is selected, so there is no “You” side.'
@@ -19183,7 +20063,10 @@ window.cwWorkbench = (function () {
     var tabLabel = TABS.filter(function (t) { return t.id === st.tab; })[0].label;
     q(panel, 'view').innerHTML = '<div class="cw-ctx"><h3>' + esc(tabLabel) + '</h3><p>' + esc(country + ' › ' + assetLabel) + ' · '
       + 'top ' + (sl[st.tab] || []).length + ' by FTDs</p></div>'
-      + tabHtml(sl, st.tab, st) + '<div class="cw-foot">' + esc(TAB_NOTE[st.tab]) + '</div>';
+      + tabHtml(sl, st.tab, st) + periodGoneTable(sl._period_gone && sl._period_gone[st.tab], tabLabel)
+      + Object.keys(d.data._period_earlier_slices || {}).map(function(asset) {
+          return periodGoneTable(d.data._period_earlier_slices[asset][st.tab], asset + ' · ' + tabLabel);
+        }).join('') + '<div class="cw-foot">' + esc(TAB_NOTE[st.tab]) + '</div>';
     refreshDest(panel);
     /* ACL-1827: боковая колонка подсвечивает выбранный ассет. */
     document.dispatchEvent(new CustomEvent('acl:cwasset', { detail: { country: cid, asset: st.asset } }));
@@ -19297,13 +20180,14 @@ window.cwWorkbench = (function () {
       text: 'Landing “' + ev.landing + '” is noted on this draft. The builder has no landing field — the account’s tracking link decides it.' };
   }
 
-  function useEvidence(panel, kind, ev) {
+  async function useEvidence(panel, kind, ev) {
     var cid = panel.dataset.country;
     var ctx = { country: cid, countryName: panel.dataset.cwCountry, asset: (states[cid] || {}).asset || '' };
     var active = activeTarget();
     var plan = planUse(kind, ctx, active);
     if (!plan.ok) { say(panel, plan.message, true); return plan; }
-    if (plan.mismatch && !window.confirm(plan.mismatch)) {
+    if (plan.mismatch && !await aclConfirm(plan.mismatch.replace(/\s*Use it anyway\?$/, ''),
+        { title: 'Use it anyway?', okLabel: 'Use it' })) {
       say(panel, 'Cancelled — nothing was added.', false);
       return { ok: false, reason: 'declined' };
     }

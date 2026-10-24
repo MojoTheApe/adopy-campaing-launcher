@@ -113,7 +113,7 @@ does not stop it. Then run the new file.
 
 | Problem | Fix |
 |---|---|
-| "No accounts were found for this campaign manager" | Your name does not match the CM column. Copy it from the workbook exactly. |
+| "… is not in the CM column of this Stats workbook" | Your name does not match the CM column. Go back to the name step and type it as shown in the "Did you mean" hint or copy it from the workbook exactly (capitals do not matter). |
 | "Stats workbook is missing columns" | You picked a different Excel file. Pick the Stats workbook. |
 | "Cannot reach Multilogin Launcher" | Open Multilogin Desktop, sign in, and test again. |
 | "Multilogin rejected token" | The token is wrong or expired. Get a new one through the password manager. |

@@ -568,3 +568,43 @@ def test_every_phase_of_one_upload_carries_the_same_waterfall_id(small, tmp_path
     ids = {params.get("waterfall_id") for _path, params in meta.posts if "upload_phase" in params}
     assert len(ids) == 1 and None not in ids
     assert re.fullmatch(r"[0-9a-f]{32}", ids.pop())
+
+
+# ───────────────────────── ACL-1998: шаги прогресса при долгой загрузке ─────────────────────────
+
+def _upload_steps(out):
+    return [s for s in out.steps if ": uploaded " in s]
+
+
+def test_a_frozen_clock_reports_progress_about_every_ten_percent(small, tmp_path):
+    # 25 кусков по 1 МБ, часы стоят: сработать может только правило «каждые 10%» (2,5 МБ -> каждый 3-й кусок).
+    d, f = _big_draft(tmp_path, size=25 * MB)
+    meta = ChunkMeta()
+    out, _ = _run(meta, d, clock=lambda: 0.0)
+    assert out.error == "", out.error
+    steps = _upload_steps(out)
+    assert 5 <= len(steps) <= 10 and len(steps) < 25
+    done = [int(re.search(r"uploaded (\d+)/25 MB", s).group(1)) for s in steps]
+    assert done == sorted(done) and done[-1] < 25
+    # Итог тот же: файл цел, видео одно.
+    assert next(iter(meta.sessions.values()))["sha"].hexdigest() == _sha(f)
+    assert len(_video_objects(meta)) == 1
+
+
+def test_slow_chunks_report_by_time_not_per_chunk(small, tmp_path, monkeypatch):
+    # Файл 100 кусков: 10% = каждые 10 кусков. Часы идут по 5 с на вызов часов -> шаг по времени чаще 10%.
+    d, _ = _big_draft(tmp_path, size=100 * MB)
+    ticks = iter(range(0, 10_000_000, 5))
+    out, _ = _run(ChunkMeta(), d, clock=lambda: float(next(ticks)), max_calls=400)
+    assert out.error == "", out.error
+    steps = _upload_steps(out)
+    assert 10 < len(steps) < 100            # чаще 10%-правила, но не на каждый кусок
+
+
+def test_progress_steps_do_not_change_the_result(small, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ChunkMeta()
+    out, _ = _run(meta, d)
+    assert out.error == "" and out.readback["ok"] is True
+    assert [o for p, o in meta.phases if p == "transfer"] == [0, MB, 2 * MB, 3 * MB]
+    assert any("chunked upload started" in s for s in out.steps)

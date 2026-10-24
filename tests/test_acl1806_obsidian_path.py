@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from config import paths
-from scripts import acl_board, acl_telemetry_report, build_creative_notes
+from scripts import acl_board, acl_telemetry_report, build_creative_notes, meta_docs_watch
 
 
 @pytest.fixture
@@ -22,6 +22,7 @@ def test_env_override_wins(home, monkeypatch):
     custom.mkdir()
     monkeypatch.setenv("ACL_OBSIDIAN_DIR", str(custom))
     assert paths.get_obsidian_dashboard_dir() == custom
+    assert meta_docs_watch.default_vault_dir() == custom
 
 
 def test_env_pointing_nowhere_falls_back(home, monkeypatch):
@@ -29,19 +30,28 @@ def test_env_pointing_nowhere_falls_back(home, monkeypatch):
     real.mkdir(parents=True)
     monkeypatch.setenv("ACL_OBSIDIAN_DIR", str(home / "missing"))
     assert paths.get_obsidian_dashboard_dir() == real
+    assert meta_docs_watch.default_vault_dir() == real
 
 
 def test_first_existing_candidate(home):
     legacy = home / "Desktop" / "Obsidian" / "Kuwait Forms" / "дешборд"
     legacy.mkdir(parents=True)
     assert paths.get_obsidian_dashboard_dir() == legacy
+    assert meta_docs_watch.default_vault_dir() == legacy
     real = home / "Desktop" / "Obsidian" / "дешборд"
     real.mkdir(parents=True)
     assert paths.get_obsidian_dashboard_dir() == real
+    assert meta_docs_watch.default_vault_dir() == real
 
 
 def test_none_when_nothing_exists(home):
     assert paths.get_obsidian_dashboard_dir() is None
+    assert meta_docs_watch.default_vault_dir() is None
+
+
+def test_watcher_uses_resolver(home, monkeypatch):
+    monkeypatch.setattr(paths, "get_obsidian_dashboard_dir", lambda: home / "V")
+    assert meta_docs_watch.default_vault_dir() == home / "V"
 
 
 def test_board_uses_resolver(home, monkeypatch):
