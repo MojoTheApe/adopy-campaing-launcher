@@ -609,7 +609,7 @@
   var CTRL = ['delivery', 'dup', 'bid', 'budgetcmd'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
   var DECIDE = ['hint', 'alerts', 'goal', 'bench'];
   var PRESETS = {
-    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpa', 'b_cr', 'b_match', 'm_spend', 'm_cpm', 'm_ctr']),
+    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpl', 'b_cpa', 'b_cr', 'b_match', 'm_spend', 'm_cpm', 'm_ctr']),
     meta: CTRL.concat(['synced', 'm_spend', 'm_reach', 'm_impr', 'm_freq', 'm_clicks', 'm_ctr', 'm_cpm', 'm_cpc', 'x_obj', 'x_bid']),
     bi: CTRL.concat(DECIDE, ['m_spend'], BI_ALL),
     all: COLS.map(function (c) { return c.k; })
@@ -620,11 +620,15 @@
     if (saved && typeof saved.preset === 'string' && Array.isArray(saved.visible)) {
       var known = COLS.map(function (c) { return c.k; });
       colState = {preset: saved.preset, visible: saved.visible.filter(function (k) { return known.indexOf(k) >= 0; })};
+      /* Раскладка, сохранённая до CPL в Optimization, его не показывает: ставим перед CPA (FTD) один раз. */
+      if (!saved.cpl_seen && colState.visible.indexOf('b_cpl') < 0 && colState.visible.indexOf('b_cpa') >= 0) {
+        colState.visible.splice(colState.visible.indexOf('b_cpa'), 0, 'b_cpl');
+      }
     }
   } catch (e) { /* без памяти: хранилище закрыто или повреждено */ }
   /* Раскладка колонок общая: сменили пресет в одной таблице — остальные следуют. */
   function saveCols() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(colState)); } catch (e) { /* нет хранилища */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({preset: colState.preset, visible: colState.visible, cpl_seen: true})); } catch (e) { /* нет хранилища */ }
     instances.forEach(function (i) { if (i !== api) i.setCols(colState); });
   }
   function visibleCols() { return COLS.filter(function (c) { return colState.visible.indexOf(c.k) >= 0; }); }
