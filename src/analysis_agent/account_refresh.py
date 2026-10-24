@@ -213,10 +213,10 @@ class RefreshQueue:
         local = datetime.fromtimestamp(self._clock()).astimezone()
         window = current_window(local)
         keys = self._bindings(self._accounts() if self._accounts else [])
-        if window:
-            self._machine.migrate(self._owner, f"{local:%Y-%m-%d}/{window}", list(keys.values()),
-                                  seen=window in old["windows_done"].get(f"{local:%Y-%m-%d}", []),
-                                  halt=old.get("halt") or self._persisted_halt(), bindings=keys, now=self._clock())
+        self._machine.migrate(self._owner, f"{local:%Y-%m-%d}/{window}" if window else None,
+                              list(keys.values()),
+                              seen=bool(window and window in old["windows_done"].get(f"{local:%Y-%m-%d}", [])),
+                              halt=old.get("halt") or self._persisted_halt(), bindings=keys, now=self._clock())
         with self._store.transaction() as state:
             state["machine_migrated"] = True
 
@@ -245,8 +245,8 @@ class RefreshQueue:
         key = binding(account)
         if not known:
             shared = self._machine.result(key)
-        if not shared:
-            return
+        if not shared or shared.get("binding") != key:
+            return  # a prefetched old binding is never relabelled as the new map
         payload = shared["payload"]
         if shared.get("snapshot") and shared.get("snapshot_revision") != shared["revision"]:
             accepted = Snapshot(account=account, **{k: v for k, v in shared["snapshot"].items() if k != "ok"})
@@ -593,7 +593,7 @@ class RefreshQueue:
                 self._machine.recover_running(now=self._clock())
                 own_recovery = self._machine.stop_generation(key)
                 token = self._machine.begin(key, self._owner, trigger)
-                with self._machine.executing(token):
+                with self._machine.executing(token, key):
                     try:
                         snap = self._reader(account, trigger)
                     except Exception as exc:

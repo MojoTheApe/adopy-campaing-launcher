@@ -658,6 +658,12 @@ def put_result(done: Snapshot) -> None:
 def adopt_machine_result(done: Snapshot, revision: int) -> bool:
     """Idempotent local projection; never hide a newer/unknown local attempt."""
     with _LOCK, paths.machine_file_lock(_store_path().with_suffix(".lock"), timeout=10):
+        from src.analysis_agent.account_refresh_machine import binding
+        try:
+            if binding(done.account) != getattr(done, "_machine_binding", None):
+                return False
+        except (ValueError, RuntimeError):
+            return False
         rec = _load_all().get(done.account) or {}
         if rec.get("machine_binding") not in (None, getattr(done, "_machine_binding", None)):
             rec = {}  # the existing file is preserved; the old target is not freshness for the new target
@@ -856,6 +862,8 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
     stop = ""
     try:
         with _api._session(account) as sess:  # noqa: SLF001
+            from src.analysis_agent.account_refresh_machine import verify_session
+            verify_session(sess)
             try:
                 try:
                     read_into(snap, sess.client, sess.act, structure_only=structure_only)
@@ -915,6 +923,8 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
             raise ValueError("The account map changed. Its list was not read with the previous session.")
         require_profile_lease(_as._profile_key(account))  # noqa: SLF001
         with read_session(priority=trigger in {"action", "retry"}):
+            from src.analysis_agent.account_refresh_machine import verify_session
+            verify_session(sess)
             read_into(snap, sess.client, sess.act, structure_only=True)
             if getattr(sess.client, "stopped", None) is not None:
                 stop = sess.client.stopped.kind
@@ -933,7 +943,6 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     snap.finished_at = _as._now()  # noqa: SLF001
     snap.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
     snap.took_s = round(time.monotonic() - started, 1)
-    put_result(snap)
     notes = {**getattr(sess, "notes", {}), "trigger": trigger, "calls": snap.calls, "same_session": True}
     _api._telemetry("campaigns", account, read_succeeded(snap), snap.took_s, notes,  # noqa: SLF001
                     error=snap.error, stop=snap.stop)
@@ -1000,7 +1009,7 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
                 paused._machine_committed = True
                 return paused
             token = coordinator.begin(key, "inline", trigger)
-            with coordinator.executing(token):
+            with coordinator.executing(token, key):
                 own_recovery = coordinator.stop_generation(key)
                 done = operation()
                 revision = coordinator.publish(key, done, now=clock(), force=force,

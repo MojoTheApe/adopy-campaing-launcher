@@ -306,6 +306,8 @@ class _Session:
     keep_grace_s: float | None = None
     #: ACL-2117: keep-open включён — окно остаётся «удобным» kept-окном без своего таймера.
     keep_convenience: bool = False
+    #: Immutable actual producer identity; never inferred from a later map read.
+    profile_id: str = ""
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
@@ -466,7 +468,7 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
             max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
         )
-        sess = _Session(client=client, act=act, account=account)
+        sess = _Session(client=client, act=act, account=account, profile_id=profile_id)
         try:
             yield sess
         except GraphStop as exc:
@@ -523,6 +525,8 @@ def _open_session(account: str, *, commands: bool = False):
 
     if not (getattr(entry, "profile_id", "") or "").strip():
         raise ApiReadError(f"{account} has no profile_id in the account map")
+    from src.analysis_agent.account_refresh_machine import verify_binding
+    verify_binding(act, entry.profile_id)
     key = _as._profile_key(account)   # ACL-1853: физический UUID; ярлык ключом не бывает
     left, why = _cooldown_state(key)
     if left > 0:
@@ -598,7 +602,7 @@ def _open_session(account: str, *, commands: bool = False):
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
             max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
         )
-        sess = _Session(client=client, act=act, account=account)
+        sess = _Session(client=client, act=act, account=account, profile_id=profile_id)
         try:
             yield sess
         finally:

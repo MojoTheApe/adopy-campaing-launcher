@@ -51,7 +51,7 @@ def read_result(monkeypatch, tmp_path):
     def read(mode, edge, entry="cold", *, closing_error=False):
         transport = Transport(mode, edge)
         client = GraphClient(transport, min_interval_s=0)
-        sess = SimpleNamespace(client=client, act="act_1234567", notes={})
+        sess = SimpleNamespace(client=client, act="act_1234567", profile_id=fake_profile("A"), notes={})
 
         @contextmanager
         def session(*a, **kw):

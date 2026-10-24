@@ -173,16 +173,35 @@ def prepare_lock(path: Path) -> None:
 
 def binding(account: str) -> str:
     from src.analysis_agent.account_spend import _entry_for
-    from src.analysis_agent.account_spend_api import normalize_act
-    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
     entry = _entry_for(account)
     if entry is None:
         raise CoordinationError("This account was removed from the dashboard.")
+    return binding_values(entry.ad_account_id, entry.profile_id or "")
+
+
+def binding_values(act: str, profile: str) -> str:
+    from src.analysis_agent.account_spend_api import normalize_act
+    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
     try:
-        identity = ["structure-v1", normalize_act(entry.ad_account_id), physical_profile_key(entry.profile_id or "")]
+        identity = ["structure-v1", normalize_act(act), physical_profile_key(profile)]
     except (ValueError, ProfileLeaseError) as exc:
         raise CoordinationError("The account map needs a valid ad-account ID and physical profile.") from exc
     return hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
+
+
+def verify_binding(act: str, profile: str) -> None:
+    """Before any external open/read, bind the actual session to its producer."""
+    expected = getattr(_ACTIVE, "binding", None)
+    if expected is None:
+        return  # other existing API consumers retain their original contract
+    if binding_values(act, profile) != expected:
+        raise CoordinationError("The account map changed before its list read; no account was read.")
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+    require_profile_lease(profile)
+
+
+def verify_session(session) -> None:
+    verify_binding(session.act, getattr(session, "profile_id", ""))
 
 
 _NODE_FIELDS = {
@@ -195,6 +214,45 @@ _NODE_FIELDS = {
 }
 
 
+_SAFE_FAILURES = {
+    "proxy_auth": "The profile proxy login is wrong or expired. Update it in Multilogin, then press Retry.",
+    "logged_out": "This profile is logged out of Facebook. Sign in inside Multilogin, then press Retry.",
+    "missing_profile": "This account's physical profile is missing or unavailable. Check the account map, then press Retry.",
+    "transport": "The profile connection failed while reading its account list. Check the connection, then press Retry.",
+    "account_map_changed": "The account map changed during its list read. Check the map, then press Retry.",
+    "account_removed": "This account was removed from the dashboard. Check the account map.",
+    "coordination_unavailable": "The machine account-read state is unavailable. Restore access, then press Retry.",
+    "mlx_session_lost": "Multilogin lost its session. Reopen Multilogin, then press Retry.",
+    "mlx_token_expired": "The Multilogin token has expired. Update it in Multilogin, then press Retry.",
+    "mlx_token_workspace": "The Multilogin token belongs to another workspace. Fix it, then press Retry.",
+    "call_budget": "The call budget for account reads is used up. Raise the limit, then press Retry.",
+    "checkpoint": "This profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.",
+    "rate_limited": "Meta asked to slow down. Wait for the account-read cooldown before retrying.",
+    "policy_block": "Meta refused the account-list requests. Wait for the cooldown before retrying.",
+    "access": "This profile cannot access its ad account. Check the account map and profile permissions, then press Retry.",
+}
+_GENERIC_ERROR = "The account list could not be refreshed. Press Retry."
+_INTERRUPTED_ERROR = "The account read was interrupted. Press Retry."
+
+
+def _safe_failure(snap) -> tuple[str, str]:
+    from src.analysis_agent import account_spend
+    code = snap.error_code or snap.stop
+    if code == account_spend.LOGGED_OUT_CODE:
+        code = "logged_out"
+    if code not in _SAFE_FAILURES:
+        # Inspect locally only to choose a fixed coarse category. No original
+        # message, URL, proxy credential, account label or token leaves here.
+        text = (snap.error + " " + " ".join(snap.problems)).lower()
+        code = next((kind for words, kind in (
+            (("proxy",), "proxy_auth"), (("logged out", "not logged"), "logged_out"),
+            (("profile not found", "no profile", "missing profile", "no_profile"), "missing_profile"),
+            (("connection", "network", "transport", "disconnected"), "transport"),
+            (("map changed",), "account_map_changed"), (("no access", "permission denied"), "access"),
+        ) if any(word in text for word in words)), "")
+    return code, _SAFE_FAILURES.get(code, _GENERIC_ERROR)
+
+
 def envelope(snap) -> dict:
     from src.analysis_agent.campaign_inventory import read_succeeded
     out = {"state": snap.state, "finished_at": snap.finished_at, "finished_at_utc": snap.finished_at_utc,
@@ -204,17 +262,17 @@ def envelope(snap) -> dict:
         out[field] = [{k: v for k, v in row.items() if k in allowed} for row in getattr(snap, field)]
     # Never relay raw errors/problems, dates, Insights, credentials or arbitrary fields.
     if not out["ok"]:
-        out["error"] = "The account list could not be refreshed. Press Retry."
+        out["error_code"], out["error"] = _safe_failure(snap)
     validate_envelope(out)
     return out
 
 
 def validate_envelope(payload: dict) -> None:
     allowed = {"state", "finished_at", "finished_at_utc", "currency", "steps", "stop", "ok",
-               "campaigns", "adsets", "ads", "error"}
+               "campaigns", "adsets", "ads", "error", "error_code"}
     invalid = CoordinationError("The shared account structure is incomplete or unsupported; it was not imported.")
     if (not isinstance(payload, dict) or set(payload) - allowed
-            or not (allowed - {"error"}) <= set(payload)
+            or not (allowed - {"error", "error_code"}) <= set(payload)
             or payload["state"] not in {"ok", "partial", "empty", "failed"}
             or type(payload["ok"]) is not bool):
         raise invalid
@@ -227,8 +285,10 @@ def validate_envelope(payload: dict) -> None:
                 raise ValueError()
         except ValueError as exc:
             raise invalid from exc
-    if payload.get("error", "") not in {"", "The account list could not be refreshed. Press Retry.",
-                                        "The account read was interrupted. Press Retry."}:
+    code = payload.get("error_code", "")
+    if not isinstance(code, str) or code not in {"", *_SAFE_FAILURES}:
+        raise invalid
+    if payload.get("error", "") not in {"", _GENERIC_ERROR, _INTERRUPTED_ERROR, _SAFE_FAILURES.get(code)}:
         raise invalid
     steps = payload["steps"]
     if (not isinstance(steps, dict) or set(steps) - set(_NODE_FIELDS)
@@ -409,7 +469,7 @@ class MachineStore:
             if os.name == "nt":
                 _windows_object(self.marker, directory=False, data=True)
 
-    def migrate(self, owner: str, window: str, keys: list[str], *, seen: bool, halt: dict | None,
+    def migrate(self, owner: str, window: str | None, keys: list[str], *, seen: bool, halt: dict | None,
                 bindings: dict[str, str], now: float) -> None:
         """Conserve legacy admission/stop without inventing a successful list.
 
@@ -419,7 +479,7 @@ class MachineStore:
         or historical window is promoted to shared successful evidence.
         """
         with self.transaction() as state:
-            if seen:
+            if seen and window:
                 members = state["windows"].setdefault(window, {})
                 state["revision"] += 1
                 for key in keys:
@@ -459,13 +519,16 @@ class MachineStore:
             return bool(state["windows"].get(window, {}).get(key, {}).get("done"))
 
     @contextmanager
-    def executing(self, token: int):
+    def executing(self, token: int, key: str | None = None):
         previous = getattr(_ACTIVE, "execution", None)
+        previous_binding = getattr(_ACTIVE, "binding", None)
         _ACTIVE.execution = (str(self.root.resolve()), token)
+        _ACTIVE.binding = key
         try:
             yield
         finally:
             _ACTIVE.execution = previous
+            _ACTIVE.binding = previous_binding
 
     def recover_running(self, *, now: float | None = None) -> str | None:
         """The caller holds the actual read lease; never recover its own live scope."""

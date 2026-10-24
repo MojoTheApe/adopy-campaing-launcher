@@ -32,6 +32,7 @@ class SessionWorld(World):
         with profile_lock(fake_profile(ACCOUNT)), read_session(priority=commands):
             with super().open_session(account, commands) as sess:
                 self.active = True
+                sess.profile_id = fake_profile(ACCOUNT)
                 self.current = sess
                 try:
                     yield sess
@@ -137,6 +138,7 @@ def test_publisher_refreshes_with_its_existing_session_before_release(world):
     publisher.account_label = ACCOUNT
     with w.open_session(ACCOUNT, True) as sess:
         publisher._client, publisher.act = sess.client, sess.act
+        publisher._session_profile_id = sess.profile_id
         publisher.refresh_structure()
         assert w.active
     assert len(w.sessions) == 1 and ci.get_snapshot(ACCOUNT).state == 'ok'

@@ -18,7 +18,7 @@ def test_inner_session_exit_cannot_admit_next_reader_before_result_and_stop(monk
         ad_account_id="act_12345678", profile_id=profile, folder_id="", multilogin_instance="A"))
     monkeypatch.setattr(ci, "backend_ready", lambda: True)
     client = SimpleNamespace(calls=1, stopped=None)
-    sess = SimpleNamespace(client=client, act="act_12345678", notes={})
+    sess = SimpleNamespace(client=client, act="act_12345678", profile_id=profile, notes={})
     @contextmanager
     def opened(*a, **kw):
         yield sess

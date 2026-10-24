@@ -279,3 +279,37 @@ def test_private_projection_failure_reuses_durable_result_without_another_read(d
     assert first.state()['rows']['A']['state'] == 'empty'
     assert ci.get_snapshot('A') is not None
     assert first._drain_once() == 0 and len(reads) == 1
+
+
+def test_legacy_stop_migrates_before_first_schedule_window(dashboards):
+    select, new, reads = dashboards
+    new.clock[0] = NOW.replace(hour=7).timestamp()
+    first = new('one')
+    with first._store.transaction() as state:
+        state['halt'] = {'kind': 'checkpoint', 'reason': 'legacy checkpoint', 'until': None, 'account': 'A'}
+    assert first.state()['halt']['kind'] == 'checkpoint'
+    assert first._store.read()['machine_migrated'] is True
+    new.clock[0] = NOW.timestamp()
+    select('two'); second = new('two')
+    second.page_open(now=NOW, port=9095)
+    assert second.state()['halt']['kind'] == 'checkpoint'
+    assert second._drain_once() == 0 and reads == []
+
+
+@pytest.mark.parametrize('code,raw,expected', [
+    ('proxy_auth', 'https://synthetic:secret@proxy.invalid/path', 'proxy login'),
+    ('', 'the profile is logged out: synthetic-private', 'logged out'),
+    ('', 'profile not found: synthetic-private', 'profile is missing'),
+    ('', 'ConnectionError with synthetic-private', 'connection failed'),
+])
+def test_peer_failure_keeps_a_safe_reason_without_private_details(dashboards, code, raw, expected):
+    select, new, reads = dashboards
+    first = new('one')
+    first.record_result(ci.Snapshot(account='A', state='failed', error=raw, error_code=code,
+                                   finished_at_utc=NOW.isoformat()), trigger='action')
+    select('two'); second = new('two')
+    second.state()
+    error = second.state()['rows']['A']['error']
+    assert expected in error.lower() and 'Retry' in error
+    assert 'synthetic' not in error and 'secret' not in error and 'https://' not in error
+    assert ci.get_attempt('A')['error'] == error
