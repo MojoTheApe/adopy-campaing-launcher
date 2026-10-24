@@ -104,3 +104,52 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         assert not errors, errors
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width,theme,sources,caption", [
+    (390, "dark", ["bi"], "The BI data have no rows"),
+    (1365, "light", ["bi", "workbook"], "The selected statistics have no rows"),
+])
+def test_empty_source_notice_keeps_the_real_map_and_wraps_on_screen(browser, width, theme, sources, caption, tmp_path):
+    from tests.test_web_build_upload import _minimal_report
+
+    report = _minimal_report()
+    web._enrich_country_overview(report)
+    account_map = dict(countries=[], available=[], all_accounts=[], live={}, span="",
+                       date_from="2026-09-09", date_to="2026-09-09", dates=["2026-09-08"],
+                       source_info={"sources": sources})
+    html = web.templates.env.get_template("report.html").render(
+        request=MagicMock(), report=report, warnings=[], built_at="2026-10-24", mlx_labels={},
+        upload_errors={}, account_preflight={}, account_preflight_json={}, ref_options={},
+        ref_options_json={}, account_alias_map_json={}, draft_status={}, account_map=account_map,
+        period={"date_from": "2026-09-09", "date_to": "2026-09-09", "span": ""})
+    context = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=theme)
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.add_init_script(f"localStorage.setItem('acl.theme', '{theme}')")
+    fallback = H.make_route("")
+    def route(request):
+        if request.request.resource_type == "document":
+            request.fulfill(content_type="text/html", body=html)
+        else:
+            fallback(request)
+    page.route("**/*", route)
+    try:
+        page.goto("http://acl.test/?date_from=2026-09-09&date_to=2026-09-09")
+        notice = page.locator('#workbook-period-notice[role="status"]')
+        assert notice.is_visible() and caption in notice.inner_text()
+        assert "2026-09-09" in notice.inner_text() and "It runs to 2026-09-08" in notice.inner_text()
+        assert "The workbook has no rows" not in notice.inner_text()
+        assert page.locator("#amap-slot").count() == 1 and page.locator("#amap-slot").is_visible()
+        assert page.get_by_role("button", name="Read all spend", exact=True).count() == 1
+        geometry = notice.evaluate("e => {const r=e.getBoundingClientRect();return {left:r.left,right:r.right,scroll:e.scrollWidth,client:e.clientWidth}}")
+        assert geometry["left"] >= 0 and geometry["right"] <= width + 1, geometry
+        assert geometry["scroll"] <= geometry["client"] + 1, geometry
+        assert notice.bounding_box()["y"] < page.locator(".dashboard-shell").bounding_box()["y"]
+        artifacts = Path(os.environ.get("ACL_REVIEW_ARTIFACT_DIR", str(tmp_path)))
+        artifacts.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(artifacts / f"empty-source-{width}-{theme}.png"))
+        assert not errors, errors
+    finally:
+        context.close()

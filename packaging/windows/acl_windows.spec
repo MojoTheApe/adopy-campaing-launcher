@@ -27,6 +27,7 @@ datas = [
     (str(PROJECT_ROOT / "config" / "ads_manager_selectors.yaml"), "config"),
     (str(PROJECT_ROOT / "config" / "analysis_reading_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "benchmarks.json"), "config"),
+    (str(PROJECT_ROOT / "config" / "bi_cm_map.json"), "config"),
     (str(PROJECT_ROOT / "config" / "content_plan_week.example.json"), "config"),
     (str(PROJECT_ROOT / "config" / "knowledge_base.json"), "config"),
     (str(PROJECT_ROOT / "config" / "rpa_forbidden_zones.yaml"), "config"),

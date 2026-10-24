@@ -1,7 +1,9 @@
 """ACL-2138: every config/*.json that src/ reads at runtime ships in the installed build."""
 from __future__ import annotations
 
+import importlib.util
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -49,6 +51,32 @@ def test_account_name_rules_file_is_packaged_and_checked():
     assert '"config" / "account_name_rules.json"), "config")' in spec
     assert "account_name_rules.json" in (ROOT / "packaging/windows/test_bundle.ps1").read_text(encoding="utf-8")  # linux-ok: reads the packaging script as data
     assert "rules_status" in (ROOT / "scripts/acl_smoke.py").read_text(encoding="utf-8")
+
+
+def test_bi_cm_map_is_packaged_checked_and_resolves_from_installed_module(tmp_path):
+    spec = (ROOT / "packaging/windows/acl_windows.spec").read_text(encoding="utf-8")
+    assert '"config" / "bi_cm_map.json"), "config")' in spec
+    assert is_bundled("config/bi_cm_map.json")
+    bundle_check = (ROOT / "packaging/windows/test_bundle.ps1").read_text(encoding="utf-8")
+    assert '"_internal/config/bi_cm_map.json"' in bundle_check
+    assert 'throw "config/bi_cm_map.json is missing from the bundle."' in bundle_check
+
+    # Exercise the real loader at its frozen-layout location, without a BI connection.
+    installed = tmp_path / "_internal"
+    module_path = installed / "src/analysis_agent/bi_stats.py"
+    module_path.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / "src/analysis_agent/bi_stats.py", module_path)
+    mapping = installed / "config/bi_cm_map.json"
+    mapping.parent.mkdir()
+    shutil.copyfile(ROOT / "config/bi_cm_map.json", mapping)
+    module_spec = importlib.util.spec_from_file_location("acl_bi_stats_installed", module_path)
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    assert module.CM_MAP_PATH == mapping
+    expected = module.load_cm_map(ROOT / "config/bi_cm_map.json")
+    assert expected and module.load_cm_map() == expected
+    mapping.unlink()
+    assert module.load_cm_map() == {}, "the installed-map check must catch this otherwise silent loss"
 
 
 def test_rules_status_reports_missing_and_broken(monkeypatch, tmp_path):

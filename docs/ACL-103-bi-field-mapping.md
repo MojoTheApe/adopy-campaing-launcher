@@ -34,6 +34,8 @@ full on every read (no date bound), then reduced to the workbook schema.
 ## CM rules
 
 - A code in `bi_cm_map.json` becomes that manager's name.
+- The installed application ships this runtime file at `_internal/config/bi_cm_map.json`,
+  matching the loader's path; bundle verification rejects an installation missing it.
 - `Unknown` takes the manager the same account has in its other BI rows (a foreign code on a
   shared account is not assigned to us).
 - Remaining unmapped codes stay outside the selected-team mapping and are excluded by

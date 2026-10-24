@@ -4373,6 +4373,9 @@ async function dashRefresh(ev) {
    filter, and place the notice before the dashboard rather than below it. #}
 {%- set book_covers_period = namespace(value=(not account_map) or
       (not account_map.date_from and not account_map.date_to)) %}
+{# Legacy workbook fragments predate source_info; an explicit empty/mixed source is not a workbook. #}
+{%- set empty_source_types = (account_map.source_info or {}).get('sources') if account_map else none %}
+{%- set empty_source_is_workbook = empty_source_types is none or empty_source_types == ['workbook'] %}
 {#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
 {% import "_metrics.html" as mx with context %}
 {#- ACL-1800: командная таблица кампаний — компонент для областей под строками аккаунтов (стили, шаблон, hcMount). Секции на Home у неё нет. -#}
@@ -4399,11 +4402,18 @@ async function dashRefresh(ev) {
 {% if not report.countries or not book_covers_period.value %}
 <div class="page-top" id="workbook-period-notice" role="status">
   {% if account_map and not book_covers_period.value %}
-  <p style="color: var(--muted)">
-    {% if account_map.dates %}The selected statistics have no rows for{% else %}The selected statistics have no rows with readable dates for{% endif %}
+  <p style="color: var(--muted)" data-empty-owner="source">
+    {% if empty_source_is_workbook %}
+      {% if account_map.dates %}The workbook has no rows for{% else %}The workbook has no rows with readable dates for{% endif %}
+    {% elif empty_source_types == ['bi'] %}
+      {% if account_map.dates %}The BI data have no rows for{% else %}The BI data have no rows with readable dates for{% endif %}
+    {% else %}
+      {% if account_map.dates %}The selected statistics have no rows for{% else %}The selected statistics have no rows with readable dates for{% endif %}
+    {% endif %}
     <b>{% if account_map.date_from %}{{ account_map.date_from }}{% if account_map.date_to and account_map.date_to != account_map.date_from %} → {{ account_map.date_to }}{% elif not account_map.date_to %} onward{% endif %}{% else %}dates through {{ account_map.date_to }}{% endif %}</b>.
     {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
-    Nobody has rows for these dates, so the statistics source may need updating.
+    {% if empty_source_is_workbook %}Nobody has rows for these dates, so the workbook may need updating.
+    {% else %}Nobody has rows for these dates, so the statistics source may need updating.{% endif %}
     Pick another period, or read the spend straight from an account below.
   </p>
   {% else %}

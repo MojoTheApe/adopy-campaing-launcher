@@ -8,6 +8,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
@@ -59,10 +61,13 @@ def test_owner_never_touches_the_frame(monkeypatch):
     assert _period_owner(_report(["Ann"]))["kind"] == "manager"
 
 
-def _render(owner, *, date_from, dates=("2026-09-07", "2026-09-08")):
+def _render(owner, *, date_from, dates=("2026-09-07", "2026-09-08"), source_info=None):
+    account_map = {"date_from": date_from, "date_to": date_from, "dates": list(dates)}
+    if source_info is not None:
+        account_map["source_info"] = source_info
     return templates.env.from_string(_piece()).render(
         report={"countries": [{"country": "Saudi Arabia"}]},
-        account_map={"date_from": date_from, "date_to": date_from, "dates": list(dates)},
+        account_map=account_map,
         period={"date_from": date_from, "date_to": date_from},
         period_owner=owner,
     )
@@ -73,6 +78,7 @@ def test_manager_case_names_manager_and_dates_and_keeps_map_off_the_notice():
     assert "No rows for Bob" in out and "2026-09-07" in out
     assert "other managers" in out
     assert "The workbook has no rows" not in out
+    assert 'data-empty-owner="source"' not in out
     assert "may need updating" not in out
 
 
@@ -80,6 +86,14 @@ def test_whole_workbook_case_blames_the_file_not_the_manager():
     out = _render(_period_owner(_report(None)), date_from="2026-09-09")
     assert "The workbook has no rows" in out and "may need updating" in out
     assert "No rows for Bob" not in out
+
+
+@pytest.mark.parametrize("sources", [["bi"], ["bi", "workbook"]])
+def test_source_aware_manager_notice_keeps_owner_and_avoids_false_update_advice(sources):
+    out = _render(_period_owner(_report(["Ann"])), date_from="2026-09-07", source_info={"sources": sources})
+    assert "No rows for Bob" in out and "2026-09-07" in out and "other managers" in out
+    assert 'data-empty-owner="source"' not in out and "may need updating" not in out
+    assert "the source itself is not the problem" in out
 
 
 def test_non_empty_period_has_no_notice():
