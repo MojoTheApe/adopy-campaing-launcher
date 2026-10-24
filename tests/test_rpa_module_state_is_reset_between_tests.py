@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import ast
 import inspect
+from pathlib import Path
+
+import pytest
 
 from src.fb_ads_rpa import crop_step
 from src.fb_ads_rpa import meta_dom as md
@@ -20,8 +23,26 @@ from tests import rpa_module_state as state
 
 MODULES = {state.META_DOM: md, state.CROP_STEP: crop_step}
 PROBE = "_acl2078_probe"
-_ORIGINAL_CAPTURE = page_capture.capture
-_ORIGINAL_STALL_EVIDENCE = md._stall_evidence
+
+
+def _real_capture_and_stall_functions():
+    functions = (page_capture.capture, md._stall_evidence)
+    for function, module, name in ((functions[0], page_capture, "capture"),
+                                   (functions[1], md, "_stall_evidence")):
+        # A previous test may legitimately reload meta_dom after collection.
+        # Accept that new real definition, never an already leaked test fake.
+        assert inspect.isfunction(function)
+        assert function.__module__ == module.__name__
+        assert function.__name__ == name
+        assert Path(inspect.getsourcefile(function)).resolve() == Path(module.__file__).resolve()
+    return functions
+
+
+@pytest.fixture(scope="module")
+def _capture_and_stall_baseline():
+    # Requested by test3 BEFORE its patches, then retained unchanged for test4.
+    # Capturing during collection would become stale after a legal module reload.
+    return _real_capture_and_stall_functions()
 
 
 def _dirty_everything() -> None:
@@ -69,7 +90,7 @@ def test_2_the_next_test_starts_clean():
     _assert_clean()
 
 
-def test_3_patched_missing_thread_local_does_not_leak_other_mocks(monkeypatch):
+def test_3_patched_missing_thread_local_does_not_leak_other_mocks(monkeypatch, _capture_and_stall_baseline):
     # Undo must restore the earlier mocks before reset removes a newly added
     # TLS field. Otherwise delattr(outcome) aborts the rest of monkeypatch undo.
     monkeypatch.setattr(page_capture, "capture", lambda *a, **k: None)
@@ -77,9 +98,10 @@ def test_3_patched_missing_thread_local_does_not_leak_other_mocks(monkeypatch):
     monkeypatch.setattr(md._LAST_OPEN, "outcome", "fixture-probe", raising=False)
 
 
-def test_4_the_next_test_has_the_real_capture_and_stall_functions():
-    assert page_capture.capture is _ORIGINAL_CAPTURE
-    assert md._stall_evidence is _ORIGINAL_STALL_EVIDENCE
+def test_4_the_next_test_has_the_real_capture_and_stall_functions(_capture_and_stall_baseline):
+    capture, stall_evidence = _capture_and_stall_baseline
+    assert page_capture.capture is capture
+    assert md._stall_evidence is stall_evidence
     assert not hasattr(md._LAST_OPEN, "outcome")
 
 
