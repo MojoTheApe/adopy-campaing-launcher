@@ -58,6 +58,9 @@ def main():
     import local_dashboard
     import setup_wizard
     import psutil
+    import ctypes
+
+    assert not ctypes.windll.shell32.IsUserAnAdmin(), "acceptance must use a standard local account"
 
     local_dashboard.PORTS = settings["ports"]
     local = launcher._local_acl_dir()

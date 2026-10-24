@@ -41,6 +41,8 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
     kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
     kernel.OpenMutexW.restype = wintypes.HANDLE
+    kernel.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel.LocalFree.restype = ctypes.c_void_p
 
     class User(ctypes.Structure):
         _fields_ = [("name", wintypes.LPWSTR), ("password", wintypes.LPWSTR),
@@ -60,13 +62,39 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         _fields_ = [("process", wintypes.HANDLE), ("thread", wintypes.HANDLE),
                     ("pid", wintypes.DWORD), ("tid", wintypes.DWORD)]
 
+    class Member(ctypes.Structure):
+        _fields_ = [("name", wintypes.LPWSTR)]
+
     net.NetUserAdd.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p,
                               ctypes.POINTER(wintypes.DWORD)]
     net.NetUserDel.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    net.NetLocalGroupAddMembers.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR,
+                                           wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    advapi.ConvertStringSidToSidW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_void_p)]
+    advapi.ConvertStringSidToSidW.restype = wintypes.BOOL
+    advapi.LookupAccountSidW.argtypes = [wintypes.LPCWSTR, ctypes.c_void_p, wintypes.LPWSTR,
+        ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD)]
+    advapi.LookupAccountSidW.restype = wintypes.BOOL
     advapi.CreateProcessWithLogonW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.LPCWSTR,
         wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD, ctypes.c_void_p,
         wintypes.LPCWSTR, ctypes.POINTER(Startup), ctypes.POINTER(Process)]
     advapi.CreateProcessWithLogonW.restype = wintypes.BOOL
+    # Resolve the standard Users group by its well-known SID, independently
+    # of the runner's display language. Never add these accounts to admins.
+    sid = ctypes.c_void_p()
+    assert advapi.ConvertStringSidToSidW("S-1-5-32-545", ctypes.byref(sid))
+    try:
+        name_chars, domain_chars, use = wintypes.DWORD(), wintypes.DWORD(), wintypes.DWORD()
+        advapi.LookupAccountSidW(None, sid, None, ctypes.byref(name_chars),
+                                 None, ctypes.byref(domain_chars), ctypes.byref(use))
+        assert name_chars.value > 0
+        group, domain = ctypes.create_unicode_buffer(name_chars.value), ctypes.create_unicode_buffer(domain_chars.value)
+        assert advapi.LookupAccountSidW(None, sid, group, ctypes.byref(name_chars),
+                                        domain, ctypes.byref(domain_chars), ctypes.byref(use))
+        users_group = group.value
+    finally:
+        kernel.LocalFree(sid)
     run = uuid.uuid4().hex[:12]
     users = [f"acl1309{run}{n}" for n in (1, 2)]
     ipc = Path(os.environ["PROGRAMDATA"]) / f"acl1309-ipc-{run}"
@@ -138,11 +166,14 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     try:
         for user in users:
             password = "Aa!" + secrets.token_hex(20)
-            info = User(user, password, 0, 1, None, "Ephemeral ACL dashboard acceptance", 0x10001, None)
+            info = User(user, password, 0, 1, None, "Ephemeral ACL dashboard acceptance", 0x10201, None)
             parameter = wintypes.DWORD()
             result = net.NetUserAdd(None, 1, ctypes.byref(info), ctypes.byref(parameter))
             assert result == 0, ("cannot create controlled local account", result, parameter.value)
             created.append(user)
+            member = Member(os.environ["COMPUTERNAME"] + "\\" + user)
+            result = net.NetLocalGroupAddMembers(None, users_group, 3, ctypes.byref(member), 1)
+            assert result in (0, 1378), ("cannot assign standard Users membership", result)
             # IPC only; the actual shared registry retains ProgramData inheritance.
             subprocess.run(["icacls.exe", str(ipc), "/grant", f"{user}:(OI)(CI)M"],
                            check=True, capture_output=True, timeout=20)
@@ -206,3 +237,19 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         shutil.rmtree(ipc)
         if registry.parent.exists():
             shutil.rmtree(registry.parent)
+
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        # Publish only anonymous synthetic acceptance facts, after every
+        # assertion and owned cleanup succeeds; never profiles, SIDs or users.
+        with open(summary, "a", encoding="utf-8") as report:
+            report.write(
+                "\n### ACL-1309: two real standard Windows accounts — passed\n\n"
+                "Distinct native users/profiles and own configuration identities; "
+                "side-by-side dashboards; repeated shortcut reattach; setup and "
+                "stable-port restart beside a live neighbor; actual child PID/port "
+                "state cleanup; unchanged installer presence guard; unrelated "
+                "listener preserved. Shared ProgramData registry used inherited "
+                "permissions. Only test IPC access was granted to the two accounts. "
+                "Wizard and HTTP application bodies were synthetic; no live services.\n"
+            )
