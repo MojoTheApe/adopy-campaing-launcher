@@ -40,7 +40,7 @@
   function rowsOf(grid) {
     var out = [];
     grid.querySelectorAll('tbody > tr').forEach(function (tr) {
-      var live = tr.querySelector('td.amap-live[data-account]');
+      var live = tr.querySelector('td.amap-list[data-account], td.amap-live[data-account]');
       var cell = tr.querySelector('td.amap-acc');
       if (live && cell) out.push({ tr: tr, cell: cell, account: live.getAttribute('data-account') });
     });

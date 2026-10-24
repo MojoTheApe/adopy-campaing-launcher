@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import tempfile
@@ -567,6 +568,16 @@ def get_attempt(account: str) -> dict | None:
     return attempt if isinstance(attempt, dict) else None
 
 
+def _saved_stop(rec: dict) -> tuple[str, str]:
+    active = rec.get("active_stop")
+    if isinstance(active, dict) and active.get("kind"):
+        return str(active["kind"]), str(active.get("at_utc") or "")
+    attempt = rec.get("attempt")
+    source = attempt if isinstance(attempt, dict) else rec.get("snapshot")
+    source = source if isinstance(source, dict) else {}
+    return str(source.get("stop") or ""), str(source.get("at_utc") or source.get("finished_at_utc") or "")
+
+
 def latest_stops() -> dict[str, tuple[str, str]]:
     """Аккаунт → (вид остановки Meta, ISO UTC времени) по последней записи: попытке или снимку.
 
@@ -578,13 +589,7 @@ def latest_stops() -> dict[str, tuple[str, str]]:
     for account, rec in data.items():
         if not isinstance(rec, dict):
             continue
-        attempt = rec.get("attempt")
-        if isinstance(attempt, dict):
-            kind, at = str(attempt.get("stop") or ""), str(attempt.get("at_utc") or "")
-        else:
-            snap = rec.get("snapshot")
-            snap = snap if isinstance(snap, dict) else {}
-            kind, at = str(snap.get("stop") or ""), str(snap.get("finished_at_utc") or "")
+        kind, at = _saved_stop(rec)
         if kind:
             out[account] = (kind, at)
     return out
@@ -599,6 +604,19 @@ def put_result(done: Snapshot) -> None:
     with _LOCK:
         data = _load_all()
         rec = data.get(done.account) if isinstance(data.get(done.account), dict) else {}
+        old_stop, old_at = _saved_stop(rec)
+        clean_success = (done.state in {"ok", "partial", "empty"} and not done.stop
+                         and "failed" not in done.steps.values())
+        if clean_success:
+            active_stop = None
+        elif done.stop and not (old_stop == "checkpoint" and done.stop != "checkpoint"):
+            active_stop = {"kind": done.stop, "at_utc": done.finished_at_utc}
+        else:
+            active_stop = {"kind": old_stop, "at_utc": old_at} if old_stop else None
+        if active_stop is not None or "active_stop" in rec:
+            # Локальная ошибка/неполная попытка не доказывает снятый checkpoint
+            # и не начинает заново старое остывание. Новая удача снимает запись.
+            rec["active_stop"] = active_stop
         if done.state == "failed":
             # `stop` и `at_utc` нужны очереди обновления: пауза по чекпоинту переживает рестарт
             # и видна второму процессу дешборда (ACL-2063).
@@ -619,6 +637,7 @@ def summary(snap: Snapshot | None, attempt: dict | None = None, *, now: float | 
         return out
     out.update({
         "state": snap.state, "finished_at": snap.finished_at, "age_s": _age_s(snap.finished_at, now),
+        "revision": hashlib.sha256(json.dumps(snap.to_dict(), sort_keys=True).encode()).hexdigest(),
         "date_from": snap.date_from, "date_to": snap.date_to, "currency": snap.currency,
         "problems": list(snap.problems), "steps": dict(snap.steps), "error": snap.error,
         "counts": {"campaigns": len(snap.campaigns), "adsets": len(snap.adsets), "ads": len(snap.ads)},
@@ -820,6 +839,60 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
     return snap
 
 
+def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
+    """Обновить структуру уже открытой сессией после команды/публикации (ACL-2063).
+
+    Ни открытия профиля, ни нового клиента, ни сброса бюджета. Вызывающий
+    сохраняет физическую аренду профиля на весь вызов.
+    """
+    from src.analysis_agent import account_spend_api as _api
+    from src.analysis_agent.account_refresh_state import read_session
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+    from src.fb_api.graph import GraphStop
+
+    snap = Snapshot(account=account, state="failed", started_at=_as._now())  # noqa: SLF001
+    entry = _as._entry_for(account)  # noqa: SLF001
+    if entry is None:
+        # Удаление привязки не должно ни читать старый профиль, ни стирать его
+        # прежнюю остановку/историю новой фиктивной попыткой.
+        snap.error, snap.error_code = "This account was removed from the dashboard.", "account_removed"
+        return snap
+    started = time.monotonic()
+    before = int(getattr(sess.client, "calls", 0) or 0)
+    stop = ""
+    try:
+        if not backend_ready():
+            raise NeedsApiBackend(NEEDS_API_MESSAGE)
+        if _api.normalize_act(str(getattr(entry, "ad_account_id", "") or "")) != sess.act:
+            raise ValueError("The account map changed. Its list was not read with the previous session.")
+        require_profile_lease(_as._profile_key(account))  # noqa: SLF001
+        with read_session(priority=trigger in {"action", "retry"}):
+            read_into(snap, sess.client, sess.act, structure_only=True)
+            if getattr(sess.client, "stopped", None) is not None:
+                stop = sess.client.stopped.kind
+                _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
+            finalize(snap)
+    except Exception as exc:  # noqa: BLE001 — исход команды не меняется
+        if snap.steps.get("campaigns") in ("ok", "truncated"):
+            snap.problems.append(_api._failure(account, exc)[0])  # noqa: SLF001
+            finalize(snap)
+        else:
+            snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
+        if isinstance(exc, GraphStop):
+            stop = exc.kind
+            _api._report_stop(exc, account)  # noqa: SLF001
+    snap.stop = snap.stop or stop
+    snap.calls = max(0, int(getattr(sess.client, "calls", 0) or 0) - before)
+    snap.finished_at = _as._now()  # noqa: SLF001
+    snap.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    snap.took_s = round(time.monotonic() - started, 1)
+    put_result(snap)
+    notes = {**getattr(sess, "notes", {}), "trigger": trigger, "calls": snap.calls, "same_session": True}
+    _api._telemetry("campaigns", account, snap.state != "failed", snap.took_s, notes,  # noqa: SLF001
+                    error=snap.error, stop=snap.stop)
+    return snap
+
+
 def run_read(account: str, *, trigger: str) -> Snapshot:
     """Синхронное чтение только структуры (ACL-2063): без Insights, без периода.
 
@@ -828,12 +901,23 @@ def run_read(account: str, *, trigger: str) -> Snapshot:
     """
     began = time.time()
     started_at = _as._now()  # noqa: SLF001
+    baseline = summary(get_snapshot(account)).get("revision")
     try:
         if not backend_ready():
             # Как `start_read`: без бэкенда API профиль не открываем вовсе.
             done = Snapshot(account=account, state="failed", error=NEEDS_API_MESSAGE, error_code=NEEDS_API_CODE)
         else:
             with browser_operation.reading(), _as._lock_for(account):  # noqa: SLF001
+                # A publishing/command session can refresh while this request
+                # waits for its physical profile. Join that newer result rather
+                # than opening the same profile again after it is released.
+                from src.analysis_agent import account_refresh, account_spend_api
+                cached = get_snapshot(account)
+                if (account_refresh.is_fresh(account)
+                        and (trigger.split(":")[0] in {"schedule", "attention"}
+                             or summary(cached).get("revision") != baseline)):
+                    account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
+                    return cached
                 done = read_via_api(account, structure_only=True, trigger=trigger)
     except Exception as exc:  # noqa: BLE001
         done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")

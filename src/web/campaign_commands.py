@@ -84,10 +84,19 @@ def run_preview(body: dict[str, Any]) -> tuple[dict, int]:
         return refused
     account = str(body.get("account") or "")
     try:
+        from src.analysis_agent import campaign_inventory
+        saved = campaign_inventory.get_snapshot(account)
+        baseline = {}
+        if saved is not None:
+            for level, rows in (("campaign", saved.campaigns), ("adset", saved.adsets), ("ad", saved.ads)):
+                baseline.update({level + ":" + str(row["id"]): row for row in rows})
+        kwargs = {"baseline": baseline} if baseline else {}
         op = _cmd.preview(_cmd.get_store(), _sessions(), account=account,
                           actor=body.get("actor"), command=str(body.get("command") or ""),
-                          value=body.get("value"), targets=body.get("targets"))
+                          value=body.get("value"), targets=body.get("targets"), **kwargs)
     except _cmd.CommandRefused as exc:
+        if exc.code == "stale":
+            _refresh_stale({"account": account})
         return _refusal(exc)
     except (GraphStop, GraphError) as exc:
         return {"error": _failure(account, exc), "code": getattr(exc, "kind", "")}, 502
@@ -102,10 +111,26 @@ def run_execute(body: dict[str, Any]) -> tuple[dict, int]:
         return refused
     try:
         op = _cmd.execute(_cmd.get_store(), _sessions(), revision_id=str(body.get("revision_id") or ""),
-                          idempotency_key=str(body.get("idempotency_key") or ""))
+                          idempotency_key=str(body.get("idempotency_key") or ""),
+                          after_write=_refresh_after_write, on_stale=_refresh_stale)
     except _cmd.CommandRefused as exc:
         return _refusal(exc)
     return op, 202 if op.get("state") in (_cmd.RUNNING, _cmd.VERIFYING) else 200
+
+
+def _refresh_after_write(op: dict, sess: Any) -> None:
+    from src.analysis_agent import account_refresh, campaign_inventory
+
+    snap = campaign_inventory.read_in_session(op["account"], sess, trigger="action")
+    account_refresh.queue().record_result(snap, trigger="action")
+
+
+def _refresh_stale(op: dict) -> None:
+    from src.analysis_agent import account_refresh
+
+    q = account_refresh.queue()
+    q.request(op["account"], "action", force=True)
+    q.start()
 
 
 def get_status(op_id: str) -> tuple[dict, int]:

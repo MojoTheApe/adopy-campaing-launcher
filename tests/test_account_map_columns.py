@@ -19,7 +19,7 @@ TPL = (
 #: затем лиды, депозиты и производные, и состояние кабинета последним.
 #: «On account» переименовано в «Account spend» — прежнее название читалось
 #: как состояние, а состояние теперь стоит рядом отдельной колонкой.
-WANT = ["Account", "Spend", "Account spend", "Leads", "FTDs", "CPL", "CPA", "CR", "Status"]
+WANT = ["Account", "Spend", "Campaign list", "Leads", "FTDs", "CPL", "CPA", "CR", "Status"]
 
 
 def _head() -> list[str]:
@@ -69,9 +69,10 @@ def test_the_drill_no_longer_needs_a_hand_written_width():
     assert "ncols=" not in t, "вернулась ширина, написанная руками"
 
 
-def test_the_two_spends_say_where_they_came_from():
+def test_workbook_spend_is_kept_and_meta_spend_is_replaced_by_structure_status():
     """Рядом стоят два спенда — из книги и с кабинета. Порознь их путают."""
     t = TPL.read_text(encoding="utf-8")
     head = t[t.index("<thead>"): t.index("</thead>")]
     assert "workbook" in head, "не сказано, что первый спенд — из книги"
-    assert "ad account itself" in head, "не сказано, что второй прочитан с кабинета"
+    assert "Campaign list" in head and "Account spend" not in head
+    assert "amap-live" not in t and "amapReadSpend" not in t

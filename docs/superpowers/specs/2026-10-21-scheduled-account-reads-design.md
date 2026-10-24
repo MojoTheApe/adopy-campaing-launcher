@@ -109,3 +109,12 @@ must stay rare and purposeful.
 - Expand an account whose list is 2 h old → old list visible at once, `updating…`, then `list <now>`.
 - Pause a campaign that was edited by hand → nothing written, message shown, account refreshed.
 - Proxy failure on one account → reason + Retry on that row; the sweep continues.
+
+## Implementation notes (2026-10-24)
+
+- Queue state: machine-local `account_refresh.json`; short atomic transactions are independent of the long dispatcher/profile read leases. The latter share the existing machine profile-lease root across ports. Failed/corrupt state is not reset to forget a completed window.
+- Routes: `POST /account-refresh/page-open`, `POST /account-refresh/request` (attention/retry only), `GET /account-refresh/state`. The server takes accounts from the current map. No period is passed to the structure reader.
+- Workbook navigation uses a one-time `view_only` page transition. It is consumed without a page-open admission; cached inventory/BI GETs still work. Polling while work is pending only reads local queue state.
+- Automatic startup may resume current-window persisted work, but never catches up an expired window. Attention/action/retry requests are retained. Same-account requests join running reads.
+- Read results from confirmed commands/publishing settle the queue using the existing open session without opening again or resetting its Graph call budget. Unknown/failed/cancelled/dry publishing does not invoke a successful-publish refresh. Existing write reconciliation remains unchanged.
+- The working packaged application defaults on. Source port9090 retains its working fallback; other source ports and `--reload` default off. `ACL_AUTO_REFRESH=1` explicitly enables TEST9095. Actual launch environment and real profile observations are deployment facts, separate from offline automated checks.

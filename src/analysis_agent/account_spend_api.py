@@ -494,9 +494,14 @@ def _touch_kept_window(account: str) -> None:
 @contextmanager
 def _session(account: str, *, commands: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
+    from src.analysis_agent.account_refresh_state import read_session
+
     try:
-        with _open_session(account, commands=commands) as sess:
-            yield sess
+        # Вызывающий уже держит физическую аренду профиля. Порядок тот же
+        # у чтения после команды/публикации: профиль, затем одна общая читалка.
+        with read_session(priority=commands):
+            with _open_session(account, commands=commands) as sess:
+                yield sess
     finally:
         _touch_kept_window(account)
 

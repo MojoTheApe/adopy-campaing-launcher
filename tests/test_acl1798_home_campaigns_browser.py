@@ -46,7 +46,7 @@ AMAP_CSS = REPORT[REPORT.index("    .amap table { width: 100%"): REPORT.index(" 
 def account_row(account):
     """Строка списка аккаунтов страны (ячейка с аккаунтом, спенд, кнопка чтения)."""
     return (f'<tr><td class="amap-acc"><span class="amap-caret-off">·</span>{account}</td>'
-            f'<td class="num amap-live" data-account="{account}">$0.00</td><td class="amap-actions"><button class="amap-btn amap-read">Read spend</button></td></tr>')
+            f'<td class="amap-list" data-account="{account}">$0.00</td><td class="amap-actions"><button class="amap-btn amap-read">Read spend</button></td></tr>')
 
 
 class Site:
@@ -226,7 +226,7 @@ def test_unknown_values_are_dashes_not_zeros(page):
     assert cells and all(c.strip() == "—" for c in cells), cells
     assert "$0" not in row.inner_text()
     # у кампании 1 есть Insights: числа настоящие, а Frequency/Reach не суммируются из детей
-    assert "5,000" in page.locator('tr[data-key="campaign:1"]').inner_text()
+    assert "5,000" not in page.locator('tr[data-key="campaign:1"]').inner_text()  # Meta metrics are no longer displayed
 
 
 def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
@@ -271,10 +271,10 @@ def test_column_preset_and_visibility_persist(page):
 def test_unread_account_says_so_and_has_its_own_read_button_on_its_row(page):
     open_acc(page, "Fresh")
     text = page.inner_text(f'{row_of("Fresh")} + tr.hc-acct-child')
-    assert "Not read yet" in text and "press Read campaigns" in text             # снимка нет, прежний список не рисуется
+    assert "No saved list yet" in text and "Expand this account" in text             # снимка нет, прежний список не рисуется
     assert "IN THE ACCOUNT" not in text.upper()
     assert page.locator(f'{row_of("Fresh")} button.hc-rc').count() == 1 and page.locator(f'{row_of("Acc")} button.hc-rc').count() == 1
-    assert "Campaigns: not read yet" in page.inner_text(f'{row_of("Fresh")} .hc-snap')
+    assert "list not read" in page.inner_text(f'{row_of("Fresh")} .hc-snap')
     assert page.locator("[data-read-country]").count() == 0
 
 
@@ -285,7 +285,7 @@ def test_one_tree_the_account_row_is_the_parent_and_there_is_no_separate_table(p
     assert page.locator(".hc-table tr.hc-band").count() == 0                      # полос аккаунтов внутри таблицы нет
     accounts = page.evaluate("[...new Set([...document.querySelectorAll('.hc-table tbody tr[data-account]')].map(r => r.dataset.account))]")
     assert accounts == ["Acc"]
-    assert page.evaluate("document.querySelector('tr.hc-acct-child').previousElementSibling.querySelector('td.amap-live').dataset.account") == "Acc"
+    assert page.evaluate("document.querySelector('tr.hc-acct-child').previousElementSibling.querySelector('td.amap-list').dataset.account") == "Acc"
     assert page.get_attribute(f'{row_of("Acc")}', "aria-expanded") == "true" and page.get_attribute(f'{row_of("Fresh")}', "aria-expanded") == "false"
     tabs = page.locator(".hc-tabs .hc-tab").all_inner_texts()
     assert tabs == ["Campaigns", "Winning setups", "Landings", "Targets", "Creatives", "Buyers"]
@@ -315,21 +315,12 @@ def test_showing_the_block_never_reads_meta(page, site):
     assert not [r for r in site.requests if r[1] == "/campaign-inventory/read"]
 
 
-def test_country_header_button_reads_every_account_one_by_one(page, site):
-    page.route("http://acl.test/campaign-inventory/read", lambda route: (
-        site.requests.append(("POST", "/campaign-inventory/read")),
-        site.reads.append(route.request.post_data or ""),
-        route.fulfill(status=200, content_type="application/json", body='{"ok": true}')))
-    btn = page.locator(".amap-read-campaigns")
-    assert btn.inner_text() == "Read campaigns in Kuwait"
-    btn.click()
-    for _ in range(40):                                                   # очередь: по одному, опрос статуса у своего сервера
-        if len(site.reads) == 2 and not btn.is_disabled():
-            break
-        page.wait_for_timeout(500)
-    assert len(site.reads) == 2
-    assert "Acc" in site.reads[0] and "Fresh" in site.reads[1]            # по очереди, в порядке строк страны
-    assert btn.inner_text() == "Read campaigns in Kuwait" and not btn.is_disabled()
+def test_country_has_no_manual_bulk_read_control(page, site):
+    from src.web.app import templates
+    rendered = templates.env.get_template('_account_map_country.html').render(
+        mc={'country':'Kuwait','key':'Kuwait','rows':[]},amap={'span':'all','countries':[]},mlx={})
+    assert 'amapReadCampaigns(this)' not in rendered and 'amapReadAll(this)' not in rendered
+    assert not [r for r in site.requests if r[1] == '/campaign-inventory/read']
 
 
 def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
@@ -339,11 +330,11 @@ def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
         pg = browser.new_page(viewport={"width": 1280, "height": 600})
         pg.route("http://acl.test/**", site.handle)
         goto(pg, "http://acl.test/")
-        pg.wait_for_selector("[data-hc=needs]:not([hidden])")
-        assert "Campaign inventory needs the API backend" in pg.inner_text("[data-hc=needs]")
-        assert not pg.is_visible("[data-hc=body]")
-        pg.wait_for_timeout(300)
-        assert [r for r in site.requests if r[1].startswith("/campaign-inventory")] == [("GET", "/campaign-inventory/status")]
+        pg.wait_for_selector("[data-hc=body]:not([hidden])")
+        open_acc(pg, "Acc")
+        pg.wait_for_selector('.hc-table tbody tr')
+        assert pg.locator('[data-hc=needs]').is_hidden()
+        assert not [r for r in site.requests if r[0] == 'POST']
         browser.close()
 
 

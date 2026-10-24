@@ -88,6 +88,19 @@ def test_rules_without_insights_not_reconciled():
     assert out["status"] == "not_reconciled"
 
 
+@pytest.mark.parametrize("kind", ["checkpoint", "rate_limited"])
+def test_later_local_failure_does_not_erase_or_extend_an_unresolved_global_stop(kind):
+    old_at = "2026-10-24T08:00:00+00:00"
+    ci.put_result(ci.Snapshot(account="A", state="failed", stop=kind,
+                              error="Original stop", finished_at_utc=old_at))
+    ci.put_result(ci.Snapshot(account="A", state="failed", error="The account map changed",
+                              finished_at_utc="2026-10-24T08:04:00+00:00"))
+    assert ci.latest_stops()["A"] == (kind, old_at)
+    ci.put_result(ci.Snapshot(account="A", state="empty", steps={s: "ok" for s in ci.STRUCTURE_STEPS},
+                              finished_at_utc="2026-10-24T08:05:00+00:00"))
+    assert "A" not in ci.latest_stops()
+
+
 def _ctx_recorder(log, name):
     from contextlib import contextmanager
 
@@ -191,3 +204,35 @@ def test_partial_snapshot_stop_is_listed_until_the_next_read():
                        finished_at_utc="2026-10-23T08:00:00+00:00")
     ci.put_result(part)
     assert ci.latest_stops() == {"B": ("rate_limited", "2026-10-23T08:00:00+00:00")}
+
+
+def test_waiting_request_joins_a_newer_same_session_result_without_reopening(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from datetime import datetime, timezone, timedelta
+    import threading
+    from src.analysis_agent import account_spend as spend
+    monkeypatch.setattr(ci, '_store_path', lambda: tmp_path / 'inventory.json')
+    monkeypatch.setattr(ci, 'backend_ready', lambda: True)
+    began, released = threading.Event(), threading.Event()
+    @contextmanager
+    def physical(account):
+        began.set()
+        assert released.wait(3)
+        yield
+    monkeypatch.setattr(spend, '_lock_for', physical)
+    opened = []
+    monkeypatch.setattr(ci, 'read_via_api', lambda *a, **k: opened.append(a))
+    old = ci.Snapshot(account='A', state='empty', finished_at_utc=(datetime.now(timezone.utc)-timedelta(hours=2)).isoformat())
+    ci.put_result(old)
+    result = []
+    thread = threading.Thread(target=lambda: result.append(ci.run_read('A', trigger='action')))
+    thread.start()
+    try:
+        assert began.wait(3)
+        # Actual same-session publisher result arrives while physical profile is held.
+        fresh = ci.Snapshot(account='A', state='empty', finished_at_utc=datetime.now(timezone.utc).isoformat())
+        ci.put_result(fresh)
+    finally:
+        released.set(); thread.join(3)
+    assert not thread.is_alive() and opened == []
+    assert result[0].finished_at_utc == fresh.finished_at_utc

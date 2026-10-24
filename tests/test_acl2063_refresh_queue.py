@@ -89,6 +89,49 @@ def test_old_or_failed_snapshot_is_not_fresh(env):
     assert not ar.is_fresh("nobody", now=NOW)
 
 
+@pytest.mark.parametrize("trigger", ["attention", "schedule"])
+def test_recent_successful_empty_account_does_not_open_again(env, trigger):
+    def empty():
+        return ci.Snapshot(account="A", state="empty", finished_at_utc=_iso(NOW - 10),
+                           steps={name: "ok" for name in ci.STRUCTURE_STEPS})
+
+    env.snaps["A"] = empty()
+
+    def read_empty(account, label):
+        env.read.append((account, label))
+        env.snaps[account] = empty()
+        return env.snaps[account]
+
+    q = ar.RefreshQueue(reader=read_empty, clock=env.clock)
+    results = []
+    for _ in range(2):
+        results.append(q.request("A", trigger))
+        q._drain_once()
+    assert env.read == []
+    assert results == [{"queued": False, "reason": "fresh"}] * 2
+
+
+def test_successful_empty_freshness_keeps_expiry_failure_and_explicit_retry(env):
+    snap = ci.Snapshot(account="A", state="empty", finished_at_utc=_iso(NOW - 10),
+                       steps={name: "ok" for name in ci.STRUCTURE_STEPS})
+    env.snaps["A"] = snap
+    snap.finished_at_utc = _iso(NOW - ar.FRESH_S)
+    assert not ar.is_fresh("A", now=NOW)
+    snap.finished_at_utc = _iso(NOW + 1)
+    assert not ar.is_fresh("A", now=NOW)
+    snap.finished_at_utc = _iso(NOW - 10)
+    snap.steps["adsets"] = "failed"
+    assert not ar.is_fresh("A", now=NOW)
+    snap.steps["adsets"] = "ok"
+    snap.stop = "checkpoint"
+    assert not ar.is_fresh("A", now=NOW)
+    snap.stop = ""
+    q = _queue(env)
+    assert q.request("A", "retry", force=True) == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert env.read == [("A", "retry")]
+
+
 def test_priority_order(env):
     q = _queue(env)
     q.request("B", "schedule")
@@ -533,7 +576,7 @@ def test_cooldown_from_text_is_not_shorter_than_the_table():
     assert ar._cooldown_s("rate_limited", "wait about 20 min") == 20 * 60.0
 
 
-def test_forced_request_for_the_running_account_waits_behind_the_read(env):
+def test_forced_request_for_the_running_account_joins_the_existing_read(env):
     entered, release = threading.Event(), threading.Event()
 
     def reader(account, trigger):
@@ -547,11 +590,11 @@ def test_forced_request_for_the_running_account_waits_behind_the_read(env):
     t.start()
     assert entered.wait(5)
     assert q.request("A", "attention") == {"queued": False, "reason": "running"}
-    assert q.request("A", "action", force=True) == {"queued": True, "reason": "queued"}
+    assert q.request("A", "action", force=True) == {"queued": False, "reason": "running"}
     release.set()
     t.join(5)
-    # Явная заявка не потеряна: тот же проход читает аккаунт второй раз сразу за первым.
-    assert env.read == [("A", "attention"), ("A", "action")]
+    # Whole-task contract: subscriptions to a running account never open it twice.
+    assert env.read == [("A", "attention")]
     assert q.state()["queued"] == []
 
 

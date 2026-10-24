@@ -517,6 +517,22 @@ class ApiPublisher:
             pass
 
     # -- конец
+    def refresh_structure(self) -> None:
+        """Read the account list before releasing this already-open session.
+
+        The job calls this only after confirmed publishing. Keep its original
+        call budget and stops; a failed refresh never repeats a publish.
+        """
+        if (self.dry_run or self.blocked or self.stop or self.cancelled()
+                or self._client is None):
+            return
+        from types import SimpleNamespace
+        from src.analysis_agent import account_refresh, campaign_inventory
+
+        snap = campaign_inventory.read_in_session(
+            self.account_label, SimpleNamespace(client=self._client, act=self.act), trigger="action")
+        account_refresh.queue().record_result(snap, trigger="action")
+
     def close(self, *, force: bool = False) -> None:
         """Закрыть свою вкладку. Профиль не трогаем."""
         _ = force

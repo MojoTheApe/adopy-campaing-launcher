@@ -20,11 +20,11 @@ new endpoints. Commands refresh the account in their own session after a write.
 - A period change starts **zero** reads.
 - At most **one** profile read at a time, across all dashboard processes on the machine.
 - Windows: `08:00`, `13:00`, `18:00` local time; a missed window is not caught up.
-- Fresh = last snapshot state `ok` or `partial` with `finished_at_utc` less than **3600 s** old.
+- Fresh = last successful snapshot state `ok`, `partial` or `empty` with `finished_at_utc` less than **3600 s** old.
 - Priority: `action` > `retry` > `attention` > `schedule`.
 - Structure-only read: steps `campaigns`, `adsets`, `ads` only — no Insights, no account spend, no country split.
 - Setting `ACL_AUTO_REFRESH`: `1` on / `0` off; unset → on when the server port is `9090`, off otherwise.
-  TEST9095 launch sets `ACL_AUTO_REFRESH=1` (owner decision).
+  Packaged working installs default on, source/dev ports otherwise off, and `--reload` defaults off. TEST9095 launch sets `ACL_AUTO_REFRESH=1` (owner decision).
 - All user-facing text in English (labels, banner, errors). Code comments in Russian like the surrounding code.
 - Existing endpoints `/account-spend/read` and `/campaign-inventory/read` stay (Retry tooling, scripts, tests).
 - Every read still goes through `browser_operation.reading()` and `_as._lock_for(account)`; no cooldown bypass.

@@ -9109,6 +9109,7 @@ function amapApply(from, to, span) {
     if (from) q.push('date_from=' + encodeURIComponent(from));
     if (to) q.push('date_to=' + encodeURIComponent(to));
   }
+  q.push('view_only=1');  // changing workbook dates never admits a profile read
   var hash = window.location.hash || '';
   window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
 }
@@ -10759,7 +10760,7 @@ function amapCampaignTree(grid, accounts) {
   var handles = {};
   var warmOwn = !window.__aclWarmSessions;      // чип и «Open/Close» от ACL-1812 уже в строке — второй не рисуем
   function btn(cls, text) { var b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = text; return b; }
-  grid.querySelectorAll('td.amap-live[data-account]').forEach(function (cell) {
+  grid.querySelectorAll('td.amap-list[data-account]').forEach(function (cell) {
     var a = cell.dataset.account, row = cell.closest('tr');
     if (!row || accounts.indexOf(a) < 0 || handles[a]) return;
     var acc = row.querySelector('td.amap-acc');
@@ -10774,10 +10775,9 @@ function amapCampaignTree(grid, accounts) {
       chip = document.createElement('span'); chip.className = 'amap-pstate'; chip.hidden = true;
       acc.appendChild(chip);
     }
-    var snap = document.createElement('small'); snap.className = 'hc-snap';
-    acc.appendChild(snap);
+    var snap = cell.querySelector('span') || cell; snap.className = 'hc-snap';
     var act = row.querySelector('td.amap-actions') || row.lastElementChild;
-    var readBtn = btn('amap-btn hc-rc', 'Read campaigns');
+    var readBtn = btn('amap-btn hc-rc', 'Retry'); readBtn.hidden = true;
     act.appendChild(readBtn);
     if (warmOwn) { openBtn = btn('amap-btn hc-ro', 'Open profile'); openBtn.hidden = true; act.appendChild(openBtn); }
     var child = document.createElement('tr');
@@ -10818,7 +10818,7 @@ function amapCampaignMount(host) {
   host.dataset.periodTo = per.to || '';
   host.dataset.periodSpan = per.span || '';
   var seen = {}, accounts = [];
-  scope.querySelectorAll('table.amap-grid td.amap-live[data-account]').forEach(function (c) {
+  scope.querySelectorAll('table.amap-grid td.amap-list[data-account]').forEach(function (c) {
     var a = c.dataset.account;
     if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
   });
@@ -17321,6 +17321,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});
           }
+          if (job.status === 'done' && window.aclAccountRefresh) window.aclAccountRefresh.load();
           if (done) { var f = done; done = null; f(job); }
         }
       })

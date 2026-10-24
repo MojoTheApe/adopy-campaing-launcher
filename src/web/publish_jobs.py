@@ -1251,6 +1251,15 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             wrote = True
         settled = clean or not wrote
         other = settled and _profile_has_other_job(job_id, account_label)
+        if clean and wrote and not dry_run:
+            refresh = getattr(publisher, "refresh_structure", None)
+            if refresh is not None:
+                try:
+                    refresh()
+                except Exception:
+                    # Publishing is already confirmed. Never turn a failed
+                    # local refresh into a retry of a successful write.
+                    logging.getLogger(__name__).warning("Post-publish account list refresh failed")
         try:
             outcome = publisher.finish_job(account_label, clean=settled, other_job_waits=other)
         except Exception:
