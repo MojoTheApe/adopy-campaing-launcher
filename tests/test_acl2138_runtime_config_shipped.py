@@ -57,7 +57,7 @@ def test_bi_cm_map_is_packaged_checked_and_resolves_from_installed_module(tmp_pa
     spec = (ROOT / "packaging/windows/acl_windows.spec").read_text(encoding="utf-8")
     assert '"config" / "bi_cm_map.json"), "config")' in spec
     assert is_bundled("config/bi_cm_map.json")
-    bundle_check = (ROOT / "packaging/windows/test_bundle.ps1").read_text(encoding="utf-8")
+    bundle_check = (ROOT / "packaging/windows/test_bundle.ps1").read_text(encoding="utf-8")  # linux-ok: reads the packaging script as data; does not execute PowerShell
     assert '"_internal/config/bi_cm_map.json"' in bundle_check
     assert 'throw "config/bi_cm_map.json is missing from the bundle."' in bundle_check
 
