@@ -212,7 +212,9 @@ def main():
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception:
+    except BaseException as error:
+        if isinstance(error, SystemExit) and error.code in (None, 0):
+            raise
         settings = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
         write(Path(settings["ipc"]) / f"{sys.argv[2]}.json",
               {"phase": "error", "traceback": traceback.format_exc()})

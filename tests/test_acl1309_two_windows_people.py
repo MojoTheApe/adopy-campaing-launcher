@@ -225,6 +225,11 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                     return value
             process = person_processes.get(person)
             if process and kernel.WaitForSingleObject(process.process, 0) == 0:
+                # Exit is observed after the earlier status read: collect the
+                # producer's final atomic error, not a stale prepared snapshot.
+                if path.exists():
+                    final = json.loads(path.read_text(encoding="utf-8"))
+                    assert final.get("phase") != "error", final
                 code = wintypes.DWORD()
                 assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
                 pytest.fail(f"synthetic Windows process exited before required state: 0x{code.value:08X}")
