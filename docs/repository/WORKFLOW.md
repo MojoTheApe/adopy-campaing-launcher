@@ -123,8 +123,8 @@ Use `check-pr N` for early linkage feedback; run `check-merge N` once immediatel
 It includes linkage, so do not repeat a separate immediate `check-pr` call. Keep
 the distinct required review, merge-recording and delivery actions.
 Final admission checks current review, CI and any configured stage evidence. These agent commands are
-not GitHub branch protection. Verify actual GitHub controls; the private repository
-currently reports a plan restriction for branch protection/rulesets. Never present
+not GitHub branch protection. Verify actual GitHub controls; repository visibility
+alone proves neither branch protection nor ruleset enforcement. Never present
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
