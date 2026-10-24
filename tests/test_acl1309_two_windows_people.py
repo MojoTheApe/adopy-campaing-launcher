@@ -43,6 +43,19 @@ $service = New-Object -ComObject 'Schedule.Service'
 $service.Connect()
 $root = $service.GetFolder('\')
 $output = @{completed=$true}
+function RegisteredSnapshot($task) {
+    $settings = $task.Definition.Settings
+    return @{
+        path=[string]$task.Path; enabled=[bool]$task.Enabled
+        last_run=[string]$task.LastRunTime
+        demand_start=[bool]$settings.AllowDemandStart
+        run_only_if_idle=[bool]$settings.RunOnlyIfIdle
+        run_only_if_network=[bool]$settings.RunOnlyIfNetworkAvailable
+        disallow_battery=[bool]$settings.DisallowStartIfOnBatteries
+        logon_type=[int]$task.Definition.Principal.LogonType
+        run_level=[int]$task.Definition.Principal.RunLevel
+    }
+}
 if ($p.operation -eq 'create') {
     $null = $root.CreateFolder($p.folder, $null)
 } elseif ($p.operation -eq 'start') {
@@ -63,13 +76,38 @@ if ($p.operation -eq 'create') {
     $action.WorkingDirectory = $p.directory
     # TASK_CREATE only: never update a task that might belong to someone else.
     $task = $folder.RegisterTaskDefinition($p.name, $definition, 2, $p.user, $p.password, 1, $null)
+    $output.registered = RegisteredSnapshot ($folder.GetTask($p.name))
+    if (!$output.registered.enabled -or !$output.registered.demand_start -or
+        $output.registered.logon_type -ne 1 -or $output.registered.run_level -ne 0) {
+        throw ('Registered task differs from the controlled Password/Limited demand: ' +
+               ($output.registered | ConvertTo-Json -Compress))
+    }
     $instance = $task.Run($null)
     if (!$instance) { throw 'No actual task instance was started' }
     $output.instance = [string]$instance.InstanceGuid
+    $output.instance_state = [int]$instance.State
 } elseif ($p.operation -eq 'status') {
     $task = $service.GetFolder('\' + $p.folder).GetTask($p.name)
     $output.state = [int]$task.State
     $output.last_result = [int64]$task.LastTaskResult
+    $output.registered = RegisteredSnapshot $task
+    $output.instances = @($task.GetInstances(0) | ForEach-Object {
+        @{guid=[string]$_.InstanceGuid; state=[int]$_.State;
+          action=[string]$_.CurrentAction; engine_pid=[int]$_.EnginePID}
+    })
+    # Read only this test's exact task events. Never enable/change the channel.
+    $channel = 'Microsoft-Windows-TaskScheduler/Operational'
+    $xpath = "*[EventData[Data[@Name='TaskName']='" + $task.Path + "']]"
+    try {
+        $output.events = @(Get-WinEvent -LogName $channel -FilterXPath $xpath -MaxEvents 20 -ErrorAction Stop |
+            ForEach-Object {
+                [xml]$xml = $_.ToXml()
+                @{id=[int]$_.Id; time=[string]$_.TimeCreated;
+                  data=@($xml.Event.EventData.Data | ForEach-Object {
+                      @{name=[string]$_.Name; value=[string]$_.'#text'}
+                  })}
+            })
+    } catch { $output.events_unavailable = [string]$_.Exception.Message }
 } elseif ($p.operation -eq 'cleanup') {
     $folder = $service.GetFolder('\' + $p.folder)
     foreach ($task in @($folder.GetTasks(1))) {
@@ -82,13 +120,15 @@ if ($p.operation -eq 'create') {
     }
     $root.DeleteFolder($p.folder, 0)
 } else { throw 'Unknown controlled task operation' }
-$output | ConvertTo-Json -Compress
+$output | ConvertTo-Json -Depth 8 -Compress
 """
     result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
                             input=json.dumps(payload), capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, f"controlled task operation failed: {result.stderr}"
     observed = json.loads(result.stdout)
     assert observed["completed"] is True
+    if payload["operation"] == "start":
+        assert uuid.UUID(observed["instance"]).int != 0, observed
     return observed
 
 
@@ -172,6 +212,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     ipc.mkdir()
     created, processes = [], []
     person_processes = {}
+    start_receipts = {}
     task_folder = "acl1309-" + uuid.uuid4().hex
     tasks_created = False
 
@@ -232,7 +273,8 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 pytest.fail(f"synthetic Windows process exited before required state: 0x{code.value:08X}")
             time.sleep(0.1)
         task = scheduled_tasks({"operation": "status", "folder": task_folder, "name": person})
-        pytest.fail(f"real account did not reach required state: {person}; task={task}")
+        pytest.fail(f"real account did not reach required state: {person}; "
+                    f"start={start_receipts.get(person)}; task={task}")
 
     sequence = 0
 
@@ -269,7 +311,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                            check=True, capture_output=True, timeout=20)
             helper = Path(__file__).with_name("acl1309_windows_person.py")
             arguments = subprocess.list2cmdline([str(helper), str(settings), user, "person"])
-            scheduled_tasks({"operation": "start", "folder": task_folder, "name": user,
+            start_receipts[user] = scheduled_tasks({"operation": "start", "folder": task_folder, "name": user,
                              "user": os.environ["COMPUTERNAME"] + "\\" + user,
                              "password": password, "executable": sys.executable,
                              "arguments": arguments, "directory": str(helper.parent)})
