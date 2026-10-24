@@ -8356,7 +8356,7 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|multilogin_not_running$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|multilogin_not_running$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|status_shot$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error|proxy_gate_)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
@@ -9987,47 +9987,59 @@ function amapCopyShot(btn) {
 /* } ACL-1430 copy-shot */
 
 /* ACL-1520 copy-group { */
-/* Одна картинка для группы поставщика: полоса с «<имя> — Account <Status> ·
-   <время чтения>» и под ней снимок ACL-1430. Собирается здесь, на canvas, из
-   уже сохранённого PNG; наружу ничего не уходит и нигде не сохраняется —
-   только буфер обмена. Как и у Copy screenshot, ClipboardItem получает
+/* Copy for group: в буфер обмена — сам снимок проблемного состояния
+   (ACL-1430). Полосы «<имя> — Account <Status>» над ним больше нет
+   (ACL-1529, отзыв владельца 03.10: полоса закрывала верх картинки, а имя и
+   статус и так видны в строке дешборда; номер кабинета — в выборе кабинета
+   внутри снимка). Новые снимки уже обрезаны по таблице и белым полям при
+   чтении (в Python, снимок без clip и scale); у старых здесь срезаются
+   пустые белые поля справа и снизу — окно профиля было больше отрисованной
+   страницы. Наружу ничего не уходит и
+   нигде не сохраняется — только буфер обмена. ClipboardItem получает
    обещание, а не готовый blob: клик засчитывается жестом, пока картинка
-   качается и рисуется. Браузер отказал — собранная картинка открывается во
-   вкладке с подсказкой «Right-click → Copy image»; не открылась вкладка или
-   не собралась картинка — прежняя страница снимка /view. */
-function amapComposeGroup(blob, head) {
+   качается. Браузер отказал — картинка открывается во вкладке с подсказкой
+   «Right-click → Copy image»; не открылась вкладка или не загрузился снимок —
+   прежняя страница снимка /view. */
+function amapTrimShot(blob) {
   return new Promise(function (resolve, reject) {
     var src = URL.createObjectURL(blob);
     var img = new Image();
     img.onerror = function () { URL.revokeObjectURL(src); reject(new Error('the screenshot did not load')); };
     img.onload = function () {
       URL.revokeObjectURL(src);
-      /* Ширина не уже 960: на узком снимке строка иначе нечитаема. Шрифт —
-         от ширины, чтобы в группе на телефоне текст был крупным. */
-      var w = Math.max(img.naturalWidth, 960), h = img.naturalHeight;
-      var size = Math.max(28, Math.round(w / 40)), pad = Math.round(size * 0.6);
-      var band = Math.round(size * 2.2);
+      var w = img.naturalWidth, h = img.naturalHeight;
       var c = document.createElement('canvas');
-      c.width = w; c.height = band + h;
+      c.width = w; c.height = h;
       var g = c.getContext('2d');
-      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, c.height);
-      g.fillStyle = '#b3261e'; g.fillRect(0, 0, w, band);
-      g.fillStyle = '#ffffff'; g.textBaseline = 'middle';
-      g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
-      while (size > 12 && g.measureText(head).width > w - 2 * pad) {
-        size -= 2; g.font = 'bold ' + size + 'px Arial, Helvetica, sans-serif';
+      g.drawImage(img, 0, 0);
+      var px = g.getImageData(0, 0, w, h).data;
+      /* «Пусто» — почти белый пиксель: сжатие и сглаживание дают 250+. */
+      function blank(i) { return px[i] > 249 && px[i + 1] > 249 && px[i + 2] > 249; }
+      var right = w, bottom = h, x, y, clear;
+      for (clear = true; right > 1 && clear; ) {
+        for (y = 0; y < h; y++) if (!blank(((y * w) + right - 1) * 4)) { clear = false; break; }
+        if (clear) right--;
       }
-      g.fillText(head, pad, band / 2);
-      g.drawImage(img, 0, band);
-      c.toBlob(function (b) { if (b) resolve(b); else reject(new Error('the image was not composed')); }, 'image/png');
+      for (clear = true; bottom > 1 && clear; ) {
+        for (x = 0; x < right; x++) if (!blank((((bottom - 1) * w) + x) * 4)) { clear = false; break; }
+        if (clear) bottom--;
+      }
+      /* Немного поля, чтобы край таблицы не прилипал к краю картинки. */
+      var pad = Math.round(Math.max(w, h) / 200);
+      right = Math.min(w, right + pad); bottom = Math.min(h, bottom + pad);
+      if (right >= w && bottom >= h) { resolve(blob); return; }
+      var out = document.createElement('canvas');
+      out.width = right; out.height = bottom;
+      out.getContext('2d').drawImage(c, 0, 0);
+      out.toBlob(function (b) { if (b) resolve(b); else reject(new Error('the image was not cropped')); }, 'image/png');
     };
     img.src = src;
   });
 }
 
-/* Собранная картинка во вкладке. Вкладка about:blank — того же источника,
-   поэтому blob-ссылка из этой страницы в ней открывается. false — браузер
-   вкладку не дал. */
+/* Картинка во вкладке. Вкладка about:blank — того же источника, поэтому
+   blob-ссылка из этой страницы в ней открывается. false — браузер вкладку
+   не дал. */
 function amapOpenGroupImage(blob, head) {
   var w = window.open('', '_blank');
   if (!w) return false;
@@ -10051,21 +10063,25 @@ function amapCopyGroup(btn) {
   var url = '/account-spend/status-shot/' + encodeURIComponent(id);
   var head = btn.dataset.head || '';
   var label = 'Copy for group';
-  var composed = fetch(url).then(function (r) {
+  var shot = fetch(url).then(function (r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.blob();
-  }).then(function (b) { return amapComposeGroup(b, head); });
-  composed.catch(function () {});
+  }).then(function (b) {
+    var png = b.type === 'image/png' ? b : new Blob([b], {type: 'image/png'});
+    /* Стенды без этого помощника копируют снимок как есть. */
+    return typeof amapTrimShot === 'function' ? amapTrimShot(png).catch(function () { return png; }) : png;
+  });
+  shot.catch(function () {});
   function fallback() {
     btn.textContent = label;
-    composed.then(function (b) {
+    shot.then(function (b) {
       if (!amapOpenGroupImage(b, head)) window.open(url + '/view', '_blank');
     }, function () { window.open(url + '/view', '_blank'); });
   }
   if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { fallback(); return; }
   btn.textContent = 'Copying…';
   var item;
-  try { item = new ClipboardItem({'image/png': composed}); } catch (e) { fallback(); return; }
+  try { item = new ClipboardItem({'image/png': shot}); } catch (e) { fallback(); return; }
   navigator.clipboard.write([item]).then(function () {
     btn.textContent = 'Copied';
     clearTimeout(btn._amapCopyTimer);
@@ -10095,12 +10111,12 @@ function amapStatusTail(account, s) {
   }
   var word = AMAP_STATUS_WORDS[s.status];
   if (word && typeof window === 'object' && window.AMAP_SHOW_COPY_FOR_GROUP === true) {
-    /* Время в полосе — время чтения, как в шаблоне (st.at). */
+    /* data-head — заголовок вкладки запасного пути; время — время чтения, как в шаблоне (st.at). */
     var at = s.finished_at || s.status_shot_at || '';
     var head = String(account || '').split(' - ')[0] + ' — ' + word + (at ? ' · ' + at : '');
     out += '<div class="amap-st-report">' + (s.status_shot
       ? '<button type="button" class="amap-btn amap-copy-group" data-shot="' + esc(s.status_shot) + '" data-head="'
-        + esc(head) + '" title="Copies one image: ' + esc(head) + ', above the screenshot taken '
+        + esc(head) + '" title="Copies the screenshot taken '
         + esc(s.status_shot_at) + '" onclick="amapCopyGroup(this)">Copy for group</button>'
       : '<button type="button" class="amap-btn amap-copy-group" disabled title="Screenshots are switched off for safety">Copy for group</button>')
       + '<small class="amap-st-hint">Copy for group — paste it into the provider&#39;s group</small></div>';

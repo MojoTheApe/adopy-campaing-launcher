@@ -194,9 +194,9 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               {%- if st.shot_id and st.status == 'unknown' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>{% endif -%}
               {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
               {#- Одна картинка для группы поставщика (ACL-1520, решение владельца
-                  03.10): сверху полоса «<имя> — Account <Status> · <время
-                  чтения>», под ней снимок. Собирается в браузере из снимка
-                  ACL-1430; заменяет Copy text (acl-132) и Copy screenshot.
+                  03.10): снимок ACL-1430 как есть, без полосы сверху
+                  (ACL-1529); data-head — заголовок вкладки запасного пути.
+                  Заменяет Copy text (acl-132) и Copy screenshot.
                   Имя — до « - », как его называют вслух. Снимка нет — кнопка
                   есть, но выключена и говорит почему. -#}
               {%- set st_word = {'disabled': 'Account Disabled', 'restricted': 'Account Restricted', 'blocked': 'Account Blocked', 'review': 'Account Under Review'}.get(st.status) -%}
@@ -206,7 +206,7 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               {%- if st_word and SHOW_COPY_FOR_GROUP -%}
               {%- set group_head = r.account.split(' - ')[0] ~ ' — ' ~ st_word ~ ((' · ' ~ st.at) if st.at else '') -%}
               <div class="amap-st-report">
-              {%- if st.shot_id %}<button type="button" class="amap-btn amap-copy-group" data-shot="{{ st.shot_id }}" data-head="{{ group_head }}" title="Copies one image: {{ group_head }}, above the screenshot taken {{ st.shot_at }}" onclick="amapCopyGroup(this)">Copy for group</button>
+              {%- if st.shot_id %}<button type="button" class="amap-btn amap-copy-group" data-shot="{{ st.shot_id }}" data-head="{{ group_head }}" title="Copies the screenshot taken {{ st.shot_at }}" onclick="amapCopyGroup(this)">Copy for group</button>
               {%- else %}<button type="button" class="amap-btn amap-copy-group" disabled title="Screenshots are switched off for safety">Copy for group</button>{% endif -%}
               <small class="amap-st-hint">Copy for group — paste it into the provider's group</small></div>{% endif -%}
               {%- endif -%}
