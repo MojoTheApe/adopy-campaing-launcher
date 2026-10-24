@@ -245,9 +245,9 @@ def _safe_failure(snap) -> tuple[str, str]:
         # message, URL, proxy credential, account label or token leaves here.
         text = (snap.error + " " + " ".join(snap.problems)).lower()
         code = next((kind for words, kind in (
-            (("proxy",), "proxy_auth"), (("logged out", "not logged"), "logged_out"),
+            (("logged out", "not logged"), "logged_out"),
             (("profile not found", "no profile", "missing profile", "no_profile"), "missing_profile"),
-            (("connection", "network", "transport", "disconnected"), "transport"),
+            (("connection", "network", "transport", "disconnected", "proxy"), "transport"),
             (("map changed",), "account_map_changed"), (("no access", "permission denied"), "access"),
         ) if any(word in text for word in words)), "")
     return code, _SAFE_FAILURES.get(code, _GENERIC_ERROR)

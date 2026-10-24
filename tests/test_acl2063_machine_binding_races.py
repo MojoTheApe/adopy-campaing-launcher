@@ -113,3 +113,30 @@ def test_resolved_foreign_session_cannot_read_or_relay_under_old_key(monkeypatch
     ci.run_read('A', trigger='schedule')
     assert calls == [], 'an actual session of another account must be refused before Graph reads'
     assert MachineStore().result(old)['payload']['campaigns'] == []
+
+
+def test_actual_profiles_cooldown_is_not_switched_by_a_later_map_lookup(monkeypatch):
+    from src.meta_campaign_agent.ad_account_map import AccountMapEntry
+    from src.analysis_agent import account_refresh_machine as machine
+    import time
+    p, q = fake_profile('cooldown-P'), fake_profile('cooldown-Q')
+    holder = [AccountMapEntry(ad_account_id='act_12345678', profile_id=p)]
+    monkeypatch.setattr(ci._as, '_entry_for', lambda a: holder[0])
+    monkeypatch.setattr(ci, 'backend_ready', lambda: True)
+    verify = machine.verify_binding
+    def change_after_verified(act, profile):
+        verify(act, profile)
+        holder[0] = AccountMapEntry(ad_account_id='act_12345678', profile_id=q)
+    monkeypatch.setattr(machine, 'verify_binding', change_after_verified)
+    monkeypatch.setattr(api, '_COOLDOWN', {p: (time.monotonic() + 300, 'checkpoint')})
+    checked, opened = [], []
+    cooldown = api._cooldown_state
+    def observe(key):
+        checked.append(key)
+        return cooldown(key)
+    monkeypatch.setattr(api, '_cooldown_state', observe)
+    monkeypatch.setattr(api, '_warm_registry', lambda: opened.append('warm'))
+    monkeypatch.setattr(api, '_open_gated', lambda *a: opened.append('open'))
+    ci.run_read('A', trigger='schedule')
+    assert checked == [p], 'cooldown belongs to the actual immutable session profile, not a later map'
+    assert opened == [], 'an active actual-profile cooldown must refuse before any external open'

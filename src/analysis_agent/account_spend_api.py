@@ -526,8 +526,12 @@ def _open_session(account: str, *, commands: bool = False):
     if not (getattr(entry, "profile_id", "") or "").strip():
         raise ApiReadError(f"{account} has no profile_id in the account map")
     from src.analysis_agent.account_refresh_machine import verify_binding
-    verify_binding(act, entry.profile_id)
-    key = _as._profile_key(account)   # ACL-1853: физический UUID; ярлык ключом не бывает
+    from src.fb_ads_rpa.profile_lease import physical_profile_key
+    profile_id = entry.profile_id.strip()
+    verify_binding(act, profile_id)
+    # The entry is immutable. A later map lookup must not move this actual
+    # session's cooldown to another physical profile.
+    key = physical_profile_key(profile_id)
     left, why = _cooldown_state(key)
     if left > 0:
         mins = int(left // 60) + 1
@@ -547,7 +551,6 @@ def _open_session(account: str, *, commands: bool = False):
 
     # ACL-1812: профиль, который человек держит «тёплым» (Open profiles for today),
     # работает через реестр: одна вкладка робота на все действия, без перезагрузки.
-    profile_id = (getattr(entry, "profile_id", "") or "").strip()
     if profile_id and _warm_registry().is_warm(profile_id):
         with _warm_session(account, act, key, profile_id, commands) as warm_sess:
             yield warm_sess

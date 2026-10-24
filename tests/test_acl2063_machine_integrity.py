@@ -65,3 +65,11 @@ def test_tampered_result_fails_closed_without_projection(dashboards):
 
 
 from tests.test_acl2063_machine_queue import dashboards
+
+
+def test_unknown_proxy_timeout_does_not_claim_wrong_authentication():
+    value = envelope(ci.Snapshot(account='A', state='failed',
+                                 error='ConnectionError: proxy connection timed out at synthetic-private'))
+    assert value['error_code'] == 'transport'
+    assert 'connection failed' in value['error']
+    assert 'wrong or expired' not in value['error'] and 'synthetic-private' not in value['error']
