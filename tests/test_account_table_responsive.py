@@ -55,17 +55,15 @@ def test_account_identity_and_actions_remain_reachable(browser, width, theme, ro
         scroll.focus()
         scroll.evaluate("el => { el.scrollLeft = el.scrollWidth; }")
         page.wait_for_timeout(200)
-        page.locator(".amap-read").focus()
-        bounds = page.locator(".amap-read").bounding_box()
+        # ACL-2063 removes manual reads; exercise a real, always enabled action.
+        page.locator(".amap-x-acl").focus()
+        bounds = page.locator(".amap-x-acl").bounding_box()
         region = scroll.bounding_box()
         assert region["x"] <= bounds["x"]
         assert bounds["x"] + bounds["width"] <= region["x"] + region["width"] + 1
         assert page.locator(".amap-actions").evaluate("el => el.scrollWidth <= el.clientWidth")
-        # ACL-1798's staged amapCampaignTree appends this exact action to the same
-        # cell. A fourth profile action covers its recovery path without live RPA.
-        page.locator(".amap-actions").evaluate("""el => {
-            el.insertAdjacentHTML('beforeend', '<button type="button" class="amap-btn hc-rc">Read campaigns</button><button type="button" class="amap-btn hc-ro">Open profile</button>');
-        }""")
+        # Test all actual actions in the current shared partial. Queue Retry and
+        # warm-profile controls are exercised by the production-script fixtures.
         for button in page.locator(".amap-actions button").all():
             button.focus()
             bounds = button.bounding_box()
@@ -105,9 +103,9 @@ def test_scroll_region_holds_only_the_table_beside_the_campaign_sections(browser
         scroll.focus()
         scroll.evaluate("el => { el.scrollLeft = el.scrollWidth; }")
         page.wait_for_timeout(200)
-        page.locator(".amap-read").focus()
+        page.locator(".amap-x-acl").focus()
         page.wait_for_timeout(300)
-        bounds, region = page.locator(".amap-read").bounding_box(), scroll.bounding_box()
+        bounds, region = page.locator(".amap-x-acl").bounding_box(), scroll.bounding_box()
         assert region["x"] <= bounds["x"] and bounds["x"] + bounds["width"] <= region["x"] + region["width"] + 1
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     finally:

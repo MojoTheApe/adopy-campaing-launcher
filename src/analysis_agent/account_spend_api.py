@@ -306,6 +306,8 @@ class _Session:
     keep_grace_s: float | None = None
     #: ACL-2117: keep-open включён — окно остаётся «удобным» kept-окном без своего таймера.
     keep_convenience: bool = False
+    #: Immutable actual producer identity; never inferred from a later map read.
+    profile_id: str = ""
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
@@ -466,7 +468,7 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
             max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
         )
-        sess = _Session(client=client, act=act, account=account)
+        sess = _Session(client=client, act=act, account=account, profile_id=profile_id)
         try:
             yield sess
         except GraphStop as exc:
@@ -494,9 +496,14 @@ def _touch_kept_window(account: str) -> None:
 @contextmanager
 def _session(account: str, *, commands: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
+    from src.analysis_agent.account_refresh_state import read_session, target_activity
+
     try:
-        with _open_session(account, commands=commands) as sess:
-            yield sess
+        # Вызывающий уже держит физическую аренду профиля. Порядок тот же
+        # у чтения после команды/публикации: профиль, затем одна общая читалка.
+        with target_activity(_as._profile_key(account)), read_session(priority=commands):
+            with _open_session(account, commands=commands) as sess:
+                yield sess
     finally:
         _touch_kept_window(account)
 
@@ -518,7 +525,13 @@ def _open_session(account: str, *, commands: bool = False):
 
     if not (getattr(entry, "profile_id", "") or "").strip():
         raise ApiReadError(f"{account} has no profile_id in the account map")
-    key = _as._profile_key(account)   # ACL-1853: физический UUID; ярлык ключом не бывает
+    from src.analysis_agent.account_refresh_machine import verify_binding
+    from src.fb_ads_rpa.profile_lease import physical_profile_key
+    profile_id = entry.profile_id.strip()
+    verify_binding(act, profile_id)
+    # The entry is immutable. A later map lookup must not move this actual
+    # session's cooldown to another physical profile.
+    key = physical_profile_key(profile_id)
     left, why = _cooldown_state(key)
     if left > 0:
         mins = int(left // 60) + 1
@@ -538,7 +551,6 @@ def _open_session(account: str, *, commands: bool = False):
 
     # ACL-1812: профиль, который человек держит «тёплым» (Open profiles for today),
     # работает через реестр: одна вкладка робота на все действия, без перезагрузки.
-    profile_id = (getattr(entry, "profile_id", "") or "").strip()
     if profile_id and _warm_registry().is_warm(profile_id):
         with _warm_session(account, act, key, profile_id, commands) as warm_sess:
             yield warm_sess
@@ -593,7 +605,7 @@ def _open_session(account: str, *, commands: bool = False):
             min_interval_s=_env_number(MIN_INTERVAL_ENV, DEFAULT_MIN_INTERVAL_S, 0.5, 10.0),
             max_calls=int(_env_number(MAX_CALLS_ENV, DEFAULT_MAX_CALLS, 4, 60)),
         )
-        sess = _Session(client=client, act=act, account=account)
+        sess = _Session(client=client, act=act, account=account, profile_id=profile_id)
         try:
             yield sess
         finally:
@@ -655,10 +667,23 @@ def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dic
         event["error"] = error[:200]
     if stop:
         event["stop"] = stop
+    trigger = sess_notes.get("trigger")
+    if trigger:
+        event["trigger"] = trigger  # ACL-2063: чем вызвано чтение (schedule/attention/...)
     _tm.record(event)
     _as._record("api_read", ok, took_s,
                 {"account": account, "kind": kind, "source": "api",
-                 "calls": sess_notes.get("calls", 0), **({"stop": stop} if stop else {})})
+                 "calls": sess_notes.get("calls", 0), **({"stop": stop} if stop else {}),
+                 **({"trigger": trigger} if trigger else {})})
+
+
+def _telemetry_skip(account: str, trigger: str, reason: str = "skipped_fresh") -> None:
+    """ACL-2063: чтение пропущено (свежо) — отдельное событие, не шаг `api_read`.
+
+    Счёт `api_read` остаётся числом настоящих открытий профиля.
+    """
+    _tm.record({"event": "fb_api_skip", "kind": reason, "source": "api", "trigger": trigger})
+    _as._record("api_read_skip", True, 0.0, {"account": account, "reason": reason, "trigger": trigger})
 
 
 def _report_stop(exc: BaseException, account: str) -> None:

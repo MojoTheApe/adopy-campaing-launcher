@@ -15,10 +15,13 @@ import inspect
 from src.fb_ads_rpa import crop_step
 from src.fb_ads_rpa import meta_dom as md
 from src.fb_ads_rpa import run_telemetry as rt
+from src.fb_ads_rpa import page_capture
 from tests import rpa_module_state as state
 
 MODULES = {state.META_DOM: md, state.CROP_STEP: crop_step}
 PROBE = "_acl2078_probe"
+_ORIGINAL_CAPTURE = page_capture.capture
+_ORIGINAL_STALL_EVIDENCE = md._stall_evidence
 
 
 def _dirty_everything() -> None:
@@ -64,6 +67,20 @@ def test_1_a_test_leaves_every_piece_of_module_state_dirty():
 
 def test_2_the_next_test_starts_clean():
     _assert_clean()
+
+
+def test_3_patched_missing_thread_local_does_not_leak_other_mocks(monkeypatch):
+    # Undo must restore the earlier mocks before reset removes a newly added
+    # TLS field. Otherwise delattr(outcome) aborts the rest of monkeypatch undo.
+    monkeypatch.setattr(page_capture, "capture", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_stall_evidence", lambda *a, **k: None)
+    monkeypatch.setattr(md._LAST_OPEN, "outcome", "fixture-probe", raising=False)
+
+
+def test_4_the_next_test_has_the_real_capture_and_stall_functions():
+    assert page_capture.capture is _ORIGINAL_CAPTURE
+    assert md._stall_evidence is _ORIGINAL_STALL_EVIDENCE
+    assert not hasattr(md._LAST_OPEN, "outcome")
 
 
 def test_reset_clears_everything_on_its_own():

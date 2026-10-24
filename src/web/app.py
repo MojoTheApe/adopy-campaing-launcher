@@ -1407,13 +1407,12 @@ templates.env.filters["anchor_slug"] = _anchor_slug
 
 
 def _campaign_table_api() -> bool:
-    """Какой список кампаний рисовать у аккаунта (ACL-1800): `api` — таблица страны, `rpa` — прежний список из Read spend.
+    """ACL-2063: saved structure is available regardless of the read backend.
 
-    Читается при каждом рендере, чтобы смена `ACL_FB_BACKEND` не требовала ничего, кроме перезапуска, и тест мог её переключать.
+    This retained template predicate selects the view only. Real reads and
+    commands continue to enforce their API-backend/loopback guards.
     """
-    from src.analysis_agent import campaign_inventory as _ci
-
-    return _ci.backend_ready()
+    return True
 
 
 templates.env.globals["campaign_table_api"] = _campaign_table_api
@@ -1735,6 +1734,8 @@ async def health() -> JSONResponse:
     """Fast identity check for the Windows launcher; never loads workbooks.
 
     `version` lets the update helper tell the new release from the old one.
+    `config` says whose dashboard this is: the launcher attaches only to its
+    own, and anything else on the port means it takes another (ACL-1309).
     """
     # ACL-1399: первый вопрос о версии — это git (~3 с на загруженной
     # машине). /health — то, чем лаунчер проверяет, жив ли сервер: версию
@@ -1745,7 +1746,10 @@ async def health() -> JSONResponse:
         await asyncio.to_thread(known.wait, 0.3)
     # Прочитана — повторный вызов берёт её из кэша acl_update мгновенно.
     release = _installed_release() if known.is_set() else {"tag": ""}
-    return JSONResponse({"app": "ACL", "ok": True, "version": (release or {}).get("tag", "")})
+    from config.paths import config_identity
+
+    return JSONResponse({"app": "ACL", "ok": True, "version": (release or {}).get("tag", ""),
+                         "config": config_identity()})
 
 
 _INSTALLED: dict = {"event": None}
@@ -1798,6 +1802,17 @@ def _warm_control_paths() -> None:
 @app.on_event("startup")
 async def _warm_on_startup() -> None:
     _warm_control_paths()
+    from src.analysis_agent import account_refresh, campaign_inventory
+
+    if campaign_inventory.backend_ready():
+        account_refresh.queue().start()
+
+
+@app.on_event("shutdown")
+def _stop_account_refresh() -> None:
+    from src.analysis_agent import account_refresh
+
+    account_refresh.stop_queue()
 
 
 @app.get("/acl/update/check")
@@ -4507,6 +4522,73 @@ async def account_spend_status(
             },
         }
     )
+
+
+# ───────────────────────── обновление структуры, не зависящее от дат (ACL-2063) ─────────────────────────
+
+
+@app.post("/account-refresh/page-open")
+async def account_refresh_page_open(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+    from src.analysis_agent import account_refresh as refresh, campaign_inventory as ci
+
+    if not ci.backend_ready():
+        return JSONResponse({"ok": False, "code": ci.NEEDS_API_CODE, "error": ci.NEEDS_API_MESSAGE}, status_code=409)
+    form = await read_form(request)
+    accounts = refresh.dashboard_accounts()
+    if accounts:
+        refused = _mlx_batch_refusal(form, accounts[0])
+        if refused is not None:
+            return refused
+    try:
+        q = refresh.queue()
+        result = await run_in_threadpool(q.page_open, port=request.url.port or 80,
+                                        view_only=str(form.get("view_only") or "").lower() in {"1", "true"})
+        q.start()
+    except (OSError, RuntimeError, ValueError):
+        return JSONResponse({"ok": False, "error": "Account refresh could not start. Check saved settings and retry."}, status_code=503)
+    return JSONResponse({"ok": True, **result})
+
+
+@app.post("/account-refresh/request")
+async def account_refresh_request(request: Request) -> JSONResponse:
+    from starlette.concurrency import run_in_threadpool
+    from src.analysis_agent import account_refresh as refresh, campaign_inventory as ci
+
+    form = await read_form(request)
+    trigger = str(form.get("trigger") or "").strip()
+    if trigger not in {"attention", "retry"}:
+        return JSONResponse({"ok": False, "error": "trigger must be attention or retry"}, status_code=400)
+    if not ci.backend_ready():
+        return JSONResponse({"ok": False, "code": ci.NEEDS_API_CODE, "error": ci.NEEDS_API_MESSAGE}, status_code=409)
+    account = refresh.resolve_account(str(form.get("account") or ""))
+    if account is None:
+        return JSONResponse({"ok": False, "error": "This account is no longer on the dashboard."}, status_code=404)
+    refused = _mlx_batch_refusal(form, account)
+    if refused is not None:
+        return refused
+    try:
+        q = refresh.queue()
+        result = await run_in_threadpool(q.request, account, trigger, force=trigger == "retry")
+        q.start()
+    except (OSError, RuntimeError, ValueError):
+        return JSONResponse({"ok": False, "error": "Account refresh could not be queued. Check saved settings and retry."}, status_code=503)
+    return JSONResponse({"ok": True, **result})
+
+
+@app.get("/account-refresh/state")
+@_off_loop
+def account_refresh_state() -> JSONResponse:
+    from src.analysis_agent import account_refresh as refresh, campaign_inventory as ci
+
+    try:
+        accounts = refresh.dashboard_accounts()
+        state = refresh.queue().state()
+    except (OSError, RuntimeError, ValueError):
+        return JSONResponse({"ok": False, "error": "Saved account refresh state is unavailable. Check the settings backup."}, status_code=503)
+    state["rows"] = {a: value for a, value in state["rows"].items() if a in accounts}
+    return JSONResponse({"ok": True, **state, "accounts": ci.summaries(accounts),
+                         "needs_api": not ci.backend_ready()})
 
 
 # ───────────────────────── опись кампаний для Home (ACL-1798) ─────────────────────────
