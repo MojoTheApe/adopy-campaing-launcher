@@ -33,6 +33,24 @@ def wait_for(path, timeout=90):
         time.sleep(0.1)
 
 
+def marker_namespace_controls(kernel, unique_name):
+    """Two owned diagnostic objects; never alter an existing ACL marker."""
+    from ctypes import wintypes
+
+    create = kernel.CreateMutexExW
+    create.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD]
+    create.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    controls = []
+    for name in (None, unique_name):
+        handle = create(None, name, 0, 0x00100000)
+        controls.append({"kind": "unnamed" if name is None else "unique_local",
+                         "created": bool(handle), "last_error": ctypes.get_last_error()})
+        if handle:
+            assert kernel.CloseHandle(handle), "could not close owned diagnostic mutex"
+    return controls
+
+
 def observe_launcher_gates(launcher, diagnostics):
     """Retain actual gate outcomes without changing calls, rights or results."""
     import config.paths
@@ -61,27 +79,36 @@ def observe_launcher_gates(launcher, diagnostics):
     marker = launcher._installer_presence_mutex
 
     def observed_marker(kernel):
-        event = {"called": False, "acquired": False}
+        event = {"acquired": False, "operations": []}
         diagnostics["markers"].append(event)
-        native = kernel.CreateMutexExW
-        previous = native.errcheck
+        originals = []
 
-        def checked(result, function, arguments):
-            # Capture the original result/error before LocalFree cleanup.
-            event.update(called=True, acquired=bool(result), last_error=ctypes.get_last_error())
-            return previous(result, function, arguments) if previous else result
+        def observe(name, access_index):
+            native = getattr(kernel, name)
+            previous = native.errcheck
+            originals.append((native, previous))
 
-        native.errcheck = checked
+            def checked(result, function, arguments):
+                # Capture the original result/error before LocalFree cleanup.
+                event["operations"].append({"operation": name, "acquired": bool(result),
+                    "desired_access": arguments[access_index], "last_error": ctypes.get_last_error()})
+                return previous(result, function, arguments) if previous else result
+
+            native.errcheck = checked
+
+        observe("OpenMutexW", 0)
+        observe("CreateMutexExW", 3)
         try:
             result = marker(kernel)
-            if not event["called"]:
-                event.update(last_error=ctypes.get_last_error(), stage="security_descriptor")
+            event["acquired"] = bool(result)
+            event["return_last_error"] = ctypes.get_last_error()
             return result
         finally:
-            if previous is None:
-                del native.errcheck
-            else:
-                native.errcheck = previous
+            for native, previous in originals:
+                if previous is None:
+                    del native.errcheck
+                else:
+                    native.errcheck = previous
 
     launcher._installer_presence_mutex = observed_marker
     find_own = launcher.local_dashboard.find_own
@@ -129,6 +156,10 @@ def main():
 
     assert not ctypes.windll.shell32.IsUserAnAdmin(), "acceptance must use a standard local account"
     _native_diagnostics["mode"] = mode
+    if mode == "person":
+        _native_diagnostics["namespace_controls"] = marker_namespace_controls(
+            ctypes.WinDLL("kernel32", use_last_error=True),
+            f"Local\\{ipc.name}-{person}-namespace-control")
     observe_launcher_gates(launcher, _native_diagnostics)
 
     local_dashboard.PORTS = settings["ports"]
