@@ -1,12 +1,12 @@
-"""mtime-keyed in-process cache for the morning report.
+"""File-version-keyed in-process cache for the morning report.
 
 Single-user, single-uvicorn-worker tool. The cache holds:
 
-  - enriched Excel DataFrame (keyed by excel path + mtime) — expensive to rebuild
+  - enriched Excel DataFrame (keyed by path + mtime + size) — expensive to rebuild
   - full report dict (GSheet + Excel) — Refresh reuses the DF when Excel unchanged
 
-  - GET /  : if report cache matches Excel mtime, return instantly.
-  - POST /refresh : force-rebuild report (reuse Excel DF if mtime unchanged).
+  - GET /  : if report cache matches the file version, return instantly.
+  - POST /refresh : force-rebuild report (reuse Excel DF if the version is unchanged).
   - GET /details : uses cached enriched_df; builds if empty.
 
 Known race (per design 7C, accepted): if /refresh swaps the cache while a
@@ -25,6 +25,7 @@ import pandas as pd
 from src.analysis_agent import bi_stats
 from src.analysis_agent.morning_service import (
     _resolve_excel_path,
+    _workbook_key,
     load_morning_report,
 )
 
@@ -35,22 +36,22 @@ from src.analysis_agent.morning_service import (
 # would have thrown away the parsed workbook and re-read ~71k rows each time.
 _REVISIONS = count(1)
 _CACHE: Dict[str, Any] = {
-    "key": None,            # (excel_path, mtime) for full report — None means empty
+    "key": None,            # file-version/source key for full report — None means empty
     "reports": {},          # cm -> report dict
     "df": None,             # pd.DataFrame (same as excel_df when warm)
     "warnings": [],         # list[str]
     "built_at": None,       # ISO datetime string
-    "excel_key": None,      # (excel_path, mtime) for reused DF
+    "excel_key": None,      # file-version/source key for reused DF
     "excel_df": None,       # pd.DataFrame — survives report-only refresh
     # (key, {cm: report}, df, warnings) — то, что видят читатели (ACL-1399)
     "entry": None,
 }
 
 
-def _excel_key(excel_path: str) -> Optional[Tuple[str, float]]:
+def _excel_key(excel_path: str) -> Optional[Tuple[str, float, int]]:
     if not os.path.isfile(excel_path):
         return None
-    return (excel_path, os.path.getmtime(excel_path))
+    return _workbook_key(excel_path)
 
 
 def _current_key(excel_path: str):
@@ -114,9 +115,9 @@ def get_cached_report(
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Return the latest (report, df, warnings).
 
-    Rebuilds when the Excel file's mtime differs from the cached entry, or
+    Rebuilds when the Excel file's version differs from the cached entry, or
     when force_rebuild is set. On force_rebuild, reuses the enriched DataFrame
-    if Excel mtime is unchanged (only GSheet + report assembly re-run).
+    if the Excel version is unchanged (only GSheet + report assembly re-run).
 
     Blocking: a cold build takes a minute. Never call it on the event loop —
     handlers go through a worker thread (see src/web/app.py, ACL-1399).

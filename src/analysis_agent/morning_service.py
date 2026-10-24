@@ -144,8 +144,10 @@ _WORKBOOK_CACHE: Dict[str, Any] = {"key": None, "df": None}
 _WORKBOOK_LOCK = threading.Lock()
 
 
-def _read_workbook_cached(excel_path: str) -> pd.DataFrame:
-    key = (excel_path, os.path.getmtime(excel_path))
+def _read_workbook_cached(excel_path: str, *, version: Optional[str] = None) -> pd.DataFrame:
+    # Reuse the exact version captured for archive admission. A replacement may
+    # preserve mtime while changing size, so the reader must use that same key.
+    key = version if version is not None else _workbook_version(excel_path)
     with _WORKBOOK_LOCK:
         if _WORKBOOK_CACHE["key"] != key:
             _WORKBOOK_CACHE["df"] = read_stats_workbook(excel_path)
@@ -171,9 +173,13 @@ def merge_bi_with_history(bi: pd.DataFrame, book: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([history, bi], ignore_index=True, sort=False)
 
 
-def _workbook_version(excel_path: str) -> str:
+def _workbook_key(excel_path: str) -> Tuple[str, float, int]:
     st = os.stat(excel_path)
-    return f"{os.path.abspath(excel_path)}|{st.st_mtime}|{st.st_size}"
+    return os.path.abspath(excel_path), st.st_mtime, st.st_size
+
+
+def _workbook_version(excel_path: str) -> str:
+    return "|".join(str(part) for part in _workbook_key(excel_path))
 
 
 def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]:
@@ -201,7 +207,7 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
         if os.path.isfile(excel_path):
             version = _workbook_version(excel_path)
             if bi_archive.workbook_version_seen() != version:
-                bi_archive.ingest_workbook(_read_workbook_cached(excel_path), version)
+                bi_archive.ingest_workbook(_read_workbook_cached(excel_path, version=version), version)
         stored = bi_archive.read_archive()
     except Exception as e:  # noqa: BLE001 — архив сломан: без него, как до архива
         notes.append(f"Stats archive unavailable ({type(e).__name__}: {bi_stats.redact(str(e))}).")

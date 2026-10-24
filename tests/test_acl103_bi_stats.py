@@ -1,8 +1,10 @@
 """ACL-103: статистика из BI (MySQL) в схеме Stats-книги, с фолбэком на книгу."""
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -261,6 +263,70 @@ def test_workbook_imported_once_and_never_over_bi_days(monkeypatch, tmp_path):
     by_day = rows.groupby("Date")["$ Spend"].sum().to_dict()
     assert by_day == {pd.Timestamp("2026-01-05"): 7.0, pd.Timestamp("2026-10-18"): 12.5}
     assert bi_archive.archive_days() == {"bi": 1, "workbook": 1}
+
+
+@pytest.mark.parametrize("report_refresh", [None, False, True], ids=["archive", "report", "forced-report"])
+def test_replaced_workbook_with_preserved_mtime_imports_its_actual_new_rows(monkeypatch, tmp_path, report_refresh):
+    from src.analysis_agent import bi_archive
+
+    _enable_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_KNOWN]))
+    book = _book_two_days(tmp_path / "stats.xlsx")
+    read_rows = lambda: morning_service._read_stats_rows(str(book))
+    if report_refresh is not None:
+        monkeypatch.setattr(cache, "_CACHE", deepcopy(cache._CACHE))
+        cache.cache_clear()
+        monkeypatch.setattr(cache, "_resolve_excel_path", lambda _p: str(book))
+        monkeypatch.setitem(bi_stats._REV, "value", "unchanged-bi-revision")
+        monkeypatch.setattr(bi_stats, "refresh_revision", lambda **kw: "unchanged-bi-revision")
+        monkeypatch.setattr(bi_stats, "ensure_revision_watcher", lambda: None)
+        load = morning_service.load_morning_report
+        monkeypatch.setattr(cache, "load_morning_report", lambda **kw: load(
+            excel_path=str(book), skip_gsheet=True, account_rows_cached=[], **kw))
+
+        def read_rows():
+            _, rows, _ = cache.get_cached_report(force_rebuild=report_refresh, my_cm="Evgeni Sedin")
+            return rows, rows.attrs["stats_source"], rows.attrs["stats_note"]
+
+    original_stat = book.stat()
+    reads, imports = [], []
+    read = morning_service.read_stats_workbook
+    ingest = bi_archive.ingest_workbook
+    monkeypatch.setattr(morning_service, "read_stats_workbook", lambda p: reads.append(p) or read(p))
+    monkeypatch.setattr(bi_archive, "ingest_workbook", lambda df, version: imports.append(version) or ingest(df, version))
+
+    first, _, _ = read_rows()
+    assert first.groupby("Date")["$ Spend"].sum().to_dict() == {
+        pd.Timestamp("2026-01-05"): 7.0, pd.Timestamp("2026-10-18"): 12.5,
+    }
+    original_version = bi_archive.workbook_version_seen()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(STATS_REQUIRED_COLUMNS + ["Date"])
+    for day, spend in ((datetime(2026, 1, 5), 91.0), (datetime(2026, 1, 6), 31.0),
+                       (datetime(2026, 10, 18), 99.0)):
+        ws.append(["Mexico", "FacebookDoc101", "MX_AMZ_All_Image_134_HV_40_22.10", "Image 134",
+                   1, 0, spend, "Evgeni Sedin", "Amazon", 0.0, day])
+    wb.save(book)
+    os.utime(book, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+    assert book.stat().st_mtime_ns == original_stat.st_mtime_ns
+    assert book.stat().st_size != original_stat.st_size
+
+    replaced, source, note = read_rows()
+    expected = {pd.Timestamp("2026-01-05"): 91.0, pd.Timestamp("2026-01-06"): 31.0,
+                pd.Timestamp("2026-10-18"): 12.5}
+    assert replaced.groupby("Date")["$ Spend"].sum().to_dict() == expected
+    assert source == "bi" and note is None
+    replacement_version = morning_service._workbook_version(str(book))
+    assert replacement_version != original_version
+    assert bi_archive.workbook_version_seen() == replacement_version
+
+    unchanged, _, _ = read_rows()
+    assert unchanged.groupby("Date")["$ Spend"].sum().to_dict() == expected
+    assert len(reads) == 2 and imports == [original_version, replacement_version]
+    assert bi_archive.archive_days() == {"bi": 1, "workbook": 2}
 
 
 def test_cm_map_change_applies_to_archived_days(monkeypatch, tmp_path):

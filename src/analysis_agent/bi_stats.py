@@ -279,7 +279,7 @@ def ensure_revision_watcher() -> None:
         thread.start()
 
 
-def source_key(excel_key: Optional[Tuple[str, float]]) -> Optional[Tuple[Any, ...]]:
+def source_key(excel_key: Optional[Tuple[str, float, int]]) -> Optional[Tuple[Any, ...]]:
     """Ключ кэша отчёта: ревизия BI плюс ключ книги (книга — фолбэк)."""
     rev = known_revision()
     if rev is None:
