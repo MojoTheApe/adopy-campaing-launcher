@@ -204,6 +204,12 @@ def _slot_queue_never_reads_the_host_memory(monkeypatch):
         return ps.MemoryReading(total_mb=64 * 1024, available_mb=48 * 1024)
 
     monkeypatch.setitem(ps.ProfileSlots.__init__.__kwdefaults__, "memory", plenty)
+    # ACL-1642: «профиль уже открыт?» тоже не спрашиваем у машины — иначе каждое
+    # ожидание гоняет psutil по процессам раннера. Тесты самой проверки
+    # передают `check` явно.
+    if hasattr(ps, "OpenProfileProbe"):
+        monkeypatch.setattr(ps.OpenProfileProbe.__init__, "__defaults__",
+                            (lambda profiles: set(),))
     # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
     # (`keep`), не должны занимать места следующему.
     monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))

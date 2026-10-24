@@ -23,6 +23,7 @@ playwright_datas, playwright_binaries, playwright_hiddenimports = collect_all("p
 datas = [
     (str(PROJECT_ROOT / ".env.example"), "."),
     (str(PROJECT_ROOT / "config" / "ad_account_map.example.csv"), "config"),
+    (str(PROJECT_ROOT / "config" / "account_name_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "ads_manager_selectors.yaml"), "config"),
     (str(PROJECT_ROOT / "config" / "analysis_reading_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "benchmarks.json"), "config"),
