@@ -17,19 +17,37 @@ import sys
 import uuid
 from types import SimpleNamespace
 import pytest
+from tests.acl2063_task_control import run_task_control, preserve_primary_cleanup, private_payload
 pytestmark = pytest.mark.windows_only(reason="two real standard Windows users and production ProgramData coordination DACL/locks")
 
 def scheduled_tasks(payload):
     """Use only the test's unique folder; credentials travel over stdin."""
+    payload = private_payload(payload)
     suffix = payload["folder"].removeprefix("acl2063-")
     assert payload["folder"].startswith("acl2063-")
     assert len(suffix) == 32 and all(c in "0123456789abcdef" for c in suffix)
     script = r"""
 $ErrorActionPreference = 'Stop'
 $p = [Console]::In.ReadToEnd() | ConvertFrom-Json
+function Phase($name) {
+    [Console]::Error.WriteLine('ACL2063_TASK_PHASE:' + $name)
+    [Console]::Error.Flush()
+}
+trap {
+    [Console]::Error.WriteLine('ACL2063_TASK_HRESULT:' + [string][int]$_.Exception.HResult)
+    [Console]::Error.Flush()
+    exit 1
+}
+Phase 'powershell.begin'
+Phase 'service.create.begin'
 $service = New-Object -ComObject 'Schedule.Service'
+Phase 'service.create.end'
+Phase 'service.connect.begin'
 $service.Connect()
+Phase 'service.connect.end'
+Phase 'root.open.begin'
 $root = $service.GetFolder('\')
+Phase 'root.open.end'
 $output = @{completed=$true}
 function RegisteredSnapshot($task) {
     $settings = $task.Definition.Settings
@@ -45,10 +63,16 @@ function RegisteredSnapshot($task) {
     }
 }
 if ($p.operation -eq 'create') {
+    Phase 'folder.create.begin'
     $null = $root.CreateFolder($p.folder, $null)
+    Phase 'folder.create.end'
 } elseif ($p.operation -eq 'start') {
+    Phase 'task.folder.begin'
     $folder = $service.GetFolder('\' + $p.folder)
+    Phase 'task.folder.end'
+    Phase 'task.definition.begin'
     $definition = $service.NewTask(0)
+    Phase 'task.definition.end'
     $definition.Principal.UserId = $p.user
     $definition.Principal.LogonType = 1  # TASK_LOGON_PASSWORD
     $definition.Principal.RunLevel = 0  # TASK_RUNLEVEL_LUA, never Highest
@@ -63,29 +87,42 @@ if ($p.operation -eq 'create') {
     $action.Arguments = $p.arguments
     $action.WorkingDirectory = $p.directory
     # TASK_CREATE only: never update a task that might belong to someone else.
+    Phase 'register.begin'
     $task = $folder.RegisterTaskDefinition($p.name, $definition, 2, $p.user, $p.password, 1, $null)
+    Phase 'register.end'
+    Phase 'snapshot.begin'
     $output.registered = RegisteredSnapshot ($folder.GetTask($p.name))
+    Phase 'snapshot.end'
     if (!$output.registered.enabled -or !$output.registered.demand_start -or
         $output.registered.logon_type -ne 1 -or $output.registered.run_level -ne 0) {
         throw ('Registered task differs from the controlled Password/Limited demand: ' +
                ($output.registered | ConvertTo-Json -Compress))
     }
+    Phase 'run.begin'
     $instance = $task.Run($null)
+    Phase 'run.end'
     if (!$instance) { throw 'No actual task instance was started' }
+    Phase 'receipt.begin'
     $output.instance = [string]$instance.InstanceGuid
     $output.instance_state = [int]$instance.State
+    Phase 'receipt.end'
 } elseif ($p.operation -eq 'status') {
+    Phase 'status.task.begin'
     $task = $service.GetFolder('\' + $p.folder).GetTask($p.name)
+    Phase 'status.task.end'
     $output.state = [int]$task.State
     $output.last_result = [int64]$task.LastTaskResult
     $output.registered = RegisteredSnapshot $task
+    Phase 'status.instances.begin'
     $output.instances = @($task.GetInstances(0) | ForEach-Object {
         @{guid=[string]$_.InstanceGuid; state=[int]$_.State;
           action=[string]$_.CurrentAction; engine_pid=[int]$_.EnginePID}
     })
+    Phase 'status.instances.end'
     # Read only this test's exact task events. Never enable/change the channel.
     $channel = 'Microsoft-Windows-TaskScheduler/Operational'
     $xpath = "*[EventData[Data[@Name='TaskName']='" + $task.Path + "']]"
+    Phase 'status.events.begin'
     try {
         $output.events = @(Get-WinEvent -LogName $channel -FilterXPath $xpath -MaxEvents 20 -ErrorAction Stop |
             ForEach-Object {
@@ -96,9 +133,11 @@ if ($p.operation -eq 'create') {
                   })}
             })
     } catch { $output.events_unavailable = [string]$_.Exception.Message }
+    Phase 'status.events.end'
     # If task history is disabled, preserve any native batch-logon refusal
     # for this uniquely created test account, without reading other accounts.
     $xpath = "*[System[EventID=4625] and EventData[Data[@Name='TargetUserName']='" + $p.name + "']]"
+    Phase 'status.security.begin'
     try {
         $output.logon_failures = @(Get-WinEvent -LogName Security -FilterXPath $xpath -MaxEvents 10 -ErrorAction Stop |
             ForEach-Object {
@@ -111,24 +150,34 @@ if ($p.operation -eq 'create') {
                   })}
             })
     } catch { $output.logon_failures_unavailable = [string]$_.Exception.Message }
+    Phase 'status.security.end'
 } elseif ($p.operation -eq 'cleanup') {
+    Phase 'cleanup.folder.begin'
     $folder = $service.GetFolder('\' + $p.folder)
-    foreach ($task in @($folder.GetTasks(1))) {
+    Phase 'cleanup.folder.end'
+    Phase 'cleanup.list.begin'
+    $tasks = @($folder.GetTasks(1))
+    Phase 'cleanup.list.end'
+    foreach ($task in $tasks) {
         if ($p.names -notcontains $task.Name) { throw 'Unexpected task in owned folder' }
         if ($task.State -eq 4 -or $task.State -eq 2) {
+            Phase 'cleanup.stop.begin'
             try { $task.Stop(0) }
             catch { if ($_.Exception.HResult -ne -2147216629) { throw } }
+            Phase 'cleanup.stop.end'
         }
+        Phase 'cleanup.delete.begin'
         $folder.DeleteTask($task.Name, 0)
+        Phase 'cleanup.delete.end'
     }
+    Phase 'cleanup.folder_delete.begin'
     $root.DeleteFolder($p.folder, 0)
+    Phase 'cleanup.folder_delete.end'
 } else { throw 'Unknown controlled task operation' }
+Phase 'complete'
 $output | ConvertTo-Json -Depth 8 -Compress
 """
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                            input=json.dumps(payload), capture_output=True, text=True, timeout=30)
-    assert result.returncode == 0, f"controlled task operation failed: {result.stderr}"
-    observed = json.loads(result.stdout)
+    observed = run_task_control(script, payload)
     assert observed["completed"] is True
     if payload["operation"] == "start":
         assert uuid.UUID(observed["instance"]).int != 0, observed
@@ -268,23 +317,24 @@ def test_two_standard_windows_users_share_machine_union_results_stop_and_recover
             code = wintypes.DWORD()
             assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code)) and code.value == 0
     finally:
-        for process in processes:
-            if kernel.WaitForSingleObject(process.process, 15000) != 0:
-                kernel.TerminateProcess(process.process, 1)
-                kernel.WaitForSingleObject(process.process, 10000)
-            kernel.CloseHandle(process.process)
-        try:
-            if tasks_created:
-                scheduled_tasks({"operation": "cleanup", "folder": task_folder, "names": users})
-        finally:
+        with preserve_primary_cleanup(sys.exception()):
+            for process in processes:
+                if kernel.WaitForSingleObject(process.process, 15000) != 0:
+                    kernel.TerminateProcess(process.process, 1)
+                    kernel.WaitForSingleObject(process.process, 10000)
+                kernel.CloseHandle(process.process)
             try:
-                admission_cleanup.close()
+                if tasks_created:
+                    scheduled_tasks({"operation": "cleanup", "folder": task_folder, "names": users})
             finally:
-                failures = [(user, net.NetUserDel(None, user)) for user in created]
-                shutil.rmtree(ipc)
-                if machine.exists():
-                    shutil.rmtree(machine)
-                assert all(code == 0 for _, code in failures), failures
+                try:
+                    admission_cleanup.close()
+                finally:
+                    failures = [(user, net.NetUserDel(None, user)) for user in created]
+                    shutil.rmtree(ipc)
+                    if machine.exists():
+                        shutil.rmtree(machine)
+                    assert all(code == 0 for _, code in failures), failures
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as report:
