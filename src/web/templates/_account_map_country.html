@@ -1,4 +1,4 @@
-{% import "_metrics.html" as mx %}
+{% import "_metrics.html" as mx with context %}
 {# Одна страна в карте аккаунтов: таблица, подсказка о пустых строках и
    способы добавить аккаунт. Отдельным файлом, потому что этот же блок
    показывается дважды — списком на Home и в одиночку на вкладке страны.
@@ -43,7 +43,7 @@
             колонка, и путать их нельзя. -#}
         <thead><tr>
           <th>Account</th>
-          <th class="num" title="Spend from the stats workbook for the chosen period">Spend</th>
+          <th class="num" title="Spend from {{ (amap.source_info or {}).get("description", "the selected statistics") }} for the chosen period">Spend</th>
           <th>Campaign list</th>
           <th class="num">Leads</th>
           <th class="num">FTDs</th>
@@ -87,11 +87,11 @@
               {# Числа подставлены по совпадению хвоста имён — говорим, по
                  какому именно. Молчаливое совпадение выглядит так же, как
                  собственные данные аккаунта, и проверить его было бы нечем. #}
-              {% if r.workbook_alias %}<span class="amap-alias" title="Numbers come from {{ r.workbook_alias }} in the workbook — {% if r.workbook_alias_exact %}same account by naming rule{% else %}matched on the trailing {{ r.workbook_alias[-3:] }}{% endif %}">= {{ r.workbook_alias }}</span>{% endif %}
+              {% if r.workbook_alias %}<span class="amap-alias" title="Numbers come from {{ r.workbook_alias }} in the selected source — {% if r.workbook_alias_exact %}same account by naming rule{% else %}matched on the trailing {{ r.workbook_alias[-3:] }}{% endif %}">= {{ r.workbook_alias }}</span>{% endif %}
               {# «Строк нет» и «строки есть, но под другой страной» — разные
                  вещи, а прочерк у них один. Во втором случае чинить надо
                  привязку, а не искать данные. #}
-              {% if r.elsewhere %}<span class="amap-alias" title="This account has spend in the workbook, but filed under another country. Either the link is wrong, or the account really works there.">↗ {% for c, s in r.elsewhere.items() %}{{ c }} {{ s | fmt_usd }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+              {% if r.elsewhere %}<span class="amap-alias" title="This account has spend in the selected source, but filed under another country. Either the link is wrong, or the account really works there.">↗ {% for c, s in r.elsewhere.items() %}{{ c }} {{ s | fmt_usd }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
             </td>
             {# ACL-110 comparison stays beside BI spend; ACL-2063 replaces Meta spend with list status. #}
             {%- set cc = metric_compare(r if r.has_data else none, pv) if compare else none -%}
