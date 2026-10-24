@@ -473,6 +473,72 @@ class SetupOnASharedMachineTests(_SharedMachine):
         wizard.assert_not_called()
 
 
+class ServerStartRaceTests(_SharedMachine):
+    def test_the_parent_recovers_a_late_bind_collision_without_touching_its_winner(self):
+        started = []
+
+        def popen(command, **_):
+            port = int(command[command.index("--port") + 1])
+            started.append(port)
+            process = mock.Mock()
+            if len(started) == 1:
+                self._serve(port, self._acl(self.dan))
+                process.poll.return_value = 73  # child reports a real bind collision
+            else:
+                self._serve(port, self._acl(self.anna))
+                process.poll.return_value = None
+            return process
+
+        with mock.patch.object(launcher.subprocess, "Popen", side_effect=popen), \
+                mock.patch.object(launcher.webbrowser, "open") as opened, \
+                mock.patch.object(launcher, "_show_message") as message, \
+                mock.patch.object(launcher.time, "sleep"):
+            self.assertEqual(launcher._launch_normal(), 0)
+
+        self.assertEqual(started, self.ports[:2])
+        opened.assert_called_once_with(f"http://127.0.0.1:{self.ports[1]}/")
+        message.assert_not_called()
+        self.assertEqual(local_dashboard.health(self.ports[0]), self._acl(self.dan))
+        self.assertEqual(local_dashboard.remembered_port(self.anna), self.ports[0])
+
+    def test_collision_retries_are_bounded_and_do_not_reuse_failed_candidates(self):
+        child = mock.Mock()
+        child.poll.return_value = 73
+        with mock.patch.object(launcher.subprocess, "Popen", return_value=child) as popen, \
+                mock.patch.object(local_dashboard, "find_own", return_value=None), \
+                mock.patch.object(launcher, "_show_message"), \
+                mock.patch.object(launcher.time, "sleep"):
+            self.assertEqual(launcher._launch_normal(open_browser=False), 2)
+        selected = [int(call.args[0][-1]) for call in popen.call_args_list]
+        self.assertEqual(selected, self.ports)
+
+    def test_a_child_reports_the_bind_collision_and_removes_only_its_state(self):
+        from types import SimpleNamespace
+
+        released = mock.Mock()
+
+        def collide():
+            state = json.loads((self.anna / "server.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["port"], self.ports[0])
+            self.assertEqual(state["pid"], os.getpid())
+            self._serve(self.ports[0], self._acl(self.dan))
+            raise SystemExit(1)
+
+        fake = SimpleNamespace(main=collide, _pick_port=lambda *args, **kwargs: self.ports[0])
+        with mock.patch.dict(sys.modules, {"serve": fake}), \
+                mock.patch.object(launcher, "_acquire_server_mutex", return_value=True), \
+                mock.patch.object(launcher, "_release_server_mutex", released), \
+                mock.patch.object(launcher, "_ensure_server_streams"), \
+                mock.patch.object(launcher, "_runtime_workdir", return_value=self.anna), \
+                mock.patch.object(launcher.os, "chdir"), \
+                mock.patch.object(sys, "argv", ["ACL.exe"]), \
+                mock.patch.dict(os.environ):
+            self.assertEqual(launcher._run_server(["--server", "--port", str(self.ports[0])]), 73)
+        self.assertFalse((self.anna / "server.json").exists())
+        self.assertEqual(local_dashboard.health(self.ports[0]), self._acl(self.dan))
+        released.assert_called_once_with()
+
+
 class StickyPortTests(_SharedMachine):
     """Порт закреплён за человеком, а не за тем, кто раньше запустился.
 
@@ -533,6 +599,84 @@ class StickyPortTests(_SharedMachine):
         self.assertEqual(local_dashboard.choose_port(self.dan), self.ports[1])
         self.assertEqual(local_dashboard.remembered_port(self.dan), self.ports[1])
         self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.anna))
+
+    def test_competing_first_allocations_return_their_actual_exclusive_claims(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        barrier = threading.Barrier(2, timeout=5)
+        first_attempt = threading.local()
+        remember = local_dashboard._remember
+
+        def compete(directory, port):
+            if not getattr(first_attempt, "seen", False):
+                first_attempt.seen = True
+                barrier.wait()
+            return remember(directory, port)
+
+        with mock.patch.object(local_dashboard, "_remember", side_effect=compete):
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                # Both callers already observed a free socket. The barrier
+                # forces their actual exclusive-file attempts to compete.
+                anna = workers.submit(local_dashboard.choose_port, self.anna, in_use=lambda _: False)
+                dan = workers.submit(local_dashboard.choose_port, self.dan, in_use=lambda _: False)
+                selected = [anna.result(timeout=10), dan.result(timeout=10)]
+
+        self.assertEqual(set(selected), set(self.ports[:2]))
+        for directory, port in zip((self.anna, self.dan), selected):
+            self.assertEqual(local_dashboard.claim_owner(port), config_identity(directory))
+            self.assertEqual(local_dashboard.remembered_port(directory), port)
+
+    def test_a_lost_remembered_claim_is_replaced_instead_of_returned(self):
+        (self.anna / local_dashboard.MEMORY_FILE).write_text(
+            json.dumps({"port": self.ports[0]}), encoding="utf-8")
+        remember = local_dashboard._remember
+
+        def lose_first(directory, port):
+            if port == self.ports[0]:
+                self.registry.mkdir(exist_ok=True)
+                (self.registry / f"{port}.json").write_text(
+                    json.dumps({"config": config_identity(self.dan)}), encoding="utf-8")
+            return remember(directory, port)
+
+        with mock.patch.object(local_dashboard, "_remember", side_effect=lose_first):
+            self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[1])
+        self.assertEqual(local_dashboard.remembered_port(self.anna), self.ports[1])
+        self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.dan))
+
+    def test_an_incomplete_mark_is_not_an_unclaimed_port_or_a_fallback(self):
+        self.registry.mkdir()
+        mark = self.registry / f"{self.ports[0]}.json"
+        mark.write_text('{"config":', encoding="utf-8")
+
+        self.assertEqual(local_dashboard.choose_port(self.anna, remember=False), self.ports[1])
+        self.assertFalse((self.anna / local_dashboard.MEMORY_FILE).exists())
+        self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[1])
+        self.assertEqual(mark.read_text(encoding="utf-8"), '{"config":')
+
+        with mock.patch.object(local_dashboard, "PORTS", self.ports[:1]):
+            self.assertIsNone(local_dashboard.choose_port(self.dan))
+
+    def test_exclusive_create_loser_does_not_borrow_the_same_just_claimed_port(self):
+        remember = local_dashboard._remember
+
+        def lose(directory, port):
+            self.registry.mkdir(exist_ok=True)
+            (self.registry / f"{port}.json").write_text(
+                json.dumps({"config": config_identity(self.dan)}), encoding="utf-8")
+            return remember(directory, port)
+
+        with mock.patch.object(local_dashboard, "PORTS", self.ports[:1]), \
+                mock.patch.object(local_dashboard, "_remember", side_effect=lose):
+            self.assertIsNone(local_dashboard.choose_port(self.anna))
+        self.assertFalse((self.anna / local_dashboard.MEMORY_FILE).exists())
+
+    def test_a_registry_that_cannot_be_created_keeps_local_memory_fallback(self):
+        # A file instead of a directory is genuinely unavailable, rather than
+        # an existing port mark whose concurrent writer has not finished yet.
+        self.registry.write_text("unavailable", encoding="utf-8")
+        self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
+        self.assertEqual(local_dashboard.remembered_port(self.anna), self.ports[0])
+        self.assertEqual(self.registry.read_text(encoding="utf-8"), "unavailable")
 
     def test_a_neighbours_mark_is_never_overwritten(self):
         """Когда встать больше некуда, можно постоять на месте спящего соседа,

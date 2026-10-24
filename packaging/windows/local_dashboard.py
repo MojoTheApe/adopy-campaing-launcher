@@ -214,30 +214,57 @@ def remembered_port(config_directory: str | os.PathLike) -> int | None:
     return None
 
 
-def _remember(config_directory: str | os.PathLike, port: int) -> None:
+def _incomplete_claim(port: int) -> bool:
+    """An existing, unreadable/unfinished mark is not an unclaimed port."""
+    folder = registry_dir()
+    if folder is None:
+        return False
+    try:
+        (folder / f"{port}.json").stat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError:
+        return True
+    return claim_owner(port) is None
+
+
+def _remember(config_directory: str | os.PathLike, port: int) -> bool:
     """Закрепить порт за мной: в реестре, если он есть, и в своей памяти.
 
     Сначала реестр: если сосед успел отметить этот порт раньше, в память его
-    не пишем — порт не мой. Ошибки записи не мешают запуску: дешборд на
-    свободном порту лучше, чем никакого. Чужую отметку не перезаписываем.
+    не пишем и возвращаем False — вызывающий обязан выбрать другой порт.
+    Недоступный реестр допускает прежнюю локальную память, но проигранное
+    exclusive-create (даже пока JSON соседа не дописан) — не успех.
     """
     mine = identity(config_directory)
     folder = registry_dir()
-    if folder is not None and claim_owner(port) is None:
+    if folder is not None:
+        owner = claim_owner(port)
+        if owner not in (None, mine):
+            return False
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            with open(folder / f"{port}.json", "x", encoding="utf-8") as handle:
-                json.dump({"config": mine}, handle)
         except OSError:
-            pass  # сосед успел первым, либо реестр недоступен — решит проверка ниже
-    if folder is not None and claim_owner(port) not in (None, mine):
-        return
+            pass  # genuinely unavailable registry: retain local-only fallback
+        else:
+            if owner is None:
+                try:
+                    with open(folder / f"{port}.json", "x", encoding="utf-8") as handle:
+                        json.dump({"config": mine}, handle)
+                except FileExistsError:
+                    # The file may exist before its creator writes the JSON.
+                    if claim_owner(port) != mine:
+                        return False
+                except OSError:
+                    if _incomplete_claim(port) or claim_owner(port) not in (None, mine):
+                        return False
     memory = Path(config_directory) / MEMORY_FILE
     try:
         memory.parent.mkdir(parents=True, exist_ok=True)
         memory.write_text(json.dumps({"port": port}) + "\n", encoding="utf-8")
     except OSError:
         pass
+    return True
 
 
 def choose_port(config_directory: str | os.PathLike, *, remember: bool = True,
@@ -255,14 +282,24 @@ def choose_port(config_directory: str | os.PathLike, *, remember: bool = True,
     """
     mine = identity(config_directory)
     own = remembered_port(config_directory)
+    rejected: set[int] = set()
     if own is not None and not in_use(own):
-        if remember:
-            _remember(config_directory, own)  # дописать отметку в реестр, если её нет
-        return own
+        if not _incomplete_claim(own) and (not remember or _remember(config_directory, own)):
+            return own
+        rejected.add(own)
+        own = None  # stale local memory lost its reservation; select a new own port
     for port in PORTS:
+        if _incomplete_claim(port):
+            rejected.add(port)
+            continue
+        if port in rejected:
+            continue
         if in_use(port) or claim_owner(port) not in (None, mine):
             continue
-        if remember and own is None:
-            _remember(config_directory, port)
+        if remember and own is None and not _remember(config_directory, port):
+            rejected.add(port)
+            continue
         return port
-    return free_port(in_use=in_use)
+    # Preserve the old temporary detour onto a sleeping known owner's port,
+    # but never immediately borrow the claim we just lost or an unfinished one.
+    return free_port(in_use=lambda port: port in rejected or in_use(port))

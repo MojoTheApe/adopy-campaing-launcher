@@ -1,6 +1,7 @@
 """User-facing Windows launcher around the reviewed ACL runtime."""
 from __future__ import annotations
 
+import errno
 import json
 import os
 import subprocess
@@ -16,8 +17,11 @@ import local_dashboard
 
 DEFAULT_PORT = local_dashboard.DEFAULT_PORT
 HEALTH_TIMEOUT_SECONDS = 60
+PORT_BUSY_EXIT_CODE = 73
 SERVER_MUTEX_NAME = r"Local\ACL-Campaign-Launcher-Server-v1"
+CONFIG_MUTEX_PREFIX = r"Global\ACL-Campaign-Launcher-Config-v1"
 _MUTEX_HANDLE: int | None = None
+_INSTALLER_MUTEX_HANDLE: int | None = None
 
 
 def _bundle_root() -> Path:
@@ -122,9 +126,47 @@ def _configured_port(args: list[str]) -> int:
         return DEFAULT_PORT
 
 
+def _installer_presence_mutex(kernel) -> int | None:
+    """Keep the existing installer AppMutex alive, independently of ownership.
+
+    Every dashboard in this Windows session holds the same presence marker.
+    Authenticated users may only open it for SYNCHRONIZE, not modify it or
+    acquire another person's configuration gate. The last dashboard closes it.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class SecurityAttributes(ctypes.Structure):
+        _fields_ = [("length", wintypes.DWORD), ("descriptor", ctypes.c_void_p),
+                    ("inherit", wintypes.BOOL)]
+
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    convert = advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW
+    convert.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                        ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
+    convert.restype = wintypes.BOOL
+    descriptor = ctypes.c_void_p()
+    # SYSTEM/admin retain control; other authenticated users can retain a
+    # handle to this data-free presence marker. No filesystem ACL is changed.
+    if not convert("D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00100000;;;AU)",
+                   1, ctypes.byref(descriptor), None):
+        return None
+    try:
+        attributes = SecurityAttributes(ctypes.sizeof(SecurityAttributes), descriptor, False)
+        kernel.CreateMutexExW.argtypes = [ctypes.POINTER(SecurityAttributes), wintypes.LPCWSTR,
+                                         wintypes.DWORD, wintypes.DWORD]
+        kernel.CreateMutexExW.restype = wintypes.HANDLE
+        handle = kernel.CreateMutexExW(ctypes.byref(attributes), SERVER_MUTEX_NAME, 0, 0x00100000)
+        return int(handle) if handle else None
+    finally:
+        kernel.LocalFree.argtypes = [ctypes.c_void_p]
+        kernel.LocalFree.restype = ctypes.c_void_p
+        kernel.LocalFree(descriptor)
+
+
 def _acquire_server_mutex() -> bool:
-    """Prevent two packaged ACL server processes from racing on Windows."""
-    global _MUTEX_HANDLE
+    """One server/setup per configuration; preserve the fixed installer marker."""
+    global _MUTEX_HANDLE, _INSTALLER_MUTEX_HANDLE
     if sys.platform != "win32":
         return True
     import ctypes
@@ -132,26 +174,41 @@ def _acquire_server_mutex() -> bool:
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
     kernel.CreateMutexW.restype = wintypes.HANDLE
-    handle = kernel.CreateMutexW(None, False, SERVER_MUTEX_NAME)
+    # The config/ports are machine-wide, even when the same person has two
+    # Windows sessions. The legacy installer marker remains session-local.
+    name = f"{CONFIG_MUTEX_PREFIX}-{local_dashboard.identity(_local_acl_dir())}"
+    ctypes.set_last_error(0)
+    handle = kernel.CreateMutexW(None, False, name)
     if not handle:
         return False
     if ctypes.get_last_error() == 183:
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel.CloseHandle(handle)
         return False
+    marker = _installer_presence_mutex(kernel)
+    if marker is None:
+        # Never start a process invisible to the existing installer guard.
+        # In particular, do not bypass an inaccessible older presence object.
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle(handle)
+        return False
     _MUTEX_HANDLE = int(handle)
+    _INSTALLER_MUTEX_HANDLE = marker
     return True
 
 
 def _release_server_mutex() -> None:
-    global _MUTEX_HANDLE
-    if _MUTEX_HANDLE and sys.platform == "win32":
+    global _MUTEX_HANDLE, _INSTALLER_MUTEX_HANDLE
+    if (_MUTEX_HANDLE or _INSTALLER_MUTEX_HANDLE) and sys.platform == "win32":
         import ctypes
         from ctypes import wintypes
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel.CloseHandle(_MUTEX_HANDLE)
+        for handle in (_MUTEX_HANDLE, _INSTALLER_MUTEX_HANDLE):
+            if handle:
+                kernel.CloseHandle(handle)
     _MUTEX_HANDLE = None
+    _INSTALLER_MUTEX_HANDLE = None
 
 
 def _run_setup() -> bool:
@@ -216,28 +273,41 @@ def _run_server(args: list[str]) -> int:
     if not _acquire_server_mutex():
         return 0  # Another launcher may still be starting; the parent waits for health.
 
-    _ensure_server_streams()
-    server_args = [arg for arg in args if arg != "--server"]
-    if "--no-browser" not in server_args:
-        server_args.append("--no-browser")
-    port = _configured_port(server_args)
-    sys.argv = [sys.argv[0], *server_args]
-
-    # Bind exactly the requested port; serve.py normally scans alternatives,
-    # which would leave server.json and the parent polling the wrong address.
-    import serve
-    pick_port = serve._pick_port
-    serve._pick_port = lambda host, preferred, **kw: pick_port(host, preferred, scan=1)
-    serve_main = serve.main
-
-    runtime_workdir = _runtime_workdir()
-    os.chdir(runtime_workdir)
-    os.environ.setdefault("ACL_RUNTIME_DIR", str(runtime_workdir))
-    token = _write_server_state(port)
+    token = None
+    serve = None
+    pick_port = None
     try:
-        serve_main()
+        _ensure_server_streams()
+        server_args = [arg for arg in args if arg != "--server"]
+        if "--no-browser" not in server_args:
+            server_args.append("--no-browser")
+        port = _configured_port(server_args)
+        sys.argv = [sys.argv[0], *server_args]
+
+        # Keep a single actual port per child/state record. If another process
+        # binds after selection, the parent retries a different bounded candidate.
+        import serve
+        pick_port = serve._pick_port
+        serve._pick_port = lambda host, preferred, **kw: pick_port(host, preferred, scan=1)
+        runtime_workdir = _runtime_workdir()
+        os.chdir(runtime_workdir)
+        os.environ.setdefault("ACL_RUNTIME_DIR", str(runtime_workdir))
+        token = _write_server_state(port)
+        try:
+            serve.main()
+        except SystemExit as exc:
+            if exc.code not in (None, 0) and local_dashboard.port_in_use(port):
+                return PORT_BUSY_EXIT_CODE
+            raise
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048:
+                return PORT_BUSY_EXIT_CODE
+            raise
     finally:
-        _remove_server_state(token)
+        if token is not None:
+            _remove_server_state(token)
+        if serve is not None and pick_port is not None:
+            serve._pick_port = pick_port
         _release_server_mutex()
     return 0
 
@@ -246,6 +316,32 @@ def _executable_command() -> list[str]:
     if getattr(sys, "frozen", False):
         return [sys.executable]
     return [sys.executable, str(Path(__file__).resolve())]
+
+
+def _no_available_port() -> int:
+    first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
+    _show_message(
+        "Adopy Campaign Manager cannot start",
+        f"Ports {first}-{last} are all used by other applications. The launcher did not stop any of them. "
+        "Close one of them or contact support, then try again.",
+        error=True,
+    )
+    return 2
+
+
+def _start_server(port: int) -> subprocess.Popen:
+    command = [*_executable_command(), "--server", "--no-browser", "--port", str(port)]
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+    return subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creationflags,
+    )
 
 
 def _launch_normal(*, open_browser: bool = True) -> int:
@@ -264,27 +360,9 @@ def _launch_normal(*, open_browser: bool = True) -> int:
     # включил компьютер, тот и на 9090, и адрес меняется день ото дня.
     port = local_dashboard.choose_port(config_dir)
     if port is None:
-        first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
-        _show_message(
-            "Adopy Campaign Manager cannot start",
-            f"Ports {first}-{last} are all used by other applications. The launcher did not stop any of them. "
-            "Close one of them or contact support, then try again.",
-            error=True,
-        )
-        return 2
-
-    command = [*_executable_command(), "--server", "--no-browser", "--port", str(port)]
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        close_fds=True,
-        creationflags=creationflags,
-    )
+        return _no_available_port()
+    attempted = {port}
+    process = _start_server(port)
 
     deadline = time.monotonic() + HEALTH_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
@@ -297,7 +375,20 @@ def _launch_normal(*, open_browser: bool = True) -> int:
             if open_browser:
                 webbrowser.open(f"http://127.0.0.1:{own[0]}/")
             return 0
-        if process.poll() not in (None, 0):
+        result = process.poll()
+        if result == PORT_BUSY_EXIT_CODE:
+            # Never retry the same just-lost candidate, even if its new owner
+            # stops before this observation. Keep the original health deadline.
+            port = local_dashboard.choose_port(
+                config_dir, in_use=lambda candidate: candidate in attempted
+                or local_dashboard.port_in_use(candidate),
+            )
+            if port is None:
+                return _no_available_port()
+            attempted.add(port)
+            process = _start_server(port)
+            continue
+        if result not in (None, 0):
             break
         time.sleep(0.5)
 
