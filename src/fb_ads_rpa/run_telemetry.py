@@ -161,6 +161,38 @@ _BARE_VALUE = r'("(?:[^"\\\n]|\\.)*"?|\'(?:[^\'\\\n]|\\.)*\'?|[^\s,;&"\'<>\)\]\}
 #: всё до конца строки/текста.
 _QUOTED_VALUE = r'((?:\\.|(?!\4)[^\\\n])*)(\4)?'
 
+
+_PROXY_USER = re.compile(r"(?<![^\s/=,;(\[{<>\"'])([^\s:@/\\\"'<>=,;(\[{]+):")
+_URI_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*")
+_RATIO_SCALE = re.compile(r"\d+:\d+@\d+(?:\.\d+)?x[,;)\]}]*", re.I)
+
+
+def _scrub_proxy(match: re.Match) -> str:
+    """Inspect each word once, without a credential-length escape hatch."""
+    word = match[0]
+    at = word.rfind("@")
+    if at < 0 or at == len(word) - 1:
+        return word
+    if not (word[at + 1].isalnum() or word[at + 1] == "["):
+        return word
+    for user in _PROXY_USER.finditer(word, 0, at):
+        name = user[1]
+        password_start = user.end()
+        if password_start == at or name.lower() in {"mailto", "email", "e-mail"}:
+            continue
+        if word.startswith("//", password_start) and _URI_SCHEME.fullmatch(name):
+            continue
+        if len(name) == 1 and name.isalpha() and word.startswith("/", password_start):
+            continue  # C:/Users/a@host is a Windows path.
+        if _RATIO_SCALE.fullmatch(word, user.start()):
+            return word
+        if (word[max(0, user.start() - 3):user.start()] == "://"
+                and re.match(r"\d{1,5}/", word[password_start:at])):
+            return word  # A URL host:port/path@example.com, not userinfo.
+        return word[:user.start()] + "<user>:<hidden>@" + word[at + 1:]
+    return word
+
+
 _SCRUB = (
     # JSON / python-repr словарь: "key":"value" или 'key': 'value' — с любыми
     # пробелами вокруг двоеточия, кавычки ключа и значения не обязаны
@@ -185,19 +217,11 @@ _SCRUB = (
     # Хост и порт остаются — по ним видно, какой прокси отказал; логин и
     # пароль прячутся всегда оба. Начало — только в начале «слова» (после
     # пробела, `/`, `=`, кавычки, скобки…), иначе каждая позиция длинной
-    # строки начинала бы свой перебор; обе части ограничены 256 — линейно.
-    # Пароль жадный и может содержать `@`/`:`, совпадение заканчивается на
-    # ПОСЛЕДНЕЙ `@` слова — `p@ss` не оставляет хвост `ss@` открытым. `/`
-    # в пароле можно (base64-пароли), но не первым: `https://user@host` —
-    # это схема, а не `https:<пароль>`. `\` исключён из обеих частей:
-    # `C:\Users\a@b` — путь, а не учётка; `mailto:`/`email:` — адрес, а не
-    # логин. Хост обязан выглядеть хостом (имя с доменом, IPv4, `[IPv6]`
-    # или `имя:порт`) — `16:9@2x` не учётка.
-    (re.compile(r"(?<![^\s/=,;(\[{<>\"'])(?!(?:mailto|e-?mail):)[^\s:@/\\\"'<>=,;(\[{]{1,256}:"
-                r"[^\s/\\\"'<>][^\s\\\"'<>]{0,255}@"
-                r"(?=\[|\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}\b"
-                r"|[A-Za-z0-9.-]{1,253}:\d{1,5}\b)", re.I),
-     "<user>:<hidden>@"),
+    # строки начинала бы свой перебор. Каждый отдельный фрагмент без
+    # пробела/кавычки проверяется один раз: последняя @, затем непересекающиеся
+    # имена перед двоеточием. Длинный пароль не остаётся открытым из-за лимита.
+    # `/`, `:` и `@` в пароле допустимы; схемы, пути и ratio отличаем отдельно.
+    (re.compile(r"[^\s\\\"'<>]+"), _scrub_proxy),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
     (re.compile(r"\b\d{10,}\b"), "<digits>"),
@@ -281,12 +305,13 @@ def clean_key(key):
     return key
 
 
-def put_unique(out: dict, key, item) -> None:
-    """Два ключа, ставшие одинаковыми после вычистки, не затирают друг друга."""
+def put_unique(out: dict, key, item, *, suffixes: dict) -> None:
+    """Append without loss; suffix progress belongs to this output dictionary."""
     if key in out:
-        n = 2
+        n = suffixes.get(key, 2)
         while f"{key}#{n}" in out:
             n += 1
+        suffixes[key] = n + 1
         key = f"{key}#{n}"
     out[key] = item
 
@@ -295,9 +320,10 @@ def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
         out: dict = {}
+        suffixes: dict = {}
         for key, item in value.items():
             clean = "<hidden>" if _hides_dict_value(key, item) else scrub_diag(item)
-            put_unique(out, clean_key(key), clean)
+            put_unique(out, clean_key(key), clean, suffixes=suffixes)
         return out
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]

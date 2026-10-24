@@ -49,6 +49,7 @@ def scrub_value(value: Any) -> Any:
         except Exception:
             run_telemetry = None
         out = {}
+        suffixes = {}
         for key, item in value.items():
             if isinstance(key, str) and key.lower().replace("-", "_") in {"access_token", "token"}:
                 out[key] = "<hidden>"
@@ -58,7 +59,8 @@ def scrub_value(value: Any) -> Any:
                 out[scrub(key) if isinstance(key, str) else key] = clean
                 continue
             new_key = run_telemetry.clean_key(key)
-            run_telemetry.put_unique(out, scrub(new_key) if isinstance(new_key, str) else new_key, clean)
+            run_telemetry.put_unique(out, scrub(new_key) if isinstance(new_key, str) else new_key,
+                                    clean, suffixes=suffixes)
         return out
     if isinstance(value, (list, tuple)):
         return [scrub_value(item) for item in value]

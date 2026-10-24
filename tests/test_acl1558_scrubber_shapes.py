@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from src import acl_sentry  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
+from src.fb_ads_rpa import run_summary  # noqa: E402
 from src.fb_api import telemetry as fb_tel  # noqa: E402
 
 FAKE_TOKEN = "EAAB" + "Zx9FAKEtoken0" * 6
@@ -70,6 +71,14 @@ PROXY_CASES = [
     # пароль с `/` (base64) прячется целиком
     ("http://proxyuser:pr0xyPass/w0rd+==@198.51.100.7:8080", "http://<user>:<hidden>@198.51.100.7:8080"),
     ("proxyuser:pr0xyPass@localhost:3128", "<user>:<hidden>@localhost:3128"),
+    ("proxyuser:pr0xyPass@localhost", "<user>:<hidden>@localhost"),
+    ("proxyuser:pr0xyPass@proxy-internal", "<user>:<hidden>@proxy-internal"),
+    ("socks5://proxyuser:pr0xyPass@localhost", "socks5://<user>:<hidden>@localhost"),
+    ("proxyuser:/pr0xyPass@proxy.example.net", "<user>:<hidden>@proxy.example.net"),
+    ("http://proxyuser:/pr0xyPass@localhost", "http://<user>:<hidden>@localhost"),
+    ("123:pr0xyPass@2x", "<user>:<hidden>@2x"),
+    ("proxyuser" * 100 + ":pr0xyPass@localhost", "<user>:<hidden>@localhost"),
+    ("proxyuser:" + "pr0xyPass" * 100 + "@localhost", "<user>:<hidden>@localhost"),
 ]
 
 
@@ -92,10 +101,25 @@ def test_proxy_credentials_are_hidden_and_the_host_is_kept(raw, expected):
     "ratio 16:9@2x",
     "https://user@example.com/x",
     "C:/Users/a@b.example.com",
+    "custom://user@example.com/path",
+    "http://host:8080/u/a@b.com",
     "git@github.com:org/repo",
 ])
 def test_ordinary_text_with_colons_and_at_signs_is_not_over_scrubbed(text):
     assert "<user>" not in rt.scrub(text)
+
+
+@pytest.mark.parametrize("raw", [case[0] for case in PROXY_CASES])
+def test_proxy_credentials_are_hidden_at_every_shared_export_boundary(raw):
+    event = {"contexts": {"diag": {"why": raw}}}
+    sentry = acl_sentry._before_send(event, {})
+    attachment = run_summary._attachment_row({"diag": {"why": raw}}, "synthetic-run")
+    for out in (
+        rt.scrub_diag({"why": raw}), sentry["contexts"]["diag"],
+        attachment["diag"], fb_tel.scrub_value({"why": raw}),
+    ):
+        assert "proxyuser" not in repr(out) and "pr0xyPass" not in repr(out), out
+        assert "<user>:<hidden>@" in repr(out), out
 
 
 # ── ключи словаря ──────────────────────────────────────────────────────────
@@ -135,6 +159,42 @@ def test_scrub_diag_keeps_every_entry_when_scrubbed_keys_collide():
         v for v in ID_KEY_DIAG.values() if isinstance(v, str))
     assert out["step"] == "publish" and out["attempt_2"] == 3
     assert "act_<hidden>" in out and "act_<hidden>#2" in out and "<email>" in out
+
+
+@pytest.mark.parametrize("scrubber", [rt.scrub_diag, fb_tel.scrub_value])
+@pytest.mark.parametrize("count", [128, 256, 512])
+def test_colliding_id_keys_take_linear_dictionary_work(monkeypatch, scrubber, count):
+    """Count actual helper operations; no machine-speed or timeout assumption."""
+    original = rt.put_unique
+    operations = 0
+
+    class MeasuredDict(dict):
+        def __contains__(self, key):
+            nonlocal operations
+            operations += 1
+            return super().__contains__(key)
+
+    def measured(out, *args, **kwargs):
+        # Instrument the real dictionary interface without changing its contents.
+        observed = MeasuredDict(out)
+        original(observed, *args, **kwargs)
+        out.clear()
+        out.update(observed)
+
+    monkeypatch.setattr(rt, "put_unique", measured)
+    clean = scrubber({str(100000 + i): i for i in range(count)})
+    assert len(clean) == count and sorted(clean.values()) == list(range(count))
+    assert operations <= 4 * count, (count, operations)
+
+
+@pytest.mark.parametrize("scrubber", [rt.scrub_diag, fb_tel.scrub_value])
+def test_collision_suffixes_preserve_literal_keys_and_reset_per_dictionary(scrubber):
+    raw = {"<id>#2": "literal", "100000": 1, "100001": 2,
+           "<id>#3": "other literal", "100002": 3}
+    expected = {"<id>#2": "literal", "<id>": 1, "<id>#3": 2,
+                "<id>#3#2": "other literal", "<id>#4": 3}
+    assert scrubber(raw) == expected
+    assert scrubber({"left": raw, "right": raw}) == {"left": expected, "right": expected}
 
 
 @pytest.mark.parametrize("key,leak", [
