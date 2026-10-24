@@ -86,6 +86,8 @@ def test_whole_workbook_case_blames_the_file_not_the_manager():
     out = _render(_period_owner(_report(None)), date_from="2026-09-09")
     assert "The workbook has no rows" in out and "may need updating" in out
     assert "No rows for Bob" not in out
+    assert "2026-09-09" in out
+    assert "read the spend straight" not in out
 
 
 @pytest.mark.parametrize("sources", [["bi"], ["bi", "workbook"]])
@@ -94,6 +96,7 @@ def test_source_aware_manager_notice_keeps_owner_and_avoids_false_update_advice(
     assert "No rows for Bob" in out and "2026-09-07" in out and "other managers" in out
     assert 'data-empty-owner="source"' not in out and "may need updating" not in out
     assert "the source itself is not the problem" in out
+    assert "read the spend straight" not in out
 
 
 def test_non_empty_period_has_no_notice():

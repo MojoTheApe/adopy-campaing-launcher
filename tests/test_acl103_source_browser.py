@@ -16,14 +16,43 @@ from tests.test_acl103_saved_source import saved_comparison_context  # noqa: F40
 pw = pytest.importorskip("playwright.sync_api")
 
 
+def local_refresh_route(calls=None):
+    """Real tracked JS; the local RPA backend refuses profile-read admission."""
+    from src.analysis_agent import campaign_inventory
+
+    fallback = H.make_route("")
+    def route(request):
+        path = urlparse(request.request.url).path
+        if calls is not None:
+            calls.append((request.request.method, path))
+        # The maintained conftest layer already serves tracked /static/*.js bytes.
+        if path == "/account-refresh/page-open":
+            request.fulfill(status=409, json={"ok": False,
+                "code": campaign_inventory.NEEDS_API_CODE,
+                "error": campaign_inventory.NEEDS_API_MESSAGE})
+        elif path == "/account-refresh/state":
+            request.fulfill(json={"ok": True, "rows": {}, "accounts": {}, "queued": [],
+                "running": None, "sweep": None, "halt": None, "needs_api": True})
+        elif path == "/campaign-inventory/status":
+            request.fulfill(json={"ok": True, "backend": "rpa", "needs_api": True,
+                "message": campaign_inventory.NEEDS_API_MESSAGE, "running": [], "accounts": {}})
+        elif path == "/campaign-commands/availability":
+            request.fulfill(json={"available": False, "reason": "API backend is disabled", "max_targets": 0})
+        elif path == "/warm/state":
+            request.fulfill(json={"available": False, "accounts": {}, "actions": False})
+        else:
+            fallback(request)
+    return route
+
+
 @pytest.mark.parametrize("width,theme", [(390, "dark"), (1365, "light")])
 def test_saved_comparison_opens_and_changes_dates_without_an_external_read(browser, saved_comparison_context, tmp_path, width, theme):
     context = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=theme)
     page = context.new_page()
-    errors, forbidden = [], []
+    errors, forbidden, calls, navigations = [], [], [], []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.add_init_script(f"localStorage.setItem('acl.theme', '{theme}')")
-    fallback = H.make_route("")
+    fallback = local_refresh_route(calls)
     def route(request):
         path = urlparse(request.request.url).path
         if path in {"/api/source-vs-account", "/account-refresh/request", "/account-spend/read", "/campaign-inventory/read"}:
@@ -31,6 +60,7 @@ def test_saved_comparison_opens_and_changes_dates_without_an_external_read(brows
             request.abort()
         elif request.request.resource_type == "document":
             query = parse_qs(urlparse(request.request.url).query)
+            navigations.append(query)
             start = query.get("date_from", ["2026-10-18"])[0]
             end = query.get("date_to", [start])[0]
             request.fulfill(content_type="text/html", body=saved_comparison_context["render"](start, end, full=True))
@@ -38,7 +68,11 @@ def test_saved_comparison_opens_and_changes_dates_without_an_external_read(brows
             fallback(request)
     page.route("**/*", route)
     try:
-        page.goto("http://acl.test/?date_from=2026-10-18&date_to=2026-10-18")
+        with page.expect_response(lambda r: urlparse(r.url).path == "/static/account_refresh.js") as script:
+            with page.expect_response(lambda r: urlparse(r.url).path == "/account-refresh/state"):
+                page.goto("http://acl.test/?date_from=2026-10-18&date_to=2026-10-18")
+        assert script.value.body() == (H.ROOT / "src/web/static/account_refresh.js").read_bytes()
+        assert calls.count(("POST", "/account-refresh/page-open")) == 1
         panel = page.locator("#amap-slot details[data-source-check]")
         assert panel.count() == 1, "API presence alone is not a visible comparison"
         assert not panel.evaluate("e => e.open")
@@ -54,8 +88,12 @@ def test_saved_comparison_opens_and_changes_dates_without_an_external_read(brows
         artifacts = Path(os.environ.get("ACL_REVIEW_ARTIFACT_DIR", str(tmp_path)))
         artifacts.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(artifacts / f"saved-check-{width}-{theme}.png"))
-        page.evaluate("amapApply('2026-01-05','2026-01-05','')")
+        with page.expect_response(lambda r: urlparse(r.url).path == "/account-refresh/state"):
+            page.evaluate("amapApply('2026-01-05','2026-01-05','')")
         page.wait_for_url("**date_from=2026-01-05&date_to=2026-01-05*")
+        assert navigations[-1]["view_only"] == ["1"]
+        assert calls.count(("POST", "/account-refresh/page-open")) == 1
+        assert calls.count(("GET", "/account-refresh/state")) >= 2
         panel.locator("summary").click()
         assert "USD 7.00" in panel.inner_text()
         assert "No saved account figure for these dates" in panel.inner_text()
@@ -107,7 +145,7 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.add_init_script(f"localStorage.setItem('acl.theme', '{theme}')")
-    fallback = H.make_route("")
+    fallback = local_refresh_route()
     def route(request):
         if request.request.resource_type == "document":
             request.fulfill(content_type="text/html", body=render(request.request.url))
@@ -178,7 +216,7 @@ def test_empty_source_notice_keeps_the_real_map_and_wraps_on_screen(browser, wid
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.add_init_script(f"localStorage.setItem('acl.theme', '{theme}')")
-    fallback = H.make_route("")
+    fallback = local_refresh_route()
     def route(request):
         if request.request.resource_type == "document":
             request.fulfill(content_type="text/html", body=html)
@@ -192,7 +230,8 @@ def test_empty_source_notice_keeps_the_real_map_and_wraps_on_screen(browser, wid
         assert "2026-09-09" in notice.inner_text() and "It runs to 2026-09-08" in notice.inner_text()
         assert "The workbook has no rows" not in notice.inner_text()
         assert page.locator("#amap-slot").count() == 1 and page.locator("#amap-slot").is_visible()
-        assert page.get_by_role("button", name="Read all spend", exact=True).count() == 1
+        # Later ACL-2063 removes manual Meta reads; the empty source map stays visible.
+        assert page.get_by_role("button", name="Read all spend", exact=True).count() == 0
         geometry = notice.evaluate("e => {const r=e.getBoundingClientRect();return {left:r.left,right:r.right,scroll:e.scrollWidth,client:e.clientWidth}}")
         assert geometry["left"] >= 0 and geometry["right"] <= width + 1, geometry
         assert geometry["scroll"] <= geometry["client"] + 1, geometry

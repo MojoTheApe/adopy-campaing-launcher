@@ -5,12 +5,10 @@
    секции «Campaigns» на Home нет (решение владельца 12.10): кампании и аккаунты живут
    внутри стран. Файл — компонент: стили, шаблон разметки `#hc-scoped-tpl` и `hcMount`.
 
-   Опись и Insights читает Graph API в профиле по кнопке «Read campaigns» аккаунта
-   (POST /campaign-inventory/read, как Read spend) или кнопке страны «Read campaigns in
-   <страна>»; раскрытие областей ничего не читает у Meta — только локальные GET по
-   сохранённому снимку. Команды (on/off, budget, bid) — ACL-1800: каждая идёт только по
-   щелчку человека через превью и подтверждение (`acmCommands.home`), состояние
-   переключателя берётся из подтверждённого чтения Meta, а не выставляется заранее.
+   ACL-2063: список структуры общий для всех дат. Раскрытие показывает кеш сразу
+   и ставит устаревший аккаунт в очередь attention. Расписание и Retry используют
+   одну машинную очередь; числа берутся только из BI за период страницы.
+   Команды всегда проходят прежнее превью и подтверждение.
    Duplicate и Copy остаются выключенными (ACL-1773).
 
    Токены Adopy объявлены на `.hc`, а не на `:root` (как у билдера, ACL-1769):
@@ -248,6 +246,9 @@
   .hc.hc-embed { margin: 0; padding: 0.5rem 0.75rem 0.75rem; }
   .hc-embed .hc-frame { background: var(--adopy-surface); }
   .hc-snap { display: block; font-size: 0.66rem; font-weight: 400; line-height: 1.3; color: var(--muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .amap-list .hc-snap { font-size: 0.75rem; white-space: normal; overflow-wrap: anywhere; }
+  .amap-refresh-status { margin-block: 0.5rem; color: var(--muted, #647084); font-size: 0.8125rem; }
+  .amap-refresh-status[role="alert"] { color: var(--bad); }
   .hc-snap[data-tone="bad"] { color: var(--bad, #c0392b); }
   .amap-pstate[hidden], .hc-ro[hidden] { display: none !important; }
   .amap-pstate { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; font-size: 0.66rem; font-weight: 400; white-space: nowrap; border: 1px solid var(--border-strong, #8886); border-radius: 999px; color: var(--muted, #888); cursor: help; vertical-align: middle; }
@@ -274,7 +275,7 @@
       </div>
       <div class="hc-tool-group" role="group" aria-label="Metric navigation">
       <button type="button" data-jump="controls">Controls</button><button type="button" data-jump="bi">BI metrics</button>
-      <button type="button" data-jump="meta">Meta metrics</button><button type="button" data-jump="tracker">Tracking</button>
+      <button type="button" data-jump="meta">Structure</button><button type="button" data-jump="tracker">Tracking</button>
       </div>
       <div class="hc-tool-group hc-tool-expansion" role="group" aria-label="Tree expansion">
       <button type="button" data-hc="expand-all">Expand all</button><button type="button" data-hc="collapse-all">Collapse all</button>
@@ -285,8 +286,8 @@
       </span>
       <div class="hc-tool-group hc-tool-columns" role="group" aria-label="Column settings">
       <label class="hc-note">Columns <select data-hc="preset" aria-label="Column preset">
-        <option value="optimization">Optimization</option><option value="meta">Meta delivery</option>
-        <option value="bi">BI funnel</option><option value="all">All metrics</option><option value="custom" hidden>Custom</option></select></label>
+        <option value="optimization">Optimization</option><option value="meta">Structure</option>
+        <option value="bi">BI funnel</option><option value="all">All columns</option><option value="custom" hidden>Custom</option></select></label>
       <details class="hc-cols" data-hc="cols"><summary>Manage columns</summary><div class="hc-cols-pop" data-hc="cols-pop"></div></details>
       </div>
       <span class="hc-tool-group hc-batch" data-hc="batch" role="group" aria-label="Commands for the selected rows">
@@ -315,6 +316,7 @@
 </template>
 
 <script src="/static/acm_commands.js"></script>
+<script src="/static/account_refresh.js"></script>
 <script>
 (function () {
   'use strict';
@@ -385,7 +387,7 @@
   var seed = opts.seed || [];     // [{country, accounts: [один аккаунт]}]
   var period = { from: root.dataset.periodFrom || '', to: root.dataset.periodTo || '', span: root.dataset.periodSpan || '' };
   if (!period.to) period.to = period.from;
-  var periodOk = !!period.from && period.span !== 'all';
+  var periodOk = true; // structure is independent of workbook dates, including Maximum
 
   /* ── состояние ── */
   var S = {
@@ -398,7 +400,7 @@
     bi: {},                          // account -> сводка BI
     kids: {},                        // 'level:id' -> {state, rows, note}
     expanded: {}, selected: {}, details: {}, acctOpen: {},
-    running: {}, busy: queueBusy,
+    running: {}, uncertain: {}, readsAvailable: null, busy: queueBusy,
     avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
     q: '', delivery: 'all',
@@ -427,20 +429,6 @@
   function dec(v, d) { return v == null ? null : v.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d}); }
   function numCell(text, why) { return '<td class="num">' + (text == null ? na(why) : esc(text)) + '</td>'; }
 
-  function metaWhy(m) {
-    if (m.state === 'not_read') return 'Insights for this level were not read';
-    if (m.state === 'no_row') return 'Meta returned no Insights row for this period (no delivery, or not returned)';
-    if (m.state === 'partial_unknown') return 'The Insights list was cut at the page limit; this row may be missing';
-    return 'Not available';
-  }
-  function metaCell(fn, d) {
-    return function (r) {
-      var m = r.meta || {};
-      if (m.state !== 'ok') return numCell(null, metaWhy(m));
-      var v = m[d];
-      return numCell(v == null ? null : fn(v, r.currency), v == null ? 'Meta did not report this value' : '');
-    };
-  }
   function biWhy(b) {
     if (b.match === 'partial') return 'BI matched only ' + b.coverage + ' ad sets of this campaign; not shown as a total';
     return 'No exact name match in the stats workbook for this account (workbook rows without a match stay evidence only)';
@@ -589,14 +577,6 @@
       var a = age(sum, S.fetchedAt[r.account]);
       return '<td title="' + esc(r.synced_at) + '">' + (a ? esc(a) : na('Read time unknown')) + '</td>';
     }},
-    {k: 'm_spend', g: 'meta', h: 'Spend', w: 104, num: 1, cell: metaCell(money, 'spend')},
-    {k: 'm_reach', g: 'meta', h: 'Reach', w: 96, num: 1, cell: metaCell(function (v) { return int(v); }, 'reach')},
-    {k: 'm_impr', g: 'meta', h: 'Impressions', w: 108, num: 1, cell: metaCell(function (v) { return int(v); }, 'impressions')},
-    {k: 'm_freq', g: 'meta', h: 'Frequency', w: 96, num: 1, cell: metaCell(function (v) { return dec(v, 2); }, 'frequency')},
-    {k: 'm_clicks', g: 'meta', h: 'Clicks (all)', w: 100, num: 1, cell: metaCell(function (v) { return int(v); }, 'clicks')},
-    {k: 'm_ctr', g: 'meta', h: 'CTR (all)', w: 92, num: 1, cell: metaCell(function (v) { return dec(v, 2) + '%'; }, 'ctr')},
-    {k: 'm_cpm', g: 'meta', h: 'CPM', w: 92, num: 1, cell: metaCell(money, 'cpm')},
-    {k: 'm_cpc', g: 'meta', h: 'CPC (all)', w: 96, num: 1, cell: metaCell(money, 'cpc')},
     {k: 'x_obj', g: 'meta', h: 'Objective', w: 140, cell: function (r) { return '<td>' + (r.objective ? esc(r.objective) : na('Only campaigns carry an objective')) + '</td>'; }},
     {k: 'x_bid', g: 'meta', h: 'Bid strategy', w: 130, cell: function (r) { return '<td>' + (r.bid_strategy ? esc(r.bid_strategy) : na(r.level === 'ad' ? 'Managed by the ad set' : 'Meta did not return a bid strategy')) + '</td>'; }},
     {k: 't_keitaro', g: 'tracker', h: 'Keitaro', w: 130, cell: trackerCell('Keitaro is not connected to this dashboard')},
@@ -605,13 +585,13 @@
     {k: 't_land', g: 'tracker', h: 'Landing Variant', w: 140, cell: trackerCell('The landing variant is not joined to Meta objects yet')},
     {k: 't_hist', g: 'tracker', h: 'History', w: 110, cell: trackerCell('Per-object history is not recorded; see “What was changed here” below')}
   ];
-  var GROUPS = {controls: 'MANAGEMENT & DECISIONS', bi: 'BI · business outcomes', meta: 'META · delivery', tracker: 'TRACKER & CONTEXT'};
+  var GROUPS = {controls: 'MANAGEMENT & DECISIONS', bi: 'BI · business outcomes', meta: 'Structure', tracker: 'TRACKER & CONTEXT'};
   var CTRL = ['delivery', 'dup', 'bid', 'budgetcmd'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
   var DECIDE = ['hint', 'alerts', 'goal', 'bench'];
   var PRESETS = {
-    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpl', 'b_cpa', 'b_cr', 'b_match', 'm_spend', 'm_cpm', 'm_ctr']),
-    meta: CTRL.concat(['synced', 'm_spend', 'm_reach', 'm_impr', 'm_freq', 'm_clicks', 'm_ctr', 'm_cpm', 'm_cpc', 'x_obj', 'x_bid']),
-    bi: CTRL.concat(DECIDE, ['m_spend'], BI_ALL),
+    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpl', 'b_cpa', 'b_cr', 'b_match']),
+    meta: CTRL.concat(['synced', 'x_obj', 'x_bid']),
+    bi: CTRL.concat(DECIDE, BI_ALL),
     all: COLS.map(function (c) { return c.k; })
   };
   var colState = {preset: 'optimization', visible: PRESETS.optimization.slice()};
@@ -758,7 +738,7 @@
     var span = 4 + cols.length, k = S.kids[r.key], noun = r.level === 'campaign' ? 'ad sets' : 'ads';
     if (!k || k.state === 'loading') return msg('', 'Loading ' + noun + '…', span);
     if (k.state === 'error') return msg('hc-bad', 'Could not load ' + noun + ': ' + esc(k.note) + ' <button type="button" data-retry="' + esc(r.key) + '">Retry</button>', span);
-    if (k.state === 'not_read') return msg('hc-warn', 'The ' + noun + ' of this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + ' were not read — ' + esc(k.note || 'Read campaigns again for this account') + '. This is not the same as having none.', span);
+    if (k.state === 'not_read') return msg('hc-warn', 'The ' + noun + ' of this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + ' were not read — ' + esc(k.note || 'Retry this account list') + '. This is not the same as having none.', span);
     if (k.state === 'empty') return msg('', 'No ' + noun + ' in the saved inventory for this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + '.', span);
     var out = (k.rows || []).filter(function (c) { return !S.q || qmatch(c.name) || qmatch(r.name) || hasMatchBelow(c); }).map(function (c) { return rowHtml(c, cols); }).join('');
     if (k.state === 'partial') out += msg('hc-warn', 'Partial: ' + esc(k.note), span);
@@ -769,18 +749,17 @@
      тёплых сессий) состояние профиля с «Open profile». Полоса аккаунта внутри таблицы кампаний убрана. */
   function decorate(account, h) {
     var sum = S.summaries[account] || {state: 'idle'}, att = sum.attempt, ag = age(sum, S.fetchedAt[account]);
-    var text, bad = false, title = '';
-    if (S.running[account]) text = 'Campaigns: reading…';
-    else if (att && att.state === 'failed') {
-      var ex = noteFrom(att.error || 'unknown reason', 'bad', att.code);
-      text = 'Campaigns: last read failed — ' + ex.text; bad = true; title = att.error || '';
-    } else if (sum.state === 'idle') text = 'Campaigns: not read yet';
-    else text = 'Campaigns: ' + (sum.counts ? sum.counts.campaigns + ' campaigns · ' + sum.counts.ads + ' ads' : sum.state) + (ag ? ' · read ' + ag : '');
-    if (h.snap) { h.snap.textContent = text; h.snap.title = title || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
+    var row = S.refreshRows && S.refreshRows[account] || {}, text, bad = false;
+    var pending = !!S.running[account];
+    if (pending) text = 'updating';
+    else if (row.state === 'failed' || att && att.state === 'failed') { text = 'list failed — ' + noteFrom(row.error || att && att.error || 'Read failed', 'bad').text; bad = true; }
+    else text = sum.finished_at ? 'list ' + sum.finished_at.slice(11, 16) : 'list not read';
+    if (h.snap) { h.snap.textContent = text; h.snap.title = row.error || att && att.error || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
     if (h.readBtn) {
-      h.readBtn.disabled = !!(S.busy || !periodOk || S.running[account]);
-      h.readBtn.textContent = S.running[account] ? 'Reading…' : 'Read campaigns';
-      h.readBtn.title = periodOk ? 'Read campaigns, ad sets, ads and Insights for the dates on screen (GET only)' : 'Select dates to read campaigns; Maximum is not supported';
+      h.readBtn.hidden = (!bad && !S.uncertain[account]) || S.readsAvailable === false;
+      h.readBtn.disabled = pending || S.readsAvailable === false;
+      h.readBtn.textContent = 'Retry';
+      h.readBtn.title = row.error || att && att.error || 'Retry the account structure read';
     }
     var wi = S.warm.available ? S.warm.accounts[account] : null, shown = !!(wi && wi.state && wi.state !== 'unknown');
     if (h.chip) {
@@ -802,6 +781,7 @@
     if (!handles[account]) return;
     if (S.acctOpen[account]) delete S.acctOpen[account]; else S.acctOpen[account] = true;
     render();
+    if (S.acctOpen[account] && S.readsAvailable !== false && window.aclAccountRefresh) window.aclAccountRefresh.request(account, 'attention');
   }
   function onRowClick(account, ev) {
     var t = ev.target, c = t && t.closest ? t.closest('button, a, input, select, textarea, [contenteditable], .amap-acct-note, .amap-note-pop') : null;
@@ -826,7 +806,7 @@
     if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
       sum.state !== 'idle' ? ' — showing the earlier snapshot below' : '');
     if (S.warmMsg[a.account]) out += rowMsg('acct:' + a.account + ':open', S.warmMsg[a.account], span);
-    if (sum.state === 'idle') return out || msg('', 'Not read yet — press Read campaigns. Nothing is shown until the account has been read.', span);
+    if (sum.state === 'idle') return out || msg('', 'No saved list yet. Expand this account to request its structure; dates only change workbook numbers.', span);
     if (sum.state === 'empty') return out + msg('', 'The account was read and has no campaigns in the shown states.', span);
     if (sum.state === 'partial') {
       var why = (sum.problems || []).join('; ') || 'some levels were not read';
@@ -861,7 +841,7 @@
     });
     root.style.setProperty('--hc-pin-w', pin + 'px');
     var narrowed = S.q || S.delivery !== 'all';
-    if (el('foot')) el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span>' +
+    if (el('foot')) el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Metrics use BI for the selected period; the saved campaign list is independent of dates.</span>' +
       '<span>Status shows the configured on/off from Meta; Effective delivery is separate. The switch changes only after Meta confirms it.</span>';
     var n = Object.keys(S.selected).length;
     el('selcount').textContent = n ? n + ' selected' : '';
@@ -980,43 +960,8 @@
     return found;
   }
 
-  function readOne(account, batch) {
-    var stop = null;
-    var body = new FormData();
-    body.append('account', account); body.append('date_from', period.from); body.append('date_to', period.to); body.append('span', period.span || '');
-    if (batch) body.append('batch', batch);
-    S.running[account] = true; render();
-    return fetch('/campaign-inventory/read', {method: 'POST', body: body, credentials: 'same-origin'}).then(function (r) {
-      return r.json().then(function (j) { if (!r.ok || !j.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.code = j.code; throw e; } });
-    }).then(function () { return awaitDone(account); }).then(function () {
-      return refreshAccount(account).then(function () {
-        /* Тот же аккаунт открыт в другой области (он стоит в двух странах) — её данные устарели. */
-        instances.forEach(function (i) { if (i !== api && i.watches(account)) i.reload(account); });
-        var at = (S.summaries[account] || {}).attempt;
-        if (at && BATCH_STOPS[at.code]) stop = {account: account, text: at.error || ''};
-        loadWarm();
-      });
-    }).catch(function (e) {
-      if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
-      if (e && BATCH_STOPS[e.code]) stop = {account: account, text: String(e.message || '')};
-      S.summaries[account] = Object.assign({}, S.summaries[account] || {state: 'idle'}, {attempt: {state: 'failed', at: '', error: String(e && e.message || e), code: e && e.code || ''}});
-    }).then(function () { delete S.running[account]; render(); return stop; });
-  }
-  /* Ждём конец чтения у СВОЕГО сервера (локальный статус задания); Meta это не трогает. */
-  function awaitDone(account) {
-    var tries = 0;
-    return new Promise(function (resolve, reject) {
-      (function poll() {
-        setTimeout(function () {
-          getJson('/campaign-inventory/status?account=' + encodeURIComponent(account)).then(function (j) {
-            if (j.needs_api) { var e = new Error(j.message); e.code = 'needs_api_backend'; return reject(e); }
-            if (j.running.indexOf(account) < 0) return resolve();
-            if (++tries > 240) return reject(new Error('No answer after twelve minutes — check the Adopy Campaign Manager window'));
-            poll();
-          }, reject);
-        }, tries === 0 ? 1500 : 3000);
-      })();
-    });
+  function readOne(account) {
+    return window.aclAccountRefresh ? window.aclAccountRefresh.request(account, 'retry') : Promise.resolve();
   }
   function refreshAccount(account) {
     return getJson('/campaign-inventory/status?account=' + encodeURIComponent(account)).then(function (j) {
@@ -1031,11 +976,6 @@
   }
   /* Чтение аккаунта идёт через общую очередь страницы: «один профиль одновременно» —
      правило всей страницы, а не одной таблицы, и кнопка страны ведёт несколько таблиц. */
-  function readQueue(accounts) {
-    if (!periodOk) return Promise.resolve();
-    return queueRun(accounts.map(function (a) { return {inst: api, account: a}; }));
-  }
-
   function showNeedsApi() { el('needs').hidden = false; el('body').hidden = true; }
 
   /* ── события ── */
@@ -1054,13 +994,23 @@
     }).then(function (res) {
       /* Строку меняет только `settle`, и только подтверждённым чтением Meta; остальное — пометка. */
       var notes = ACM.home.settle(rows, res);
+      if (res.kind === 'unknown') S.uncertain[plan.account] = true;
       rows.forEach(function (r) { if (notes[r.key]) S.notes[r.key] = noteFrom(notes[r.key].text, notes[r.key].tone); else delete S.notes[r.key]; });
       if ((res.kind === 'failed' || res.kind === 'unknown' || res.kind === 'nothing') && res.message) el('batch-note').textContent = noteFrom(res.message, 'warn').text;
     }, function (e) {
       /* Сюда — только когда сервер НЕ принял запись (отказ превью/исполнения): ничего не отправлено. */
       var nf = noteFrom('Not sent: ' + String(e && e.message || e), 'bad', e && e.code);
       rows.forEach(function (r) { S.notes[r.key] = nf; });
-    }).then(function () { setBusy(rows, false); render(); });
+    }).then(function () {
+      setBusy(rows, false);
+      if (window.aclAccountRefresh) window.aclAccountRefresh.load();
+      return getJson('/campaign-inventory/status?account=' + encodeURIComponent(plan.account)).then(function (j) {
+        var fresh = (j.accounts || {})[plan.account], old = S.summaries[plan.account] || {};
+        // A failed refresh keeps the confirmed per-object command readback.
+        // Never overwrite it with the unchanged older inventory snapshot.
+        if (fresh && fresh.revision && fresh.revision !== old.revision) return refreshAccount(plan.account);
+      }).then(render, render);
+    });
   }
 
   function currencyOf(rows) { return (rows[0] && rows[0].currency) || ''; }
@@ -1175,6 +1125,7 @@
     if (S.expanded[key]) { delete S.expanded[key]; render(); return; }
     S.expanded[key] = true;
     if (!S.kids[key] || S.kids[key].state === 'error') loadKids(row); else render();
+    if (S.readsAvailable !== false && window.aclAccountRefresh) window.aclAccountRefresh.request(row.account, 'attention');
   };
   var onTableChange = function (ev) {
     var key = ev.target && ev.target.dataset ? ev.target.dataset.sel : '';
@@ -1216,7 +1167,7 @@
   function expandAll() {
     var camps = [];
     Object.keys(S.rows).forEach(function (a) { (S.rows[a] || []).forEach(function (r) { if (visible(r)) camps.push(r); }); });
-    Object.keys(handles).forEach(function (a) { S.acctOpen[a] = true; });
+    Object.keys(handles).forEach(function (a) { S.acctOpen[a] = true; if (S.readsAvailable !== false && window.aclAccountRefresh) window.aclAccountRefresh.request(a, 'attention'); });
     camps.forEach(function (r) { S.expanded[r.key] = true; });
     render();
     return loadMany(camps).then(function () {
@@ -1259,7 +1210,8 @@
     var accounts = Object.keys(S.accountCountries);
     var q = accounts.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
     return getJson('/campaign-inventory/status?' + q).then(function (j) {
-      if (j.needs_api) { showNeedsApi(); return; }
+      S.readsAvailable = !j.needs_api;
+      // Cached structure stays visible even if reads are unavailable on this backend.
       S.summaries = j.accounts || {};
       accounts.forEach(function (a) { S.fetchedAt[a] = Date.now(); if (j.running.indexOf(a) >= 0) S.running[a] = true; });
       el('body').hidden = false;
@@ -1267,11 +1219,6 @@
       loadWarm();
       (ACM ? ACM.home.availability() : Promise.resolve({available: false, reason: 'the command helper did not load'}))
         .then(function (a) { S.avail = a; render(); });
-      /* Страницу перезагрузили во время чтения: дальше ждём его конец у своего сервера. */
-      accounts.filter(function (a) { return S.running[a]; }).forEach(function (a) {
-        awaitDone(a).then(function () { return refreshAccount(a); }).catch(function () { /* статус виден в полосе аккаунта */ })
-          .then(function () { delete S.running[a]; render(); });
-      });
       var seen = accounts.filter(function (a) { return (S.summaries[a] || {}).state && S.summaries[a].state !== 'idle'; });
       return Promise.all(seen.map(loadTree)).then(render);
     }, function (e) {
@@ -1327,7 +1274,7 @@
     h.account = account;
     h.row.addEventListener('click', function (ev) { onRowClick(account, ev); });
     h.row.addEventListener('keydown', function (ev) { onRowKey(account, ev); });
-    if (h.readBtn) h.readBtn.addEventListener('click', function () { if (!h.readBtn.disabled) readQueue([account]); });
+    if (h.readBtn) h.readBtn.addEventListener('click', function () { if (!h.readBtn.disabled) readOne(account); });
     if (h.openBtn) h.openBtn.addEventListener('click', function () { if (!h.openBtn.disabled) warmOpen(account); });
     h.table.addEventListener('mousedown', onResizeDown);
     h.table.addEventListener('dblclick', onDbl);
@@ -1351,7 +1298,6 @@
       b.appendChild(sp); b.appendChild(bt);
     },
     accounts: function () { return Object.keys(S.accountCountries); },
-    readAll: function (progress) { return periodOk ? queueRun(Object.keys(S.accountCountries).map(function (a) { return {inst: api, account: a}; }), progress) : Promise.resolve(); },
     periodOk: periodOk,
     setReadBusy: function (on) { S.busy = on; render(); },
     setPin: function (w, persist) { setPin(w, persist); },
@@ -1359,6 +1305,25 @@
     reload: function (a) { return refreshAccount(a).then(render); },
     setCols: function (c) { colState = c; fillCols(); render(); }
   };
+  if (window.aclAccountRefresh) window.aclAccountRefresh.subscribe(function (view) {
+    S.refreshRows = view.rows || {};
+    S.readsAvailable = !view.needs_api;
+    var previousRunning = S.running;
+    S.running = {};
+    (view.queued || []).forEach(function (r) { S.running[r.account] = true; });
+    if (view.running) S.running[view.running] = true;
+    var refreshes = [];
+    Object.keys(S.accountCountries).forEach(function (a) {
+      if (previousRunning[a] && !S.running[a] && (view.rows || {})[a]) delete S.uncertain[a];
+      var sum = (view.accounts || {})[a];
+      if (!sum) return;
+      var old = S.summaries[a] || {};
+      S.summaries[a] = sum; S.fetchedAt[a] = Date.now();
+      if (sum.revision && sum.revision !== old.revision) refreshes.push(refreshAccount(a));
+    });
+    render();
+    Promise.all(refreshes).then(render);
+  });
   instances.push(api);
   return api;
   }

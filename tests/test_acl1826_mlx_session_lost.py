@@ -433,13 +433,15 @@ def test_expired_token_stops_the_whole_slot_b_batch_before_any_start(monkeypatch
 
 def test_page_scripts_send_batch_show_one_banner_and_retry_only_the_skipped():
     report = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
-    assert "body.append('batch', batch)" in report and "amapBatchBanner(btn, scope, stopped, per" in report
-    assert "amapRunJobs(btn, scope, stopped, per)" in report            # Retry = только пропущенные
+    assert "body.append('batch', batch)" in report
     assert "fd.set('batch', batch.id)" in report                         # Publish all
     camp = (ROOT / "src/web/templates/_campaign_table.html").read_text(encoding="utf-8")
-    assert "body.append('batch', batch)" in camp and "stopped.map(function (x) { return x.job; })" in camp
+    assert "stopped.map(function (x) { return x.job; })" in camp
     assert "data-cb-stop-retry" in report and "onlyKeys.indexOf" in report
-    assert "amapRunSplit(job.account, job.btn, per, batch)" in report
+    # ACL-2063 убирает ручное чтение по странам: его заменяет одна очередь.
+    refresh = (ROOT / "src/web/static/account_refresh.js").read_text(encoding="utf-8")
+    assert "'/account-refresh/page-open'" in refresh and "'/account-refresh/request'" in refresh
+    assert "halt.reason" in refresh and "request(account, 'retry')" in camp
     warm_js = (ROOT / "src/web/static/warm_sessions.js").read_text(encoding="utf-8")
     assert "runOpen(grid, s.stopped)" in warm_js
     cmds = (ROOT / "src/web/static/acm_commands.js").read_text(encoding="utf-8")

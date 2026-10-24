@@ -257,6 +257,7 @@ class ApiPublisher:
         self._facts: AccountFacts | None = None
         self._resolver: TargetingResolver | None = None
         self._entry = None
+        self._session_profile_id = ""
         self._opened = None
         #: ACL-2113: окно открыто прошлым заданием и оставлено (мы его взяли без перезапуска) —
         #: для решений «закрыть/держать» оно наше, как поднятое этим заданием.
@@ -310,6 +311,7 @@ class ApiPublisher:
                 f"{account_label}: Meta stopped the last API call ({why}); waiting about "
                 f"{int(left // 60) + 1} min before calling again. Nothing was created.")
         self._entry = entry
+        self._session_profile_id = profile_id
         from src.fb_api import profile as _fb_profile
 
         if self._open_warm(account_label, profile_id):
@@ -517,6 +519,22 @@ class ApiPublisher:
             pass
 
     # -- конец
+    def refresh_structure(self) -> None:
+        """Read the account list before releasing this already-open session.
+
+        The job calls this only after confirmed publishing. Keep its original
+        call budget and stops; a failed refresh never repeats a publish.
+        """
+        if (self.dry_run or self.blocked or self.stop or self.cancelled()
+                or self._client is None):
+            return
+        from types import SimpleNamespace
+        from src.analysis_agent import account_refresh, campaign_inventory
+
+        snap = campaign_inventory.read_in_session(
+            self.account_label, SimpleNamespace(client=self._client, act=self.act, profile_id=self._session_profile_id), trigger="action")
+        account_refresh.queue().record_result(snap, trigger="action")
+
     def close(self, *, force: bool = False) -> None:
         """Закрыть свою вкладку. Профиль не трогаем."""
         _ = force

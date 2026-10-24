@@ -13,11 +13,6 @@
       {#- Выбор периода переехал в шапку: он меняет всю страницу, а не эту
           секцию. Здесь остаётся только то, за какие дни показаны числа. -#}
       <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from and amap.date_from == amap.date_to %}{{ amap.date_from }}{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
-      {#- ACL-353: одна кнопка читает все подключённые аккаунты карты, по
-          одному за раз — правило «один профиль одновременно» никуда не
-          девается, поэтому это очередь, а не параллельный прогон. -#}
-      <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
-              title="Read every connected account for the period on screen — one at a time, top to bottom">Read all spend</button>
       <span class="amap-add" style="padding:0;margin-left:auto">
         <input type="text" id="amap-new-country" placeholder="new country…" size="14">
         <select id="amap-new-country-acc">
@@ -42,7 +37,7 @@
     <div class="amap-grid-head" aria-hidden="true">
       <span></span>
       <span>Country</span>
-      <span title="Spend read from the ad accounts themselves for the period on screen">Account read</span>
+      <span aria-hidden="true"></span>
       {{ mx.span_headers() }}
       <span class="num">Accounts</span>
       <span></span>
@@ -61,42 +56,7 @@
           {%- if compare %}{{ mx.flag(compare_state(bk if bk else none, cpv)) }}{% endif %}
           {#- ACL-1721: заметки у стран убраны (хранятся в файле, но не показываются и не правятся); остались только заметки аккаунтов. -#}
         </span>
-        {#- Спенд, снятый с самих кабинетов (Read). Прочерк значит «никто не
-            читал», это не ноль.
-
-            Классы `amap-live-summary*` тут обязательны, и это не украшение:
-            по ним `amapUpdateCountrySummaries` дописывает сюда числа после
-            каждого Read. Первая итерация этой строки их несла, вторая —
-            писалась раньше того кода и обходилась без них; сведи их
-            небрежно, и строка замрёт на том, что отрисовал сервер, молча.
-
-            Подпись говорит то, чего по числу не видно: это весь спенд
-            привязанных кабинетов по всем странам, а не спенд этой страны. -#}
-        <span class="amap-cell-read amap-live-summary"
-              title="Full spend of the linked accounts across all countries for the selected dates; not country-attributed spend. Currencies are kept separate.">
-          <span class="amap-live-summary-values">
-          {%- if mc.live_sums %}
-          {%- for s in mc.live_sums %}<b>{{ s.spend | fmt_summary_amount(s.currency) }}</b>{% if not loop.last %} · {% endif %}{% endfor %}
-          {%- else %}<b>—</b>{% endif %}</span>
-          <i class="amap-live-summary-count">{{ mc.live_read or 0 }}/{{ mc.rows | length }} spend read</i>
-          {#- acl-357: спенд, привязанный к стране самим кабинетом. Стоит в
-              той же ячейке, что и общий: порознь их путают, а разница между
-              ними — весь смысл разбивки. Сумма без пометки `summed` — это
-              один кабинет: под знаком валюты (`$`) складывать нельзя, он не
-              говорит, песо это или доллары. -#}
-          {%- if mc.country_read %}
-          <i class="amap-country-read"
-             title="Spend the accounts themselves attribute to {{ mc.country | e }} for these dates, read from Ads Reporting">
-            {#- ACL-1264: как сводка рядом (ACL-1258) — без «currency unknown» и
-                имён кабинетов. Суммы без кода по-прежнему не складываются и
-                стоят порознь; почему — в подсказке. Пробел после двоеточия
-                стоит явно: `{%- for` съедает перевод строки. #}
-            in {{ mc.country }}: {% for r in mc.country_read %}
-            {%- if r.summed %}<b>{% elif r.currency %}<b title="One account: the currency is written as a sign, and a sign does not say which currency it is, so amounts from different accounts are not added up">{% else %}<b title="One account: Meta did not write a currency, so amounts from different accounts are not added up">{% endif %}{{ r.spend | fmt_summary_amount(r.currency) }}</b>{% if not loop.last %} · {% endif %}
-            {%- endfor %}
-          </i>
-          {%- endif %}
-        </span>
+        <span class="amap-cell-read" aria-hidden="true"></span>
         {#- У страны без строк в книге (`book` пуст) чисел нет — прочерки, а не нули. -#}
         {% if bk %}{{ mx.spans(bk.spend, bk.leads, bk.deposits, prev=cpv) }}{% elif compare and cpv %}{{ mx.spans(0, 0, 0, prev=cpv, gone=true) }}{% else %}{{ mx.dash_spans() }}{% endif %}
         <span class="num{% if not mc.rows %} amap-nocov-count{% endif %}"><b>{{ mc.rows | length }}</b></span>
@@ -155,9 +115,7 @@
     <div class="amap-total-row amap-row" id="amap-totals">
       <span></span>
       <span class="amap-cell-name">Total</span>
-      <span class="amap-cell-read"
-            title="{{ tt.read_count }} of {{ tt.accounts }} accounts read. The accounts' own spend, added up once per account; shown only when every read account is in the same currency{% if tt.mixed %} — mixed currencies here, so not added up{% endif %}, otherwise a dash.">
-        {%- if tt.read %}<b>{{ tt.read.spend | fmt_summary_amount(tt.read.currency) }}</b>{% else %}<b>—</b>{% endif %}</span>
+      <span class="amap-cell-read" aria-hidden="true"></span>
       {{ mx.spans(tt.spend, tt.leads, tt.deposits, prev=(compare.totals() if compare else false)) }}
       <span class="num"><b>{{ amap.countries | sum(attribute='rows', start=[]) | length }}</b></span>
       <span></span>

@@ -38,12 +38,70 @@ def run(args, *, timeout=180, expected=0, env=None):
     return result.stdout
 
 
+# ACL-1309: the launcher no longer always takes 9090 -- it keeps one port per person
+# (local_dashboard.choose_port) and skips ports the shared registry %ProgramData%\ACL\ports
+# marks as another person's. An earlier step of the same job (test_installer.ps1) uses a
+# different config dir and may already own 9090, so this test's isolated config can
+# legitimately land on 9091. Ask the same code the launcher asks, with this test's config.
+CONFIG_DIR = None
+
+
+def _local_dashboard():
+    for path in (ROOT, ROOT / "packaging/windows"):
+        if str(path) not in sys.path:
+            sys.path.insert(0, str(path))
+    import local_dashboard
+    return local_dashboard
+
+
+LEGACY_PORT = 9090
+
+
+def find_dashboard(config, probe, in_use=None):
+    """(port, /health payload) of the dashboard under test, or None.
+
+    The current launcher answers with a `config` fingerprint and may sit on its
+    per-person port, so it is looked up exactly as the launcher does. A package built
+    before ACL-1309 -- every release published so far, which Complete Delivery installs
+    as the "old" version -- always binds 9090 and has no `config` in /health; it is
+    accepted there. A payload whose `config` is present but is someone else's is never ours.
+    """
+    module = _local_dashboard()
+    found = module.find_own(config, probe=probe, in_use=in_use or module.port_in_use)
+    if found is not None:
+        return found
+    payload = probe(LEGACY_PORT)
+    if payload and payload.get("app") == "ACL" and payload.get("ok") is True and "config" not in payload:
+        return LEGACY_PORT, payload
+    return None
+
+
 def health():
+    if CONFIG_DIR is None:
+        port = LEGACY_PORT
+    else:
+        found = find_dashboard(CONFIG_DIR, lambda candidate: _local_dashboard().health(candidate, timeout=2))
+        if found is None:
+            return None
+        port = found[0]
     try:
-        with urllib.request.urlopen("http://127.0.0.1:9090/health", timeout=2) as response:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as response:
             return json.load(response)
     except (OSError, ValueError, urllib.error.URLError):
         return None
+
+
+def describe_ports():
+    """What a CI log needs to see when no dashboard of ours answers."""
+    try:
+        module = _local_dashboard()
+        busy = [port for port in module.PORTS if module.port_in_use(port)]
+        registry = module.registry_dir()
+        marks = sorted(p.name for p in registry.iterdir()) if registry and registry.is_dir() else []
+        remembered = module.remembered_port(CONFIG_DIR) if CONFIG_DIR else None
+        return f"ports in use {busy}; remembered port {remembered}; registry marks {marks}"
+    except Exception as exc:  # diagnostics must never hide the real failure
+        return f"port diagnostics unavailable: {exc}"
 
 
 def wait_version(version):
@@ -53,7 +111,7 @@ def wait_version(version):
         if value and value.get("ok") is True and value.get("app") == "ACL" and value.get("version") == version:
             return value
         time.sleep(0.5)
-    raise RuntimeError(f"The actual installed version {version} did not become healthy")
+    raise RuntimeError(f"The actual installed version {version} did not become healthy ({describe_ports()})")
 
 
 def digest(path):
@@ -122,6 +180,8 @@ def main():
         raise RuntimeError("A previous test configuration exists; inspect instead of overwriting it")
     logs.mkdir(parents=True, exist_ok=True)
     config.mkdir()
+    global CONFIG_DIR
+    CONFIG_DIR = config
     fixtures = {".env": "ACL_NO_TELEMETRY=1\n",
                 "ad_account_map.csv": "account_id,country\n",
                 "targeting_registry.json": '{"Local synthetic":{"interests":"Finance","narrow":"Owners"}}',

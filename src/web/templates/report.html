@@ -4395,7 +4395,7 @@ async function dashRefresh(ev) {
     No rows for {{ period_owner.manager }} in
     <b>{{ period.date_from or 'the start' }}{% if period.date_to and period.date_to != period.date_from %} → {{ period.date_to }}{% elif not period.date_to %} onward{% endif %}</b>,
     while the selected statistics have rows for other managers on these dates. Nothing to review for you here; the source itself is not the problem.
-    Pick another period, or read the spend straight from an account below; the account map stays on this page.
+    Pick another period. Saved account lists remain available below; the account map stays on this page.
   </p>
 </div>
 {% endif %}
@@ -4414,7 +4414,7 @@ async function dashRefresh(ev) {
     {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
     {% if empty_source_is_workbook %}Nobody has rows for these dates, so the workbook may need updating.
     {% else %}Nobody has rows for these dates, so the statistics source may need updating.{% endif %}
-    Pick another period, or read the spend straight from an account below.
+    Pick another period. Saved account lists remain available below.
   </p>
   {% else %}
   <p style="color: var(--muted)">No country data found. Check the Excel path and the filters.</p>
@@ -8372,7 +8372,7 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|multilogin_not_running$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|multilogin_not_running$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|api_read_skip$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error|proxy_gate_)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
@@ -9582,6 +9582,7 @@ function amapApply(from, to, span, cmp) {
       }
     }
   }
+  q.push('view_only=1');  // changing workbook dates never admits a profile read
   var hash = window.location.hash || '';
   window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
 }
@@ -11238,7 +11239,7 @@ function amapCampaignTree(grid, accounts) {
   var handles = {};
   var warmOwn = !window.__aclWarmSessions;      // чип и «Open/Close» от ACL-1812 уже в строке — второй не рисуем
   function btn(cls, text) { var b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = text; return b; }
-  grid.querySelectorAll('td.amap-live[data-account]').forEach(function (cell) {
+  grid.querySelectorAll('td.amap-list[data-account]').forEach(function (cell) {
     var a = cell.dataset.account, row = cell.closest('tr');
     if (!row || accounts.indexOf(a) < 0 || handles[a]) return;
     var acc = row.querySelector('td.amap-acc');
@@ -11253,10 +11254,9 @@ function amapCampaignTree(grid, accounts) {
       chip = document.createElement('span'); chip.className = 'amap-pstate'; chip.hidden = true;
       acc.appendChild(chip);
     }
-    var snap = document.createElement('small'); snap.className = 'hc-snap';
-    acc.appendChild(snap);
+    var snap = cell.querySelector('span') || cell; snap.className = 'hc-snap';
     var act = row.querySelector('td.amap-actions') || row.lastElementChild;
-    var readBtn = btn('amap-btn hc-rc', 'Read campaigns');
+    var readBtn = btn('amap-btn hc-rc', 'Retry'); readBtn.hidden = true;
     act.appendChild(readBtn);
     if (warmOwn) { openBtn = btn('amap-btn hc-ro', 'Open profile'); openBtn.hidden = true; act.appendChild(openBtn); }
     var child = document.createElement('tr');
@@ -11297,7 +11297,7 @@ function amapCampaignMount(host) {
   host.dataset.periodTo = per.to || '';
   host.dataset.periodSpan = per.span || '';
   var seen = {}, accounts = [];
-  scope.querySelectorAll('table.amap-grid td.amap-live[data-account]').forEach(function (c) {
+  scope.querySelectorAll('table.amap-grid td.amap-list[data-account]').forEach(function (c) {
     var a = c.dataset.account;
     if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
   });
@@ -18078,6 +18078,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});
           }
+          if (job.status === 'done' && window.aclAccountRefresh) window.aclAccountRefresh.load();
           if (done) { var f = done; done = null; f(job); }
         }
       })

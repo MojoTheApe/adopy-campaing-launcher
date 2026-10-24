@@ -93,7 +93,7 @@ def test_maximum_does_not_read_yesterday_or_show_cached_spend(monkeypatch):
     assert app._live_spend("", "") == {}
     amap=account_map("all")
     rendered=app.templates.env.get_template("_account_map_country.html").render(mc=amap["countries"][0], amap=amap, mlx={"A":"A","B":"B"})
-    assert 'disabled title="Select dates' in rendered
+    assert 'Campaign list' in rendered and 'Select dates' not in rendered
     assert 'onclick="amapReadSpend' not in rendered
 
 
@@ -102,7 +102,8 @@ def test_reload_keeps_currency_and_cents(currency, expected):
     assert fmt_currency(1234.56, currency) == expected
     amap=account_map(live={"Buyer's X01":dict(state="ok", spend=1234.56, currency=currency)})
     rendered=app.templates.env.get_template("_account_map_country.html").render(mc=amap["countries"][0], amap=amap, mlx={"A":"A","B":"B"})
-    assert expected in rendered
+    assert expected not in rendered  # ACL-2063 removes historical Meta spend from this UI
+    assert "Campaign list" in rendered
 
 
 def test_poll_resumes_and_updates_all_copies_and_status(tmp_path):

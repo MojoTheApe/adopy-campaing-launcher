@@ -199,16 +199,8 @@ def test_the_country_attributed_part_shows_only_amounts(splits):
     view = _build_account_map_view(_report_with("Kuwait", "FacebookX", 120.0),
                                    date_from="2026-09-01", date_to="2026-09-15")
     html = templates.env.get_template("_account_map.html").render(amap=view, mlx={})
-    part = html.split('class="amap-country-read"', 1)[1].split("</i>", 1)[0]
-    assert "KWD 7.00" in part
-    assert "$10.50" in part and "$20.25" in part, "суммы под знаком — порознь, не сложены"
-    assert "$30.75" not in part
-    assert "currency unknown" not in part
-    assert ">3.00</b>" in part, "без валюты — голое число"
-    assert "FacebookX" not in part and "FacebookY" not in part and "FacebookZ" not in part
-    assert "FacebookW" not in part
-    import re
-    text = re.sub(r"<[^>]+>", "", part.split(">", 1)[1])
-    assert re.search(r"in Kuwait: \S", " ".join(text.split())), f"сумма прилипла к двоеточию: {text!r}"
-    assert "Meta did not write a currency" in part, "подсказка для суммы без валюты — своя"
-
+    # ACL-2063 supersedes the live-account spend display; its retained model
+    # and historical readings remain intact, but no Meta number is shown as BI.
+    assert 'class="amap-country-read"' not in html
+    assert 'class="amap-live-summary"' not in html
+    assert 'Campaign list' in html and 'numbers from the stats workbook' in html
