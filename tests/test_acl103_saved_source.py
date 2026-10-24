@@ -107,7 +107,7 @@ def test_real_map_exposes_both_saved_figures_for_one_alias_and_period(saved_comp
     assert panel.entries == 1, "an account linked to two countries is compared once"
     text = panel.content()
     for expected in [LABEL, ALIAS, "BI", "USD 12.50", "USD 14.00", "USD 1.50",
-                     DAY, "UTC", "calendar_day", "2026-10-18 14:20:00"]:
+                     DAY, "UTC", "calendar day", "2026-10-18 14:20:00"]:
         assert expected in text
     assert "999.00" not in text
     assert not panel.unsafe and "tr" not in panel.parents
@@ -137,3 +137,14 @@ def test_saved_comparison_never_substitutes_another_period(saved_comparison_cont
     assert "No saved account figure for these dates" in text
     assert "14.00" not in text and "999.00" not in text
     assert saved_comparison_context["blocked"] == []
+
+
+def test_saved_day_label_is_human_readable_without_changing_metadata(saved_comparison_context):
+    _report, amap = saved_comparison_context["model"]()
+    row = amap["saved_source_check"]["rows"][0]
+    assert row["source"]["day_boundary"] == "calendar_day"
+    assert row["account_day_boundary"] == "calendar_day"
+    assert row["comparison_state"] == "comparable" and row["gap"] == 1.5
+    panel = SavedPanel(saved_comparison_context["render"]())
+    assert panel.content().count("day boundary: calendar day") == 2
+    assert "calendar_day" not in panel.content()

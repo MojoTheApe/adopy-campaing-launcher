@@ -1,4 +1,5 @@
 {# Saved diagnostic values only. Deliberately outside campaign rows/attention handlers. #}
+{% set day_labels = {'calendar_day': 'calendar day'} %}
 <details data-source-check class="amap-source-check">
   <summary>Saved source/account check</summary>
   <p class="hint">Only values already saved on this computer. Opening this check does not read an account.
@@ -9,9 +10,9 @@
     <p>{% if amap.saved_source_check.all_dates %}All dates{% else %}{{ amap.saved_source_check.date_from }}{% if amap.saved_source_check.date_to != amap.saved_source_check.date_from %} → {{ amap.saved_source_check.date_to }}{% endif %}{% endif %}</p>
     <dl>
       <dt>{{ row.source.source }}</dt>
-      <dd>{{ row.source_amount }} · time zone: {{ row.source.timezone or 'unknown' }} · day boundary: {{ row.source.day_boundary or 'unknown' }}</dd>
+      <dd>{{ row.source_amount }} · time zone: {{ row.source.timezone or 'unknown' }} · day boundary: {{ day_labels.get(row.source.day_boundary, row.source.day_boundary or 'unknown') }}</dd>
       <dt>Saved account figure</dt>
-      <dd>{{ row.account_amount }} · time zone: {{ row.account_timezone or 'unknown' }} · day boundary: {{ row.account_day_boundary or 'unknown' }} · read: {{ row.account_at or 'unknown' }}</dd>
+      <dd>{{ row.account_amount }} · time zone: {{ row.account_timezone or 'unknown' }} · day boundary: {{ day_labels.get(row.account_day_boundary, row.account_day_boundary or 'unknown') }} · read: {{ row.account_at or 'unknown' }}</dd>
     </dl>
     <p>{{ row.reason }}{% if row.gap is not none %}: {{ row.gap_amount }}{% endif %}.</p>
   </div>
