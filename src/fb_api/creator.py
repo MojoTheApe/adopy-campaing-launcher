@@ -1430,12 +1430,10 @@ class CampaignCreator:
         for loc in want:
             members = groups.get(loc) or {}
             if loc in groups and loc not in got:
-                hit = [a for a in got if a in members]
-                if hit:
-                    norm += hit
+                if members:
+                    norm += list(members)
                     continue
-                if not members:
-                    unknown.append(loc)
+                unknown.append(loc)
             norm.append(loc)
         if _same(sorted(set(norm)), sorted(set(got))):
             checks[-1]["ok"] = True

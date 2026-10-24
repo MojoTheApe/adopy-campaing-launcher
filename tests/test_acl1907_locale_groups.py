@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from copy import deepcopy
 import sys
 from pathlib import Path
 
@@ -55,6 +56,30 @@ def test_an_expansion_plus_a_foreign_locale_is_a_mismatch(tmp_path):
     _expand(meta, (7, 23, 6))
     out, _ = _run(meta, _draft(tmp_path, ads=1))
     assert [m["field"] for m in out.mismatches] == ["languages"]
+
+
+def test_an_incomplete_known_expansion_is_a_readback_mismatch(tmp_path):
+    meta = LocaleMeta()
+    _expand(meta, (7,))
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert [(m["field"], m["expected"], m["actual"]) for m in out.mismatches] == [
+        ("languages", [1002], [7])]
+    lang = next(c for c in out.readback["checks"] if c["field"] == "languages")
+    assert lang["ok"] is False and not lang.get("expanded")
+
+
+def test_rerun_does_not_reuse_an_incomplete_known_expansion(tmp_path):
+    meta = LocaleMeta()
+    _run(meta, _draft(tmp_path, ads=1))
+    next(o for o in meta.objects.values() if o["_kind"] == "adset")["targeting"]["locales"] = [7]
+    original = deepcopy({k: o for k, o in meta.objects.items()
+                         if o["_kind"] in ("campaign", "adset")})
+    out, _ = _run(meta, _draft(tmp_path, ads=2))
+    assert out.error == "" and any("Published as" in w and "_2" in w for w in out.warnings)
+    assert any("languages (builder: 1002, Meta: 7)" in w for w in out.warnings)
+    assert {k: meta.objects[k] for k in original} == original
+    assert sum(o["_kind"] == "campaign" for o in meta.objects.values()) == 2
+    assert sum(o["_kind"] == "adset" for o in meta.objects.values()) == 2
 
 
 def test_rerun_reuses_objects_when_meta_expanded_the_group(tmp_path):
