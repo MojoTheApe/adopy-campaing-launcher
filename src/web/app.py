@@ -33,6 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.templating import Jinja2Templates
 
 from src.web import account_notes as _account_notes
+from src.web import builder_drafts as _builder_drafts
 
 # Make project root importable when invoked via `uvicorn src.web.app:app`
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
@@ -68,6 +69,7 @@ from src.web.request_limits import (
 from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
 from src.analysis_agent import metric_columns
+from src.web import period_compare
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -1421,6 +1423,10 @@ templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
 # ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
 # заголовки, и ячейки — таблицы не могут разойтись друг с другом.
 templates.env.globals["metric_values"] = metric_columns.metric_values
+# ACL-110: «было X и изменение» под значением, когда включено сравнение периодов.
+templates.env.globals["metric_compare"] = period_compare.metric_compare
+templates.env.globals["value_compare"] = period_compare.value_compare
+templates.env.globals["compare_state"] = period_compare.state_for
 # Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
 # status are hidden for now. True brings them back (template: _account_map_country.html).
 SHOW_COPY_FOR_GROUP = False
@@ -1943,6 +1949,34 @@ def _enrich_country_overview(report: Dict[str, Any]) -> None:
             country["my_spend"] = country["my_totals"]["spend"]
 
 
+def _build_compare(
+    base_report: dict, df, date_from: str, date_to: str, span: str,
+    compare: str, cmp_from: str, cmp_to: str,
+) -> tuple["period_compare.PeriodCompare | None", str]:
+    """Отчёт и карта аккаунтов за сравниваемый период (ACL-110).
+
+    Считаются тем же кодом, что и страница: `report_for_period` и
+    `_build_account_map_view`. Сломанное сравнение не должно ронять страницу —
+    она остаётся обычной, а причина показывается в шапке.
+    """
+    info, note = period_compare.resolve_compare(
+        compare, cmp_from, cmp_to, date_from, date_to, span)
+    if info is None:
+        return None, note
+    try:
+        from copy import deepcopy
+
+        # Копия: отчёт за период лежит в общем кэше, а его параллельно копирует
+        # основной путь страницы.
+        prev = deepcopy(report_for_period(base_report, df, info["date_from"], info["date_to"]))
+        _enrich_country_overview(prev)
+        # span="all": чтения с аккаунтов сравнению не нужны, только книжные числа.
+        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all")
+        return period_compare.PeriodCompare(info, prev, prev_amap), ""
+    except Exception:
+        return None, "Could not calculate the earlier period; showing the selected period only."
+
+
 def _render_report(
     request: Request,
     *,
@@ -1950,6 +1984,9 @@ def _render_report(
     date_from: str = "",
     date_to: str = "",
     span: str = "",
+    compare: str = "",
+    cmp_from: str = "",
+    cmp_to: str = "",
 ) -> HTMLResponse:
     try:
         report, _df, warnings = get_cached_report()
@@ -1976,6 +2013,7 @@ def _render_report(
     # Стартовые цели не зависят от выбранных дней — те же страны, что
     # сохранит первая правка (_goal_countries_now).
     goal_seed = _my_goal_countries(report)
+    base_report = report
     try:
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
@@ -1994,6 +2032,9 @@ def _render_report(
     # готовности, и строку в билдере, а не одно из двух.
     _add_linked_accounts_to_builder(report)
     _enrich_country_overview(report)
+    period_cmp, compare_note = _build_compare(
+        base_report, _df, date_from, date_to, span.strip(),
+        compare.strip(), cmp_from.strip(), cmp_to.strip())
     ref_opts = _load_ref_options()
 
     # Collect all account labels from open_recs across all countries
@@ -2046,6 +2087,12 @@ def _render_report(
             # ACL-1827: плитки «Вы / Другие» над картой аккаунтов на Home.
             "home_kpis": _home_kpis(report),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
+            # ACL-110: сравнение с другим периодом (None — не включено).
+            "compare": period_cmp,
+            "compare_note": compare_note,
+            # Только проверенное: сырое значение из адреса попало бы в разметку календаря.
+            "compare_pick": ({"mode": period_cmp.mode, "date_from": period_cmp.date_from,
+                              "date_to": period_cmp.date_to} if period_cmp else {}),
             "period_owner": _period_owner(report),
             "goals": goals_view,
             # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
@@ -2467,7 +2514,8 @@ def _start_warm(date_from: str, date_to: str, span: str) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(
-    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+    request: Request, date_from: str = "", date_to: str = "", span: str = "",
+    compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
     # а сразу ответить «цифры загружаются» и собрать его в фоне.
@@ -2478,7 +2526,8 @@ async def index(
         # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
         # ту же ошибку по-человечески (нет файла, не тот формат).
     return await _in_report_pool(
-        _render_report, request, date_from=date_from, date_to=date_to, span=span
+        _render_report, request, date_from=date_from, date_to=date_to, span=span,
+        compare=compare, cmp_from=cmp_from, cmp_to=cmp_to,
     )
 
 
@@ -3280,6 +3329,49 @@ def api_accounts_overview() -> JSONResponse:
     })
 
 
+@app.get("/api/team-library")
+def api_team_library_state() -> JSONResponse:
+    """Подключена ли общая библиотека на этой машине (ACL-2038). Токен не отдаётся."""
+    from src.analysis_agent import team_library_connect as tlc
+
+    return JSONResponse({"ok": True, **tlc.state()})
+
+
+@app.post("/api/team-library/connect")
+async def api_team_library_connect(request: Request) -> JSONResponse:
+    """Проверить токен, сохранить в настройках машины, добавить недостающее (ACL-2038).
+
+    Значение токена нигде не логируется и в ответ не возвращается: ни при успехе,
+    ни при ошибке. Любая неожиданная ошибка отвечает фиксированным текстом.
+    """
+    from src.analysis_agent import team_library_connect as tlc
+
+    try:
+        data = await request.json()
+        token = data.get("token") if isinstance(data, dict) else None
+        if not isinstance(token, str):
+            raise tlc.ConnectError("Paste the library token first.")
+        result = await asyncio.to_thread(tlc.connect, token)
+    except tlc.ConnectError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not connect the team library. Try again."},
+                            status_code=500)
+    return JSONResponse({**result, "message": tlc.summary(result.get("added") or {}, bool(result.get("seed_error")))})
+
+
+@app.post("/api/team-library/disconnect")
+async def api_team_library_disconnect() -> JSONResponse:
+    """Убрать токен из настроек машины; локальные цели и тексты остаются."""
+    from src.analysis_agent import team_library_connect as tlc
+
+    try:
+        await asyncio.to_thread(tlc.disconnect)
+    except tlc.ConnectError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
 @app.get("/api/targeting-profiles")
 def api_targeting_profiles(force: bool = False) -> JSONResponse:
     """Refresh the read copy from the team library, then answer from it."""
@@ -3636,6 +3728,35 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
         out["set_aside"] = aside["set_aside"]
         out["warning"] = f"Notes file was damaged; a copy was kept at {aside['set_aside']}"
     return JSONResponse(out)
+
+
+@app.get("/api/builder-state")
+def api_builder_state_get() -> JSONResponse:
+    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}."""
+    return JSONResponse({"ok": True, "docs": _builder_drafts.load()})
+
+
+@app.post("/api/builder-state")
+async def api_builder_state_set(request: Request) -> JSONResponse:
+    """Сохранить один документ черновиков; побеждает более новый `saved_at`.
+
+    Body JSON: {name: keep|jobs|ui, saved_at: ms, data: {...}, base: ms|null}.
+    Ответ: {ok, accepted, doc}; accepted=false — на сервере копия новее, она в doc.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    try:
+        accepted, doc = _builder_drafts.save(body.get("name"), body.get("saved_at"),
+                                             body.get("data"), body.get("base"))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save the draft. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, "accepted": accepted, "doc": doc})
 
 
 @app.post("/api/accounts-hidden")
@@ -4633,7 +4754,8 @@ def account_attribution(
 @app.get("/account-map")
 @_off_loop
 def account_map_fragment(
-    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+    request: Request, date_from: str = "", date_to: str = "", span: str = "",
+    compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> Response:
     """The account map alone, recomputed for a period.
 
@@ -4646,6 +4768,21 @@ def account_map_fragment(
     except Exception as exc:
         return HTMLResponse(f'<div class="amap-empty">Could not read the workbook: {exc}</div>')
 
+    from copy import deepcopy
+
+    base_report = report
+    period_cmp, compare_note = None, ""
+    if compare.strip():
+        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+        try:
+            report = report_for_period(base_report, df, date_from, date_to)
+        except PeriodReportError:
+            return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
+        period_cmp, compare_note = _build_compare(
+            base_report, df, date_from, date_to, span.strip(),
+            compare.strip(), cmp_from.strip(), cmp_to.strip())
+    # Enrichment belongs to this response, never the shared workbook cache.
+    report = deepcopy(report)
     _enrich_country_overview(report)
     return templates.TemplateResponse(
         request,
@@ -4656,6 +4793,8 @@ def account_map_fragment(
                 report, df, date_from.strip(), date_to.strip(), span.strip()
             ),
             "mlx": mlx_instance_labels(),
+            "compare": period_cmp,
+            "compare_fragment_note": compare_note,
         },
     )
 
@@ -5014,6 +5153,12 @@ async def account_map_remove(request: Request) -> JSONResponse:
     existing in the company's sheet, keeps its history and its campaigns —
     this machine simply stops knowing how to reach it. Nothing here can or
     should delete a shared record.
+
+    ACL-142: with `also_unlink: true` the removed accounts are also taken out
+    of every country and asset they stand in on this machine ("Remove from
+    ACL"). Without it only the map row goes, which is what the Accounts tab
+    has always done. Taking an account out of ONE country is a different
+    action: `/account-links` with `unlink`.
     """
     import csv as _csv
 
@@ -5037,38 +5182,66 @@ async def account_map_remove(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    also_unlink = data.get("also_unlink") is True
     map_path = Path(get_ad_account_map_path())
-    if not map_path.is_file():
+    if not map_path.is_file() and not also_unlink:
         return JSONResponse({"ok": False, "error": "Account map not found"}, status_code=404)
 
-    try:
-        with open(map_path, encoding="utf-8-sig", newline="") as f:
-            reader = _csv.DictReader(f)
-            fieldnames = reader.fieldnames or []
-            rows = list(reader)
+    removed: list[str] = []
+    kept: list = []
+    unlinked: list[dict] = []
 
-        target = set(wanted)
-        kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
-        removed = [
-            (r.get("account_name") or "").strip() for r in rows
-            if (r.get("account_name") or "").strip() in target
-        ]
-        if not removed:
+    def account_key(name: str) -> str:
+        # Full removal uses the same account identity as the local placements.
+        # Ordinary map-only removals retain their exact-name matching.
+        return name.lower() if also_unlink else name
+
+    try:
+        if map_path.is_file():
+            with open(map_path, encoding="utf-8-sig", newline="") as f:
+                reader = _csv.DictReader(f)
+                fieldnames = reader.fieldnames or []
+                rows = list(reader)
+
+            target = {account_key(name) for name in wanted}
+            kept = [r for r in rows if account_key((r.get("account_name") or "").strip()) not in target]
+            removed = [
+                (r.get("account_name") or "").strip() for r in rows
+                if account_key((r.get("account_name") or "").strip()) in target
+            ]
+            if removed:
+                write_csv_atomic(map_path, fieldnames, kept)
+
+        # "Remove from ACL" must not depend on a map row: country rows come
+        # from the placements, and an account can be placed with no row (a
+        # workbook-only account, one already removed in the Accounts tab, or a
+        # different letter case). Doing this independently also lets a retry
+        # finish a removal whose placement write failed after the row was gone.
+        if also_unlink:
+            from src.web import account_links
+
+            for name in dict.fromkeys(wanted):
+                for kind in account_links.KINDS:
+                    for place in account_links.values_for(name, kind):
+                        if account_links.unlink(name, kind, place):
+                            unlinked.append({"account": name, "kind": kind, "value": place})
+
+        if not removed and not unlinked:
             shown = "«" + "», «".join(wanted[:3]) + "»"
             return JSONResponse(
                 {"ok": False, "error": f"{shown} is not in the map of this machine"},
                 status_code=404,
             )
-
-        write_csv_atomic(map_path, fieldnames, kept)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
     # `missing` is reported rather than treated as failure: the rest were
     # removed, and pretending otherwise would invite a confused retry.
-    missing = sorted(set(wanted) - set(removed))
+    removed_keys = {account_key(name) for name in removed}
+    missing = sorted(name for name in set(wanted) if account_key(name) not in removed_keys)
     return JSONResponse(
-        {"ok": True, "removed": removed, "missing": missing, "left": len(kept)}
+        {"ok": True, "removed": removed, "missing": missing, "left": len(kept),
+         "unlinked": unlinked}
     )
 
 
@@ -5237,28 +5410,54 @@ def robot_health_capture(run_id: str, name: str) -> Response:
     return FileResponse(str(path))
 
 
+def _teach_with_accounts(teach: dict) -> dict:
+    """Name the account each waiting job belongs to (ACL-1142)."""
+    from src.web import publish_jobs
+
+    jobs = []
+    for item in teach.get("jobs") or []:
+        job = publish_jobs.get_job(item["job_id"]) or {}
+        jobs.append({**item, "account_label": job.get("account_label") or ""})
+    return {**teach, "jobs": jobs}
+
+
 @app.get("/rpa-takeover")
 async def rpa_takeover_status() -> JSONResponse:
     from src.fb_ads_rpa.pacing import is_takeover_active, get_teach_state
-    teach = get_teach_state()
+    teach = _teach_with_accounts(get_teach_state())
     return JSONResponse({"active": is_takeover_active(), "teach": teach})
 
 
 @app.post("/rpa-teach/resume")
-async def rpa_teach_resume() -> JSONResponse:
-    """Tell the RPA that the user has clicked Website manually — resume the flow."""
+async def rpa_teach_resume(job_id: str = "") -> JSONResponse:
+    """The user has clicked the wanted element by hand — resume ONE job.
+
+    ACL-1142: the wait is per job. `job_id` names the job to release; without
+    it the call works only while exactly one job waits, so that "continue" can
+    never release the wrong account.
+    """
     from src.fb_ads_rpa.pacing import end_teach_wait, get_teach_state
     state = get_teach_state()
-    if not state.get("waiting"):
+    waiting = [j["job_id"] for j in state.get("jobs") or []]
+    if not job_id:
+        if len(waiting) > 1:
+            return JSONResponse(
+                {"ok": False, "error": "Several accounts are waiting - say which one (job_id)"},
+                status_code=409,
+            )
+        job_id = waiting[0] if waiting else ""
+    if not job_id or job_id not in waiting:
         return JSONResponse({"ok": False, "error": "Not in teach-mode wait"}, status_code=400)
-    end_teach_wait()
+    end_teach_wait(job_id=job_id)
     return JSONResponse({"ok": True, "message": "RPA resumed — capturing locator"})
 
 
 @app.get("/rpa-teach/status")
-async def rpa_teach_status() -> JSONResponse:
+async def rpa_teach_status(job_id: str = "") -> JSONResponse:
     from src.fb_ads_rpa.pacing import get_teach_state
-    return JSONResponse(get_teach_state())
+    if job_id:
+        return JSONResponse(_teach_with_accounts({**get_teach_state(job_id), "job_id": job_id}))
+    return JSONResponse(_teach_with_accounts(get_teach_state()))
 
 
 @app.get("/rpa-teach/pending-strategies")

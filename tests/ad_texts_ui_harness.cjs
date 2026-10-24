@@ -33,6 +33,7 @@ const context = {
   location: {hash:''},
   CustomEvent: class { constructor(type, options={}) { this.type=type; this.detail=options.detail; } },
   confirm(){ return confirmed; },
+  aclConfirm(){ return Promise.resolve(confirmed); },
   fetch: async (url, opts) => {
     if (opts) {
       requests.push(JSON.parse(opts.body));

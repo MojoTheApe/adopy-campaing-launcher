@@ -68,10 +68,13 @@ def test_rendered_inline_handlers_keep_quotes_and_argument_values(tmp_path):
         source += "new vm.Script(" + json.dumps(block) + ");\n"
     source += "const goalMenu=(...a)=>calls.push(['goal',a[1]]), amapUnlink=(...a)=>calls.push(['unlink',...a]), amapLink=(...a)=>calls.push(['link',...a]), amapClose=(...a)=>calls.push(['close',...a]);\n"
     source += "const event={preventDefault(){},stopPropagation(){}};\n"
+    source += "const originatingElement={previousElementSibling:'selector'};\n"
     for h in wanted:
-        source += "new Function('goalMenu','amapUnlink','amapLink','amapClose','event'," + json.dumps(h) + ").call({previousElementSibling:'selector'},goalMenu,amapUnlink,amapLink,amapClose,event);\n"
+        source += "new Function('goalMenu','amapUnlink','amapLink','amapClose','event'," + json.dumps(h) + ").call(originatingElement,goalMenu,amapUnlink,amapLink,amapClose,event);\n"
     source += "assert.deepEqual(calls.find(c=>c[0]==='goal')[1],"+json.dumps(goal)+");\n"
-    source += "assert.deepEqual(calls.find(c=>c[0]==='unlink').slice(1),"+json.dumps(["Buyer's X01", "country", goal["country"]])+");\n"
+    source += "const unlink=calls.find(c=>c[0]==='unlink').slice(1); assert.equal(unlink.length,4);\n"
+    source += "assert.deepEqual(unlink.slice(0,3),"+json.dumps(["Buyer's X01", "country", goal["country"]])+");\n"
+    source += "assert.strictEqual(unlink[3],originatingElement);\n"
     source += "assert.deepEqual(calls.find(c=>c[0]==='close').slice(1),"+json.dumps(["country", goal["country"],goal["country"]])+");\n"
     path=tmp_path / "handlers.cjs"; path.write_text(source, encoding="utf-8")
     run_node([path])
