@@ -108,6 +108,21 @@ if ($p.operation -eq 'create') {
                   })}
             })
     } catch { $output.events_unavailable = [string]$_.Exception.Message }
+    # If task history is disabled, preserve any native batch-logon refusal
+    # for this uniquely created test account, without reading other accounts.
+    $xpath = "*[System[EventID=4625] and EventData[Data[@Name='TargetUserName']='" + $p.name + "']]"
+    try {
+        $output.logon_failures = @(Get-WinEvent -LogName Security -FilterXPath $xpath -MaxEvents 10 -ErrorAction Stop |
+            ForEach-Object {
+                [xml]$xml = $_.ToXml()
+                @{time=[string]$_.TimeCreated;
+                  data=@($xml.Event.EventData.Data | Where-Object {
+                      $_.Name -in @('Status', 'SubStatus', 'FailureReason', 'LogonType')
+                  } | ForEach-Object {
+                      @{name=[string]$_.Name; value=[string]$_.'#text'}
+                  })}
+            })
+    } catch { $output.logon_failures_unavailable = [string]$_.Exception.Message }
 } elseif ($p.operation -eq 'cleanup') {
     $folder = $service.GetFolder('\' + $p.folder)
     foreach ($task in @($folder.GetTasks(1))) {
