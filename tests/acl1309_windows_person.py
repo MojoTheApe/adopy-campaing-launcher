@@ -18,11 +18,17 @@ import sys
 import time
 import traceback
 
+# This script is launched directly from tests/, including its early boot write.
+# Make the existing bounded atomic replacement primitive available beforehand.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 
 def write(path, value):
+    from config.paths import _replace_when_free
+
     temp = path.with_suffix(".tmp")
     temp.write_text(json.dumps(value), encoding="utf-8")
-    os.replace(temp, path)
+    _replace_when_free(temp, path)
 
 
 def wait_for(path, timeout=90):

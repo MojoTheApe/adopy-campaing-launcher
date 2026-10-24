@@ -18,9 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def write(path, value):
+    from config.paths import _replace_when_free
+
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value), encoding='utf-8')
-    os.replace(temporary, path)
+    _replace_when_free(temporary, path)
 
 
 def main():
