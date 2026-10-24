@@ -16,6 +16,7 @@ import pytest
 
 from config import paths
 from tests.acl2063_machine_scenario import MachinePeople
+from tests import synthetic_json_ipc as ipc
 
 
 @pytest.fixture(params=["acl1309_windows_person", "acl2063_machine_person", "machine_command"])
@@ -116,3 +117,117 @@ namespace['write'](Path(sys.argv[2]), {'phase': 'boot'})
                             cwd=tmp_path, capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     assert json.loads(target.read_text(encoding="utf-8")) == {"phase": "boot"}
+
+
+@pytest.fixture(params=["direct", "machine_status"])
+def reader(request, tmp_path):
+    target = tmp_path / "person.json"
+    value = {"phase": "ready", "sequence": 7, "action": "state"}
+    target.write_text(json.dumps(value), encoding="utf-8")
+    if request.param == "machine_status":
+        scenario = MachinePeople(tmp_path, ["person"])
+        scenario.sequence = 7
+        return target, lambda: scenario.read("person", lambda v: v["phase"] == "ready"), value
+    return target, lambda: ipc.read_json(target), value
+
+
+def test_reader_recovers_and_returns_actual_json(monkeypatch, reader):
+    target, consume, value = reader
+    read_text, attempts, pauses = Path.read_text, [], []
+
+    def briefly_denied(path, *args, **kwargs):
+        if path == target:
+            attempts.append(path)
+            if len(attempts) <= 3:
+                raise PermissionError(13, "synthetic replacement still holds the name")
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", briefly_denied)
+    monkeypatch.setattr(ipc.time, "sleep", pauses.append)
+    assert consume() == value
+    assert len(attempts) == 4 and pauses == [ipc._READ_PAUSE] * 3
+
+
+def test_reader_permanent_denial_never_returns_an_earlier_good_status(monkeypatch, reader):
+    target, consume, value = reader
+    assert consume() == value  # a prior valid snapshot must never become fallback
+    attempts, pauses = [], []
+    denied = [PermissionError(13, f"synthetic denial {n}") for n in range(10)]
+
+    def held(path, *args, **kwargs):
+        assert path == target
+        attempts.append(path)
+        raise denied[len(attempts) - 1]
+
+    monkeypatch.setattr(Path, "read_text", held)
+    monkeypatch.setattr(ipc.time, "sleep", pauses.append)
+    with pytest.raises(PermissionError) as error:
+        consume()
+    assert error.value is denied[-1]
+    assert len(attempts) == ipc._READ_ATTEMPTS == 10
+    assert pauses == [ipc._READ_PAUSE] * 9 and sum(pauses) < 0.5
+    assert json.loads(target.read_bytes()) == value
+
+
+@pytest.mark.parametrize("failure", [FileNotFoundError(2, "synthetic missing file"),
+                                    OSError(28, "synthetic full disk")])
+def test_reader_other_errors_are_immediate(monkeypatch, reader, failure):
+    target, consume, _value = reader
+    attempts, pauses = [], []
+
+    def broken(path, *args, **kwargs):
+        assert path == target
+        attempts.append(path)
+        raise failure
+
+    monkeypatch.setattr(Path, "read_text", broken)
+    monkeypatch.setattr(ipc.time, "sleep", pauses.append)
+    with pytest.raises(type(failure)) as error:
+        consume()
+    assert error.value is failure
+    assert len(attempts) == 1 and pauses == []
+
+
+def test_reader_malformed_json_fails_immediately(monkeypatch, reader):
+    target, consume, _value = reader
+    target.write_bytes(b'{"phase":')
+    read_text, attempts, pauses = Path.read_text, [], []
+
+    def counted(path, *args, **kwargs):
+        assert path == target
+        attempts.append(path)
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counted)
+    monkeypatch.setattr(ipc.time, "sleep", pauses.append)
+    with pytest.raises(json.JSONDecodeError):
+        consume()
+    assert len(attempts) == 1 and pauses == []
+
+
+def test_busy_status_read_does_not_resend_or_resequence_command(monkeypatch, tmp_path):
+    scenario = MachinePeople(tmp_path, ["person"])
+    status = tmp_path / "person.json"
+    value = {"phase": "ready", "sequence": 1}
+    status.write_text(json.dumps(value), encoding="utf-8")
+    read_text, send, reads, sends = Path.read_text, scenario.send, [], []
+
+    def briefly_denied(path, *args, **kwargs):
+        if path == status:
+            reads.append(path)
+            if len(reads) <= 3:
+                raise PermissionError(13, "synthetic replacement still holds the name")
+        return read_text(path, *args, **kwargs)
+
+    def counted_send(person, action):
+        sends.append((person, action))
+        return send(person, action)
+
+    monkeypatch.setattr(Path, "read_text", briefly_denied)
+    monkeypatch.setattr(scenario, "send", counted_send)
+    monkeypatch.setattr(ipc.time, "sleep", lambda _seconds: None)
+    assert scenario.command("person", "state") == value
+    assert sends == [("person", "state")] and scenario.sequence == 1
+    assert json.loads((tmp_path / "person.command.json").read_text(encoding="utf-8")) == {
+        "sequence": 1, "action": "state"}
+    assert len(reads) == 4

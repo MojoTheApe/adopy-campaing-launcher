@@ -29,6 +29,7 @@ from types import SimpleNamespace
 import pytest
 
 from tests.acl1309_windows_person import write
+from tests.synthetic_json_ipc import read_json
 
 pytestmark = pytest.mark.windows_only(
     reason="two real Windows local accounts, native logon/profile/mutex and ProgramData file permissions")
@@ -279,7 +280,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         while time.monotonic() < deadline:
             path = ipc / f"{person}.json"
             if path.exists():
-                value = json.loads(path.read_text(encoding="utf-8"))
+                value = read_json(path)
                 assert value.get("phase") != "error", json.dumps(value, indent=2)
                 if predicate(value):
                     return value
@@ -288,7 +289,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 # Exit is observed after the earlier status read: collect the
                 # producer's final atomic error, not a stale prepared snapshot.
                 if path.exists():
-                    final = json.loads(path.read_text(encoding="utf-8"))
+                    final = read_json(path)
                     assert final.get("phase") != "error", json.dumps(final, indent=2)
                 code = wintypes.DWORD()
                 assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))

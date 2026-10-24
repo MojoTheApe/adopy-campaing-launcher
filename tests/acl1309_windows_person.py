@@ -22,6 +22,8 @@ import traceback
 # Make the existing bounded atomic replacement primitive available beforehand.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from tests.synthetic_json_ipc import read_json
+
 
 def write(path, value):
     from config.paths import _replace_when_free
@@ -286,7 +288,7 @@ def main():
             if not command_path.exists():
                 time.sleep(0.1)
                 continue
-            command = json.loads(command_path.read_text(encoding="utf-8"))
+            command = read_json(command_path)
             if command["sequence"] <= sequence:
                 time.sleep(0.1)
                 continue
@@ -357,6 +359,6 @@ if __name__ == "__main__":
         write(Path(settings["ipc"]) / f"{_status_person}.json",
               {"phase": "error", "traceback": traceback.format_exc(),
                "diagnostics": _native_diagnostics,
-               "server_diagnostics": json.loads(server_diagnostics.read_text(encoding="utf-8"))
+               "server_diagnostics": read_json(server_diagnostics)
                if server_diagnostics.exists() else None})
         raise
