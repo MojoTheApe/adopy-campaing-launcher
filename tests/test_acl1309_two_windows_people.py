@@ -35,6 +35,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     net = ctypes.WinDLL("netapi32", use_last_error=True)
     advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
     kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
@@ -65,6 +66,10 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     class Member(ctypes.Structure):
         _fields_ = [("name", wintypes.LPWSTR)]
 
+    class Security(ctypes.Structure):
+        _fields_ = [("length", wintypes.DWORD), ("descriptor", ctypes.c_void_p),
+                    ("inherit", wintypes.BOOL)]
+
     net.NetUserAdd.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p,
                               ctypes.POINTER(wintypes.DWORD)]
     net.NetUserDel.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
@@ -76,10 +81,36 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
         ctypes.POINTER(wintypes.DWORD)]
     advapi.LookupAccountSidW.restype = wintypes.BOOL
+    advapi.LookupAccountNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.c_void_p,
+        ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD)]
+    advapi.LookupAccountNameW.restype = wintypes.BOOL
+    advapi.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.LPWSTR)]
+    advapi.ConvertSidToStringSidW.restype = wintypes.BOOL
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p]
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
     advapi.CreateProcessWithLogonW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.LPCWSTR,
         wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD, ctypes.c_void_p,
         wintypes.LPCWSTR, ctypes.POINTER(Startup), ctypes.POINTER(Process)]
     advapi.CreateProcessWithLogonW.restype = wintypes.BOOL
+    user32.GetProcessWindowStation.restype = wintypes.HANDLE
+    user32.SetProcessWindowStation.argtypes = [wintypes.HANDLE]
+    user32.SetProcessWindowStation.restype = wintypes.BOOL
+    user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
+    user32.GetThreadDesktop.restype = wintypes.HANDLE
+    user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
+    user32.SetThreadDesktop.restype = wintypes.BOOL
+    user32.CreateWindowStationW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                                           wintypes.DWORD, ctypes.POINTER(Security)]
+    user32.CreateWindowStationW.restype = wintypes.HANDLE
+    user32.CreateDesktopW.argtypes = [wintypes.LPCWSTR, ctypes.c_void_p, ctypes.c_void_p,
+                                    wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(Security)]
+    user32.CreateDesktopW.restype = wintypes.HANDLE
+    user32.CloseDesktop.argtypes = [wintypes.HANDLE]
+    user32.CloseDesktop.restype = wintypes.BOOL
+    user32.CloseWindowStation.argtypes = [wintypes.HANDLE]
+    user32.CloseWindowStation.restype = wintypes.BOOL
     # Resolve the standard Users group by its well-known SID, independently
     # of the runner's display language. Never add these accounts to admins.
     sid = ctypes.c_void_p()
@@ -100,7 +131,56 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     ipc = Path(os.environ["PROGRAMDATA"]) / f"acl1309-ipc-{run}"
     registry = Path(os.environ["PROGRAMDATA"]) / f"acl1309-registry-{run}" / "ports"
     ipc.mkdir()
-    created, processes = [], []
+    created, processes, desktops = [], [], []
+    person_processes = {}
+
+    def private_desktop(user):
+        # CreateProcessWithLogonW requires access to its station/desktop.
+        # Give this exact synthetic user a private object, never WinSta0 or
+        # the runner's existing desktop, registry, configuration or token.
+        sid_bytes, domain_chars, use = wintypes.DWORD(), wintypes.DWORD(), wintypes.DWORD()
+        account = os.environ["COMPUTERNAME"] + "\\" + user
+        advapi.LookupAccountNameW(None, account, None, ctypes.byref(sid_bytes),
+                                  None, ctypes.byref(domain_chars), ctypes.byref(use))
+        assert sid_bytes.value > 0
+        sid = ctypes.create_string_buffer(sid_bytes.value)
+        domain = ctypes.create_unicode_buffer(domain_chars.value)
+        assert advapi.LookupAccountNameW(None, account, sid, ctypes.byref(sid_bytes),
+            domain, ctypes.byref(domain_chars), ctypes.byref(use)), ctypes.get_last_error()
+        text, descriptor = wintypes.LPWSTR(), ctypes.c_void_p()
+        assert advapi.ConvertSidToStringSidW(sid, ctypes.byref(text))
+        try:
+            sddl = f"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{text.value})"
+            assert advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl, 1, ctypes.byref(descriptor), None), ctypes.get_last_error()
+        finally:
+            kernel.LocalFree(text)
+        previous = user32.GetProcessWindowStation()
+        previous_desktop = user32.GetThreadDesktop(kernel.GetCurrentThreadId())
+        station = desktop = None
+        retained = False
+        name = f"acl1309-{run}-{user[-1]}"
+        try:
+            security = Security(ctypes.sizeof(Security), descriptor, False)
+            station = user32.CreateWindowStationW(name, 1, 0x000F037F, ctypes.byref(security))
+            assert station, ("private window station", ctypes.get_last_error())
+            assert user32.SetProcessWindowStation(station), ctypes.get_last_error()
+            desktop = user32.CreateDesktopW("default", None, None, 0, 0x000F01FF, ctypes.byref(security))
+            assert desktop, ("private desktop", ctypes.get_last_error())
+            desktops.append((station, desktop))
+            retained = True
+            return name + "\\default"
+        finally:
+            try:
+                assert user32.SetProcessWindowStation(previous), ctypes.get_last_error()
+                assert user32.SetThreadDesktop(previous_desktop), ctypes.get_last_error()
+            finally:
+                if not retained:
+                    if desktop:
+                        user32.CloseDesktop(desktop)
+                    if station:
+                        user32.CloseWindowStation(station)
+                kernel.LocalFree(descriptor)
     listeners = []
     ports = []
     # Reserve together so the OS cannot hand the same ephemeral port back.
@@ -143,6 +223,11 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 assert value.get("phase") != "error", value
                 if predicate(value):
                     return value
+            process = person_processes.get(person)
+            if process and kernel.WaitForSingleObject(process.process, 0) == 0:
+                code = wintypes.DWORD()
+                assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
+                pytest.fail(f"synthetic Windows process exited before required state: 0x{code.value:08X}")
             time.sleep(0.1)
         pytest.fail(f"real account did not reach required state: {person}")
 
@@ -179,6 +264,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                            check=True, capture_output=True, timeout=20)
             startup = Startup()
             startup.cb = ctypes.sizeof(startup)
+            startup.desktop = private_desktop(user)
             process = Process()
             helper = Path(__file__).with_name("acl1309_windows_person.py")
             arguments = subprocess.list2cmdline([sys.executable, str(helper), str(settings), user, "person"])
@@ -187,6 +273,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 ctypes.byref(startup), ctypes.byref(process))
             assert ok, ("real profile logon failed", ctypes.get_last_error())
             processes.append(process)
+            person_processes[user] = process
             kernel.CloseHandle(process.thread)
         prepared = [read(user, lambda v: v["phase"] == "prepared") for user in users]
         assert prepared[0]["sid"] != prepared[1]["sid"]
@@ -230,6 +317,9 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 kernel.TerminateProcess(process.process, 1)
                 kernel.WaitForSingleObject(process.process, 10000)
             kernel.CloseHandle(process.process)
+        for station, desktop in reversed(desktops):
+            assert user32.CloseDesktop(desktop), ctypes.get_last_error()
+            assert user32.CloseWindowStation(station), ctypes.get_last_error()
         foreign.shutdown()
         foreign.server_close()
         for user in created:

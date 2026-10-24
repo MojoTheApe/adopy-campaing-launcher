@@ -36,6 +36,8 @@ def main():
     settings = json.loads(Path(settings_path).read_text(encoding="utf-8"))
     ipc = Path(settings["ipc"])
     status = ipc / f"{person}.json"
+    if mode == "person":
+        write(status, {"phase": "boot"})
     # A new real profile supplies its own LOCALAPPDATA/USERPROFILE. Never
     # inherit a runner's ACL_CONFIG_DIR or load a production account's .env.
     os.environ["ACL_CONFIG_DIR"] = ""
