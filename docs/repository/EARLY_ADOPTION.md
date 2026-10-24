@@ -1,6 +1,25 @@
 # ACL early adoption: released support, then separate owned selections
 
-## Current instruction pin: ACL-2079 candidate
+## Current executable provider: ACL-2156 candidate — 24 October 2026
+
+The owner selected the separately published standalone Task Tracker3.14.0
+provider at `e204d17ebe5dbabeb4ca1f5011276d4106f1bcc4`. Read
+[the exact ACL adoption boundary](STANDALONE_PROVIDER_ACL.md). Master1.8.0
+`fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` remains the unchanged documentation
+reference; this opt-in route needs no Master write or companion publication.
+The native configuration, adopted execution3/5-5-5, disabled Stage, product,
+target, required checks, owners, IDs and original requirements are preserved.
+Source selection is not live optional-policy adoption or verified delivery.
+This migration retains normal source/combined review, frozen-batch admission,
+actual Main checks and the expressly authorized stable package receipt.
+
+ACL-2046's ordinary terminal fold and ACL-2099's separate one-policy selection
+remain their own full tasks. Deliver the former before the latter. Retain the
+real preselection configuration for the latter's own frozen package continuation;
+do not remove a selected key to fabricate an operative config. All readiness,
+every-writer, recovery and separately owned idle adoption controls below remain.
+
+## Earlier instruction pin: ACL-2079 — retained history
 
 [ACL-2079](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1079)
 selects published Master1.8.0

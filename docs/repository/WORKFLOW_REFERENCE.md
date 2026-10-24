@@ -36,6 +36,12 @@ an explicit same-task continuation after the earlier execution stopped; it never
 authorizes concurrent implementation. Related tasks may share a legacy PR when
 the actual complete scope and project controls permit it.
 
+Supply the actual Worker actor/session on new work. A project whose compatible
+writers already selected the existing pause fence can bind that new run and
+return its actual claim; preserve those credentials on subsequent owned commands.
+Unfenced/old unbound reservations stay unconfirmed; never invent a claim or
+activate a policy merely to obtain a clock.
+
 After implementation/self-check, set Review. For an explicit partial handoff,
 record branch, PR, checks and remaining outcomes in Specifications, then use
 `queue release TASK_ID`. Partial tasks stay Review and never complete a parent.
@@ -87,6 +93,12 @@ steal it or infer abandonment from elapsed time. `work TASK_ID --resume` is only
 an explicit same-task continuation after the earlier execution stopped; it never
 authorizes concurrent implementation. Related tasks may share a legacy PR when
 the actual complete scope and project controls permit it.
+
+Supply the actual Worker actor/session on new work. A project whose compatible
+writers already selected the existing pause fence can bind that new run and
+return its actual claim; preserve those credentials on subsequent owned commands.
+Unfenced/old unbound reservations stay unconfirmed; never invent a claim or
+activate a policy merely to obtain a clock.
 
 After implementation/self-check, set Review. For an explicit partial handoff,
 record branch, PR, checks and remaining outcomes in Specifications, then use

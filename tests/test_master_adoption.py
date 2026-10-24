@@ -182,7 +182,17 @@ def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consis
     assert 'ci_evidence_policy' not in config  # Exported support cannot opt ACL into the native V1 protocol.
     action = yaml.safe_load((ROOT / '.github/workflows/delivery-check.yml').read_text())
     steps = action['jobs']['descriptor']['steps']
-    assert any(step.get('uses') == 'MojoTheApe/master-repo@' + descriptor['standard']['revision'] for step in steps)
+    provider = descriptor.get('workflow_provider')
+    if provider is not None:
+        assert set(provider) == {'schema_version', 'repository', 'revision'}
+        assert type(provider['schema_version']) is int and provider['schema_version'] == 1
+        assert provider['repository'] == 'https://github.com/MojoTheApe/task-tracker'
+        assert provider['revision'] == descriptor['tracker']['revision'] == lock['revision']
+        selected_action = 'MojoTheApe/task-tracker@' + provider['revision']
+    else:
+        selected_action = 'MojoTheApe/master-repo@' + descriptor['standard']['revision']
+    assert [step['uses'] for step in steps
+            if step.get('uses', '').startswith(('MojoTheApe/master-repo@', 'MojoTheApe/task-tracker@'))] == [selected_action]
     assert not descriptor['workflow']['staging'] and not rules.policy(config)['staging']['enabled']
     assert descriptor['workflow']['stage_branch'] == rules.policy(config)['staging']['branch'] == 'stage'
     assert 'stage' not in config['workflow']

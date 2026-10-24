@@ -20,6 +20,14 @@ The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
 - [Selected Master 1.8.0 standard](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/standard.md).
+- [ACL standalone workflow provider](docs/repository/STANDALONE_PROVIDER_ACL.md):
+  the owner-selected executable source is published Task Tracker3.14.0 at
+  `e204d17ebe5dbabeb4ca1f5011276d4106f1bcc4`; Master remains the unchanged
+  documentation reference. Provider, engine, Action and canonical export must
+  agree. Use the immutable official provider entry point for rendering and
+  validation; do not run consumer-controlled validation with credentials or
+  rewrite global skills. Existing task ownership and all review/check/package
+  controls below remain required. No optional policy is activated by this pin.
 - [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
   [selected Tracker guide](docs/repository/TRACKER.md), [verification](docs/repository/VERIFICATION.md)
   and [file ownership](docs/repository/LAYOUT.md).
