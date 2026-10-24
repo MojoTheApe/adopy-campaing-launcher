@@ -139,25 +139,15 @@ def _installer_presence_mutex(kernel) -> int | None:
         _fields_ = [("length", wintypes.DWORD), ("descriptor", ctypes.c_void_p),
                     ("inherit", wintypes.BOOL)]
 
-    synchronize = 0x00100000
-    kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
-    kernel.OpenMutexW.restype = wintypes.HANDLE
-    handle = kernel.OpenMutexW(synchronize, False, SERVER_MUTEX_NAME)
-    if handle:
-        return int(handle)
-    if ctypes.get_last_error() != 2:  # ERROR_FILE_NOT_FOUND only
-        return None  # Never recreate or change an inaccessible existing marker.
-
     advapi = ctypes.WinDLL("advapi32", use_last_error=True)
     convert = advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW
     convert.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
                         ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
     convert.restype = wintypes.BOOL
     descriptor = ctypes.c_void_p()
-    # The new object's owner/SYSTEM/admin retain creation/control rights.
-    # Other authenticated users get only shared presence access, as Inno's
-    # OpenMutex(SYNCHRONIZE) requires. No filesystem ACL is changed.
-    if not convert("D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)(A;;0x00100000;;;AU)",
+    # SYSTEM/admin retain control; other authenticated users can retain a
+    # handle to this data-free presence marker. No filesystem ACL is changed.
+    if not convert("D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00100000;;;AU)",
                    1, ctypes.byref(descriptor), None):
         return None
     try:
@@ -165,11 +155,7 @@ def _installer_presence_mutex(kernel) -> int | None:
         kernel.CreateMutexExW.argtypes = [ctypes.POINTER(SecurityAttributes), wintypes.LPCWSTR,
                                          wintypes.DWORD, wintypes.DWORD]
         kernel.CreateMutexExW.restype = wintypes.HANDLE
-        handle = kernel.CreateMutexExW(ctypes.byref(attributes), SERVER_MUTEX_NAME, 0, 0x001F0001)
-        if not handle and ctypes.get_last_error() == 5:
-            # Another creator may have won since the missing-object read.
-            # Its AU grant deliberately cannot satisfy our creation access.
-            handle = kernel.OpenMutexW(synchronize, False, SERVER_MUTEX_NAME)
+        handle = kernel.CreateMutexExW(ctypes.byref(attributes), SERVER_MUTEX_NAME, 0, 0x00100000)
         return int(handle) if handle else None
     finally:
         kernel.LocalFree.argtypes = [ctypes.c_void_p]

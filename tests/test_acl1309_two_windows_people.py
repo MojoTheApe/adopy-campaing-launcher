@@ -1,8 +1,8 @@
 """The literal two-real-Windows-account acceptance for dashboard ownership.
 
-Creates only two ephemeral standard local users, with real primary tokens and
-loaded profiles. Filesystem grants affect only synthetic IPC; private desktop
-objects are test-owned, and the ProgramData reservation tree is unchanged.
+Creates only two ephemeral standard local users, with real batch logons and
+loaded profiles. Filesystem grants affect only synthetic IPC; scheduled tasks
+are test-owned, and the ProgramData reservation tree is unchanged.
 Missing runner privileges fail this
 required acceptance; there is no environment-dependent success/skip fallback.
 """
@@ -23,11 +23,94 @@ import threading
 import time
 import urllib.request
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
 pytestmark = pytest.mark.windows_only(
     reason="two real Windows local accounts, native logon/profile/mutex and ProgramData file permissions")
+
+
+def scheduled_tasks(payload):
+    """Use only the test's unique folder; credentials travel over stdin."""
+    suffix = payload["folder"].removeprefix("acl1309-")
+    assert payload["folder"].startswith("acl1309-")
+    assert len(suffix) == 32 and all(c in "0123456789abcdef" for c in suffix)
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$p = [Console]::In.ReadToEnd() | ConvertFrom-Json
+$service = New-Object -ComObject 'Schedule.Service'
+$service.Connect()
+$root = $service.GetFolder('\')
+$output = @{completed=$true}
+if ($p.operation -eq 'create') {
+    $null = $root.CreateFolder($p.folder, $null)
+} elseif ($p.operation -eq 'start') {
+    $folder = $service.GetFolder('\' + $p.folder)
+    $definition = $service.NewTask(0)
+    $definition.Principal.UserId = $p.user
+    $definition.Principal.LogonType = 1  # TASK_LOGON_PASSWORD
+    $definition.Principal.RunLevel = 0  # TASK_RUNLEVEL_LUA, never Highest
+    $definition.Settings.Enabled = $true
+    $definition.Settings.AllowDemandStart = $true
+    $definition.Settings.DisallowStartIfOnBatteries = $false
+    $definition.Settings.StopIfGoingOnBatteries = $false
+    $definition.Settings.ExecutionTimeLimit = 'PT6M'
+    $definition.Settings.MultipleInstances = 2  # ignore a duplicate demand
+    $action = $definition.Actions.Create(0)
+    $action.Path = $p.executable
+    $action.Arguments = $p.arguments
+    $action.WorkingDirectory = $p.directory
+    # TASK_CREATE only: never update a task that might belong to someone else.
+    $task = $folder.RegisterTaskDefinition($p.name, $definition, 2, $p.user, $p.password, 1, $null)
+    $instance = $task.Run($null)
+    if (!$instance) { throw 'No actual task instance was started' }
+    $output.instance = [string]$instance.InstanceGuid
+} elseif ($p.operation -eq 'status') {
+    $task = $service.GetFolder('\' + $p.folder).GetTask($p.name)
+    $output.state = [int]$task.State
+    $output.last_result = [int64]$task.LastTaskResult
+} elseif ($p.operation -eq 'cleanup') {
+    $folder = $service.GetFolder('\' + $p.folder)
+    foreach ($task in @($folder.GetTasks(1))) {
+        if ($p.names -notcontains $task.Name) { throw 'Unexpected task in owned folder' }
+        if ($task.State -eq 4 -or $task.State -eq 2) {
+            try { $task.Stop(0) }
+            catch { if ($_.Exception.HResult -ne -2147216629) { throw } }
+        }
+        $folder.DeleteTask($task.Name, 0)
+    }
+    $root.DeleteFolder($p.folder, 0)
+} else { throw 'Unknown controlled task operation' }
+$output | ConvertTo-Json -Compress
+"""
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                            input=json.dumps(payload), capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, f"controlled task operation failed: {result.stderr}"
+    observed = json.loads(result.stdout)
+    assert observed["completed"] is True
+    return observed
+
+
+def retain_person_process(kernel, identity, user, helper, settings):
+    """Fence the handle to the actual created user's exact helper instance."""
+    import psutil
+
+    child = psutil.Process(identity["pid"])
+    assert child.username().casefold() == identity["username"].casefold()
+    assert child.username().casefold().endswith("\\" + user.casefold())
+    assert child.create_time() == identity["created_at"]
+    assert Path(child.exe()).resolve() == Path(sys.executable).resolve()
+    command = child.cmdline()
+    assert command[-1] == "person" and str(helper) in command and str(settings) in command
+    handle = kernel.OpenProcess(0x00101001, False, identity["pid"])
+    assert handle, ("cannot retain owned helper process", ctypes.get_last_error())
+    try:
+        assert psutil.Process(identity["pid"]).create_time() == identity["created_at"]
+    except BaseException:
+        kernel.CloseHandle(handle)
+        raise
+    return SimpleNamespace(process=handle, pid=identity["pid"])
 
 
 def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
@@ -36,11 +119,12 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     net = ctypes.WinDLL("netapi32", use_last_error=True)
     advapi = ctypes.WinDLL("advapi32", use_last_error=True)
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
     kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
     kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
     kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
     kernel.OpenMutexW.restype = wintypes.HANDLE
     kernel.LocalFree.argtypes = [ctypes.c_void_p]
@@ -52,24 +136,8 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                     ("home", wintypes.LPWSTR), ("comment", wintypes.LPWSTR),
                     ("flags", wintypes.DWORD), ("script", wintypes.LPWSTR)]
 
-    class Startup(ctypes.Structure):
-        _fields_ = [("cb", wintypes.DWORD), ("reserved", wintypes.LPWSTR),
-                    ("desktop", wintypes.LPWSTR), ("title", wintypes.LPWSTR),
-                    *[(n, wintypes.DWORD) for n in ("x", "y", "width", "height", "chars_x", "chars_y", "fill", "flags")],
-                    ("show", wintypes.WORD), ("reserved_bytes", wintypes.WORD),
-                    ("reserved_ptr", ctypes.POINTER(ctypes.c_byte)),
-                    ("stdin", wintypes.HANDLE), ("stdout", wintypes.HANDLE), ("stderr", wintypes.HANDLE)]
-
-    class Process(ctypes.Structure):
-        _fields_ = [("process", wintypes.HANDLE), ("thread", wintypes.HANDLE),
-                    ("pid", wintypes.DWORD), ("tid", wintypes.DWORD)]
-
     class Member(ctypes.Structure):
         _fields_ = [("name", wintypes.LPWSTR)]
-
-    class Security(ctypes.Structure):
-        _fields_ = [("length", wintypes.DWORD), ("descriptor", ctypes.c_void_p),
-                    ("inherit", wintypes.BOOL)]
 
     net.NetUserAdd.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p,
                               ctypes.POINTER(wintypes.DWORD)]
@@ -82,36 +150,6 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
         ctypes.POINTER(wintypes.DWORD)]
     advapi.LookupAccountSidW.restype = wintypes.BOOL
-    advapi.LookupAccountNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.c_void_p,
-        ctypes.POINTER(wintypes.DWORD), wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
-        ctypes.POINTER(wintypes.DWORD)]
-    advapi.LookupAccountNameW.restype = wintypes.BOOL
-    advapi.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.LPWSTR)]
-    advapi.ConvertSidToStringSidW.restype = wintypes.BOOL
-    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
-        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p]
-    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
-    advapi.CreateProcessWithLogonW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.LPCWSTR,
-        wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD, ctypes.c_void_p,
-        wintypes.LPCWSTR, ctypes.POINTER(Startup), ctypes.POINTER(Process)]
-    advapi.CreateProcessWithLogonW.restype = wintypes.BOOL
-    user32.GetProcessWindowStation.restype = wintypes.HANDLE
-    user32.SetProcessWindowStation.argtypes = [wintypes.HANDLE]
-    user32.SetProcessWindowStation.restype = wintypes.BOOL
-    user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
-    user32.GetThreadDesktop.restype = wintypes.HANDLE
-    user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
-    user32.SetThreadDesktop.restype = wintypes.BOOL
-    user32.CreateWindowStationW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
-                                           wintypes.DWORD, ctypes.POINTER(Security)]
-    user32.CreateWindowStationW.restype = wintypes.HANDLE
-    user32.CreateDesktopW.argtypes = [wintypes.LPCWSTR, ctypes.c_void_p, ctypes.c_void_p,
-                                    wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(Security)]
-    user32.CreateDesktopW.restype = wintypes.HANDLE
-    user32.CloseDesktop.argtypes = [wintypes.HANDLE]
-    user32.CloseDesktop.restype = wintypes.BOOL
-    user32.CloseWindowStation.argtypes = [wintypes.HANDLE]
-    user32.CloseWindowStation.restype = wintypes.BOOL
     # Resolve the standard Users group by its well-known SID, independently
     # of the runner's display language. Never add these accounts to admins.
     sid = ctypes.c_void_p()
@@ -132,56 +170,11 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     ipc = Path(os.environ["PROGRAMDATA"]) / f"acl1309-ipc-{run}"
     registry = Path(os.environ["PROGRAMDATA"]) / f"acl1309-registry-{run}" / "ports"
     ipc.mkdir()
-    created, processes, desktops = [], [], []
+    created, processes = [], []
     person_processes = {}
+    task_folder = "acl1309-" + uuid.uuid4().hex
+    tasks_created = False
 
-    def private_desktop(user):
-        # CreateProcessWithLogonW requires access to its station/desktop.
-        # Give this exact synthetic user a private object, never WinSta0 or
-        # the runner's existing desktop, registry, configuration or token.
-        sid_bytes, domain_chars, use = wintypes.DWORD(), wintypes.DWORD(), wintypes.DWORD()
-        account = os.environ["COMPUTERNAME"] + "\\" + user
-        advapi.LookupAccountNameW(None, account, None, ctypes.byref(sid_bytes),
-                                  None, ctypes.byref(domain_chars), ctypes.byref(use))
-        assert sid_bytes.value > 0
-        sid = ctypes.create_string_buffer(sid_bytes.value)
-        domain = ctypes.create_unicode_buffer(domain_chars.value)
-        assert advapi.LookupAccountNameW(None, account, sid, ctypes.byref(sid_bytes),
-            domain, ctypes.byref(domain_chars), ctypes.byref(use)), ctypes.get_last_error()
-        text, descriptor = wintypes.LPWSTR(), ctypes.c_void_p()
-        assert advapi.ConvertSidToStringSidW(sid, ctypes.byref(text))
-        try:
-            sddl = f"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{text.value})"
-            assert advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl, 1, ctypes.byref(descriptor), None), ctypes.get_last_error()
-        finally:
-            kernel.LocalFree(text)
-        previous = user32.GetProcessWindowStation()
-        previous_desktop = user32.GetThreadDesktop(kernel.GetCurrentThreadId())
-        station = desktop = None
-        retained = False
-        name = f"acl1309-{run}-{user[-1]}"
-        try:
-            security = Security(ctypes.sizeof(Security), descriptor, False)
-            station = user32.CreateWindowStationW(name, 1, 0x000F037F, ctypes.byref(security))
-            assert station, ("private window station", ctypes.get_last_error())
-            assert user32.SetProcessWindowStation(station), ctypes.get_last_error()
-            desktop = user32.CreateDesktopW("default", None, None, 0, 0x000F01FF, ctypes.byref(security))
-            assert desktop, ("private desktop", ctypes.get_last_error())
-            desktops.append((station, desktop))
-            retained = True
-            return name + "\\default"
-        finally:
-            try:
-                assert user32.SetProcessWindowStation(previous), ctypes.get_last_error()
-                assert user32.SetThreadDesktop(previous_desktop), ctypes.get_last_error()
-            finally:
-                if not retained:
-                    if desktop:
-                        user32.CloseDesktop(desktop)
-                    if station:
-                        user32.CloseWindowStation(station)
-                kernel.LocalFree(descriptor)
     listeners = []
     ports = []
     # Reserve together so the OS cannot hand the same ephemeral port back.
@@ -238,7 +231,8 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
                 pytest.fail(f"synthetic Windows process exited before required state: 0x{code.value:08X}")
             time.sleep(0.1)
-        pytest.fail(f"real account did not reach required state: {person}")
+        task = scheduled_tasks({"operation": "status", "folder": task_folder, "name": person})
+        pytest.fail(f"real account did not reach required state: {person}; task={task}")
 
     sequence = 0
 
@@ -252,12 +246,14 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         return read(person, lambda v: v.get("sequence") == sequence)
 
     def installer_still_sees_a_running_dashboard():
-        # The existing Inno Setup AppMutex check uses precisely SYNCHRONIZE.
-        marker = kernel.OpenMutexW(0x00100000, False, r"Local\ACL-Campaign-Launcher-Server-v1")
-        assert marker, "running dashboard became invisible to the existing installer"
-        kernel.CloseHandle(marker)
+        # Check the unchanged session-scoped Inno API from both actual users,
+        # including the user whose server was stopped beside a live neighbor.
+        for person in users:
+            assert command(person, "installer")["installer_checks"] >= 1
 
     try:
+        scheduled_tasks({"operation": "create", "folder": task_folder})
+        tasks_created = True
         for user in users:
             password = "Aa!" + secrets.token_hex(20)
             info = User(user, password, 0, 1, None, "Ephemeral ACL dashboard acceptance", 0x10201, None)
@@ -271,25 +267,22 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
             # IPC only; the actual shared registry retains ProgramData inheritance.
             subprocess.run(["icacls.exe", str(ipc), "/grant", f"{user}:(OI)(CI)M"],
                            check=True, capture_output=True, timeout=20)
-            startup = Startup()
-            startup.cb = ctypes.sizeof(startup)
-            startup.desktop = private_desktop(user)
-            process = Process()
             helper = Path(__file__).with_name("acl1309_windows_person.py")
-            arguments = subprocess.list2cmdline([sys.executable, str(helper), str(settings), user, "person"])
-            ok = advapi.CreateProcessWithLogonW(user, ".", password, 1, sys.executable,
-                ctypes.create_unicode_buffer(arguments), 0x08000000, None, str(helper.parent),
-                ctypes.byref(startup), ctypes.byref(process))
-            assert ok, ("real profile logon failed", ctypes.get_last_error())
-            processes.append(process)
-            person_processes[user] = process
-            kernel.CloseHandle(process.thread)
+            arguments = subprocess.list2cmdline([str(helper), str(settings), user, "person"])
+            scheduled_tasks({"operation": "start", "folder": task_folder, "name": user,
+                             "user": os.environ["COMPUTERNAME"] + "\\" + user,
+                             "password": password, "executable": sys.executable,
+                             "arguments": arguments, "directory": str(helper.parent)})
         prepared = [read(user, lambda v: v["phase"] == "prepared") for user in users]
         assert prepared[0]["sid"] != prepared[1]["sid"]
         assert prepared[0]["profile"] != prepared[1]["profile"]
         assert prepared[0]["config"] != prepared[1]["config"]
+        assert prepared[0]["session"] == prepared[1]["session"]
         for user, result in zip(users, prepared):
             assert result["username"].casefold().endswith("\\" + user.casefold())
+            process = retain_person_process(kernel, result, user, helper, settings)
+            processes.append(process)
+            person_processes[user] = process
         (ipc / "start").touch()
         running = [read(user, lambda v: v["phase"] == "running") for user in users]
         assert running[0]["hash"] != running[1]["hash"]
@@ -326,16 +319,17 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 kernel.TerminateProcess(process.process, 1)
                 kernel.WaitForSingleObject(process.process, 10000)
             kernel.CloseHandle(process.process)
-        for station, desktop in reversed(desktops):
-            assert user32.CloseDesktop(desktop), ctypes.get_last_error()
-            assert user32.CloseWindowStation(station), ctypes.get_last_error()
-        foreign.shutdown()
-        foreign.server_close()
-        for user in created:
-            assert net.NetUserDel(None, user) == 0
-        shutil.rmtree(ipc)
-        if registry.parent.exists():
-            shutil.rmtree(registry.parent)
+        try:
+            if tasks_created:
+                scheduled_tasks({"operation": "cleanup", "folder": task_folder, "names": users})
+        finally:
+            foreign.shutdown()
+            foreign.server_close()
+            failures = [(user, net.NetUserDel(None, user)) for user in created]
+            shutil.rmtree(ipc)
+            if registry.parent.exists():
+                shutil.rmtree(registry.parent)
+            assert all(code == 0 for _, code in failures), failures
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
@@ -349,7 +343,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 "stable-port restart beside a live neighbor; actual child PID/port "
                 "state cleanup; unchanged installer presence guard; unrelated "
                 "listener preserved. Shared ProgramData registry used inherited "
-                "permissions. Access grants were confined to test IPC and private "
-                "desktop objects for the two accounts. "
+                "permissions. Access grants were confined to test IPC; own scheduled "
+                "tasks used real Password logons at Limited run level. "
                 "Wizard and HTTP application bodies were synthetic; no live services.\n"
             )

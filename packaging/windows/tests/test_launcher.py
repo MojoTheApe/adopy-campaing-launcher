@@ -64,7 +64,6 @@ class LauncherTests(unittest.TestCase):
 
         kernel.CreateMutexW.side_effect = create_mutex
         kernel.CreateMutexExW.side_effect = lambda _security, name, *_: create_mutex(None, False, name)
-        kernel.OpenMutexW.return_value = None
         kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -73,7 +72,7 @@ class LauncherTests(unittest.TestCase):
         self.addCleanup(lambda: [lock.__exit__(None, None, None) for lock in held])
         with mock.patch.object(sys, "platform", "win32"), \
                 mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                mock.patch.object(ctypes, "get_last_error", return_value=2, create=True), \
+                mock.patch.object(ctypes, "get_last_error", side_effect=lambda: error[0], create=True), \
                 mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
                 mock.patch.object(launcher, "_CONFIG_LOCK", None), \
                 mock.patch.object(launcher.local_dashboard, "find_own", return_value=None):
@@ -116,14 +115,12 @@ class LauncherTests(unittest.TestCase):
 
         kernel = mock.Mock()
         kernel.CreateMutexW.return_value = 0  # Global namespace unavailable
-        kernel.OpenMutexW.return_value = None
         kernel.CreateMutexExW.return_value = 456  # original Local installer marker is available
         kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(sys, "platform", "win32"), \
                 mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
                 mock.patch.object(ctypes, "set_last_error", create=True), \
-                mock.patch.object(ctypes, "get_last_error", return_value=2, create=True), \
                 mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
                 mock.patch.object(launcher, "_CONFIG_LOCK", None, create=True), \
                 mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp)):
@@ -137,110 +134,6 @@ class LauncherTests(unittest.TestCase):
                 launcher._release_server_mutex()
             with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
                 pass
-
-    def test_existing_installer_marker_opens_with_synchronize_only(self):
-        import ctypes
-
-        kernel = mock.Mock()
-        kernel.OpenMutexW.return_value = 312
-        with mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True):
-            self.assertEqual(launcher._installer_presence_mutex(kernel), 312)
-        kernel.OpenMutexW.assert_called_once_with(0x00100000, False, launcher.SERVER_MUTEX_NAME)
-        kernel.CreateMutexExW.assert_not_called()
-        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.assert_not_called()
-
-    def test_new_installer_marker_grants_full_access_to_its_owner_only(self):
-        import ctypes
-
-        kernel = mock.Mock()
-        kernel.OpenMutexW.return_value = None
-        kernel.CreateMutexExW.return_value = 313
-        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
-        with mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                mock.patch.object(ctypes, "get_last_error", return_value=2, create=True):
-            self.assertEqual(launcher._installer_presence_mutex(kernel), 313)
-        dacl = kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.call_args.args[0]
-        self.assertEqual(dacl, "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)(A;;0x00100000;;;AU)")
-        self.assertEqual(kernel.CreateMutexExW.call_args.args[1:],
-                         (launcher.SERVER_MUTEX_NAME, 0, 0x001F0001))
-        kernel.LocalFree.assert_called_once()
-
-    def test_installer_marker_creation_race_reopens_without_extra_rights(self):
-        import ctypes
-
-        kernel = mock.Mock()
-        kernel.OpenMutexW.side_effect = [None, 314]
-        kernel.CreateMutexExW.return_value = None
-        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
-        with mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                mock.patch.object(ctypes, "get_last_error", side_effect=[2, 5], create=True):
-            self.assertEqual(launcher._installer_presence_mutex(kernel), 314)
-        self.assertEqual(kernel.OpenMutexW.call_args_list,
-                         [mock.call(0x00100000, False, launcher.SERVER_MUTEX_NAME)] * 2)
-        kernel.CreateMutexExW.assert_called_once()
-        kernel.LocalFree.assert_called_once()
-
-    def test_inaccessible_or_wrong_type_installer_marker_is_never_recreated(self):
-        import ctypes
-
-        for error in (5, 6, 87):
-            with self.subTest(error=error):
-                kernel = mock.Mock()
-                kernel.OpenMutexW.return_value = None
-                with mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                        mock.patch.object(ctypes, "get_last_error", return_value=error, create=True):
-                    self.assertIsNone(launcher._installer_presence_mutex(kernel))
-                kernel.CreateMutexExW.assert_not_called()
-                kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.assert_not_called()
-
-    def test_failed_marker_creation_frees_descriptor_and_stays_failed(self):
-        import ctypes
-
-        kernel = mock.Mock()
-        kernel.OpenMutexW.return_value = None
-        kernel.CreateMutexExW.return_value = None
-        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
-        with mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                mock.patch.object(ctypes, "get_last_error", side_effect=[2, 87], create=True):
-            self.assertIsNone(launcher._installer_presence_mutex(kernel))
-        kernel.OpenMutexW.assert_called_once()
-        kernel.LocalFree.assert_called_once()
-
-    def test_new_marker_security_descriptor_refusal_stays_failed(self):
-        import ctypes
-
-        kernel = mock.Mock()
-        kernel.OpenMutexW.return_value = None
-        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = False
-        with mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                mock.patch.object(ctypes, "get_last_error", return_value=2, create=True):
-            self.assertIsNone(launcher._installer_presence_mutex(kernel))
-        kernel.CreateMutexExW.assert_not_called()
-        kernel.LocalFree.assert_not_called()
-
-    def test_raced_marker_refusal_releases_only_the_own_config_gate(self):
-        import ctypes
-        from config.paths import machine_file_lock
-
-        kernel = mock.Mock()
-        kernel.OpenMutexW.side_effect = [None, None]
-        kernel.CreateMutexExW.return_value = None
-        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
-        with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(sys, "platform", "win32"), \
-                mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
-                mock.patch.object(ctypes, "get_last_error", side_effect=[2, 5], create=True), \
-                mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
-                mock.patch.object(launcher, "_CONFIG_LOCK", None), \
-                mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp)):
-            self.assertFalse(launcher._acquire_server_mutex())
-            self.assertIsNone(launcher._MUTEX_HANDLE)
-            self.assertIsNone(launcher._CONFIG_LOCK)
-            with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
-                pass
-        self.assertEqual(kernel.OpenMutexW.call_count, 2)
-        kernel.LocalFree.assert_called_once()
-        kernel.CloseHandle.assert_not_called()
 
 
 if __name__ == "__main__":

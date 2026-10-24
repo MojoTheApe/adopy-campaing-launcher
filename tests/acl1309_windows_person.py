@@ -153,6 +153,7 @@ def main():
     import setup_wizard
     import psutil
     import ctypes
+    import winreg
 
     assert not ctypes.windll.shell32.IsUserAnAdmin(), "acceptance must use a standard local account"
     _native_diagnostics["mode"] = mode
@@ -210,6 +211,7 @@ def main():
     opened = []
     messages = _native_diagnostics["messages"]
     wizard_calls = []
+    installer_checks = []
     popen = launcher.subprocess.Popen
 
     def spawn(*args, **kwargs):
@@ -235,8 +237,20 @@ def main():
     who = subprocess.check_output(["whoami.exe", "/user", "/fo", "csv", "/nh"], text=True).strip()
     sid = next(csv.reader([who]))[1]
     assert sid.startswith("S-1-5-21-")
+    with winreg.OpenKey(winreg.HKEY_USERS, sid):
+        pass  # Require an actually loaded native profile, not environment text.
+    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList" + "\\" + sid) as key:
+        profile, _ = winreg.QueryValueEx(key, "ProfileImagePath")
+        assert Path(os.path.expandvars(profile)).resolve() == Path(os.environ["USERPROFILE"]).resolve()
+    session = ctypes.c_ulong()
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.ProcessIdToSessionId.argtypes = [ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong)]
+    assert kernel.ProcessIdToSessionId(os.getpid(), ctypes.byref(session)), ctypes.get_last_error()
     write(status, {"phase": "prepared", "username": psutil.Process().username(),
-                   "sid": sid, "profile": os.environ["USERPROFILE"], "config": str(local)})
+                   "sid": sid, "profile": os.environ["USERPROFILE"], "config": str(local),
+                   "session": session.value, "pid": os.getpid(),
+                   "created_at": psutil.Process().create_time()})
     try:
         wait_for(ipc / "start")
         sys.argv = ["ACL.exe"]
@@ -255,7 +269,8 @@ def main():
                     "profile": os.environ["USERPROFILE"], "config": str(local),
                     "hash": local_dashboard.identity(local), "port": current[0] if current else None,
                     "first_port": first_port, "children": [p.pid for p in children],
-                    "wizard_calls": len(wizard_calls), "opened": opened, "messages": messages}
+                    "wizard_calls": len(wizard_calls), "opened": opened, "messages": messages,
+                    "session": session.value, "installer_checks": len(installer_checks)}
 
         write(status, snapshot("running"))
         sequence = 0
@@ -292,6 +307,17 @@ def main():
                 assert local_dashboard.find_own(local)[0] == first_port
                 state = json.loads((local / "server.json").read_text(encoding="utf-8"))
                 assert state["port"] == first_port and state["pid"] == children[-1].pid
+            elif action == "installer":
+                # Inno's fixed Local AppMutex is session-scoped: make its real
+                # SYNCHRONIZE-only check in the application's actual session.
+                from ctypes import wintypes
+                kernel.OpenMutexW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+                kernel.OpenMutexW.restype = wintypes.HANDLE
+                marker = kernel.OpenMutexW(0x00100000, False, launcher.SERVER_MUTEX_NAME)
+                assert marker, ("running dashboard invisible to installer", ctypes.get_last_error())
+                kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+                assert kernel.CloseHandle(marker)
+                installer_checks.append(True)
             elif action == "exit":
                 break
             else:
