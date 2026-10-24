@@ -389,10 +389,12 @@ def test_running_reset_when_reader_raises_base_exception(env):
         raise Boom()
 
     q = ar.RefreshQueue(reader=reader, clock=env.clock)
+    q.begin_sweep("morning",1,accounts=["A"])
     q.request("A", "attention")
     with pytest.raises(Boom):
         q._drain_once()
     assert q.state()["running"] is None
+    assert q.state()["sweep"]["done"] == 1
     assert q._drain_lock.acquire(blocking=False)  # замок отпущен
     q._drain_lock.release()
 
@@ -618,6 +620,7 @@ def test_row_does_not_stay_updating_when_the_read_is_interrupted(env):
         raise Boom()
 
     q = ar.RefreshQueue(reader=reader, clock=env.clock)
+    q.begin_sweep("morning",1,accounts=["A"])
     q.request("A", "attention")
     with pytest.raises(Boom):
         q._drain_once()

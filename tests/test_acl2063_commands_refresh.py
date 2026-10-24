@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 import pytest
 
+from tests.profile_lease_fakes import fake_profile
 from src.analysis_agent import account_refresh as ar, campaign_inventory as ci
 from src.analysis_agent.account_refresh_state import read_session
 from src.fb_ads_rpa.profile_lease import profile_lock
@@ -28,7 +29,7 @@ class SessionWorld(World):
     active = False
     @contextmanager
     def open_session(self, account, commands):
-        with profile_lock("11111111-1111-1111-1111-111111111111"), read_session(priority=commands):
+        with profile_lock(fake_profile(ACCOUNT)), read_session(priority=commands):
             with super().open_session(account, commands) as sess:
                 self.active = True
                 self.current = sess
@@ -44,7 +45,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "backend_ready", lambda: True)
     monkeypatch.setattr(ci, "_store_path", lambda: tmp_path / "inventory.json")
     monkeypatch.setattr(ci._as, "_entry_for", lambda account: SimpleNamespace(
-        ad_account_id=ACT, profile_id="11111111-1111-1111-1111-111111111111"))
+        ad_account_id=ACT, profile_id=fake_profile(ACCOUNT)))
     q = ar.RefreshQueue(accounts=lambda: [ACCOUNT])
     monkeypatch.setattr(ar, "_QUEUE", q)
     monkeypatch.setattr(q, "start", lambda: None)

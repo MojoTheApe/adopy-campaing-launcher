@@ -6,6 +6,7 @@ real app paths; synthetic profile results are explicit fixture boundaries.
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from types import SimpleNamespace
 import threading
 from urllib.parse import urlparse, parse_qs
@@ -13,6 +14,7 @@ from urllib.parse import urlparse, parse_qs
 import pytest
 from fastapi.testclient import TestClient
 from playwright.sync_api import sync_playwright
+from tests.profile_lease_fakes import fake_profile
 from src.analysis_agent import account_refresh as ar, campaign_inventory as ci
 from src.analysis_agent.account_refresh_state import RefreshStore
 from tests._retry_once import goto, launch_chromium
@@ -21,7 +23,9 @@ from tests.test_acl1798_campaign_inventory import snapshot
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = (ROOT / 'src/web/templates/report.html').read_text()
 MOUNT_JS = REPORT[REPORT.index('function amapCampaignSlug('):REPORT.index('function amapPollSpend(')]
-AMAP_CSS = REPORT[REPORT.index('    .amap table { width: 100%'):REPORT.index('    .amap-caret-off {')]
+# Use the complete production cascade: the action-cell wrapping rule comes
+# after the caret styles and is essential when Retry joins the removal controls.
+AMAP_CSS = (ROOT / 'src/web/templates/adopy-tokens.css').read_text() + re.search(r'<style>(.*?)</style>', REPORT, re.S).group(1)
 
 def open_acc(page, account):
     page.click(f'tr:has(td[data-account="{account}"]) td.amap-acc', position={'x': 8, 'y': 8})
@@ -39,6 +43,7 @@ class Dashboard:
         self.command_world = None
         self.warm_available = False
         self.fail = set()
+        self.checkpoint = set()
         self.entered, self.release = threading.Event(), threading.Event()
         self.hold = False
         self.now = datetime(2026, 10, 24, 8).astimezone().timestamp()
@@ -82,6 +87,10 @@ class Dashboard:
         self.entered.set()
         if self.hold:
             assert self.release.wait(10), 'test must release its synthetic reader'
+        if account in self.checkpoint:
+            snap = ci.Snapshot(account=account, state='failed', stop='checkpoint', error='Synthetic checkpoint')
+            ci.put_result(snap)
+            return snap
         if account in self.fail:
             snap = ci.Snapshot(account=account, state='failed', error='Proxy connection failed', error_code='proxy_failed')
             ci.put_result(snap)
@@ -102,7 +111,7 @@ class Dashboard:
                 templates.env.get_template('_campaign_table.html').render() +
                 '<div class="amap"><details class="amap-country" open>' + country_html + '</details></div>' +
                 '<script src="/static/warm_sessions.js"></script>' +
-                '<script>window.AMAP_CAMPAIGN_TABLE=true;function amapPeriod(){return ' +
+                '<script>window.AMAP_CAMPAIGN_TABLE=true;var _amapCmp={};function amapPeriod(){return ' +
                 json.dumps({'from': '' if span == 'all' else f, 'to': f, 'span': span}) + ';}\n' + MOUNT_JS + APPLY_JS + '</script></body></html>')
 
     def handle(self, route):
@@ -193,8 +202,10 @@ def test_stale_expand_shows_cache_while_updating_then_new_list_without_reopening
     assert site.errors == []
 
 
-def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashboard):
+@pytest.mark.parametrize('width', [1280, 390])
+def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashboard, width):
     site, page = dashboard
+    page.set_viewport_size({'width': width, 'height': 900})
     site.fail.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
@@ -207,6 +218,27 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc.state === 'ok'")
     assert site.reads[-1] == ('Acc', 'retry') and len(site.reads) == 3
     assert not retry.is_visible() and site.errors == []
+
+
+def test_global_checkpoint_has_one_banner_and_only_explicit_same_account_retry_resumes(dashboard):
+    site, page = dashboard
+    site.checkpoint.add('Acc')
+    site.save('Acc', age=7200); site.save('Fresh', age=7200)
+    goto(page, 'http://acl.test/'); wait_ready(page)
+    banner = page.locator('#account-refresh-status[role=alert]')
+    banner.wait_for(state='visible')
+    assert 'checkpoint' in banner.inner_text().lower()
+    assert page.locator('#account-refresh-status').count() == 1
+    assert [a for a, _ in site.reads] == ['Acc']
+    assert site.q.state()['queued'] == [{'account': 'Fresh', 'trigger': 'schedule:2026-10-24/08:00'}]
+    assert site.q.state()['sweep']['done'] == 1
+    site.checkpoint.clear()
+    page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
+    assert [a for a, _ in site.reads] == ['Acc', 'Acc', 'Fresh']
+    assert site.reads[1] == ('Acc', 'retry')
+    assert site.q.state()['halt'] is None and site.q.state()['sweep']['done'] == 2
+    assert banner.is_hidden() and site.errors == []
 
 
 def test_hand_edit_pause_refuses_write_shows_message_and_refreshes_account(dashboard, monkeypatch, tmp_path):
@@ -223,7 +255,7 @@ def test_hand_edit_pause_refuses_write_shows_message_and_refreshes_account(dashb
     monkeypatch.setenv('ACL_BIND_HOST', '127.0.0.1')
     monkeypatch.setattr(cc, '_sessions', lambda: world.open_session)
     monkeypatch.setattr(ci._as, '_entry_for', lambda a: SimpleNamespace(
-        ad_account_id=ACT, profile_id='11111111-1111-1111-1111-111111111111'))
+        ad_account_id=ACT, profile_id=fake_profile('Acc')))
     # A running campaign is paused in the UI, but the human already paused it
     # after preview. Execute must preserve the exact no-write stale guard.
     world.meta.objs[CAMP_A]['status'] = 'ACTIVE'
@@ -265,3 +297,15 @@ def test_backend_rpa_keeps_saved_structure_and_bi_but_refuses_real_reads(dashboa
     assert site.reads==[] and site.q.state()['queued']==[]
     assert site.client.post('/account-refresh/request',data={'account':'Acc','trigger':'retry'}).status_code==409
     assert site.errors==[]
+
+
+def test_cpl_default_order_hiding_and_persistence_survive_structure_refresh(dashboard):
+    site,page=dashboard
+    goto(page,'http://acl.test/?view_only=1');wait_ready(page);open_acc(page,'Acc')
+    headings=page.locator('.hc-table .hc-heads th').all_inner_texts()
+    assert headings.index('CPL')==headings.index('CPA (FTD)')-1
+    assert '$0.80' in page.locator('tr[data-key="campaign:2"]').inner_text()
+    page.click('[data-hc=cols] > summary');page.uncheck('[data-col=b_cpl]')
+    page.reload();wait_ready(page);open_acc(page,'Acc')
+    assert page.locator('.hc-table .hc-heads th',has_text='CPL').count()==0
+    assert site.reads==[] and site.errors==[]

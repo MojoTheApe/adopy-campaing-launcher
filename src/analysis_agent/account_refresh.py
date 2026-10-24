@@ -500,6 +500,7 @@ class RefreshQueue:
                             prev = self._rows.get(account, {}).get("list_at", "")
                             self._rows[account] = {"list_at": prev, "state": "failed",
                                                    "error": "The read was interrupted. Press Retry."}
+                            self._sweep_complete(account, trigger)
                 done += 1
         finally:
             if dispatch is not None:
