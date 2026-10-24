@@ -1735,6 +1735,8 @@ async def health() -> JSONResponse:
     """Fast identity check for the Windows launcher; never loads workbooks.
 
     `version` lets the update helper tell the new release from the old one.
+    `config` says whose dashboard this is: the launcher attaches only to its
+    own, and anything else on the port means it takes another (ACL-1309).
     """
     # ACL-1399: первый вопрос о версии — это git (~3 с на загруженной
     # машине). /health — то, чем лаунчер проверяет, жив ли сервер: версию
@@ -1745,7 +1747,10 @@ async def health() -> JSONResponse:
         await asyncio.to_thread(known.wait, 0.3)
     # Прочитана — повторный вызов берёт её из кэша acl_update мгновенно.
     release = _installed_release() if known.is_set() else {"tag": ""}
-    return JSONResponse({"app": "ACL", "ok": True, "version": (release or {}).get("tag", "")})
+    from config.paths import config_identity
+
+    return JSONResponse({"app": "ACL", "ok": True, "version": (release or {}).get("tag", ""),
+                         "config": config_identity()})
 
 
 _INSTALLED: dict = {"event": None}
