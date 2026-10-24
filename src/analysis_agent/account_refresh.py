@@ -8,20 +8,22 @@
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import heapq
+import hashlib
 import logging
 import os
 import re
 import threading
 import time
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Literal
 
 from src.analysis_agent import campaign_inventory
 from src.analysis_agent.campaign_inventory import Snapshot, run_read
 from src.analysis_agent.account_refresh_state import RefreshStore
+from src.analysis_agent.account_refresh_machine import MachineStore, binding, CoordinationError
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
     "mlx_token_expired": ("The Multilogin token has expired. Update it in Multilogin, then press Retry.", None),
     "mlx_token_workspace": ("The Multilogin token belongs to another workspace. Fix it, then press Retry.", None),
     "call_budget": ("The call budget for account reads is used up. Raise the limit, then press Retry.", None),
+    "coordination_unavailable": ("The machine account-read state is unavailable. Restore access, then press Retry.", None),
 }
 
 _MINUTES = re.compile(r"about (\d+) min", re.I)
@@ -155,11 +158,18 @@ def _halt_kind(snap: Snapshot) -> str:
 class RefreshQueue:
     def __init__(self, reader: Callable[[str, str], Snapshot] | None = None,
                  clock: Callable[[], float] = time.time, *, store: RefreshStore | None = None,
-                 accounts: Callable[[], list[str]] | None = None):
-        self._reader = reader or (lambda account, trigger: run_read(account, trigger=trigger))
+                 accounts: Callable[[], list[str]] | None = None,
+                 machine: MachineStore | None = None):
+        self._reader = reader or (lambda account, trigger: run_read(account, trigger=trigger,
+                                                                   machine=self._machine, now=self._clock))
+        self._injected_reader = reader is not None
         self._clock = clock
         self._store = store
         self._accounts = accounts
+        # An injected reader is a standalone/test executor; production queue()
+        # always uses run_read and the real machine coordinator.
+        self._machine = machine if machine is not None else (MachineStore() if reader is None and store else None)
+        self._owner = hashlib.sha256(str(store.root.resolve()).encode()).hexdigest() if store else ""
         self._lock = threading.Lock()
         self._wake = threading.Condition(self._lock)
         #: Второй замок: два чтения одновременно не бывает ни при каком вызове _drain_once.
@@ -174,10 +184,97 @@ class RefreshQueue:
         self._halt: dict | None = None
         self._sweep: dict | None = None
         self._rows: dict[str, dict] = {}
+        self._keys: dict[str, str] = {}
         self._thread: threading.Thread | None = None
         self._stop = False
         #: Заявки, отброшенные при выборе как уже свежие: телеметрию пишем вне замка.
         self._pending_skips: list[tuple[str, str]] = []
+
+    def _bindings(self, accounts) -> dict[str, str]:
+        keys = {}
+        for account in accounts:
+            try:
+                keys[account] = binding(account)
+            except (ValueError, CoordinationError):
+                # A bad/removed map row must not prevent the other rows' reads.
+                continue
+        return keys
+
+    def _invalid_row(self, account: str) -> None:
+        self._entries.pop(account, None)
+        self._rows[account] = {**self._rows.get(account, {}), "state": "failed",
+                              "error": "This account needs a valid ad-account ID and physical profile in the account map."}
+        self._sweep_complete(account)
+
+    def _migrate_legacy(self) -> None:
+        old = self._store.read()
+        if old.get("machine_migrated"):
+            return
+        local = datetime.fromtimestamp(self._clock()).astimezone()
+        window = current_window(local)
+        keys = self._bindings(self._accounts() if self._accounts else [])
+        if window:
+            self._machine.migrate(self._owner, f"{local:%Y-%m-%d}/{window}", list(keys.values()),
+                                  seen=window in old["windows_done"].get(f"{local:%Y-%m-%d}", []),
+                                  halt=old.get("halt") or self._persisted_halt(), bindings=keys, now=self._clock())
+        with self._store.transaction() as state:
+            state["machine_migrated"] = True
+
+    def _pull_results(self, accounts=None) -> None:
+        if self._machine is None:
+            return
+        hold = self._machine.lease("account-structure-read.lock").holding(timeout=0)
+        try:
+            hold.__enter__()
+        except TimeoutError:
+            return  # status/admission remains responsive during a real profile read
+        try:
+            self._migrate_legacy()
+            self._machine.recover_running(now=self._clock())
+            members = list(accounts if accounts is not None else (self._accounts() if self._accounts else self._entries))
+            keys = self._bindings(members)
+            results = self._machine.results(list(keys.values()))
+            for account, key in keys.items():
+                self._import_result(account, shared=results.get(key), known=True)
+        finally:
+            hold.__exit__(None, None, None)
+
+    def _import_result(self, account: str, *, shared=None, known: bool = False) -> None:
+        if self._machine is None or not self._known_account(account):
+            return
+        key = binding(account)
+        if not known:
+            shared = self._machine.result(key)
+        if not shared:
+            return
+        payload = shared["payload"]
+        if shared.get("snapshot") and shared.get("snapshot_revision") != shared["revision"]:
+            accepted = Snapshot(account=account, **{k: v for k, v in shared["snapshot"].items() if k != "ok"})
+            accepted._machine_binding = key
+            campaign_inventory.adopt_machine_result(accepted, shared["snapshot_revision"])
+        snap = Snapshot(account=account, **{k: v for k, v in payload.items() if k != "ok"})
+        snap._machine_binding = key
+        if binding(account) != key:
+            return
+        if campaign_inventory.adopt_machine_result(snap, shared["revision"]):
+            with self._state_guard():
+                previous = self._rows.get(account, {}).get("list_at", "")
+                self._rows[account] = {"list_at": snap.finished_at if payload["ok"] else previous,
+                                       "state": snap.state if payload["ok"] else "failed", "error": snap.error}
+
+    def _publish_result(self, snap: Snapshot, *, force: bool = False, recovery: int | None = None,
+                        token: int | None = None, own_recovery: int | None = None) -> None:
+        if self._machine is not None and not getattr(snap, "_machine_committed", False):
+            with self._machine.lease("account-structure-read.lock").holding():
+                key = binding(snap.account)
+                revision = self._machine.publish(key, snap, now=self._clock(), force=force, recovery=recovery, own_recovery=own_recovery, token=token)
+                snap._machine_revision = revision
+                snap._machine_binding = key
+                snap._machine_committed = True
+                try:
+                    campaign_inventory.put_result(snap)
+                except Exception:
+                    log.exception("The committed account result awaits its local cache projection")
 
     @contextmanager
     def _state_guard(self):
@@ -193,18 +290,21 @@ class RefreshQueue:
                 heapq.heapify(self._heap)
                 self._running = state.get("running")
                 self._rows = state["rows"]
+                self._keys = state.get("machine_bindings", {})
                 self._halt = state.get("halt")
                 self._sweep = state.get("sweep")
                 self._bypass = set(state.get("bypass", []))
                 yield state
                 state.update(seq=self._seq, entries=self._entries, running=self._running,
                              rows=self._rows, halt=self._halt, sweep=self._sweep,
-                             bypass=sorted(self._bypass))
+                             bypass=sorted(self._bypass), machine_bindings=self._keys)
 
     def _known_account(self, account: str) -> bool:
         return self._accounts is None or account.casefold() in {a.casefold() for a in self._accounts()}
 
     def _sweep_complete(self, account: str, trigger: str = "") -> None:
+        if self._machine and account in self._keys:
+            self._machine.withdraw(self._keys[account], self._owner)
         if not self._sweep:
             return
         pending = self._sweep.get("_pending")
@@ -229,13 +329,26 @@ class RefreshQueue:
             raise RuntimeError("Scheduled account reads require persisted dashboard settings.")
         day = now.strftime("%Y-%m-%d")
         accounts = list({a.casefold(): a for a in self._accounts()}.values())
+        machine_started = True
+        if self._machine is not None:
+            keys = self._bindings(accounts)
+            self._migrate_legacy()
+            machine_started = self._machine.admit(f"{day}/{window}", list(keys.values()), self._owner)
+            self._pull_results(accounts)
         skipped = []
         queued = 0
         with self._state_guard() as state:
             seen = state["windows_done"].setdefault(day, [])
-            if window in seen:
+            tag = f"{day}/{window}"
+            bindings = self._bindings(accounts) if self._machine else {}
+            previous = state.setdefault("machine_members", {}).get(tag, {}) if self._machine else {}
+            added = {a for a, key in bindings.items() if previous.get(a) != key}
+            if window in seen and (not self._machine or not added):
                 return {"sweep": "already_done", "window": window, "queued": 0}
-            seen.append(window)
+            if window not in seen:
+                seen.append(window)
+            if self._machine:
+                state["machine_members"][tag] = bindings
             self._maybe_lift()
             # Старые, ещё не начатые окна не догоняем. Действие/Retry/attention
             # остаются; идущее чтение не прерывается.
@@ -244,7 +357,13 @@ class RefreshQueue:
                            "_pending": list(accounts)}
             label = f"schedule:{day}/{window}"
             for account in accounts:
+                if self._machine and account not in bindings:
+                    self._invalid_row(account)
+                    continue
                 if self._running == account:
+                    continue
+                if self._machine and self._machine.satisfied(bindings[account], tag):
+                    self._sweep_complete(account)
                     continue
                 if is_fresh(account, now=self._clock()):
                     snap = campaign_inventory.get_snapshot(account)
@@ -259,7 +378,7 @@ class RefreshQueue:
             self._wake.notify_all()
         for account, label in skipped:
             self._telemetry_skipped(account, label)
-        return {"sweep": "started", "window": window, "queued": queued}
+        return {"sweep": "started" if machine_started else "joined", "window": window, "queued": queued}
 
     # ───────── заявки ─────────
 
@@ -294,6 +413,15 @@ class RefreshQueue:
         return found
 
     def _maybe_lift(self) -> None:
+        if self._machine is not None:
+            shared = self._machine.halt(now=self._clock())
+            if shared:
+                account = next((a for a, key in self._bindings(self._accounts() if self._accounts else []).items()
+                                if key == shared["key"]), "")
+                self._halt = {**shared, "account": account, "machine_generation": shared["generation"]}
+                return
+            if self._halt and "machine_generation" in self._halt:
+                self._halt = None
         halt = self._halt
         if halt and halt.get("persisted"):
             self._halt = halt = None  # восстановленная пауза выводится заново: файл мог измениться
@@ -322,6 +450,9 @@ class RefreshQueue:
             self._maybe_lift()
             if not self._known_account(account):
                 return {"queued": False, "reason": "removed"}
+            if self._machine and account not in self._bindings([account]):
+                self._invalid_row(account)
+                return {"queued": False, "reason": "invalid_account_map"}
             if self._running == account:
                 return {"queued": False, "reason": "running"}
             if not force and is_fresh(account, now=self._clock()):
@@ -350,6 +481,10 @@ class RefreshQueue:
 
     def _push(self, account: str, trigger: str, label: str, force: bool) -> None:
         prio = PRIORITY[trigger]
+        if self._machine is not None:
+            key = binding(account)
+            self._keys[account] = key
+            self._machine.request(key, self._owner, prio, label, force)
         current = self._entries.get(account)
         if current is not None and current[0] <= prio:
             # Уже стоит с тем же или более высоким приоритетом; force не теряем.
@@ -377,6 +512,10 @@ class RefreshQueue:
 
     def record_result(self, snap: Snapshot, *, trigger: str) -> None:
         """Настоящее чтение в уже открытой сессии команды; повторной заявки нет."""
+        if not self._known_account(snap.account):
+            return
+        self._publish_result(snap, force=trigger in {"action", "retry"},
+                             recovery=(self._halt or {}).get("machine_generation"))
         with self._state_guard():
             if not self._known_account(snap.account):
                 return
@@ -387,6 +526,7 @@ class RefreshQueue:
             self._settle(snap.account, trigger, snap, bypassed)
 
     def state(self) -> dict:
+        self._pull_results()
         with self._state_guard():
             self._maybe_lift()
             queued = [{"account": a, "trigger": e[2]}
@@ -448,18 +588,179 @@ class RefreshQueue:
         try:
             if not self._known_account(account):
                 return Snapshot(account=account, state="failed", error="This account was removed from the dashboard.")
-            return self._reader(account, trigger)
+            if self._machine is not None and self._injected_reader:
+                key = binding(account)
+                self._machine.recover_running(now=self._clock())
+                own_recovery = self._machine.stop_generation(key)
+                token = self._machine.begin(key, self._owner, trigger)
+                with self._machine.executing(token):
+                    try:
+                        snap = self._reader(account, trigger)
+                    except Exception as exc:
+                        stamp = datetime.fromtimestamp(self._clock(), timezone.utc)
+                        snap = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}",
+                                        finished_at=stamp.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
+                                        finished_at_utc=stamp.isoformat())
+                    self._publish_result(snap, force=trigger.split(":")[0] in {"action", "retry"},
+                                         recovery=(self._halt or {}).get("machine_generation"), own_recovery=own_recovery, token=token)
+                    return snap
+            snap = self._reader(account, trigger)
+            self._publish_result(snap, force=trigger.split(":")[0] in {"action", "retry"},
+                                 recovery=(self._halt or {}).get("machine_generation"))
+            return snap
         except Exception as exc:  # noqa: BLE001
             return Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
 
     def _drain_once(self) -> int:
+        if self._machine is not None:
+            hold = self._machine.lease(f"worker-{self._owner}.lock").holding(timeout=0)
+            try:
+                hold.__enter__()
+            except TimeoutError:
+                return 0
+            try:
+                return self._drain_machine()
+            finally:
+                hold.__exit__(None, None, None)
+        return self._drain_owned()
+
+    @contextmanager
+    def _execution_available(self, account: str):
+        """Never occupy the machine dispatcher while waiting for a live target."""
+        from src.analysis_agent import account_spend
+        from src.analysis_agent.account_refresh_state import target_lease, read_session
+        from src.fb_ads_rpa.operations import browser_operation
+        stack = ExitStack()
+        try:
+            stack.enter_context(browser_operation.reading())
+            physical = account_spend._lock_for(account)
+            if not physical.acquire(blocking=False):
+                yield False
+                return
+            stack.callback(physical.release)
+            try:
+                stack.enter_context(target_lease(account_spend._profile_key(account)).holding(timeout=0))
+                stack.enter_context(read_session(priority=False, timeout=0))
+            except TimeoutError:
+                stack.close()
+                yield False
+                return
+            yield True
+        finally:
+            stack.close()
+
+    def _requeue(self, account: str, trigger: str, force: bool, bypassed: bool) -> None:
+        with self._state_guard():
+            self._push(account, trigger.split(":")[0], trigger, force)
+            if bypassed:
+                self._bypass.add(account)
+
+    def _execute_selected(self, account: str, trigger: str, bypassed: bool) -> Snapshot | None:
+        with self._state_guard():
+            self._running = account
+            self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
+        snap = None
+        try:
+            snap = self._read(account, trigger)
+        finally:
+            with self._state_guard():
+                self._running = None
+                if snap is not None:
+                    self._settle(account, trigger, snap, bypassed)
+                else:
+                    previous = self._rows.get(account, {}).get("list_at", "")
+                    self._rows[account] = {"list_at": previous, "state": "failed",
+                                           "error": "The read was interrupted. Press Retry."}
+                    self._sweep_complete(account, trigger)
+        return snap
+
+    def _drain_machine(self) -> int:
+        if not self._drain_lock.acquire(blocking=False):
+            return 0
+        local = self._store.dispatch_lock.holding(timeout=0)
+        entered = False
+        try:
+            try:
+                local.__enter__()
+                entered = True
+            except TimeoutError:
+                return 0
+            done, blocked = 0, set()
+            with self._state_guard():
+                if self._running is not None:
+                    previous = self._rows.get(self._running, {}).get("list_at", "")
+                    self._rows[self._running] = {"list_at": previous, "state": "failed",
+                                                "error": "The read was interrupted. Press Retry."}
+                    self._sweep_complete(self._running)
+                    self._running = None
+            while True:
+                self._pull_results()
+                with self._state_guard():
+                    deferred = {a: self._entries.pop(a) for a in blocked if a in self._entries}
+                    self._heap = [(e[0], e[1], a) for a, e in self._entries.items()]
+                    heapq.heapify(self._heap)
+                    forces = {a: e[3] for a, e in self._entries.items()}
+                    item = self._pop()
+                    self._entries.update(deferred)
+                    skips, self._pending_skips = self._pending_skips, []
+                for acc, label in skips:
+                    self._telemetry_skipped(acc, label)
+                if item is None:
+                    return done
+                account, trigger, bypassed = item
+                force = forces[account]
+                try:
+                    key = binding(account)
+                except (ValueError, CoordinationError):
+                    with self._state_guard():
+                        self._invalid_row(account)
+                    continue
+                with self._execution_available(account) as available:
+                    self._machine.availability(key, self._owner, available)
+                    if not available:
+                        self._requeue(account, trigger, force, bypassed)
+                        self._machine.availability(key, self._owner, False)
+                        blocked.add(account)
+                        continue
+                    dispatch = self._machine.lease("dispatch.lock").holding(timeout=0)
+                    try:
+                        dispatch.__enter__()
+                    except TimeoutError:
+                        self._requeue(account, trigger, force, bypassed)
+                        return done
+                    try:
+                        if not self._machine.may_dispatch(key):
+                            self._requeue(account, trigger, force, bypassed)
+                            return done
+                        self._import_result(account)
+                        if force and not self._machine.pending(key, self._owner):
+                            with self._state_guard():
+                                self._sweep_complete(account, trigger)
+                            continue
+                        if not force and (is_fresh(account, now=self._clock()) or recently_failed(account, now=self._clock())):
+                            with self._state_guard():
+                                self._sweep_complete(account, trigger)
+                            continue
+                        snap = self._execute_selected(account, trigger, bypassed)
+                        if snap is not None and not getattr(snap, "_machine_paused", None):
+                            self._machine.finish(key, getattr(snap, "_machine_revision", None))
+                            done += 1
+                    finally:
+                        dispatch.__exit__(None, None, None)
+        finally:
+            if entered:
+                local.__exit__(None, None, None)
+            self._drain_lock.release()
+
+    def _drain_owned(self) -> int:
         """Прочитать всё, что стоит и не на паузе. Возвращает число чтений."""
         if not self._drain_lock.acquire(blocking=False):
             return 0  # читает другой вызов: два чтения сразу не бывает
         dispatch = None
         try:
             if self._store is not None:
-                dispatch = self._store.dispatch_lock.holding(timeout=0)
+                lock = self._store.dispatch_lock
+                dispatch = lock.holding(timeout=0)
                 try:
                     dispatch.__enter__()
                 except TimeoutError:
@@ -508,6 +809,11 @@ class RefreshQueue:
 
     def _settle(self, account: str, trigger: str, snap: Snapshot, bypassed: bool) -> None:
         """Записать итог чтения. Под замком."""
+        paused = getattr(snap, "_machine_paused", None)
+        if paused:
+            self._halt = {**paused, "account": account, "machine_generation": paused["generation"]}
+            self._push(account, trigger.split(":")[0], trigger, bypassed)
+            return
         verdict = classify(snap)
         self._sweep_complete(account, trigger)
         prev_at = self._rows.get(account, {}).get("list_at", "")
@@ -535,8 +841,23 @@ class RefreshQueue:
         return any(a in self._bypass for a in self._entries)
 
     def _loop(self) -> None:
+        if self._machine is not None:
+            while not self._stop:
+                try:
+                    with self._machine.lease(f"worker-{self._owner}.lock").holding(timeout=0):
+                        self._loop_owned()
+                    return
+                except TimeoutError:
+                    with self._wake:
+                        if not self._stop:
+                            self._wake.wait(timeout=1)
+        else:
+            self._loop_owned()
+
+    def _loop_owned(self) -> None:
         while True:
             try:
+                self._pull_results()
                 with self._state_guard():
                     if self._stop:
                         if self._thread is threading.current_thread():

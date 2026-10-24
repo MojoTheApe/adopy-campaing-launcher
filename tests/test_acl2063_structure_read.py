@@ -18,7 +18,13 @@ from src.analysis_agent.rules import evidence as ev  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def store(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from tests.profile_lease_fakes import fake_profile
     monkeypatch.setattr(ci, "_store_path", lambda: tmp_path / "campaign_inventory.json")
+    # The production machine relay now binds the read to its physical target;
+    # these isolated transport tests retain all assertions with a real valid key.
+    monkeypatch.setattr(ci._as, "_entry_for", lambda account: SimpleNamespace(
+        ad_account_id="act_12345678", profile_id=fake_profile(account)))
     ci._RUNNING.clear()
     yield tmp_path
 
@@ -230,7 +236,8 @@ def test_waiting_request_joins_a_newer_same_session_result_without_reopening(tmp
     try:
         assert began.wait(3)
         # Actual same-session publisher result arrives while physical profile is held.
-        fresh = ci.Snapshot(account='A', state='empty', finished_at_utc=datetime.now(timezone.utc).isoformat())
+        fresh = ci.Snapshot(account='A', state='empty', finished_at_utc=datetime.now(timezone.utc).isoformat(),
+                            steps={step: 'ok' for step in ci.STRUCTURE_STEPS})
         ci.put_result(fresh)
     finally:
         released.set(); thread.join(3)

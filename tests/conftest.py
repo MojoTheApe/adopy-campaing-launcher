@@ -104,6 +104,13 @@ def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(profile_lease, "_lease_root", lambda: root)
 
 
+@pytest.fixture(autouse=True)
+def _account_refresh_off_the_live_machine(tmp_path_factory, monkeypatch):
+    from src.analysis_agent import account_refresh_state
+    root = tmp_path_factory.mktemp("account_refresh_machine") / "coordination"
+    monkeypatch.setattr(account_refresh_state, "machine_root", lambda: root)
+
+
 # Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
 #
 # `run_telemetry.TELEMETRY_PATH` смотрит в `output/rpa_telemetry.jsonl` рабочей

@@ -562,7 +562,7 @@ def get_snapshot(account: str) -> Snapshot | None:
     """Последний принятый снимок аккаунта (или `None`, если ни разу не читали)."""
     with _LOCK:
         rec = _load_all().get(account)
-    snap = (rec or {}).get("snapshot") if isinstance(rec, dict) else None
+    snap = (rec or {}).get("snapshot") if isinstance(rec, dict) and _record_matches(rec, account) else None
     return _snapshot_from(snap) if isinstance(snap, dict) else None
 
 
@@ -570,8 +570,19 @@ def get_attempt(account: str) -> dict | None:
     """Последняя неудачная попытка, если она новее снимка: `{state, at, error, code}`."""
     with _LOCK:
         rec = _load_all().get(account)
-    attempt = (rec or {}).get("attempt") if isinstance(rec, dict) else None
+    attempt = (rec or {}).get("attempt") if isinstance(rec, dict) and _record_matches(rec, account) else None
     return attempt if isinstance(attempt, dict) else None
+
+
+def _record_matches(rec: dict, account: str) -> bool:
+    expected = rec.get("machine_binding")
+    if expected is None:
+        return True  # preserved legacy inventory is not invented binding proof
+    from src.analysis_agent.account_refresh_machine import binding
+    try:
+        return expected == binding(account)
+    except (RuntimeError, ValueError):
+        return False
 
 
 def _saved_stop(rec: dict) -> tuple[str, str]:
@@ -601,7 +612,7 @@ def latest_stops() -> dict[str, tuple[str, str]]:
     return out
 
 
-def put_result(done: Snapshot) -> None:
+def _put_result(done: Snapshot) -> None:
     """Принять результат чтения.
 
     Удача (`ok`/`partial`/`empty`) заменяет снимок. Неудача его НЕ стирает: прежняя
@@ -631,8 +642,38 @@ def put_result(done: Snapshot) -> None:
         else:
             rec["snapshot"] = done.to_dict()
             rec["attempt"] = None
+        rec["machine_revision"] = getattr(done, "_machine_revision", None)
+        rec["machine_binding"] = getattr(done, "_machine_binding", None)
         data[done.account] = rec
         _save_all(data)
+
+
+def put_result(done: Snapshot) -> None:
+    # The short local projection lock is distinct from the machine read lease.
+    # It prevents another dashboard process losing a different account's result.
+    with _LOCK, paths.machine_file_lock(_store_path().with_suffix(".lock"), timeout=10):
+        _put_result(done)
+
+
+def adopt_machine_result(done: Snapshot, revision: int) -> bool:
+    """Idempotent local projection; never hide a newer/unknown local attempt."""
+    with _LOCK, paths.machine_file_lock(_store_path().with_suffix(".lock"), timeout=10):
+        rec = _load_all().get(done.account) or {}
+        if rec.get("machine_binding") not in (None, getattr(done, "_machine_binding", None)):
+            rec = {}  # the existing file is preserved; the old target is not freshness for the new target
+        previous = rec.get("machine_revision")
+        if isinstance(previous, int):
+            if previous >= revision:
+                return False
+        else:
+            latest = rec.get("attempt") or rec.get("snapshot")
+            if isinstance(latest, dict):
+                stamp = latest.get("at_utc") or latest.get("finished_at_utc") or ""
+                if not stamp or stamp >= done.finished_at_utc:
+                    return False
+        done._machine_revision = revision
+        _put_result(done)
+        return True
 
 
 def summary(snap: Snapshot | None, attempt: dict | None = None, *, now: float | None = None) -> dict:
@@ -658,6 +699,8 @@ def summaries(accounts: list[str]) -> dict[str, dict]:
     out = {}
     for account in accounts:
         rec = data.get(account) if isinstance(data.get(account), dict) else {}
+        if not _record_matches(rec, account):
+            rec = {}
         raw = rec.get("snapshot")
         attempt = rec.get("attempt") if isinstance(rec.get("attempt"), dict) else None
         out[account] = summary(_snapshot_from(raw) if isinstance(raw, dict) else None, attempt)
@@ -844,7 +887,7 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
     return snap
 
 
-def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
+def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     """Обновить структуру уже открытой сессией после команды/публикации (ACL-2063).
 
     Ни открытия профиля, ни нового клиента, ни сброса бюджета. Вызывающий
@@ -897,7 +940,7 @@ def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     return snap
 
 
-def run_read(account: str, *, trigger: str) -> Snapshot:
+def _run_read(account: str, *, trigger: str, baseline=None, persist: bool = True) -> Snapshot:
     """Синхронное чтение только структуры (ACL-2063): без Insights, без периода.
 
     Очередь та же, что у `start_read`: `browser_operation.reading()` и замок
@@ -905,35 +948,120 @@ def run_read(account: str, *, trigger: str) -> Snapshot:
     """
     began = time.time()
     started_at = _as._now()  # noqa: SLF001
-    baseline = summary(get_snapshot(account)).get("revision")
     try:
         if not backend_ready():
             # Как `start_read`: без бэкенда API профиль не открываем вовсе.
             done = Snapshot(account=account, state="failed", error=NEEDS_API_MESSAGE, error_code=NEEDS_API_CODE)
         else:
-            with browser_operation.reading(), _as._lock_for(account):  # noqa: SLF001
-                # A publishing/command session can refresh while this request
-                # waits for its physical profile. Join that newer result rather
-                # than opening the same profile again after it is released.
-                from src.analysis_agent import account_refresh, account_spend_api
-                cached = get_snapshot(account)
-                if (account_refresh.is_fresh(account)
-                        and (trigger.split(":")[0] in {"schedule", "attention"}
-                             or summary(cached).get("revision") != baseline)):
-                    account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
-                    return cached
-                done = read_via_api(account, structure_only=True, trigger=trigger)
+            # The caller now holds the physical target and read fence through
+            # this result's durable settlement, not only through _session.
+            from src.analysis_agent import account_refresh, account_spend_api
+            cached = get_snapshot(account)
+            if (account_refresh.is_fresh(account)
+                    and (trigger.split(":")[0] in {"schedule", "attention"}
+                         or summary(cached).get("revision") != baseline)):
+                account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
+                return cached
+            done = read_via_api(account, structure_only=True, trigger=trigger)
     except Exception as exc:  # noqa: BLE001
         done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
     done.started_at = started_at
     done.finished_at = _as._now()  # noqa: SLF001
     done.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
     done.took_s = round(time.time() - began, 1)
-    try:
-        put_result(done)
-    except Exception:  # noqa: BLE001
-        log.exception("Could not persist the campaign inventory of %s", account)
+    if persist:
+        try:
+            put_result(done)
+        except Exception:  # noqa: BLE001
+            log.exception("Could not persist the campaign inventory of %s", account)
     return done
+
+
+def _machine_read(account: str, trigger: str, operation, *, machine=None, now=None) -> Snapshot:
+    """Fence actual open/read, outcome and durable halt before the next reader.
+
+    It deliberately does not require the queued dispatcher. A publisher already
+    owns this physical target and can reenter this same-thread read fence.
+    """
+    from src.analysis_agent.account_refresh_machine import MachineStore, binding
+    from src.analysis_agent.account_refresh_state import read_session, target_activity
+    coordinator = machine if machine is not None else MachineStore()
+    clock = now if now is not None else time.time
+    force = trigger.split(":")[0] in {"action", "retry"}
+    try:
+        profile = _as._profile_key(account)  # noqa: SLF001
+        with browser_operation.reading(), _as._lock_for(account), target_activity(profile), read_session(priority=force):
+            key = binding(account)
+            coordinator.recover_running(now=clock())
+            halt = coordinator.halt(now=clock())
+            if halt and (halt["until"] is not None or not force):
+                paused = Snapshot(account=account, state="failed", error=halt["reason"])
+                paused._machine_paused = halt
+                paused._machine_committed = True
+                return paused
+            token = coordinator.begin(key, "inline", trigger)
+            with coordinator.executing(token):
+                own_recovery = coordinator.stop_generation(key)
+                done = operation()
+                revision = coordinator.publish(key, done, now=clock(), force=force,
+                                               recovery=halt["generation"] if halt else None,
+                                               own_recovery=own_recovery, token=token)
+                try:
+                    still_bound = binding(account) == key
+                except (ValueError, RuntimeError):
+                    still_bound = False
+                if not still_bound:
+                    # Keep the old physical target's durable outcome/stop, but
+                    # never project it as the new/removed map row's own list.
+                    changed = Snapshot(account=account, state="failed", error="The account map changed while its list was read.",
+                                       error_code="account_map_changed")
+                    changed._machine_committed = True
+                    return changed
+                done._machine_revision = revision
+                done._machine_binding = key
+                done._machine_committed = True
+                try:
+                    put_result(done)
+                except Exception:
+                    # The durable shared result remains authoritative and can
+                    # be projected on the next status request without rereading.
+                    log.exception("The committed account result awaits its local cache projection")
+                return done
+    except Exception as exc:  # noqa: BLE001 — no private fallback and no second external attempt
+        failed = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}",
+                          error_code="coordination_unavailable", finished_at=_as._now(),
+                          finished_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        failed._machine_committed = True
+        try:
+            put_result(failed)
+        except Exception:
+            log.exception("Could not save the account-refresh refusal")
+        return failed
+
+
+def run_read(account: str, *, trigger: str, machine=None, now=None) -> Snapshot:
+    if not backend_ready():
+        # A config-local disabled backend is not an external stop on another
+        # dashboard's valid API session. Preserve the original no-open refusal.
+        done = Snapshot(account=account, state="failed", error=NEEDS_API_MESSAGE, error_code=NEEDS_API_CODE,
+                        finished_at=_as._now(), finished_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        done._machine_committed = True
+        put_result(done)
+        return done
+    baseline = summary(get_snapshot(account)).get("revision")
+    return _machine_read(account, trigger, lambda: _run_read(account, trigger=trigger, baseline=baseline, persist=False),
+                         machine=machine, now=now)
+
+
+def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+    if _as._entry_for(account) is None:
+        failed = Snapshot(account=account, state="failed", error="This account was removed from the dashboard.",
+                          error_code="account_removed")
+        failed._machine_committed = True
+        return failed
+    require_profile_lease(_as._profile_key(account))  # noqa: SLF001
+    return _machine_read(account, trigger, lambda: _read_in_session(account, sess, trigger=trigger))
 
 
 def default_reader() -> Callable[[str, str, str], Snapshot]:

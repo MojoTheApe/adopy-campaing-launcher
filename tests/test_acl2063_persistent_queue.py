@@ -113,7 +113,7 @@ RefreshQueue(reader=read,store=RefreshStore(root),accounts=lambda:['A','B'])._dr
 
 
 def test_two_real_processes_share_one_dispatcher_and_do_not_duplicate(tmp_path):
-    q = ar.RefreshQueue(store=RefreshStore(tmp_path))
+    q = ar.RefreshQueue(reader=lambda a, t: None, store=RefreshStore(tmp_path))
     q.request("A", "schedule")
     q.request("B", "schedule")
     env = {**os.environ, "ACL_CONFIG_DIR": str(tmp_path), "ACL_FB_BACKEND": "rpa",
@@ -142,12 +142,17 @@ from datetime import datetime
 from src.analysis_agent.account_refresh import RefreshQueue
 from src.analysis_agent.account_refresh_state import RefreshStore
 root=Path(sys.argv[1]); now=datetime(2026,10,24,8).astimezone()
+from src.analysis_agent import account_refresh_state as ars
+ars.machine_root=lambda:root/'machine'
 q=RefreshQueue(store=RefreshStore(root),accounts=lambda:['A','B'],clock=lambda:now.timestamp())
 print(json.dumps(q.page_open(now=now,port=9095)))
 '''
 
 
 def test_two_actual_dashboard_processes_admit_only_one_window(tmp_path):
+    from tests.profile_lease_fakes import fake_profile
+    (tmp_path / 'ad_account_map.csv').write_text('account_name,ad_account_id,profile_id\n' +
+        f'A,act_12345678,{fake_profile("machine-A")}\nB,act_22345678,{fake_profile("machine-B")}\n')
     env={**os.environ, 'ACL_AUTO_REFRESH':'1', 'ACL_CONFIG_DIR':str(tmp_path)}
     procs=[subprocess.Popen([sys.executable,'-c',_WINDOW_CHILD,str(tmp_path)],
         cwd=Path(__file__).resolve().parents[1],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True) for _ in range(2)]
@@ -172,6 +177,8 @@ from src.fb_ads_rpa import profile_lease
 from src.analysis_agent.account_refresh_state import read_session
 root=Path(sys.argv[1]);label=sys.argv[2]
 profile_lease._lease_root=lambda:root/'leases'
+from src.analysis_agent import account_refresh_state as ars
+ars.machine_root=lambda:root/'machine'
 with profile_lease.profile_lock('11111111-1111-1111-1111-'+('111111111111' if label=='A' else '222222222222')):
  with read_session(priority=label=='B'):
   with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['start',label])+'\n')

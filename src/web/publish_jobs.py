@@ -33,6 +33,7 @@ from src.fb_ads_rpa.profile_lease import ProfileLeaseError
 from src.web.keep_awake import keep_display_awake
 from src.web.profile_slots import KEPT_CONVENIENCE, KEPT_REVIEW, ProfileSlots
 from src.web import draft_status
+from src.analysis_agent.account_refresh_state import target_activity
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -754,7 +755,8 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)):
+        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), target_activity(
+                profile, cancelled=lambda: _is_cancelled(job_id)):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)
                 return

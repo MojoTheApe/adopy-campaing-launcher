@@ -9,6 +9,8 @@ from contextlib import contextmanager
 import json
 from pathlib import Path
 import threading
+import time
+import hashlib
 
 from config.paths import _atomic_write, get_local_config_dir, machine_file_lock
 
@@ -21,6 +23,10 @@ class FileLease:
         self._lock = threading.RLock()
         self._depth = 0
         self._hold = None
+        self._owner = None
+
+    def owned(self) -> bool:
+        return self._owner == threading.get_ident() and self._depth > 0
 
     @contextmanager
     def holding(self, timeout: float = 120.0):
@@ -32,6 +38,7 @@ class FileLease:
                 hold = machine_file_lock(self.path, timeout=timeout)
                 hold.__enter__()
                 self._hold = hold
+                self._owner = threading.get_ident()
             self._depth += 1
             entered = True
             yield
@@ -41,6 +48,7 @@ class FileLease:
                     self._depth -= 1
                     if self._depth == 0:
                         hold, self._hold = self._hold, None
+                        self._owner = None
                         hold.__exit__(None, None, None)
             finally:
                 self._lock.release()
@@ -48,6 +56,50 @@ class FileLease:
 
 _LEASES: dict[str, FileLease] = {}
 _LEASES_LOCK = threading.Lock()
+
+
+def machine_root() -> Path:
+    from src.analysis_agent.account_refresh_machine import default_root
+    return default_root()
+
+
+def machine_lease(name: str) -> FileLease:
+    from src.analysis_agent.account_refresh_machine import prepare_lock
+    path = machine_root() / name
+    prepare_lock(path)
+    return lease(path)
+
+
+def target_lease(profile: str) -> FileLease:
+    from src.fb_ads_rpa.profile_lease import _canonical_key
+    key = _canonical_key(profile)
+    return machine_lease("target-" + hashlib.sha256(key.encode()).hexdigest() + ".lock")
+
+
+@contextmanager
+def target_activity(profile: str, *, cancelled=None):
+    """Only this feature's reader/publisher interlock, per physical target.
+
+    The caller keeps its existing physical-profile ownership. Different targets
+    have different leases; an inline same-thread refresh is reentrant.
+    """
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+    lock = target_lease(profile)
+    end = time.monotonic() + 120
+    while True:
+        if cancelled is not None and cancelled():
+            raise ProfileLeaseError("The operation was cancelled while waiting for its account read.")
+        hold = lock.holding(timeout=min(.1, max(0, end - time.monotonic())))
+        try:
+            hold.__enter__()
+            break
+        except TimeoutError:
+            if time.monotonic() >= end:
+                raise ProfileLeaseError("This profile is still being used by another ACL account read.")
+    try:
+        yield
+    finally:
+        hold.__exit__(None, None, None)
 
 
 def lease(path: Path) -> FileLease:
@@ -62,28 +114,29 @@ def read_lease() -> FileLease:
     Брать ПОСЛЕ физического замка профиля и ДО его открытия. Публикатор,
     уже владеющий своим профилем, тогда может обновить список без deadlock.
     """
-    from src.fb_ads_rpa import profile_lease
-
-    return lease(profile_lease._lease_root() / "account-structure-read.lock")
+    return machine_lease("account-structure-read.lock")
 
 
 @contextmanager
-def read_session(*, priority: bool = False):
+def read_session(*, priority: bool = False, timeout: float = 120):
     """Действие, ожидающее конца чтения, идёт раньше следующего обхода.
 
     OS-аренда намерения отпускается при смерти процесса, не оставляя вечной
     отметки в JSON. Обычное чтение держит её лишь до входа, действие — весь
     свой заход. Физическая аренда профиля всегда уже взята вызывающим.
     """
-    from src.fb_ads_rpa import profile_lease
-
-    intent = lease(profile_lease._lease_root() / "account-read-priority.lock")
+    read = read_lease()
+    if read.owned():
+        with read.holding(timeout=timeout):
+            yield
+        return
+    intent = machine_lease("account-read-priority.lock")
     if priority:
-        with intent.holding(), read_lease().holding():
+        with intent.holding(timeout=timeout), read.holding(timeout=timeout):
             yield
     else:
-        with intent.holding():
-            held = read_lease().holding()
+        with intent.holding(timeout=timeout):
+            held = read.holding(timeout=timeout)
             held.__enter__()
         try:
             yield
