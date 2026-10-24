@@ -42,6 +42,7 @@ def main():
     # inherit a runner's ACL_CONFIG_DIR or load a production account's .env.
     os.environ["ACL_CONFIG_DIR"] = ""
     os.environ["ACL_PORT_REGISTRY_DIR"] = settings["registry"]
+    os.environ["ACL_BUILD_MANIFEST"] = settings["manifest"]
     for key in ("ACL_SENTRY_DSN", "ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
         os.environ[key] = ""
     root = Path(__file__).resolve().parents[1]
@@ -210,12 +211,14 @@ def main():
 
 
 if __name__ == "__main__":
+    # launcher.main rewrites sys.argv; retain the producer's IPC context.
+    _status_settings, _status_person = sys.argv[1:3]
     try:
         raise SystemExit(main())
     except BaseException as error:
         if isinstance(error, SystemExit) and error.code in (None, 0):
             raise
-        settings = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-        write(Path(settings["ipc"]) / f"{sys.argv[2]}.json",
+        settings = json.loads(Path(_status_settings).read_text(encoding="utf-8"))
+        write(Path(settings["ipc"]) / f"{_status_person}.json",
               {"phase": "error", "traceback": traceback.format_exc()})
         raise

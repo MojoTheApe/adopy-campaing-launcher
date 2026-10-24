@@ -1,8 +1,9 @@
 """The literal two-real-Windows-account acceptance for dashboard ownership.
 
 Creates only two ephemeral standard local users, with real primary tokens and
-loaded profiles. Permissions are widened only on synthetic IPC, never on the
-separate ProgramData reservation tree. Missing runner privileges fail this
+loaded profiles. Filesystem grants affect only synthetic IPC; private desktop
+objects are test-owned, and the ProgramData reservation tree is unchanged.
+Missing runner privileges fail this
 required acceptance; there is no environment-dependent success/skip fallback.
 """
 from __future__ import annotations
@@ -211,8 +212,11 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     foreign = ForeignServer(("127.0.0.1", ports[0]), Foreign)
     thread = threading.Thread(target=foreign.serve_forever, daemon=True)
     thread.start()
+    manifest = ipc / "acl-build-manifest.json"
+    manifest.write_text(json.dumps({"version": "test"}), encoding="utf-8")
     settings = ipc / "settings.json"
-    settings.write_text(json.dumps({"ipc": str(ipc), "registry": str(registry), "ports": ports}), encoding="utf-8")
+    settings.write_text(json.dumps({"ipc": str(ipc), "registry": str(registry),
+                                   "ports": ports, "manifest": str(manifest)}), encoding="utf-8")
 
     def read(person, predicate, timeout=100):
         deadline = time.monotonic() + timeout
@@ -345,6 +349,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 "stable-port restart beside a live neighbor; actual child PID/port "
                 "state cleanup; unchanged installer presence guard; unrelated "
                 "listener preserved. Shared ProgramData registry used inherited "
-                "permissions. Only test IPC access was granted to the two accounts. "
+                "permissions. Access grants were confined to test IPC and private "
+                "desktop objects for the two accounts. "
                 "Wizard and HTTP application bodies were synthetic; no live services.\n"
             )
