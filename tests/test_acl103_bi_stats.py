@@ -34,7 +34,9 @@ CM_MAP = {"1106": "Evgeni Sedin"}
 def _clean_env(monkeypatch, tmp_path):
     monkeypatch.setenv("BI_ARCHIVE_PATH", str(tmp_path / "archive.sqlite3"))
     monkeypatch.setitem(morning_service._WORKBOOK_CACHE, "key", None)
-    for name in ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD", "FB_STATS_SOURCE"):
+    for name in ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD", "FB_STATS_SOURCE",
+                 "BI_CURRENCY", "BI_TIMEZONE", "BI_DAY_BOUNDARY", "BI_ASSUMPTIONS_CONFIRMED",
+                 "STATS_CURRENCY", "STATS_TIMEZONE", "STATS_DAY_BOUNDARY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setitem(bi_stats._REV, "value", None)
     monkeypatch.setitem(bi_stats._REV, "checked", 0.0)
@@ -397,19 +399,23 @@ def test_sentry_event_with_bi_driver_error_has_no_host_or_login(monkeypatch):
 
 # --- ACL-103d/e/f: currency and day boundary, source versus account figures ---
 
-def test_bi_figures_carry_an_explicit_assumed_currency_and_day_boundary(monkeypatch):
+def test_bi_figures_keep_unknown_metadata_until_it_is_actually_supplied(monkeypatch):
     from src.analysis_agent import bi_compare
 
     monkeypatch.delenv("BI_ASSUMPTIONS_CONFIRMED", raising=False)
     monkeypatch.delenv("BI_CURRENCY", raising=False)
     info = bi_compare.provenance("bi")
-    assert info["currency"] == "USD" and info["assumed"] is True
-    assert "assumption" in info["note"] and "day boundary" in info["note"]
+    assert info["currency"] == "unknown" and info["assumed"] is True
+    assert info["timezone"] == "" and info["day_boundary"] == ""
+    assert "unknown" in info["note"] and "day boundary" in info["note"]
     monkeypatch.setenv("BI_ASSUMPTIONS_CONFIRMED", "1")
+    assert bi_compare.provenance("bi")["currency"] == "unknown", "a flag cannot invent source facts"
     monkeypatch.setenv("BI_CURRENCY", "eur")
+    monkeypatch.setenv("BI_TIMEZONE", "Europe/Berlin")
+    monkeypatch.setenv("BI_DAY_BOUNDARY", "calendar_day")
     confirmed = bi_compare.provenance("bi")
     assert confirmed["currency"] == "EUR" and confirmed["assumed"] is False
-    assert "assumption" not in confirmed["note"]
+    assert confirmed["timezone"] == "Europe/Berlin" and confirmed["day_boundary"] == "calendar_day"
 
 
 def test_report_carries_source_info_and_warns_while_assumed(monkeypatch, tmp_path):
@@ -420,19 +426,22 @@ def test_report_carries_source_info_and_warns_while_assumed(monkeypatch, tmp_pat
     report, _df, warnings = morning_service.load_morning_report(
         excel_path=str(tmp_path / "absent.xlsx"), skip_gsheet=True)
     assert report["source_info"]["source"] == "BI" and report["source_info"]["assumed"] is True
-    assert any("assumption" in w for w in warnings)
+    assert any("unknown" in w for w in warnings)
 
 
 def test_source_and_account_spend_are_shown_separately(monkeypatch):
     from src.analysis_agent import bi_compare
 
     monkeypatch.delenv("BI_CURRENCY", raising=False)
+    monkeypatch.setenv("BI_CURRENCY", "USD")
+    monkeypatch.setenv("BI_TIMEZONE", "UTC")
+    monkeypatch.setenv("BI_DAY_BOUNDARY", "calendar_day")
     df = bi_stats.to_workbook_frame(_raw([ROW_KNOWN, ROW_DAY(date(2026, 10, 19), "3")]), CM_MAP)
     source = bi_compare.source_spend_by_account(df, "2026-10-18", "2026-10-18")
     assert source == {"FacebookDoc101": 12.5}
     readings = {
-        "FacebookDoc101": {"state": "ok", "spend": 14.0, "currency": "USD"},
-        "Facebook_Eur": {"state": "ok", "spend": 5.0, "currency": "EUR"},
+        "FacebookDoc101": {"state": "ok", "spend": 14.0, "currency": "USD", "timezone": "UTC", "day_boundary": "calendar_day"},
+        "Facebook_Eur": {"state": "ok", "spend": 5.0, "currency": "EUR", "timezone": "UTC", "day_boundary": "calendar_day"},
         "Facebook_Busy": {"state": "running", "spend": None, "currency": ""},
     }
     rows = {r["account"]: r for r in bi_compare.compare_spend({**source, "Facebook_Eur": 4.0, "Facebook_Busy": 1.0}, readings)}
@@ -445,12 +454,15 @@ def test_source_and_account_spend_are_shown_separately(monkeypatch):
 
 def test_source_vs_account_endpoint(monkeypatch, tmp_path):
     from src.web import app as web
+    monkeypatch.setenv("BI_CURRENCY", "USD")
+    monkeypatch.setenv("BI_TIMEZONE", "UTC")
+    monkeypatch.setenv("BI_DAY_BOUNDARY", "calendar_day")
 
     df = bi_stats.to_workbook_frame(_raw([ROW_KNOWN]), CM_MAP)
     df.attrs["stats_source"] = "bi"
     monkeypatch.setattr(web, "get_cached_report", lambda *a, **k: ({}, df, []))
     monkeypatch.setattr(web, "_live_spend", lambda f="", t="": {
-        "FacebookDoc101": {"state": "ok", "spend": 12.5, "currency": "USD"}})
+        "FacebookDoc101": {"state": "ok", "spend": 12.5, "currency": "USD", "timezone": "UTC", "day_boundary": "calendar_day"}})
     response = web.api_source_vs_account.__wrapped__(date_from="2026-10-18", date_to="2026-10-18") \
         if hasattr(web.api_source_vs_account, "__wrapped__") else None
     assert response is not None

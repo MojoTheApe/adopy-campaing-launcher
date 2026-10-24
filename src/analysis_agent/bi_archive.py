@@ -31,8 +31,9 @@ FILE_NAME = "bi_stats_archive.sqlite3"
 # Колонки строки в схеме книги + код менеджера BI + источник.
 TEXT_COLS = ["Country", "Account Alias", "Adset Name", "Ad Title", "Ad Asset", "Variant", "CM"]
 NUM_COLS = ["# Leads", "# FTDs", "$ Spend", "$ Net"]
+META_COLS = ["_stats_currency_code", "_stats_timezone", "_stats_day_boundary"]
 
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()
 
 
 def archive_path() -> str:
@@ -54,6 +55,18 @@ def _connect(path: Optional[str] = None) -> sqlite3.Connection:
     )
     conn.execute(f'CREATE INDEX IF NOT EXISTS {TABLE}_date ON {TABLE} ("Date", source)')
     conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+    # Добавочная миграция сохраняет все прежние строки/источники/версии книги.
+    with _LOCK:
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({TABLE})")}
+        for col in META_COLS:
+            if col not in existing:
+                try:
+                    conn.execute(f'ALTER TABLE {TABLE} ADD COLUMN "{col}" TEXT')
+                except sqlite3.OperationalError:
+                    # Другой процесс мог закончить ту же добавочную миграцию.
+                    if col not in {r[1] for r in conn.execute(f"PRAGMA table_info({TABLE})")}:
+                        conn.close()
+                        raise
     return conn
 
 
@@ -62,6 +75,9 @@ def _day(series: pd.Series) -> pd.Series:
 
 
 def _rows(df: pd.DataFrame, source: str) -> pd.DataFrame:
+    from src.analysis_agent import bi_compare
+
+    df = bi_compare.annotate_source(df, source)
     out = pd.DataFrame({"Date": _day(df["Date"])})
     for c in TEXT_COLS:
         out[c] = df[c].fillna("").astype(str) if c in df.columns else None
@@ -69,6 +85,8 @@ def _rows(df: pd.DataFrame, source: str) -> pd.DataFrame:
         out[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0) if c in df.columns else 0.0
     out["CM_ID"] = df["CM_ID"].astype(str) if "CM_ID" in df.columns else None
     out["source"] = source
+    for col in META_COLS:
+        out[col] = df[col].map(bi_compare.text)
     return out[out["Date"].notna()]
 
 

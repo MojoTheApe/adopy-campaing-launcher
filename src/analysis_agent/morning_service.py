@@ -162,6 +162,8 @@ def merge_bi_with_history(bi: pd.DataFrame, book: pd.DataFrame) -> pd.DataFrame:
     """
     if book is None or book.empty:
         return bi
+    bi = bi_compare.annotate_source(bi, "bi")
+    book = bi_compare.annotate_source(book, "workbook")
     book_dates = pd.to_datetime(book["Date"], errors="coerce").dt.normalize()
     bi_dates = set(pd.to_datetime(bi["Date"], errors="coerce").dt.normalize().dropna())
     history = book[~book_dates.isin(bi_dates)].copy()
@@ -184,7 +186,7 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
     ``excel`` — без BI, как раньше.
     """
     if not bi_stats.bi_enabled():
-        return read_stats_workbook(excel_path), "excel", None
+        return bi_compare.annotate_source(read_stats_workbook(excel_path), "workbook"), "excel", None
     from src.analysis_agent import bi_archive
 
     notes: List[str] = []
@@ -209,15 +211,16 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
         if window is None:
             if not os.path.isfile(excel_path):
                 raise bi_stats.BIUnavailable("BI and the stats archive are unavailable and there is no Stats workbook")
-            return _read_workbook_cached(excel_path).copy(), "excel", " ".join(notes)
+            return bi_compare.annotate_source(_read_workbook_cached(excel_path), "workbook"), "excel", " ".join(notes)
         bi = bi_stats.assign_cm(window, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
         book = _read_workbook_cached(excel_path) if os.path.isfile(excel_path) else None
         return merge_bi_with_history(bi, book), "bi", " ".join(notes)
 
     if stored.empty:
         raise bi_stats.BIUnavailable("BI unavailable, the stats archive is empty and there is no Stats workbook")
-    from_bi = stored[stored["source"] == "bi"].drop(columns=["source", "CM"])
-    from_book = stored[stored["source"] == "workbook"].drop(columns=["source", "CM_ID"])
+    stored = stored.rename(columns={"source": bi_compare.SOURCE_COLUMN})
+    from_bi = stored[stored[bi_compare.SOURCE_COLUMN] == "bi"].drop(columns=["CM"])
+    from_book = stored[stored[bi_compare.SOURCE_COLUMN] == "workbook"].drop(columns=["CM_ID"])
     from_bi = bi_stats.assign_cm(from_bi, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
     rows = pd.concat([from_book, from_bi], ignore_index=True, sort=False)
     if window is None:
@@ -389,7 +392,7 @@ def load_morning_report(
         report["source_excel"] = "BI (MySQL) + local stats archive"
     # ACL-103e: валюта и граница дня источника — вместе с цифрами. Допущение
     # (пока BI не подтвердил) названо прямо, чтобы цифру не читали как точную.
-    report["source_info"] = bi_compare.provenance("bi" if report["stats_source"] in ("bi", "archive") else "excel")
+    report["source_info"] = bi_compare.provenance(report["stats_source"], enriched_df)
     if report["stats_source"] in ("bi", "archive") and report["source_info"]["assumed"]:
         warnings.append(report["source_info"]["note"])
     note = enriched_df.attrs.get("stats_note")

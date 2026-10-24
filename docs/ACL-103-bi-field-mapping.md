@@ -43,28 +43,55 @@ full on every read (no date bound), then reduced to the workbook schema.
 
 ## Currency and day boundary (103e)
 
-The BI query carries neither a currency nor a time zone, and the table has no such column in
-the selected set. The code therefore states the assumption explicitly (`bi_compare.provenance`):
+The original selected BI columns do not establish currency/timezone. Their absence from a
+projection does not prove the warehouse has no metadata. On the existing read-only connection,
+the reader uses a SELECT against information_schema.COLUMNS to discover optional explicit
+`STATS_CURRENCY`, `DATE_TIMEZONE` and `DAY_BOUNDARY` columns. `STATS_CURRENCY` declares the
+unit of the source's monetary metrics, including spend and net. An `ACCOUNT_CURRENCY` or
+spend-only currency field is deliberately not used to relabel harmonised BI figures or net.
+A denied metadata lookup does not hide the statistics: normal SELECT still works and missing
+metadata remains unknown. This is supported behavior, not evidence those columns exist live.
 
-- Currency: `USD` (`BI_CURRENCY` overrides).
-- Day boundary: the BI calendar day exactly as delivered (`BI_DAY_BOUNDARY` overrides the text).
-- While `BI_ASSUMPTIONS_CONFIRMED` is not set, the dashboard shows "BI · USD (assumed)" in the
-  header, adds the note to the report warnings, and `/api/source-vs-account` returns
-  `source.assumed = true`.
-- After a live BI read confirms currency and day boundary, set `BI_ASSUMPTIONS_CONFIRMED=1`
-  (and the two overrides if they differ). No code change is needed.
-- A reading from an account in a different currency is never subtracted from a BI figure; the
-  row is marked `currency_mismatch`.
+- Currency is a canonical three-letter code, independent of its displayed sign. Unknown or
+  ambiguous signs are never silently interpreted as USD.
+- Dates remain the delivered BI DATE/calendar labels. Daily aggregates cannot be shifted into
+  another timezone without their underlying intraday data; no such shift occurs.
+- Explicit machine source-contract declarations can supply `BI_CURRENCY`, `BI_TIMEZONE` and
+  `BI_DAY_BOUNDARY`. The corresponding workbook declarations are `STATS_CURRENCY`,
+  `STATS_TIMEZONE` and `STATS_DAY_BOUNDARY`. `calendar_day` means the calendar day in the
+  stated timezone. Set these only from authentic source metadata/contract, not from the
+  account's potentially different unit/timezone. No value is configured automatically.
+- Missing metadata is visible as unknown/incomplete in the report header, warning and API.
+  The historical `BI_ASSUMPTIONS_CONFIRMED` flag cannot create facts and no longer turns a
+  guessed USD/day into confirmed metadata. A new live or human approval ceremony is not needed
+  to implement this safe state; authentic retained/schema/configuration evidence can supply facts.
+- SQLite preserves row source and metadata. Additive migration retains old rows and workbook
+  version receipts; old metadata-less rows stay unknown, rather than inheriting today's settings.
+- The header, tooltips and API describe the selected period's actual workbook/BI/mixed rows,
+  including during archive failure fallback. Archive is storage, not a new upstream provider.
 
 ## Source versus account figures (103d)
 
 `GET /api/source-vs-account?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` returns, per account alias,
 the source spend (BI, archive or workbook, for the period) and the spend read from the account
-(`account_spend` readings for the same period), separately, with their currencies, the gap
-(account minus source) and a `differs` flag above 0.01. A missing, running or failed account
-reading leaves the account side and the gap empty. The two numbers are never merged.
+(`account_spend` readings for the same inclusive period), separately, with per-account source
+metadata. Account API currency/timezone is retained from the existing read without an additional
+Graph call; display currency remains unchanged. Legacy ambiguous signs retain an unknown ISO code.
+The gap (account minus source) and `differs` above0.01 exist only for known matching currency,
+timezone and day basis. Missing readings, unknown metadata and confirmed currency/day mismatches
+have distinct `comparison_state` values and an empty gap. Both original measured figures remain
+available; unknown is not reported as a discrepancy or an artificial zero.
 
-## Not confirmed without a live BI read
+## Discovery facts and retained history
 
-Currency, time zone / day boundary, row uniqueness of the granularity above, and the CM code
-list.
+The author's21October clarification records that BI retains roughly8days and the owner supplied
+a year workbook: SQLite accumulates BI days, replaces restated BI days and seeds workbook-only
+history once per file version. This remains required. A later BI-window metadata change does not
+rewrite the unit of older archived rows. ACL-105/Issue14 period behavior remains intact.
+
+Actual BI unit/day contract, grain uniqueness and CM mapping membership remain unconfirmed in
+the retained records; a successful fixture or confirmation flag does not establish them. These
+are concrete source facts, not an added owner-only/live/upload acceptance gate. Warehouse access
+already answers the access route; an Adverity extract/API key is not required in parallel.
+The300s local revision poll and MAX(DATE_INSERTED)/rowcount identify local fetch/revision behavior,
+not the upstream ETL cadence. Keep the original discovery questions and known unknowns visible.

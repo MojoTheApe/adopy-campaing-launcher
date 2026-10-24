@@ -840,6 +840,11 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendR
                 spend, currency = _period_total(sess.client, sess.act, date_from, date_to,
                                                 str(acc.get("currency") or ""))
                 out.spend, out.currency = spend, display_currency(currency)
+                from src.analysis_agent.bi_compare import currency_code
+
+                out.currency_code = currency_code(currency)
+                out.timezone = str(acc.get("timezone_name") or "").strip()
+                out.day_boundary = "calendar_day"
                 out.how = f"graph api: insights {date_from}..{date_to}"
                 out.state = "ok"
                 # Дерево — после принятого спенда; его отказ спенд не отменяет.

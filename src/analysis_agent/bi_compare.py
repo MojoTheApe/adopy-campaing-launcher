@@ -1,63 +1,125 @@
-"""ACL-103: что за цифры даёт BI и как их сверять с цифрами из кабинета.
-
-Три вещи, которых не было в первой версии (подзадачи 103d, 103e, 103f):
-
-- ``provenance()`` — валюта и граница дня, с которыми показаны цифры BI.
-  Запрос к ``BI_Export``.``UF.Export`` не несёт ни валюту, ни часовой пояс
-  (колонок для них в ``bi_stats.COLUMN_MAP`` нет), поэтому это ДОПУЩЕНИЕ с
-  документированными значениями по умолчанию: USD и календарный день BI.
-  Пока живое чтение BI его не подтвердило, экран и заметка называют его
-  допущением. Подтвердили — ``BI_ASSUMPTIONS_CONFIRMED=1`` (а значения
-  меняются через ``BI_CURRENCY`` / ``BI_DAY_BOUNDARY``), без правки кода.
-- ``compare_spend()`` — цифры источника (BI/книга) и цифры аккаунта
-  (показания из кабинета, ``account_spend``) рядом и по отдельности: разница
-  между ними и есть сигнал, а не повод усреднять.
-- маппинг полей — docs/ACL-103-bi-field-mapping.md.
-"""
+"""ACL-103: происхождение, единицы и сопоставимость чисел источника/аккаунта."""
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable, Optional
+import re
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
-DEFAULT_CURRENCY = "USD"
-DEFAULT_DAY_BOUNDARY = "BI calendar day (the DATE column as delivered by BI; time zone not stated by BI)"
-
-#: Расхождение меньше этого — округление, не сигнал.
+SOURCE_COLUMN = "_stats_source"
+METADATA_COLUMNS = {
+    "currency_code": "_stats_currency_code",
+    "timezone": "_stats_timezone",
+    "day_boundary": "_stats_day_boundary",
+}
+BI_METADATA_COLUMNS = {
+    "STATS_CURRENCY": "currency_code",
+    "DATE_TIMEZONE": "timezone",
+    "DAY_BOUNDARY": "day_boundary",
+}
+SOURCE_NAMES = {"bi": "BI", "workbook": "Stats workbook", "unknown": "Saved statistics"}
 TOLERANCE = 0.01
 
 
-def _confirmed() -> bool:
-    return (os.environ.get("BI_ASSUMPTIONS_CONFIRMED") or "").strip().lower() in ("1", "true", "yes")
+def text(value: Any) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    value = str(value).strip()
+    return "" if value.casefold() in {"unknown", "n/a", "none", "null", "nan", "not stated", "unspecified"} else value
 
 
-def provenance(source: str = "bi") -> Dict[str, Any]:
-    """Валюта и граница дня для цифр источника; ``assumed`` — пока не подтверждено."""
-    if source == "excel":
-        return {"source": "Stats workbook", "currency": DEFAULT_CURRENCY,
-                "day_boundary": "workbook Date column", "assumed": True,
-                "note": "Stats workbook: currency is USD by convention, day boundary is the workbook Date."}
-    currency = (os.environ.get("BI_CURRENCY") or DEFAULT_CURRENCY).strip().upper()
-    boundary = (os.environ.get("BI_DAY_BOUNDARY") or DEFAULT_DAY_BOUNDARY).strip()
-    assumed = not _confirmed()
-    note = f"BI figures are in {currency}; day boundary: {boundary}."
-    if assumed:
-        note += (" This is an assumption, not read from BI: the BI table has no currency or time zone"
-                 " column. Confirm it with BI before comparing money to an account in another currency.")
-    return {"source": "BI", "currency": currency, "day_boundary": boundary, "assumed": assumed, "note": note}
+def currency_code(value: Any) -> str:
+    value = text(value).upper()
+    # Знак $ сам по себе не отличает USD от других долларов.
+    return value if re.fullmatch(r"[A-Z]{3}", value) else ""
+
+
+def timezone_name(value: Any) -> str:
+    value = text(value)
+    return "UTC" if value in {"UTC", "Etc/UTC", "GMT", "Etc/GMT"} else value
+
+
+def configured_metadata(source: str) -> Dict[str, str]:
+    prefix = "BI" if source == "bi" else "STATS"
+    return {
+        "currency_code": currency_code(os.environ.get(prefix + "_CURRENCY")),
+        "timezone": timezone_name(os.environ.get(prefix + "_TIMEZONE")),
+        "day_boundary": text(os.environ.get(prefix + "_DAY_BOUNDARY")),
+    }
+
+
+def annotate_source(df: pd.DataFrame, source: str) -> pd.DataFrame:
+    """Метка исходных строк; конвенция/confirmation flag не создаёт метаданные."""
+    source = "workbook" if source == "excel" else source
+    out = df.copy()
+    out[SOURCE_COLUMN] = source
+    configured = configured_metadata(source)
+    for key, column in METADATA_COLUMNS.items():
+        raw = next((name for name, field in BI_METADATA_COLUMNS.items()
+                    if source == "bi" and field == key and name in out), None)
+        clean = currency_code if key == "currency_code" else timezone_name if key == "timezone" else text
+        if raw:
+            out[column] = out[raw].map(clean)
+        elif column not in out:
+            out[column] = configured[key]
+    return out
+
+
+def period_rows(df: pd.DataFrame, date_from: str = "", date_to: str = "") -> pd.DataFrame:
+    if df is None or df.empty or not date_from:
+        return df
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    return df[(dates >= pd.Timestamp(date_from)) & (dates <= pd.Timestamp(date_to or date_from))]
+
+
+def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+    """Описание именно выбранных строк; архив — хранилище, а не их поставщик."""
+    if frame is None:
+        source = "workbook" if source == "excel" else source
+        frame = annotate_source(pd.DataFrame({"_row": [1]}), source)
+    if frame.empty:
+        sources = []
+    elif SOURCE_COLUMN in frame:
+        sources = sorted({text(v) or "unknown" for v in frame[SOURCE_COLUMN]})
+    else:
+        sources = ["workbook" if source == "excel" else "unknown"]
+
+    def uniform(key):
+        column = METADATA_COLUMNS[key]
+        clean = currency_code if key == "currency_code" else timezone_name if key == "timezone" else text
+        if frame.empty or column not in frame:
+            return ""
+        values = {clean(v) for v in frame[column]}
+        return values.pop() if len(values) == 1 and "" not in values else ""
+
+    currency, zone, boundary = (uniform(k) for k in METADATA_COLUMNS)
+    name = " + ".join(SOURCE_NAMES.get(s, SOURCE_NAMES["unknown"]) for s in sources) or "No source rows"
+    incomplete = not (currency and zone and boundary)
+    note = (f"{name}; currency: {currency or 'unknown'}; time zone: {zone or 'unknown'}; "
+            f"day boundary: {boundary or 'unknown'}.")
+    if incomplete:
+        note += " Missing source metadata is unknown; money or day boundaries are not assumed to match an account."
+    return {"source": name, "sources": sources, "currency": currency or "unknown",
+            "currency_code": currency, "timezone": zone, "day_boundary": boundary,
+            "assumed": incomplete, "note": note,
+            "description": "the BI data" if sources == ["bi"] else
+                           "the Stats workbook" if sources == ["workbook"] else
+                           "the selected source data"}
 
 
 def source_spend_by_account(df: pd.DataFrame, date_from: str = "", date_to: str = "") -> Dict[str, float]:
-    """Спенд источника по алиасу аккаунта за период (даты включительно)."""
     if df is None or df.empty:
         return {}
-    frame = df
-    if date_from:
-        dates = pd.to_datetime(frame["Date"], errors="coerce")
-        frame = frame[(dates >= pd.Timestamp(date_from)) & (dates <= pd.Timestamp(date_to or date_from))]
-    grouped = frame.groupby("Account Alias")["$ Spend"].sum()
+    grouped = period_rows(df, date_from, date_to).groupby("Account Alias")["$ Spend"].sum()
     return {str(k): round(float(v), 2) for k, v in grouped.items()}
+
+
+def source_context_by_account(df: pd.DataFrame, date_from: str = "", date_to: str = "") -> Dict[str, Dict[str, Any]]:
+    if df is None or df.empty:
+        return {}
+    return {str(account): provenance(frame=rows)
+            for account, rows in period_rows(df, date_from, date_to).groupby("Account Alias")}
 
 
 def compare_spend(
@@ -65,33 +127,42 @@ def compare_spend(
     account_readings: Dict[str, Dict[str, Any]],
     *,
     source_currency: Optional[str] = None,
+    source_context: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> list[Dict[str, Any]]:
-    """Строка на аккаунт: цифра источника, цифра аккаунта, разница — отдельно.
-
-    ``account_readings`` — ``SpendReading.to_dict()`` по аккаунту. Показание без
-    числа (идёт/не удалось) не сравнивается: ``account_spend`` пуст, ``gap`` пуст.
-    Разные валюты не вычитаются — ``currency_mismatch``.
-    """
-    source_currency = (source_currency or provenance()["currency"]).upper()
+    """Оба числа отдельно; неизвестные единицы/границы не становятся разницей."""
     rows = []
     for account in sorted(set(source_by_account) | set(account_readings)):
         reading = account_readings.get(account) or {}
+        info = (source_context or {}).get(account) or provenance()
+        unit = currency_code(source_currency) if source_currency is not None else info["currency_code"]
         has_reading = reading.get("state") == "ok" and reading.get("spend") is not None
         account_spend = round(float(reading["spend"]), 2) if has_reading else None
-        account_currency = (reading.get("currency") or "").strip().upper() if has_reading else ""
+        account_currency = (currency_code(reading.get("currency_code")) or
+                            currency_code(reading.get("currency"))) if has_reading else ""
         source_spend = source_by_account.get(account)
-        mismatch = bool(has_reading and account_currency and account_currency != source_currency)
-        gap = None
-        if source_spend is not None and account_spend is not None and not mismatch:
-            gap = round(account_spend - source_spend, 2)
+        mismatch = bool(has_reading and unit and account_currency and unit != account_currency)
+        source_zone, source_boundary = info.get("timezone", ""), info.get("day_boundary", "")
+        account_zone = timezone_name(reading.get("timezone"))
+        account_boundary = text(reading.get("day_boundary"))
+        state = "comparable"
+        if source_spend is None:
+            state = "missing_source"
+        elif not has_reading:
+            state = "missing_account"
+        elif not unit or not account_currency:
+            state = "unknown_currency"
+        elif mismatch:
+            state = "currency_mismatch"
+        elif not all((source_zone, source_boundary, account_zone, account_boundary)):
+            state = "unknown_day_boundary"
+        elif (source_zone, source_boundary) != (account_zone, account_boundary):
+            state = "day_boundary_mismatch"
+        gap = round(account_spend - source_spend, 2) if state == "comparable" else None
         rows.append({
-            "account": account,
-            "source_spend": source_spend,
-            "source_currency": source_currency,
-            "account_spend": account_spend,
-            "account_currency": account_currency,
-            "currency_mismatch": mismatch,
-            "gap": gap,
-            "differs": gap is not None and abs(gap) > TOLERANCE,
+            "account": account, "source_spend": source_spend, "source_currency": unit,
+            "source": info, "account_spend": account_spend, "account_currency": account_currency,
+            "account_timezone": account_zone, "account_day_boundary": account_boundary,
+            "currency_mismatch": mismatch, "comparison_state": state,
+            "gap": gap, "differs": gap is not None and abs(gap) > TOLERANCE,
         })
     return rows

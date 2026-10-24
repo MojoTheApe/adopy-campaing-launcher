@@ -115,12 +115,25 @@ def fetch_raw(cfg: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     conn = _connect(cfg)
     try:
         with conn.cursor() as cur:
-            cols = ["CM_ID", *COLUMN_MAP]
+            from src.analysis_agent.bi_compare import BI_METADATA_COLUMNS
+
+            # Только явно относящиеся к единицам статистики колонки; валюта
+            # аккаунта/одного SPEND не доказывает общую валюту SPEND и NET.
+            try:
+                cur.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+                            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s",
+                            (cfg["database"], cfg["table"]))
+                available = {str(row[0]).upper(): str(row[0]) for row in cur.fetchall()}
+            except Exception:  # noqa: BLE001 — отказ метаданных не отменяет сами числа
+                available = {}
+            optional = [available[name] for name in BI_METADATA_COLUMNS if name in available]
+            cols = ["CM_ID", *COLUMN_MAP, *optional]
             cur.execute(f"SELECT {', '.join('`' + c + '`' for c in cols)} FROM {_table_ref(cfg)}")
             rows = cur.fetchall()
     finally:
         conn.close()
-    return pd.DataFrame(list(rows), columns=cols)
+    frame = pd.DataFrame(list(rows), columns=cols)
+    return frame.rename(columns={name: name.upper() for name in optional})
 
 
 def normalize(raw: pd.DataFrame) -> pd.DataFrame:
@@ -134,7 +147,9 @@ def normalize(raw: pd.DataFrame) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     for col in ("Country", "Account Alias", "Adset Name", "Ad Title", "Ad Asset", "Variant"):
         df[col] = df[col].fillna("").astype(str).str.strip()
-    return df
+    from src.analysis_agent import bi_compare
+
+    return bi_compare.annotate_source(df, "bi")
 
 
 def assign_cm(df: pd.DataFrame, cm_map: Dict[str, str], *, keep_unmapped: bool = False) -> pd.DataFrame:

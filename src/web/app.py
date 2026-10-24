@@ -2697,11 +2697,12 @@ def api_source_vs_account(date_from: str = "", date_to: str = "") -> JSONRespons
 
     _report, df, _warnings = get_cached_report()
     date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), "")
-    info = bi_compare.provenance("bi" if df.attrs.get("stats_source") in ("bi", "archive") else "excel")
+    info = bi_compare.provenance(df.attrs.get("stats_source", "excel"),
+                                 bi_compare.period_rows(df, date_from, date_to))
     rows = bi_compare.compare_spend(
         bi_compare.source_spend_by_account(df, date_from, date_to),
         _live_spend(date_from, date_to),
-        source_currency=info["currency"],
+        source_context=bi_compare.source_context_by_account(df, date_from, date_to),
     )
     return JSONResponse({"ok": True, "date_from": date_from, "date_to": date_to,
                          "source": info, "rows": rows})
