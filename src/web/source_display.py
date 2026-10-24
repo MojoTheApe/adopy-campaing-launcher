@@ -10,6 +10,66 @@ from src.analysis_agent.money_format import fmt_usd
 from src.web import period_compare
 
 
+def saved_comparison(frame, countries, readings, date_from, date_to, span=""):
+    """Use the supplied frame/readings, without fetching a source or profile."""
+    import pandas as pd
+    from src.analysis_agent.account_names import account_key
+    from src.analysis_agent.analyze_fb_stats import alias_matches
+
+    selected = frame if frame is not None else pd.DataFrame()
+    if date_from or date_to:
+        selected = (bi_compare.period_rows(selected, date_from, date_to)
+                    if "Date" in selected else selected.iloc[:0])
+    accounts = {}
+    for country in countries:
+        for row in country.get("rows", []):
+            label = row["account"]
+            entry = accounts.setdefault(label.casefold(), {"account": label, "aliases": set()})
+            entry["aliases"].add(row.get("workbook_alias") or label)
+
+    def amount(value, unit):
+        number = metric_columns._num(value)
+        return "—" if number is None else f"{unit or 'currency unknown'} {number:,.2f}"
+
+    rows = []
+    for entry in accounts.values():
+        label, aliases = entry["account"], entry["aliases"]
+        source_rows = selected.iloc[:0]
+        ambiguous = len({account_key(alias) for alias in aliases}) != 1
+        if not ambiguous and "Account Alias" in selected and "$ Spend" in selected:
+            source_rows = selected[alias_matches(selected["Account Alias"], next(iter(aliases)))]
+        source = bi_compare.provenance(frame=source_rows)
+        stored = [v for key, v in readings.items() if key.strip().casefold() == label.casefold()]
+        reading = stored[0] if len(stored) == 1 else {}
+        # A latest-read fallback belongs to its own dates, never this comparison.
+        if (span == "all" or not date_from or reading.get("date_from") != date_from
+                or reading.get("date_to") != (date_to or date_from)):
+            reading = {}
+        totals = {} if source_rows.empty else {label: round(float(source_rows["$ Spend"].sum()), 2)}
+        row = bi_compare.compare_spend(totals, {label: reading}, source_context={label: source})[0]
+        reason = {
+            "comparable": "Difference: account minus source",
+            "missing_source": "No source figure for these dates",
+            "missing_account": "No saved account figure for these dates",
+            "unknown_currency": "Currency is unknown; no difference calculated",
+            "currency_mismatch": "Currencies differ; no difference calculated",
+            "unknown_day_boundary": "Day boundary is unknown; no difference calculated",
+            "day_boundary_mismatch": "Day boundaries differ; no difference calculated",
+        }[row["comparison_state"]]
+        if ambiguous:
+            reason = "Source alias is ambiguous; no difference calculated"
+        row.update(
+            source_alias=" / ".join(sorted(set(source_rows.get("Account Alias", [])))),
+            source_amount=amount(row["source_spend"], row["source_currency"]),
+            account_amount=amount(row["account_spend"], row["account_currency"]),
+            gap_amount=amount(row["gap"], row["source_currency"]), reason=reason,
+            account_at=reading.get("finished_at", "") if row["account_spend"] is not None else "",
+        )
+        rows.append(row)
+    return {"rows": rows, "date_from": date_from, "date_to": date_to or date_from,
+            "all_dates": span == "all"}
+
+
 def source_info(context):
     report = context.get("report") or {}
     for owner in (context.get("amap") or {}, context.get("account_map") or {}, report):

@@ -29,6 +29,8 @@
       </span>
     </div>
 
+    {% if amap.saved_source_check and amap.saved_source_check.rows %}{% include "_saved_source_comparison.html" %}{% endif %}
+
     {#- ACL-356, вторая итерация (решение владельца 10.09): одна таблица
         вместо двух. Countries overview слился сюда — каждая строка несёт
         книжные тоталы страны (те же my_totals, что показывал overview),

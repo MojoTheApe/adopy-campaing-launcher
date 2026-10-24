@@ -913,8 +913,12 @@ def _build_account_map_view(
         mc["note_key"] = _account_notes.country_key(mc.get("country") or "")
 
     available = _with_assets(buckets["shown"])
+    from src.web import source_display
+
     return {
         "countries": countries,
+        "saved_source_check": source_display.saved_comparison(
+            df, countries, live, date_from, date_to, span),
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),

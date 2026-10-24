@@ -80,6 +80,15 @@ metadata remains unknown. This is supported behavior, not evidence those columns
 
 ## Source versus account figures (103d)
 
+The collapsed **Saved source/account check** beneath the Account map header shows
+both retained figures, their source/alias, exact selected dates, currency/day basis
+and the recorded account-read time. It is outside campaign rows and their attention
+handlers. Opening it uses native HTML disclosure only: no comparison API fetch,
+BI reload, profile opening, command or Retry is added. Its local report-build time
+does not claim the upstream ETL update time, which remains unknown. Accounts linked
+to several countries appear once, and a reading from another period is never used
+as the current figure. No Meta metric column or manual read control is introduced.
+
 `GET /api/source-vs-account?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` returns, per account alias,
 the source spend (BI, archive or workbook, for the period) and the spend read from the account
 (`account_spend` readings for the same inclusive period), separately, with per-account source
