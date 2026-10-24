@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -29,6 +30,12 @@ sys.path.insert(0, str(ROOT))
 from src.web import hidden_accounts as ha
 
 TPL = ROOT / "src" / "web" / "templates" / "report.html"
+
+
+def _until_next_function(js):
+    """Тело одной функции — до следующей, обычной или async (ACL-141 сделал
+    подтверждения асинхронными)."""
+    return re.split(r"\n  (?:async )?function ", js, maxsplit=1)[0]
 
 
 @pytest.fixture(autouse=True)
@@ -133,7 +140,7 @@ def test_what_happens_under_the_button_is_chosen_by_the_row():
     ничего не сделать."""
     js = _accounts_js()
     body = js[js.index("function drop(btn)"):]
-    body = body[: body.index("\n  function ")]
+    body = _until_next_function(body)
     assert "btn.dataset.removable === '1'" in body, "исход выбирается не по строке"
     assert "/api/accounts-hidden" in body and "/account-map-remove" in body
     assert "Take \"' + label + '\" out of this list?" in body, (
@@ -151,7 +158,7 @@ def test_hiding_never_touches_the_account_itself():
     """Прячется вид. Ни карта, ни общая таблица при этом не меняются."""
     js = _accounts_js()
     hide = js[js.index("function hide(btn)"):]
-    hide = hide[: hide.index("\n  function ")]
+    hide = _until_next_function(hide)
     assert "/api/accounts-hidden" in hide
     for forbidden in ("/account-map-patch", "/account-map-remove", "/account-links"):
         assert forbidden not in hide, f"пряча строку, дешборд лезет в {forbidden}"

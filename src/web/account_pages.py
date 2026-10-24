@@ -127,3 +127,35 @@ def read_pages(account: str, *, force: bool = False) -> dict:
     except Exception as exc:
         return {"ok": False, "state": "failed", "pages": [], "account": account,
                 "message": "Could not load Facebook Pages. Refresh pages to retry. " + api._failure(account, exc)[0]}
+
+
+def validate_profile_page(account: str, *, act: str, page_id: str, page_name: str = "", link: str = "") -> str:
+    """RPA uses the same constrained, account-bound no-creation proof as the API.
+
+    Discovery is fresh in this build operation; proof is never read from its UI
+    cache. The normal read-session lock and Graph stop/write guards stay active.
+    """
+    from src.analysis_agent import account_spend as accounts, account_spend_api as api
+    from src.fb_api import pages as pg
+    from src.fb_api.graph import normalize_act
+
+    def check(label: str) -> None:
+        with api._session(label) as sess:
+            if sess.client.allow_writes:
+                raise AssertionError("Page validation must not enable ordinary writes")
+            if sess.act != normalize_act(act):
+                raise ValueError("The account changed before Page validation. Refresh pages and retry.")
+            sess.client.reset_budget(1)
+            reason = pg.check_usable(sess.client, page_id, page_name, act=sess.act, link=link)
+            if reason:
+                raise ValueError(reason)
+            if sess.client.writes:
+                raise AssertionError("Page validation must not create objects")
+
+    run = accounts.serialized_browser(key=accounts._profile_key, reading=True)(check)
+    try:
+        run(account)
+        return ""
+    except Exception as exc:
+        return (f"The Page {page_name or page_id!r} ({page_id}) could not be confirmed for this ad account: "
+                f"{api._failure(account, exc)[0]}. Nothing was created.")

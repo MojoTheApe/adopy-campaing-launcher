@@ -215,6 +215,7 @@
 
   function runOpen(grid, labels) {
     if (!labels.length) { say(grid, 'Nothing to open.', true); return; }
+    if (busy) return;   // второе «да» из очереди окон, пока идёт первое открытие
     setBusy(true);
     say(grid, 'Opening ' + labels.length + ' profile(s) one after another…', false);
     post('/warm/open', { accounts: labels }).then(function (res) {
@@ -249,16 +250,24 @@
   function openProfiles(grid) {
     var p = picked(grid);
     var rows = p.ticked.length ? p.ticked : p.rows;
-    if (rows.length > 3 && !window.confirm('Start ' + rows.length + ' Multilogin profiles one after another and keep them open?')) return;
-    runOpen(grid, rows.map(function (r) { return r.account; }));
+    var accounts = rows.map(function (r) { return r.account; });
+    if (rows.length <= 3) { runOpen(grid, accounts); return; }
+    window.aclConfirm('They open one after another and stay open.',
+      { title: 'Start ' + rows.length + ' Multilogin profiles?', okLabel: 'Start' })
+      .then(function (yes) { if (yes) runOpen(grid, accounts); });
   }
 
   function runClose(grid, labels) {
     if (!labels.length) { say(grid, 'Tick the accounts whose profiles to close.', true); return; }
-    var ok = window.confirm('Close ' + labels.length + ' profile(s)?\n\nOnly profiles that this dashboard opened are closed, '
+    window.aclConfirm('Only profiles that this dashboard opened are closed, '
       + 'gently, through Multilogin. Anything opened another way stays open. A closed profile can be '
-      + 'started again after about 3 minutes.');
-    if (!ok) return;
+      + 'started again after about 3 minutes.',
+      { title: 'Close ' + labels.length + ' profile(s)?', okLabel: 'Close profiles' })
+      .then(function (ok) { if (ok) closeNow(grid, labels); });
+  }
+
+  function closeNow(grid, labels) {
+    if (busy) return;   // пока окно было открыто, могло начаться другое действие
     setBusy(true);
     post('/warm/close', { accounts: labels, confirm: true }).then(function (res) {
       setBusy(false);

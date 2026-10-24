@@ -60,6 +60,7 @@ const context = {
   location: {hash: ''},
   CustomEvent: class { constructor(type, options = {}) { this.type = type; this.detail = options.detail; } },
   confirm() { return confirmed; },
+  aclConfirm() { return Promise.resolve(confirmed); },
   fetch: async (url, opts) => {
     if (opts) {
       requests.push({url, body: JSON.parse(opts.body)});
@@ -83,7 +84,7 @@ vm.runInContext(code, context);
 
 const flush = () => new Promise(r => setImmediate(r));
 const fire = (type, target) => (listeners[type] || []).forEach(fn => fn({target}));
-const click = (id, attrs = {}) => fire('click', {id, getAttribute(k) { return attrs[k] ?? null; }});
+const click = (id, attrs = {}) => fire('click', {id, isConnected: true, getAttribute(k) { return attrs[k] ?? null; }});
 const type = (id, value) => { get(id).value = value; fire('input', get(id)); };
 const lastPost = () => requests.filter(r => r.body).pop();
 

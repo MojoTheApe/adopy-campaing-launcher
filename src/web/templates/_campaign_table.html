@@ -57,8 +57,20 @@
   }
   .hc-needs small { display: block; margin-top: 0.25rem; color: var(--adopy-text-muted); font-weight: 400; }
   .hc-toolbar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.5rem 0;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; padding: 0.5rem 0;
   }
+  /* Related controls move as groups; long groups may wrap internally without
+     splitting the expand/collapse pair or shrinking command labels. */
+  .hc-tool-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-width: 0; max-width: 100%; }
+  .hc-tool-filters { flex: 1 1 24rem; }
+  .hc-tool-filters input[type="search"] { flex: 1 1 14rem; min-width: 0; }
+  .hc-tool-expansion { flex-wrap: nowrap; }
+  .hc-tool-group button { white-space: nowrap; }
+  .hc-tool-counts { flex: 1 1 8rem; }
+  .hc-tool-columns { position: relative; }
+  .hc-tool-columns > label { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; min-width: 0; }
+  .hc-tool-columns .hc-cols { position: static; }
+  .hc-tool-columns .hc-cols-pop { top: 100%; max-width: 100%; }
   .hc-toolbar select, .hc-toolbar input[type="search"] {
     height: 32px; padding: 0 0.5rem; border: 1px solid var(--adopy-control-border);
     border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); color: var(--adopy-text);
@@ -177,7 +189,7 @@
   .hc-cmd { min-width: 28px; padding: 0 0.375rem !important; min-height: 28px !important; }
   .hc-cmd-note { font-size: 0.6875rem; color: var(--adopy-text-muted); }
   .hc-batchbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0 0 0.5rem; }
-  .hc-batch { display: inline-flex; gap: 0.25rem; align-items: center; }
+  .hc-batch { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 0.25rem; align-items: center; }
   /* Маркер результата в ячейке Status — точка с подсказкой; сам текст — в строке `.hc-rowmsg` под строкой. */
   .hc-mk { display: inline-block; width: 8px; height: 8px; margin-left: 0.375rem; border-radius: 50%; background: var(--adopy-text-muted); vertical-align: middle; cursor: help; }
   .hc-mk.ok { background: var(--adopy-success); } .hc-mk.bad { background: var(--adopy-danger); } .hc-mk.warn { background: var(--adopy-warning); }
@@ -256,22 +268,29 @@
   <div data-hc="body" hidden>
     <div class="hc-needs" data-hc="banner" role="alert" hidden></div>
     <div class="hc-toolbar" role="toolbar" aria-label="Campaign tree controls">
+      <div class="hc-tool-group hc-tool-filters" role="group" aria-label="Search and filter">
       <input type="search" data-hc="search" placeholder="Search campaigns, ad sets or ads" aria-label="Search names">
       <select data-hc="delivery" aria-label="Delivery filter">
         <option value="all">All delivery</option><option value="active">Enabled campaigns</option><option value="paused">Paused campaigns</option></select>
-      <span class="hc-divider" aria-hidden="true"></span>
+      </div>
+      <div class="hc-tool-group" role="group" aria-label="Metric navigation">
       <button type="button" data-jump="controls">Controls</button><button type="button" data-jump="bi">BI metrics</button>
       <button type="button" data-jump="meta">Structure</button><button type="button" data-jump="tracker">Tracking</button>
-      <span class="hc-divider" aria-hidden="true"></span>
+      </div>
+      <div class="hc-tool-group hc-tool-expansion" role="group" aria-label="Tree expansion">
       <button type="button" data-hc="expand-all">Expand all</button><button type="button" data-hc="collapse-all">Collapse all</button>
-      <span class="hc-spacer"></span>
+      </div>
+      <span class="hc-tool-group hc-tool-counts">
       <span class="hc-note" data-hc="count" aria-live="polite"></span>
       <span class="hc-note" data-hc="selcount" aria-live="polite"></span>
+      </span>
+      <div class="hc-tool-group hc-tool-columns" role="group" aria-label="Column settings">
       <label class="hc-note">Columns <select data-hc="preset" aria-label="Column preset">
         <option value="optimization">Optimization</option><option value="meta">Structure</option>
         <option value="bi">BI funnel</option><option value="all">All columns</option><option value="custom" hidden>Custom</option></select></label>
       <details class="hc-cols" data-hc="cols"><summary>Manage columns</summary><div class="hc-cols-pop" data-hc="cols-pop"></div></details>
-      <span class="hc-batch" data-hc="batch" role="group" aria-label="Commands for the selected rows">
+      </div>
+      <span class="hc-tool-group hc-batch" data-hc="batch" role="group" aria-label="Commands for the selected rows">
         <button type="button" data-batch="on">Switch on</button>
         <button type="button" data-batch="off">Switch off</button>
         <button type="button" data-batch="budget">Set budget…</button>
@@ -570,7 +589,7 @@
   var CTRL = ['delivery', 'dup', 'bid', 'budgetcmd'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
   var DECIDE = ['hint', 'alerts', 'goal', 'bench'];
   var PRESETS = {
-    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpa', 'b_cr', 'b_match']),
+    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpl', 'b_cpa', 'b_cr', 'b_match']),
     meta: CTRL.concat(['synced', 'x_obj', 'x_bid']),
     bi: CTRL.concat(DECIDE, BI_ALL),
     all: COLS.map(function (c) { return c.k; })
@@ -581,11 +600,15 @@
     if (saved && typeof saved.preset === 'string' && Array.isArray(saved.visible)) {
       var known = COLS.map(function (c) { return c.k; });
       colState = {preset: saved.preset, visible: saved.visible.filter(function (k) { return known.indexOf(k) >= 0; })};
+      /* Раскладка, сохранённая до CPL в Optimization, его не показывает: ставим перед CPA (FTD) один раз. */
+      if (!saved.cpl_seen && colState.visible.indexOf('b_cpl') < 0 && colState.visible.indexOf('b_cpa') >= 0) {
+        colState.visible.splice(colState.visible.indexOf('b_cpa'), 0, 'b_cpl');
+      }
     }
   } catch (e) { /* без памяти: хранилище закрыто или повреждено */ }
   /* Раскладка колонок общая: сменили пресет в одной таблице — остальные следуют. */
   function saveCols() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(colState)); } catch (e) { /* нет хранилища */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({preset: colState.preset, visible: colState.visible, cpl_seen: true})); } catch (e) { /* нет хранилища */ }
     instances.forEach(function (i) { if (i !== api) i.setCols(colState); });
   }
   function visibleCols() { return COLS.filter(function (c) { return colState.visible.indexOf(c.k) >= 0; }); }
