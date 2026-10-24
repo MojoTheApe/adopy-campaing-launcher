@@ -224,7 +224,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
             path = ipc / f"{person}.json"
             if path.exists():
                 value = json.loads(path.read_text(encoding="utf-8"))
-                assert value.get("phase") != "error", value
+                assert value.get("phase") != "error", json.dumps(value, indent=2)
                 if predicate(value):
                     return value
             process = person_processes.get(person)
@@ -233,7 +233,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 # producer's final atomic error, not a stale prepared snapshot.
                 if path.exists():
                     final = json.loads(path.read_text(encoding="utf-8"))
-                    assert final.get("phase") != "error", final
+                    assert final.get("phase") != "error", json.dumps(final, indent=2)
                 code = wintypes.DWORD()
                 assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
                 pytest.fail(f"synthetic Windows process exited before required state: 0x{code.value:08X}")

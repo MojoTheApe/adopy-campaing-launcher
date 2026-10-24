@@ -7,6 +7,8 @@ no browser, employee settings, ads, Google, Multilogin or telemetry are used.
 from __future__ import annotations
 
 import csv
+import contextlib
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -29,6 +31,68 @@ def wait_for(path, timeout=90):
         if time.monotonic() >= deadline:
             raise TimeoutError(path.name)
         time.sleep(0.1)
+
+
+def observe_launcher_gates(launcher, diagnostics):
+    """Retain actual gate outcomes without changing calls, rights or results."""
+    import config.paths
+
+    lock = config.paths.machine_file_lock
+
+    @contextlib.contextmanager
+    def observed_lock(path, *args, **kwargs):
+        if Path(path).name != "server-instance.lock":
+            with lock(path, *args, **kwargs) as value:
+                yield value
+            return
+        event = {"acquired": False}
+        diagnostics["locks"].append(event)
+        try:
+            with lock(path, *args, **kwargs) as value:
+                event["acquired"] = True
+                yield value
+        except BaseException as error:
+            event.update(exception=type(error).__name__, reason=str(error),
+                         errno=getattr(error, "errno", None),
+                         winerror=getattr(error, "winerror", None))
+            raise
+
+    config.paths.machine_file_lock = observed_lock
+    marker = launcher._installer_presence_mutex
+
+    def observed_marker(kernel):
+        event = {"called": False, "acquired": False}
+        diagnostics["markers"].append(event)
+        native = kernel.CreateMutexExW
+        previous = native.errcheck
+
+        def checked(result, function, arguments):
+            # Capture the original result/error before LocalFree cleanup.
+            event.update(called=True, acquired=bool(result), last_error=ctypes.get_last_error())
+            return previous(result, function, arguments) if previous else result
+
+        native.errcheck = checked
+        try:
+            result = marker(kernel)
+            if not event["called"]:
+                event.update(last_error=ctypes.get_last_error(), stage="security_descriptor")
+            return result
+        finally:
+            if previous is None:
+                del native.errcheck
+            else:
+                native.errcheck = previous
+
+    launcher._installer_presence_mutex = observed_marker
+    find_own = launcher.local_dashboard.find_own
+
+    def observed_health(*args, **kwargs):
+        result = find_own(*args, **kwargs)
+        diagnostics["health"].append({"found": result is not None,
+                                      "port": result[0] if result is not None else None})
+        return result
+
+    launcher.local_dashboard.find_own = observed_health
 
 
 def main():
@@ -64,6 +128,8 @@ def main():
     import ctypes
 
     assert not ctypes.windll.shell32.IsUserAnAdmin(), "acceptance must use a standard local account"
+    _native_diagnostics["mode"] = mode
+    observe_launcher_gates(launcher, _native_diagnostics)
 
     local_dashboard.PORTS = settings["ports"]
     local = launcher._local_acl_dir()
@@ -104,11 +170,14 @@ def main():
 
         sys.modules["serve"] = SimpleNamespace(main=serve, _pick_port=lambda *a, **kw: None)
         sys.argv = [sys.argv[0], *sys.argv[4:]]
-        return launcher.main()
+        try:
+            return launcher.main()
+        finally:
+            write(ipc / f"{person}.server-diagnostics.json", _native_diagnostics)
 
     children = []
     opened = []
-    messages = []
+    messages = _native_diagnostics["messages"]
     wizard_calls = []
     popen = launcher.subprocess.Popen
 
@@ -124,7 +193,8 @@ def main():
 
     launcher.subprocess.Popen = spawn
     launcher.webbrowser.open = lambda url: opened.append(url)
-    launcher._show_message = lambda title, message, **kw: messages.append(title)
+    launcher._show_message = lambda title, message, **kw: messages.append(
+        {"title": title, "body": message, "error": bool(kw.get("error"))})
     launcher._executable_command = lambda: [sys.executable, str(Path(__file__).resolve()),
                                            settings_path, person, "server"]
     setup_wizard.run_setup_wizard = wizard
@@ -213,12 +283,17 @@ def main():
 if __name__ == "__main__":
     # launcher.main rewrites sys.argv; retain the producer's IPC context.
     _status_settings, _status_person = sys.argv[1:3]
+    _native_diagnostics = {"messages": [], "locks": [], "markers": [], "health": []}
     try:
         raise SystemExit(main())
     except BaseException as error:
         if isinstance(error, SystemExit) and error.code in (None, 0):
             raise
         settings = json.loads(Path(_status_settings).read_text(encoding="utf-8"))
+        server_diagnostics = Path(settings["ipc"]) / f"{_status_person}.server-diagnostics.json"
         write(Path(settings["ipc"]) / f"{_status_person}.json",
-              {"phase": "error", "traceback": traceback.format_exc()})
+              {"phase": "error", "traceback": traceback.format_exc(),
+               "diagnostics": _native_diagnostics,
+               "server_diagnostics": json.loads(server_diagnostics.read_text(encoding="utf-8"))
+               if server_diagnostics.exists() else None})
         raise
