@@ -547,8 +547,11 @@ def update_machine_env(values: dict[str, str]) -> str:
     for line in lines:
         match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
         key = match.group(1) if match else None
-        if key in pending:
-            out.append(_dotenv_line(key, pending.pop(key)))
+        if key in values:
+            if key in pending:
+                out.append(_dotenv_line(key, pending.pop(key)))
+            # Remove obsolete duplicate assignments for this updated key: dotenv
+            # uses the last value, so a later old token would survive Disconnect.
         else:
             out.append(line)
     if pending and out and out[-1].strip():

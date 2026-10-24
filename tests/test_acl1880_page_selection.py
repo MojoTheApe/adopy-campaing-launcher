@@ -78,10 +78,10 @@ def test_form_parser_carries_campaign_specific_selection():
 
 
 @pytest.mark.parametrize('available,selected,expected,error', [
-    # Automatic (empty) on RPA: Identity untouched, nothing resolved, nothing refused.
-    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}]}, '', None, False),
+    # ACL-1897: Automatic resolves the first usable Page, just like the API.
+    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First', 'source': 'ad account'}]}, '', '123', False),
     ({'ok': True, 'act': 'act_1234567890', 'pages': []}, '', None, False),
-    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}, {'id': '456', 'name': 'Second'}]}, '456', '456', False),
+    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First', 'source': 'ad account'}, {'id': '456', 'name': 'Second', 'source': 'ad account'}]}, '456', '456', False),
     ({'ok': True, 'act': 'act_1234567890', 'pages': []}, '456', None, True),
     ({'ok': False, 'message': 'Could not load pages'}, '456', None, True),
     ({'ok': True, 'act': 'act_999', 'pages': [{'id': '456', 'name': 'Wrong account'}]}, '456', None, True),
@@ -111,8 +111,8 @@ def test_conflicting_page_choices_cannot_be_silently_grouped():
     assert any('different Facebook Page choices' in e for e in drafts[0].errors)
 
 
-def test_automatic_rpa_draft_never_touches_identity(monkeypatch):
-    """Empty page_id (Automatic) on RPA: no Pages read, no Identity kwargs, no ensure_page_identity."""
+def test_confirmed_empty_automatic_rpa_keeps_existing_identity(monkeypatch):
+    """A fresh confirmed-empty list keeps the existing Website RPA behavior."""
     from src.fb_ads_rpa import rpa_publisher as rpa, page_identity
     from src.fb_ads_rpa.ads_manager_flow import page_identity_kwargs, explicit_page_choice
     from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
@@ -121,12 +121,14 @@ def test_automatic_rpa_draft_never_touches_identity(monkeypatch):
     drafts = slots_to_campaign_drafts([{'name': 'C', 'budget': '50', 'page_id': ''}], account_label='Demo', country='MX')
     assert drafts[0].page_provided and not drafts[0].page_id
     calls = []
-    monkeypatch.setattr(account_pages, 'read_pages', lambda *a, **k: calls.append(a) or {'ok': True, 'pages': []})
+    monkeypatch.setattr(account_pages, 'read_pages', lambda *a, **k: calls.append((a, k)) or {
+        'ok': True, 'act': 'act_1234567890', 'pages': []})
     monkeypatch.setattr(page_identity, 'ensure_page_identity', lambda *a, **k: calls.append('identity'))
     monkeypatch.setattr(rpa, 'slots_to_campaign_drafts', lambda *a, **k: drafts)
     monkeypatch.setattr(rpa, 'enrich_campaign_drafts', lambda d, **k: d)
+    drafts[0].ad_account_id = 'act_1234567890'
     out = rpa.RpaPublisher().build_drafts([], account_label='Demo', country='MX')
-    assert calls == [] and not out[0].errors and page_identity_kwargs(out[0]) == {}
+    assert calls == [(('Demo',), {'force': True})] and not out[0].errors and page_identity_kwargs(out[0]) == {}
     assert not explicit_page_choice(out[0])
     chosen = CampaignDraft('C', 'MX', 'Demo', page_id='123', page_provided=True, page_name='P', page_name_unique=True)
     assert page_identity_kwargs(chosen) == {'page_id': '123', 'page_name': 'P', 'page_name_unique': True}

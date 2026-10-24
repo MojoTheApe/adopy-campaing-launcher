@@ -20,7 +20,9 @@
     var signature = JSON.stringify([key, hidden.value, state]);
     if (select._pageSignature === signature) return;
     select._pageSignature = signature;
-    select.replaceChildren(new Option('Automatic — first available Page of this account', ''));
+    var first = pages[0];
+    select.replaceChildren(new Option(first ? 'Automatic: ' + first.name + ' (' + first.id + ')'
+      : 'Automatic — first available Page of this account', ''));
     pages.forEach(function (p) { select.add(new Option(p.name + ' (' + p.id + ')' + (p.source === 'profile' ? ' — profile Page' : ''), p.id)); });
     var chosen = pages.find(function (p) { return p.id === hidden.value; });
     if (hidden.value && !chosen) select.add(new Option('Unavailable Page (' + hidden.value + ')', hidden.value));
