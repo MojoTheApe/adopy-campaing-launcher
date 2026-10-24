@@ -19,9 +19,8 @@ DEFAULT_PORT = local_dashboard.DEFAULT_PORT
 HEALTH_TIMEOUT_SECONDS = 60
 PORT_BUSY_EXIT_CODE = 73
 SERVER_MUTEX_NAME = r"Local\ACL-Campaign-Launcher-Server-v1"
-CONFIG_MUTEX_PREFIX = r"Global\ACL-Campaign-Launcher-Config-v1"
 _MUTEX_HANDLE: int | None = None
-_INSTALLER_MUTEX_HANDLE: int | None = None
+_CONFIG_LOCK: Any = None
 
 
 def _bundle_root() -> Path:
@@ -130,8 +129,8 @@ def _installer_presence_mutex(kernel) -> int | None:
     """Keep the existing installer AppMutex alive, independently of ownership.
 
     Every dashboard in this Windows session holds the same presence marker.
-    Authenticated users may only open it for SYNCHRONIZE, not modify it or
-    acquire another person's configuration gate. The last dashboard closes it.
+    The shared authenticated-user grant is SYNCHRONIZE only; it grants no
+    access to another person's configuration gate. The last dashboard closes it.
     """
     import ctypes
     from ctypes import wintypes
@@ -166,49 +165,50 @@ def _installer_presence_mutex(kernel) -> int | None:
 
 def _acquire_server_mutex() -> bool:
     """One server/setup per configuration; preserve the fixed installer marker."""
-    global _MUTEX_HANDLE, _INSTALLER_MUTEX_HANDLE
-    if sys.platform != "win32":
+    global _MUTEX_HANDLE, _CONFIG_LOCK
+    from config.paths import machine_file_lock
+
+    # Reuse the existing native process lock in the canonical own folder. It
+    # covers different Windows sessions without requiring a Global namespace
+    # unavailable to Store-context launches. Never wait behind a running server.
+    lock = machine_file_lock(_local_acl_dir() / "server-instance.lock", timeout=0)
+    try:
+        lock.__enter__()
+    except (OSError, TimeoutError):
+        return False
+    try:
+        marker = None
+        if sys.platform == "win32":
+            import ctypes
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            marker = _installer_presence_mutex(kernel)
+            if marker is None:
+                # Do not bypass an inaccessible older presence object or
+                # start a process invisible to the existing installer guard.
+                return False
+        _MUTEX_HANDLE = marker
+        _CONFIG_LOCK = lock
         return True
-    import ctypes
-    from ctypes import wintypes
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
-    kernel.CreateMutexW.restype = wintypes.HANDLE
-    # The config/ports are machine-wide, even when the same person has two
-    # Windows sessions. The legacy installer marker remains session-local.
-    name = f"{CONFIG_MUTEX_PREFIX}-{local_dashboard.identity(_local_acl_dir())}"
-    ctypes.set_last_error(0)
-    handle = kernel.CreateMutexW(None, False, name)
-    if not handle:
-        return False
-    if ctypes.get_last_error() == 183:
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel.CloseHandle(handle)
-        return False
-    marker = _installer_presence_mutex(kernel)
-    if marker is None:
-        # Never start a process invisible to the existing installer guard.
-        # In particular, do not bypass an inaccessible older presence object.
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel.CloseHandle(handle)
-        return False
-    _MUTEX_HANDLE = int(handle)
-    _INSTALLER_MUTEX_HANDLE = marker
-    return True
+    finally:
+        if _CONFIG_LOCK is not lock:
+            lock.__exit__(None, None, None)
 
 
 def _release_server_mutex() -> None:
-    global _MUTEX_HANDLE, _INSTALLER_MUTEX_HANDLE
-    if (_MUTEX_HANDLE or _INSTALLER_MUTEX_HANDLE) and sys.platform == "win32":
-        import ctypes
-        from ctypes import wintypes
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        for handle in (_MUTEX_HANDLE, _INSTALLER_MUTEX_HANDLE):
-            if handle:
-                kernel.CloseHandle(handle)
+    global _MUTEX_HANDLE, _CONFIG_LOCK
+    marker, lock = _MUTEX_HANDLE, _CONFIG_LOCK
     _MUTEX_HANDLE = None
-    _INSTALLER_MUTEX_HANDLE = None
+    _CONFIG_LOCK = None
+    try:
+        if marker and sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.CloseHandle(marker)
+    finally:
+        if lock is not None:
+            lock.__exit__(None, None, None)
 
 
 def _run_setup() -> bool:

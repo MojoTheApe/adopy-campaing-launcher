@@ -108,7 +108,8 @@ def main():
 
     def spawn(*args, **kwargs):
         child = popen(*args, **kwargs)
-        children.append(child)
+        if "--server" in args[0]:
+            children.append(child)
         return child
 
     def wizard(directory, version):

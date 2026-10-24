@@ -65,27 +65,28 @@ class LauncherTests(unittest.TestCase):
         kernel.CreateMutexW.side_effect = create_mutex
         kernel.CreateMutexExW.side_effect = lambda _security, name, *_: create_mutex(None, False, name)
         kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
-        with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(sys, "platform", "win32"), \
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        tmp = temporary.name
+        held = []
+        self.addCleanup(lambda: [lock.__exit__(None, None, None) for lock in held])
+        with mock.patch.object(sys, "platform", "win32"), \
                 mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
                 mock.patch.object(ctypes, "get_last_error", side_effect=lambda: error[0], create=True), \
-                mock.patch.object(ctypes, "set_last_error", create=True), \
                 mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
-                mock.patch.object(launcher, "_INSTALLER_MUTEX_HANDLE", None, create=True), \
+                mock.patch.object(launcher, "_CONFIG_LOCK", None), \
                 mock.patch.object(launcher.local_dashboard, "find_own", return_value=None):
             for person in ("anna", "dan"):
                 with mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp) / person):
                     self.assertTrue(launcher._acquire_server_mutex(), person)
-                    # Simulate a separate process retaining its named handles.
+                    # Retain two real, separate OS file locks like two processes.
+                    held.append(launcher._CONFIG_LOCK)
+                    launcher._CONFIG_LOCK = None
                     launcher._MUTEX_HANDLE = None
-                    launcher._INSTALLER_MUTEX_HANDLE = None
             with mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp) / "anna"):
                 self.assertFalse(launcher._acquire_server_mutex())
         self.assertIn(launcher.SERVER_MUTEX_NAME, existing)
-        gates = existing - {launcher.SERVER_MUTEX_NAME}
-        self.assertEqual(len(gates), 2)
-        self.assertTrue(all(name.startswith("Global\\") for name in gates))
-        self.assertTrue(all("anna" not in name and "dan" not in name for name in gates))
+        self.assertEqual(existing, {launcher.SERVER_MUTEX_NAME})
         installer = (PACKAGING_DIR / "installer.iss").read_text(encoding="utf-8")
         self.assertIn("AppMutex=" + launcher.SERVER_MUTEX_NAME, installer)
 
@@ -93,19 +94,46 @@ class LauncherTests(unittest.TestCase):
         import ctypes
 
         kernel = mock.Mock()
-        kernel.CreateMutexW.return_value = 123
-        with mock.patch.object(sys, "platform", "win32"), \
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sys, "platform", "win32"), \
                 mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
                 mock.patch.object(ctypes, "get_last_error", return_value=0, create=True), \
-                mock.patch.object(ctypes, "set_last_error", create=True), \
                 mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
-                mock.patch.object(launcher, "_INSTALLER_MUTEX_HANDLE", None), \
-                mock.patch.object(launcher, "_local_acl_dir", return_value=Path("synthetic-config")), \
+                mock.patch.object(launcher, "_CONFIG_LOCK", None), \
+                mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp)), \
                 mock.patch.object(launcher, "_installer_presence_mutex", return_value=None):
             self.assertFalse(launcher._acquire_server_mutex())
             self.assertIsNone(launcher._MUTEX_HANDLE)
-            self.assertIsNone(launcher._INSTALLER_MUTEX_HANDLE)
-        kernel.CloseHandle.assert_called_once_with(123)
+            self.assertIsNone(launcher._CONFIG_LOCK)
+            from config.paths import machine_file_lock
+            with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
+                pass  # a failed installer marker must not leak the actual config gate
+
+    def test_config_gate_does_not_require_the_global_namespace(self):
+        import ctypes
+        from config.paths import machine_file_lock
+
+        kernel = mock.Mock()
+        kernel.CreateMutexW.return_value = 0  # Global namespace unavailable
+        kernel.CreateMutexExW.return_value = 456  # original Local installer marker is available
+        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sys, "platform", "win32"), \
+                mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
+                mock.patch.object(ctypes, "set_last_error", create=True), \
+                mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
+                mock.patch.object(launcher, "_CONFIG_LOCK", None, create=True), \
+                mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp)):
+            try:
+                self.assertTrue(launcher._acquire_server_mutex())
+                with self.assertRaises(TimeoutError):
+                    with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
+                        pass
+                kernel.CreateMutexW.assert_not_called()
+            finally:
+                launcher._release_server_mutex()
+            with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
+                pass
 
 
 if __name__ == "__main__":
