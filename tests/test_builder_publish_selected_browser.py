@@ -22,6 +22,7 @@ from test_builder_multi_publish_browser import (  # noqa: F401 — фиксту�
     browser, html, ui, add, ready, publish_one, finish, camp_name, FORM_JS,
     two_country_html, TWIN_JS, _route_for, _seeded_two_country_page,
 )
+from acl_dialog_capture import capture_dialogs
 
 ALL_RE = r'^Publish all → drafts \((\d+)\)$'
 
@@ -218,6 +219,7 @@ def test_one_account_in_two_countries_is_ticked_and_locked_per_country(browser, 
     errors, dialogs = [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(two_country_html, state))
     page.goto('http://acl.test/')

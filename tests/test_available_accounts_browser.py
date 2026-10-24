@@ -16,9 +16,11 @@ import pandas as pd
 import pytest
 
 from src.web import account_links as links
+from tests.acl_dialog_capture import capture_dialogs
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT = ROOT / "src" / "web" / "templates" / "report.html"
+TEMPLATES = ROOT / "src" / "web" / "templates"
+REPORT = TEMPLATES / "report.html"
 
 
 def _script() -> str:
@@ -108,6 +110,7 @@ def _page_html(client) -> str:
     r = client.get("/account-map", params={"span": "all"})
     assert r.status_code == 200
     return ('<!doctype html><html><body><div id="amap-slot">' + r.text + "</div>"
+            "<script>" + (TEMPLATES / "_acl_dialog.js").read_text(encoding="utf-8") + "</script>"
             "<script>" + _script() + "</script></body></html>")
 
 
@@ -127,6 +130,8 @@ def test_select_remove_restore_and_counts(app_client):
             d.accept() if answer["accept"] else d.dismiss()
 
         page.on("dialog", _dialog)
+        # ACL-141: «Remove N accounts?» — окно страницы, не confirm браузера.
+        capture_dialogs(page, dialogs, answer=lambda _t: answer["accept"])
 
         def route(r):
             url = urlparse(r.request.url)

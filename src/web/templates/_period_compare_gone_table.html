@@ -1,0 +1,9 @@
+{% import "_metrics.html" as mx %}
+<h4>{{ table.title }} · earlier only</h4>
+<div class="cmp-table-scroll"><table><thead><tr><th>{{ table.title }}</th>{{ mx.headers() }}{% if table.section in ['asset_summary', 'variants'] %}<th>Net</th>{% endif %}</tr></thead><tbody>
+{% for r in table.rows %}
+<tr class="cmp-gone-row"><td>{{ r.label }}{{ mx.flag('gone') }}{% if table.section == 'workbench' and r.you and r.you.spend > 0 %}<small>You FTDs —{{ mx.cmp_cell(value_compare(none, r.you.ftds, 'count')) }}</small>{% endif %}</td>
+{% if table.section == 'trend' %}{{ mx.pair_cells(['—'] * 6, ['—'] * 6, recent_compare=metric_compare(none, {'spend': r.spend_recent, 'leads': r.leads_recent, 'deposits': r.deposits_recent}), period_compare=metric_compare(none, {'spend': r.spend_total, 'leads': r.leads_total, 'deposits': r.deposits_total})) }}
+{% else %}{{ mx.cells(0, 0, 0, prev=r, gone=true) }}{% endif %}{% if table.section in ['asset_summary', 'variants'] %}<td class="num">—{{ mx.cmp_cell(value_compare(none, r.get('net'))) }}</td>{% endif %}</tr>
+{% endfor %}
+</tbody></table></div>

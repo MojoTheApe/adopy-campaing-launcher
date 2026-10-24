@@ -1184,6 +1184,9 @@ def test_publish_job_routes_to_the_api_only_when_switched(monkeypatch):
     from src.web import publish_api, publish_jobs
     from tests.profile_lease_fakes import fake_profile
 
+    # The RPA stub deliberately leaves a pending job. Restore the previous store
+    # after this test so later account commands do not see a fake busy account.
+    monkeypatch.setattr(publish_jobs, "_jobs", {})
     monkeypatch.setattr(publish_api, "ApiPublisher", FakeApiPublisher)
     called = {"rpa": 0}
     monkeypatch.setattr(publish_jobs, "_run_rpa", lambda *a, **k: called.__setitem__("rpa", called["rpa"] + 1))

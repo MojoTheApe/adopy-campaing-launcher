@@ -43,9 +43,27 @@ var SENT = [];
 function amapSend(payload) { SENT.push(payload); }
 var PROMPTS = %s;
 window.prompt = function () { return PROMPTS.length ? PROMPTS.shift() : null; };
+window.aclPrompt = function () { return Promise.resolve(window.prompt()); };
 %s
 </script></body></html>""" % (json.dumps(prompts), script)
     return html
+
+
+def _answer_account_dialog(page, *, read_ok: bool, typed: str = "") -> None:
+    """ACL-142: the ad account is asked in an in-page dialog, not window.prompt.
+    A good read must be ticked as the intended account; after a failed read the
+    number is typed. Either way the person presses Connect."""
+    dlg = page.locator("dialog.amap-account-dialog")
+    dlg.wait_for(timeout=5000)
+    if read_ok:
+        page.wait_for_function(
+            "document.querySelector('.amap-ad-input').value === 'act_111'", timeout=5000)
+        dlg.locator("input[type=checkbox]").check()
+    else:
+        page.wait_for_function(
+            "document.querySelector('.amap-ad-info').textContent.includes('Could not read')", timeout=5000)
+        dlg.locator(".amap-ad-input").fill(typed)
+    dlg.get_by_role("button", name="Connect", exact=True).click()
 
 
 def _run(browser, *, open_ok: bool, prompts: list[str]):
@@ -82,6 +100,7 @@ def _run(browser, *, open_ok: bool, prompts: list[str]):
     }""")
     buttons = [b.inner_text() for b in page.locator(".amap-hit button").all()]
     page.locator(".amap-hit button", has_text="Connect").click()
+    _answer_account_dialog(page, read_ok=open_ok, typed="act_222")
     page.wait_for_function("SENT.length > 0 || document.querySelector('.amap-msg').className.includes('bad')", timeout=5000)
     sent = page.evaluate("SENT")
     ctx.close()
@@ -89,13 +108,13 @@ def _run(browser, *, open_ok: bool, prompts: list[str]):
 
 
 def test_a_found_profile_has_one_button(browser):
-    buttons, _calls, _sent, errors = _run(browser, open_ok=True, prompts=["FacebookTest1", "act_111"])
+    buttons, _calls, _sent, errors = _run(browser, open_ok=True, prompts=["FacebookTest1"])
     assert buttons == ["Connect"], f"кнопки у найденного профиля: {buttons}"
     assert not errors
 
 
 def test_connect_opens_the_profile_before_reading_its_account(browser):
-    _b, calls, sent, errors = _run(browser, open_ok=True, prompts=["FacebookTest1", "act_111"])
+    _b, calls, sent, errors = _run(browser, open_ok=True, prompts=["FacebookTest1"])
     assert calls.index("/mlx-profile-open") < calls.index("/account-probe/ad-account") < calls.index("/account-map-patch")
     assert sent and sent[0]["account"] == "FacebookTest1" and sent[0]["value"] == "Kuwait"
     assert not errors
@@ -103,7 +122,7 @@ def test_connect_opens_the_profile_before_reading_its_account(browser):
 
 def test_a_failed_open_does_not_cancel_connecting(browser):
     """Окно открыто руками — робот его не перезапускает, но подключить можно."""
-    _b, calls, sent, errors = _run(browser, open_ok=False, prompts=["FacebookTest1", "act_222"])
+    _b, calls, sent, errors = _run(browser, open_ok=False, prompts=["FacebookTest1"])
     assert "/mlx-profile-open" in calls
     assert "/account-map-patch" in calls, "неудачное открытие отменило подключение"
     assert sent and sent[0]["account"] == "FacebookTest1"
@@ -119,7 +138,7 @@ def test_the_fallback_prompt_no_longer_points_to_an_open_button():
 def test_a_second_click_while_it_works_does_not_open_twice(browser):
     """Ревью ACL-1457: кнопка включалась сразу после /mlx-profile-open, пока
     ещё ждали /mlx-profile-details, и второе нажатие начинало второе открытие."""
-    html = _page_html(["FacebookTest1", "act_111"])
+    html = _page_html(["FacebookTest1"])
     calls: list[str] = []
     held: list = []
     ctx = browser.new_context()
@@ -164,6 +183,7 @@ def test_a_second_click_while_it_works_does_not_open_twice(browser):
     held[0].fulfill(body=json.dumps({"ok": True, "folder_id": "f1", "ad_account_id": "",
                                      "suggested_name": "FacebookTest1"}),
                     content_type="application/json")
+    _answer_account_dialog(page, read_ok=True)
     page.wait_for_function("SENT.length > 0", timeout=5000)
     assert calls.count("/mlx-profile-open") == 1
     assert calls.count("/account-map-patch") == 1
