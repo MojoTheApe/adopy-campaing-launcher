@@ -35,6 +35,7 @@ from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
 
@@ -540,15 +541,47 @@ def _country_names_for(code: str) -> list[str]:
     return [n.title() for n, c in COUNTRY_CODES.items() if c == code][:2]
 
 
+class TargetingUnresolved(PlanError):
+    """Термин библиотеки не найден точно или ждёт подтверждения человека (ACL-1771).
+
+    `items` — непонятые термины/части: {term, state: pending|unresolved, candidates,
+    suggested?, reason}. Текст начинается так же, как раньше («Detailed targeting not found…»).
+    """
+
+    def __init__(self, items: list[dict]):
+        self.items = items
+        unknown = [i for i in items if i.get("state") == "unknown"]
+        lost = [i for i in items if i.get("state") not in ("pending", "unknown")]
+        asks = [i for i in items if i.get("state") == "pending"]
+
+        def cands(i: dict) -> str:
+            rows = i.get("candidates") or []
+            return ("; candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
+                    if rows else "; no candidates")
+
+        msg: list[str] = []
+        if lost:
+            msg.append("Detailed targeting not found by Meta: "
+                       + " | ".join(f"{i['term']}{cands(i)}" + (f" ({i['reason']})" if i.get("reason") else "")
+                                    for i in lost))
+        if asks:
+            msg.append("Detailed targeting needs your confirmation: "
+                       + " | ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
+                                    for i in asks) + " Confirm a candidate in Check plan.")
+        if unknown:
+            msg.append(_tr.UNKNOWN_MESSAGE)
+        super().__init__(". ".join(msg))
+
+
 class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
-    def __init__(self, client: GraphClient):
+    def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None):
         self.client = client
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
-        self._interest: dict[str, dict] = {}
-        self._behaviors: list[dict] | None = None
+        #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
+        self.terms = _tr.TermResolver(client, store)
 
     def country(self, value: str) -> str:
         key = (value or "").strip()
@@ -598,37 +631,36 @@ class TargetingResolver:
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
-        """Группы имён → `flexible_spec` (interests/behaviors с id)."""
-        names = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if names:
-            rows = self.client.get_all("/search", {"type": "adinterestvalid", "interest_list": names},
-                                       max_pages=1)
-            for r in rows:
-                if r.get("valid") is not False and r.get("id"):
-                    self._interest[str(r.get("name") or "").casefold()] = {
-                        "bucket": "interests", "id": str(r["id"]), "name": str(r.get("name") or "")}
-        missing = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if missing:
-            if self._behaviors is None:
-                self._behaviors = self.client.get_all(
-                    "/search", {"type": "adTargetingCategory", "class": "behaviors", "limit": 1000},
-                    max_pages=1)
-            for b in self._behaviors:
-                nm = str(b.get("name") or "").casefold()
-                if nm and b.get("id") and nm not in self._interest:
-                    self._interest[nm] = {"bucket": "behaviors", "id": str(b["id"]),
-                                          "name": str(b.get("name") or "")}
-            missing = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if missing:
-            raise PlanError("Detailed targeting not found by Meta: " + ", ".join(missing))
+        """Группы имён → `flexible_spec` (interests/behaviors/work_*/education_* с id).
+
+        Точное имя берётся само; всё остальное — `TargetingUnresolved` с кандидатами и
+        с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
+        """
+        terms = [n for g in groups for n in g]
+        self.terms.prefetch(terms)
+        results = {n: self.terms.resolve(n) for n in terms}
+        bad: list[dict] = []
+        for r in results.values():
+            if r["state"] in ("exact", "confirmed", "split"):
+                continue
+            bad += r.get("bad_parts") or [r]
+        if bad:
+            raise TargetingUnresolved(bad)
         spec = []
         for g in groups:
             entry: dict[str, list] = {}
             for n in g:
-                hit = self._interest[n.casefold()]
-                entry.setdefault(hit["bucket"], []).append({"id": hit["id"], "name": hit["name"]})
+                for hit in results[n]["picks"]:
+                    bucket = entry.setdefault(hit["type"], [])
+                    item = {"id": hit["id"], "name": hit["name"]}
+                    if item not in bucket:
+                        bucket.append(item)
             spec.append(entry)
         return spec
+
+    def targeting_report(self) -> list[dict]:
+        """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
+        return self.terms.report()
 
 
 def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingResolver) -> dict:
@@ -794,6 +826,8 @@ class Outcome:
     plan: dict = field(default_factory=dict)
     #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
     audit: list = field(default_factory=list)
+    #: ACL-1771: как найдены термины таргетинга и что ждёт подтверждения (для Check plan).
+    targeting: list = field(default_factory=list)
     #: Что показать человеку списком (ACL-1437): title/impact/action/severity/raw.
     problems: list = field(default_factory=list)
     manual_required: list[str] = field(default_factory=list)
@@ -1881,9 +1915,19 @@ class CampaignCreator:
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
+        out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
         return out
+
+    def _targeting_report(self) -> list:
+        fn = getattr(self.resolver, "targeting_report", None)
+        try:
+            items = list(fn()) if fn else []
+            _tr.register_candidates(items)      # подтвердить можно только показанных кандидатов
+            return items
+        except Exception:  # noqa: BLE001 — отчёт вспомогательный
+            return []
 
     def _audit(self, plan: CampaignPlan, out: Outcome, *, existing: list | None, checked: bool,
                files: dict | None, renamed: str = "", name_error: str = "") -> None:
