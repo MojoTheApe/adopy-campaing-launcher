@@ -95,7 +95,7 @@ def test_denied_search_reaches_the_public_plan_result(tmp_path, monkeypatch, no_
         "Meta did not answer: " + _DENIED + "operation=search, search_type=adgeolocation]")
     assert audit["language_resolves"]["detail"] == (
         "Meta did not answer: " + _DENIED + "operation=search, search_type=adlocale]")
-    assert audit["interests_resolve"]["detail"] == "Meta did not answer: " + _DENIED + "operation=search]"
+    assert audit["interests_resolve"]["detail"] == "Meta did not answer: " + _DENIED + "operation=search, search_type=adinterest]"
     assert not any(p.endswith("/campaigns") for p, _ in meta.gets)
 
 

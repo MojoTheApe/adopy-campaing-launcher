@@ -193,6 +193,8 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
         "audit": list(outcome.audit),
+        # ACL-1771: термины таргетинга (найдены / ждут подтверждения) и кэш подтверждённых.
+        "targeting": list(outcome.targeting),
     }
 
 
@@ -580,7 +582,8 @@ class ApiPublisher:
 # дополнительно требует один отдельный validate-only creative, без создания объектов.
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-PLAN_PREFLIGHT_MAX_CALLS = 12
+# ACL-1771: поиск детального таргетинга ходит за списками Meta (в резолвере свои потолки в чтениях: 8 на термин, 16 на задание).
+PLAN_PREFLIGHT_MAX_CALLS = 30
 
 #: ACL-2117: сколько секунд Check plan держит открытым профиль, который сам поднял
 #: (0 — закрывать как раньше, через `CLOSE_GRACE_S`).
