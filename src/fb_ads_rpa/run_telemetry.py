@@ -175,17 +175,25 @@ def _scrub_proxy(match: re.Match) -> str:
         return word
     if not (word[at + 1].isalnum() or word[at + 1] == "["):
         return word
+    authority_start = None
     for user in _PROXY_USER.finditer(word, 0, at):
         name = user[1]
         password_start = user.end()
-        if password_start == at or name.lower() in {"mailto", "email", "e-mail"}:
+        if password_start == at:
             continue
-        if word.startswith("//", password_start) and _URI_SCHEME.fullmatch(name):
+        userinfo = user.start() == authority_start
+        if not userinfo and word.startswith("//", password_start) and _URI_SCHEME.fullmatch(name):
+            authority_start = password_start + 2
             continue
-        if len(name) == 1 and name.isalpha() and word.startswith("/", password_start):
-            continue  # C:/Users/a@host is a Windows path.
-        if _RATIO_SCALE.fullmatch(word, user.start()):
-            return word
+        # Once an outer URI introduced userinfo, its login/password cannot
+        # become an ordinary mail label, Windows drive, nested scheme or ratio.
+        if not userinfo:
+            if name.lower() in {"mailto", "email", "e-mail"}:
+                continue
+            if len(name) == 1 and name.isalpha() and word.startswith("/", password_start):
+                continue  # C:/Users/a@host is a Windows path.
+            if _RATIO_SCALE.fullmatch(word, user.start()):
+                return word
         if (word[max(0, user.start() - 3):user.start()] == "://"
                 and re.match(r"\d{1,5}/", word[password_start:at])):
             return word  # A URL host:port/path@example.com, not userinfo.

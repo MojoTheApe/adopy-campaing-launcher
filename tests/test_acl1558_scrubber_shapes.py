@@ -122,6 +122,30 @@ def test_proxy_credentials_are_hidden_at_every_shared_export_boundary(raw):
         assert "<user>:<hidden>@" in repr(out), out
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("http://email:syntheticSecret@localhost", "http://<user>:<hidden>@localhost"),
+    ("socks5://mailto:syntheticSecret@localhost:1080", "socks5://<user>:<hidden>@localhost:1080"),
+    ("http://e-mail:syntheticSecret@proxy.example.net:8080", "http://<user>:<hidden>@proxy.example.net:8080"),
+    ("http://16:987654321@2x", "http://<user>:<hidden>@2x"),
+    ("socks5://proxyuser://syntheticSecret@localhost", "socks5://<user>:<hidden>@localhost"),
+    ("socks5://u:/syntheticSecret@localhost", "socks5://<user>:<hidden>@localhost"),
+    ("proxy=HTTPS://EMAIL:syntheticSecret@localhost", "proxy=HTTPS://<user>:<hidden>@localhost"),
+    ("http://16:9@2x", "http://<user>:<hidden>@2x"),
+])
+def test_explicit_proxy_authority_is_not_exempted_as_ordinary_text(raw, expected):
+    """Label/path/ratio exceptions cannot override explicit proxy userinfo."""
+    sentry = acl_sentry._before_send({"contexts": {"diag": {"why": raw}}}, {})
+    attachment = run_summary._attachment_row({"diag": {"why": raw}}, "synthetic-run")
+    outputs = {
+        "scrub": rt.scrub(raw),
+        "scrub_diag": rt.scrub_diag({"why": raw})["why"],
+        "sentry": sentry["contexts"]["diag"]["why"],
+        "attachment": attachment["diag"]["why"],
+        "graph": fb_tel.scrub_value({"why": raw})["why"],
+    }
+    assert outputs == {boundary: expected for boundary in outputs}
+
+
 # ── ключи словаря ──────────────────────────────────────────────────────────
 
 ID_KEY_DIAG = {

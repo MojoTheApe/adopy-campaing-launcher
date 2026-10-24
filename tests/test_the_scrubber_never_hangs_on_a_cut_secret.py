@@ -67,6 +67,14 @@ CASES = {
         'password="' + (BS + "a") * 50_000,
         BS + "a" + BS + "a" + BS + "a",
     ),
+    "explicit_proxy_with_long_double_slash_password": (
+        "socks5://u://" + "syntheticSecret" * 8_000 + "@localhost",
+        "syntheticSecret",
+    ),
+    "explicit_proxy_with_long_label_username": (
+        "http://email:" + "syntheticSecret" * 8_000 + "@localhost",
+        "syntheticSecret",
+    ),
 }
 
 _CHILD = r"""
