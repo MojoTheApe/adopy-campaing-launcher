@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -169,6 +170,8 @@ def retain_person_process(kernel, identity, user, helper, settings):
 
 
 def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
+    from tests.acl1309_windows_batch_logon import WindowsBatchPolicy, admit_owned_batch
+
     assert sys.platform == "win32", "the platform selector must run this acceptance on Windows"
     assert ctypes.windll.shell32.IsUserAnAdmin(), "controlled account creation requires an elevated test runner"
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -228,6 +231,8 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
     created, processes = [], []
     person_processes = {}
     start_receipts = {}
+    batch_admissions = {}
+    admission_cleanup = ExitStack()
     task_folder = "acl1309-" + uuid.uuid4().hex
     tasks_created = False
 
@@ -321,6 +326,8 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
             member = Member(os.environ["COMPUTERNAME"] + "\\" + user)
             result = net.NetLocalGroupAddMembers(None, users_group, 3, ctypes.byref(member), 1)
             assert result in (0, 1378), ("cannot assign standard Users membership", result)
+            policy = admission_cleanup.enter_context(WindowsBatchPolicy(user, password, created))
+            batch_admissions[user] = admission_cleanup.enter_context(admit_owned_batch(policy))
             # IPC only; the actual shared registry retains ProgramData inheritance.
             subprocess.run(["icacls.exe", str(ipc), "/grant", f"{user}:(OI)(CI)M"],
                            check=True, capture_output=True, timeout=20)
@@ -330,12 +337,14 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                              "user": os.environ["COMPUTERNAME"] + "\\" + user,
                              "password": password, "executable": sys.executable,
                              "arguments": arguments, "directory": str(helper.parent)})
+            start_receipts[user]["batch_admission"] = batch_admissions[user]
         prepared = [read(user, lambda v: v["phase"] == "prepared") for user in users]
         assert prepared[0]["sid"] != prepared[1]["sid"]
         assert prepared[0]["profile"] != prepared[1]["profile"]
         assert prepared[0]["config"] != prepared[1]["config"]
         assert prepared[0]["session"] == prepared[1]["session"]
         for user, result in zip(users, prepared):
+            assert result["sid"] == batch_admissions[user]["sid"]
             assert result["username"].casefold().endswith("\\" + user.casefold())
             process = retain_person_process(kernel, result, user, helper, settings)
             processes.append(process)
@@ -380,13 +389,16 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
             if tasks_created:
                 scheduled_tasks({"operation": "cleanup", "folder": task_folder, "names": users})
         finally:
-            foreign.shutdown()
-            foreign.server_close()
-            failures = [(user, net.NetUserDel(None, user)) for user in created]
-            shutil.rmtree(ipc)
-            if registry.parent.exists():
-                shutil.rmtree(registry.parent)
-            assert all(code == 0 for _, code in failures), failures
+            try:
+                admission_cleanup.close()
+            finally:
+                foreign.shutdown()
+                foreign.server_close()
+                failures = [(user, net.NetUserDel(None, user)) for user in created]
+                shutil.rmtree(ipc)
+                if registry.parent.exists():
+                    shutil.rmtree(registry.parent)
+                assert all(code == 0 for _, code in failures), failures
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
@@ -400,7 +412,9 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 "stable-port restart beside a live neighbor; actual child PID/port "
                 "state cleanup; unchanged installer presence guard; unrelated "
                 "listener preserved. Shared ProgramData registry used inherited "
-                "permissions. Access grants were confined to test IPC; own scheduled "
+                "permissions. Filesystem grants were confined to test IPC; missing "
+                "batch-logon admission was scoped to the two created accounts and "
+                "restored without removing any deny. Own scheduled "
                 "tasks used real Password logons at Limited run level. "
                 "Wizard and HTTP application bodies were synthetic; no live services.\n"
             )
