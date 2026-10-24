@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   if (window.aclAccountRefresh) return;
-  var listeners = [], last = null, timer = null, loading = null, inFlight = {}, failures = 0;
+  var listeners = [], last = null, timer = null, loading = null, inFlight = {}, failures = 0, startError = '';
   function json(url, body) {
     return fetch(url, {method: body ? 'POST' : 'GET', body: body, credentials: 'same-origin'}).then(function (r) {
       return r.json().then(function (j) { if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
@@ -27,8 +27,8 @@
   function accept(view) {
     last = view; failures = 0;
     var sweep = view.sweep, halt = view.halt;
-    announce(halt ? halt.reason : view.needs_api ? 'Account reads are off: enable the API backend to refresh. Saved lists remain available.' : sweep && sweep.done < sweep.total
-      ? 'Refreshing accounts ' + sweep.done + '/' + sweep.total : '', !!halt);
+    announce(halt ? halt.reason : view.needs_api ? 'Account reads are off: enable the API backend to refresh. Saved lists remain available.' : startError || (sweep && sweep.done < sweep.total
+      ? 'Refreshing accounts ' + sweep.done + '/' + sweep.total : ''), !!halt || !!startError);
     listeners.slice().forEach(function (fn) { fn(view); });
     if (view.running || (view.queued || []).length && (!halt || halt.until != null)) later();
   }
@@ -47,7 +47,7 @@
   function request(account, trigger) {
     if (inFlight[account]) return inFlight[account];
     var body = new FormData(); body.append('account', account); body.append('trigger', trigger);
-    inFlight[account] = json('/account-refresh/request', body).then(function () { return load(); }, function (e) {
+    inFlight[account] = json('/account-refresh/request', body).then(function () { startError = ''; return load(); }, function (e) {
       announce(String(e && e.message || 'Account refresh could not start.'), true);
     }).then(function () { delete inFlight[account]; });
     return inFlight[account];
@@ -63,8 +63,10 @@
         url.searchParams.delete('view_only'); history.replaceState(history.state, '', url.pathname + url.search + url.hash);
         return load();
       }
-      return json('/account-refresh/page-open', new FormData()).catch(function (e) {
-        announce(String(e && e.message || 'Scheduled account refresh could not start.'), true);
+      return json('/account-refresh/page-open', new FormData()).then(function () { startError = ''; }).catch(function (e) {
+        // Локальный GET состояния не доказывает, что общий отказ уже устранён.
+        startError = String(e && e.message || 'Scheduled account refresh could not start.') + ' Reload or expand an account after fixing it.';
+        announce(startError, true);
       }).then(load);
     }
   };

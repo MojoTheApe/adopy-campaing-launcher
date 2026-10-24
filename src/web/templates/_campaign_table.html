@@ -841,7 +841,7 @@
     });
     root.style.setProperty('--hc-pin-w', pin + 'px');
     var narrowed = S.q || S.delivery !== 'all';
-    if (el('foot')) el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span>' +
+    if (el('foot')) el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Metrics use BI for the selected period; the saved campaign list is independent of dates.</span>' +
       '<span>Status shows the configured on/off from Meta; Effective delivery is separate. The switch changes only after Meta confirms it.</span>';
     var n = Object.keys(S.selected).length;
     el('selcount').textContent = n ? n + ' selected' : '';

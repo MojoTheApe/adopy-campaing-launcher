@@ -74,8 +74,8 @@ def is_fresh(account: str, *, now: float | None = None) -> bool:
     snap = campaign_inventory.get_snapshot(account)
     if snap is None or snap.state not in ("ok", "partial", "empty"):
         return False
-    # Обрыв на стопе Meta или упавший шаг — снимок неполный, свежим не считается.
-    if snap.stop or any(v == "failed" for v in snap.steps.values()):
+    # Неполное чтение после сбоя не считается удачей даже при сохранённых кампаниях.
+    if classify(snap) != "ok":
         return False
     done = _parse_utc(snap.finished_at_utc)
     if done is None:
@@ -131,19 +131,13 @@ def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
     return None
 
 
-#: Остановки одного аккаунта: строка с причиной и Retry, очередь идёт дальше.
-_ACCOUNT_STOPS = frozenset({"logged_out", "page_unresponsive"})
-
-
 def classify(snap: Snapshot) -> Literal["ok", "account", "global"]:
-    # Стоп бывает и у «partial»-снимка без ошибки: клиент оборвал чтение на adsets/ads.
-    if snap.state != "failed" and not snap.stop:
-        return "ok"
     if _global_stop(snap):
         return "global"
-    # Частичный снимок, оборванный выходом из аккаунта или зависшей страницей, - не «ok»:
-    # строка получает причину и Retry, а не ложный «list 14:20».
-    return "account" if snap.state == "failed" or (snap.stop or "") in _ACCOUNT_STOPS else "ok"
+    # Любой иной обрыв (включая PageFailed и обычную ошибку транспорта) оставляет
+    # прочитанное доступным, но строка показывает причину и Retry. Обычное
+    # ограничение числа страниц без упавших шагов остаётся пригодным partial.
+    return "ok" if campaign_inventory.read_succeeded(snap) else "account"
 
 
 def _halt_kind(snap: Snapshot) -> str:

@@ -241,6 +241,31 @@ def test_global_checkpoint_has_one_banner_and_only_explicit_same_account_retry_r
     assert banner.is_hidden() and site.errors == []
 
 
+@pytest.mark.parametrize('width', [1280, 390])
+def test_initial_mlx_refusal_survives_local_status_and_recovers_only_on_action(dashboard, monkeypatch, width):
+    site, page = dashboard
+    page.set_viewport_size({'width': width, 'height': 900})
+    site.save('Acc', age=7200); site.save('Fresh', age=7200)
+    monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: site.web.JSONResponse(
+        {'ok': False, 'code': 'mlx_session_lost', 'error': 'Multilogin session lost. Reopen Multilogin.'}, status_code=409))
+    goto(page, 'http://acl.test/'); wait_ready(page)
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.readsAvailable !== null")
+    page.evaluate('window.aclAccountRefresh.load()')
+    banner = page.locator('#account-refresh-status')
+    assert banner.is_visible() and 'Multilogin' in banner.inner_text()
+    assert banner.get_attribute('role') == 'alert'
+    assert site.reads == [] and site.errors == []
+    assert site.requests.count(('POST', '/account-refresh/page-open')) == 1
+    import os
+    if os.environ.get('ACL2063_FIX_SHOTS'):
+        page.screenshot(path=str(Path(os.environ['ACL2063_FIX_SHOTS']) / f'mlx-refusal-{width}.png'), full_page=True)
+    monkeypatch.setattr(site.web, '_mlx_batch_refusal', lambda *a: None)
+    open_acc(page, 'Acc')
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    assert site.reads == [('Acc', 'attention')] and banner.is_hidden()
+    assert site.requests.count(('POST', '/account-refresh/page-open')) == 1
+
+
 def test_hand_edit_pause_refuses_write_shows_message_and_refreshes_account(dashboard, monkeypatch, tmp_path):
     from types import SimpleNamespace
     from src.web import campaign_commands as cc

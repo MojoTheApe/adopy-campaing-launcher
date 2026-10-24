@@ -147,6 +147,12 @@ def _snapshot_from(raw: dict) -> Snapshot:
     return Snapshot(**{k: v for k, v in (raw or {}).items() if k in known})
 
 
+def read_succeeded(snap: Snapshot) -> bool:
+    """Чтение удалось: обрезка по лимиту допустима, ошибка/остановка — нет."""
+    return (snap.state in {"ok", "partial", "empty"} and not snap.stop and not snap.error
+            and not snap.error_code and "failed" not in snap.steps.values())
+
+
 # ───────────────────────── разбор ответов Graph ─────────────────────────
 
 def _to_float(value: Any) -> float | None:
@@ -605,8 +611,7 @@ def put_result(done: Snapshot) -> None:
         data = _load_all()
         rec = data.get(done.account) if isinstance(data.get(done.account), dict) else {}
         old_stop, old_at = _saved_stop(rec)
-        clean_success = (done.state in {"ok", "partial", "empty"} and not done.stop
-                         and "failed" not in done.steps.values())
+        clean_success = read_succeeded(done)
         if clean_success:
             active_stop = None
         elif done.stop and not (old_stop == "checkpoint" and done.stop != "checkpoint"):
@@ -820,13 +825,13 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
                 notes = sess.notes
         finalize(snap)
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
+        snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
             # Список кампаний уже прочитан: остаток — «неполно», а не «ничего».
-            snap.problems.append(_api._failure(account, exc)[0])  # noqa: SLF001
+            snap.problems.append(snap.error)
             finalize(snap)
         else:
             snap.state = "failed"
-            snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if isinstance(exc, GraphStop):
             stop = exc.kind
             _api._report_stop(exc, account)  # noqa: SLF001
@@ -834,7 +839,7 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
         snap.stop = snap.stop or stop
     if trigger:
         notes = {**notes, "trigger": trigger}
-    _api._telemetry("campaigns", account, snap.state != "failed", time.monotonic() - started, notes,  # noqa: SLF001
+    _api._telemetry("campaigns", account, read_succeeded(snap), time.monotonic() - started, notes,  # noqa: SLF001
                     error=snap.error, stop=stop)
     return snap
 
@@ -873,11 +878,10 @@ def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
                 _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
             finalize(snap)
     except Exception as exc:  # noqa: BLE001 — исход команды не меняется
+        snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
-            snap.problems.append(_api._failure(account, exc)[0])  # noqa: SLF001
+            snap.problems.append(snap.error)
             finalize(snap)
-        else:
-            snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if isinstance(exc, GraphStop):
             stop = exc.kind
             _api._report_stop(exc, account)  # noqa: SLF001
@@ -888,7 +892,7 @@ def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     snap.took_s = round(time.monotonic() - started, 1)
     put_result(snap)
     notes = {**getattr(sess, "notes", {}), "trigger": trigger, "calls": snap.calls, "same_session": True}
-    _api._telemetry("campaigns", account, snap.state != "failed", snap.took_s, notes,  # noqa: SLF001
+    _api._telemetry("campaigns", account, read_succeeded(snap), snap.took_s, notes,  # noqa: SLF001
                     error=snap.error, stop=snap.stop)
     return snap
 
