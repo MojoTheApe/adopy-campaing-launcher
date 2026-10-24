@@ -7,7 +7,7 @@
   {% for row in amap.saved_source_check.rows %}
   <div data-source-account="{{ row.account | e }}">
     <p><b>{{ row.account }}</b>{% if row.source_alias and row.source_alias != row.account %} · source alias: {{ row.source_alias }}{% endif %}</p>
-    <p>{% if amap.saved_source_check.all_dates %}All dates{% else %}{{ amap.saved_source_check.date_from }}{% if amap.saved_source_check.date_to != amap.saved_source_check.date_from %} → {{ amap.saved_source_check.date_to }}{% endif %}{% endif %}</p>
+    <p>{% if amap.saved_source_check.all_dates %}All dates{% elif not amap.saved_source_check.date_from %}Through {{ amap.saved_source_check.date_to }}{% elif not amap.saved_source_check.date_to %}From {{ amap.saved_source_check.date_from }} onward{% else %}{{ amap.saved_source_check.date_from }}{% if amap.saved_source_check.date_to != amap.saved_source_check.date_from %} → {{ amap.saved_source_check.date_to }}{% endif %}{% endif %}</p>
     <dl>
       <dt>{{ row.source.source }}</dt>
       <dd>{{ row.source_amount }} · time zone: {{ row.source.timezone or 'unknown' }} · day boundary: {{ day_labels.get(row.source.day_boundary, row.source.day_boundary or 'unknown') }}</dd>

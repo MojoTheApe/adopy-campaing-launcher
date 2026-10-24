@@ -2777,7 +2777,7 @@ def api_source_vs_account(date_from: str = "", date_to: str = "") -> JSONRespons
                                  bi_compare.period_rows(df, date_from, date_to))
     rows = bi_compare.compare_spend(
         bi_compare.source_spend_by_account(df, date_from, date_to),
-        _live_spend(date_from, date_to),
+        _live_spend(date_from, date_to) if date_from and date_to else {},
         source_context=bi_compare.source_context_by_account(df, date_from, date_to),
     )
     return JSONResponse({"ok": True, "date_from": date_from, "date_to": date_to,

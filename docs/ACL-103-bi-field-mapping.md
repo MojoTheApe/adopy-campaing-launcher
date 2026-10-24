@@ -98,6 +98,11 @@ The gap (account minus source) and `differs` above0.01 exist only for known matc
 timezone and day basis. Missing readings, unknown metadata and confirmed currency/day mismatches
 have distinct `comparison_state` values and an empty gap. Both original measured figures remain
 available; unknown is not reported as a discrepancy or an artificial zero.
+Each supplied date bound filters independently: an open end stays open in the figures
+and label. An account figure is comparable only for the exact closed selected period;
+a saved single-day reading is not reused for an onward period or Maximum. The API joins
+different labels only through the existing explicit account-name rules and only when
+the match is unique. Ambiguous identities retain the original figures without a gap.
 
 ## Discovery facts and retained history
 

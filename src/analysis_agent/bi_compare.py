@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
+from src.analysis_agent.account_names import account_key
+
 SOURCE_COLUMN = "_stats_source"
 METADATA_COLUMNS = {
     "currency_code": "_stats_currency_code",
@@ -74,10 +76,15 @@ def annotate_source(df: pd.DataFrame, source: str) -> pd.DataFrame:
 
 
 def period_rows(df: pd.DataFrame, date_from: str = "", date_to: str = "") -> pd.DataFrame:
-    if df is None or df.empty or not date_from:
+    if df is None or df.empty or not (date_from or date_to):
         return df
     dates = pd.to_datetime(df["Date"], errors="coerce")
-    return df[(dates >= pd.Timestamp(date_from)) & (dates <= pd.Timestamp(date_to or date_from))]
+    selected = dates.notna()
+    if date_from:
+        selected &= dates >= pd.Timestamp(date_from)
+    if date_to:
+        selected &= dates <= pd.Timestamp(date_to)
+    return df[selected]
 
 
 def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
@@ -137,22 +144,43 @@ def compare_spend(
     source_context: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> list[Dict[str, Any]]:
     """Оба числа отдельно; неизвестные единицы/границы не становятся разницей."""
+    # Only the established naming rules may join different labels. Multiple
+    # records under one identity stay visible; choosing one would invent a gap.
+    sources, readings = {}, {}
+    for account in source_by_account:
+        sources.setdefault(account_key(account), []).append(account)
+    for account in account_readings:
+        readings.setdefault(account_key(account), []).append(account)
+    pairs = []
+    for key in sorted(set(sources) | set(readings)):
+        source_names, reading_names = sources.get(key, []), readings.get(key, [])
+        ambiguous = len(source_names) > 1 or len(reading_names) > 1
+        if not ambiguous:
+            pairs.append((next(iter(source_names), ""), next(iter(reading_names), ""), False))
+        else:
+            pairs.extend((name if name in source_by_account else "",
+                          name if name in account_readings else "", True)
+                         for name in sorted(set(source_names) | set(reading_names)))
+
     rows = []
-    for account in sorted(set(source_by_account) | set(account_readings)):
-        reading = account_readings.get(account) or {}
-        info = (source_context or {}).get(account) or provenance()
+    for source_account, reading_account, ambiguous in sorted(pairs, key=lambda p: p[0] or p[1]):
+        account = source_account or reading_account
+        reading = account_readings.get(reading_account) or {}
+        info = (source_context or {}).get(source_account) or provenance()
         unit = currency_code(source_currency) if source_currency is not None else info["currency_code"]
         has_reading = reading.get("state") == "ok" and reading.get("spend") is not None
         account_spend = round(float(reading["spend"]), 2) if has_reading else None
         account_currency = (currency_code(reading.get("currency_code")) or
                             currency_code(reading.get("currency"))) if has_reading else ""
-        source_spend = source_by_account.get(account)
+        source_spend = source_by_account.get(source_account)
         mismatch = bool(has_reading and unit and account_currency and unit != account_currency)
         source_zone, source_boundary = info.get("timezone", ""), info.get("day_boundary", "")
         account_zone = timezone_name(reading.get("timezone"))
         account_boundary = text(reading.get("day_boundary"))
         state = "comparable"
-        if source_spend is None:
+        if ambiguous:
+            state = "ambiguous_account_identity"
+        elif source_spend is None:
             state = "missing_source"
         elif not has_reading:
             state = "missing_account"
@@ -166,7 +194,8 @@ def compare_spend(
             state = "day_boundary_mismatch"
         gap = round(account_spend - source_spend, 2) if state == "comparable" else None
         rows.append({
-            "account": account, "source_spend": source_spend, "source_currency": unit,
+            "account": account, "reading_account": reading_account,
+            "source_spend": source_spend, "source_currency": unit,
             "source": info, "account_spend": account_spend, "account_currency": account_currency,
             "account_timezone": account_zone, "account_day_boundary": account_boundary,
             "currency_mismatch": mismatch, "comparison_state": state,

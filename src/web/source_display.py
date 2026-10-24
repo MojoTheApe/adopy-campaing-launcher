@@ -42,8 +42,8 @@ def saved_comparison(frame, countries, readings, date_from, date_to, span=""):
         stored = [v for key, v in readings.items() if key.strip().casefold() == label.casefold()]
         reading = stored[0] if len(stored) == 1 else {}
         # A latest-read fallback belongs to its own dates, never this comparison.
-        if (span == "all" or not date_from or reading.get("date_from") != date_from
-                or reading.get("date_to") != (date_to or date_from)):
+        if (span == "all" or not date_from or not date_to
+                or reading.get("date_from") != date_from or reading.get("date_to") != date_to):
             reading = {}
         totals = {} if source_rows.empty else {label: round(float(source_rows["$ Spend"].sum()), 2)}
         row = bi_compare.compare_spend(totals, {label: reading}, source_context={label: source})[0]
@@ -55,6 +55,7 @@ def saved_comparison(frame, countries, readings, date_from, date_to, span=""):
             "currency_mismatch": "Currencies differ; no difference calculated",
             "unknown_day_boundary": "Day boundary is unknown; no difference calculated",
             "day_boundary_mismatch": "Day boundaries differ; no difference calculated",
+            "ambiguous_account_identity": "Account identity is ambiguous; no difference calculated",
         }[row["comparison_state"]]
         if ambiguous:
             reason = "Source alias is ambiguous; no difference calculated"
@@ -66,7 +67,7 @@ def saved_comparison(frame, countries, readings, date_from, date_to, span=""):
             account_at=reading.get("finished_at", "") if row["account_spend"] is not None else "",
         )
         rows.append(row)
-    return {"rows": rows, "date_from": date_from, "date_to": date_to or date_from,
+    return {"rows": rows, "date_from": date_from, "date_to": date_to,
             "all_dates": span == "all"}
 
 
