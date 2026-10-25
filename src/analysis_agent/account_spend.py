@@ -792,6 +792,27 @@ STARTING_NOTE = "Opening the {account} profile with automation"
 CLOSE_GRACE_S = 30.0
 
 
+#: ACL-2091: проблемы аккаунта, которые решает только человек в окне профиля
+#: (виды остановок Graph — `GraphStop.kind`). Профиль, поднятый чтением, при них
+#: не закрывается: окно остаётся открытым, чтобы войти / пройти checkpoint сразу.
+KEEP_OPEN_PROBLEMS = frozenset({"logged_out", "checkpoint", "page_unresponsive", "policy_block"})
+
+
+def keep_open_problem(reason: Any) -> str:
+    """Вид проблемы из `KEEP_OPEN_PROBLEMS` или "" (ACL-2091).
+
+    `reason` — остановка Graph, отказ с `.code` или код ошибки строкой.
+    """
+    if reason is None:
+        return ""
+    kind = reason if isinstance(reason, str) else (
+        getattr(type(reason), "kind", "") or getattr(reason, "code", "") or "")
+    kind = str(kind or "")
+    if kind == LOGGED_OUT_CODE:
+        kind = "logged_out"
+    return kind if kind in KEEP_OPEN_PROBLEMS else ""
+
+
 def logged_out_message(account: str) -> str:
     return LOGGED_OUT_MESSAGE.format(account=str(account or "") or "profile")
 
@@ -1045,14 +1066,42 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
         log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
+def _keep_for_problem(opened: _ReadOpen, problem: str) -> None:
+    """ACL-2091: проблема аккаунта — окно, поднятое чтением, остаётся открытым.
+
+    Место в очереди держится как окно «на проверку» (`review`, как у Publish с
+    проблемой, ACL-1603): очередь видит открытый Mimic, простой его не закрывает.
+    """
+    if opened.slot_id:
+        from src.web.profile_slots import KEPT_REVIEW
+
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind=KEPT_REVIEW)
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
+    log.info("%s: %s — the profile the read started stays open", opened.account, problem)
+    _record("spend_profile_kept_for_problem", True, 0.0,
+            {"account": opened.account, "problem": problem,
+             "held_s": round(time.monotonic() - opened.started_mono, 1)})
+    opened.started = False
+
+
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
-                    grace_s: float | None = None, convenience: bool = False) -> None:
+                    grace_s: float | None = None, convenience: bool = False,
+                    problem: Any = None) -> None:
     """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
 
     `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
     человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
+
+    `problem` (ACL-2091) — чем кончилось чтение (остановка или код ошибки). Разлогинен,
+    checkpoint, зависшая вкладка, блок 368 — профиль не закрываем (`_keep_for_problem`).
     """
     if not opened.started:
+        return
+    kind = keep_open_problem(problem)
+    if kind:
+        _keep_for_problem(opened, kind)
         return
     if keep_for_next and convenience and opened.slot_id:
         # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
@@ -1641,7 +1690,8 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
                 pass
         # ACL-1580: запущенное чтением — закрыть (и при отказе). Удачное
         # чтение ждёт `CLOSE_GRACE_S`: за ним может прийти чтение стран.
-        _finish_started(held, keep_for_next=out.state == "ok")
+        # ACL-2091: при проблеме аккаунта (разлогинен) окно остаётся открытым.
+        _finish_started(held, keep_for_next=out.state == "ok", problem=out.error_code)
 
 
 def _logged_out_reading(out: "SpendReading", account: str) -> "SpendReading":
