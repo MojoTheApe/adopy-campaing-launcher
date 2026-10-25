@@ -46,7 +46,7 @@ def merge_source(worktree, head):
     try:
         run("-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", head)
     except subprocess.CalledProcessError as error:
-        conflict = False
+        conflict = None  # Unknown until the owned unmerged-index probe succeeds.
         cleanup = "No abort attempted; unfinished merge state is unknown."
         try:
             marker = subprocess.run(["git", "-C", str(worktree), "rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
@@ -58,10 +58,12 @@ def merge_source(worktree, head):
                 try:
                     conflict = bool(run("ls-files", "--unmerged", "-z").stdout)
                     cleanup = ""
-                except subprocess.CalledProcessError as probe:
-                    cleanup = "Unmerged-index observation failed: " + diagnostic(probe) + ". "
-                abort_allowed = True
-                if not conflict:
+                except (OSError, subprocess.SubprocessError) as probe:
+                    detail = diagnostic(probe) if isinstance(probe, subprocess.CalledProcessError) else repr(probe)
+                    cleanup = ("Unmerged-index observation failed; no index refresh or abort attempted; "
+                               "cleanup is incomplete: " + detail + ". ")
+                abort_allowed = conflict is not None
+                if conflict is False:
                     # A refusing hook may change only cached stat metadata.
                     # Refresh genuine matching content; never discard edits or
                     # proceed after a failed/unknown refresh. Unmerged entries

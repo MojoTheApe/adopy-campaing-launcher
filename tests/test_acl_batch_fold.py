@@ -91,22 +91,26 @@ def test_no_fragments_produces_no_empty_commit(fixture):
     assert 'Changelog fold:' not in result['body']
 
 
-@pytest.mark.parametrize('edited', [False, True], ids=['stat-only', 'real-content'])
-def test_owned_merge_cleanup_refreshes_stat_but_preserves_real_edits(fixture, monkeypatch, edited):
+@pytest.mark.parametrize('case', ['stat-only', 'real-content', 'unmerged-probe'])
+def test_owned_merge_cleanup_refreshes_stat_but_preserves_real_edits(fixture, monkeypatch, case):
     root, _, section, _, assemble = fixture
     hooks = Path(acl_batch.git(root, 'rev-parse', '--git-path', 'hooks'))
     if not hooks.is_absolute():
         hooks = root / hooks
-    mutation = ("printf 'concurrent fixture edit\\n' > worker1.txt" if edited
+    mutation = ("printf 'concurrent fixture edit\\n' > worker1.txt" if case == 'real-content'
                 else 'touch -t 200101010000 worker1.txt')
     hook = hooks / 'pre-merge-commit'
     hook.write_text('#!/bin/sh\n' + mutation + "\nprintf 'primary cleanup fixture refusal\\n' >&2\nexit 73\n")
     hook.chmod(0o755)
-    actual_run, aborts = subprocess.run, []
+    actual_run, aborts, refreshes = subprocess.run, [], []
 
     def observe(argv, **kwargs):
         if argv[3:] == ['merge', '--abort']:
             aborts.append(argv)
+        if argv[3:] == ['update-index', '--refresh']:
+            refreshes.append(argv)
+        if case == 'unmerged-probe' and argv[3:] == ['ls-files', '--unmerged', '-z']:
+            raise subprocess.CalledProcessError(128, argv, output='', stderr='unmerged observation unavailable\n')
         return actual_run(argv, **kwargs)
 
     monkeypatch.setattr(subprocess, 'run', observe)
@@ -118,7 +122,13 @@ def test_owned_merge_cleanup_refreshes_stat_but_preserves_real_edits(fixture, mo
     marker = Path(acl_batch.git(work, 'rev-parse', '--git-path', 'MERGE_HEAD'))
     if not marker.is_absolute():
         marker = work / marker
-    if edited:
+    if case == 'unmerged-probe':
+        assert (work / 'worker1.txt').read_text() == 'independent work 1'
+        assert marker.read_text().strip() == section['integration']['members'][0]['head_sha']
+        assert not aborts and len(refreshes) == 1  # Only the successful pre-merge refresh.
+        assert 'unmerged observation unavailable' in str(caught.value)
+        assert 'cleanup is incomplete' in str(caught.value)
+    elif case == 'real-content':
         assert (work / 'worker1.txt').read_text() == 'concurrent fixture edit\n'
         assert marker.read_text().strip() == section['integration']['members'][0]['head_sha']
         assert not aborts and 'abort not attempted' in str(caught.value)
