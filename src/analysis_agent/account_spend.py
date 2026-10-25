@@ -237,6 +237,7 @@ class SpendReading:
         # details» — без id кабинета и адресов. Чистим здесь, на выходе, чтобы
         # это касалось и записей, сохранённых до правки.
         out["objects_error"] = scrub_tree_error(self.objects_error)
+        out["next_step"] = _next_step(self.status, self.status_text)  # ACL-123
         if tree_not_read(self):
             out["objects_problem"] = tree_problem(self.objects_error)
         return out
@@ -471,6 +472,12 @@ def _put(reading: SpendReading) -> None:
         _UNSAVED.pop(key, None)
 
 
+def _next_step(status: str, status_text: str) -> str:
+    from src.analysis_agent.account_next_step import next_step
+
+    return next_step(status, status_text)
+
+
 def get_status(account: str) -> dict[str, str]:
     """Последнее известное состояние кабинета — или пусто, если не спрашивали.
 
@@ -499,6 +506,7 @@ def get_status(account: str) -> dict[str, str]:
         "shot_id": "",
         "shot_at": "",
     }
+    out["next_step"] = _next_step(out["status"], out["status_text"])
     # Кнопка «Copy screenshot» — только у снимка, который ещё лежит на диске.
     shot_id = str(raw.get("shot_id") or "")
     if shot_id and out["status"] != "clear" and status_shot_path(shot_id) is not None:

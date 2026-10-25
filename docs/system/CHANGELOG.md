@@ -1,5 +1,21 @@
 # System history
 
+## ACL-1273 — Each manual problem report is its own Sentry issue — 2026-10-23
+
+`report_problem()` used a constant fingerprint, so every "Report a problem" from every
+machine landed in one Sentry issue titled after the first test message, and Sentry's
+new-issue alert never fired again. Each report now carries a per-call id (`r` + uuid4
+hex, also sent as the `report_id` tag) in its fingerprint, so two reports — even with the
+same text — are two issues. The `r` prefix keeps the scrubber from turning an all-digit id
+into `<digits>`. Automatic step failures keep grouping by step and reason. The dashboard
+form, `/report-problem` route and scrubber are unchanged. Whether an alert rule and team
+membership exist in Sentry remains an owner-side check; no live Sentry verification yet.
+
+## ACL-123 — Account Disabled says what a person must do — 2026-10-19
+
+`src/analysis_agent/account_next_step.py` maps the Meta `disable_reason` (read from the status text of the Graph read) to one plain-English next step shown under the status word on the account row, also after a live Read. Page reads carry no reason, so they say the reason was not reported; an unrecognised code says the cause is unknown. Nothing is diagnosed beyond what Meta reported and no automatic recovery is promised.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/29).
+
 ## ACL-2167 — Preserve real Windows stress-writer diagnostics — 2026-10-25
 
 Retain bounded per-writer identity, last progress and an actual delayed child
