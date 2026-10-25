@@ -1,7 +1,7 @@
 """The one metric set every attribution table shows (ACL-1652).
 
 Spend, Leads, FTDs, CPL, CPA, CR, in this order, on every level of the
-dashboard. The Home account table adds Account spend next to Spend.
+dashboard. The account table uses the same BI numbers; its campaign-list status is not a metric.
 
 Everything that has to agree between tables lives here: the header names, the
 three ratio formulas, how a zero divisor is shown and how money and CR are
@@ -19,8 +19,8 @@ from src.analysis_agent.money_format import fmt_usd
 
 #: Заголовки: имена, порядок и регистр — решение владельца 2026-10-06.
 METRIC_HEADERS = ("Spend", "Leads", "FTDs", "CPL", "CPA", "CR")
-#: Таблица аккаунтов на Home и в Manage: Account spend стоит рядом со Spend.
-HOME_ACCOUNT_HEADERS = ("Spend", "Account spend", "Leads", "FTDs", "CPL", "CPA", "CR")
+#: ACL-2063: Meta spend removed; all account metrics come from the workbook.
+HOME_ACCOUNT_HEADERS = METRIC_HEADERS
 
 DASH = "—"
 

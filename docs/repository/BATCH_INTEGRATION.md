@@ -242,6 +242,54 @@ affected tasks to their authors and review them again. Review also inspects the
 merge commits and resulting tree; these attestations do not authenticate GitHub
 users or replace branch protection.
 
+### Verified terminal changelog fold
+
+The published `batch_changelog_fold:[1]` capability permits one narrowly verified
+generated commit above those source merges. Source publication alone does not
+upgrade a consumer's immutable engine/helper pin. The maintained engine passes
+the configured project ID prefix to the same exported
+`composition(..., prefix=PREFIX)` predicate used by local assembly/rebuild.
+Omitting that argument retains the original strict merge-only predicate. No
+new policy/state schema, migration or capacity setting is introduced.
+
+The sole one-parent terminal commit has exactly one message line
+`Tracker changelog fold: 1`. The marker only requests verification. Its parent
+must contain the exact frozen main and every approved source head, with only
+ordinary two-parent merge nodes between those stops. No other one-parent node
+or stacked fold qualifies, including inside that graph. The existing64-node
+bound includes the terminal fold.
+
+The verifier reads complete immutable Git trees and authenticated bounded UTF-8
+blobs, never a PR's executable script. Its fixed conventional operation consumes
+all immediate `docs/system/changelog.d/*.md` task fragments, except a
+case-insensitive README.md. Filenames are `PREFIX-N.md` or
+`PREFIX-N-suffix.md`; each first line is `## PREFIX-N — Title — YYYY-MM-DD`,
+with matching numbers. Strip one UTF-8 BOM, normalize universal newlines and trim
+only surrounding newlines as the producer does. Sort by date then numeric ID,
+descending, preserving filename order for ties. Prepend complete entry texts
+absent from the previous history, separated by blank lines, after the exact
+`# System history` header in `docs/system/CHANGELOG.md`. When no entry is new,
+preserve the original changelog bytes. Delete every validated fragment; add no
+files and change no other entries, modes or content. Affected files must be
+normal100644 blobs. Limit each blob to1MiB, cumulative input to8MiB, fragments
+to512 and each complete tree to20000 file entries. Missing/truncated trees,
+malformed or inconsistent content and exceeded bounds fail closed.
+
+Run the project's reviewed producer only after assembling all source merges.
+Keep its real separate commit before opening the combined PR, with the marker
+above. The independent final report must contain a full exact line
+`Changelog fold: FULL_COMMIT_SHA`; recording and later admission both check it.
+Review covers its full final tree, every source requirement and this generated
+operation, with all applicable combined checks. The fold grants no permission
+to repair a source conflict or edit application behavior on the batch branch.
+
+For a returned-source rebuild, preserve the old candidate/evidence, verify its
+composition, assemble the newly approved tips from the new frozen baseline and
+generate the fold once on that complete new assembly. Do not cherry-pick, amend,
+hide or stack the previous fold. A no-fragment assembly needs no fold commit.
+Actual source approvals, ownership, frozen membership and mandatory delivery
+remain unchanged.
+
 Create the integration PR into stage (or main when Stage is disabled) with all member IDs in the title, exactly one
 `Tracker issues: ID, ID` line, and one `Tracker batch: BATCH_ID` line. Then:
 

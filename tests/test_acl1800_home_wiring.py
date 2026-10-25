@@ -81,7 +81,7 @@ def test_inventory_rows_carry_the_bid_fields_the_editor_needs():
 
 def test_template_loads_the_helper_first_and_keeps_one_post_path():
     assert TEMPLATE.index('<script src="/static/acm_commands.js"></script>') < TEMPLATE.index("(function () {")
-    assert re.findall(r"fetch\('([^']+)'", TEMPLATE) == ["/warm/state?", "/warm/open", "/warm/job/", "/campaign-inventory/read"]   # команды ходят через помощник; Meta читает только первый
+    assert re.findall(r"fetch\('([^']+)'", TEMPLATE) == ["/warm/state?", "/warm/open", "/warm/job/"]   # команды ходят через помощник; Meta читает только первый
     assert "data-batch" in TEMPLATE and "Duplicate here" in TEMPLATE and "REASON_COPY" in TEMPLATE
     assert "setInterval" not in TEMPLATE
 
@@ -312,7 +312,7 @@ def test_cancel_sends_neither_execute_nor_a_status_poll(page_out):
 
 
 def test_poll_failures_after_execute_say_outcome_unknown_not_not_sent(page_out):
-    unknown = "Outcome unknown — check the history and Read campaigns"
+    unknown = "Outcome unknown — check the history and use the account Retry"
     for name in ("poll_network", "poll_timeout", "poll_http", "exec_network"):
         f = page_out["fail"][name]
         assert f.get("kind") == "unknown" and f["message"] == unknown and f["applied"] == 0, (name, f)
@@ -332,7 +332,7 @@ def test_batch_leaves_busy_rows_out(page_out):
 def test_a_row_changes_only_from_a_confirmed_readback(page_out):
     st = page_out["settle"]
     assert st["failed"] == {"status": "off", "note": "Failed — previous state kept: Meta refused"}
-    assert st["unknown"] == {"status": "off", "note": "Outcome unknown — press Read campaigns to check"}
+    assert st["unknown"] == {"status": "off", "note": "Outcome unknown — use the account Retry to check"}
     assert st["saved"] == {"status": "on", "note": "Confirmed"}
     assert st["cancelled"] == {"status": "off", "note": None}
 

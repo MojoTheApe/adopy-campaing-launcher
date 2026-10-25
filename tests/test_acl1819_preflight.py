@@ -147,11 +147,12 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "cta_ok": (_with(), "cta_allowed", "ok", []),
     "cta_wrong": (_with(ads=_ad(0, cta="SHOP_NOW")), "cta_allowed", "error", [1]),
     # ACL-1767: список кнопок по месту конверсии, устройства и старт набора.
-    "cta_new_website_ok": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "ok", []),
+    "cta_new_website_ok": (_with(ads=_ad(0, cta="CONTACT_US")), "cta_allowed", "ok", []),
+    "cta_book_now_not_for_website_leads": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "error", [1]),
     "cta_order_now_not_for_forms": (_with(destination="instant_form",
                                           ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]]),
                                     "cta_allowed", "error", [1, 2]),
-    "cta_order_now_on_website_ok": (_with(ads=_ad(1, cta="ORDER_NOW")), "cta_allowed", "ok", []),
+    "devices_version_not_listed": (_with(os="iOS", os_min="99", device="mobile"), "devices_consistent", "error", []),
     "devices_ok": (_with(), "devices_consistent", "ok", []),
     "devices_ios_version_ok": (_with(os="iOS", os_min="14.0", device="mobile"), "devices_consistent", "ok", []),
     "devices_ios_desktop": (_with(os="iOS", device="desktop"), "devices_consistent", "error", []),
@@ -375,7 +376,7 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     out = _audit(AuditMeta(), d)
     assert out.error == "" and not pf.blocks(out.audit)
     assert {v["rule"]: v["status"] for v in out.audit} == {
-        "account_active": "ok", "page_ok": "ok", "pixel_ok": "ok", "country_resolves": "ok",
+        "account_active": "ok", "page_ok": "ok", "instagram_identity": "ok", "pixel_ok": "ok", "country_resolves": "ok",
         "language_resolves": "ok", "interests_resolve": "ok", "interests_confirmed": "ok", "media_readable": "ok", "media_limits": "ok",
         "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
@@ -388,11 +389,33 @@ def test_page_not_on_the_account(tmp_path):
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
-def test_page_not_chosen_and_ambiguous(tmp_path):
+def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
-    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
+
+
+def test_page_not_chosen_takes_the_first_page(tmp_path):
+    # ACL-1897: пустой выбор берёт первую Страницу кабинета, одна она или несколько.
+    d = _draft(tmp_path, ads=1)
+    d.page_id = ""
+    out = _audit(AuditMeta(pages=("111", "222")), d)
+    assert _by(out)["page_ok"]["status"] == "ok"
+    assert any("the first available page" in w for w in out.warnings)
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"  # ACL-1880: website manual completion
+
+
+def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    d.page_id = "222"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    d.page_id = "333"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
 
 
 def test_pixel_missing_for_website_conversions(tmp_path):
@@ -657,6 +680,10 @@ NAME_CASES = [
     ("1000_img.png", "Text0"), ("coffee.mp4", "Text C"), ("1080x1080-17.png", "Text D"),
     (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),  # linux-ok: Windows path is only data for the name function, which must take the basename of backslash paths too
     ("12_2403.png", "T"), ("2403x1080_3011.png", "T"),
+    # ACL-2090: вариант в конце имени, размеры и соотношения сторон — не вариант.
+    ("2175_ARM22.png", "T"), ("2175_ADN3.png", "T"), ("2175_ARM07_1080x1920.png", "T"),
+    ("2175_post_9x16.mp4", "T"), ("2175_post_9:16.mp4", "T"), ("2175_post_1080х1920.png", "T"),
+    ("12_2175_ARM22.png", "T"), ("2175_ARM22_Story.png", "T"),
 ]
 
 
@@ -670,7 +697,7 @@ def test_the_client_names_ads_exactly_like_the_server():
 
 def test_a_jpg_and_an_mp4_of_the_same_creative_with_the_same_text_are_duplicates():
     names = _harness("--names", [["2046 1.jpg", "Text A"], ["2046 1.mp4", "Text A"]])["names"]
-    assert names[0] == names[1] == "2046 - Text A"
+    assert names[0] == names[1] == "2046 1 - Text A"  # ACL-2090: «1» в конце — вариант
     ads = [{"name": n, "file": f, "form_id": "", "body": "b", "headline": "h", "cta": "LEARN_MORE"}
            for n, f in zip(names, ["2046 1.jpg", "2046 1.mp4"])]
     inp = _with(ads=ads)
@@ -702,3 +729,12 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
     assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
+
+
+def test_resolve_page_sets_the_account_default_source():
+    # ACL-1897: прямая проверка источника; кабинет с несколькими Страницами не стопорит запуск.
+    plan = cr.CampaignPlan.__new__(cr.CampaignPlan)
+    plan.page_id, plan.page_source = "", ""
+    facts = cr.AccountFacts(act=ACT, currency="USD", pages=["111", "222"], pixels=[])
+    cr.resolve_page(plan, facts)
+    assert (plan.page_id, plan.page_source) == ("111", "account default")

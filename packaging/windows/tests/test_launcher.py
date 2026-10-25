@@ -50,26 +50,90 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(result, Path(tmp) / "ACL" / "workspace")
             self.assertTrue(result.is_dir())
 
-    def test_existing_healthy_acl_is_opened_without_starting_process(self):
-        with mock.patch.object(launcher, "_is_acl_healthy", return_value=True):
-            with mock.patch.object(launcher.webbrowser, "open") as browser_open:
-                with mock.patch.object(launcher.subprocess, "Popen") as popen:
-                    result = launcher._launch_normal()
+    def test_exclusivity_is_per_config_while_the_fixed_installer_marker_stays_live(self):
+        import ctypes
 
-        self.assertEqual(result, 0)
-        browser_open.assert_called_once_with("http://127.0.0.1:9090/")
-        popen.assert_not_called()
+        existing = set()
+        error = [0]
+        kernel = mock.Mock()
 
-    def test_unrelated_port_owner_is_not_stopped(self):
-        with mock.patch.object(launcher, "_is_acl_healthy", return_value=False):
-            with mock.patch.object(launcher, "_port_is_in_use", return_value=True):
-                with mock.patch.object(launcher, "_show_message") as show_message:
-                    with mock.patch.object(launcher.subprocess, "Popen") as popen:
-                        result = launcher._launch_normal()
+        def create_mutex(_security, _owner, name):
+            error[0] = 183 if name in existing else 0
+            existing.add(name)
+            return len(existing) + 100
 
-        self.assertEqual(result, 2)
-        self.assertTrue(show_message.call_args.kwargs["error"])
-        popen.assert_not_called()
+        kernel.CreateMutexW.side_effect = create_mutex
+        kernel.CreateMutexExW.side_effect = lambda _security, name, *_: create_mutex(None, False, name)
+        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        tmp = temporary.name
+        held = []
+        self.addCleanup(lambda: [lock.__exit__(None, None, None) for lock in held])
+        with mock.patch.object(sys, "platform", "win32"), \
+                mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
+                mock.patch.object(ctypes, "get_last_error", side_effect=lambda: error[0], create=True), \
+                mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
+                mock.patch.object(launcher, "_CONFIG_LOCK", None), \
+                mock.patch.object(launcher.local_dashboard, "find_own", return_value=None):
+            for person in ("anna", "dan"):
+                with mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp) / person):
+                    self.assertTrue(launcher._acquire_server_mutex(), person)
+                    # Retain two real, separate OS file locks like two processes.
+                    held.append(launcher._CONFIG_LOCK)
+                    launcher._CONFIG_LOCK = None
+                    launcher._MUTEX_HANDLE = None
+            with mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp) / "anna"):
+                self.assertFalse(launcher._acquire_server_mutex())
+        self.assertIn(launcher.SERVER_MUTEX_NAME, existing)
+        self.assertEqual(existing, {launcher.SERVER_MUTEX_NAME})
+        installer = (PACKAGING_DIR / "installer.iss").read_text(encoding="utf-8")
+        self.assertIn("AppMutex=" + launcher.SERVER_MUTEX_NAME, installer)
+
+    def test_missing_installer_presence_does_not_leave_an_unprotected_server_gate(self):
+        import ctypes
+
+        kernel = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sys, "platform", "win32"), \
+                mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
+                mock.patch.object(ctypes, "get_last_error", return_value=0, create=True), \
+                mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
+                mock.patch.object(launcher, "_CONFIG_LOCK", None), \
+                mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp)), \
+                mock.patch.object(launcher, "_installer_presence_mutex", return_value=None):
+            self.assertFalse(launcher._acquire_server_mutex())
+            self.assertIsNone(launcher._MUTEX_HANDLE)
+            self.assertIsNone(launcher._CONFIG_LOCK)
+            from config.paths import machine_file_lock
+            with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
+                pass  # a failed installer marker must not leak the actual config gate
+
+    def test_config_gate_does_not_require_the_global_namespace(self):
+        import ctypes
+        from config.paths import machine_file_lock
+
+        kernel = mock.Mock()
+        kernel.CreateMutexW.return_value = 0  # Global namespace unavailable
+        kernel.CreateMutexExW.return_value = 456  # original Local installer marker is available
+        kernel.ConvertStringSecurityDescriptorToSecurityDescriptorW.return_value = True
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sys, "platform", "win32"), \
+                mock.patch.object(ctypes, "WinDLL", return_value=kernel, create=True), \
+                mock.patch.object(ctypes, "set_last_error", create=True), \
+                mock.patch.object(launcher, "_MUTEX_HANDLE", None), \
+                mock.patch.object(launcher, "_CONFIG_LOCK", None, create=True), \
+                mock.patch.object(launcher, "_local_acl_dir", return_value=Path(tmp)):
+            try:
+                self.assertTrue(launcher._acquire_server_mutex())
+                with self.assertRaises(TimeoutError):
+                    with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
+                        pass
+                kernel.CreateMutexW.assert_not_called()
+            finally:
+                launcher._release_server_mutex()
+            with machine_file_lock(Path(tmp) / "server-instance.lock", timeout=0):
+                pass
 
 
 if __name__ == "__main__":

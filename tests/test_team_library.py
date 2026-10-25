@@ -394,18 +394,17 @@ def test_migration_keeps_original_data_for_later_add_missing(team):
     assert names() == ["Team"]
 
 
-@pytest.mark.parametrize("missing", ["ACL_LIBRARY_TOKEN", "ACL_LIBRARY_REPO"])
-def test_partial_configuration_does_not_silently_save_locally(team, monkeypatch, missing):
+def test_a_repository_without_a_token_is_local_and_not_connected(team, monkeypatch):
+    """ACL-2038: репозиторий по умолчанию есть всегда, подключение — это токен."""
     _, on = team
     on("Anna")
     tl.use_backend(None)
     monkeypatch.setenv("ACL_LIBRARY_REPO", "example/library")
-    monkeypatch.setenv("ACL_LIBRARY_TOKEN", "synthetic")
-    monkeypatch.delenv(missing)
-    with pytest.raises(tr.TargetingError, match="configuration is incomplete"):
-        tr.add("Keep", "Finance")
-    assert names() == []
-    assert not tr.pull(force=True)["ok"]
+    monkeypatch.setenv("ACL_LIBRARY_TOKEN", "")
+    assert not tl.configured() and tl.backend() is None
+    tr.add("Keep", "Finance")
+    assert names() == ["Keep"]
+    assert tr.pull(force=True) == {"connected": False, "ok": True, "error": "", "synced_at": ""}
 
 
 def test_confirmed_remote_save_survives_a_local_disk_error(team, monkeypatch):

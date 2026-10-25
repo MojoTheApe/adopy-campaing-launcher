@@ -23,6 +23,16 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 os.chdir(_root)
 
+# ACL-1680: every launch path (exe, start_dashboard.bat, a Claude-started shell)
+# must use the same real %LOCALAPPDATA%\ACL, not the MSIX package copy. Pin it
+# before anything reads settings; also merges a package copy and logs the folder.
+try:
+    from config.config_unify import prepare_config_dir
+
+    prepare_config_dir()
+except Exception as _exc:  # a convenience step must never stop the dashboard
+    print(f"[serve] settings folder check skipped: {_exc}", file=sys.stderr)
+
 try:
     # Machine-local settings first, checkout .env second — see
     # config.paths.get_env_files. Keeps a buyer's configuration outside the
@@ -172,6 +182,8 @@ def main() -> None:
         help="Do not open the browser automatically",
     )
     args = parser.parse_args()
+    if args.reload:
+        os.environ.setdefault("ACL_AUTO_REFRESH", "0")  # dev reload never starts scheduled profiles by default
 
     _configure_logging()
 

@@ -173,6 +173,8 @@ def slots_to_campaign_drafts(
             language=language,
             link_provided=first_campaign.get("tracking_link_provided", "tracking_link" in first_campaign),
             language_provided=first_campaign.get("language_provided", "language" in first_campaign),
+            page_id=str(first_campaign.get("page_id") or "").strip() or None,
+            page_provided="page_id" in first_campaign,
             ad_sets=ad_sets,
             warnings=warnings,
         )
@@ -183,6 +185,8 @@ def slots_to_campaign_drafts(
             if not ad_set.ads:
                 draft.errors.append("No ads in campaign" if len(ad_sets) == 1
                                     else f"No ads in ad set {ad_set.name!r}")
+        if any(str(s.get("page_id") or "").strip() != str(first_campaign.get("page_id") or "").strip() for s in group):
+            draft.errors.append("Campaigns with the same name have different Facebook Page choices. Give each campaign a distinct name.")
         if budget is None:
             draft.errors.append("Daily budget missing")
         drafts.append(draft)

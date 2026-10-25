@@ -193,7 +193,10 @@ def enrich_campaign_drafts(
         # Источник запоминаем для «Check plan»; RPA эти поля не читает.
         draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
         draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
-        draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        if not draft.page_provided:
+            draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        elif not draft.page_id:
+            draft.page_source = "automatic"
         draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
@@ -233,7 +236,7 @@ def enrich_campaign_drafts(
         if not str(getattr(draft, "language", "") or "").strip():
             draft.warnings.append("audience language not set — the Language step will be skipped")
         # page_id is only required for ACTIVE campaigns; drafts publish without it
-        if not draft.page_id:
+        if not draft.page_id and not draft.page_provided:
             draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
         if not entry.profile_id:
             if preview_mode:
@@ -325,7 +328,13 @@ def enrich_campaign_drafts(
                 if ad.creative_filename and not preview_mode:
                     try:
                         ad.creative_path = str(find_creative_file(root, ad.creative_filename, fresh=True))
-                    except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
+                    except CreativeNotFoundError:
+                        # ACL-1668: выбранный файл удалили или переименовали после выбора.
+                        draft.errors.append(
+                            f"Creative file missing: {ad.creative_filename!r} was deleted or renamed "
+                            f"in the creatives folder - pick the file again"
+                        )
+                    except (AmbiguousCreativeError, FileNotFoundError) as exc:
                         draft.errors.append(str(exc))
                 elif ad.creative_filename:
                     ad.creative_path = str(Path(root) / ad.creative_filename)

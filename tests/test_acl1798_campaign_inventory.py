@@ -36,6 +36,10 @@ D = "2026-10-08"
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "_store_path", lambda: tmp_path / "campaign_inventory.json")
     ci._RUNNING.clear()
+    # ACL-1853: замок профиля берётся по физическому UUID из карты, не по ярлыку.
+    from tests.profile_lease_fakes import fake_profile
+
+    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(profile_id=fake_profile(account)))
     yield tmp_path
 
 
@@ -717,9 +721,9 @@ def test_command_controls_are_disabled_with_the_reason_and_carry_object_data():
 
 def test_template_has_no_write_paths_and_one_post():
     posts = re.findall(r"method:\s*'(\w+)'", SRC)
-    assert posts == ["POST", "POST"]                                # чтение описи и «Open profile» (по кнопке)
+    assert posts == ["POST"]                                # чтение описи и «Open profile» (по кнопке)
     # Meta читает только /campaign-inventory/read; остальное — локальные маршруты профилей (ACL-1812), открытие — по кнопке
-    assert re.findall(r"fetch\('([^']+)'", SRC) == ["/warm/state?", "/warm/open", "/warm/job/", "/campaign-inventory/read"]
+    assert re.findall(r"fetch\('([^']+)'", SRC) == ["/warm/state?", "/warm/open", "/warm/job/"]
     assert not re.search(r"\b(PUT|PATCH|DELETE)\b", SRC)
     for verb in ("setInterval",):
         assert verb not in SRC                                      # ни таймеров, ни опроса по расписанию
@@ -740,7 +744,7 @@ def test_home_has_no_standalone_campaigns_section():
     assert "_home_campaigns" not in report
     assert not (ROOT / "src" / "web" / "templates" / "_home_campaigns.html").exists()
     rows = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
-    assert "amapReadCampaigns(this)" in rows and 'class="hc hc-scoped amap-campaigns"' in rows
+    assert "amapReadCampaigns(this)" not in rows and 'class="hc hc-scoped amap-campaigns"' in rows
     assert "hc-root" not in report and "hc-title" not in report
 
 

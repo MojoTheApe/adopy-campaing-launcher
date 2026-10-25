@@ -113,8 +113,8 @@ def test_read_and_probe_wait_for_publish_lease(monkeypatch):
     from src.web import publish_jobs
     # Замок один на профиль: публикация держит его на весь прогон, чтение
     # того же профиля — на время чтения, и очередь у них общая (acl-113e →
-    # acl-1210). Ключ чтения «Acc» без карты — сам ярлык; публикация берёт
-    # тот же ключ тем же правилом.
+    # acl-1210). Тестовая карта связывает «Acc» с физическим UUID;
+    # публикация берёт тот же ключ тем же правилом.
     assert publish_jobs._publish_serial is sp.publish_lease
     entered = threading.Event()
     def reader(a, f, t):
@@ -128,8 +128,8 @@ def test_read_and_probe_wait_for_publish_lease(monkeypatch):
     entered.clear()
     monkeypatch.setattr(sp, "_probe_entry", lambda *a: entered.set())
     monkeypatch.setattr(sp, "_attach_only", lambda *a: (_ for _ in ()).throw(sp.ProfileNotAttachable("test")))
-    with publish_jobs._publish_serial("profile-a"):
-        thread = threading.Thread(target=sp.read_ad_account, args=("profile-a",))
+    with publish_jobs._publish_serial("550e8400-e29b-41d4-a716-446655440000"):
+        thread = threading.Thread(target=sp.read_ad_account, args=("550e8400-e29b-41d4-a716-446655440000",))
         thread.start()
         assert not entered.wait(.1)
     thread.join(2)
@@ -143,10 +143,10 @@ def process(udd, port=19222, listening=True):
 
 def test_strict_attach_refuses_other_profiles_global_port(tmp_path, monkeypatch):
     import psutil
-    wanted = tmp_path / "profile-a"
+    wanted = tmp_path / "550e8400-e29b-41d4-a716-446655440000"
     wanted.mkdir()
     (wanted / "DevToolsActivePort").write_text("19222\n", encoding="utf-8")
-    monkeypatch.setattr(psutil, "process_iter", lambda _: [process(str(wanted), 0, False), process(str(tmp_path / "profile-b"))])
+    monkeypatch.setattr(psutil, "process_iter", lambda _: [process(str(wanted), 0, False), process(str(tmp_path / "6ba7b810-9dad-11d1-80b4-00c04fd430c8"))])
     provider = br.MultiloginDirectCDPProvider()
     monkeypatch.setattr(provider, "_cdp_accepting", lambda *a: True)
     assert provider._discover_owned_debug_port(str(wanted)) is None
@@ -172,7 +172,8 @@ def test_attach_requests_owned_profile_and_new_tab(monkeypatch, tmp_path):
             return NS()
     monkeypatch.setattr(br, "MultiloginDirectCDPProvider", Direct)
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a: tmp_path)
-    sp._attach_only(NS(profile_id="a"), "Acc")
+    with sp.profile_lock("550e8400-e29b-41d4-a716-446655440000"):
+        sp._attach_only(NS(profile_id="550e8400-e29b-41d4-a716-446655440000"), "Acc")
     assert calls == [{"strict_profile": True, "new_page": True}]
 
 
@@ -198,7 +199,7 @@ def test_account_identity_is_checked_and_only_owned_tab_is_closed(monkeypatch, r
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **kw: None, close=lambda: calls.append("tab closed"))
     if redirect_at == "initial":
         page.url = "https://adsmanager.facebook.com/?act=222"
-    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111", profile_id="550e8400-e29b-41d4-a716-446655440000"))
     monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **kw: calls.append(kw)))
     monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
     monkeypatch.setattr(sp, "_read_status", lambda _: ("clear", ""))
@@ -365,3 +366,10 @@ def test_a_tab_we_could_not_open_in_the_background_is_still_opened(monkeypatch):
     conn = br._connect_playwright(cdp_url="test", provider="multilogin_direct",
                                   debug_port="123", ws_endpoint=None, new_page=True)
     assert conn.page is fallback
+
+
+@pytest.fixture(autouse=True)
+def mapped_profiles(monkeypatch):
+    from types import SimpleNamespace
+    from tests.profile_lease_fakes import fake_profile
+    monkeypatch.setattr(sp, "_entry_for", lambda label: SimpleNamespace(profile_id=fake_profile(label)))

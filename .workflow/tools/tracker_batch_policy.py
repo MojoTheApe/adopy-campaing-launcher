@@ -74,14 +74,102 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
     return pr
 
 
-def composition(request, root, head, baseline, sources):
+FOLD_MARKER = 'Tracker changelog fold: 1'
+FOLD_DIRECTORY = 'docs/system/changelog.d/'
+FOLD_CHANGELOG = 'docs/system/CHANGELOG.md'
+FOLD_HEADER = '# System history\n\n'
+
+
+def terminal_fold(request, root, head, prefix):
+    """Verify one conventional generated fold; never execute consumer code.
+
+    A marker selects a check, not an exception: immutable parent/head trees and
+    authenticated blobs must prove the entire deterministic operation. A caller
+    without an explicit project prefix retains the original strict composition.
+    """
+    if not isinstance(prefix, str) or not re.fullmatch(r'[A-Z][A-Z0-9]{0,15}', prefix):
+        return None
+    commit = request(root + '/git/commits/' + head)
+    parents = [p['sha'] for p in commit.get('parents', [])]
+    if len(parents) != 1:
+        return None
+    if (commit.get('message') or '').splitlines().count(FOLD_MARKER) != 1:
+        raise ValueError('Integration branch contains work outside the approved source tips')
+    rules.reject_closing(commit.get('message', ''))
+    parent = parents[0]
+    process = rules.process_module()
+    before = process.entries(request, root, rules.tree(request, root, parent))
+    after = process.entries(request, root, rules.tree(request, root, head))
+    if len(before) > 20000 or len(after) > 20000:
+        raise ValueError('Changelog fold exceeds the bounded Git tree')
+    paths = sorted(path for path in before if path.startswith(FOLD_DIRECTORY)
+                   and '/' not in path[len(FOLD_DIRECTORY):] and path.endswith('.md')
+                   and path[len(FOLD_DIRECTORY):].lower() != 'readme.md')
+    if not 1 <= len(paths) <= 512:
+        raise ValueError('Changelog fold requires a bounded nonempty complete fragment set')
+    filename = re.compile(r'^' + re.escape(prefix) + r'-(\d+)(?:-[A-Za-z0-9-]+)?\.md$')
+    heading = re.compile(r'^## ' + re.escape(prefix) + r'-(\d+) — .+ — (\d{4}-\d{2}-\d{2})$')
+    total, fragments = 0, []
+
+    def text(path):
+        nonlocal total
+        row = before.get(path)
+        if not row or row['mode'] != '100644' or row['type'] != 'blob':
+            raise ValueError('Changelog fold requires normal regular source files')
+        raw = process.blob(request, root, row['sha'])
+        total += len(raw.encode('utf-8'))
+        if total > 8 * 1024 * 1024:
+            raise ValueError('Changelog fold exceeds the bounded total content')
+        return raw, raw.removeprefix('\ufeff').replace('\r\n', '\n').replace('\r', '\n')
+
+    for path in paths:
+        match = filename.fullmatch(path[len(FOLD_DIRECTORY):])
+        if not match:
+            raise ValueError('Changelog fold has an invalid fragment filename')
+        _, value = text(path)
+        value = value.strip('\n')
+        first = heading.fullmatch(value.split('\n', 1)[0])
+        if not first or first.group(1) != match.group(1):
+            raise ValueError('Changelog fold has an invalid or mismatched fragment heading')
+        fragments.append((first.group(2), int(first.group(1)), value))
+    original, body = text(FOLD_CHANGELOG)
+    if not body.startswith(FOLD_HEADER):
+        raise ValueError('Changelog fold requires the conventional system history header')
+    rest = body[len(FOLD_HEADER):]
+    ordered = sorted(fragments, key=lambda item: (item[0], item[1]), reverse=True)
+    fresh = [item[2] for item in ordered if item[2] not in rest]
+    expected = FOLD_HEADER + '\n\n'.join(fresh) + '\n\n' + rest if fresh else original
+    removed = set(paths)
+    if set(before) - set(after) != removed or set(after) - set(before):
+        raise ValueError('Changelog fold must consume every fragment and add no files')
+    if any(before[path] != after[path] for path in set(after) - {FOLD_CHANGELOG}):
+        raise ValueError('Changelog fold contains unrelated edits')
+    row = after.get(FOLD_CHANGELOG)
+    if not row or row['mode'] != '100644' or row['type'] != 'blob':
+        raise ValueError('Changelog fold requires a normal regular result file')
+    if process.blob(request, root, row['sha']) != expected:
+        raise ValueError('Changelog fold does not match the exact deterministic content')
+    return {'head_sha': head, 'parent_sha': parent, 'tree_sha': rules.tree(request, root, head),
+            'fragments': paths}
+
+
+def require_fold_review(request, config, pr, document):
+    fold = terminal_fold(request, 'repos/' + config['project']['repository'],
+                         pr['head']['sha'], config['project'].get('id_prefix'))
+    if fold and ('Changelog fold: ' + fold['head_sha']) not in (document.get('report') or '').splitlines():
+        raise ValueError('Independent combined review must name the exact Changelog fold: <commit>')
+    return fold
+
+
+def composition(request, root, head, baseline, sources, *, prefix=None):
     """Candidate consists solely of the baseline, approved tips and merge commits.
 
     Review still inspects conflict resolution and the resulting combined tree.
     Ordinary extra implementation commits on the integration branch are rejected.
     """
     stops = {baseline, *sources}
-    found, seen, pending = set(), set(), [head]
+    fold = terminal_fold(request, root, head, prefix) if head not in stops and prefix else None
+    found, seen, pending = set(), {head} if fold else set(), [fold['parent_sha'] if fold else head]
     while pending:
         sha = pending.pop()
         if sha in stops:
@@ -100,6 +188,7 @@ def composition(request, root, head, baseline, sources):
         pending.extend(parents)
     if found != stops:
         raise ValueError('Candidate must include the exact main baseline and every approved source tip')
+    return fold
 
 
 def batch_id(pr):
@@ -140,7 +229,8 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
     if not completed:
         dependencies_ready(request, config, numbers, shared)
     if direction in ('stage', 'batch'):
-        composition(request, root, pr['head']['sha'], baseline, [m['head_sha'] for m in batch['members']])
+        composition(request, root, pr['head']['sha'], baseline, [m['head_sha'] for m in batch['members']],
+                    prefix=config['project'].get('id_prefix'))
         if direction == 'batch':
             base = rules.merge_base(request, root, pr) if pr.get('merged') else pr['base']['sha']
             if base != baseline:
@@ -186,6 +276,7 @@ def admit(request, config, pr, numbers, shared):
             or reviewed.get('source_heads') != [m['head_sha'] for m in batch['members']]):
         raise ValueError('Combined content requires the current independent integration review')
     if direction in ('stage', 'batch'):
+        require_fold_review(request, config, pr, reviewed)
         if batch.get('pr') != pr['number'] or not rules.review_matches(reviewed, config, pr, content, numbers):
             raise ValueError('Combined candidate review is missing or stale')
         if pr.get('merged') and rules.merge_base(request, root, pr) != reviewed['base_sha']:
