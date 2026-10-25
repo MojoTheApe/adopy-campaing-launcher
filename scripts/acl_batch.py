@@ -60,12 +60,25 @@ def merge_source(worktree, head):
                     cleanup = ""
                 except subprocess.CalledProcessError as probe:
                     cleanup = "Unmerged-index observation failed: " + diagnostic(probe) + ". "
-                try:
-                    run("merge", "--abort")
-                    cleanup += "Owned unfinished merge aborted."
-                except (OSError, subprocess.SubprocessError) as abort:
-                    detail = diagnostic(abort) if isinstance(abort, subprocess.CalledProcessError) else repr(abort)
-                    cleanup += "Owned merge abort failed; cleanup is incomplete: " + detail
+                abort_allowed = True
+                if not conflict:
+                    # A refusing hook may change only cached stat metadata.
+                    # Refresh genuine matching content; never discard edits or
+                    # proceed after a failed/unknown refresh. Unmerged entries
+                    # retain the ordinary conflict abort path instead.
+                    try:
+                        run("update-index", "--refresh")
+                    except (OSError, subprocess.SubprocessError) as refresh:
+                        abort_allowed = False
+                        detail = diagnostic(refresh) if isinstance(refresh, subprocess.CalledProcessError) else repr(refresh)
+                        cleanup += "Owned index refresh failed; abort not attempted; cleanup is incomplete: " + detail
+                if abort_allowed:
+                    try:
+                        run("merge", "--abort")
+                        cleanup += "Owned unfinished merge aborted."
+                    except (OSError, subprocess.SubprocessError) as abort:
+                        detail = diagnostic(abort) if isinstance(abort, subprocess.CalledProcessError) else repr(abort)
+                        cleanup += "Owned merge abort failed; cleanup is incomplete: " + detail
             else:
                 cleanup += (f" Merge-marker observation: exit={marker.returncode}; "
                             f"stdout={marker.stdout!r}; stderr={marker.stderr!r}")

@@ -91,6 +91,44 @@ def test_no_fragments_produces_no_empty_commit(fixture):
     assert 'Changelog fold:' not in result['body']
 
 
+@pytest.mark.parametrize('edited', [False, True], ids=['stat-only', 'real-content'])
+def test_owned_merge_cleanup_refreshes_stat_but_preserves_real_edits(fixture, monkeypatch, edited):
+    root, _, section, _, assemble = fixture
+    hooks = Path(acl_batch.git(root, 'rev-parse', '--git-path', 'hooks'))
+    if not hooks.is_absolute():
+        hooks = root / hooks
+    mutation = ("printf 'concurrent fixture edit\\n' > worker1.txt" if edited
+                else 'touch -t 200101010000 worker1.txt')
+    hook = hooks / 'pre-merge-commit'
+    hook.write_text('#!/bin/sh\n' + mutation + "\nprintf 'primary cleanup fixture refusal\\n' >&2\nexit 73\n")
+    hook.chmod(0o755)
+    actual_run, aborts = subprocess.run, []
+
+    def observe(argv, **kwargs):
+        if argv[3:] == ['merge', '--abort']:
+            aborts.append(argv)
+        return actual_run(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, 'run', observe)
+    with pytest.raises(ValueError, match='source-content conflict is not established') as caught:
+        assemble(apply=True)
+    assert 'primary cleanup fixture refusal' in caught.value.__cause__.stderr
+    work = root.parent / 'integration'
+    assert acl_batch.git(work, 'rev-parse', 'HEAD') == section['integration']['main_sha']
+    marker = Path(acl_batch.git(work, 'rev-parse', '--git-path', 'MERGE_HEAD'))
+    if not marker.is_absolute():
+        marker = work / marker
+    if edited:
+        assert (work / 'worker1.txt').read_text() == 'concurrent fixture edit\n'
+        assert marker.read_text().strip() == section['integration']['members'][0]['head_sha']
+        assert not aborts and 'abort not attempted' in str(caught.value)
+        assert 'cleanup is incomplete' in str(caught.value)
+    else:
+        assert len(aborts) == 1 and 'Owned unfinished merge aborted' in str(caught.value)
+        assert not marker.exists() and not (work / 'worker1.txt').exists()
+        assert acl_batch.git(work, 'status', '--porcelain') == ''
+
+
 def test_missing_approved_tip_stops_before_any_fold(fixture):
     root, _, section, _, _ = fixture
     add_fragments(fixture)
