@@ -1,0 +1,11 @@
+{
+  "_comment": "BI CM_ID -> campaign manager name as in the Stats workbook (ACL-103). Matched on account+date overlap 2026-10-13..18; confirm with BI.",
+  "codes": {
+    "1003": "Gil Zangi",
+    "1005": "Dan Dicker",
+    "1106": "Evgeni Sedin",
+    "1107": "Yotam Balteriski",
+    "1108": "Udi Levin",
+    "4006": "Yinon Avraham"
+  }
+}

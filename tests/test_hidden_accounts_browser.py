@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from test_builder_per_account import _render
 from playwright.sync_api import sync_playwright,expect
 import pytest
+from acl_dialog_capture import capture_dialogs
 
 
 def test_hidden_accounts_survive_navigation_and_bulk_actions(tmp_path, monkeypatch):
@@ -13,7 +14,7 @@ def test_hidden_accounts_survive_navigation_and_bulk_actions(tmp_path, monkeypat
     with sync_playwright() as pw:
         b=pw.chromium.launch(executable_path=os.environ.get('ACL_BROWSER_EXECUTABLE') or None)
         page=b.new_page();errors=[];posts=[];hidden=set();removed=set()
-        page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
+        page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept());capture_dialogs(page, [])
         def overview():
             return {'ok':True,'open_profiles':[],'suggestions':[], 'accounts':[
                 {'label':label,'connected':connected,'local_only':False,'missing':[] if connected else ['profile_id'],

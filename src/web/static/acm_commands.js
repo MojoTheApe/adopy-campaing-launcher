@@ -100,7 +100,7 @@
       function tick() {
         root.fetch('/campaign-commands/' + encodeURIComponent(opId)).then(readReply).then(function (op) {
           if (opts.onUpdate) { try { opts.onUpdate(op); } catch (e) { /* экран не ломает опрос */ } }
-          if (FINAL.indexOf(op.state) >= 0) return resolve(op);
+          if (FINAL.indexOf(op.state) >= 0 && !op.refresh_pending) return resolve(op);
           if (Date.now() - started > timeout) {
             return reject(new Error('Still running after ' + Math.round(timeout / 60000)
                                     + ' min. Check the history; nothing is retried.'));
@@ -362,8 +362,8 @@
     return row;
   }
 
-  var UNKNOWN_TEXT = 'Outcome unknown — check the history and Read campaigns';
-  var CHECK_TEXT = 'Outcome unknown — press Read campaigns to check';
+  var UNKNOWN_TEXT = 'Outcome unknown — check the history and use the account Retry';
+  var CHECK_TEXT = 'Outcome unknown — use the account Retry to check';
 
   // Что показать в строках по итогу и что в них изменить. Строка меняется ТОЛЬКО объектами,
   // которые операция подтвердила чтением Meta (`res.applied`); при отказе и неизвестном
@@ -401,7 +401,7 @@
         };
         return execute(op.revision_id, hooks.key).then(function (started) {
           return poll(started.op_id, { intervalMs: hooks.intervalMs, timeoutMs: hooks.timeoutMs, onUpdate: function (o) {
-            say(o.state === 'Verifying' ? 'Verifying…' : 'Running…');
+            say(o.state === 'Succeeded' && o.refresh_pending ? 'Refreshing list…' : o.state === 'Verifying' ? 'Verifying…' : 'Running…');
           } }).then(classify, unknown);
         }, function (e) {
           if (e && e.status) throw e;          // сервер отказал: запись не принята
@@ -471,6 +471,8 @@
     unresponsive: 'Ads Manager stopped answering — try again in a few minutes',
     permission: 'Multilogin refused to start this profile (permission) — another user may be signed in to the same Multilogin account',
     stale: 'Changed since the preview — review again',
+    storage: "Not sent — this computer couldn't save the change history (disk full?)",
+    historyCheck: "Change history couldn't be saved on this computer — check Ads Manager",
     unknown: 'Something went wrong — see Details'
   };
   var OWN_TEXT_CODES = ['restart_cooldown', 'not_loopback', 'rpa_backend', 'rpa'];   // текст сервера уже человеческий (с оставшимся временем)
@@ -488,6 +490,12 @@
     if (/checkpoint/i.test(text)) return FRIENDLY.checkpoint;
     if (code === 'page_unresponsive' || /stopped answering|page[ _]unresponsive/i.test(text)) return FRIENDLY.unresponsive;
     if (code === 'stale' || /changed since|since the preview/i.test(text)) return FRIENDLY.stale;
+    // ACL-1855: журнал операций не записался. «Not sent» — только когда в Meta точно ничего не ушло;
+    // если запись была (или могла быть), отдельный текст без «Not sent».
+    if (code === 'storage') return FRIENDLY.storage;
+    if (/history could not be saved/i.test(text)) {
+      return /^Not sent:|nothing was (?:sent|written)/i.test(text) ? FRIENDLY.storage : FRIENDLY.historyCheck;
+    }
     if (/listens on this computer alone|\(127\.0\.0\.1\)/.test(text) || /ACL_FB_BACKEND=api/.test(text)) return text.replace(/^Not sent:\s*/, '');
     return null;
   }

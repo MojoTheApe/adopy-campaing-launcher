@@ -64,11 +64,11 @@ def test_no_reading_for_the_dates_on_screen_shows_the_latest_marked(store):
     country = _country(view)
     assert country["live_read"] == 0 and country["live_sums"] == [], "запасное чтение попало в итог страны"
     html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
-    assert 'data-read-state="fallback"' in html
-    assert 'data-fb-from="2026-09-01" data-fb-to="2026-09-21"' in html
-    assert "$1,044.82" in html and "09-01…09-21" in html
-    assert "not the dates on screen" in html
-    assert "0/1 spend read" in html
+    # ACL-2063 сохраняет совместимые записи, но экран показывает BI и список,
+    # не расход Meta за другой период под текущими датами.
+    assert 'class="amap-list" data-account="A"' in html and 'Campaign list' in html
+    assert 'list not read' in html and 'data-read-state=' not in html
+    assert "$1,044.82" not in html and 'spend read' not in html
 
 
 def test_an_exact_reading_wins_and_is_counted(store):
@@ -84,7 +84,8 @@ def test_never_read_stays_a_dash(store):
     view = app._build_account_map_view({"countries": []}, date_from="2026-09-01", date_to="2026-09-22")
     assert view["fallback"] == {}
     html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
-    assert 'data-read-state=""' in html
+    assert 'class="amap-list" data-account="A"' in html and 'list not read' in html
+    assert 'data-read-state=' not in html
 
 
 def test_all_dates_asks_for_no_fallback(store):
@@ -166,10 +167,9 @@ def test_a_failed_reading_shows_the_old_one_too(store):
     assert view["fallback"]["A"]["spend"] == 1044.82
     assert _country(view)["live_read"] == 0
     html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
-    cell = html.split('class="num amap-live"', 1)[1].split("</td>", 1)[0]
-    assert 'data-read-state="failed"' in cell and 'data-fb-from="2026-09-01"' in cell
-    assert "amap-live-bad" in cell and "amap-live-old" in cell and "$1,044.82" in cell
-    assert "failed · retry" in html
+    assert 'class="amap-list" data-account="A"' in html and 'list not read' in html
+    assert 'data-read-state=' not in html and "$1,044.82" not in html
+    assert "amap-live-old" not in html and "failed · retry" not in html
 
 
 def test_a_live_failure_keeps_the_old_amount_in_the_cell(page):
@@ -185,7 +185,7 @@ def test_a_live_failure_keeps_the_old_amount_in_the_cell(page):
 
 def test_the_old_amount_stands_on_its_own_line_under_a_failure(page):
     src = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
-    from _design_tokens import tokens_css  # ACL-1797: палитра — отдельный файл
+    from tests._design_tokens import tokens_css  # Не зависит от порядка сбора соседних тестов.
     css = tokens_css() + src[src.index("    .amap-live-ok {"): src.index("    .amap-tree-head.old {")]
     page.set_content('<style>' + css + '</style><table><tr><td class="amap-live" style="width:200px">'
                      '<span class="amap-live-bad">profile is closed</span>'

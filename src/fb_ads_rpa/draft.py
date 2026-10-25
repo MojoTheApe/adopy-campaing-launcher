@@ -46,6 +46,8 @@ class AdDraft:
     ad_body2: str = ""
     # ACL-1775: id существующей формы Страницы (только Instant Form, только API-бэкенд).
     lead_form_id: str = ""
+    # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
+    lead_form_template: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -90,6 +92,8 @@ class AdDraft:
             out["ad_body2"] = (self.ad_body2 or "")[:80]
         if self.lead_form_id:
             out["lead_form_id"] = self.lead_form_id
+        if self.lead_form_template:
+            out["lead_form_template"] = self.lead_form_template
         return out
 
 
@@ -144,6 +148,11 @@ class CampaignDraft:
     # Empty form fields are explicit choices; older callers may omit them.
     link_provided: bool = False
     language_provided: bool = False
+    # Builder Page selection is campaign-local; empty means automatic, never map fallback.
+    page_provided: bool = False
+    page_name: str = ""
+    page_name_unique: bool = False
+    page_origin: str = ""
 
     @property
     def ad_count(self) -> int:
@@ -189,6 +198,9 @@ class RpaPublishResult:
     # Telemetry run id of this campaign (ACL-1437): shown under "Technical
     # details" so a card can be matched to rpa_telemetry.jsonl.
     run_id: str | None = None
+    page_id: str = ""
+    page_name: str = ""
+    page_origin: str = ""
 
     @property
     def publishable(self) -> bool:
@@ -202,7 +214,7 @@ class RpaPublishResult:
         return bool(self.success) and not self.blocking_failures
 
     def to_job_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "campaign_name": self.campaign_name,
             "success": self.success,
             # Everything the operator needs in order NOT to publish a broken
@@ -226,3 +238,6 @@ class RpaPublishResult:
             "steps_completed": self.steps_completed,
             "screenshots": self.screenshot_paths,
         }
+        if self.page_origin:
+            out.update(page_id=self.page_id, page_name=self.page_name, page_origin=self.page_origin)
+        return out

@@ -21,11 +21,12 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from acl_dialog_capture import capture_dialogs
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
 from test_builder_per_account import _render
-from test_drawer_review_browser import fields
+from test_drawer_review_browser import OFFLINE_FILES, fields
 
 ACTIVE = ('pending', 'queued', 'running', 'cancelling')
 # Форма ищется по аккаунту, а не по номеру: раскрытая в ящике форма
@@ -70,7 +71,7 @@ def _route_for(html, state):
         if r.request.resource_type == 'document':
             r.fulfill(content_type='text/html', body=html)
             return
-        data = {'files': [], 'texts': [], 'profiles': [], 'waiting': False}
+        data = {'files': OFFLINE_FILES, 'texts': [], 'profiles': [], 'waiting': False}
         if path == '/preview-publish':
             f = fields(r.request)
             data = {'plan': [{'Campaign Name': f[f'camp_{i}_name'], 'errors': [], 'warnings': [], '_ads_raw': []}
@@ -111,6 +112,7 @@ def ui(browser, html):
         dialogs.append(d.message)
         d.accept()
     page.on('dialog', on_dialog)
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(html, state))
     page.goto('http://acl.test/')
@@ -236,8 +238,11 @@ def test_the_same_account_twice_is_refused_with_a_message(ui):
     assert len(state['posts']) == 1
     assert len(state['dialogs']) == 2
     assert all('Demo is already being built' in m for m in state['dialogs']), state['dialogs']
-    # «Publish all», когда кроме идущего аккаунта собирать нечего, — то же.
-    p.locator('.cbd-publish-all').click()
+    # No unlocked campaigns: the action explains the wait before a click.
+    expect(p.locator('.cbd-publish-all')).to_be_disabled()
+    expect(p.locator('.cbd-publication-reason')).to_contain_text('already being built')
+    # The existing programmatic guard still refuses a duplicate request.
+    p.evaluate('cbPublishAll()')
     p.wait_for_timeout(200)
     expect(p.locator('#sfc-ok')).to_have_count(0)
     assert len(state['posts']) == 1
@@ -468,6 +473,7 @@ def test_one_account_in_two_countries_publishes_both(browser, two_country_html):
     errors, dialogs = [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(two_country_html, state))
     page.goto('http://acl.test/')
@@ -482,7 +488,8 @@ def test_one_account_in_two_countries_publishes_both(browser, two_country_html):
         ready(page)
         page.locator('.cbd-publish-all').click()
         modal = page.locator('#safe-confirm-modal')
-        expect(modal).to_contain_text('UL869 (Chile), UL869 (Peru)')
+        expect(modal).to_contain_text('UL869 (Chile)')
+        expect(modal).to_contain_text('UL869 (Peru)')
         expect(modal).not_to_contain_text('Already being built')
         page.locator('#sfc-ok').click()
         for _ in range(50):
@@ -515,6 +522,7 @@ def _seeded_two_country_page(browser, html, saved):
     errors, dialogs = [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {'job-old': {'status': 'running', 'account': 'UL869', 'names': ['X']}},
              'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(html, state))

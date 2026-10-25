@@ -193,6 +193,10 @@ class SpendReading:
     source: str = "rpa"           # rpa | token
     spend: float | None = None
     currency: str = ""
+    # Канонические единицы отдельно от знака валюты, который уже читает экран.
+    currency_code: str = ""
+    timezone: str = ""
+    day_boundary: str = ""
     state: str = "idle"           # idle | running | ok | failed
     how: str = ""                 # каким приёмом прочитано — чтобы знать, что сломалось
     error: str = ""
@@ -387,6 +391,10 @@ def _restore_reading(key: str, raw: dict) -> SpendReading:
     known = SpendReading.__dataclass_fields__
     reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
     if reading.source == "api":
+        if not reading.currency_code:
+            from src.analysis_agent.bi_compare import currency_code
+
+            reading.currency_code = currency_code(reading.currency)
         # API-чтения до 10.10 сохраняли ISO-код («USD 179.47» не влезал в ячейку);
         # показываем знаком, как новые чтения (`account_spend_api.display_currency`).
         reading.currency = _API_SIGNS.get(str(reading.currency or "").strip().upper(), reading.currency)
@@ -529,16 +537,28 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     Ярлыков может оказаться несколько на один профиль: карта этого не
     запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
-    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
-    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
-    занять нужное.
+    защищает. Без физического UUID отказываем до открытия браузера: ярлык
+    не защищает тот же профиль в другом процессе.
     """
     try:
         entry = _entry_for(account)
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or str(account or "")
+    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
+
+    if entry is None:
+        raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    if not profile:
+        raise ProfileLeaseError(f"{account} has no profile_id in the account map.")
+    return physical_profile_key(profile)
+
+
+def _failure_text(exc: BaseException) -> str:
+    """Текст сбоя чтения для человека; отказ замка профиля уже написан словами."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    return str(exc) if isinstance(exc, ProfileLeaseError) else f"{type(exc).__name__}: {exc}"
 
 
 def _lock_for(account: str):
@@ -610,9 +630,11 @@ def start_read(
 
             # ACL-1826: вход в прокси (ERR_INVALID_AUTH_CREDENTIALS) читается одной фразой.
             text, code = _mlx.humanize(exc, "", account)
+            if _hand_refusal(exc, account):   # ACL-1184
+                text, code = hand_message(), HAND_OPEN_CODE
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
+                state="failed", error=text or _failure_text(exc), error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -695,6 +717,25 @@ def hand_message() -> str:
 
     return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
         else HAND_OPEN_MESSAGE
+
+
+def _running_by_hand(direct, udd, profile_id: str) -> bool:
+    """Запущен ли профиль — единой проверкой слоя RPA (ACL-1184).
+
+    `profile_is_running` сам перебирает написания папки, а без папки
+    (`udd is None`) ищет по id профиля: «папка не найдена» больше не
+    пропускает проверку.
+    """
+    return bool(direct.profile_is_running(str(udd) if udd is not None else "", profile_id))
+
+
+def _hand_refusal(exc: BaseException, account_label: str) -> bool:
+    """Отказ слоя RPA «профиль открыт руками» — исходник в лог, человеку текст (ACL-1184)."""
+    if not (isinstance(exc, _profile_trouble.ProfileStop) and exc.code == _profile_trouble.OPEN_BY_HAND):
+        return False
+    log.warning("%s: the profile is open by hand; showing the way out instead of %s: %s",
+                account_label, type(exc).__name__, exc)
+    return True
 
 
 #: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
@@ -855,7 +896,8 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
-    why = _stop_log.refusal(profile_id)
+    # ACL-2117: пока MLX досохраняет профиль, чтение ждёт (а не отказывает).
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _set_wait_note(account_label, text))
     if why:
         raise ProfileNotAttachable(why, code="restart_cooldown")
     queue = _slot_queue()
@@ -891,6 +933,14 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
         _record("spend_profile_started", False, time.monotonic() - began,
                 {"account": account_label, "slot_wait_s": round(waited_s, 1),
                  "error": type(exc).__name__})
+        if _hand_refusal(exc, account_label):
+            raise ProfileNotAttachable(hand_message(), code=HAND_OPEN_CODE) from exc
+        from src.fb_ads_rpa import profile_trouble
+
+        if isinstance(exc, profile_trouble.ProfileStop):
+            # ACL-1138: причина в профиле (нет прокси) — её текст, а не «профиль закрыт».
+            raise ProfileNotAttachable(f"{account_label}: {profile_trouble.message(exc.code) or exc}",
+                                       code=exc.code) from exc
         # ACL-1826: 403 «restricted permission» на слоте B / вход в прокси — понятный текст и код.
         from src.fb_api import mlx_session as _mlx
 
@@ -980,22 +1030,51 @@ def _publish_touched(opened: _ReadOpen) -> bool:
 
 def _close_if_still_pending(opened: _ReadOpen) -> None:
     """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
-    with browser_operation.reading(), profile_lock(opened.profile_id):
-        with _PENDING_LOCK:
-            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
-                return
-            _PENDING_CLOSE.pop(opened.profile_id, None)
-        _close_started(opened)
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    # ACL-1853: таймер в своём потоке — отказ замка не должен его ронять; запись остаётся
+    # в `_PENDING_CLOSE`, следующая операция с этим профилем возьмёт её или закроет.
+    try:
+        with browser_operation.reading(), profile_lock(opened.profile_id):
+            with _PENDING_LOCK:
+                if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                    return
+                _PENDING_CLOSE.pop(opened.profile_id, None)
+            _close_started(opened)
+    except ProfileLeaseError as exc:
+        log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
-def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
-    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
+                    grace_s: float | None = None, convenience: bool = False) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
+    человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
+    """
     if not opened.started:
         return
-    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+    if keep_for_next and convenience and opened.slot_id:
+        # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
+        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
+        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
+        return
+    grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
+    if keep_for_next and grace > 0 and opened.profile_id:
+        if grace_s is not None and opened.slot_id:
+            # ACL-2117: окно, которое держим под Publish, — оставленное (kept): Publish берёт его
+            # место (`_reuse_kept`) и не стоит в очереди за обычным местом чтения.
+            try:
+                _slot_queue().keep(opened.slot_id, opened.account)
+            except Exception:
+                log.exception("Could not mark the kept window of %s", opened.account)
         with _PENDING_LOCK:
             _PENDING_CLOSE[opened.profile_id] = opened
-        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer = threading.Timer(grace, _close_if_still_pending, args=(opened,))
         timer.daemon = True
         timer.start()
         return
@@ -1019,96 +1098,43 @@ def _logged_out(page, *, deep: bool = False) -> bool:
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
-    """Папка профиля Multilogin — по адресу, а не обходом дерева.
+    """Папка профиля Multilogin — по адресу, без обхода дерева.
 
-    Штатный `_find_mlx_profile_dir` делает `rglob` по всему `~/mlx/profiles`, а
-    там лежат полные каталоги Chrome. Замерено на этой машине: **около десяти
-    секунд на каждый вызов**, и не только на первый. Адресный поиск — 0.001 с,
-    ответ тот же.
-
-    Путь описан в самом слое RPA: `profiles/{ws}/{folder_id}/{profile_id}`.
-    Раскладку проверяем в трёх видах, все — на глубину не больше двух уровней.
-
-    Живёт здесь, а не в `src/fb_ads_rpa`, потому что тот файл принадлежит
-    другому треку. Эти десять секунд платит и каждый прогон публикации —
-    заведено как `acl-144`.
+    Логика живёт в одном месте: `fb_ads_rpa.browser._find_mlx_profile_dir`
+    (ACL-144 — тот же адресный поиск теперь и у прогона публикации).
     """
-    profile_id = (profile_id or "").strip()
-    if not profile_id:
-        return None
-    root = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx"))) / "profiles"
-    if not root.is_dir():
-        return None
-    folder_id = (folder_id or "").strip()
-    try:
-        for ws in root.iterdir():
-            if not ws.is_dir():
-                continue
-            if folder_id:
-                p = ws / folder_id / profile_id
-                if p.is_dir():
-                    return p
-            p = ws / profile_id
-            if p.is_dir():
-                return p
-            for folder in ws.iterdir():
-                if not folder.is_dir():
-                    continue
-                p = folder / profile_id
-                if p.is_dir():
-                    return p
-    except OSError:
-        return None
-    return None
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    return rpa_browser._find_mlx_profile_dir(profile_id, folder_id)
 
 
 def _dir_spellings(path) -> list[str]:
-    """Написания одной и той же папки, которые Windows считает равными.
+    """Написания одной и той же папки (длинное и 8.3) — см. `fb_ads_rpa.profile_dir`.
 
-    9 сентября чтение спенда X84 отказывало словами «профиль открыт вручную»
-    сразу после того, как дешборд сам его и открыл. Прицепиться мешало
-    единственное: **у папки два написания**. Multilogin запускает Mimic с
-    коротким именем 8.3 —
-
-        C:\\Users\\EXAMPL~1\\mlx\\profiles\\WORKSP~1\\FOLDER~1\\PROFIL~1
-
-    — а мы вычисляем длинное, и проверка владения портом сравнивает их как
-    строки. `os.path.abspath` и `normcase` короткое имя не разворачивают, и
-    два имени одной папки расходятся.
-
-    Проверять владение по папке — правильно: без этого можно прицепиться к
-    браузеру **другого** аккаунта, а это хуже любого непрочитанного числа.
-    Поэтому сравнение остаётся, а сюда добавляется второе написание.
-
-    Разворачивать короткое в длинное было бы половиной решения: неизвестно,
-    какое из двух придёт следующим, и на машине с выключенным 8.3 короткого
-    имени нет вовсе. Поэтому возвращаются оба, без повторов и в понятном
-    порядке — длинное первым.
+    ACL-1184: реализация переехала к проверке «профиль запущен», чтобы
+    дешборд и RPA отвечали на этот вопрос одинаково.
     """
-    out: list[str] = []
-    text = str(path)
-    for value in (text, _short_path(text)):
-        if value and value not in out:
-            out.append(value)
-    return out
+    from src.fb_ads_rpa import profile_dir
+
+    return profile_dir.spellings(path, _short_path)
 
 
 def _short_path(path: str) -> str:
-    """Имя 8.3 для существующей папки — или пусто, если его нет.
+    """Имя 8.3 для существующей папки — или пусто (`fb_ads_rpa.profile_dir`)."""
+    from src.fb_ads_rpa import profile_dir
 
-    Пусто — обычный ответ, а не сбой: на томах с выключенным 8.3 короткого
-    имени не существует, и тогда написание всего одно.
-    """
-    if os.name != "nt":
-        return ""
+    return profile_dir.short_path(path)
+
+
+def _attach_existing(direct, profile_id: str, spelling: str, **kw):
+    """`attach_existing_only`, где отказ профиля (ACL-1138: нет прокси) — `ProfileNotAttachable`."""
+    from src.fb_ads_rpa import profile_trouble
+
     try:
-        import ctypes
-
-        buf = ctypes.create_unicode_buffer(4096)
-        length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 4096)
-        return buf.value if 0 < length < 4096 and buf.value != str(path) else ""
-    except Exception:
-        return ""
+        return direct.attach_existing_only(profile_id, spelling, **kw)
+    except profile_trouble.ProfileStop as stop:
+        raise ProfileNotAttachable(profile_trouble.message(stop.code) or str(stop),
+                                   code=stop.code) from stop
 
 
 def _attach_open(direct_cls, entry, profile_id: str):
@@ -1118,7 +1144,7 @@ def _attach_open(direct_cls, entry, profile_id: str):
         return None
     direct = direct_cls()
     for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        conn = _attach_existing(direct, profile_id, spelling, new_page=True)
         if conn is not None:
             return conn
     return None
@@ -1155,6 +1181,10 @@ def _attach_only(entry, account_label: str):
     if not profile_id:
         raise ProfileNotAttachable(f"{account_label} has no profile_id in the account map")
 
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+
+    require_profile_lease(profile_id)
+
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         raise ProfileNotAttachable(
@@ -1162,28 +1192,23 @@ def _attach_only(entry, account_label: str):
         )
 
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
-    if udd is None:
-        # Папку создаёт сам Multilogin при первом запуске — у профиля, ни разу
-        # не запускавшегося здесь, её нет; открытым он быть не может.
-        if opening is not None:
-            return _start_closed(entry, account_label, opening,
-                                 recheck=lambda: _attach_open(direct_cls, entry, profile_id))
-        raise ProfileNotAttachable(
-            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
-        )
-
     direct = direct_cls()
-    for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
-        if conn is not None:
-            # Профиль, который прошлое чтение запустило и ещё не закрыло
-            # (`CLOSE_GRACE_S`), закроет теперь это чтение.
-            _take_over_pending(profile_id, opening)
-            return conn
+    if udd is not None:
+        for spelling in _dir_spellings(udd):
+            conn = _attach_existing(direct, profile_id, spelling, new_page=True)
+            if conn is not None:
+                # Профиль, который прошлое чтение запустило и ещё не закрыло
+                # (`CLOSE_GRACE_S`), закроет теперь это чтение.
+                _take_over_pending(profile_id, opening)
+                return conn
 
+    # ACL-1184: проверяем и без папки. Обычно у профиля без папки (её создаёт сам
+    # Multilogin при первом запуске) открытого окна нет, но папку мы ищем своей
+    # раскладкой и можем не найти — тогда окно, открытое руками, раньше
+    # доходило до запуска и голого RuntimeError вместо подсказки.
     running = False
     try:
-        running = any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd))
+        running = _running_by_hand(direct, udd, profile_id)
     except Exception:
         pass
     if running:
@@ -1194,13 +1219,30 @@ def _attach_only(entry, account_label: str):
     if opening is not None:
         return _start_closed(entry, account_label, opening,
                              recheck=lambda: _attach_open(direct_cls, entry, profile_id))
+    if udd is None:
+        raise ProfileNotAttachable(
+            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
+        )
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
     )
 
 
-@serialized_browser(reading=True)
+def _probe_lease_error(exc, *_args, **_kwargs):
+    return {"ok": False, "act": "", "account_name": "", "error": str(exc)}
+
+
+def _open_lease_error(exc, *_args, **_kwargs):
+    return False, str(exc)
+
+
+def _spend_lease_error(exc, account, date_from, date_to=""):
+    return SpendReading(account=account, date_from=date_from, date_to=date_to or date_from,
+                        source="rpa", state="failed", error=str(exc))
+
+
+@serialized_browser(reading=True, on_lease_error=_probe_lease_error)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -1244,6 +1286,10 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
         out["act"] = act
         out["account_name"] = _ads_manager_account_name(page)
         out["ok"] = True
+        # ACL-142: Ads Manager без параметров открывает кабинет профиля ПО
+        # УМОЛЧАНИЮ. Прочитанное — предложение, а не выбор: экран обязан
+        # дать человеку подтвердить его или вписать другой номер.
+        out["needs_confirmation"] = True
         return out
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
         out["error"] = f"{type(exc).__name__}: {exc}"
@@ -1326,7 +1372,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser(reading=True)
+@serialized_browser(reading=True, on_lease_error=_open_lease_error)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -1365,20 +1411,27 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         return False, "The RPA browser layer changed (see acl-108e)"
 
     udd = _mlx_profile_dir(profile_id, folder_id)
+    direct = direct_cls()
     if udd is not None:
-        direct = direct_cls()
         for spelling in _dir_spellings(udd):
-            attached = direct.attach_existing_only(profile_id, spelling)
+            try:
+                attached = _attach_existing(direct, profile_id, spelling)
+            except ProfileNotAttachable as exc:
+                return False, CodedMessage(str(exc), exc.code)
             if attached is not None:
                 attached.close(keep_browser_open=True)
                 return True, "The profile is already open through automation. You can read it."
-        try:
-            if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
-                # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
-                return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
-        except Exception as exc:
+    try:
+        # ACL-1184: и без найденной папки — по id профиля (та же проверка, что у RPA).
+        if _running_by_hand(direct, udd, profile_id):
+            # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
+            return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
+    except Exception as exc:
+        if udd is not None:
             return False, f"Could not check open profiles: {exc}. Nothing was launched."
-
+        # Без папки до ACL-1184 проверки не было вовсе: сбой проверки не мешает
+        # запуску, а окно, открытое руками, остановит сам запуск (`open`).
+        log.warning("%s: could not check open profiles (%s); starting through Multilogin", who, exc)
 
     # ACL-1812 (B1-bis): обе кнопки («open profile» на строке и Connect) идут через общий журнал.
     from src.fb_api import stop_log as _stop_log
@@ -1392,8 +1445,13 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(
             entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
+        if _hand_refusal(exc, who):
+            return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
+        from src.fb_ads_rpa import profile_trouble
         from src.fb_api import mlx_session as _mlx
 
+        if isinstance(exc, profile_trouble.ProfileStop):   # ACL-1138: нет прокси
+            return False, CodedMessage(profile_trouble.message(exc.code) or str(exc), exc.code)
         text, code = _mlx.humanize(exc, instance, who)   # ACL-1826
         if code:
             return False, CodedMessage(text, code)
@@ -1421,7 +1479,7 @@ class CodedMessage(str):
         return obj
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_open_lease_error)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -1435,7 +1493,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_spend_lease_error)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -3297,6 +3355,10 @@ class TurnOffResult:
     #: по умолчанию оно остаётся намеренно: если однажды появится второй путь
     #: и забудет представиться, журнал промолчит, а не соврёт, что это был RPA.
     route: str = ""
+    #: Как найдена строка: пусто — по id (как всегда было), `name` — по точному
+    #: имени в таблице без id (ACL-1379). В журнале без этого не отличить
+    #: «выключили объект 123» от «выключили единственную строку с таким именем».
+    matched_by: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -3392,7 +3454,16 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser(key=_profile_key)
+def _turn_off_lease_error(exc, account, level, object_id, *, expected_name="", requester="", **_kwargs):
+    # No browser action started: this is a refusal, not an unconfirmed click.
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, state="failed", error=str(exc), at=_now(),
+                        requester=(requester or "").strip(), route="rpa")
+    _record_turn_off(out)
+    return out
+
+
+@serialized_browser(key=_profile_key, on_lease_error=_turn_off_lease_error)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":

@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.test_acl2063_dashboard_browser import dashboard  # noqa: F401 -- shared production fixture
+
 ROOT = Path(__file__).resolve().parent.parent
 ROW = ROOT / "src" / "web" / "templates" / "_account_map_country.html"
 PAGE = ROOT / "src" / "web" / "templates" / "report.html"
@@ -73,17 +75,21 @@ def test_the_column_count_still_matches_itself():
     # ему не с чем.
 
 
-def test_a_failed_read_shows_its_reason_after_a_reload():
-    """Живой обработчик рисует причину только после попытки.
-
-    После перезагрузки человек видел «failed» без объяснения — в том числе
-    когда причина успела смениться.
-    """
-    t = ROW.read_text(encoding="utf-8")
-    cell = t[t.index("amap-live"): t.index("amap-status")]
-    assert "state == 'failed'" in cell, "отказ снова показывается прочерком"
-    assert "sr.error" in cell, "причина не выводится"
-    assert "sr.shot" in cell, "снимок опять негде найти"
+def test_a_failed_read_shows_its_reason_after_a_reload(dashboard):
+    """Persisted structure failure keeps its real reason and one Retry on reload."""
+    site, page = dashboard
+    site.fail.add('Acc'); site.save('Acc', age=7200)
+    page.goto('http://acl.test/')
+    failed = "document.querySelector('.amap-campaigns')?._hc?.state.refreshRows?.Acc?.state === 'failed'"
+    page.wait_for_function(failed)
+    row = page.locator('tr:has(td[data-account="Acc"])')
+    assert row.locator('.hc-snap').get_attribute('title') == 'Proxy connection failed'
+    assert row.locator('button.hc-rc:visible').all_inner_texts() == ['Retry']
+    reads = list(site.reads)
+    page.reload(); page.wait_for_function(failed)
+    assert row.locator('.hc-snap').get_attribute('title') == 'Proxy connection failed'
+    assert row.locator('button.hc-rc:visible').all_inner_texts() == ['Retry']
+    assert site.reads == reads and site.errors == []
 
 
 def test_the_row_carries_whether_the_workbook_knows_the_account():

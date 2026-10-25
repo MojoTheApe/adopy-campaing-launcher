@@ -23,14 +23,11 @@ import subprocess
 import sys
 import time
 import re
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-PORT = 9090
 STOP_TIMEOUT_S = 90
 INSTALL_TIMEOUT_S = 15 * 60
 START_TIMEOUT_S = 180
@@ -44,13 +41,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def health(port: int = PORT) -> dict | None:
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2.0) as r:
-            data = json.loads(r.read().decode("utf-8"))
-        return data if isinstance(data, dict) else None
-    except (OSError, ValueError, urllib.error.URLError):
-        return None
+def own_health(local_acl_dir: Path) -> Callable[[], dict | None]:
+    """`/health` МОЕГО дешборда, где бы он ни стоял; None — если он не работает.
+
+    Раньше обновление спрашивало порт 9090. На машине с двумя людьми там мог
+    отвечать дешборд соседа: обновление ждало бы, пока остановится чужой, и
+    откатывалось по таймауту, а после установки могло принять чужой запуск
+    за свой (ACL-1309).
+    """
+    import local_dashboard
+
+    def probe() -> dict | None:
+        found = local_dashboard.find_own(local_acl_dir)
+        return found[1] if found else None
+
+    return probe
+
+
+def _no_health() -> dict | None:
+    # Среда без настоящего `health` — ошибка сборки теста, а не «дешборд
+    # остановлен»: иначе обновление решило бы, что ждать нечего.
+    raise RuntimeError("Environment.health must be provided")
 
 
 @dataclass
@@ -59,7 +70,7 @@ class Environment:
 
     programs_dir: Path
     updates_dir: Path
-    health: Callable[[], dict | None] = health
+    health: Callable[[], dict | None] = _no_health
     run: Callable[..., int] = lambda cmd, timeout: run_command(cmd, timeout)
     start: Callable[[list[str]], object] = lambda cmd: subprocess.Popen(
         cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
@@ -228,7 +239,8 @@ def main(args: list[str], local_acl_dir: Path) -> int:
             or not setup.is_file()):
         return 2
     programs = previous.parent.parent.parent  # …\Programs\ACL\versions\<v>\ACL.exe
-    env = Environment(programs_dir=programs, updates_dir=local_acl_dir / "updates")
+    env = Environment(programs_dir=programs, updates_dir=local_acl_dir / "updates",
+                      health=own_health(local_acl_dir))
     # Браузер не открываем: открытая страница сама ждёт /health и перезагружается.
     result = apply_update(env, setup, expect, previous)
     return 0 if result["result"] == "updated" else 1
