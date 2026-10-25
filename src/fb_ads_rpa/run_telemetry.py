@@ -261,9 +261,7 @@ def _hide_configured_secrets(text: str) -> str:
     try:
         from config import token_vault
 
-        for value in sorted(token_vault.configured_secret_values(), key=len, reverse=True):
-            if value in text:
-                text = text.replace(value, "<hidden>")
+        return token_vault.hide_configured_secrets(text)
     except Exception:
         pass
     return text

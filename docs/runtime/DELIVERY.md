@@ -79,18 +79,35 @@ limitation, never a claim that installation passed or a release approval.
 Since ACL-1358 the Multilogin automation tokens (`MULTILOGIN_AUTOMATION_TOKEN_*` in
 `%LOCALAPPDATA%\ACL\.env`, stored as `dpapi:v1:...`) and the Google token files
 (`token_accounts.json`, `token_telemetry.json`, header `ACLDPAPI1`) are encrypted with
-Windows DPAPI for the current user. Every start (`load_env`, also on the packaged
-`ACL.exe` path) protects any plain token it finds, after saving an encrypted copy in
-`%LOCALAPPDATA%\ACL\protected-backup\`.
+Windows DPAPI for the current user. An encrypted copy of each plain file is kept in
+`%LOCALAPPDATA%\ACL\protected-backup\` first.
 
-A version older than ACL-1358 cannot read these values (it would send the ciphertext as
-a bearer token). Before a manual reinstall or downgrade, as the same Windows user:
+When the tokens are protected:
+- `serve.py` (the installed `ACL.exe` and the source launcher) does **not** protect them at
+  start. It protects them about 15 seconds after the dashboard's own `/health` first
+  answers. The updater starts a new version, waits for `/health` and otherwise starts the
+  previous version again; so a first update that fails before it is healthy never touches
+  the tokens, and the old version keeps reading plain files.
+- `ensure_machine_config`, `scripts/acl_migrate_config.py` and scripts that call
+  `load_env()` outside the dashboard protect immediately.
 
-    python scripts/acl_migrate_config.py --unprotect
+Going back to a version older than ACL-1358 after a *healthy* update (manual reinstall or
+downgrade), as the same Windows user:
 
-This writes the tokens back as plain text. If a live file cannot be opened, the newest
-readable encrypted backup is used; `--unprotect --from-backup` forces the backup for
-every file. The next start of a current version protects the tokens again. The updater's
-automatic "start the previous version" fallback does not run this step, so a failed
-update to a version with protected tokens needs `--unprotect` before the old version is
-used. Another Windows user cannot open the values: the app then asks to connect again.
+1. Stop the dashboard: `ACL.exe --stop-server`. A running dashboard would protect the
+   tokens again.
+2. Installed app: `ACL.exe --unprotect-tokens`. Source checkout:
+   `python scripts/acl_migrate_config.py --unprotect`. The tokens are plain text again.
+3. Install or start the older version. A current version protects them again on its next
+   start.
+
+If a file cannot be opened, the newest readable encrypted backup is used. `--from-backup`
+forces the backup for every file; for `.env` only the token lines are put back (other
+settings stay as they are now), but a token connected after the backup was taken is
+replaced by the older one. Last resort when nothing can be restored (another Windows user,
+no backup): reconnect Multilogin in the app and sign in to Google again.
+
+The default machine folder `%LOCALAPPDATA%\ACL` is shared by every instance on the
+machine. Once a current version has protected the tokens, an older instance using the same
+folder (for example 9090/main) reads ciphertext until `--unprotect-tokens` is run or
+Multilogin and Google are connected again. Give a test instance its own `ACL_CONFIG_DIR`.

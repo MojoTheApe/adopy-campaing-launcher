@@ -50,8 +50,9 @@ def machine(request, tmp_path, monkeypatch):
         monkeypatch.setattr(token_vault, "unprotect_bytes", lambda b: bytes(x ^ 0x5A for x in b[4:]))
         assert paths.protect_machine_secrets()
         assert FAKE_ML not in (config / ".env").read_text(encoding="utf-8")
-    token_vault._file_cache.clear()
-    return config
+    token_vault.reset_secret_cache()
+    yield config
+    token_vault.reset_secret_cache()
 
 
 def _absent(text: str) -> None:

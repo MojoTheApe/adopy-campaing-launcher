@@ -166,8 +166,7 @@ class Scrubber:
         try:
             from config import token_vault
 
-            for secret in sorted(token_vault.configured_secret_values(), key=len, reverse=True):
-                text = text.replace(secret, "TOKEN_REDACTED")
+            text = token_vault.hide_configured_secrets(text, "TOKEN_REDACTED")
         except Exception:
             pass
         for real, synthetic in sorted(self.pairs, key=lambda p: -len(p[0])):

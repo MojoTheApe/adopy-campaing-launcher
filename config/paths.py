@@ -743,9 +743,14 @@ def protect_machine_secrets() -> list[str]:
     token_files = {Path(get_google_oauth_token_path())}
     token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
     for path in sorted(token_files):
-        note = token_vault.migrate_file(path, config_dir)
+        try:
+            with machine_file_lock(path.parent / token_vault.TOKEN_LOCK_NAME):
+                note = token_vault.migrate_file(path, config_dir)
+        except Exception as exc:
+            note = f"{path.name}: could not move to protected storage ({type(exc).__name__}); left as it was"
         if note:
             notes.append(note)
+    token_vault.reset_secret_cache()
     return notes
 
 
@@ -777,10 +782,66 @@ def unprotect_machine_secrets(*, from_backup: bool = False) -> list[str]:
     token_files = {Path(get_google_oauth_token_path())}
     token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
     for path in sorted(token_files):
-        note = token_vault.unprotect_file(path, config_dir, from_backup=from_backup)
+        try:
+            with machine_file_lock(path.parent / token_vault.TOKEN_LOCK_NAME):
+                note = token_vault.unprotect_file(path, config_dir, from_backup=from_backup)
+        except Exception as exc:
+            note = f"{path.name}: could not restore ({type(exc).__name__}); left as it was"
         if note:
             notes.append(note)
+    token_vault.reset_secret_cache()
     return notes
+
+
+DEFER_PROTECTION_ENV = "ACL_DEFER_TOKEN_PROTECTION"
+
+
+def protection_deferred() -> bool:
+    return (os.environ.get(DEFER_PROTECTION_ENV) or "").strip() == "1"
+
+
+def protect_secrets_when_healthy(
+    health_url: str,
+    *,
+    settle_s: float = 15.0,
+    timeout_s: float = 900.0,
+    poll_s: float = 2.0,
+    fetch=None,
+    sleep=time.sleep,
+    clock=time.monotonic,
+) -> list[str] | None:
+    """ACL-1358: protect the tokens only after this version has proven healthy.
+
+    The updater starts a new version, waits for ``/health`` and otherwise starts
+    the previous one again. A version older than ACL-1358 cannot read protected
+    tokens, so the migration must not happen before that check is over. Waits
+    until ``health_url`` answers, lets ``settle_s`` pass, then protects and lifts
+    the deferral. Returns the notes, or None if it never became healthy. Never
+    raises.
+    """
+    def default_fetch(url: str) -> bool:
+        import urllib.request
+
+        with urllib.request.urlopen(url, timeout=3) as response:  # noqa: S310 - loopback health URL
+            return 200 <= response.status < 300
+
+    probe = fetch or default_fetch
+    deadline = clock() + timeout_s
+    while clock() < deadline:
+        try:
+            if probe(health_url):
+                break
+        except Exception:
+            pass
+        sleep(poll_s)
+    else:
+        return None
+    sleep(settle_s)
+    os.environ.pop(DEFER_PROTECTION_ENV, None)
+    try:
+        return protect_machine_secrets()
+    except Exception:
+        return []
 
 
 def ensure_machine_config() -> list[str]:
@@ -839,11 +900,15 @@ def load_env() -> list[str]:
     # ensure_machine_config, so plain tokens would stay plain on installer
     # based machines. Every start comes through here: protect them first.
     # Idempotent and cheap once done; a failure leaves the files as they were.
-    try:
-        for note in protect_machine_secrets():
-            print(f"[config] {note}", file=sys.stderr)
-    except Exception:
-        pass
+    # serve.py defers it (ACL_DEFER_TOKEN_PROTECTION) until this version has
+    # answered /health: an update that fails before that point is rolled back by
+    # the updater to the previous version, which cannot read protected tokens.
+    if not protection_deferred():
+        try:
+            for note in protect_machine_secrets():
+                print(f"[config] {note}", file=sys.stderr)
+        except Exception:
+            pass
     try:
         from dotenv import load_dotenv
     except Exception:

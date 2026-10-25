@@ -37,6 +37,7 @@ FILE_MAGIC = b"ACLDPAPI1\n"
 SECRET_ENV_KEY = re.compile(r"^MULTILOGIN_AUTOMATION_TOKEN_[A-Z0-9]+$")
 TOKEN_FILES = ("token_accounts.json", "token_telemetry.json")
 BACKUP_DIR_NAME = "protected-backup"
+TOKEN_LOCK_NAME = ".tokens.lock"
 BACKUPS_KEPT = 3
 _ENTROPY = b"ACL-token-vault-v1"
 
@@ -162,15 +163,33 @@ def read_secret_text(path: str | Path) -> str:
 
 def write_secret_text(path: str | Path, text: str) -> None:
     """Atomically write ``text`` protected (plain where DPAPI is absent)."""
-    from config.paths import _atomic_write
+    from config.paths import _atomic_write, machine_file_lock
 
     data = text.encode("utf-8")
     if available():
         data = FILE_MAGIC + protect_bytes(data)
-    _atomic_write(path, data)
+    with machine_file_lock(Path(path).parent / TOKEN_LOCK_NAME):
+        _atomic_write(path, data)
+    reset_secret_cache()
 
 
 # ── migration ─────────────────────────────────────────────────────────────────
+
+def backup_key(path: str | Path, config_dir: str | Path) -> str:
+    """Backup name for a file: its name inside the config folder, name plus a
+    short hash of the full path for a file living elsewhere (GSHEET_OAUTH_TOKEN)."""
+    import hashlib
+
+    target = Path(path)
+    try:
+        inside = target.resolve().parent == Path(config_dir).resolve()
+    except OSError:
+        inside = True
+    if inside:
+        return target.name
+    digest = hashlib.sha1(str(target.resolve()).lower().encode("utf-8", "replace")).hexdigest()[:8]
+    return f"{target.name}.{digest}"
+
 
 def _backup(original: bytes, name: str, config_dir: Path) -> Path:
     """Encrypted copy of the pre-migration bytes; the newest few are kept."""
@@ -200,7 +219,7 @@ def migrate_file(path: str | Path, config_dir: str | Path) -> str | None:
         raw = target.read_bytes()
         if is_protected_bytes(raw) or not raw.strip():
             return None
-        _backup(raw, target.name, Path(config_dir))
+        _backup(raw, backup_key(target, config_dir), Path(config_dir))
         sealed = FILE_MAGIC + protect_bytes(raw)
         if unprotect_bytes(sealed[len(FILE_MAGIC):]) != raw:
             return f"{target.name}: protected copy did not verify; left as it was"
@@ -254,7 +273,7 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
             out.append(line)
         if not changed:
             return None
-        _backup(original, target.name, Path(config_dir))
+        _backup(original, backup_key(target, config_dir), Path(config_dir))
         _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
         return f".env: {changed} Multilogin token(s) moved to protected storage (encrypted backup kept)"
     except Exception as exc:
@@ -308,7 +327,7 @@ def unprotect_file(path: str | Path, config_dir: str | Path, *, from_backup: boo
             except VaultError:
                 plain = None
         if plain is None:
-            plain = _newest_backup_bytes(target.name, Path(config_dir))
+            plain = _newest_backup_bytes(backup_key(target, config_dir), Path(config_dir))
             source = "encrypted backup"
         if plain is None:
             if target.is_file() and not from_backup:
@@ -320,6 +339,34 @@ def unprotect_file(path: str | Path, config_dir: str | Path, *, from_backup: boo
         return f"{target.name}: could not restore ({type(exc).__name__}); left as it was"
 
 
+def _env_tokens_from_backup(target: Path, config_dir: str | Path) -> str | None:
+    """Put the token lines of the newest .env backup back; other settings stay as they are now."""
+    from config.paths import _atomic_write, _dotenv_line
+
+    backup = _newest_backup_bytes(backup_key(target, config_dir), Path(config_dir))
+    if backup is None:
+        return None
+    wanted: dict[str, str] = {}
+    for line in backup.decode("utf-8", "replace").splitlines():
+        m = _ENV_LINE.match(line)
+        if m and is_secret_env_key(m.group(2)):
+            value = _unquote(m.group(4))
+            if value:
+                wanted[m.group(2)] = value
+    if not wanted:
+        return None
+    current = target.read_bytes().decode("utf-8").splitlines() if target.is_file() else []
+    out: list[str] = []
+    for line in current:
+        m = _ENV_LINE.match(line)
+        if m and m.group(2) in wanted:
+            continue  # replaced below; also drops duplicate assignments
+        out.append(line)
+    out.extend(_dotenv_line(key, value) for key, value in wanted.items())
+    _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
+    return f".env: {len(wanted)} Multilogin token(s) restored from the encrypted backup (other settings kept)"
+
+
 def unprotect_env_file(env_path: str | Path, config_dir: str | Path, *, from_backup: bool = False) -> str | None:
     """Replace ``dpapi:v1:`` values in .env by plain ones (same Windows user)."""
     target = Path(env_path)
@@ -329,11 +376,7 @@ def unprotect_env_file(env_path: str | Path, config_dir: str | Path, *, from_bac
 
     try:
         if from_backup:
-            plain = _newest_backup_bytes(target.name, Path(config_dir))
-            if plain is None:
-                return None
-            _atomic_write(target, plain)
-            return ".env restored to plain text from the encrypted backup"
+            return _env_tokens_from_backup(target, config_dir)
         if not target.is_file():
             return None
         lines = target.read_bytes().decode("utf-8").splitlines()
@@ -352,10 +395,9 @@ def unprotect_env_file(env_path: str | Path, config_dir: str | Path, *, from_bac
                         unreadable += 1
             out.append(line)
         if unreadable and not changed:
-            backup = _newest_backup_bytes(target.name, Path(config_dir))
-            if backup is not None:
-                _atomic_write(target, backup)
-                return ".env restored to plain text from the encrypted backup"
+            note = _env_tokens_from_backup(target, config_dir)
+            if note:
+                return note
             return ".env: tokens cannot be opened (other Windows user?) and there is no readable backup; left as it was"
         if not changed:
             return None
@@ -397,13 +439,18 @@ def _google_values(path: Path) -> frozenset[str]:
     return values
 
 
-def configured_secret_values() -> set[str]:
-    """Plain values of this machine's tokens, for scrubbers that must hide them.
+_SECRETS_TTL_S = 5.0
+_secrets_cache: tuple[float, frozenset[str], tuple[str, ...]] | None = None
 
-    Multilogin automation tokens from the process environment and the secrets
-    in the Google token files. Never raises, never logs; a value shorter than
-    8 characters is ignored so a placeholder cannot blank ordinary text.
-    """
+
+def reset_secret_cache() -> None:
+    """Forget the cached values (tokens were written, a test changed the machine)."""
+    global _secrets_cache
+    _secrets_cache = None
+    _file_cache.clear()
+
+
+def _collect_secret_values() -> set[str]:
     values: set[str] = set()
     try:
         for key, value in list(os.environ.items()):
@@ -427,3 +474,38 @@ def configured_secret_values() -> set[str]:
     except Exception:
         pass
     return values
+
+
+def _secrets_snapshot() -> tuple[frozenset[str], tuple[str, ...]]:
+    global _secrets_cache
+    now = time.monotonic()
+    cached = _secrets_cache
+    if cached is not None and 0 <= now - cached[0] < _SECRETS_TTL_S:
+        return cached[1], cached[2]
+    values = frozenset(_collect_secret_values())
+    ordered = tuple(sorted(values, key=len, reverse=True))
+    _secrets_cache = (now, values, ordered)
+    return values, ordered
+
+
+def configured_secret_values() -> set[str]:
+    """Plain values of this machine's tokens, for scrubbers that must hide them.
+
+    Multilogin automation tokens from the process environment and the secrets
+    in the Google token files. Never raises, never logs; a value shorter than
+    8 characters is ignored so a placeholder cannot blank ordinary text. The
+    answer is cached for a few seconds: scrubbers call this per string, and the
+    environment walk plus file checks must not run each time.
+    """
+    return set(_secrets_snapshot()[0])
+
+
+def hide_configured_secrets(text: str, replacement: str = "<hidden>") -> str:
+    """``text`` without any configured token value (longest first). Never raises."""
+    try:
+        for value in _secrets_snapshot()[1]:
+            if value in text:
+                text = text.replace(value, replacement)
+    except Exception:
+        pass
+    return text

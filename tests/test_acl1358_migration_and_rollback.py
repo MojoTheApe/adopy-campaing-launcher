@@ -102,7 +102,7 @@ def test_the_packaged_chain_stays_wired():
     launcher = (ROOT / "packaging" / "windows" / "launcher.py").read_text(encoding="utf-8")
     assert "prepare_config_dir()" in launcher
     serve = (ROOT / "serve.py").read_text(encoding="utf-8")
-    assert "from config.paths import load_env" in serve and "load_env()" in serve
+    assert "load_env" in serve and "load_env()" in serve
 
 
 # ── rollback ──────────────────────────────────────────────────────────────────

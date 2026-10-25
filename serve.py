@@ -37,7 +37,9 @@ try:
     # Machine-local settings first, checkout .env second — see
     # config.paths.get_env_files. Keeps a buyer's configuration outside the
     # folder that updates overwrite.
-    from config.paths import load_env
+    from config.paths import DEFER_PROTECTION_ENV, load_env
+    # ACL-1358: tokens are protected only once /health answers (see main()).
+    os.environ[DEFER_PROTECTION_ENV] = "1"
     load_env()
 except Exception:
     pass
@@ -195,6 +197,14 @@ def main() -> None:
 
     if not args.no_browser:
         _schedule_browser_open(url)
+
+    def _protect_tokens() -> None:
+        from config.paths import protect_secrets_when_healthy
+
+        for note in protect_secrets_when_healthy(f"http://{args.host}:{port}/health") or []:
+            print(f"[config] {note}", file=sys.stderr)
+
+    threading.Thread(target=_protect_tokens, daemon=True, name="protect-tokens").start()
 
     # ACL-1800: команды над кампаниями отвечают только на loopback — адрес привязки
     # запоминаем для приложения (процесс --reload наследует окружение).
