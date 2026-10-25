@@ -509,13 +509,16 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         except cr.TargetingUnresolved as exc:
             lost = [i for i in exc.items if i.get("state") not in ("pending", "unknown")]
             asks = [i for i in exc.items if i.get("state") == "pending"]
-            if any(i.get("state") == "unknown" for i in exc.items):
+            unknown = any(i.get("state") == "unknown" for i in exc.items)
+            if lost:
+                # Уже найденные «не найдено» показываем даже когда другой термин не успели проверить.
+                put("interests_resolve", ERROR,
+                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost)
+                    + (". " + cr._tr.UNKNOWN_MESSAGE if unknown else ""))
+                out["interests_resolve"]["items"] = lost
+            elif unknown:
                 # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
                 put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
-            elif lost:
-                put("interests_resolve", ERROR,
-                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost))
-                out["interests_resolve"]["items"] = lost
             else:
                 put("interests_resolve", OK)
             if asks:

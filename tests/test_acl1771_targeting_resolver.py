@@ -99,7 +99,7 @@ def test_norm_keeps_symbols_and_diacritics(a, b):
     assert tr.norm(a) != tr.norm(b)
 
 
-@pytest.mark.parametrize("a,b", [("Forex Trading", "forex  trading"), ("Hip-Hop", "hip hop"), ("a_b", "A/B"),
+@pytest.mark.parametrize("a,b", [("Forex Trading", "forex  trading"), ("Hip-Hop", "hip hop"), ("a_b", "A_B"),
                                  ("YOGA", "yoga"), ("Año", "año")])
 def test_norm_ignores_case_whitespace_and_dash_underscore_slash(a, b):
     assert tr.norm(a) == tr.norm(b)
@@ -594,3 +594,101 @@ def test_audience_languages_and_detailed_targeting_share_one_resolver(tmp_path):
     spec = resolver.interests([["forex"]])
     assert spec == [{"interests": [{"id": "5", "name": "Forex"}]}]
     assert resolver.targeting_report()[0]["state"] == "exact"
+
+
+# ───────────────────────────── round 2: read budget, retry, lost terms ─────────────────────────────
+
+def _client_with_budget(inner, max_calls):
+    """A FakeSearch that also carries the client's call ceiling like GraphClient."""
+    inner.max_calls = max_calls
+    return inner
+
+
+def test_three_missing_terms_and_a_near_composite_all_resolve_within_budget(tmp_path):
+    near = {"Alpari": [{"id": "1", "name": "Alpari Group"}], "Plus500": [{"id": "2", "name": "Plus 500"}]}
+    c = _client_with_budget(FakeSearch(interests=near), cr_budget())
+    r = _resolver(c, tmp_path)
+    terms = ["Zzzz1", "Zzzz2", "Zzzz3", "Alpari or Plus500"]
+    r.prefetch(terms)
+    states = {t: r.resolve(t)["state"] for t in terms}
+    assert "unknown" not in states.values(), states
+    assert states["Zzzz1"] == states["Zzzz2"] == states["Zzzz3"] == "unresolved"
+    assert states["Alpari or Plus500"] in ("pending", "unresolved")
+    assert r.reads <= tr.JOB_READ_ABS_CAP
+
+
+def cr_budget():
+    from src.web import publish_api
+    return publish_api.PLAN_PREFLIGHT_MAX_CALLS
+
+
+def test_job_cap_has_a_sane_absolute_ceiling(tmp_path):
+    c = _client_with_budget(FakeSearch(), cr_budget())
+    r = _resolver(c, tmp_path)
+    r.prefetch([f"Missing {i}" for i in range(40)])
+    assert r.job_cap == tr.JOB_READ_ABS_CAP
+    assert cr_budget() >= tr.JOB_READ_ABS_CAP + 20, "the client allowance sits above the resolver ceiling"
+
+
+def test_retry_after_unknown_makes_progress_through_the_shared_cache(tmp_path):
+    cache = tr.SearchCache()
+    terms = [f"Zzzz{i}" for i in range(4)]
+    first = FakeSearch()
+    r1 = tr.TermResolver(first, _store(tmp_path), job_cap=14, cache=cache, scope="act_1")
+    r1.prefetch(terms)
+    s1 = [r1.resolve(t)["state"] for t in terms]
+    assert "unknown" in s1
+    second = FakeSearch()
+    r2 = tr.TermResolver(second, _store(tmp_path), job_cap=14, cache=cache, scope="act_1")
+    r2.prefetch(terms)
+    s2 = [r2.resolve(t)["state"] for t in terms]
+    assert s2.count("unknown") < s1.count("unknown"), "the retry must go further than the first run"
+    assert second.calls < first.calls + 1 and r2.reads <= 14
+
+
+def test_search_cache_expires_and_is_scoped_per_account(tmp_path):
+    now = [0.0]
+    cache = tr.SearchCache(ttl=10, clock=lambda: now[0])
+    cache.put("a", ("k",), [{"id": "1"}])
+    assert cache.get("a", ("k",)) and cache.get("b", ("k",)) is None
+    now[0] = 11
+    assert cache.get("a", ("k",)) is None
+
+
+def test_slash_is_not_a_space_so_a_b_is_not_an_exact_hit(tmp_path):
+    assert tr.norm("A/B") != tr.norm("A B")
+    c = FakeSearch(interests={"A/B": [{"id": "1", "name": "A B"}]})
+    res = _one(_resolver(c, tmp_path), "A/B")
+    assert res["state"] != "exact" and res["picks"] == []
+
+
+def test_error_message_has_no_doubled_period():
+    exc = cr.TargetingUnresolved([
+        {"term": "x", "state": "pending", "candidates": [], "suggested": {"id": "1", "type": "interests", "name": "X1"}},
+        {"term": "y", "state": "unresolved", "candidates": []}])
+    assert ".." not in str(exc)
+
+
+def test_concurrent_confirms_do_not_lose_entries(tmp_path):
+    import threading
+
+    store = _store(tmp_path)
+    def put(i):
+        store.put(f"term {i}", id=str(i + 1), type="interests", name=f"N{i}")
+    ts = [threading.Thread(target=put, args=(i,)) for i in range(12)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert len(store.entries()) == 12
+
+
+def test_guard_reports_not_found_terms_even_when_another_term_is_unknown(tmp_path):
+    seen = set()
+    for mc in range(9, 40):
+        out, got = _audit(TargetMeta(), tmp_path, "Nothing close, Also gone", _store(tmp_path), max_calls=mc)
+        v = got["interests_resolve"]
+        if "press Check plan again" in v["detail"]:
+            seen.add(v["status"])
+            if v["status"] == "error":
+                assert "Nothing close" in v["detail"], "the term already known as not found stays visible"
+                return
+    pytest.fail(f"no budget stopped the job halfway with a not-found term reported; statuses {seen}")

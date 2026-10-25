@@ -674,7 +674,7 @@ class TargetingUnresolved(PlanError):
         if asks:
             msg.append("Detailed targeting needs your confirmation: "
                        + " | ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
-                                    for i in asks) + " Confirm a candidate in Check plan.")
+                                    for i in asks) + " Confirm a candidate in Check plan")
         if unknown:
             msg.append(_tr.UNKNOWN_MESSAGE)
         super().__init__(". ".join(msg))
@@ -683,14 +683,15 @@ class TargetingUnresolved(PlanError):
 class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
-    def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None):
+    def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = ""):
         self.client = client
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
-        self.terms = _tr.TermResolver(client, store)
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope)
 
     def country(self, value: str) -> str:
         key = (value or "").strip()
@@ -751,7 +752,7 @@ class TargetingResolver:
         results = {n: self.terms.resolve(n) for n in terms}
         bad: list[dict] = []
         for r in results.values():
-            if r["state"] in ("exact", "confirmed", "split"):
+            if r["state"] in ("exact", "confirmed"):
                 continue
             bad += r.get("bad_parts") or [r]
         if bad:

@@ -27,6 +27,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
     resolve_page,
@@ -375,7 +376,7 @@ class ApiPublisher:
             self._halt(exc)
         except GraphError as exc:
             raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}") from exc
-        self._resolver = TargetingResolver(self._client)
+        self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
         self.progress("ad account verified")
 
     def _open_warm(self, account_label: str, profile_id: str) -> bool:
@@ -608,8 +609,11 @@ class ApiPublisher:
 # дополнительно требует один отдельный validate-only creative, без создания объектов.
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-# ACL-1771: поиск детального таргетинга ходит за списками Meta (в резолвере свои потолки в чтениях: 8 на термин, 16 на задание).
-PLAN_PREFLIGHT_MAX_CALLS = 30
+# ACL-1771: поиск детального таргетинга ходит за списками Meta. Потолок задания в резолвере растёт с числом
+# терминов, но не выше `JOB_READ_ABS_CAP`; здесь он лежит выше него с запасом на предпроверку кабинета.
+PLAN_PREFLIGHT_MAX_CALLS = 30 + _tr_cap.JOB_READ_ABS_CAP
+#: Результаты поиска переживают Check plan на короткое время: повтор после «unknown» идёт дальше.
+PLAN_SEARCH_CACHE = _tr_cap.SearchCache()
 
 #: ACL-2117: сколько секунд Check plan держит открытым профиль, который сам поднял
 #: (0 — закрывать как раньше, через `CLOSE_GRACE_S`).
@@ -640,7 +644,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
-        pub._resolver = TargetingResolver(client)
+        pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
         for draft in drafts:
             if draft.errors:
                 out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
