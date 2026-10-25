@@ -221,7 +221,7 @@ CI (`.github/workflows/ci.yml`, ACL-1582) splits the suite by platform:
 | Job name (exact) | Runner | Python | Files |
 |---|---|---|---|
 | `linux tests (<py>, <k>)` | ubuntu-latest | 3.11 and 3.13 on pushes and manual runs, 3.13 on most PRs (below); shards k = 1..3 | every `tests/test_*.py` without the `windows_only` marker: `python scripts/acl_test_shard.py --platform linux <k> 3` |
-| `windows tests (<py>)` | windows-latest | 3.13 | the `windows_only` files plus the Windows smoke set (`scripts/acl_test_platform.py` `WINDOWS_SMOKE`), after the secret scan and `scripts/acl_smoke.py`: `--platform windows 1 1` |
+| `windows tests (<py>)` | windows-2022; actual Server 2022/build 20348 checked before tests | 3.13 | the `windows_only` files plus the Windows smoke set (`scripts/acl_test_platform.py` `WINDOWS_SMOKE`), after the secret scan and `scripts/acl_smoke.py`: `--platform windows 1 1` |
 | `ACL verification` | ubuntu-latest | - | aggregates `scope`, both Linux and Windows test jobs |
 
 A test file that needs Windows says so at module level, with the reason:

@@ -74,7 +74,14 @@ def test_the_linux_job_runs_every_unmarked_file_on_ubuntu_in_shards():
 
 def test_the_windows_job_runs_the_marked_files_the_smoke_set_and_the_app_smoke_check():
     job = JOBS["test-windows"]
-    assert job["runs-on"] == "windows-latest"
+    assert job["runs-on"] == "windows-2022"
+    guard = next(step for step in job["steps"] if step.get("id") == "verify-windows-host")
+    assert guard["shell"] == "pwsh" and not guard.get("continue-on-error")  # linux-ok: inspect YAML text, never execute PowerShell here
+    assert "if" not in guard, "The native host check must run whenever the Windows job runs"
+    assert "Get-CimInstance -ClassName Win32_OperatingSystem" in guard["run"]
+    assert "$os.BuildNumber -ne '20348' -or $os.Caption -notlike '*Windows Server 2022*'" in guard["run"]
+    assert "throw " in guard["run"] and "$ErrorActionPreference = 'Stop'" in guard["run"]
+    assert job["steps"].index(guard) < next(i for i, step in enumerate(job["steps"]) if step.get("name") == "Install dependencies")
     pythons = tuple(job["strategy"]["matrix"]["python-version"])
     assert pythons == reuse.CI_WINDOWS_PYTHONS and "3.13" in pythons
     run = _run("test-windows")
