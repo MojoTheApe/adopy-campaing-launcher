@@ -38,6 +38,8 @@ starlette==1.7.0
 uvicorn==0.44.0
 jinja2==3.1.6          # 3.1.4 had sandbox CVEs (CVE-2024-56201, -56326, CVE-2025-27516)
 python-multipart==0.0.32  # required by Starlette Request.form() in Campaign Builder POST routes
+Pillow==12.2.0         # crops the account status screenshot (ACL-1529); optional at
+                       # run time — without it the shot is kept uncropped.
 
 # --- Google Sheets (accounts, targeting, stats) ---
 google-api-python-client==2.193.0
@@ -62,3 +64,6 @@ sentry-sdk==2.69.1
 # Несёт внутри статический ffmpeg: у байера системного не будет, а требовать
 # его установки — та самая ручная возня, на которой ломается установка.
 imageio-ffmpeg==0.6.0
+
+# zoneinfo needs the IANA database on Windows (ACL-1767: start time by the ad account time zone)
+tzdata==2026.3
