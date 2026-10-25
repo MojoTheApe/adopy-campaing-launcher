@@ -4752,14 +4752,13 @@ async function dashRefresh(ev) {
       <label style="flex:0 0 7rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale</div>
         <input id="fm-locale" type="text" maxlength="5" value="EN_US" style="width:100%"></label>
     </div>
-    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Intro (optional)</div>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
-      <label><input type="checkbox" id="fm-c-name" checked> Full name</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-first_name"> First name</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name"> Last name</label>
+      <label><input type="checkbox" id="fm-c-first_name" checked> First name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name" checked> Last name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone"> Phone</label></div>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone" checked> Phone</label></div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
       <div id="fm-questions"></div>
       <button type="button" id="fm-add-q-btn" class="btn">+ Add question</button></div>
@@ -14922,13 +14921,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label class="cb-fc-label">Template name<input type="text" class="cb-input cb-fc-name" maxlength="60" placeholder="Demo form template"></label>' +
       '<label class="cb-fc-label">Headline<input type="text" class="cb-input cb-fc-headline" maxlength="60" placeholder="Get more information"></label>' +
       '<label class="cb-fc-label">Intro title <span class="cb-fc-opt">(optional, the headline is used if empty)</span><input type="text" class="cb-input cb-fc-intro-title" maxlength="60"></label>' +
-      '<label class="cb-fc-label">Intro <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
+      '<label class="cb-fc-label">Description <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
       '<div class="cb-fc-label">Contact fields<div class="cb-fc-checks">' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Full name</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="first_name"> First name</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="last_name"> Last name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="first_name" checked> First name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="last_name" checked> Last name</label>' +
       '<label><input type="checkbox" class="cb-fc-contact" value="email" checked> Email</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="phone" checked> Phone</label></div>' +
       '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
       '<div class="cb-fc-questions"></div>' +
@@ -19602,7 +19600,7 @@ window.aclTeamLibrary = (function () {
 // (зеркало form_templates.validate); окончательно проверяет сервер.
 (function () {
   var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
-  var contactKeys = ['name', 'first_name', 'last_name', 'email', 'phone'];
+  var contactKeys = ['first_name', 'last_name', 'email', 'phone'];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -19744,7 +19742,9 @@ window.aclTeamLibrary = (function () {
     el('fm-privacy').value = tpl.privacy_url || '';
     el('fm-thanks').value = tpl.thank_you_text || '';
     el('fm-site').value = tpl.website_url || '';
-    var contacts = tpl.contact_fields || ['name', 'email'];
+    var contacts = tpl.contact_fields || ['first_name', 'last_name', 'email', 'phone'];
+    // Старые шаблоны с «Full name»: поле убрано из редактора, при правке имя превращается в имя + фамилию.
+    if (contacts.indexOf('name') !== -1) contacts = contacts.filter(function (k) { return k !== 'name'; }).concat(['first_name', 'last_name']);
     contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
     questions = (tpl.questions || []).map(function (q) {
       return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
