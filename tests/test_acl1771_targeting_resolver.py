@@ -692,3 +692,13 @@ def test_guard_reports_not_found_terms_even_when_another_term_is_unknown(tmp_pat
                 assert "Nothing close" in v["detail"], "the term already known as not found stays visible"
                 return
     pytest.fail(f"no budget stopped the job halfway with a not-found term reported; statuses {seen}")
+
+
+def test_search_cache_prunes_expired_entries_on_store():
+    now = [0.0]
+    cache = tr.SearchCache(ttl=10, clock=lambda: now[0])
+    for i in range(5):
+        cache.put("a", (i,), [])
+    now[0] = 11
+    cache.put("a", ("fresh",), [])
+    assert len(cache._rows) == 1

@@ -93,7 +93,10 @@ class SearchCache:
 
     def put(self, scope: str, key: tuple, rows: list[dict]) -> None:
         with self._lock:
-            self._rows[(scope, key)] = (self._clock(), rows)
+            now = self._clock()
+            for k in [k for k, (ts, _) in self._rows.items() if now - ts > self.ttl]:
+                del self._rows[k]      # просроченное не копим: память ограничена
+            self._rows[(scope, key)] = (now, rows)
 
     def clear(self) -> None:
         with self._lock:
