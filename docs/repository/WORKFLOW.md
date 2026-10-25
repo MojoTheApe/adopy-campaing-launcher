@@ -221,7 +221,7 @@ CI (`.github/workflows/ci.yml`, ACL-1582) splits the suite by platform:
 | Job name (exact) | Runner | Python | Files |
 |---|---|---|---|
 | `linux tests (<py>, <k>)` | ubuntu-latest | 3.11 and 3.13 on pushes and manual runs, 3.13 on most PRs (below); shards k = 1..3 | every `tests/test_*.py` without the `windows_only` marker: `python scripts/acl_test_shard.py --platform linux <k> 3` |
-| `windows tests (<py>)` | windows-latest | 3.13 | the `windows_only` files plus the Windows smoke set (`scripts/acl_test_platform.py` `WINDOWS_SMOKE`), after the secret scan and `scripts/acl_smoke.py`: `--platform windows 1 1` |
+| `windows tests (<py>)` | windows-2022; actual Server 2022/build 20348 checked before tests | 3.13 | the complete `windows_only` + Windows smoke selection (`--platform windows 1 1`), after secret scan and startup smoke; checked each-once phases: general files in parallel, then ACL-1309, ACL-2063 and lock stress separately below |
 | `ACL verification` | ubuntu-latest | - | aggregates `scope`, both Linux and Windows test jobs |
 
 A test file that needs Windows says so at module level, with the reason:
@@ -281,8 +281,18 @@ no test reaches the live team library even when the machine `.env` configures it
 Each test gets its own `tmp_path`, machine config folder (`ACL_CONFIG_DIR`) and
 telemetry journal from the conftest fixtures.
 
-Serial-only tests: none. A test that genuinely cannot run next to others must be
-listed here with the reason and run in its own step; none needed it so far.
+Windows serial phases (ACL-2164): `test_acl1309_two_windows_people.py` and
+`test_acl2063_two_windows_people.py` each use the machine's real Task Scheduler
+and scoped batch-logon admission. `test_shared_file_locks.py` intentionally
+saturates every CPU. Run these three files separately, in that order, after the
+general parallel Windows files, using `-n 0` for each phase. The existing selector
+still supplies every Windows-only/smoke file. Its runtime planner refuses missing,
+extra or duplicate plan members and verifies that the phases cover the exact
+selection once. Internal real users, simultaneous writers, all-core burners and
+all original deadlines/assertions remain unchanged; the whole job retains its
+30-minute limit. Host pinning alone did not prevent the retained COM recurrence
+on Server 2022; this isolates shared test resources without claiming the unknown
+system-service cause is repaired.
 Several real-Chromium tests check the robot's own time budgets (a tab that does
 not answer in 2-5 s counts as frozen); on a CPU-starved machine they can fail in
 any mode, serial included. If a budget/timing test fails locally, rerun that
