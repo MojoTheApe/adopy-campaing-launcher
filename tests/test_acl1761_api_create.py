@@ -545,7 +545,7 @@ class FakeMeta:
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
                     row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels",
-                                                          "degrees_of_freedom_spec") if k in cre}
+                                                          "degrees_of_freedom_spec", "contextual_multi_ads") if k in cre}
                     row = json.loads(json.dumps(row))
                     for key, value in self.mutate_ads.items():
                         target = row
@@ -1253,9 +1253,9 @@ const h = G[NAME];
   out.missing = await h.call({ method: 'POST', path: '/' + ACT + '/campaigns',
                                params: { name: 'C', objective: 'OUTCOME_LEADS' } });
   out.nested_active = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
-                                     params: { name: 's', status: 'PAUSED', targeting: { status: 'ACTIVE' } } });
+                                     params: { name: 's', status: 'PAUSED', targeting: { geo_locations: { status: 'ACTIVE' } } } });
   out.nested_forbidden = await h.call({ method: 'POST', path: '/' + ACT + '/adsets',
-                                        params: { name: 'a', status: 'PAUSED', targeting: { lead_gen_form_id: '1' } } });
+                                        params: { name: 'a', status: 'PAUSED', targeting: { geo_locations: { lead_gen_form_id: '1' } } } });
   out.json_active = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',
                                    params: { name: 'x', object_story_spec: '{"link_data":{"status":"ACTIVE"}}' } });
   out.json_bad = await h.call({ method: 'POST', path: '/' + ACT + '/adcreatives',

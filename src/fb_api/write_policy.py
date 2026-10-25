@@ -45,7 +45,8 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
     "adsets": frozenset({"name", "campaign_id", "status", "optimization_goal", "billing_event",
                          "destination_type", "promoted_object", "targeting", "start_time",
                          "adlabels"}),
-    "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels"}),
+    "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels",
+                              "contextual_multi_ads"}),
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
     "adimages": frozenset(),
     "advideos": frozenset({"name", "title"}),
@@ -102,7 +103,8 @@ LEAD_FORM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
 #: поэтому и мы разбираем её до проверок статуса (ревью, minor 1).
 JSON_KEYS = frozenset({"special_ad_categories", "adlabels", "promoted_object", "targeting",
-                       "object_story_spec", "creative", "degrees_of_freedom_spec"})
+                       "object_story_spec", "creative", "degrees_of_freedom_spec",
+                       "contextual_multi_ads"})
 #: Ключи-«статусы», которые не про показ объявления: участие в улучшениях
 #: Advantage+ creative. Разрешено только выключить (OPT_OUT), никогда — включить.
 OPT_OUT_KEYS = frozenset({"enroll_status"})
@@ -113,6 +115,54 @@ OPT_OUT = "OPT_OUT"
 #: `text_optimizations` — в справочнике Graph «Ad Creative Features Spec».
 #: Отдельного документированного ключа «text generation» там нет — не гадаем.
 DOF_FEATURES = frozenset({"text_optimizations"})
+
+#: Multi-advertiser ads (ACL-1767): ключ креатива, который можно только ВЫКЛЮЧИТЬ — ровно
+#: {"enroll_status": "OPT_OUT"}. Включить его (OPT_IN) политика не даёт никогда.
+MULTI_ADS_KEY = "contextual_multi_ads"
+
+#: Кнопки (call_to_action.type), которые билдер может отправить для цели Leads (ACL-1767).
+#: Имена — из справочника Graph «Ad Creative Link Data Call To Action» (enum проверен);
+#: какие из них принимает именно цель OUTCOME_LEADS, Meta не публикует списком — берём
+#: те, что предлагает Ads Manager для лидов; лишнее Meta отвергнет известной ошибкой #100.
+#: BOOK_NOW, ORDER_NOW, REQUEST_TIME убраны (ревью ACL-1767): в справочнике Meta они есть в enum,
+#: но для сайта с целью Leads нигде не документированы.
+CTA_WEBSITE = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
+               "DOWNLOAD", "GET_OFFER")
+#: Для Instant Form (link_data + lead_gen_form_id) Meta документирует РОВНО шесть кнопок
+#: (Marketing API, Lead Ads: «call_to_action must be one of …»). Остальные из списка сайта
+#: (CONTACT_US, GET_OFFER, BOOK_NOW, REQUEST_TIME, ORDER_NOW) для формы не предлагаются и
+#: не подменяются другими: Meta отвергла бы их, а молчаливая замена меняла бы смысл кнопки.
+CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "DOWNLOAD")
+CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
+
+#: Ключи `targeting`, которые создатель вообще отправляет (ACL-1767: закрытый список).
+TARGETING_KEYS = frozenset({"geo_locations", "age_min", "age_max", "genders", "locales",
+                            "flexible_spec", "targeting_automation", "publisher_platforms",
+                            "facebook_positions", "instagram_positions", "device_platforms",
+                            "user_os"})
+#: genders: 1 — мужчины, 2 — женщины (Graph «Targeting»); «все» = ключа нет.
+GENDER_VALUES = frozenset({1, 2})
+#: device_platforms: Graph «Targeting» — mobile, desktop.
+DEVICE_PLATFORMS = frozenset({"mobile", "desktop"})
+#: user_os: «iOS» / «Android» или с минимальной версией «iOS_ver_14.0_and_above».
+#: Минимальные версии ОС, которые Meta перечисляет в справочнике таргетинга (user_os,
+#: «iOS_ver_14.0_and_above»). Статический список: вне него отказ ДО записи, а не ошибка #100
+#: после создания кампании. Ключ - ОС в нижнем регистре; значения - «N.M».
+OS_VERSIONS = {
+    "ios": ["2.0", "3.0"] + [f"{v}.0" for v in range(4, 19)],
+    "android": ["2.0", "2.1", "2.2", "2.3", "3.0", "3.1", "3.2", "4.0", "4.1", "4.2", "4.3", "4.4",
+                "5.0", "5.1", "6.0", "7.0", "7.1"] + [f"{v}.0" for v in range(8, 17)],
+}
+
+
+def os_version_ok(os_name: str, ver: str) -> bool:
+    """«14» или «14.0» из списка версий этой ОС."""
+    ver = str(ver or "").strip()
+    ver = ver if "." in ver else ver + ".0"
+    return ver in OS_VERSIONS.get(str(os_name or "").strip().lower(), [])
+
+
+USER_OS_RE = re.compile(r"^(iOS|Android)(_ver_[0-9]{1,2}(\.[0-9]{1,2})?_and_above)?$")
 
 _PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
 
@@ -137,6 +187,12 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
+        "multi_ads_key": MULTI_ADS_KEY,
+        "cta_types": sorted(CTA_TYPES),
+        "cta_website": list(CTA_WEBSITE),
+        "cta_form": list(CTA_FORM),
+        "targeting": {"keys": sorted(TARGETING_KEYS), "genders": sorted(GENDER_VALUES),
+                      "devices": sorted(DEVICE_PLATFORMS), "user_os_re": USER_OS_RE.pattern},
         "instagram": {"key": INSTAGRAM_KEY, "id_re": INSTAGRAM_ID_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
@@ -165,9 +221,9 @@ def _walk(value: Any, where: str, depth: int = 0) -> None:
             low = str(key).lower()
             if low in FORBIDDEN_ANYWHERE:
                 raise WriteRefused(f"write refused: key {key!r} is not allowed ({where})")
-            if low == "degrees_of_freedom_spec" and depth > 0:
+            if low in ("degrees_of_freedom_spec", MULTI_ADS_KEY) and depth > 0:
                 # Ревью R6: только на верхнем уровне креатива, где его проверяет `_check_dof`.
-                raise WriteRefused(f"write refused: degrees_of_freedom_spec is only allowed at the top ({where})")
+                raise WriteRefused(f"write refused: {key} is only allowed at the top ({where})")
             if low in OPT_OUT_KEYS:
                 if item != OPT_OUT:
                     raise WriteRefused(f"write refused: {key} may only be OPT_OUT ({where})")
@@ -191,6 +247,53 @@ def _check_dof(value: Any) -> None:
             raise WriteRefused(f"write refused: creative feature {feature!r} is not on the opt-out list")
         if not (isinstance(item, dict) and item == {"enroll_status": OPT_OUT}):
             raise WriteRefused(f"write refused: creative feature {feature!r} must be exactly OPT_OUT")
+
+
+def _check_multi_ads(value: Any) -> None:
+    """Ровно {"enroll_status": "OPT_OUT"}: Multi-advertiser ads можно только выключить (ACL-1767)."""
+    if value != {"enroll_status": OPT_OUT} or not isinstance(value, dict):
+        raise WriteRefused("write refused: contextual_multi_ads may only be exactly OPT_OUT")
+
+
+def _check_cta(spec: Any, on_ad: bool = False) -> None:
+    """Тип кнопки — из списка; всё прочее Graph отвергнет, мы не даём и отправить (ACL-1767)."""
+    if not isinstance(spec, dict):
+        return
+    # Назначение известно, когда вызывающий сказал `on_ad` (Instant Form): тогда список формы,
+    # без «Order now». Иначе - список сайта (он шире и включает список формы).
+    allowed = CTA_FORM if on_ad else CTA_WEBSITE
+    for fmt in LEAD_FORM_FORMATS:
+        data = spec.get(fmt)
+        if not isinstance(data, dict) or "call_to_action" not in data:
+            continue
+        cta = data["call_to_action"]      # null тоже отказ, как в слое страницы
+        if not (isinstance(cta, dict) and cta.get("type") in allowed):
+            raise WriteRefused("write refused: call_to_action.type is not on the allowed list")
+
+
+def _check_targeting(t: Any) -> None:
+    """Закрытый список ключей таргетинга и допустимые значения новых полей (ACL-1767)."""
+    if not isinstance(t, dict):
+        raise WriteRefused("write refused: targeting must be an object")
+    extra = sorted(set(t) - TARGETING_KEYS)
+    if extra:
+        raise WriteRefused(f"write refused: targeting key {extra[0]!r} is not allowed")
+    if "genders" in t:
+        g = t["genders"]
+        if not (isinstance(g, list) and g and all(type(x) is int and x in GENDER_VALUES for x in g)):
+            raise WriteRefused("write refused: targeting.genders may hold only 1 and 2")
+    if "device_platforms" in t:
+        d = t["device_platforms"]
+        if not (isinstance(d, list) and d and all(x in DEVICE_PLATFORMS for x in d)):
+            raise WriteRefused("write refused: targeting.device_platforms may hold only mobile and desktop")
+    if "user_os" in t:
+        o = t["user_os"]
+        if not (isinstance(o, list) and o and all(isinstance(x, str) and USER_OS_RE.fullmatch(x) for x in o)):
+            raise WriteRefused("write refused: targeting.user_os value is not allowed")
+    if "locales" in t:
+        loc = t["locales"]
+        if not (isinstance(loc, list) and loc and all(type(x) is int and x > 0 for x in loc)):
+            raise WriteRefused("write refused: targeting.locales must be a list of numeric ids")
 
 
 def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
@@ -337,6 +440,12 @@ def check(act: str, method: str, path: str, params: dict | None,
             raise WriteRefused(f"write refused: {key} must be a JSON object or list")
     if "degrees_of_freedom_spec" in checked:
         _check_dof(checked["degrees_of_freedom_spec"])
+    if MULTI_ADS_KEY in checked:
+        _check_multi_ads(checked[MULTI_ADS_KEY])
+    if edge == "adcreatives":
+        _check_cta(checked.get("object_story_spec"), on_ad)
+    if edge == "adsets" and "targeting" in checked:
+        _check_targeting(checked["targeting"])
     if edge == "ads" and "creative" in checked:
         # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
         # встроенный креатив провёз бы свой degrees_of_freedom_spec).
