@@ -347,6 +347,9 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
             problems.append(f"Ad set {name!r}: minimum OS version {os_min!r} is not a number like 14 or 14.0")
         else:
             plan_set.os_min = os_min
+            if not _wpol.os_version_ok(plan_set.os, os_min):
+                problems.append(f"Ad set {name!r}: Meta does not list {plan_set.os} {os_min} as a minimum version "
+                                f"(use one of: {', '.join(_wpol.OS_VERSIONS[plan_set.os.casefold()])})")
     seen: set[str] = set()
     for lang in getattr(src, "languages", None) or []:
         lang = str(lang).strip()

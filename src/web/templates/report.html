@@ -6759,7 +6759,8 @@ window.cbPreflight = (function () {
         var mobile = os === 'ios' || os === 'android';
         if (mobile && dev === 'desktop') out.push(v(id, 'error', 'mobile_os_desktop'));
         else if (ver && !mobile) out.push(v(id, 'error', 'version_needs_os'));
-        else if (ver && !new RegExp(C.os_min_re || '^$').test(ver)) out.push(v(id, 'error', 'bad_version'));
+        else if (ver && !(new RegExp(C.os_min_re || '^$').test(ver)
+          && ((C.os_versions || {})[os] || []).indexOf(ver.indexOf('.') === -1 ? ver + '.0' : ver) !== -1)) out.push(v(id, 'error', 'bad_version'));
         else out.push(v(id, 'ok'));
       } else if (id === 'start_time_valid') {
         var st = s(inp.start_time), nw = s(inp.now), stRe = new RegExp(C.start_re || '^$');
@@ -15391,7 +15392,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<datalist id="cb-lang-' + idx + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
       '<span class="cb-label">Devices</span>' +
       '<div class="cb-inline"><select name="camp_' + idx + '_device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
-      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only</option></select>' +
+      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop" disabled>Desktop only (unavailable: Instagram, Stories and Reels placements need mobile)</option></select>' +
       '<input type="text" name="camp_' + idx + '_os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
       '<span class="cb-label">Start time</span>' +
       '<input type="datetime-local" name="camp_' + idx + '_start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
