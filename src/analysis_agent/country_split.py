@@ -1413,7 +1413,8 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                 pass
         # ACL-1580: профиль, который запустило это чтение (или Read spend перед
         # ним), закрывается мягкой остановкой — и при отказе тоже.
-        _finish_started(held)
+        # ACL-2091: кроме проблемы аккаунта (разлогинен) — тогда окно остаётся открытым.
+        _finish_started(held, problem=out.error_code)
     return out
 
 
