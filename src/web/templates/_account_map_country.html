@@ -131,6 +131,7 @@
                   «Account <Status>» для группы у него нет. Проблемные статусы
                   получают одну кнопку Copy for group ниже (ACL-1520). -#}
               {%- if st.shot_id and st.status == 'unknown' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>{% endif -%}
+              {%- if st.next_step %}<small class="amap-st-next">{{ st.next_step }}</small>{% endif -%}
               {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
               {#- Одна картинка для группы поставщика (ACL-1520, решение владельца
                   03.10): сверху полоса «<имя> — Account <Status> · <время
