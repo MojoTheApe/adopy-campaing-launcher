@@ -11,15 +11,33 @@ from src.fb_ads_rpa import job_cancel
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
-# Global flag — set to True to pause the RPA; set to False to resume.
+# Global flag — set to True to pause the RPA; set to False to resume. This is the
+# dashboard's manual Pause button: it stops every job.
 _HUMAN_TAKEOVER: bool = False
 _TAKEOVER_POLL_S: float = 0.25
 
-# Teach-mode: RPA pauses on a specific step (e.g. Website click failed),
-# user does it manually, then RPA resumes and captures the successful state.
-_TEACH_WAITING: bool = False    # RPA is waiting for human action
-_TEACH_STEP: str = ""           # e.g. "website_click"
-_TEACH_RESULT: dict = {}        # captured data written back by RPA after resume
+# Teach-mode (ACL-1142): RPA pauses on a specific step (e.g. Website click
+# failed), the user does it manually, then RPA resumes. The state is kept PER
+# JOB. With two builds at once a single module-level pair of variables could not
+# say whose click was wanted, and "continue" released whichever job was waiting.
+# Key = id of the job whose thread asks (job_cancel.current_job_id()); a thread
+# outside any job (tests, scripts) uses the key "". An entry exists only while
+# that job is waiting, and an entry also means "the human has control" for that
+# job alone — the other jobs keep working.
+#   {job_id: {"step": "website_click", "since": <epoch s>}}
+_TEACH_WAITING_JOBS: dict[str, dict] = {}
+# Captured data written back after a resume, kept per job until read.
+_TEACH_RESULTS: dict[str, dict] = {}
+
+
+def _job_key(job_id: str | None = None) -> str:
+    if job_id is not None:
+        return job_id
+    return job_cancel.current_job_id() or ""
+
+
+def _in_job() -> bool:
+    return job_cancel.current_job_id() is not None
 
 
 def request_takeover() -> None:
@@ -35,7 +53,17 @@ def release_takeover() -> None:
 
 
 def is_takeover_active() -> bool:
-    return _HUMAN_TAKEOVER
+    """Does the human hold control for the caller?
+
+    A job thread sees the manual Pause button plus ITS OWN teach wait. A caller
+    outside any job (the dashboard status endpoint) sees the button plus any
+    teach wait.
+    """
+    if _HUMAN_TAKEOVER:
+        return True
+    if _in_job():
+        return _job_key() in _TEACH_WAITING_JOBS
+    return bool(_TEACH_WAITING_JOBS)
 
 
 # ── Teach-mode helpers ─────────────────────────────────────────────────────────
@@ -43,47 +71,68 @@ def is_takeover_active() -> bool:
 def begin_teach_wait(step: str) -> None:
     """Called by RPA when it needs the human to act (e.g. Website click).
 
-    `_HUMAN_TAKEOVER` belongs in the `global` list below. Without it the
-    assignment made a local variable and the module flag never changed: the
-    comment promised that pacing checks would pause, and they did not. RPA
-    asked the human to click and kept acting in the same browser.
+    Registers the wait for the calling job only. The entry doubles as the
+    takeover for that job, so its pacing checks pause (see `is_takeover_active`).
     """
-    global _TEACH_WAITING, _TEACH_STEP, _TEACH_RESULT, _HUMAN_TAKEOVER
-    _TEACH_WAITING = True
-    _TEACH_STEP = step
-    _TEACH_RESULT = {}
-    _HUMAN_TAKEOVER = True  # also set takeover so pacing checks pause
+    key = _job_key()
+    _TEACH_WAITING_JOBS[key] = {"step": step, "since": time.time()}
+    _TEACH_RESULTS.pop(key, None)
 
 
-def end_teach_wait(captured: dict | None = None) -> None:
-    """Called externally (API) or by RPA after human has acted."""
-    global _TEACH_WAITING, _TEACH_STEP, _TEACH_RESULT, _HUMAN_TAKEOVER
-    _TEACH_WAITING = False
-    _TEACH_STEP = ""
-    _TEACH_RESULT = captured or {}
-    _HUMAN_TAKEOVER = False
+def end_teach_wait(captured: dict | None = None, job_id: str | None = None) -> None:
+    """Called externally (API, with `job_id`) or by RPA after human has acted.
+
+    Releases exactly one job: `job_id` if given, else the calling job.
+    """
+    key = _job_key(job_id)
+    _TEACH_WAITING_JOBS.pop(key, None)
+    _TEACH_RESULTS[key] = captured or {}
 
 
-def get_teach_state() -> dict:
+def get_teach_state(job_id: str | None = None) -> dict:
+    """Teach state of one job (`job_id`, or the calling job).
+
+    A caller outside any job that names no job gets the dashboard-wide view:
+    `waiting` if any job waits, `step` of the longest-waiting one, and `jobs`
+    listing every waiting job_id with its step.
+    """
+    if job_id is None and not _in_job():
+        waiting = sorted(_TEACH_WAITING_JOBS.items(), key=lambda kv: kv[1]["since"])
+        first = waiting[0] if waiting else None
+        return {
+            "waiting": bool(waiting),
+            "step": first[1]["step"] if first else "",
+            "result": _TEACH_RESULTS.get(first[0] if first else "", {}),
+            "jobs": [{"job_id": k, "step": v["step"]} for k, v in waiting],
+        }
+    key = _job_key(job_id)
+    entry = _TEACH_WAITING_JOBS.get(key)
     return {
-        "waiting": _TEACH_WAITING,
-        "step": _TEACH_STEP,
-        "result": _TEACH_RESULT,
+        "waiting": entry is not None,
+        "step": entry["step"] if entry else "",
+        "result": _TEACH_RESULTS.get(key, {}),
     }
 
 
 def wait_for_teach_resume(max_wait_s: float = 600.0) -> bool:
-    """Block the RPA thread until the human resumes (or timeout)."""
+    """Block the calling job's thread until the human resumes it (or timeout)."""
     import time as _t
+    key = _job_key()
     deadline = _t.time() + max_wait_s
-    while _t.time() < deadline:
-        _t.sleep(0.5)
-        job_cancel.check()
-        job_cancel.heartbeat()   # тихое ожидание человека — не зависание
-        if not _TEACH_WAITING:
-            return True
-    end_teach_wait()
-    return False
+    try:
+        while _t.time() < deadline:
+            _t.sleep(0.5)
+            job_cancel.check()
+            job_cancel.heartbeat()   # тихое ожидание человека — не зависание
+            if key not in _TEACH_WAITING_JOBS:
+                return True
+        end_teach_wait(job_id=key)
+        return False
+    finally:
+        # Cancellation is a BaseException too. Never leave an orphan teach
+        # takeover behind, or release another job / the manual Pause button.
+        # A successful resume's captured answer remains available to the RPA.
+        _TEACH_WAITING_JOBS.pop(key, None)
 
 
 def _get_mouse_pos(page: "Page") -> tuple[float, float] | None:
@@ -129,7 +178,7 @@ def check_human_takeover(page: "Page | None" = None) -> bool:
 
     If True, the RPA should pause and wait until released.
     """
-    if _HUMAN_TAKEOVER:
+    if is_takeover_active():
         return True
     if page is None:
         return False
@@ -160,7 +209,7 @@ def wait_for_human_release(page: "Page | None" = None, *, max_wait_s: float = 30
         time.sleep(0.5)
         job_cancel.check()
         job_cancel.heartbeat()   # тихое ожидание человека — не зависание
-        if not _HUMAN_TAKEOVER:
+        if not is_takeover_active():
             if page:
                 try:
                     moved = page.evaluate("() => !!window._rpa_mouse_moved")

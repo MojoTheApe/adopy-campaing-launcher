@@ -26,6 +26,8 @@ const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'fb_a
 function world(backend, fetchReply) {
   const log = { fetched: [], opened: [], proceeded: 0, alerts: [] };
   const w = { CB_PREFLIGHT_RULES: rules, ACL_FB_BACKEND: backend, alert: (m) => log.alerts.push(m) };
+  // ACL-141: страница говорит своим окном — та же запись.
+  w.aclAlert = (m) => { log.alerts.push(m); return Promise.resolve(); };
   const sandbox = {
     window: w, Object, Array, JSON, RegExp, Number, String, parseInt, isFinite, Promise, Date,
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
@@ -38,6 +40,7 @@ function world(backend, fetchReply) {
     },
     document: { querySelector: () => ({ disabled: false, title: '' }) },
     setTimeout,
+    aclAlert: (m) => w.aclAlert(m),
   };
   w.window = w;
   vm.createContext(sandbox);
@@ -57,6 +60,7 @@ function world(backend, fetchReply) {
       return w.cbPreflight.lines(slot._input, opts);
     },
   };
+  vm.runInContext(slice('/* ACL-2118 begin */', '/* ACL-2118 end */'), sandbox);   // ACL-2118: группировка замечаний
   vm.runInContext(block, sandbox);
   return { w, log, sandbox };
 }

@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from src.analysis_agent import account_spend as sp
+from tests.profile_lease_fakes import fake_profile
 
 
 DIGITS = "1234567890"
@@ -44,7 +45,7 @@ def test_url_refuses_malformed_account_ids(stored):
 
 @pytest.fixture
 def reader(monkeypatch):
-    entry = SimpleNamespace(ad_account_id="act_" + DIGITS)
+    entry = SimpleNamespace(ad_account_id="act_" + DIGITS, profile_id=fake_profile("Synthetic account"))
     page = Mock()
     page.url = "about:blank"
     page.goto.side_effect = lambda url, **kwargs: setattr(page, "url", url)

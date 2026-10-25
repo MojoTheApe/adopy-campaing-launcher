@@ -65,13 +65,13 @@ def _country_html(monkeypatch, backend):
 def test_the_backend_decides_which_campaign_ui_renders(monkeypatch):
     """rpa (по умолчанию): прежний список из Read spend; api: таблица страны. Обе — никогда для одной страны."""
     rpa = _country_html(monkeypatch, "rpa")
-    assert "amap-campaigns" not in rpa and "Read campaigns in" not in rpa and "data-hc-mount" not in rpa
+    assert "amap-campaigns" in rpa and "Read campaigns in" not in rpa and "data-hc-mount" in rpa
     assert '<span class="amap-caret-off">·</span>' in rpa                       # стрелку, как раньше, рисует JS из чтения спенда
     api = _country_html(monkeypatch, "api")
-    assert api.count('class="hc hc-scoped amap-campaigns"') == 1 and "Read campaigns in Chile" in api
+    assert api.count('class="hc hc-scoped amap-campaigns"') == 1 and "Read campaigns in Chile" not in api
     assert '<span class="amap-caret-off">·</span>' in api                        # строка аккаунта одна и та же
     monkeypatch.delenv("ACL_FB_BACKEND", raising=False)                          # по умолчанию — rpa
-    assert "amap-campaigns" not in _country_html(monkeypatch, "")
+    assert "amap-campaigns" in _country_html(monkeypatch, "")
 
 
 def test_the_page_flag_and_the_component_follow_the_backend(monkeypatch):
@@ -80,7 +80,7 @@ def test_the_page_flag_and_the_component_follow_the_backend(monkeypatch):
     flag = next(l for l in REPORT.splitlines() if l.startswith("window.AMAP_CAMPAIGN_TABLE ="))
     include = '{% if campaign_table_api is defined and campaign_table_api() %}{% include "_campaign_table.html" %}{% endif %}'
     assert REPORT.count(include) == 1
-    for backend, want in (("rpa", False), ("api", True)):
+    for backend, want in (("rpa", True), ("api", True)):
         monkeypatch.setenv("ACL_FB_BACKEND", backend)
         assert templates.env.from_string(flag).render().strip() == "window.AMAP_CAMPAIGN_TABLE = %s;" % str(want).lower()
         out = templates.env.from_string(include).render()
@@ -111,8 +111,8 @@ def test_the_old_paint_is_a_no_op_under_api_and_runs_under_rpa():
 
 
 def test_country_block_carries_tabs_the_read_button_and_one_tree():
-    assert 'class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)"' in COUNTRY
-    assert "Read campaigns in {{ mc.country }}" in COUNTRY and "Read all spend in {{ mc.country }}" in COUNTRY
+    assert 'amapReadCampaigns(this)' not in COUNTRY
+    assert "Read campaigns in {{ mc.country }}" not in COUNTRY and "Read all spend in {{ mc.country }}" not in COUNTRY
     assert COUNTRY.count('class="hc hc-scoped amap-campaigns"') == 1 and COUNTRY.count("data-hc-mount") == 1
     assert "data-hc-tabs" in COUNTRY and "anchor_slug" not in COUNTRY      # вкладки строит JS: шаблон не требует серверных фильтров
     # одно дерево: тулбар и вкладки — НАД списком аккаунтов, подвал и журнал — под ним; отдельной таблицы кампаний нет

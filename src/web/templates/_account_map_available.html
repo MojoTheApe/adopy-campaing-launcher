@@ -26,7 +26,7 @@
         <button type="button" class="amap-btn danger amap-avail-remove" onclick="amapAvailRemove(this)" disabled
                 title="Hide the selected accounts from this list on this machine. Nothing is deleted.">Remove selected</button>
         {%- if av_inactive %}
-        <label class="amap-avail-opt" title="Accounts with no spend in the last {{ av_window.days if av_window else 30 }} days of the workbook"><input type="checkbox" class="amap-avail-show-inactive" onchange="amapAvailShowInactive(this)"> Show inactive ({{ av_inactive | length }})</label>
+        <label class="amap-avail-opt" title="Accounts with no spend in the last {{ av_window.days if av_window else 30 }} days of the statistics source"><input type="checkbox" class="amap-avail-show-inactive" onchange="amapAvailShowInactive(this)"> Show inactive ({{ av_inactive | length }})</label>
         {%- endif %}
         <span class="amap-msg amap-avail-msg"></span>
       </div>
@@ -40,9 +40,9 @@
             <td class="amap-avail-pickcol"><input type="checkbox" class="amap-avail-pick" value="{{ r.account | e }}" onchange="amapAvailSync(this)" aria-label="Select {{ r.account | e }}"></td>
             <td class="amap-acc">{{ r.account }}</td>
             <td>
-              {%- if r.status == 'active' %}<span title="Spend in the last {{ av_window.days }} days of the workbook ({{ av_window.from }} → {{ av_window.to }})">{{ r.spend | fmt_usd }} in {{ av_window.days }}d</span>
-              {%- elif r.status == 'new' %}<span class="amap-tag" title="Connected on this machine; the workbook has no spend for it yet">new</span>
-              {%- elif r.status == 'inactive' %}<span class="nodata" title="No spend in the last {{ av_window.days }} days of the workbook ({{ av_window.from }} → {{ av_window.to }})">no spend in {{ av_window.days }}d</span>
+              {%- if r.status == 'active' %}<span title="Spend in the last {{ av_window.days }} days of the statistics source ({{ av_window.from }} → {{ av_window.to }})">{{ r.spend | fmt_usd(r.source_info | default(none)) }} in {{ av_window.days }}d</span>
+              {%- elif r.status == 'new' %}<span class="amap-tag" title="Connected on this machine; the statistics source has no spend for it yet">new</span>
+              {%- elif r.status == 'inactive' %}<span class="nodata" title="No spend in the last {{ av_window.days }} days of the statistics source ({{ av_window.from }} → {{ av_window.to }})">no spend in {{ av_window.days }}d</span>
               {%- else %}<span class="nodata">—</span>{% endif -%}
             </td>
             <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>

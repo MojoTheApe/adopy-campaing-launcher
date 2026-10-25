@@ -33,7 +33,10 @@ def _messages(path: Path, error_names: set[str]) -> list[str]:
         if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
             found.append(arg.value)
         elif isinstance(arg, ast.JoinedStr) and isinstance(arg.values[0], ast.Constant):
-            found.append(arg.values[0].value)
+            # Сообщение, начатое подстановкой («“{name}” is not in …»), первой
+            # константой даёт одну кавычку, — тогда берём самый длинный кусок.
+            pieces = [part.value for part in arg.values if isinstance(part, ast.Constant)]
+            found.append(arg.values[0].value if len(arg.values[0].value.strip(" “\"")) > 3 else max(pieces, key=len))
         elif isinstance(arg, ast.BinOp) and isinstance(arg.left, ast.Constant):
             found.append(arg.left.value)
     return found
@@ -92,8 +95,38 @@ class SetupGuideMatchesTheProductTests(unittest.TestCase):
         self.assertGreaterEqual(len(messages), 14, messages)
         for message in messages:
             # Длинный отказ в таблице приведён первой фразой.
-            first_sentence = message.split(". ")[0].rstrip()
+            first_sentence = message.split(". ")[0].strip().lstrip("”").strip()
             self.assertIn(first_sentence, GUIDE, message)
+
+    def test_every_update_button_failure_is_explained(self):
+        """ACL-1175, критерий 3: что человек увидит при сбое кнопки Update, названо в гиде."""
+        messages = _messages(REPO_ROOT / "src" / "web" / "release_updates.py", {"UpdateError"})
+        self.assertGreaterEqual(len(messages), 15, messages)
+        for message in messages:
+            first_sentence = message.split(". ")[0].rstrip().rstrip(".:")
+            self.assertIn(first_sentence, GUIDE, message)
+        app_source = (REPO_ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
+        block = app_source[app_source.index("async def _apply_release_update"):]
+        block = block[:block.index("def _period_owner")]
+        refusals = re.findall(r'"error": (?:message if|"([^"]+)")', block)
+        refusals = [text for text in refusals if text]
+        self.assertGreaterEqual(len(refusals), 4, refusals)
+        for text in refusals:
+            self.assertIn(text.split(". ")[0].rstrip("."), GUIDE, text)
+        page = (REPO_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+        for phrase in (
+            "Update not started",
+            "ACM did not come back within 10 minutes",
+            "did not work, so ACM went back to",
+            "ACM could not fully restore the previous version",
+        ):
+            self.assertIn(phrase, page, phrase)
+            self.assertIn(phrase, GUIDE, phrase)
+
+    def test_update_flow_names_what_the_button_shows(self):
+        page = (REPO_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+        self.assertIn("title: 'Update ACM to ' + name + '?'", page)
+        self.assertIn("**Update ACM to <version>?**", GUIDE)
 
     def test_installer_and_wizard_point_at_the_shipped_guide(self):
         iss = (PACKAGING_DIR / "installer.iss").read_text(encoding="utf-8")

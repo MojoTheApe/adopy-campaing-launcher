@@ -30,6 +30,7 @@ import secrets
 import threading
 import time
 from contextlib import AbstractContextManager
+import logging
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
@@ -38,6 +39,8 @@ from src.fb_api import write_policy as _wp
 from src.fb_api.creator import ZERO_DECIMAL, budget_minor
 from src.fb_api.graph import GraphError, GraphStop, WriteUnknown, WritesBlocked
 from src.fb_api.telemetry import scrub
+
+log = logging.getLogger(__name__)
 
 # ───────────────────────── константы ─────────────────────────
 
@@ -87,6 +90,14 @@ class CommandRefused(ValueError):
         self.code = code
 
 
+class HistoryUnavailable(OSError):
+    """Журнал операций не записался (append / flush / fsync) — писать в Meta нельзя."""
+
+
+HISTORY_FAILED = ("The operation history could not be saved on this computer "
+                  "(disk full or not writable).")
+
+
 # ───────────────────────── хранилище операций ─────────────────────────
 
 def default_history_path() -> Path:
@@ -118,47 +129,70 @@ class OperationStore:
         if not self.path.is_file():
             return
         try:
-            lines = self.path.read_text(encoding="utf-8").splitlines()
+            lines = self.path.read_bytes().split(b"\n")
         except OSError:
             return
         for line in lines:
             try:
-                op = json.loads(line)
-            except ValueError:
+                # строка, оборванная посреди символа (диск кончился), — пропускается (ACL-1855)
+                op = json.loads(line.decode("utf-8"))
+            except ValueError:   # UnicodeDecodeError тоже ValueError
                 continue
             if isinstance(op, dict) and op.get("op_id"):
                 self._ops[str(op["op_id"])] = op
         for op in list(self._ops.values()):
+            if op.get("refresh_pending"):
+                # The old process/session is gone. Preserve the command result;
+                # never replay its write or claim its refresh is still running.
+                op["refresh_pending"] = False
+                self.try_save(op)
             if op.get("state") in (RUNNING, VERIFYING):
                 items = op.get("affected", [])
-                maybe_sent = any(i.get("result") in ("sending", "sent", "unknown") for i in items)
+                # «saved»/«mismatch» — сверка уже показала, что запись дошла (ACL-1855:
+                # рестарт после сверки не должен превращать их в «не отправлено»).
+                maybe_sent = any(i.get("result") in ("sending", "sent", "unknown", "saved", "mismatch")
+                                 for i in items)
                 if maybe_sent:
-                    # Запись могла уйти: результат не сверен.
-                    op["state"] = UNKNOWN
-                    op["message"] = ("The dashboard stopped before the result was verified. "
-                                     "Check the objects in Ads Manager; nothing was retried.")
                     for item in items:
                         if item.get("result") in ("sending", "sent"):
                             item["result"] = "unknown"
                         elif item.get("result") in ("", "pending"):
                             item["result"] = "not_attempted"
+                    _conclude(op)
+                    if op["state"] == UNKNOWN:
+                        # Запись могла уйти: результат не сверен.
+                        op["message"] = ("The dashboard stopped before the result was verified. "
+                                         "Check the objects in Ads Manager; nothing was retried.")
                 else:
                     op["state"] = FAILED
                     op["message"] = "The dashboard stopped before anything was sent. Nothing was written."
                     for item in items:
-                        item["result"] = "not_sent"
-                self._persist(op)
+                        if item.get("result") in ("", "pending"):
+                            item["result"] = "not_sent"
+                self.try_save(op)
+
+    @staticmethod
+    def _open_append(path: Path):
+        return path.open("a+b")
 
     def _persist(self, op: dict) -> None:
+        """Дописать строку и дождаться fsync. Сбой — `HistoryUnavailable`, не молчание (ACL-1855)."""
         op["updated_at"] = self.now_iso(self.clock())
+        line = (json.dumps(op, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(op, ensure_ascii=False, sort_keys=True) + "\n")
+            with self._open_append(self.path) as fh:
+                fh.seek(0, os.SEEK_END)
+                if fh.tell():
+                    fh.seek(-1, os.SEEK_END)
+                    if fh.read(1) != b"\n":
+                        # прошлая строка оборвана сбоем: не приклеивать к ней новую
+                        line = b"\n" + line
+                fh.write(line)
                 fh.flush()
                 os.fsync(fh.fileno())   # след переживает падение процесса
-        except OSError:
-            pass   # журнал — след, а не условие: ошибка диска не должна ломать результат
+        except OSError as exc:
+            raise HistoryUnavailable(str(exc)) from exc
 
     # -- доступ
     def add(self, op: dict) -> None:
@@ -184,8 +218,22 @@ class OperationStore:
         return None
 
     def save(self, op: dict) -> None:
+        """Обязательное сохранение: перед любой записью в Meta. Бросает `HistoryUnavailable`."""
         with self._lock:
             self._persist(op)
+
+    def try_save(self, op: dict) -> bool:
+        """Сохранение по возможности (после записи или когда ничего не ушло).
+
+        Каждая строка — полный снимок операции, поэтому следующая удачная
+        строка лечит пропущенную.
+        """
+        with self._lock:
+            try:
+                self._persist(op)
+            except HistoryUnavailable:
+                return False
+            return True
 
     def history(self, limit: int = 50) -> list[dict]:
         with self._lock:
@@ -433,7 +481,7 @@ def max_targets_for_ceiling() -> int:
 
 
 def preview(store: OperationStore, open_session: OpenSession, *, account: str, actor: str,
-            command: str, value: Any, targets: Any) -> dict:
+            command: str, value: Any, targets: Any, baseline: dict | None = None) -> dict:
     if command not in COMMANDS:
         raise CommandRefused("Unknown command. Use set_status, set_budget or set_bid.")
     account = str(account or "").strip()
@@ -470,6 +518,14 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
                                 "reason": f"Could not read this {LEVEL_WORD[t['level']].lower()} "
                                           f"(Graph error {exc.code})"})
                 continue
+            saved = (baseline or {}).get(t["level"] + ":" + t["id"], {})
+            for field in ("status", "daily_budget", "bid_amount", "bid_strategy"):
+                known = saved.get(field)
+                if known not in (None, "") and snap.get(field) != known:
+                    raise CommandRefused(
+                        f"{LEVEL_WORD[t['level']]} changed since the saved list. "
+                        "Nothing was written; the account list is refreshing. Preview it again.",
+                        status=409, code="stale")
             entry, why = plan_one(command, snap, new, currency)
             if entry is None:
                 skipped.append({"level": t["level"], "id": t["id"], "name": snap["name"], "reason": why})
@@ -505,7 +561,9 @@ def _spawn_thread(fn: Callable[[], None]) -> None:
 
 def execute(store: OperationStore, open_session: OpenSession, *, revision_id: str,
             idempotency_key: str, spawn: Callable[[Callable[[], None]], None] | None = None,
-            sleep: Callable[[float], None] = time.sleep) -> dict:
+            sleep: Callable[[float], None] = time.sleep,
+            after_write: Callable[[dict, Any], None] | None = None,
+            on_stale: Callable[[dict], None] | None = None) -> dict:
     """Принять подтверждение человека и запустить операцию. Возвращает её состояние.
 
     Тот же ключ — тот же ответ, записей больше нет. Превью исполняется один раз.
@@ -535,14 +593,31 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
         op["idempotency_key"] = key
         op["state"] = RUNNING
         op["message"] = "Re-reading current values"
+        if after_write is not None or on_stale is not None:
+            op["refresh_pending"] = True
         for item in op["affected"]:
             item["result"] = "pending"
-        store.save(op)
+        try:
+            store.save(op)
+        except HistoryUnavailable:
+            # Ни одной записи в Meta: без следа на диске операцию не начинаем.
+            for item in op["affected"]:
+                item["result"] = "not_sent"
+            op["state"] = FAILED
+            op["refresh_pending"] = False
+            op["message"] = HISTORY_FAILED + " Nothing was sent. Free up disk space and try again."
+            store.try_save(op)
+            raise CommandRefused(op["message"], status=503, code="storage") from None
         op_id = op["op_id"]
 
     def work() -> None:
         try:
-            run_op(store, op_id, open_session, sleep=sleep)
+            callbacks = {}
+            if after_write is not None:
+                callbacks["after_write"] = after_write
+            if on_stale is not None:
+                callbacks["on_stale"] = on_stale
+            run_op(store, op_id, open_session, sleep=sleep, **callbacks)
         except BaseException as exc:  # noqa: BLE001 — операция не должна остаться в Running
             _finish_after_crash(store, op_id, exc)
 
@@ -564,7 +639,7 @@ def _finish_after_crash(store: OperationStore, op_id: str, exc: BaseException) -
     op["message"] = (f"Stopped: {scrub(str(exc))[:200] or type(exc).__name__}. "
                      + ("Some writes may have been applied; check Ads Manager. Nothing was retried."
                         if sent else "Nothing was written."))
-    store.save(op)
+    store.try_save(op)
 
 
 def _fail_all(op: dict, message: str, *, stale: bool = False) -> None:
@@ -574,26 +649,42 @@ def _fail_all(op: dict, message: str, *, stale: bool = False) -> None:
 
 
 def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
-           sleep: Callable[[float], None] = time.sleep) -> None:
+           sleep: Callable[[float], None] = time.sleep,
+           after_write: Callable[[dict, Any], None] | None = None,
+           on_stale: Callable[[dict], None] | None = None) -> None:
     op = store.get(op_id)
     assert op is not None
     try:
         with open_session(op["account"], True) as sess:
             _run(store, op, sess, sleep)
+            if op["state"] == SUCCEEDED and after_write is not None:
+                try:
+                    after_write(op, sess)
+                except Exception:  # noqa: BLE001 — запись уже подтверждена и сохранена
+                    log.warning("The campaign list could not refresh after a confirmed command; its result is unchanged.")
     except CommandRefused as exc:
         # Отказ до первой записи (чужой кабинет, смена валюты, устаревшее превью).
         _fail_all(op, f"{exc} Nothing was written.", stale=exc.code == "stale")
-        store.save(op)
+        store.try_save(op)
     except GraphStop as exc:
         if op["state"] in FINAL_STATES:
             return
         _stopped(op, f"Stopped before writing: {exc}")
-        store.save(op)
+        store.try_save(op)
     except Exception as exc:  # noqa: BLE001 — профиль не открылся и т. п.
         if op["state"] in FINAL_STATES:
             return
         _stopped(op, scrub(str(exc)) or type(exc).__name__)
-        store.save(op)
+        store.try_save(op)
+    finally:
+        if op.get("stale") and on_stale is not None:
+            try:
+                on_stale(op)
+            except Exception:  # noqa: BLE001 — отказ записи остаётся отказом
+                log.warning("The stale campaign list could not be queued for refresh. Nothing was retried.")
+        if op.get("refresh_pending"):
+            op["refresh_pending"] = False
+            store.try_save(op)
 
 
 def _stopped(op: dict, message: str) -> None:
@@ -633,11 +724,12 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
                             f"{why or _display(command, now_value, currency)}")
             _fail_all(op, f"{LEVEL_WORD[item['level']]} \"{item['name']}\" changed since the "
                           "preview. Nothing was written; review the change again.", stale=True)
-            store.save(op)
+            store.try_save(op)
             return
 
     # 2) Одна запись на объект. Первая неудача — остальные не пробуем.
     stop_rest = False
+    history_blocked = False   # локально: флаг не попадает ни в журнал, ни в снимки
     for item in op["affected"]:
         if stop_rest:
             item["result"] = "not_attempted"
@@ -645,7 +737,14 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         path = f"/{item['id']}"
         item["requested"] = item["after"]
         item["result"] = "sending"      # до POST: упавший процесс не должен выглядеть как «не отправлено»
-        store.save(op)
+        try:
+            store.save(op)              # без надёжного «sending» на диске POST не уходит (ACL-1855)
+        except HistoryUnavailable:
+            item["result"] = "not_sent"
+            item["note"] = "Not sent: " + HISTORY_FAILED[0].lower() + HISTORY_FAILED[1:]
+            history_blocked = True
+            stop_rest = True
+            continue
         try:
             client.post(path, {item["field"]: item["after"] if item["field"] == "status"
                                else str(item["after"])})
@@ -660,11 +759,11 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         except (GraphStop, WritesBlocked, ValueError) as exc:
             item["result"], item["note"] = "not_sent", f"Not sent: {exc}"[:240]
             stop_rest = True
-        store.save(op)
+        store.try_save(op)   # не вышло — на диске остаётся «sending», при рестарте это «неизвестно»
 
     # 3) Сверка чтением того, что ушло (или могло уйти).
     op["state"], op["message"] = VERIFYING, "Reading the values back from Meta"
-    store.save(op)
+    store.try_save(op)
     for item in op["affected"]:
         if item["result"] not in ("sent", "unknown"):
             continue
@@ -693,7 +792,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         else:
             item["result"] = "mismatch"
             item["note"] = (f"Meta accepted the change but saved {_display(command, saved, currency)}")
-    _finalize(store, op)
+    _finalize(store, op, history_blocked=history_blocked)
 
 
 def _display(command: str, value: Any, currency: str) -> str:
@@ -702,7 +801,8 @@ def _display(command: str, value: Any, currency: str) -> str:
     return fmt_minor(value, currency)
 
 
-def _finalize(store: OperationStore, op: dict) -> None:
+def _conclude(op: dict) -> None:
+    """Итог по результатам объектов (и при рестарте после сверки)."""
     results = [a["result"] for a in op["affected"]]
     done = sum(1 for r in results if r == "saved")
     total = len(results)
@@ -712,10 +812,28 @@ def _finalize(store: OperationStore, op: dict) -> None:
                          "check Ads Manager. Nothing was retried.")
     elif done == total:
         op["state"], op["message"] = SUCCEEDED, f"All {total} confirmed by readback."
+    elif done == 0 and all(r in ("not_sent", "not_attempted") for r in results):
+        op["state"], op["message"] = FAILED, "Nothing was written."
     else:
         op["state"] = FAILED
         op["message"] = f"{done} of {total} saved; the rest were not changed or did not match."
-    store.save(op)
+
+
+def _finalize(store: OperationStore, op: dict, *, history_blocked: bool = False) -> None:
+    _conclude(op)
+    if history_blocked:
+        op["message"] = HISTORY_FAILED + " " + op["message"]
+    if store.try_save(op):
+        return
+    # Итог не лёг на диск: там последнее надёжное — намерение («sending»/«sent»).
+    # Показываем то же, что покажет журнал после рестарта, — «не проверено».
+    sent = any(a["result"] in ("saved", "mismatch", "unknown", "sent") for a in op["affected"])
+    if sent:
+        op["state"] = UNKNOWN
+    if HISTORY_FAILED not in op["message"]:
+        op["message"] = HISTORY_FAILED + " " + op["message"]
+    if sent:
+        op["message"] += " Check Ads Manager; nothing was retried."
 
 
 def status(store: OperationStore, op_id: str) -> dict | None:

@@ -4,7 +4,7 @@
     `metric_values` (src/analysis_agent/metric_columns.py): делитель ноль даёт
     прочерк, доллары — целыми с округлением вверх, CR — с одним знаком.
 
-    Подключать так: {% import "_metrics.html" as mx %}. Таблица аккаунтов на
+    Подключать так: {% import "_metrics.html" as mx with context %}. Таблица аккаунтов на
     Home и в Manage пишет свои <th>/<td> руками (у неё особая ячейка Account
     spend), но берёт значения из того же `metric_values`. -#}
 
@@ -14,21 +14,41 @@
 {%- for h in METRIC_HEADERS %}<th class="num">{{ h }}</th>{% endfor -%}
 {%- endmacro %}
 
+{#- ACL-110: сравнение периодов. Под значением — «было X» и изменение. `prev`:
+    false — сравнения нет (ячейки как раньше); none — раньше этой строки не
+    было; словарь spend/leads/deposits — строка прошлого периода. `gone` — строки
+    нет в текущем периоде (рисуется только из прошлого): текущие значения «—». -#}
+{% macro cmp_cell(c) -%}
+{%- set c = source_comparison_cell(c) -%}
+<small class="cmp"><span class="cmp-prev" title="Earlier period">{{ c.prev }}</span><span class="cmp-delta {{ c.dir }} {{ c.tone }}">{{ c.delta }}</span></small>
+{%- endmacro %}
+
+{% macro ftd_pair(c) -%}
+<small class="cmp" aria-label="Earlier FTDs and change"><span class="cmp-prev">You {{ c.you.prev }} · {{ c.you.delta }}</span><span class="cmp-prev">All {{ c.all.prev }} · {{ c.all.delta }}</span></small>
+{%- endmacro %}
+
+{#- Метка строки, которой нет в одном из периодов. -#}
+{% macro flag(state, what='the earlier period') -%}
+{%- if state == 'new' %}<span class="cmp-flag new" title="Not in {{ what }}">new</span>{% elif state == 'gone' %}<span class="cmp-flag gone" title="In {{ what }}, not in this period">gone</span>{% endif -%}
+{%- endmacro %}
+
 {#- Шесть <td> по счётчикам. `ftds` — депозиты строки. -#}
 {#- `ftd_class` — необязательный класс (good/bad) только для ячейки FTDs. -#}
-{% macro cells(spend, leads, ftds, ftd_class='') -%}
-{%- for x in metric_values(spend, leads, ftds) %}<td class="num{% if loop.index == 3 and ftd_class %} {{ ftd_class }}{% endif %}">{{ x }}</td>{% endfor -%}
+{% macro cells(spend, leads, ftds, ftd_class='', prev=false, gone=false) -%}
+{%- set cc = metric_compare(none if gone else {'spend': spend, 'leads': leads, 'deposits': ftds}, prev) if prev is not sameas false else none -%}
+{%- for x in (metric_values(spend, leads, ftds) if not gone else ['—', '—', '—', '—', '—', '—']) %}<td class="num{% if loop.index == 3 and ftd_class %} {{ ftd_class }}{% endif %}">{{ x }}{% if cc %}{{ cmp_cell(cc[loop.index0]) }}{% endif %}</td>{% endfor -%}
 {%- endmacro %}
 
 {#- Трендовая таблица: в каждой из шести ячеек две строки — последние дни
     жирным, весь период серым снизу (решение владельца 06.10, вариант B). -#}
-{% macro pair_cells(recent, period) -%}
-{%- for r in recent %}{% set p = period[loop.index0] %}<td class="num two"><b>{{ r }}</b><small>{{ p }}</small></td>{% endfor -%}
+{% macro pair_cells(recent, period, recent_compare=none, period_compare=none) -%}
+{%- for r in recent %}{% set p = period[loop.index0] %}<td class="num two"><b>{{ r }}</b>{% if recent_compare %}{{ cmp_cell(recent_compare[loop.index0]) }}{% endif %}<small>{{ p }}</small>{% if period_compare %}{{ cmp_cell(period_compare[loop.index0]) }}{% endif %}</td>{% endfor -%}
 {%- endmacro %}
 
 {#- Те же шесть значений для грид-строк Home (не <td>, а <span>). -#}
-{% macro spans(spend, leads, ftds) -%}
-{%- for x in metric_values(spend, leads, ftds) %}<span class="num"><b>{{ x }}</b></span>{% endfor -%}
+{% macro spans(spend, leads, ftds, prev=false, gone=false) -%}
+{%- set cc = metric_compare(none if gone else {'spend': spend, 'leads': leads, 'deposits': ftds}, prev) if prev is not sameas false else none -%}
+{%- for x in (metric_values(spend, leads, ftds) if not gone else ['—', '—', '—', '—', '—', '—']) %}<span class="num"><b>{{ x }}</b>{% if cc %}{{ cmp_cell(cc[loop.index0]) }}{% endif %}</span>{% endfor -%}
 {%- endmacro %}
 
 {% macro span_headers() -%}
