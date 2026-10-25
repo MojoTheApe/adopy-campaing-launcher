@@ -2443,6 +2443,18 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         name      = (form.get(f"camp_{idx}_name") or "").strip()
         # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
         destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
+        # ACL-1767 (только API-бэкенд): поля набора. Пусто = ключа в слоте нет, и
+        # прежние черновики не меняются ни байтом. Незнакомое значение уходит как есть,
+        # а план откажет вслух, молча в умолчание оно не превращается.
+        gender_val = (form.get(f"camp_{idx}_gender") or "").strip().lower()
+        if gender_val == "all":
+            gender_val = ""
+        device_val = (form.get(f"camp_{idx}_device") or "").strip().lower()
+        if device_val == "all":
+            device_val = ""
+        os_min_val = (form.get(f"camp_{idx}_os_min") or "").strip()
+        start_val = (form.get(f"camp_{idx}_start_time") or "").strip()
+        langs_val = [x.strip() for x in (form.get(f"camp_{idx}_languages") or "").split(",") if x.strip()]
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
@@ -2500,6 +2512,13 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 # Незнакомое назначение не превращается в сайт молча: уходит как есть,
                 # и план откажет вслух ("Unknown conversion location").
                 slot["destination"] = destination
+            for key, val in (("gender", gender_val), ("languages", langs_val), ("device", device_val),
+                             ("os_min", os_min_val), ("start_time", start_val)):
+                if val:
+                    slot[key] = val
+            cta_val = (form.get(f"camp_{idx}_ad_{a_idx}_cta") or "").strip().upper()
+            if cta_val and cta_val != "LEARN_MORE":
+                slot["cta"] = cta_val
             if destination == "instant_form":
                 slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
                 # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
@@ -5764,6 +5783,31 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+#: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
+API_ONLY_SLOT_KEYS = {"gender": "Gender", "languages": "Several languages", "device": "Devices",
+                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more"}
+
+
+def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1767: заполненное поле только для API при бэкенде RPA - отказ вслух, не молча."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    names: list[str] = []
+    for slot in slots:
+        for key, title in API_ONLY_SLOT_KEYS.items():
+            if slot.get(key) and title not in names:
+                names.append(title)
+        if str(slot.get("os") or "").strip().lower() == "android" and "Android only" not in names:
+            names.append("Android only")
+    if names:
+        return JSONResponse({"error": "These fields work only with the Graph API backend "
+                             "(ACL_FB_BACKEND=api): " + ", ".join(names) + ". Clear them or use the API backend."},
+                            status_code=409)
+    return None
+
+
 @app.post("/api/account-pages")
 async def api_account_pages(request: Request) -> JSONResponse:
     """Read available Pages under the existing profile read lock; no Meta writes."""
@@ -5910,7 +5954,7 @@ async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
-    refused = _instant_form_refusal(slots)
+    refused = _instant_form_refusal(slots) or _api_only_fields_refusal(slots)
     if refused is not None:
         return refused
     if not country:
@@ -5948,7 +5992,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     """
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
-    refused = _instant_form_refusal(slots)
+    refused = _instant_form_refusal(slots) or _api_only_fields_refusal(slots)
     if refused is not None:
         return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
