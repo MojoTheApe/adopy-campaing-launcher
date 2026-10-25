@@ -2272,6 +2272,249 @@ def _prune_status_shots(folder: Path, safe: str) -> None:
             pass
 
 
+# ── Чёткий обрезанный снимок (ACL-1529) ──────────────────────────────────
+#
+# Отзыв владельца 03.10 (9943, Account Disabled): снимок мелкий и нечитаемый.
+# Окно профиля больше отрисованной страницы, и Ads Manager занимал левый
+# верхний угол (~1920×1080 из 3837×2157), остальное — белое. Теперь: снимок
+# видимой области как есть, а рамка (видимая область по DOM, снизу — последний
+# текст таблицы) вырезается уже в Python, затем срезаются белые поля.
+#
+# Решение владельца 03.10 (ревью PR #530, B2): отпечаток экрана профиля
+# Multilogin не трогаем никак. Любой `clip` (с `scale` или без) в
+# `Page.captureScreenshot` из новой CDP-сессии сбрасывает чужую подмену
+# метрик устройства: замер на Chromium 149 — DPR 1.5 → 1, screen 1920×1080 →
+# настоящий размер окна, и насовсем. Старый `page.screenshot(full_page=False)`
+# делает то же самое. Не сбрасывает её только голый
+# `Page.captureScreenshot` без clip и без scale — его и зовём, а режем потом.
+# Поэтому и запасного пути через `page.screenshot` после неудачи нет: лучше
+# без снимка, чем со сброшенным экраном профиля. Он остаётся только для
+# страниц без CDP вообще (не Chromium).
+#
+# Зависание (B1): снимок ждёт кадр композитора, у свёрнутого или скрытого
+# окна его может не быть никогда, а `CDPSession.send` без тайм-аута — чтение
+# держало бы живой профиль вечно. Скрытую страницу не снимаем, всё остальное
+# ограничено `_SHOT_DEADLINE_S`.
+
+#: Поле под последней строкой таблицы, CSS px.
+_SHOT_PAD = 24
+#: Шире не храним: у хоста с DPR 2 видимая область 1920 CSS px — это 3840 px,
+#: а копирование потом гоняет `getImageData` по всей картинке (ревью N1).
+STATUS_SHOT_MAX_WIDTH = 2600
+#: Сколько ждать снимок целиком (рамка + захват), секунд.
+_SHOT_DEADLINE_S = 10.0
+#: Отказ снимка — предупреждение в Sentry не чаще раза за столько секунд на кабинет.
+_SHOT_WARN_EVERY_S = 6 * 3600.0
+#: «Пусто» при обрезке полей — как в `amapTrimShot`: все каналы > 249.
+_SHOT_BLANK = 249
+
+#: Рамка снимка в CSS px относительно видимой области: верх не режем никогда
+#: (там выбор кабинета с номером, баннер Meta и заголовок таблицы), низ —
+#: последний текст верхней таблицы (строки, итоги) плюс поле. Таблицы нет (у
+#: отключённого кабинета бывает) — вся видимая высота. Плюс видна ли страница
+#: и её devicePixelRatio (для журнала: масштаб снимка берётся из него самого).
+_SHOT_FRAME_JS = r"""
+(pad) => {
+  const de = document.documentElement;
+  const vv = window.visualViewport;
+  const w = Math.floor((vv && vv.width) || de.clientWidth || window.innerWidth);
+  const h = Math.floor((vv && vv.height) || de.clientHeight || window.innerHeight);
+  const tables = Array.from(document.querySelectorAll('[role="table"], [role="grid"], table'))
+    .filter(t => t.getClientRects().length && !t.parentElement.closest('[role="table"], [role="grid"], table'));
+  let bottom = 0;
+  const range = document.createRange();
+  for (const t of tables) {
+    const walk = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+    let n, seen = 0;
+    while ((n = walk.nextNode()) && seen < 20000) {
+      seen++;
+      if (!n.nodeValue.trim()) continue;
+      range.selectNodeContents(n);
+      const r = range.getBoundingClientRect();
+      if (r.width && r.height && r.top < h && r.bottom > 0) bottom = Math.max(bottom, r.bottom);
+    }
+  }
+  const cut = bottom ? Math.min(h, Math.ceil(bottom) + pad) : h;
+  return {visible: document.visibilityState === 'visible', dpr: window.devicePixelRatio || 1,
+          width: w, height: Math.max(1, cut)};
+}
+"""
+
+
+class _ShotFailed(Exception):
+    """Снимок не вышел; `kind` — короткая причина для телеметрии и Sentry."""
+
+    def __init__(self, kind: str, detail: str = "") -> None:
+        super().__init__(detail or kind)
+        self.kind = kind
+
+
+def _within(obj, name: str, deadline: float, *args):
+    """`obj.name(*args)`, но не дольше `deadline` (по `time.monotonic`).
+
+    Синхронный Playwright можно звать только из своего потока, поэтому для
+    него — его же цикл событий и `asyncio.wait_for` вокруг асинхронной
+    реализации; ответ, пришедший после срока, Playwright сам отбрасывает.
+    Прочие объекты (не Playwright) — в отдельном потоке с `join(timeout)`.
+    """
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise _ShotFailed("timeout", f"{name}: no time left")
+    impl = getattr(obj, "_impl_obj", None)
+    sync = getattr(obj, "_sync", None)
+    if impl is not None and callable(sync):
+        import asyncio
+
+        try:
+            return sync(asyncio.wait_for(getattr(impl, name)(*args), left))
+        except (TimeoutError, asyncio.TimeoutError) as exc:
+            raise _ShotFailed("timeout", f"{name}: over {left:.1f}s") from exc
+    box: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            box["ok"] = getattr(obj, name)(*args)
+        except BaseException as exc:  # noqa: BLE001 — передаём вызвавшему
+            box["err"] = exc
+
+    t = threading.Thread(target=run, name="acl-status-shot", daemon=True)
+    t.start()
+    t.join(left)
+    if t.is_alive():
+        raise _ShotFailed("timeout", f"{name}: over {left:.1f}s")
+    if "err" in box:
+        raise box["err"]
+    return box.get("ok")
+
+
+def _crop_shot(data: bytes, frame: dict) -> bytes:
+    """Вырезать рамку (CSS px → пиксели снимка), срезать белые поля справа и снизу,
+    ужать до `STATUS_SHOT_MAX_WIDTH`. Без Pillow — снимок как есть: поля
+    тогда срежет `amapTrimShot` при копировании."""
+    try:
+        from PIL import Image, ImageChops
+    except ImportError:
+        return data
+    import io
+
+    with Image.open(io.BytesIO(data)) as src:
+        img = src.convert("RGB")
+    # Снимок без clip — ровно видимая область, поэтому пикселей на CSS px —
+    # ширина картинки на ширину области. Без подмены это и есть
+    # devicePixelRatio; с подменой нет: замер 03.10 на headless Chromium 149 —
+    # хост 1.5 и подмена DPR 0.75 дают картинку 1920 на 1280 CSS px (×1.5),
+    # хост 1 и подмена DPR 2 — 1280 (×1). Умножение на DPR там срезало бы
+    # половину кадра или не обрезало бы низ.
+    scale = img.width / float(frame["width"])
+    w = img.width
+    h = max(1, min(img.height, round(float(frame["height"]) * scale)))
+    img = img.crop((0, 0, w, h))
+    # Не пусто там, где хоть один канал ≤ 249; поля — только справа и снизу.
+    r, g, b = (ch.point(lambda v: 255 if v <= _SHOT_BLANK else 0) for ch in img.split())
+    box = ImageChops.lighter(ImageChops.lighter(r, g), b).getbbox()
+    if box:
+        pad = round(max(w, h) / 200)
+        right, bottom = min(w, box[2] + pad), min(h, box[3] + pad)
+        if (right, bottom) != (w, h):
+            img = img.crop((0, 0, right, bottom))
+    if img.width > STATUS_SHOT_MAX_WIDTH:
+        size = (STATUS_SHOT_MAX_WIDTH, max(1, round(img.height * STATUS_SHOT_MAX_WIDTH / img.width)))
+        img = img.resize(size, Image.Resampling.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _full_view_shot(page, target: Path, deadline_s: float | None = None) -> None:
+    """Снимок видимой области голым `Page.captureScreenshot` (без clip и
+    scale), рамка вырезается в Python. Не вышло — `_ShotFailed`."""
+    deadline = time.monotonic() + (_SHOT_DEADLINE_S if deadline_s is None else deadline_s)
+    try:
+        frame = _within(page, "evaluate", deadline, _SHOT_FRAME_JS, _SHOT_PAD)
+    except _ShotFailed:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _ShotFailed("no_frame", str(exc)) from exc
+    if not isinstance(frame, dict) or float(frame.get("width") or 0) < 1 or float(frame.get("height") or 0) < 1:
+        raise _ShotFailed("no_frame")
+    if not frame.get("visible"):
+        # Свёрнутое или перекрытое окно: кадра композитора может не быть вовсе.
+        raise _ShotFailed("hidden")
+    session = None
+    try:
+        import base64
+
+        try:
+            session = page.context.new_cdp_session(page)
+            got = _within(session, "send", deadline, "Page.captureScreenshot",
+                          {"format": "png", "captureBeyondViewport": False})
+        except _ShotFailed:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise _ShotFailed("error", str(exc)) from exc
+        data = base64.b64decode((got or {}).get("data") or "")
+        if not data.startswith(b"\x89PNG"):
+            raise _ShotFailed("not_png")
+        try:
+            data = _crop_shot(data, frame)
+        except Exception as exc:  # noqa: BLE001 — неразрезанный снимок лучше, чем никакого
+            log.debug("status shot: crop failed, keeping the whole view: %s", exc)
+        target.write_bytes(data)
+    finally:
+        if session is not None:
+            try:
+                _within(session, "detach", max(deadline, time.monotonic() + 3.0))
+            except Exception:  # noqa: BLE001
+                pass
+
+
+_shot_warned: dict[str, float] = {}
+_shot_warned_lock = threading.Lock()
+
+
+def _report_shot_failure(account: str, kind: str, detail: str) -> None:
+    """Предупреждение в Sentry об отказе снимка: вычищенное, не чаще раза в
+    `_SHOT_WARN_EVERY_S` на кабинет. Никогда не бросает."""
+    try:
+        key = _safe_name(account) or "account"
+        now = time.monotonic()
+        with _shot_warned_lock:
+            last = _shot_warned.get(key)
+            if last is not None and now - last < _SHOT_WARN_EVERY_S:
+                return
+            _shot_warned[key] = now
+        from src import acl_sentry
+
+        if not acl_sentry.init():
+            return
+        import sentry_sdk
+
+        with sentry_sdk.new_scope() as scope:
+            scope.fingerprint = ["acl-status-shot", kind]
+            scope.set_tag("step", "status_shot")
+            scope.set_tag("reason", kind)
+            tag = acl_sentry.account_tag(account)
+            if tag:
+                scope.set_tag("account", tag)
+            scope.set_context("status_shot", {"kind": kind, "detail": scrub_tree_error(detail)[:500]})
+            sentry_sdk.capture_message(f"status_shot: {kind}", level="warning")
+    except Exception:  # noqa: BLE001 — отчёт не должен ломать чтение
+        pass
+
+
+def _record_shot_path(account: str, path: str, kind: str = "") -> None:
+    """Каким путём снят снимок: `full`, `fallback` (без CDP) или `none`."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        diag = {"account": account, "path": path}
+        if kind:
+            diag["reason"] = kind
+        _rt.record("status_shot", path != "none", diag=diag)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _status_shot(page, account: str) -> tuple[str, str]:
     """Снять видимую часть страницы. (id, время) или ("", "") при неудаче."""
     try:
@@ -2282,7 +2525,21 @@ def _status_shot(page, account: str) -> tuple[str, str]:
         shot_id, n = stem, 1
         while (folder / f"{shot_id}.png").exists() and n < 1000:
             shot_id, n = f"{stem}-{n}", n + 1
-        page.screenshot(path=str(folder / f"{shot_id}.png"), full_page=False)
+        target = folder / f"{shot_id}.png"
+        context = getattr(page, "context", None)
+        if context is None or not hasattr(context, "new_cdp_session"):
+            # Не Chromium: CDP нет — и подмены экрана через него тоже.
+            page.screenshot(path=str(target), full_page=False)
+            _record_shot_path(account, "fallback")
+        else:
+            try:
+                _full_view_shot(page, target)
+            except _ShotFailed as exc:
+                log.warning("account status: no screenshot for %s (%s)", account, exc.kind)
+                _record_shot_path(account, "none", exc.kind)
+                _report_shot_failure(account, exc.kind, str(exc))
+                return "", ""
+            _record_shot_path(account, "full")
         at = _now()
         _prune_status_shots(folder, safe)
         return shot_id, at
