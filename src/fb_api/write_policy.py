@@ -343,6 +343,12 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
         refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
     cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
+    for kind_name in ("bodies", "titles", "descriptions"):
+        # Длина - отдельная причина: «1-N текстов» скрыла бы её (ACL-1774).
+        limit = ASSET_FEED_TEXT_MAX[kind_name]
+        for x in spec.get(kind_name) or []:
+            if isinstance(x, dict) and isinstance(x.get("text"), str) and len(x["text"]) > limit:
+                refuse(f"{kind_name} text is {len(x['text'])} characters long, the limit is {limit}")
     if not _is_text_list(spec.get("bodies"), "bodies", required=True, limit_count=cap):
         refuse(f"bodies must hold 1-{cap} non-empty texts")
     if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):

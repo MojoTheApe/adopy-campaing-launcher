@@ -808,3 +808,34 @@ def test_partial_video_retry_ignores_an_expiring_thumbnail_url_in_creative_ident
     assert len(set(thumbnails)) == 2
     assert len(meta.sessions) == 1
     assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 1
+
+
+# ───────────────────────── длина текста и подпись загрузки ─────────────────────────
+
+@pytest.mark.parametrize("field,size,limit", [("ad_body", 1025, 1024), ("ad_title", 256, 255)])
+def test_an_over_length_text_gets_a_message_naming_the_length(tmp_path, field, size, limit):
+    d = _ad_with(tmp_path, vertical=None)
+    setattr(d.ad_sets[0].ads[0], field, "x" * size)
+    with pytest.raises(cr.PlanError, match=f"{size} characters long, the limit is {limit}"):
+        cr.plan_from_draft(d)
+
+
+def test_the_policy_names_the_length_not_the_count():
+    spec = _feed(bodies=[{"text": "x" * 1025}])
+    with pytest.raises(wp.WriteRefused, match="1025 characters long, the limit is 1024"):
+        wp.check(ACT, "POST", f"/{ACT}/adcreatives", _cre(spec))
+
+
+def test_the_vertical_file_upload_has_its_own_progress_label(tmp_path, monkeypatch):
+    seen: list = []
+    real = cr.CampaignCreator._write
+
+    def spy(self, *a, **kw):
+        if kw.get("upload"):
+            seen.append(kw["upload"])
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(cr.CampaignCreator, "_write", spy)
+    out, _ = _run(FakeMeta(), _ad_with(tmp_path))
+    assert out.error == ""
+    assert sorted(k for _, k in seen) == ["Stories / Reels image", "image"]

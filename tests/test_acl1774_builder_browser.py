@@ -94,3 +94,70 @@ def test_the_type_switch_clears_both_files_and_duplicate_copies_everything(page)
     row.evaluate("r => { const v = r.querySelector('input[type=radio][value=Video]'); v.checked = true; cbAdTypeChange(v); }")
     assert row.locator("input[name$='_creative_file_vertical']").input_value() == ""
     assert row.locator(".cb-vertical-search").input_value() == ""
+
+
+# ── «Reuse creative_pairing»: пара Square + Vertical подставляется в пустое поле Stories / Reels ──
+
+_PAIR_FILES = [
+    {"filename": "4_es_2403_post.png", "rel_path": "4_es_2403_post.png", "folder": "", "type": "Image",
+     "size_bytes": 1, "story_label": "Story: 4_es_2403_story.png", "vertical_partner": "4_es_2403_story.png"},
+    {"filename": "4_es_2403_story.png", "rel_path": "4_es_2403_story.png", "folder": "", "type": "Image",
+     "size_bytes": 1, "story_label": "Story: same file, Original", "square_file": "4_es_2403_post.png"},
+    {"filename": "1962.png", "rel_path": "1962.png", "folder": "", "type": "Image",
+     "size_bytes": 1, "story_label": "Story: same file, Original"},
+]
+
+
+def _pick_main(p, row, name):
+    p.route("**/api/creatives*", lambda r: r.fulfill(json={"files": _PAIR_FILES}))
+    p.evaluate("cbRefreshCreatives(0)")
+    p.wait_for_timeout(150)
+    box = row.locator(".cb-creative-search:not(.cb-vertical-search)")
+    box.fill(name)
+    row.locator(".cb-creative-sel-wrap:not(.cb-vertical-sel-wrap) .cb-sel-opt[data-val]").first.dispatch_event("mousedown")
+
+
+def _vertical(row):
+    return (row.locator("input[name$='_creative_file_vertical']").input_value(),
+            row.locator(".cb-vertical-search").input_value())
+
+
+def test_a_square_file_with_a_story_partner_fills_the_empty_vertical_field(page):
+    _open_first(page, "ad")
+    _backend(page, "api")
+    row = _row(page)
+    _pick_main(page, row, "4_es_2403_post")
+    assert _vertical(row) == ("4_es_2403_story.png", "4_es_2403_story.png")
+    # человек очистил поле: следующее изменение, не связанное с выбором файла, его не возвращает
+    row.locator(".cb-vertical-search").fill("")
+    row.locator("input[name$='_creative_file_vertical']").evaluate("e => { e.value = ''; }")
+    page.wait_for_timeout(100)
+    assert _vertical(row) == ("", "")
+
+
+def test_the_prefill_never_overrides_a_choice_and_skips_unpaired_or_multi_text_ads(page):
+    _open_first(page, "ad")
+    _backend(page, "api")
+    row = _row(page)
+    row.evaluate("""r => {
+      r.querySelector('input[name$="_creative_file_vertical"]').value = 'mine.png';
+      r.querySelector('.cb-vertical-search').value = 'mine.png'; }""")
+    _pick_main(page, row, "4_es_2403_post")
+    assert _vertical(row) == ("mine.png", "mine.png")
+    row.evaluate("""r => {
+      r.querySelector('input[name$="_creative_file_vertical"]').value = '';
+      r.querySelector('.cb-vertical-search').value = '';
+      r.querySelector('input[name$="_copy2"]').value = 'T2'; }""")
+    _pick_main(page, row, "4_es_2403_post")
+    assert _vertical(row) == ("", ""), "несколько текстов + вертикальный файл отказываются, подставлять нельзя"
+    row.evaluate("r => { r.querySelector('input[name$=\"_copy2\"]').value = ''; }")
+    _pick_main(page, row, "1962")
+    assert _vertical(row) == ("", "")
+
+
+def test_under_rpa_nothing_is_prefilled(page):
+    _open_first(page, "ad")
+    _backend(page, "rpa")
+    row = _row(page)
+    _pick_main(page, row, "4_es_2403_post")
+    assert _vertical(row) == ("", "")

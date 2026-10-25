@@ -420,6 +420,12 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
                          ("descriptions", plan_ad.descriptions)):
         if len(items) > MAX_TEXTS:
             problems.append(f"Ad {i}: up to {MAX_TEXTS} {label} per ad (got {len(items)})")
+    for label, items, key in (("primary text", plan_ad.bodies, "bodies"), ("headline", plan_ad.titles, "titles"),
+                              ("description", plan_ad.descriptions, "descriptions")):
+        limit = _wpol.ASSET_FEED_TEXT_MAX[key]
+        for n, text in enumerate(items, 1):
+            if len(text) > limit:
+                problems.append(f"Ad {i}: {label} {n} is {len(text)} characters long, the limit is {limit}")
     if plan_ad.multi_text and str(getattr(src, "vertical_path", "") or "").strip():
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
         # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
@@ -1457,7 +1463,7 @@ class CampaignCreator:
         # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
         got = self._write(out, f"{who}: image upload", f"/{plan.act}/adimages", {}, find,
                           files={"filename": data}, filename=image_name(path, data), id_of=hash_of,
-                          upload=(ad.index, "image"))
+                          upload=(ad.index, f"{role.strip()} image".strip()))
         out.created.setdefault("images", []).append(got)
         self._step(out, f"{who}: image uploaded")
         return got
@@ -1484,7 +1490,7 @@ class CampaignCreator:
         else:
             vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
-                              filename=Path(path).name, upload=(ad.index, "video"))
+                              filename=Path(path).name, upload=(ad.index, f"{role.strip()} video".strip()))
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"{who}: video uploaded")
         return vid, self._wait_video(out, ad, vid, who=who)

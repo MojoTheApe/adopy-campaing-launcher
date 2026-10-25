@@ -328,10 +328,16 @@ the visual Ads Manager presentation check remains pending):
 - Readback checks media labels and IDs even when ads are reused. Feed creatives retain the current
   Instagram identity; vertical videos use the same bounded/chunked loader as the main video.
   Website media/CTA controls stay outside the hidden Instant Form section, and campaign copies
-  preserve their ad counts. Existing `creative_pairing` metadata remains the source of Post/Story hints.
+  preserve their ad counts. Choosing a square `..._post` file that has a `..._story` partner in
+  the same folder fills the empty Stories / Reels field from `creative_pairing` (the person can
+  change or clear it; an ad with several texts is not prefilled).
+- Over-length texts (1024 body, 255 headline/description) are refused before any write with a message
+  naming the length. The vertical file upload is labelled "Stories / Reels image/video" in progress.
 - Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
-  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 dependency,
-  visual acceptance and unverified asset feeds with Instant Forms remain explicit conditions.
+  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 is merged.
+  The RPA backend is out of scope (owner decision 2026-10-25). Open conditions: the live checks on
+  TEST9095 (2-5 texts as Dynamic Creative; one text with a square + 9:16 pair and placement rules)
+  and Instant Form asset feeds, which stay refused.
 
 
 ## ACL-1891 — Videos over 200 MB upload in chunks ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891), 2026-10-14)

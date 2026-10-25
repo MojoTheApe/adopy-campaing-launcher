@@ -13850,7 +13850,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   };
 
   function cbCreativeSig(f) {
-    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
+    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file, f.vertical_partner] : null;
   }
 
   // Карточки перерисовываем только там, где изменился выбранный файл:
@@ -13974,9 +13974,39 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbPrefillVertical(wrap, val);
         cbMarkMissingCreatives();
       });
     });
+  };
+
+  /* ACL-1774: «Reuse creative_pairing»: выбран квадратный файл с готовой вертикальной парой
+     (`N_post` + `N_story`) - пустое поле Stories / Reels заполняется этой парой. Только API.
+     Не трогаем: непустое поле (выбор человека главнее) и объявление с несколькими текстами
+     (вместе с вертикальным файлом такой запрос отказывается до записи). Подставляем только в момент
+     выбора основного файла, поэтому очищенное человеком поле само не возвращается. */
+  window.cbPrefillVertical = function (wrap, picked) {
+    if (window.ACL_FB_BACKEND !== 'api' || !wrap || wrap.classList.contains('cb-vertical-sel-wrap')) return;
+    var row = wrap.closest('.cb-ad-row');
+    var vwrap = row && row.querySelector('.cb-vertical-sel-wrap');
+    if (!vwrap) return;
+    var vh = vwrap.querySelector('input[type="hidden"]');
+    var vt = vwrap.querySelector('.cb-vertical-search');
+    if ((vh && vh.value.trim()) || (vt && vt.value.trim())) return;
+    var more = ['_copy2', '_copy3', '_copy4', '_copy5'].some(function (suf) {
+      var h = row.querySelector('input[type="hidden"][name$="' + suf + '"]');
+      return h && h.value.trim();
+    });
+    if (more) return;
+    var f = CREATIVES.filter(function (c) { return c.filename === picked || c.rel_path === picked; })[0];
+    var partner = f && f.vertical_partner;
+    if (!partner) return;
+    var pf = CREATIVES.filter(function (c) { return c.rel_path === partner; })[0];
+    if (!pf || pf.type !== f.type) return;
+    var dup = CREATIVES.filter(function (c) { return c.filename.toLowerCase() === pf.filename.toLowerCase(); }).length > 1;
+    var v = dup ? pf.rel_path : pf.filename;
+    if (vt) vt.value = v;
+    if (vh) vh.value = v;
   };
 
   // close creative dropdown on blur

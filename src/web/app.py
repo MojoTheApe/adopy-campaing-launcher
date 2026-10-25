@@ -3031,6 +3031,11 @@ def _add_story_labels(files: list[dict]) -> None:
             f["story_label"] = plan.builder_label()
             if plan.square_file != f["filename"]:
                 f["square_file"] = plan.square_file
+            elif plan.replace_vertical and plan.vertical_file != f["filename"]:
+                # ACL-1774: на пути API это готовая вертикальная пара к квадратному файлу -
+                # конструктор подставляет её в пустое поле Stories / Reels.
+                folder = f.get("folder") or ""
+                f["vertical_partner"] = (folder + "/" if folder else "") + plan.vertical_file
         except Exception:
             f["story_label"] = ""
 
