@@ -14668,7 +14668,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         var tTip = !api ? 'API backend only: the robot creates forms through the Graph API' : '';
         if (srcSel.title !== tTip) srcSel.title = tTip;
       }
-      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden === tmpl) el.hidden = !tmpl; });
+      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden !== tmpl) el.hidden = tmpl; });
       var panelOpen = row.querySelector('.cb-form-create') && !row.querySelector('.cb-form-create').hidden;
       row.querySelectorAll('.cb-form-templatebox').forEach(function (el) {
         var want = !(tmpl && !panelOpen);
