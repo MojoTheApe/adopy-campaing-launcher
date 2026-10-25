@@ -4749,8 +4749,8 @@ async function dashRefresh(ev) {
         <input id="fm-name" type="text" maxlength="60" placeholder="Demo form template" style="width:100%"></label>
       <label style="flex:2 1 16rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Headline</div>
         <input id="fm-headline" type="text" maxlength="60" placeholder="Get more information" style="width:100%"></label>
-      <label style="flex:0 0 7rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale</div>
-        <input id="fm-locale" type="text" maxlength="5" value="EN_US" style="width:100%"></label>
+      <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale (language of the built-in Meta labels)</div>
+        <select id="fm-locale" style="width:100%"></select></label>
     </div>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
@@ -6600,6 +6600,23 @@ window.cbLayout = (function () {
   var FORM_LOCALES = ['AR_AR', 'CS_CZ', 'DA_DK', 'DE_DE', 'EL_GR', 'EN_GB', 'EN_US', 'ES_ES', 'ES_LA', 'FI_FI', 'FR_FR',
     'HE_IL', 'HI_IN', 'HU_HU', 'ID_ID', 'IT_IT', 'JA_JP', 'KO_KR', 'NB_NO', 'NL_NL', 'PL_PL', 'PT_BR',
     'PT_PT', 'RO_RO', 'RU_RU', 'SV_SE', 'TH_TH', 'TR_TR', 'VI_VN', 'ZH_CN', 'ZH_HK', 'ZH_TW'];
+  /* ACL-2180: Auto - язык формы из языка и страны набора. Зеркало src/fb_api/form_locale.py
+     (LOCALE_NAMES, RULES; сверяет тест). Форму задаёт основной язык набора, дополнительные не влияют. */
+  var FORM_LOCALE_AUTO = 'AUTO';
+  var FORM_LOCALE_AUTO_LABEL = "Auto (from the ad set language and country)";
+  var FORM_LOCALE_NAMES = {"AR_AR": "Arabic", "CS_CZ": "Czech", "DA_DK": "Danish", "DE_DE": "German", "EL_GR": "Greek", "EN_GB": "English (UK)", "EN_US": "English (US)", "ES_ES": "Spanish (Spain)", "ES_LA": "Spanish (Latin America)", "FI_FI": "Finnish", "FR_FR": "French", "HE_IL": "Hebrew", "HI_IN": "Hindi", "HU_HU": "Hungarian", "ID_ID": "Indonesian", "IT_IT": "Italian", "JA_JP": "Japanese", "KO_KR": "Korean", "NB_NO": "Norwegian (Bokmal)", "NL_NL": "Dutch", "PL_PL": "Polish", "PT_BR": "Portuguese (Brazil)", "PT_PT": "Portuguese (Portugal)", "RO_RO": "Romanian", "RU_RU": "Russian", "SV_SE": "Swedish", "TH_TH": "Thai", "TR_TR": "Turkish", "VI_VN": "Vietnamese", "ZH_CN": "Chinese (Simplified)", "ZH_HK": "Chinese (Hong Kong)", "ZH_TW": "Chinese (Taiwan)"};
+  var FORM_LOCALE_RULES = {"english": {"GB": "EN_GB", "*": "EN_US"}, "spanish": {"ES": "ES_ES", "AR": "ES_LA", "BO": "ES_LA", "CL": "ES_LA", "CO": "ES_LA", "CR": "ES_LA", "CU": "ES_LA", "DO": "ES_LA", "EC": "ES_LA", "GT": "ES_LA", "HN": "ES_LA", "MX": "ES_LA", "NI": "ES_LA", "PA": "ES_LA", "PE": "ES_LA", "PY": "ES_LA", "SV": "ES_LA", "UY": "ES_LA", "VE": "ES_LA"}, "portuguese": {"BR": "PT_BR", "*": "PT_PT"}, "chinese": {"CN": "ZH_CN", "HK": "ZH_HK", "TW": "ZH_TW"}, "arabic": {"*": "AR_AR"}, "french": {"*": "FR_FR"}, "german": {"*": "DE_DE"}, "italian": {"*": "IT_IT"}, "turkish": {"*": "TR_TR"}, "russian": {"*": "RU_RU"}, "czech": {"*": "CS_CZ"}, "danish": {"*": "DA_DK"}, "greek": {"*": "EL_GR"}, "finnish": {"*": "FI_FI"}, "hebrew": {"*": "HE_IL"}, "hindi": {"*": "HI_IN"}, "hungarian": {"*": "HU_HU"}, "indonesian": {"*": "ID_ID"}, "japanese": {"*": "JA_JP"}, "korean": {"*": "KO_KR"}, "norwegian": {"*": "NB_NO"}, "dutch": {"*": "NL_NL"}, "polish": {"*": "PL_PL"}, "romanian": {"*": "RO_RO"}, "swedish": {"*": "SV_SE"}, "thai": {"*": "TH_TH"}, "vietnamese": {"*": "VI_VN"}};
+  function formLocaleOptions(selected) {
+    var cur = squeeze(selected).toUpperCase().replace(/-/g, '_') || FORM_LOCALE_AUTO;
+    var out = '<option value="AUTO"' + (cur === FORM_LOCALE_AUTO ? ' selected' : '') + '>' + FORM_LOCALE_AUTO_LABEL + '</option>';
+    FORM_LOCALES.forEach(function (l) {
+      out += '<option value="' + l + '"' + (l === cur ? ' selected' : '') + '>' + (FORM_LOCALE_NAMES[l] || l) + ' (' + l + ')</option>';
+    });
+    if (cur !== FORM_LOCALE_AUTO && FORM_LOCALES.indexOf(cur) === -1 && /^[A-Z]{2}_[A-Z]{2}$/.test(cur)) {
+      out += '<option value="' + cur + '" selected>' + cur + ' (saved earlier)</option>';
+    }
+    return out;
+  }
 
   function httpsUrl(u) {
     return /^https:\/\/[^\s\/?#:]+\.[^\s\/?#:]+(:\d+)?([\/?#]\S*)?$/i.test(String(u == null ? '' : u).trim());
@@ -6651,7 +6668,7 @@ window.cbLayout = (function () {
     var site = String(t.website_url || '').trim();
     if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
     var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
-    if (FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
+    if (locale !== FORM_LOCALE_AUTO && FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
     var ftype = squeeze(t.form_type).toLowerCase() || 'more_volume';
     if (ftype !== 'more_volume' && ftype !== 'higher_intent') e.push('Form type must be More volume or Higher intent');
     return e;
@@ -6683,7 +6700,8 @@ window.cbLayout = (function () {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
     validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
-    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES,
+    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
+    FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -14866,7 +14884,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       privacy_url: panelValue(panel, '.cb-fc-privacy'), thank_you_text: panelValue(panel, '.cb-fc-thanks'),
       website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
       form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
-      locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
+      locale: panelValue(panel, '.cb-fc-locale') || 'AUTO'
     };
   };
 
@@ -14937,8 +14955,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label class="cb-fc-label">Follow-up URL <span class="cb-fc-opt">(optional, https; where the lead goes after submitting. Without a completion screen text the screen is skipped)</span><input type="text" class="cb-input cb-fc-followup" placeholder="https://example.com/thanks"></label>' +
       '<label class="cb-fc-label">Form type<select class="cb-input cb-select cb-fc-form-type">' +
       '<option value="more_volume" selected>More volume</option><option value="higher_intent">Higher intent</option></select></label>' +
-      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels)</span><select class="cb-input cb-select cb-fc-locale">' +
-      ((window.cbLayout && window.cbLayout.FORM_LOCALES) || ['EN_US']).map(function (l) { return '<option value="' + l + '"' + (l === 'EN_US' ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>' +
+      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels; Auto follows the ad set language and country)</span><select class="cb-input cb-select cb-fc-locale">' +
+      ((window.cbLayout && window.cbLayout.formLocaleOptions) ? window.cbLayout.formLocaleOptions('AUTO') : '<option value="EN_US" selected>EN_US</option>') + '</select></label>' +
       '<div class="cb-fc-actions">' +
       '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
@@ -16633,6 +16651,7 @@ function cbPlanHtml(data) {
             + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')
+            + (ad.form_locale ? '<br>' + aclEscHtml(ad.form_locale) : '')
             + (ad.form_note ? '<br>Instant Form: ' + aclEscHtml(ad.form_note)
                               + (ad.form_id ? ' (' + aclEscHtml(ad.form_id) + ')' : '')
               : ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
@@ -19738,7 +19757,9 @@ window.aclTeamLibrary = (function () {
     el('fm-name').value = tpl.name || '';
     el('fm-headline').value = tpl.headline || '';
     el('fm-intro').value = tpl.intro || '';
-    el('fm-locale').value = tpl.locale || 'EN_US';
+    var lay = window.cbLayout;
+    if (lay && lay.formLocaleOptions) el('fm-locale').innerHTML = lay.formLocaleOptions(tpl.locale || 'AUTO');
+    el('fm-locale').value = tpl.locale || 'AUTO';
     el('fm-privacy').value = tpl.privacy_url || '';
     el('fm-thanks').value = tpl.thank_you_text || '';
     el('fm-site').value = tpl.website_url || '';
@@ -19782,7 +19803,7 @@ window.aclTeamLibrary = (function () {
         return item;
       }),
       privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
-      website_url: el('fm-site').value, locale: el('fm-locale').value || 'EN_US'
+      website_url: el('fm-site').value, locale: el('fm-locale').value || 'AUTO'
     });
   }
 

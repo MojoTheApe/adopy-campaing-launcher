@@ -123,6 +123,29 @@ const lastPost = () => requests.filter(r => r.body).pop();
     return;
   }
 
+  if (scenario === 'auto-locale') {
+    // ACL-2180: the locale is a dropdown with readable names; a new template defaults to Auto.
+    click('fm-new-btn');
+    const opts = get('fm-locale').innerHTML;
+    assert(opts.includes('Auto (from the ad set language and country)'), 'no Auto option');
+    assert(opts.includes('Spanish (Latin America) (ES_LA)') && opts.includes('Portuguese (Brazil) (PT_BR)'), 'no readable names');
+    assert(opts.indexOf('value="AUTO"') < opts.indexOf('value="AR_AR"'), 'Auto is not the first option');
+    assert(opts.includes('value="AUTO" selected'), 'Auto is not selected by default');
+    assert.equal(get('fm-locale').value, 'AUTO');
+    for (const [id, value] of Object.entries({
+      'fm-name': 'Auto template', 'fm-headline': VALID.headline,
+      'fm-privacy': VALID.privacy_url, 'fm-thanks': VALID.thank_you_text,
+    })) type(id, value);
+    click('fm-save-btn'); await flush();
+    assert(lastPost(), 'Auto template was blocked: ' + get('fm-editor-msg').textContent);
+    assert.equal(lastPost().body.locale, 'AUTO');
+    // An old template keeps its manual locale, selected in the dropdown.
+    click('', {'data-fm-edit': VALID.id});
+    assert(get('fm-locale').innerHTML.includes('value="EN_US" selected'), 'saved locale not selected');
+    assert.equal(get('fm-locale').value, 'EN_US');
+    return;
+  }
+
   if (scenario === 'legacy-locale') {
     // Only the originally saved locale is compatible; no broader input waiver.
     click('', {'data-fm-edit': VALID.id});
