@@ -744,7 +744,7 @@ def protect_machine_secrets() -> list[str]:
     token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
     for path in sorted(token_files):
         try:
-            with machine_file_lock(path.parent / token_vault.TOKEN_LOCK_NAME):
+            with machine_file_lock(config_dir / token_vault.TOKEN_LOCK_NAME):
                 note = token_vault.migrate_file(path, config_dir)
         except Exception as exc:
             note = f"{path.name}: could not move to protected storage ({type(exc).__name__}); left as it was"
@@ -783,7 +783,7 @@ def unprotect_machine_secrets(*, from_backup: bool = False) -> list[str]:
     token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
     for path in sorted(token_files):
         try:
-            with machine_file_lock(path.parent / token_vault.TOKEN_LOCK_NAME):
+            with machine_file_lock(config_dir / token_vault.TOKEN_LOCK_NAME):
                 note = token_vault.unprotect_file(path, config_dir, from_backup=from_backup)
         except Exception as exc:
             note = f"{path.name}: could not restore ({type(exc).__name__}); left as it was"

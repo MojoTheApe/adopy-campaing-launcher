@@ -163,12 +163,12 @@ def read_secret_text(path: str | Path) -> str:
 
 def write_secret_text(path: str | Path, text: str) -> None:
     """Atomically write ``text`` protected (plain where DPAPI is absent)."""
-    from config.paths import _atomic_write, machine_file_lock
+    from config.paths import _atomic_write, get_local_config_dir, machine_file_lock
 
     data = text.encode("utf-8")
     if available():
         data = FILE_MAGIC + protect_bytes(data)
-    with machine_file_lock(Path(path).parent / TOKEN_LOCK_NAME):
+    with machine_file_lock(Path(get_local_config_dir()) / TOKEN_LOCK_NAME):
         _atomic_write(path, data)
     reset_secret_cache()
 
