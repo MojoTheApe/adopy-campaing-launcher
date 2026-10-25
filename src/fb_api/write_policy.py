@@ -126,9 +126,11 @@ MULTI_ADS_KEY = "contextual_multi_ads"
 #: те, что предлагает Ads Manager для лидов; лишнее Meta отвергнет известной ошибкой #100.
 CTA_WEBSITE = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
                "DOWNLOAD", "GET_OFFER", "BOOK_NOW", "ORDER_NOW", "REQUEST_TIME")
-#: Для Instant Form (форма Страницы вместо сайта) — без «Order now».
-CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
-            "DOWNLOAD", "GET_OFFER", "BOOK_NOW", "REQUEST_TIME")
+#: Для Instant Form (link_data + lead_gen_form_id) Meta документирует РОВНО шесть кнопок
+#: (Marketing API, Lead Ads: «call_to_action must be one of …»). Остальные из списка сайта
+#: (CONTACT_US, GET_OFFER, BOOK_NOW, REQUEST_TIME, ORDER_NOW) для формы не предлагаются и
+#: не подменяются другими: Meta отвергла бы их, а молчаливая замена меняла бы смысл кнопки.
+CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "DOWNLOAD")
 CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
 
 #: Ключи `targeting`, которые создатель вообще отправляет (ACL-1767: закрытый список).

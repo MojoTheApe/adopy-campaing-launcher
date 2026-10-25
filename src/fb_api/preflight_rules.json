@@ -22,11 +22,7 @@
         "APPLY_NOW",
         "GET_QUOTE",
         "SUBSCRIBE",
-        "CONTACT_US",
-        "DOWNLOAD",
-        "GET_OFFER",
-        "BOOK_NOW",
-        "REQUEST_TIME"
+        "DOWNLOAD"
       ]
     },
     "default_objective": "leads",

@@ -320,6 +320,22 @@ def test_the_default_cta_is_learn_more_and_a_foreign_one_is_refused(tmp_path):
     assert cr.plan_from_draft(ok).ad_sets[0].ads[0].cta == "ORDER_NOW"
 
 
+def test_instant_form_offers_exactly_the_six_buttons_meta_documents(tmp_path):
+    """Meta (Lead Ads, link_data + lead_gen_form_id): APPLY_NOW, DOWNLOAD, GET_QUOTE, LEARN_MORE,
+    SIGN_UP, SUBSCRIBE. CONTACT_US / GET_OFFER / BOOK_NOW / REQUEST_TIME are not offered for a form
+    and are refused, never swapped for another button."""
+    assert set(wp.CTA_FORM) == {"APPLY_NOW", "DOWNLOAD", "GET_QUOTE", "LEARN_MORE", "SIGN_UP", "SUBSCRIBE"}
+    assert wp.CTA_FORM[0] == "LEARN_MORE"
+    for extra in ("CONTACT_US", "GET_OFFER", "BOOK_NOW", "REQUEST_TIME"):
+        form = _with_fields(tmp_path, cta=extra)
+        form.ad_sets[0].destination = "instant_form"
+        form.ad_sets[0].ads[0].lead_form_id = "7000001"
+        with pytest.raises(cr.PlanError, match=extra):
+            cr.plan_from_draft(form)
+        with pytest.raises(wp.WriteRefused):
+            wp.check(ACT, "POST", f"/{ACT}/adcreatives", _cta(extra), on_ad=True)
+
+
 def test_every_cta_the_creator_offers_passes_the_write_policy():
     assert set(cr.CTA_WEBSITE) | set(cr.CTA_FORM) == set(wp.CTA_TYPES)
     for cta in wp.CTA_TYPES:
