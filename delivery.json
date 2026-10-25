@@ -42,6 +42,9 @@
       "review_limit": 5,
       "batch_limit": 5
     },
+    "task_context": {
+      "schema_version": 1
+    },
     "process_instructions": {
       "schema_version": 1,
       "required_checks": [

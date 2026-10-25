@@ -493,5 +493,8 @@
       "tracker-link",
       "Process instructions"
     ]
+  },
+  "task_context_policy": {
+    "schema_version": 1
   }
 }
