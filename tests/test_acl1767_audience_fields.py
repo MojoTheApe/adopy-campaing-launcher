@@ -325,6 +325,8 @@ def test_the_default_cta_is_learn_more_and_a_foreign_one_is_refused(tmp_path):
 
 def test_minimum_os_version_must_be_one_meta_lists(tmp_path):
     assert wp.os_version_ok("iOS", "14") and wp.os_version_ok("android", "9.0")
+    assert all(wp.os_version_ok("android", v) for v in ("2.1", "2.2", "3.1", "3.2", "5.1", "7.1", "16"))
+    assert wp.os_version_ok("iOS", "2.0") and wp.os_version_ok("iOS", "3.0")
     assert not wp.os_version_ok("iOS", "99") and not wp.os_version_ok("iOS", "14.5")
     d = _with_fields(tmp_path, os="iOS", os_min="14")
     assert cr.plan_from_draft(d).ad_sets[0].os_min == "14"
