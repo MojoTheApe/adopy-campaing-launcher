@@ -199,9 +199,16 @@ def main() -> None:
         _schedule_browser_open(url)
 
     def _protect_tokens() -> None:
-        from config.paths import protect_secrets_when_healthy
+        from config.paths import health_url_for, protect_secrets_when_healthy
 
-        for note in protect_secrets_when_healthy(f"http://{args.host}:{port}/health") or []:
+        def this_version() -> str:
+            # the value /health reports, which the updater compares with the release it installed
+            from src.web.app import _installed_release
+
+            return str((_installed_release() or {}).get("tag") or "")
+
+        notes = protect_secrets_when_healthy(health_url_for(args.host, port), expected_version=this_version)
+        for note in notes or []:
             print(f"[config] {note}", file=sys.stderr)
 
     threading.Thread(target=_protect_tokens, daemon=True, name="protect-tokens").start()

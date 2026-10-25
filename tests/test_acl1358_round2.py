@@ -150,7 +150,7 @@ def test_tokens_are_protected_only_after_health_answers(machine, fake_dpapi, mon
         clock["t"] += seconds
         seen_protected.append((machine / "token_accounts.json").read_bytes().startswith(token_vault.FILE_MAGIC))
 
-    answers = iter([False, OSError("refused"), True])
+    answers = iter([None, OSError("refused"), {"app": "ACL", "ok": True, "version": "v1"}])
 
     def fetch(url):
         result = next(answers)
@@ -159,8 +159,8 @@ def test_tokens_are_protected_only_after_health_answers(machine, fake_dpapi, mon
         return result
 
     notes = paths.protect_secrets_when_healthy(
-        "http://127.0.0.1:9/health", settle_s=15.0, poll_s=2.0, fetch=fetch, sleep=sleep,
-        clock=lambda: clock["t"])
+        "http://127.0.0.1:9/health", expected_version=lambda: "v1", settle_s=15.0, poll_s=2.0,
+        fetch=fetch, sleep=sleep, clock=lambda: clock["t"])
     assert notes
     assert seen_protected and not any(seen_protected)  # plain through the polling and the settle time
     assert (machine / "token_accounts.json").read_bytes().startswith(token_vault.FILE_MAGIC)
@@ -176,8 +176,8 @@ def test_an_unhealthy_version_never_protects_the_tokens(machine, fake_dpapi, mon
         clock["t"] += seconds
 
     result = paths.protect_secrets_when_healthy(
-        "http://127.0.0.1:9/health", timeout_s=30, fetch=lambda url: False, sleep=sleep,
-        clock=lambda: clock["t"])
+        "http://127.0.0.1:9/health", expected_version=lambda: "v1", timeout_s=30,
+        fetch=lambda url: None, sleep=sleep, clock=lambda: clock["t"])
     assert result is None
     assert json.loads((machine / "token_accounts.json").read_text(encoding="utf-8")) == GOOGLE
     assert paths.protection_deferred()
@@ -266,3 +266,62 @@ def test_token_files_are_written_and_migrated_under_the_token_lock(machine, fake
     token_vault.write_secret_text(machine / "token_telemetry.json", json.dumps(GOOGLE))
     paths.unprotect_machine_secrets()
     assert held.count(token_vault.TOKEN_LOCK_NAME) >= 3
+
+
+@pytest.mark.parametrize("answer", [
+    {"app": "ACL", "ok": True, "version": ""},            # answers before the version is read
+    {"app": "ACL", "ok": True, "version": "v0-other"},    # another build
+    {"app": "ACL", "ok": True},                           # no version at all
+    {"app": "ACL", "ok": False, "version": "v1"},
+    {"app": "someone-else", "ok": True, "version": "v1"},
+    {"app": "ACL", "ok": "yes", "version": "v1"},
+    "200 OK",
+])
+def test_a_bare_answer_or_the_wrong_version_never_protects(machine, fake_dpapi, monkeypatch, answer):
+    _plain(machine)
+    monkeypatch.setenv(paths.DEFER_PROTECTION_ENV, "1")
+    clock = {"t": 0.0}
+
+    def sleep(seconds):
+        clock["t"] += seconds
+
+    result = paths.protect_secrets_when_healthy(
+        "http://127.0.0.1:9/health", expected_version=lambda: "v1", timeout_s=60,
+        fetch=lambda url: answer, sleep=sleep, clock=lambda: clock["t"])
+    assert result is None
+    assert json.loads((machine / "token_accounts.json").read_text(encoding="utf-8")) == GOOGLE
+
+
+def test_an_unknown_own_version_never_protects(machine, fake_dpapi, monkeypatch):
+    _plain(machine)
+    clock = {"t": 0.0}
+    result = paths.protect_secrets_when_healthy(
+        "http://127.0.0.1:9/health", expected_version=lambda: "",
+        timeout_s=20, fetch=lambda url: {"app": "ACL", "ok": True, "version": ""},
+        sleep=lambda s: clock.__setitem__("t", clock["t"] + s), clock=lambda: clock["t"])
+    assert result is None
+
+
+@pytest.mark.parametrize("host,expected", [
+    ("127.0.0.1", "http://127.0.0.1:9109/health"),
+    ("0.0.0.0", "http://127.0.0.1:9109/health"),
+    ("::", "http://[::1]:9109/health"),
+    ("::1", "http://[::1]:9109/health"),
+    ("localhost", "http://localhost:9109/health"),
+])
+def test_the_health_url_never_uses_a_wildcard_host(host, expected):
+    assert paths.health_url_for(host, 9109) == expected
+
+
+def test_serve_py_uses_the_loopback_mapped_url():
+    serve = (ROOT / "serve.py").read_text(encoding="utf-8")
+    assert "health_url_for(args.host, port)" in serve and "expected_version=" in serve
+
+
+def test_saving_a_token_resets_the_secret_cache(machine, monkeypatch):
+    token_vault.reset_secret_cache()
+    late = "FAKE-connected-now-token-acl1358-0077"
+    assert late not in token_vault.configured_secret_values()  # cached as "nothing"
+    paths.update_machine_env({"MULTILOGIN_AUTOMATION_TOKEN_A": late})
+    assert late in token_vault.configured_secret_values()
+

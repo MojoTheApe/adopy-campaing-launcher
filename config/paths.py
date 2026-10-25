@@ -590,6 +590,10 @@ def update_machine_env(values: dict[str, str]) -> str:
         _atomic_write(target, ("\n".join(out).rstrip() + "\n").encode("utf-8"))
     for key, value in values.items():
         os.environ[key] = value
+    try:
+        token_vault.reset_secret_cache()  # a new token must be hidden by value at once
+    except Exception:
+        pass
     return str(target)
 
 
@@ -800,9 +804,22 @@ def protection_deferred() -> bool:
     return (os.environ.get(DEFER_PROTECTION_ENV) or "").strip() == "1"
 
 
+def health_url_for(host: str, port: int) -> str:
+    """Loopback URL of the dashboard's /health; a wildcard bind host is not connectable."""
+    host = (host or "").strip()
+    if host in ("", "0.0.0.0"):
+        host = "127.0.0.1"
+    elif host in ("::", "[::]"):
+        host = "[::1]"
+    elif ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{port}/health"
+
+
 def protect_secrets_when_healthy(
     health_url: str,
     *,
+    expected_version=lambda: "",
     settle_s: float = 15.0,
     timeout_s: float = 900.0,
     poll_s: float = 2.0,
@@ -812,24 +829,35 @@ def protect_secrets_when_healthy(
 ) -> list[str] | None:
     """ACL-1358: protect the tokens only after this version has proven healthy.
 
-    The updater starts a new version, waits for ``/health`` and otherwise starts
-    the previous one again. A version older than ACL-1358 cannot read protected
-    tokens, so the migration must not happen before that check is over. Waits
-    until ``health_url`` answers, lets ``settle_s`` pass, then protects and lifts
-    the deferral. Returns the notes, or None if it never became healthy. Never
-    raises.
+    "Healthy" is the updater's own acceptance (packaging/windows/updater.py
+    ``_is_acl``): ``/health`` says ``app == "ACL"``, ``ok is True`` and the
+    version of this very process, non-empty. A bare 200 is not enough: a build
+    that answers without (or with another) version is rolled back by the
+    updater after its start timeout, and the old version cannot read protected
+    tokens. After that, ``settle_s`` passes, then the tokens are protected and
+    the deferral is lifted. Returns the notes, or None if it never became
+    healthy. Never raises.
     """
-    def default_fetch(url: str) -> bool:
+    def default_fetch(url: str):
         import urllib.request
 
         with urllib.request.urlopen(url, timeout=3) as response:  # noqa: S310 - loopback health URL
-            return 200 <= response.status < 300
+            return json.loads(response.read().decode("utf-8"))
 
     probe = fetch or default_fetch
+
+    def accepted() -> bool:
+        answer = probe(health_url)
+        if not isinstance(answer, dict):
+            return False
+        version = answer.get("version")
+        return (answer.get("app") == "ACL" and answer.get("ok") is True
+                and isinstance(version, str) and bool(version) and version == expected_version())
+
     deadline = clock() + timeout_s
     while clock() < deadline:
         try:
-            if probe(health_url):
+            if accepted():
                 break
         except Exception:
             pass

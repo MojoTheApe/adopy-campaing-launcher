@@ -85,7 +85,7 @@ Windows DPAPI for the current user. An encrypted copy of each plain file is kept
 When the tokens are protected:
 - `serve.py` (the installed `ACL.exe` and the source launcher) does **not** protect them at
   start. It protects them about 15 seconds after the dashboard's own `/health` first
-  answers. The updater starts a new version, waits for `/health` and otherwise starts the
+  answers as the updater accepts it (app ACL, ok, this version), The updater starts a new version, waits for `/health` and otherwise starts the
   previous version again; so a first update that fails before it is healthy never touches
   the tokens, and the old version keeps reading plain files.
 - `ensure_machine_config`, `scripts/acl_migrate_config.py` and scripts that call
