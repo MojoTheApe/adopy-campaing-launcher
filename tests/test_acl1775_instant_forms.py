@@ -647,6 +647,18 @@ def _golden_run(cr_mod, tmp):
     return json.loads(json.dumps(out))
 
 
+def _without_multi_advertiser(got: dict) -> dict:
+    """ACL-1767: единственное, что добавилось к плану пустого черновика, - явный OPT_OUT
+    Multi-advertiser ads (решение владельца). Всё остальное обязано совпасть побайтно."""
+    got = json.loads(json.dumps(got))
+    for _path, params in got["posts"]:
+        params.pop("contextual_multi_ads", None)
+    got["readback_checks"] = [c for c in got["readback_checks"] if c["field"] != "multi_advertiser"]
+    for row in got["plan"]["summary"]["ad_sets"]:
+        row.pop("multi_advertiser", None)
+    return got
+
+
 def _without_instagram(value):
     """ACL-1896 добавляет ровно Instagram-идентичность: поле креатива, шаг предпроверки и строку сверки."""
     if isinstance(value, dict):
@@ -664,11 +676,12 @@ def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(
     """Золотой файл снят прежним создателем (до ACL-1775) на том же черновике.
 
     ACL-1896: кроме Instagram-идентичности (поле, шаг, строка сверки) не меняется ни байта.
+    ACL-1767: пустые новые поля не меняют ни байта; добавлено лишь явное «Multi-advertiser off».
     """
     want = json.loads(GOLDEN.read_text(encoding="utf-8"))
     got = _golden_run(cr, tmp_path)
     assert got != want, "креатив должен нести Instagram-идентичность Страницы"
-    assert _without_instagram(got) == want
+    assert _without_instagram(_without_multi_advertiser(got)) == want
 
 
 def test_website_draft_does_not_grow_new_keys(tmp_path):

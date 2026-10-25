@@ -185,6 +185,8 @@ def test_requirements_carry_nothing_only_the_rest_of_the_repo_needs():
     # Server and template plumbing is pulled in by FastAPI rather than imported
     # by name anywhere in our code.
     ship_names |= {"uvicorn", "jinja2", "google-auth-httplib2", "python-multipart"}
+    # ACL-1767: `zoneinfo` на Windows берёт базу часовых поясов из пакета tzdata (в импортах его нет).
+    ship_names |= {"tzdata"}
 
     stray = sorted(r for r in reqs if r not in ship_names)
     assert not stray, (
