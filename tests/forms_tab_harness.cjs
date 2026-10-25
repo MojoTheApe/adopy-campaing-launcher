@@ -100,7 +100,6 @@ const lastPost = () => requests.filter(r => r.body).pop();
     // and the original effective order, rather than reconstructing checkbox order.
     click('', {'data-fm-edit': VALID.id});
     for (const k of VALID.contact_fields) assert(get('fm-c-' + k).checked, 'Missing selected contact ' + k);
-    assert.equal(get('fm-c-name').checked, false);
     click('fm-save-btn'); await flush();
     assert.deepEqual(lastPost().body.contact_fields, VALID.contact_fields, 'No-op edit rewrote contacts');
     click('', {'data-fm-edit': VALID.id});
@@ -112,28 +111,15 @@ const lastPost = () => requests.filter(r => r.body).pop();
                      'privacy_link_text', 'thank_you_title', 'button_text', 'future_field']) {
       assert.deepEqual(lastPost().body[k], VALID[k], 'Lost retained field ' + k);
     }
-    // Full name plus split names still fails validation before any write.
+    // Intentional removal works; retained contacts keep their order.
     click('', {'data-fm-edit': VALID.id});
-    get('fm-c-name').checked = true;
-    let n = requests.filter(r => r.body).length;
-    click('fm-save-btn'); await flush();
-    assert.equal(requests.filter(r => r.body).length, n);
-    assert(get('fm-editor-msg').textContent.includes('either full name or first and last name'));
-    // Intentional removal and addition work; retained contacts keep their order.
-    get('fm-c-name').checked = false;
     get('fm-c-email').checked = false;
     get('fm-c-phone').checked = false;
     click('fm-save-btn'); await flush();
     assert.deepEqual(lastPost().body.contact_fields, ['last_name', 'first_name']);
-    click('', {'data-fm-edit': VALID.id});
-    get('fm-c-first_name').checked = false;
-    get('fm-c-last_name').checked = false;
-    get('fm-c-name').checked = true;
-    click('fm-save-btn'); await flush();
-    assert.deepEqual(lastPost().body.contact_fields, ['email', 'phone', 'name']);
     click('fm-new-btn');
-    assert(get('fm-c-name').checked && get('fm-c-email').checked);
-    assert(!get('fm-c-first_name').checked && !get('fm-c-last_name').checked && !get('fm-c-phone').checked);
+    // 25.10 (owner): Full name is gone; a new template starts with all four contact fields selected.
+    assert(get('fm-c-first_name').checked && get('fm-c-last_name').checked && get('fm-c-email').checked && get('fm-c-phone').checked);
     return;
   }
 
@@ -209,11 +195,11 @@ const lastPost = () => requests.filter(r => r.body).pop();
   assert(!list().includes('Demo'));
   type('fm-search', '');
 
-  // New: пустая форма с Name и Email по умолчанию.
+  // New: пустая форма, все четыре контактных поля выбраны (без Full name).
   click('fm-new-btn');
   assert.equal(get('fm-editor').hidden, false);
   assert.equal(get('fm-name').value, '');
-  assert(get('fm-c-name').checked && get('fm-c-email').checked && !get('fm-c-phone').checked);
+  assert(get('fm-c-first_name').checked && get('fm-c-last_name').checked && get('fm-c-email').checked && get('fm-c-phone').checked);
 
   // Клиентская проверка (зеркало Python) не пускает на сервер.
   const posts = requests.filter(r => r.body).length;
