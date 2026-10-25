@@ -1,5 +1,1115 @@
 # System history
 
+## ACL-1273 — Each manual problem report is its own Sentry issue — 2026-10-23
+
+`report_problem()` used a constant fingerprint, so every "Report a problem" from every
+machine landed in one Sentry issue titled after the first test message, and Sentry's
+new-issue alert never fired again. Each report now carries a per-call id (`r` + uuid4
+hex, also sent as the `report_id` tag) in its fingerprint, so two reports — even with the
+same text — are two issues. The `r` prefix keeps the scrubber from turning an all-digit id
+into `<digits>`. Automatic step failures keep grouping by step and reason. The dashboard
+form, `/report-problem` route and scrubber are unchanged. Whether an alert rule and team
+membership exist in Sentry remains an owner-side check; no live Sentry verification yet.
+
+## ACL-123 — Account Disabled says what a person must do — 2026-10-19
+
+`src/analysis_agent/account_next_step.py` maps the Meta `disable_reason` (read from the status text of the Graph read) to one plain-English next step shown under the status word on the account row, also after a live Read. Page reads carry no reason, so they say the reason was not reported; an unrecognised code says the cause is unknown. Nothing is diagnosed beyond what Meta reported and no automatic recovery is promised.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/29).
+
+## ACL-2167 — Preserve real Windows stress-writer diagnostics — 2026-10-25
+
+Retain bounded per-writer identity, last progress and an actual delayed child
+trace before the existing 180-second failure limit. Preserve the original error,
+four concurrent writers, twelve writes each, all-core stress, real file locks
+and exact data assertions. Reap already started children when a later start
+fails, and report missing or partial diagnostics honestly. Add real-spawn
+regressions for failed, blocked and completed children and cleanup. Include the
+declared existing Server 2022 acceptance prerequisites without importing the
+unfinished ACL-2164 Source or fragment. This adds observability; it does not
+claim to repair the unknown underlying sporadic writer stall or COM cause.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1167).
+
+## ACL-2164 — Isolate native Windows acceptance on a verified host — 2026-10-25
+
+Run the complete Windows acceptance suite on supported Windows Server 2022,
+with an early native check that refuses any host other than Server 2022/build
+20348. Keep all real standard-user tests, assertions, Python versions, job names,
+timeouts and release checks. Align the existing workflow-layout guard and host
+documentation. Preserve the two Server 2025 Task Scheduler/COM failures without
+claiming their unknown underlying cause is repaired. Both subsequent Server 2022
+failures also remain traceable. Pinning alone was insufficient: isolate the two
+real standard-user files and the intentional all-core stress file into separate
+sequential phases after the general parallel suite. Validate the exact original
+file multiset and execute each member once, preserving all internal concurrency,
+native controls and deadlines. This changes test scheduling, not product behavior.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1164).
+
+## ACL-2162 — Deterministic shared dashboard-window regression — 2026-10-25
+
+The two-process dashboard regression now controls both orders between real machine admission and the separate local dashboard transaction. It records the actual admission results and checks one machine window, both distinct account bindings, the exact shared-settings owner and both local queued accounts. Reverse ordering legitimately reports joined/already_done; negative observations reject duplicate or missing work and wrong isolation. Product storage, locking, settings, permissions and delivery policies are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1162).
+
+## ACL-2158 — Reliable test IPC and module-reset guards — 2026-10-25
+
+The two real standard-user acceptance fixtures and their controller commands
+reuse ACL's existing bounded atomic replacement helper when a synthetic JSON
+file is briefly open for reading. Persistent permission failures still fail;
+application behavior, file permissions, locks and acceptance assertions remain
+unchanged. Deterministic regressions cover recovery, the failure bound and
+standalone early boot imports; real user behavior remains checked on Windows CI.
+Mutable synthetic status, command, trace and diagnostic reads also tolerate only
+brief PermissionError sharing collisions, with a ten-attempt bound. Permanent
+denial retains its error; malformed/missing files never become stale/empty data.
+Product file readers and original polling deadlines/transitions remain unchanged.
+
+The RPA module-reset guard captures genuine current functions before its mock/undo
+cycle, so a legitimate earlier module reload cannot invalidate a collection-time
+reference. Strict post-undo object identity, TLS and existing container checks
+remain; isolated regressions prove leaked mocks/TLS and spoofed baselines fail.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1158).
+
+## ACL-2156 — Published Task Tracker workflow provider — 2026-10-24
+
+ACL selects the independently reviewed standalone Task Tracker3.14.1 provider,
+with matching immutable engine, source-owned private-provider checkout and
+complete canonical export. A separately authorized dedicated read-only key
+connects public ACL to private Task Tracker; trusted validation executes no
+consumer code.
+The genuine92-file pristine ancestry and two explicit local adaptations are
+preserved. Master1.8.0 remains the unchanged documentation reference. Native
+configuration, adopted policies, product behavior, checks and required verified
+package delivery remain unchanged; no optional policy is activated.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1156).
+
+## ACL-2063 — Scheduled, attention and action account structure refresh — 2026-10-24
+
+Account/campaign lists remain available for every workbook period, including Maximum. Dates change BI numbers and do not start a profile read. The dashboard removes manual spend/campaign/country read controls and Meta Insights columns; each account shows its list time, updating state or failure with one Retry.
+
+The first ordinary page opening in each local 08:00/13:00/18:00 window queues the dashboard's current accounts serially. A persisted shared queue and OS leases prevent duplicate sweeps and concurrent reads across processes. Missed windows are skipped; successful lists (including empty accounts) younger than one hour are reused. Explicit settings override working-install defaults; development reloads default off.
+
+Expanding stale structure requests attention refresh without hiding the cache. Commands keep their live hand-edit checks and refresh through the same successful session; confirmed API publishing refreshes before releasing its session. Account failures continue the sweep; global stops, checkpoint/cooldown, call limits, API/MLX refusals, writer/profile leases and profile ownership remain enforced. Trigger and fresh-skip telemetry use the existing read records.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1063).
+
+Interrupted structure reads retain the saved campaigns but expose the failure and Retry, stay outside the one-hour freshness shortcut and preserve unresolved Meta stops. Multilogin refusals at page opening, attention or Retry remain visible until a new explicit action is admitted; local status polling does not dismiss them or replay work.
+
+A later failed attempt keeps its error and Retry even when the retained successful list is younger than one hour. Existing account-map, responsive, comparison and failure-display checks follow the current BI/list controls while retaining the legacy reader safety and formatting coverage.
+
+The campaign-table browser fixtures distinguish an unread cache, admitted attention work and an actual persisted terminal failure. They retain compact command-error details and verify one Retry without inventing a pending read or starting an external profile.
+
+
+Machine coordination now uses one fixed operating-system namespace across dashboard ports, private configuration directories and Windows users. The active window unions all participating maps; matching ad-account/physical-profile bindings share one bounded structure result with its original timestamp. Distinct accounts and late map additions still receive their own list. Shared revisions keep a newer local failure visible, and an admitted read is committed before another reader can enter. A per-target interlock also covers publishing and allows different targets to publish independently.
+
+The new shared namespace carries only allow-listed campaign structure and coordination metadata. Existing account maps, credentials, BI data and private snapshots stay in place. On Windows, newly created objects grant local Authenticated Users the access needed for this structure relay; stable lock files cannot be deleted with that grant. Existing unsupported permissions or corrupt/missing initialized state refuse reads instead of falling back to a private lock. This shared local-user contract is not application authentication against another process running as an authenticated OS user.
+
+Interrupted reads and legacy consumed windows without a bound result remain visibly failed until an explicit Retry; they do not become a fabricated successful list or an automatic second sweep. Shared checkpoints, cooldown deadlines and explicit recovery survive process/configuration changes. Upgrading requires restarting old dashboard processes: an older binary cannot participate in the new coordination protocol. Controlled process and two-standard-Windows-user acceptance uses synthetic transport and only uniquely owned test accounts/tasks; it does not exercise live Meta or Multilogin.
+
+Actual cold, warm and confirmed inline sessions carry their immutable ad-account/profile identity into the machine read scope; a changed map or a prefetched peer result cannot be relabelled as another account. Active legacy stops migrate even before the first daily window. Peer failures retain a bounded safe reason (for example proxy login, Facebook login or transport) and Retry without exposing raw errors, URLs or credentials.
+
+Cooldown lookup and updates use that same immutable actual profile. An unknown proxy/network timeout stays a connection failure; it is not presented as a proven wrong proxy password.
+
+A missing account-map profile retains its specific setup message before any target lock or browser operation; invalid non-empty identities still fail the UUID guard. Test isolation keeps the existing RPA reset and mock-restoration order, preventing one synthetic capture refusal from disabling later evidence checks. Draft-status fixtures use stable synthetic physical identities with the real target interlock.
+
+Controlled Windows acceptance retains the original task failure if owned cleanup also fails, and records fixed Task Scheduler phases and numeric errors without credential payloads. The same 30-second operation bounds, two real standard users, profile checks, scenario assertions and exact-owned cleanup remain; this improves failure diagnostics without claiming a runtime fix for a Scheduler timeout.
+
+## ACL-1897 — Automatic Page parity for API and RPA — 2026-10-24
+
+Automatic uses the first merged usable Page, with ad-account Pages before profile
+Pages; a saved map does not override an empty campaign-local choice. The selector
+shows the resolved name and ID and updates after refresh. An explicit campaign
+choice remains local to that campaign.
+
+RPA now passes the resolved Automatic Page to the existing recorded Identity
+selection and verification. Profile Pages require the same constrained account-
+and-Page-bound no-creation proof before the RPA flow starts. Failed discovery,
+unknown/refused proof and unsupported Identity engines stop before creation.
+The result names the selected Page and its origin without changing the verdict.
+
+API Website manual-completion shells, Instant Forms refusals/resolution and
+promoted_page/creative Page readback retain their guards. A confirmed-empty
+Automatic Website RPA list keeps its existing Identity behavior; legacy non-builder
+map fallback remains. No live advertising or Multilogin operation was performed.
+
+## ACL-1309 — Concurrent first launch and bounded port recovery — 2026-10-24
+
+Competing first launches now use the result of the exclusive shared-port claim.
+A lost claim or an unfinished JSON mark cannot become the selected own port,
+including when old local memory names it. Existing stable ports and temporary
+detours remain; a neighbor's mark is never overwritten.
+
+If another process binds after selection, the child removes its own state and
+reports the collision. The parent tries different candidates within the existing
+startup deadline, then opens only the matching configuration's actual health
+address. It never stops the winning listener or silently records a scanned port.
+
+Server/setup exclusivity reuses the canonical configuration's native process
+file lock, avoiding reliance on the Global named-object namespace. Each active
+process also retains the original fixed installer presence marker, with
+shared open-only access, so parallel configurations do not disable the existing
+installer guard. An inaccessible presence marker remains a refusal, not an
+unprotected startup.
+
+Added real competing-file, partial-mark, late-bind and state-cleanup regressions,
+plus a Windows-only acceptance test using two temporary standard OS accounts and
+their actual profiles/permissions. The latter uses synthetic wizard/HTTP bodies
+and must run in the normal Windows job; local logic tests do not replace that
+platform acceptance or the package's physical installation/update checks.
+
+## ACL-1309 — Each person gets their own dashboard, not whoever holds port 9090 — 2026-10-23
+
+During the team rollout on 2026-09-24 a second person started the launcher on a machine
+where the owner's dashboard was already running. The launcher saw a live ACL on port
+9090, took it for its own, and opened a browser at it: the owner's accounts and numbers,
+with nothing to say anything was wrong. Stopping the owner's dashboard was all it took
+for the second person's own to come up. The owner had hit the other half of it that
+morning — a fresh install opened his running dashboard instead of the setup wizard.
+
+`/health` said *what* was running, never *whose*. It now carries `config`, a short hash
+of the configuration directory (`config.paths.config_identity`). A hash rather than the
+path, because `/health` is reachable by any process on the machine and the path would
+give away another Windows account's name.
+
+The same blind check sat in four places, all now asking "is this mine" through
+`packaging/windows/local_dashboard.py`:
+
+- the launcher opened any ACL on 9090 — it now opens only its own, wherever it runs, and
+  otherwise starts beside whatever holds the port, on the next free one of 9090-9109;
+- the launcher skipped setup whenever 9090 answered, and refused to run it whenever 9090
+  was taken — only the person's own running dashboard blocks setup now;
+- the wizard's System check failed with "port 9090 is already in use", which would have
+  stopped a second person on step 2 of 6 — it now names the port the dashboard will use;
+- the updater waited for the dashboard on 9090 to stop and then to start — on a shared
+  machine that would have been the neighbour's.
+
+Nothing that holds a port is ever stopped. Two dashboards side by side is the intended
+result, not an error.
+
+The first version of the lookup asked every port over HTTP. On Windows a closed port does
+not refuse, it waits: twenty ports took **19 seconds** on every cold start and again on
+every turn of the wait-for-startup loop. Occupancy is now checked by trying to bind the
+port — exclusively (`SO_EXCLUSIVEADDRUSE`, or Windows lets you bind on top of a live
+listener and "free" would be a lie), on `0.0.0.0` (or a program listening on every
+address goes unseen), and without `listen` (so the Windows firewall asks nothing). Only
+occupied ports are asked over HTTP. 19 s became about 50 ms, and a test holds it there.
+
+A dashboard from before this change reports no `config` and therefore counts as someone
+else's. That cannot strand a person's own old dashboard: the installer holds the same
+session mutex (`AppMutex=Local\ACL-Campaign-Launcher-Server-v1`) and refuses to install
+while it runs, and the in-app update stops it first.
+
+Review of the first version (PR #310) found three gaps, fixed on 2026-10-15:
+
+- **The port belongs to the person, not to whoever started first.** Before, the first person to
+  start took 9090 and the other took 9091, so the address changed from one day to the next. Each
+  person now remembers their port (`dashboard_port.json` in their configuration directory). The
+  port is also marked in a machine-wide registry, `%ProgramData%\ACL\ports\<port>.json`, which
+  holds the configuration hash, not the path. A newcomer who starts while the owner of 9090 is
+  away therefore does not take 9090. A neighbour's mark is never overwritten. When every other
+  port is busy, a neighbour's free port is used for that run only. The wizard's System check
+  names the same port the launcher will take, and does not claim it.
+- **A listener on `[::]` is now seen.** An exclusive bind on `0.0.0.0` alone missed it, and
+  Windows would have let us bind on top of it. Occupancy now also tries an exclusive dual-stack
+  bind on `::` with `IPV6_V6ONLY=0`.
+- **The tests now catch the bug they are named after.** The launcher and setup tests used to
+  replace `find_own`. On a clean machine they still passed when the original bug was put back.
+  They now run the real launcher against real stub dashboards on real ports. Each of the
+  reviewed bugs was restored in turn, and each one turns the suite red.
+
+## ACL-142 — Account connection and complete local removal — 2026-10-24
+
+- Connect now uses an in-page dialog with a "Read from the open account" button. The detected
+  account name and number are shown, editable, and an unedited read needs an explicit tick because
+  Ads Manager redirects to the profile's default ad account. The probe answer carries
+  `needs_confirmation`. Existing connection behavior and Multilogin naming are unchanged.
+- Country rows: `x` asks before taking the account out of that country; a separate "Remove from ACL"
+  deletes this computer's map row and all placements (`/account-map-remove`, `also_unlink`).
+  Shared sheet, history, Meta campaigns and Multilogin profiles are untouched.
+- Review fixes: "Remove from ACL" also works for an account that is placed in a country but has no
+  map row (the route answers 404 only when there is neither a row nor a placement), so a retry after a
+  partly failed removal completes. The dialog keeps the "leave this empty to connect now" guidance and
+  disables its field during the automatic first read.
+
+The current-main refresh also keeps page confirmations and inline removal errors,
+removes the machine-map row under the same case-insensitive identity as placements,
+and verifies reconnect does not restore removed country/asset placements.
+
+## ACL-103 — Preserve selected-period sources and comparable units — 2026-10-24
+
+Workbook-only history keeps its workbook identity, mixed periods identify both sources, and
+SQLite preserves source metadata without replacing old rows or year history. Unknown units
+or day boundaries remain explicit; a confirmation flag no longer invents USD/timezone facts.
+Account readings retain canonical ISO currency/timezone separately from display signs using
+their existing read. Source/account differences require known matching currency and day bases.
+Source captions and financial cells retain known ISO units or explicit unknown units;
+account amounts and Builder budgets retain their independent contracts. Unmapped CM coverage
+is visible without including other teams. Available-account spend keeps its own activity
+window/alias units when the selected report shows a different historical period. Optional explicit warehouse metadata is read through SELECT only; unavailable metadata does
+not hide the underlying statistics. The installed bundle includes the runtime BI manager mapping;
+empty-period guidance distinguishes workbook, BI and mixed/unknown sources without hiding the
+account map or blaming a manager for a source-wide gap. A collapsed saved comparison in the
+existing account map shows both source and account figures with their own units, dates and
+recorded time, without adding a primary column, a manual read or an on-open request. Missing,
+unknown or unlike readings remain explicit instead of becoming a misleading difference.
+Open-ended periods retain each actual bound without borrowing a single-day account reading.
+The API resolves unique explicit account-name aliases; ambiguous matches keep their original
+figures and do not produce a difference.
+Report and workbook caches share the archive's file-version identity, so replacing a workbook
+while preserving its modification time imports the actual replacement rows once.
+All original ingestion, period and delivery requirements remain.
+
+The earlier dated entry below is retained as history; its former USD-assumption/confirmation
+behavior is superseded by this correction.
+
+## ACL-103 — Dashboard reads statistics from the company BI — 2026-10-23
+
+The dashboard reads spend, leads, FTDs and net from the BI table `BI_Export`.`UF.Export`
+(read-only, columns mapped to the Stats workbook schema in `COLUMN_MAP`) and keeps a local
+archive of the days BI has served; the workbook remains the fallback when BI does not answer.
+The BI address, login and password come only from the machine `.env`.
+
+When BI is unreachable or refuses the login, the dashboard warning, the server log, the error
+page and Sentry events show only the error class and the numeric driver code (for example
+`OperationalError 2003`), never the driver text, which contains the host and the login. The
+shared telemetry scrubber also hides the configured `BI_MYSQL_HOST`, `BI_MYSQL_USER` and
+`BI_MYSQL_PASSWORD` values wherever it runs. Tests use fake values only.
+Currency and day boundary are carried with every BI figure: the BI table has no such columns, so the
+code states a documented assumption (USD, the BI calendar day) that the header ("BI · USD (assumed)"),
+the report warnings and `/api/source-vs-account` all name as an assumption until a live BI read confirms
+it (`BI_ASSUMPTIONS_CONFIRMED=1`, overrides `BI_CURRENCY` / `BI_DAY_BOUNDARY`; no code change).
+`/api/source-vs-account` shows source spend and the spend read from the account side by side, never merged;
+a different account currency is flagged and not subtracted. The field and granularity mapping is
+`docs/ACL-103-bi-field-mapping.md`. Still to confirm with a live BI read: currency, time zone, row
+uniqueness of the granularity, the CM code list.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/13).
+
+## ACL-2146 — Linux browser checks resolve the hosted Ubuntu mirror list — 2026-10-23
+
+Chromium dependency preparation now redirects the active Ubuntu Azure archive
+both in direct apt source URIs and in their local `mirror+file:` lists. Security
+URLs, third-party repositories, signing settings and mirror metadata are preserved.
+Offline fixtures use temporary apt directories. Existing test/platform coverage,
+three bounded install attempts and installer/admission gates remain unchanged.
+
+## ACL-2138 — Ship account name rules in the installed build — 2026-10-23
+
+`config/account_name_rules.json` was not packaged, so installed buyer builds lost explicit account-name matching (e.g. FacebookMKTOBFL<id> = KLD_BFL_<id>). The file is now bundled and checked by `test_bundle.ps1` and the packaged smoke check; a missing or broken file logs a clear warning and shows in the diagnostics summary; a guard test fails CI when `src/` reads a `config/*.json` that is neither packaged nor allow-listed as dev-only.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1138).
+
+## ACL-2123 — Meta API version comes from the rules registry — 2026-10-23
+
+The Graph API version is now read from `config/meta_rules/meta.json` (currently v26.0);
+an environment value only wins when it is strictly newer. `.env.example` no longer pins
+the unsupported v22.0, and on update a leftover `META_GRAPH_API_VERSION=v22.0` in a
+machine's `.env` is cleared once, with a note in the update log.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1123).
+
+## ACL-2122 — Ship the Meta rules registry and fail closed — 2026-10-23
+
+The Windows build did not package `config/meta_rules/`, so on installed builds the Meta rules loader failed and the pre-upload check silently skipped the rules. The registry is now bundled via `acl_windows.spec`, verified by `test_bundle.ps1` and the packaged smoke check, and a registry that cannot be loaded blocks every campaign with "Meta rules registry is missing — reinstall or update ACL".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1122).
+
+## ACL-2038 — Connect the team library from the dashboard — 2026-10-23
+
+The team library defaults to MojoTheApe/acl-lib on main while explicit machine
+repository and branch settings still win. A token alone is a complete setup;
+without a token, Targeting and Ad titles offer Connect team library. The dialog
+has one masked token field, validates it with one authenticated repository read,
+stores it in machine-local settings and adds the machine's missing targets and
+ad texts without overwriting or deleting team data. Counts, partial failures and
+retry outcomes remain visible. Wrong or revoked tokens receive a plain English
+reason; Disconnect removes the token and retains local targets and ad texts.
+Updating or disconnecting also removes obsolete duplicate assignments for the
+updated machine setting, so reloading cannot restore an older token. Unrelated
+machine settings remain intact.
+
+The token is not returned, logged, included in errors or URLs, or sent to
+telemetry, Sentry or capture artifacts. No Meta account action is performed.
+
+Shared add-missing logic lives in the runtime package for installed dashboards.
+The CLI wrapper retains the existing form-template seed kind, duplicate and
+Recently deleted protection, and idempotent repeated seeding. The dashboard's
+connection import keeps its original targets-and-ad-texts scope. Regression
+checks use synthetic credentials, temporary machine settings and an in-memory
+library, preserving local originals and remote records.
+
+Partial imports retain the masked Connect retry; connected views also offer
+Add local items after reloading. Retry combines retained failed originals with
+new local records, while keeping team and Recently deleted records unchanged.
+Disconnect keeps its confirmation and recoverable inline errors through the
+current page dialog or the shared asynchronous dialog when available.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1038).
+
+## ACL-1998 — Long video uploads report progress steps — 2026-10-23
+
+While a video over 200 MB goes up in chunks, the robot now records a step `ad N: uploaded X/Y MB` at most every 12 s and at least every 10% of the file. Each step resets the dashboard's "no new step" timer, so a long upload is no longer flagged as stalled. The percent model and the upload result are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/998).
+
+## ACL-1945 — Dashboard: turn a campaign off through the Graph API by id — 2026-10-23
+
+- Under `ACL_FB_BACKEND=api`, `POST /account-spend/turn-off` no longer clicks a switch in Ads Manager.
+  It sends `POST /<id>` with `status=PAUSED` from the account's own Multilogin profile, then reads the
+  object back and reports "off" only when the read-back shows `status=PAUSED` and the delivery is not
+  still active. The RPA backend keeps the old switch path.
+- The name shown on the dashboard must match the name Meta returns for that id, and an ad is turned off
+  only when Meta confirms its parent campaign. Same-name campaigns are told apart by id.
+- A publish job running or queued in the same profile refuses the turn-off (HTTP 409, "The robot is
+  building campaigns in this profile"). Every outcome, refusals included, goes to `turn_off_log.jsonl`
+  with `route: api` and `matched_by: id`.
+- Turning back on stays out of scope.
+
+## ACL-1896 — Instagram identity for Instagram placements — 2026-10-23
+
+Check plan now refuses a plan with Instagram placements when the chosen Facebook Page has no Instagram account (Doc120 live finding: Meta 100/1772103 after the campaign, ad set and creative were already written). New server rule `instagram_identity`; at most two read-only Graph calls per Page, cached for the run; a failed read is a refusal, not a pass. When an account exists it is sent as `object_story_spec.instagram_user_id` and read back. The write policy allows that one numeric field in both layers (Python and page helper), refuses `instagram_actor_id`, and creates no Page-backed account. Details and the live-check list: `docs/system/PROJECT.md`, ACL-1896 ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/896)).
+
+## ACL-1853 — Physical profile ownership across ACM processes — 2026-10-23
+
+- The main Read Spend/country/RPA boundaries now share an OS-backed lease per
+  physical Multilogin UUID across processes of the same OS user, independent of
+  dashboard port and instance configuration. Dolphin IDs retain a separate namespace.
+- Waiting is bounded and cancellable (reads 120 s; a publish job waiting for the
+  profile 30 min, stopped promptly by Stop), nested same-profile calls reenter, and process
+  termination releases ownership. Missing identities, lock failures and changed map
+  targets refuse browser entry; publishing reports a finished error.
+- See [scope and downstream warm/API integration](PROFILE_OWNERSHIP.md). This source
+  change does not claim live verification. Covered after the merge with main: Publish
+  jobs (RPA and API), plan check, forms read, campaign commands and warm adoption. The
+  Graph API reads and the warm open/close/checkout lifecycle (ACL-1760/1761/1812) still
+  take no lease across a session; that is the follow-up #862.
+
+## ACL-1841 — Responsive account tables and grouped campaign controls — 2026-10-23
+
+Expanded Home country cards and country Manage share a keyboard-focusable account
+table scroll region. Account names and metric headers wrap at a readable minimum
+table width; read, profile and unlink actions stay reachable. Campaign sections,
+history/footer and connection forms remain outside that horizontal scroller.
+
+The campaign toolbar keeps search/filter, metric navigation, expand/collapse,
+column settings and selected-row commands in coherent accessible groups. Groups
+reflow without splitting the expansion pair or shrinking command labels. The
+column selector stays within its group at narrow widths. Country read controls
+and the Home add-country controls also wrap with bounded long values.
+
+The closed Builder handle has a reserved gutter, so focusing a far-right table
+action cannot place it under the fixed handle. An open non-overlay Builder retains
+its existing reserved width. Data, metrics, inventory, ordering and command/read
+handlers are unchanged; there are no automatic advertising operations.
+
+Full offline Home/Manage route regressions cover 1280/1024/768/390 px, both themes,
+empty/populated cached inventory, keyboard access, internal scroll reachability,
+footer/form order and actual hit testing beside the Builder.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/841).
+
+## ACL-1836 — Recover one detached Graph browser session without replay — 2026-10-23
+
+- The 2026-10-12 incident had already created a PAUSED campaign and ad set when an
+  upload became uncertain. Readback then escaped with `Session with given id not
+  found`, bypassing the pending creator's partial-result handling. The original
+  reason for browser detachment remains unknown.
+- `PageTab` now identifies session loss without retrying the command. Only the
+  local helper boundary can reattach once, to the exact owned target through the
+  existing browser socket. The target and newly attached main frame must retain
+  the expected Ads Manager page/account. The isolated helper is re-established;
+  tokens stay in-page and uncertain calls are never replayed.
+- Lost targets, identity changes, unavailable transport and repeat detachment
+  produce a sticky typed stop. Login/checkpoint remain distinct stops; missing
+  tokens after recovery do not trigger a reload. Read clients retain the stop.
+- Behaviour change: the readiness check now turns any browser-transport error
+  (`CdpError`/`OSError`), including an ordinary page error without session loss,
+  into the same sticky `PageFailed` instead of letting the raw error propagate.
+  Warm reuse still catches it and replaces the robot tab once.
+- Review found that warm mode changes create a new helper without navigating.
+  The tab now retains successful explicit navigation intent and its recovery
+  guard for replacement helpers. Failed navigation cannot rebind the expected
+  account, and the current page URL is never adopted as trusted identity.
+- An anonymized transport fixture and offline regressions cover setup, later
+  reconciliation, non-replay, identity, liveness and interruption. No live Meta
+  calls, runtime configuration changes, package delivery or rollout are claimed.
+
+## ACL-1739 — Busy tab is no longer counted as a frozen episode — 2026-10-23
+
+- Doc124 CO_bnc runs (df8549045b4a, e3f55897e533, 6331d5e85536, dbe5e7c04048, ecc2e3e54784,
+  208f67a4b2aa; 07-08.10) ended at `tab_frozen_budget_exceeded` or lost steps to `tab_frozen`.
+  Telemetry: the profile window was covered by 4-7 other windows (`window_hidden_woken`
+  reason `covered`, not foreground), the 5 s liveness probe missed, yet a minute later
+  `stall_evidence` read `responsive: true` (JS heap about 500 MB, 6.3k nodes - normal for Ads
+  Manager). Episodes fell on all steps (objective, create, ad copy, upload), not on video upload.
+- `_tab_frozen` now asks once more with the long probe (`FROZEN_CONFIRM_S`, 10 s) after a missed
+  short probe that the wake did not rescue. If the long probe answers, the tab is busy: no episode
+  is counted (telemetry `tab_frozen`, note `confirm_answered`). A tab that does not answer the long
+  probe either counts as before, so the ACL-1702 budget and the hung-tab watchdog are unchanged.
+- The objective-wait loop keeps its timing: no long confirm probe inside its own repeated polls.
+
+## ACL-1681 — Keep Builder drafts on the dashboard machine — 2026-10-23
+
+Builder campaigns, drawer open/wide state and publish-job memory now have
+debounced machine-local copies as well as the browser cache. Atomic writes,
+corruption preservation and newer-copy reconciliation retain the displaced copy.
+Drafts survive a fresh browser profile, a localhost/127.0.0.1 switch, clearing
+localStorage and a dashboard restart.
+
+Normal saves are serialized per document. A delayed acknowledgement or refusal preserves
+edits made after its request and sends the latest queued copy with the acknowledged
+server base instead of silently rolling the active draft back. Focused regressions
+cover delayed replies, an immediate closing-page keepalive flush (including replies
+in reverse order) and restoration/conflicts.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/681).
+
+## ACL-1642 — Already open profiles do not reserve memory twice — 2026-10-23
+
+- Publish jobs reuse an already open Multilogin profile without requiring memory for
+  another profile. The configured concurrency ceiling, profile ownership and current
+  kept-window rules still apply; the queue check never starts or closes a profile.
+- The first eligible job with an open profile can pass a job waiting for memory.
+  Queue details explain the order, show free and needed memory and suggest closing
+  an unneeded Multilogin window. Current idle-window waits and build progress remain visible.
+- Detection shares the robot's read-only long/short-folder and profile-ID check. Only
+  a fresh answer bypasses memory checks; failed, stale or superseded probes cannot do so.
+- A pending background answer gets at most five seconds before a memory-only idle-window
+  close. An already open target avoids the unnecessary close. Closed/failed checks,
+  a hung check past that bound and actual capacity limits preserve the existing policy;
+  waiting stays cancellable and never holds the queue lock.
+- Offline regression tests cover queue ordering, limits, kept-window composition,
+  process detection, stale probe replies, telemetry and the rendered dashboard.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/642).
+
+## ACL-1558 — Scrubber catches bare tokens, proxy credentials and id/email dict keys — 2026-10-23
+
+The shared telemetry scrubber (`run_telemetry.scrub` / `scrub_diag`, used by telemetry rows,
+Sentry contexts and the Run summary attachment) now also hides:
+- a bare Graph API token `EAA…` with no `token=` or `Bearer` before it (`<token>`);
+- proxy credentials `user:pass@host[:port]`, also after `http://`/`socks5://`: login and
+  password become `<user>:<hidden>@`, host and port stay visible;
+- dict keys that are ids or emails (`act_1234567`, a 6+ digit account id, `name@example.com`)
+  in `scrub_diag`, so Sentry contexts no longer carry them; keys that collide after scrubbing
+  keep both entries (`key`, `key#2`). The Graph pilot's `scrub_value` uses the same key rule.
+Secret matching preserves the existing no-hang safeguards.
+
+### Review corrections — 2026-10-24
+
+Proxy masking also covers local hostnames without a port and passwords beginning
+with `/`, without leaving long credentials open at a fixed length cutoff. It
+scans each word once while preserving schemes, Windows paths, ratio text and URLs whose
+email-like text is in a path. These cases are checked through the shared scrubber,
+Sentry context, Run summary attachment and Graph telemetry boundaries.
+Explicit proxy URL credentials also take precedence over ordinary email-label,
+Windows-path, nested-scheme and ratio-text exceptions, while those ordinary forms
+remain unchanged outside proxy userinfo. Long exceptional passwords retain the
+same masking and bounded processing.
+Colliding scrubbed dictionary keys retain every entry and existing suffix names;
+per-dictionary suffix progress removes repeated rescanning as the dictionary grows.
+
+## ACL-1305 — Explain the Stats workbook and check the setup name — 2026-10-23
+
+First-run setup checks the campaign manager's name against the selected Stats
+workbook before accepting the configuration. Case and surrounding spaces are
+ignored; an unknown name gets close matches and instructions for correcting it.
+The file step explains what the workbook contains and asks the manager to obtain
+it from their team lead or support. This help is available with no readable file,
+and an existing workbook in the usual location is offered automatically. Existing
+workbook validation remains in place.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/305).
+
+## ACL-1142 — Account-specific teach waits during parallel builds — 2026-10-23
+
+A Website teach wait belongs to its publish job. The banner names that account,
+and Continue releases only the selected job; other accounts keep their own wait
+or keep building. Both status and campaign-progress responses carry the same
+job-specific teach state, so the waiting campaign shows an orange attention dot.
+Ordinary builds retain the grey pulse, finished failures solid orange and clean
+results solid green; reduced motion keeps the visible dot without animation.
+
+Cancellation, timeout and an exception clear only the departing job's teach wait.
+A successful answer remains available to that job, and the manual Pause button
+continues to pause all jobs. The existing profile cap (default two) and exclusive
+profile leases remain in force for parallel builds and reads.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/142).
+
+## ACL-1138 — Refuse a Multilogin profile that has no proxy — 2026-10-23
+
+Before the robot attaches to or starts a Multilogin profile (Ads Manager publish through
+every Multilogin provider, `attach_existing_only` spend reads, the "open profile" button,
+Graph-API-in-profile `fb_api.profile.open_profile` (API publish, API spend), and the warm
+pool both when it opens or adopts a profile and at every checkout),
+it reads the profile's proxy configuration from the MLX API (`POST /profile/search` with `profile_ids`; works
+in both workspaces, while `/profile/metas` answers 501 in workspace B). A profile with
+no proxy stops the account with `profile_no_proxy` ("Add the proxy to the profile in
+Multilogin"), before anything touches the profile or Facebook. A failed or unavailable
+check logs a warning, records `proxy_gate_unchecked` telemetry and lets the run continue
+(5 s timeout, held for 60 s); a passing result is cached for ten minutes, a refusal is
+not. Without a known workspace both A and B are asked. `FB_RPA_PROXY_GATE=0` turns it off. The browser command
+line's `--proxy-server` flag is logged after attach/start as evidence only, because
+MLX may apply some proxy types through its agent. Read-only survey on 2026-10-16:
+34 of 1848 profiles in workspace A and 3 of 520 in B have no proxy configured. The gate
+was checked read-only against real http, socks5 and no-proxy profiles in both
+workspaces; an attach on a live run has not been observed yet.
+
+## ACL-141 — Dialogs and errors within the page — 2026-10-23
+
+- The dashboard no longer calls the browser's `alert`, `confirm` or `prompt` (the grey
+  "127.0.0.1:9193 says" box). One in-page `<dialog>` in `templates/_acl_dialog.js`, inlined into
+  `report.html` (so offline page tests that stub every request still have it), gives
+  `aclAlert`, `aclConfirm` and `aclPrompt`. They return promises; a second call waits until the
+  first dialog is closed.
+- Each dialog has a title, body text, a primary and a quiet button, and takes the shared `dialog`,
+  button and field styles. Escape cancels (confirm = no, prompt = nothing entered). Focus goes to
+  the field (text selected), to the primary button, or to Cancel for destructive actions, which
+  also get a red primary button. Focus returns to where it was when the dialog closes.
+- Prompts (connecting an account: name, ad account number) have a labelled field and Enter
+  submits. Every confirmation keeps its old meaning: cancelling does exactly what cancelling did.
+- Failures that belong to one button or field are a red line next to it (`aclInlineError`,
+  `role="alert"`), replaced by the next error and cleared on the next try: Refresh, Update, the
+  date calendar, opening a profile, profile search and saving a profile to an account, the goal form,
+  "Nothing is being assembled yet". Errors without a place on the page stay a dialog, now the
+  dashboard's own.
+- Manual profile-ID save and automatic profile-link refusals stay next to the
+  visible form/list. The helper returns the actual save result; success is shown
+  only after the server accepts it, so the former 800ms timer cannot hide a failure.
+- Missing creative files still stop Publish and Publish all before any submission.
+  The refusal stays beside the visible action, including the drawer footer when
+  the form button is hidden; named row markers and selected-campaign scope remain.
+
+
+Current-main refresh also migrates the Forms library deletion confirmation. Cancel
+and Escape leave templates untouched; acceptance rechecks the current row and list
+before deleting. Existing Page forms and Recently deleted/restore behavior remain.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/71).
+
+## ACL-110 — Compare the dashboard with another period — 2026-10-23
+
+The date-range popup has a "Compare with" choice: nothing, the previous period of the
+same length, or a custom range. With a comparison on, the account map (accounts,
+country rows, totals, campaign managers), CM Comparison, Optimization ad sets and the
+Builder's open recommendations show earlier values and changes. The same six report
+metrics also compare Assets, Landings, Trend, Top combos, Targeting and Creative
+breakdowns, including nested landing/creative variants, Home You/Others and
+Country Workbench slices.
+The change is a percent of the earlier value; it is "—" when the earlier value is zero
+or missing. A row present in only one period is marked "new" or "gone". The selected
+period itself is unchanged and the comparison is kept in the address (`compare`,
+`cmp_from`, `cmp_to`). Without a comparison nothing on the page changes.
+Recorded zero-valued rows remain present; explicit no-data account placeholders
+remain absent. Earlier-only countries, Home campaign managers, account and
+recommendation groups, breakdowns, assets and Workbench rows remain visible as
+read-only results. These records do not restore assignments or acquire campaign
+controls; current Workbench action indices remain intact. Read-only evidence
+also retains exact creative-version rows when a whole country or Workbench is gone;
+new nested creative versions and Home manager-country groups get the same markers.
+Historical campaign managers retain their Net and ROI alongside the six metrics.
+Workbench volume includes earlier spend and changes for you, others and spend
+without an assigned manager, including a current zero after earlier spending.
+Measured FTD summaries in row You tags, asset chips and sidebar country/asset
+counters compare the same cohorts; attributed totals and historical-only own
+results remain explicit. Navigation names and current reuse indices are preserved.
+Map summary requests
+carry both comparison modes and their validated dates, use the selected report
+and preserve cached data. The comparison chip wraps below the full date control
+without covering the buyer selector. Verification uses synthetic workbook/model
+and browser transport, with no live account or Meta actions.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/18).
+
+## ACL-2119 — Sidebar: country views above the brand asset list — 2026-10-22
+
+Under each country in the left sidebar the order is now: "All assets" row, then the country views (Workbench, Manage, Assets, Landings, Trend, Combos, Targeting, Creatives, Optimization) always visible, then the per-brand asset rows separated by a thin divider. The "More country views" collapsible is removed. Asset rows, view links and active highlighting behave as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1119).
+
+## ACL-2118 — Compact "Publish all" confirmation — 2026-10-22
+
+The "Publish all → PAUSED campaigns" confirmation now fits a 1366×768 screen: the title, the summary line and the Cancel/Publish buttons stay put and only the middle scrolls. The top line reads "Publish N campaigns on M accounts — campaigns PAUSED"; accounts are listed with their campaigns as chips (collapsed when there are more than 6 campaigns); repeated pre-flight notices become one expandable line with a count (grey for information, amber for warnings, red for blockers); the help paragraphs moved behind an ⓘ tooltip; the window is `min(900px, 90vw)` wide with two columns. Blocking behaviour is unchanged ("Not ready" accounts still need "Run anyway").
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1118).
+
+## ACL-2117 — Profiles: never reopen a profile while MLX is still saving it after a stop — 2026-10-22
+
+Live runs on 22.10 lost Facebook sessions after Check plan → profile stop → Publish reopening the same profile about 2 minutes later. Now:
+
+- **Waiting instead of failing.** After any stop an action that needs the profile waits for the restart pause (default 3 min, `ACL_PROFILE_RESTART_COOLDOWN_S`) and shows "Waiting for the profile to finish saving (cloud sync)". The MLX launcher client has no profile sync/cloud status call, so the pause after the process is gone is the signal. `ACL_PROFILE_RESTART_MAX_WAIT_S` caps the wait (`0` = refuse at once, as before). A profile that was never stopped, or is already open, does not wait.
+- **"Closing" waits.** An action that finds the profile closing waits up to 30 s (the stop rule from ACL-2095) for the process to go, instead of failing after 6 s.
+- **Check plan keeps its window.** A profile that Check plan started stays open so Publish reuses it without a stop and restart. With keep-open on (the default since ACL-2113) it is a `convenience` kept window governed by the idle/LRU eviction; with `FB_RPA_KEEP_PROFILES_OPEN=0` it is held for `ACL_PLAN_KEEP_OPEN_S` (default 600 s, `0` = old 30 s); its read slot is marked kept, so Publish takes it over without queueing; if nobody uses it, it closes by that term. It is held only after a clean plan (no Meta stop). Publish waits out the pause before it takes a queue slot and a profile lock, and Stop cancels the wait.
+- **Telemetry** (pilot log): `fb_api_profile_stop` (stop and process-exit time), `fb_api_profile_sync_wait`, `fb_api_profile_reopen` (stop age, waited), `fb_api_reopen_graph_session` (did the first Ads Manager page have a Graph session) — to confirm or drop the cloud-sync hypothesis.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1117).
+
+## ACL-2114 — Ad sets and ads are created ACTIVE under a PAUSED campaign — 2026-10-22
+
+Campaigns published through the Graph API are still created PAUSED, first, and never ACTIVE by the robot.
+Ad sets and ads are now created ACTIVE, so nothing delivers while the campaign is paused and the buyer starts
+everything with one switch on the campaign. Reused ad sets and ads from a previous run get no status writes.
+
+Safety: before the first ad set or ad write the creator re-reads the campaign; if Meta does not report PAUSED,
+the run stops (`campaign_not_paused`) before any child is written. The write policy allows `status=ACTIVE` only
+on `adsets` and `ads` and only when the caller passes `children_active` (parent confirmed PAUSED); in the Ads
+Manager page helper too. Campaigns, creatives, uploads, nested statuses and every other ACTIVE write stay refused.
+
+Readback expects PAUSED on the campaign and ACTIVE on created ad sets and ads (reused ones may be ACTIVE or PAUSED);
+the children's CAMPAIGN_PAUSED effective status is the expected state, not a mismatch. Messages, the plan preview
+and Check plan now say "Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1114).
+
+## ACL-2113 — Profile stays open after a clean publish; idle kept windows give way to new jobs — 2026-10-22
+
+- After a clean publish the profile the job started now **stays open** by default (the buyer keeps
+  working in it). `FB_RPA_KEEP_PROFILES_OPEN=0` (ACL-1444) restores closing it.
+- Two kinds of kept windows in the profile queue: **convenience** (clean publish) and **review**
+  (readback not confirmed, manual completion, account problems — ACL-2091). Review windows are
+  never closed automatically and block the queue as before (Close profile / Release).
+- When a new job needs a slot or memory, the dashboard closes the **least recently used idle
+  convenience window** (idle at least `ACL_KEPT_IDLE_CLOSE_MIN` minutes, default 10; no job on it, no
+  read holding the profile). The stop is the usual MLX stop and waits until the profile process is
+  gone (ACL-2095). The new job's panel says "Closed KLD_BFL_Bxx to make room"; the closed window's
+  panel says why; telemetry `kept_window_auto_close`.
+- A window not idle long enough shows "waiting: ... closes by itself to make room" in the queue line.
+- A job for an account whose window is already open reuses it (no restart); a review window stays
+  review after reuse.
+- A window counts as convenience only after a real clean run: no stop, no errors (checkpoint,
+  logout, preflight/plan errors stay review); in RPA only after the same checks as the close path
+  (draft saved, window owned by the robot). A stop whose process is still alive after the wait is a
+  failed auto-close; reads refresh a kept window's idle time; telemetry names the account and idle time.
+- Tests: `tests/test_acl2113_keep_profile_open.py`.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1113).
+
+## ACL-2110 — Profile Pages: new Page experience tasks count as advertise rights — 2026-10-22
+
+Pages that use the new Page experience report their tasks with a `PROFILE_PLUS_` prefix (for example
+`PROFILE_PLUS_ADVERTISE`), so ACL-2105 dropped them and found no profile Page. A single helper in
+`src/fb_api/pages.py` now treats `PROFILE_PLUS_X` as `X` for every Page task read; `ADVERTISE`, `MANAGE`
+and `FULL_CONTROL` (classic or prefixed) grant advertise rights, unknown tasks are still ignored.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1110).
+
+## ACL-2107 — Preserve exact-tree CI proof through transient GitHub failures — 2026-10-22
+
+Release validation now fetches the reused runs named by the recorded main run directly by ID. New scope
+jobs record these IDs in an `acl-reused-runs` annotation; older runs can supply them through the JSON result
+in their own successful classifier step's retained log. Unrelated log links and invalid scope payloads do
+not supply IDs. Every candidate still requires the original repository, workflow, event, exact Git tree,
+merged-PR binding and tested-tree annotation where applicable, and successful required jobs.
+
+Once direct-ID coverage proves the complete Linux 3.11/3.13 and Windows matrix, validation returns without
+the optional `head_sha` listing. A partial reused run can combine with successful jobs from the recorded
+main run directly. Discovery retries empty lists with a pause; PR-binding API errors retry and then fail
+as "could not be proven". Combined batch PRs also always select the full matrix and run their own jobs;
+source PRs retain the affected-check rule and existing check names. Release acceptance still requires the
+complete matrix of the exact released tree.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1107).
+
+## ACL-2105 — Facebook Pages: fall back to the profile's own Pages — 2026-10-22
+
+When `/{act}/promote_pages` is empty or omits the draft's Page, ACL also reads `/me/accounts` and keeps
+Pages with ADVERTISE or MANAGE. Ad-account Pages stay first; the picker, plan and result retain each
+Page's source. Refresh pages and Instant Forms use the same merged list; `api_pages_sources` records
+counts from each source.
+
+A profile Page now needs one account-bound creative `validate_only` call before any campaign, ad set,
+media upload or form creation, in both Check plan and the actual run. Generic published/promotable
+flags are not proof. Only an explicit successful Meta response without an object ID or error passes;
+refused, unavailable or unknown validation stops with the Page and reason. The helper builds its own
+fixed Page/link creative and validate-only option for the navigated ad account; ordinary creation
+permissions and their execution_options prohibition stay unchanged. Each run obtains fresh proof.
+
+The minimal link creative uses supported SDK fields but is not guaranteed to be accepted for every
+Page or plan without uploaded media. Any missing-media/unsupported response is shown and blocks
+creation; no extra asset reads or fallback writes are attempted. Verification used synthetic transports
+and the native helper offline; no live Meta/profile pilot was performed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1105).
+
+## ACL-2101 — Meta docs watcher uses the shared Obsidian folder — 2026-10-22
+
+The watcher now uses the existing Obsidian resolver, including `ACL_OBSIDIAN_DIR`
+and real/legacy folder fallback. Missing default or requested vaults emit the
+shared actionable warning on stderr. Explicit `--vault`, `--no-obsidian`, dry-run
+and valid-note append behavior are preserved with isolated CLI regressions.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1101).
+
+## ACL-2095 — Parallel profile launches: paced MLX starts, cold-start budget, no reconnect to stopped profiles — 2026-10-22
+
+Check plan, reads, Publish and "Open profiles for today" already share one profile slot
+queue (ceiling `ACL_MAX_PROFILES`, default 2, plus the memory check). What broke parallel
+runs on TEST9095y (22.10) was the launch itself, and it is fixed for every API path that
+starts a profile:
+
+- MLX `start` requests go one at a time (`ACL_MLX_PARALLEL_STARTS`, default 1, up to 4);
+  a start that had to wait pauses `ACL_MLX_START_GAP_S` (3 s). Profiles still run in parallel.
+- A launcher connection error on start (WinError 10053/10054) gets one delayed retry. If the
+  profile came up despite the dropped request, it is taken as ours (holds its slot, is closed
+  by us) instead of being started twice. Timeouts, proxy auth on the start call, MLX session
+  loss, checkpoints, logouts and Meta stops are never retried.
+- The first CDP calls after we start a profile (connect, new tab, `Page.enable`) get
+  `ACL_CDP_COLD_START_S` (40 s) instead of 10 s; later calls keep today's limits.
+- After a profile is stopped, its port is forgotten (warm registry, cold-start mark), and a
+  Chrome process that survived our stop is treated as "closing" — no more `CdpTimeout:
+  connect` to a dying browser; MLX listing the just-stopped profile as running is refused too.
+- Proxy auth race after a cold start (B97/Doc120/Doc122, 22.10): before the first Facebook
+  navigation the new tab loads a neutral probe page (`ACL_PROXY_PROBE_URL`, default
+  api.ipify.org); `ERR_INVALID_AUTH_CREDENTIALS` there gets one retry after 12 s, a second
+  failure is final, and Facebook is never asked through a proxy that is not ready yet. A warm
+  profile's proxy auth error is final as before.
+- Start/stop races: after a start the profile counts as ready only when `/json/version`
+  answers (cold budget); a stop waits until our start has settled (or its budget is over)
+  and then waits up to 30 s for the profile's process to exit instead of trusting MLX status.
+- Check plan shows "Waiting for a free profile slot" for accounts queued behind the ceiling.
+- Telemetry (`fb_api_pilot.jsonl`): `fb_api_mlx_start` (duration, queue wait, concurrent
+  starts, retry, failure kind), `fb_api_cold_open` (ready / connect / `Page.enable` timings),
+  `fb_api_proxy_probe` and `fb_api_stop_gone` — the
+  data for tuning the ceiling per machine; no live measurement was done.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1095).
+
+## ACL-2090 — Ad names take the creative variant from the end of the file name too — 2026-10-22
+
+The builder and the publisher now read a trailing 1–2 digit variant when the file has no leading one (`2175_ARM22.png` → `2175 22 - Text`); frame sizes and aspect ratios at the end (`1080x1920`, `9x16`, `9:16`) are ignored, and a leading variant keeps priority. Ads built from `2175_ARM22/21/16.png` with the same text no longer fail "Ad names are unique". Report backfill of VariantId from the robot log follows the same rule; already published names are not changed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1090).
+
+## ACL-2086 — Publish-button focus browser test no longer flaky — 2026-10-22
+
+Tests only. The checkbox-scope test clicked a campaign checkbox it had resolved a moment
+earlier; the drawer's debounced repaint could detach that node first, so the click fired no
+`change` and the scope text never updated. The click now looks the node up and clicks it in
+one page task. Assertions are unchanged; no product code changed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1086).
+
+## ACL-2054 — Shared team library of Instant Form templates and a Forms tab — 2026-10-22
+
+- Form templates become a third team library kind (`form_templates.json` in the data repository,
+  keyed by template id) with the rules of targets and ad texts: every change goes straight to the
+  repository with a sha check and retry, delete is soft with Recently deleted and Restore, publishing
+  reads a local copy (`form_templates_library.json`), and without `ACL_LIBRARY_REPO`/`ACL_LIBRARY_TOKEN`
+  everything works on the machine-local `form_templates.json` as before. `save`, `load`, `get` and
+  `delete` keep their signatures, so plan building is unchanged. Existing-template edits require
+  the revision returned with the Forms row that the editor opened. A stale or unversioned edit is
+  refused without saving, including a same-template change during a file-sha retry; changes to
+  other templates still retry safely. The editor retains unsaved input and explains how to reopen
+  and compare the latest version. This edit revision never enters publishing content or form names.
+  Forms Edit exposes full name, first name and last name alongside email/phone, preserves the order
+  of retained contact fields, and permits only the existing saved legacy locale to stay unchanged;
+  new or changed unsupported locales remain invalid.
+- A missing `form_templates.json` in an existing data repository reads as empty and is created by the
+  first write; only a real 404 counts as missing. `scripts/seed_team_library.py` knows the kind.
+- Entries that fail validation are never dropped or erased by a later write: they stay in the file,
+  show as invalid and are not used by the builder or the robot until fixed. Stored entries accept a
+  legacy locale outside the closed list (ACL-2053). Ids are lowercased as before; author/time
+  metadata never enters the content hash, so form names do not change.
+- New Forms tab: list (name, author, last change, locale, contact fields and question count), New,
+  Edit, Duplicate, Delete, Recently deleted/Restore; the editor states that forms already created on
+  Pages do not change. When the library is connected, machine-local templates are offered for
+  explicit upload; duplicates, name clashes and names deleted in the team library are skipped with a
+  reason, and the local file is kept. The builder picker reads the same list.
+- Import of a Page form into a template is ACL-2062.
+  [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1054).
+
+## ACL-2053 — Builder: form templates match buyer-made Instant Forms — 2026-10-22
+
+- Compared with a live buyer form (account D71, 2026-10-20) and brought templates to parity. New optional
+  template fields (old saved templates load unchanged, with the same content hash and form name):
+  first name / last name contact fields (refused together with full name), `questions_first` (custom
+  questions before the contact fields), `intro_title` (own title of the intro card; the headline is used
+  when empty), `follow_up_action_url` (https, up to 1000 characters; the thank-you text becomes optional
+  when it is set, the thank-you screen is then skipped), `form_type` (More volume by default =
+  `is_optimized_for_quality=false`, or Higher intent), and a locale chosen from the 32 languages Graph
+  accepts on create (default EN_US; an unknown one gives "Unknown locale").
+- Every created form now also sends `is_optimized_for_quality` and `block_display_for_non_targeted_viewer=true`.
+  The rest of the request body for an old template is byte-for-byte the same (golden test).
+- Existing forms found on the Page by name are reused unchanged and keep their old settings; only newly
+  created forms get `is_optimized_for_quality=false` and `block_display_for_non_targeted_viewer=true`.
+  Templates saved earlier with a locale outside the list (any XX_YY) keep loading and keep their form name;
+  the list applies to new input. Contact order of legacy templates (name/email/phone only) stays canonical.
+- Write policy: only the three new top-level keys (`is_optimized_for_quality`, `block_display_for_non_targeted_viewer`
+  must be real booleans; `follow_up_action_url` https and length-checked) and the question types
+  FIRST_NAME / LAST_NAME were added, in Python and in the page helper. Any tos/terms key is still refused.
+- Not done, on purpose: `allow_organic_lead` - the Graph create reference lists only the deprecated
+  `allow_organic_lead_retrieval`, "no organic display" is `block_display_for_non_targeted_viewer`.
+  `context_card.cover_photo` - the reference describes it as a FILE upload (needs `pages_manage_posts`) next to
+  `cover_photo_id` (id of an already uploaded photo); that needs an upload edge and files, which the closed
+  policy forbids, so the cover image stays out. Reference:
+  https://developers.facebook.com/docs/graph-api/reference/page/leadgen_forms/
+- Multiple-choice output (`type CUSTOM`, `options [{key, value}]`) already matched Meta's shape; the keys are
+  our `question_N` / `qN_option_M` (Graph accepts any key), unchanged to keep old form names stable.
+- Tests: `tests/test_acl2053_form_parity.py` with the sanitized live form in
+  `tests/fixtures/meta/acl2053_d71_form_sanitized.json`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1053).
+
+## ACL-2028 — Plan check snapshot test for Graph read diagnostics — 2026-10-22
+
+Added an offline test that runs the real `publish_api.check_plan` against a fake Meta denying the `/search` and `/campaigns` reads with the anonymized permission-denied fixture. It proves the public result names the denied operation, success and publishable stay false, and no writes or network calls happen. Tests only, no production change (durable proof for ACL-1886 criterion 5).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1028).
+
+## ACL-1845 — Publication controls match dashboard primary actions — 2026-10-22
+
+- The footer owns one primary all/selected campaign action; the open campaign's
+  action is secondary. Labels stay at 14 px with a 38 px minimum height and visible
+  keyboard focus. A live scope describes the checkbox selection; the action count
+  excludes accounts already building, matching the existing dispatch guard.
+- Unavailable bulk publication has a soft blue fill, distinguishable border and
+  an explanation. Zero unlocked campaigns disables that action while other accounts
+  remain enqueueable. No selection still means all campaigns and all selected keeps
+  the established all label. Confirmation retains its existing payload semantics.
+- Queue progress exposes `aria-busy` on individual and bulk publishing controls.
+  Existing duplicate explanations and the ability to queue other accounts remain;
+  this visual state adds no lock. Unknown status still uses the existing disable gate.
+  A focused footer select survives checkbox updates without node replacement.
+- Synthetic browser checks cover both themes, the production 360 px drawer and
+  480/720 px width-token compatibility previews, preview invalidation, confirmation,
+  running, queued and lost-status states. Existing selection, retry, Stop and draft-only
+  request tests pass. No live profile, advertising operation or installed-package
+  delivery is asserted by these source checks. Supplemental checks use the newer
+  production Adopy tokens, docked/expanded two-column CSS and sanitized markup;
+  they prove CSS compatibility, not adoption of the newer expanded/API runtime.
+  The preflight gate (`applyGate`) and the queue renderer (`showQueue`) keep the zero-count
+  exclusion, so a queue update cannot re-enable the action when nothing is available.
+  The PAUSED/drafts wording comes from main's ACL-1761 label; this change only switches
+  the count to the campaigns that can actually be sent.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/845).
+
+## ACL-1840 — Country campaign footer shares the connection-form inset — 2026-10-22
+
+- The pending campaign table's per-country explanation and change journal receive
+  scoped padding from the country-card stylesheet, aligned with the workbook
+  notice and connection form. The footer has explicit space above and below;
+  long history text and disclosure labels wrap inside narrow cards.
+- The rule applies to the campaign footer that ACL-1798 mounts in the account page (`<section class="hc hc-after" data-hc-after>`); it is no longer dormant.
+  Verification uses sanitized markup/CSS from preview
+  `5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d`, real Chromium geometry and keyboard
+  disclosure at 1280, 1024 and 320 px in both themes. It does not import the
+  preview's unrelated changes or assert full integrated/installed verification.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/840).
+
+## ACL-1827 — Design parity: Home KPI row, sidebar per prototype, Robot health popover — 2026-10-22
+
+Home gets a "You vs Others" KPI row (FTDs, CPA, Leads, CPL, Spend, Lead->FTD) above the account map. The left sidebar follows the prototype (no emoji icons, "Target library", per-country You/all FTD counters, Find country search, asset sub-rows). Robot health opens as a header popover; the page stays for direct links.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/827).
+
+## ACL-1710 — Bounded Chromium install in CI — 2026-10-22
+
+- The "Install Chromium" step in the Linux and Windows test jobs now runs through `scripts/ci_retry.sh`: 3 attempts (300 s Linux, 180 s Windows), apt locks cleaned between attempts, apt sources moved off the stalling Azure mirror, hard step limits of 16 / 12 minutes. The Playwright browser download is cached by Playwright version. Test job ceilings: Linux 32, Windows 30 minutes (an `apt-get update` hang used to burn 35 minutes per job).
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/710).
+
+## ACL-1708 — Rebrand leftovers — 2026-10-22
+
+- The account-unreachable error says "Check the Adopy Campaign Manager window." and the Update button refusal says ACM "was not started from its desktop shortcut" (was "launcher"); no visible "launcher" wording is left in the dashboard (Multilogin's own "local launcher" in robot failure text is that product's term and stays).
+- Deleted `scripts/convert_favicon_to_ico.py`: it drew the old ACL mark, and the repo has no SVG renderer, so rebuilding from the kit SVGs would need a new dependency. `assets/dashboard.ico` and `favicon.ico` are the committed brand-kit files; nothing can regenerate the old mark.
+- `report.html` gets `<meta name="viewport">` so phones use the responsive layout.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/708).
+
+## ACL-144 — RPA: a profile's folder is found by its address — 2026-10-22
+
+- `browser._find_mlx_profile_dir` no longer runs `rglob` over every Chrome profile in `~/mlx/profiles`
+  (about 10 s per call, paid on every publish run). It looks up `profiles/{workspace}/{folder_id}/{profile_id}`
+  by name, also accepting `profiles/{workspace}/{profile_id}`, at most two levels under a workspace.
+- There is deliberately no recursive fallback: a profile outside the known layout, a missing root or an
+  unsafe id (empty, `.`, `..`, with a path separator) returns `None` (the callers already treat that as
+  "folder not found"), and only an exact folder name matches, so another profile's folder is never chosen.
+- The dashboard's `account_spend._mlx_profile_dir` now calls the same function instead of keeping a copy.
+- Not changed: `fb_api.profile.find_profile_dir` still scans recursively (separate path, separate task).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/73).
+
+## ACL-106 — Empty period says whose emptiness it is — 2026-10-22
+
+For the chosen dates the dashboard now distinguishes a period with no workbook rows for
+anyone (the workbook may need updating) from one where only the selected manager has no
+rows while others do (nothing to review). The notice names the manager and dates; the
+account map and account-reading controls stay available in both cases.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/19).
+
+## ACL-2066 — CPL in the default Optimization columns — 2026-10-21
+
+The account campaign table's default Optimization preset now shows CPL (BI spend /
+leads) right before CPA (FTD). Layouts already saved in the browser get CPL inserted
+before CPA once (flag `cpl_seen`); a user who removes it afterwards keeps that choice.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1066).
+
+## ACL-2065 — Faster cold morning report build — 2026-10-21
+
+On the full-year Stats workbook (about 258k rows) the first build of the morning
+report took about 12 minutes, mostly in the country workbench, which filtered the
+frame once per group. The workbench now aggregates each tab with one groupby,
+computes buyer columns once per country, and the report parses interest buckets
+and ad titles once per unique value. A local cold build now takes about 100 s;
+the default-period report is identical (before/after JSON comparison).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1065).
+
+## ACL-2052 — Meta rules registry: value rules, account controls, placement soft opt-out — 2026-10-21
+
+Record Meta's new placement controls in the rules registry and add their four
+documentation pages to the docs watcher: value rules (DECREASE capped at 90, only
+LOWEST_COST_WITHOUT_CAP / COST_CAP), account controls placement exclusions,
+legacy bid_adjustments retirement, placement_soft_opt_out (up to 5%), and the
+live fact that non-Advantage+ Leads campaigns via API still accept classic
+publisher_platforms. Entries are limited/test/deprecated and scoped so existing
+builder checks are unchanged. Facts the builder cannot check yet use a new
+documentation-only `fact` kind that `check_job` skips. No builder behavior change.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1052).
+
+## ACL-1839 — Account connection panel contains long metadata — 2026-10-21
+
+- The shared country/Accounts/builder connection form wraps long Multilogin status
+  text and bounds input/select widths to their host. A synthetic 280 px host
+  previously grew to 975 px; the same rendered production partial now fits.
+- Hidden profile results stay out of layout even though the visible results use
+  flex. Account selection and profile search have accessible names; the existing
+  Add sibling lookup and workspace/filter handlers remain unchanged.
+- Real-Chromium layout regressions cover three hosts, both themes and 280/720/1040 px
+  with synthetic long values. This source change does not claim stable delivery.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/839).
+
+## ACL-1668 — Builder marks a chosen creative whose file is missing — 2026-10-21
+
+When the refreshed creatives list no longer contains a creative chosen on an ad row,
+the Builder marks the row "File missing — pick again" in the error colour and keeps
+the name visible. Publish and Publish all refuse such rows and list them in the
+confirm; the publish-time enrichment message for a missing file is clearer. The
+refusal runs before any preflight decision is recorded. Existing offline browser
+fixtures now list the files they select. No ad account is touched.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/668).
+
+## ACL-2046 — Batch integration folds CHANGELOG fragments — 2026-10-20
+
+Fold the complete per-task changelog fragment set once on an ordinary frozen batch,
+after all approved source tips merge and before the combined PR. The assembler uses
+its reviewed producer, creates one separate deterministic terminal commit and verifies
+it with the unchanged published native Git proof. Independent combined review names
+that exact commit; detached rebuilds preserve old evidence and generate one fresh fold.
+
+Preserve the newer strict one-policy singleton selection's exact five governance files
+and authentic own fragment only after its complete native selection proof, actual Issue
+binding and source-identical tree succeed. This sole typed case validates with
+`--check`; malformed/mixed selections stop. No general skip, weakened receipt or policy
+activation is introduced. The delivered ACL-2156 standalone provider supplies the
+canonical support; Master Repo stays a reference. ACL-2046 itself retains its ordinary
+fold, independent review, checks and required verified release before ACL-2099.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1046).
+
+## ACL-2037 — Per-task CHANGELOG fragments — 2026-10-20
+
+Each task now adds `docs/system/changelog.d/ACL-NNNN.md` instead of prepending to
+`docs/system/CHANGELOG.md`, so merges into main no longer make every open PR
+conflict on the same top lines. `scripts/fold_changelog.py` folds the fragments into
+`CHANGELOG.md` (newest first) at batch or release time. Open PRs are not migrated; one that still edits the top of
+`CHANGELOG.md` may conflict once fragments have been folded.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1037).
+
+## ACL-1891 — Videos over 200 MB upload in chunks through the Graph API — 2026-10-20
+
+A video up to 1536 MB can now be published PAUSED through the API path. Files over 200 MB use Meta's resumable upload (start, transfer in chunks of at most 8 MB, finish); the server reads only chunk-sized slices from disk, so memory stays flat. A failed chunk resumes from the offset Meta reports; an unknown result is reconciled by readback on the title tag and never uploads the video twice, and a re-run reuses the finished video. Chunk calls are counted against the run's call budget, and a plan whose chunks cannot fit it is refused up front. The closed write policy gained exactly the three upload phases in both layers (Python and page helper), strictly validated. The `Media within Meta limits` rule now allows video up to 1536 MB. Details and the live-check list: `docs/system/PROJECT.md`, ACL-1891 ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891)).
+
+## ACL-1854 — Current build verdict survives cancellation and concurrent completion — 2026-10-20
+
+- Starting a new accepted job durably invalidates the account's previous ready
+  badge before a worker runs. The old success remains labelled history; duplicate
+  requests do not change the current job's verdict. Every new record identifies
+  its job and a hash of the intended campaign plan.
+- Partial results, failure, cancellation and deadline abandonment are persisted.
+  Unfinished records without a live job in this process display interrupted;
+  missing/corrupt storage and failed writes display an explicit unverified error.
+  Corrupt files are preserved, and failed admission starts no browser work.
+- A thread lock plus the existing machine-file lock protects the whole JSON
+  transaction. Atomic replacement preserves unrelated accounts; job identity and
+  monotonic status revisions reject late writes. Storage I/O does not hold the
+  job lock or delay abandonment's slot release. Existing profile/slot ownership,
+  cancellation deadlines and draft-only controls remain in force.
+- Failed admission errors also retain the predecessor's observed revision: their
+  delayed bookkeeping cannot mask that accepted job's later saved success. The
+  same error stays visible when the predecessor has not advanced.
+- Offline regressions use the public job caller, real persistence and rendered
+  report, with gated synthetic publishers and isolated files. The initial seven
+  cases failed on main `3327465f`. No live profile or deployed runtime is verified.
+
+## ACL-1805 — API creator: Meta rules checked before the first write, Meta refusals through the error catalog — 2026-10-20
+
+- The API creator runs the Meta rules registry (ACL-1781 `check_job`) on the exact campaign, ad set and
+  ad values before the first POST - fresh runs, reruns and dry runs. A violation stops the run with an
+  English "Meta rules: ..." message and creates nothing. If the registry cannot be loaded the check
+  fails open and logs the reason.
+- Meta refusals (`GraphError`/`GraphStop`) on the API path go through the error catalog (ACL-1786): the
+  dashboard problem list shows the catalog message and the suggested action; an unknown code shows the
+  raw (scrubbed) text. The API status/readback panel stays visible next to the list.
+- `graph.py`: codes 1404078, 2859015 and 1404163 (as code or subcode) stop the client like a policy
+  block; the catalog lookup also accepts a specific subcode. No new write path, no live calls.
+  [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/805), PR 1019.
+
+## ACL-402 — Repeated failures grouped into a report — 2026-10-20
+
+The telemetry summary gains a "Повторяющиеся отказы" section: failures are grouped
+by step and normalised reason, with machines affected out of those reporting,
+incident and run counts, flow versions, period, a confidence level (high/medium/low)
+and the latest examples. It is a report only — no rule is proposed, approved or
+distributed; turning a repeat into a rule remains a manual owner decision.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/53).
+
+## ACL-1992 — API publish: build percent counts created objects — 2026-10-18
+
+The percent next to the campaign being built was a time-based estimate from robot
+step names (ACL-1347). The Graph API path writes every step as `api_create_step`,
+which the model does not know, so the percent stood at one number for the whole
+run. API jobs now report `units: {done, total}` per campaign on the job poll:
+`total` from the plan (preflight, campaign, ad sets, per ad media — video counts
+upload and processing — creative and ad, readback; forms are added as they come),
+`done` from the creator's existing progress lines (`src/web/api_build_progress.py`).
+The page shows `done / total`, at most 99 % before the result, never going back,
+and the latest progress line as "Building: …". Robot jobs keep the old model.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/992).
+
+## ACL-2040 — Closing a profile survives one failed launcher request — 2026-10-16
+
+`MultiloginLauncher.stop_profile` asks the main address (`v1/profile/stop/p/{id}`)
+up to three times when the request drops or the launcher answers 5xx (not "already
+stopped"), two seconds apart. Before, one dropped request sent the stop to the
+legacy addresses, which all answer 404, so a read left the profile window open
+and the error showed the last 404 instead of the cause (TEST9095, Doc120,
+2026-10-16 23:10). The raised error now names the main-address failure. 404 on the
+main address still falls through to the legacy tail; other 4xx still stop at once.
+A timeout (connect or read) is not retried (a hung launcher would otherwise hold the profile lock for
+several more timeouts). A 5xx from an older address now moves on to the next address
+instead of ending the search.
+
+## ACL-1855 — Campaign commands: no write to Meta unless the operation history is saved first — 2026-10-15
+
+- Before every write (on/off, budget, bid) the command now must save its record to
+  `campaign_command_history.jsonl` and wait for it to reach the disk (append, flush, fsync). If
+  that fails before the first write, the command is refused with "The operation history could not
+  be saved on this computer ... Nothing was sent" (HTTP 503, code `storage`) and Meta receives
+  nothing. If it fails before a later object, that object and the rest are not sent; the objects
+  already written stay visible as a partial result. Before this, a disk error was ignored: the
+  write went out and the command could show "Succeeded" with no history at all.
+- If the history fails after a write may have left, the last saved record (the intent, "sending")
+  is kept and the result is shown as "Outcome unknown", never "Nothing was written"; one missed
+  line is healed by the next successful one, because every line is a full snapshot.
+- Restart after readback no longer turns confirmed objects into "not sent": an operation stopped
+  after its readback is restored from the per-object results. A torn last line is not glued to the
+  next record. Lost answers are still reconciled by reading, never by sending again; the same
+  idempotency key after a restart writes nothing.
+
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
+
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
@@ -17,6 +1127,28 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -245,6 +1377,14 @@ a clear refusal.
   changed shard assignment. The pilot tests now restore each handler's pre-test
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
+
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 

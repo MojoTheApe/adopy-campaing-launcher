@@ -31,6 +31,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -352,7 +353,7 @@ def _wait_for(predicate, seconds=5.0):
 
 def test_read_all_with_closed_profiles_respects_the_slots(monkeypatch, tmp_path, page_reads):
     accounts = [f"Facebook_{n}" for n in (1001, 1002, 1003, 1004)]
-    entries = {a: SimpleNamespace(profile_id=f"p-{a[-4:]}", folder_id="f", multilogin_instance="A",
+    entries = {a: SimpleNamespace(profile_id=fake_profile(a), folder_id="f", multilogin_instance="A",
                                   ad_account_id="act_123") for a in accounts}
     state = SimpleNamespace(open=set(), peak=0, notes=[], starts=[], stops=[], lock=threading.Lock(),
                             queued=threading.Event())

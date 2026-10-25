@@ -71,7 +71,7 @@ def configuration(request, repo, revision):
 def state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    shared = json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object)
+    shared = rules.pause_module().decode(json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object))
     rules.state_schema(shared)
     if shared.get('maintenance'):
         raise PendingDelivery('Delivery continuation is paused by owned maintenance; resume after cutover')
@@ -203,7 +203,41 @@ def selection_descriptor(before, after, prior, selected, key):
         raise ValueError('Selection delivery cannot change the descriptor outside its one policy')
 
 
-def selection_tree(request, repo, baseline, merge_sha, prior, selected, key):
+def selection_fragment(request, root, before, after, paths, config, issue):
+    """One new record for the genuine singleton task; a path grants no authority."""
+    if not rules.direct_module().integer(issue) or len(paths) != 1:
+        raise ValueError('Selection fragment needs the actual single frozen task')
+    project = config['project']
+    prefix, offset = project.get('id_prefix'), project.get('id_offset', 0)
+    legacy = project.get('legacy_task_ids', {})
+    if (not isinstance(prefix, str) or not re.fullmatch(r'[A-Z]{2,8}', prefix)
+            or type(offset) is not int or offset < 0 or not isinstance(legacy, dict)
+            or any(not isinstance(number, str) or not re.fullmatch(r'[1-9]\d*', number)
+                   or not isinstance(value, str) or not re.fullmatch(re.escape(prefix) + r'-[1-9]\d*', value)
+                   for number, value in legacy.items())
+            or len(set(legacy.values())) != len(legacy)
+            or any(int(value.split('-')[1]) >= offset for value in legacy.values())):
+        raise ValueError('Selection fragment needs unambiguous configured public task IDs')
+    identity = legacy.get(str(issue), f'{prefix}-{issue + offset}')
+    path = next(iter(paths))
+    if path in before or path != f'docs/system/changelog.d/{identity}.md':
+        raise ValueError('Selection fragment must be newly added for the actual frozen task')
+    row = after.get(path)
+    if not row or row['type'] != 'blob' or row['mode'] != '100644':
+        raise ValueError('Selection fragment must be a normal regular non-executable file')
+    value = rules.process_module().blob(request, root, row['sha'])
+    value = value.removeprefix('\ufeff').replace('\r\n', '\n').replace('\r', '\n').strip('\n')
+    heading = re.fullmatch(r'## ' + re.escape(identity) + r' — \S(?:[^\n]*\S)? — (\d{4}-\d{2}-\d{2})',
+                           value.split('\n', 1)[0])
+    if not heading or '\x00' in value:
+        raise ValueError('Selection fragment needs a nonempty matching task/date heading')
+    try:
+        datetime.strptime(heading.group(1), '%Y-%m-%d')
+    except ValueError as error:
+        raise ValueError('Selection fragment needs a valid calendar date') from error
+
+
+def selection_tree(request, repo, baseline, merge_sha, prior, selected, key, *, issue=None):
     """Complete immutable diff; docs remain independently reviewed source text."""
     process = rules.process_module()
     root = 'repos/' + repo
@@ -213,8 +247,10 @@ def selection_tree(request, repo, baseline, merge_sha, prior, selected, key):
     allowed = {'delivery.json', 'tracker/config.json', 'docs/repository/TRACKER.md',
                document, '.workflow/template-base.json'}
     changed = {path for path in before.keys() | after.keys() if before.get(path) != after.get(path)}
-    if changed != allowed:
+    if not allowed <= changed:
         raise ValueError('Selection delivery needs its exact generated governance-only diff; runtime/pin/helper changes stop')
+    if changed != allowed:
+        selection_fragment(request, root, before, after, changed - allowed, prior, issue)
     raw = {}
     for path in allowed:
         for name, files in (('before', before), ('after', after)):
@@ -340,7 +376,7 @@ def selection_delivery_context(request, repo, shared, config, current, merge_sha
     if rules.pending_delivery(others, prior):
         raise PendingDelivery('Finish every other authorized package before this selection delivery')
     authorization(prior, batch)
-    selection_tree(request, repo, baseline, merge_sha, prior, config, key)
+    selection_tree(request, repo, baseline, merge_sha, prior, config, key, issue=batch['issues'][0])
     return prior
 
 
@@ -628,7 +664,7 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
         # CAS failure/uncertain response is never retried with a stale body.
         request(root + '/contents/.tracker-state.json', 'PUT', {
             'message': 'Record verified authorized delivery [skip ci]', 'branch': 'tracker-state', 'sha': sha,
-            'content': base64.b64encode(json.dumps(shared, indent=2).encode()).decode()})
+            'content': base64.b64encode(json.dumps(rules.pause_module().encode(shared), indent=2).encode()).decode()})
     return {'applied': apply, 'issues': numbers, 'result': 'passed'}
 
 

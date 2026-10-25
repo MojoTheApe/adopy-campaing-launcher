@@ -28,6 +28,8 @@ function fixture(handlers, prompts) {
     calls, msg, FormData: class { constructor() { this.f = {}; } append(k, v) { this.f[k] = v; } },
     Object, Promise, String, encodeURIComponent, JSON, document: fakeDocument(),
     prompt: () => prompts.shift(),
+    // ACL-141: страница спрашивает своим окном; ответы — те же, что у prompt.
+    aclPrompt: (m, o) => Promise.resolve(ctx.prompt(m, o)),
     amapHint() {}, location: {reload() { calls.push({url: 'RELOAD'}); }},
     amapSend() { calls.push({url: '/account-links'}); },
     setTimeout(fn, ms) { timers.push({fn, ms}); return timers.length; },

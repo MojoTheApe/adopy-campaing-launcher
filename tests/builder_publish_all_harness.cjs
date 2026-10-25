@@ -153,6 +153,8 @@ console.log('ok');
 const queueCode = cut('window.cbPublishAll = function', '// ── Диагностика превью');
 // ACL-1313: занятая очередь объясняет себя — берём настоящую проверку.
 // ACL-1355: держат только потерянный статус и тот же аккаунт.
+// ACL-2118: тело окна подтверждения собирают чистые помощники.
+const confirmCode = cut('/* ACL-2118 begin */', '/* ACL-2118 end */');
 const busyCode = cut('function cbQueueUncertain() {', '\nwindow.cbPublish = function');
 
 // `country` — необязательна: один аккаунт бывает привязан к двум странам,
@@ -160,7 +162,7 @@ const busyCode = cut('function cbQueueUncertain() {', '\nwindow.cbPublish = func
 function fakeForm(label, country) {
   return {
     _label: country ? label + '@' + country : label,
-    querySelectorAll: () => [{}],                        // одна карточка
+    querySelectorAll: () => [{ querySelector: () => null }],                        // одна карточка
     querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label }
       : sel === '[name="country"]' && country ? { value: country } : null),
   };
@@ -197,12 +199,15 @@ function runQueue(accounts, opts = {}) {
       return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
     },
     alert: (m) => { events.push('alert'); said.push(String(m)); },
+    // ACL-141: отказы — окна страницы (заголовок + пояснение) и строка у кнопки.
+    aclAlert: (m, o) => { events.push('alert'); said.push(((o && o.title) || '') + ' ' + m); return Promise.resolve(); },
+    aclInlineError: (anchor, m) => { if (m) { events.push('alert'); said.push(String(m)); } },
   };
   sandbox.window.window = sandbox.window;
   sandbox.window.cbPreview = sandbox.cbPreview;
   sandbox.window.alert = sandbox.alert;
   vm.runInNewContext(
-    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + busyCode + '\n' + queueCode,
+    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + confirmCode + '\n' + busyCode + '\n' + queueCode,
     sandbox);
   // ACL-1604: проверка аккаунтов живёт на window; без неё подтверждение открывается сразу.
   if (opts.preflight) sandbox.window.cbPreflightFetch = opts.preflight;

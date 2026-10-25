@@ -1007,6 +1007,39 @@ def test_a_row_the_workbook_does_not_know_gets_dashes(page):
     assert "No rows" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
 
 
+def _nowb(page):
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-line'))
+      .map(l => { const t = l.querySelector('.amap-tree-nowb'); return t ? t.textContent.trim() : ''; })""")
+
+
+def test_a_meta_only_campaign_says_it_is_not_in_the_workbook(page):
+    """ACL-1377: прогревочная кампания (MaxWarmup на Doc19) с числами Meta и
+    без строк в книге. Прочерки там — не поломка, и это сказано пометкой."""
+    warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    draft = dict(ADSET, id="998", name="Draft", spend="", results="", cost_per_result="")
+    zero = dict(ADSET, id="997", name="Zero", spend="$0.00", results="0", cost_per_result="")
+    _paint(page, [ADSET, warm, draft, zero])
+    _fill(page, [ADSET, warm, draft, zero], ATTR)
+    assert _nowb(page) == ["", "· not in workbook", "", ""], (
+        "пометка — только у кампании с числами Meta и без строк книги")
+    assert set(_attr(page, 1).values()) == {"—"}, "прочерки в колонках книги остаются"
+    assert "not an error" in page.evaluate("() => document.querySelector('.amap-tree-nowb').title")
+
+
+def test_the_not_in_workbook_hint_goes_when_the_workbook_finds_the_campaign(page):
+    warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    _paint(page, [warm])
+    _fill(page, [warm], ATTR)
+    assert _nowb(page) == ["· not in workbook"]
+    found = {"ok": True, "has_data": True, "ads": {},
+             "campaigns": {"MaxWarmup Engagement": {"spend": "$5", "leads": 1, "deposits": 0,
+                                                    "cpl": "$5", "cpa": None, "cr": None}}}
+    _fill(page, [warm], found)
+    assert _nowb(page) == [""], "пометка пережила ответ, в котором кампания нашлась"
+    _fill(page, [warm], {"ok": False, "error": "busy"})
+    assert _nowb(page) == [""], "непрочитанная книга — не «нет в книге»"
+
+
 SHARED_TIP = ("The workbook cannot tell ads with the same name apart; "
               "these are the totals for all of them")
 
@@ -1476,8 +1509,8 @@ def test_the_labels_are_the_words_from_the_table_head(page):
     Три подписи нарочно не совпадают с шапкой, и каждая — решение, а не
     оплошность:
 
-    * «Account spend» → «Meta spend». В строке аккаунта это прочитанный
-      спенд кабинета; в строке кампании — спенд самой кампании словами Meta.
+    * «Campaign list» не обозначает сумму: ACL-2063 заменяет ею спенд аккаунта.
+      Совместимый старый форматтер дерева сохраняет отдельную подпись «Meta spend».
     * «Status» → «Delivery». Status строки аккаунта — предупреждение
       кабинета; здесь стоит доставка Meta.
     * «Note» → «Meta». Note аккаунта — заметка менеджера (ACL-1620; раньше Setup), а в дереве
@@ -1491,7 +1524,9 @@ def test_the_labels_are_the_words_from_the_table_head(page):
     _open(page)
     labels = page.evaluate("""() => Array.from(
       document.querySelectorAll('.amap-tree-line > [data-label]')).map(c => c.dataset.label)""")
-    assert labels[1] == 'Meta spend' and heads[2] == 'Account spend', (heads[2], labels[1])
+    # ACL-2063: в текущей карте вместо расхода Meta — состояние списка.
+    # Старое дерево сохраняет собственную подпись для совместимого ответа.
+    assert labels[1] == 'Meta spend' and heads[2] == 'Campaign list', (heads[2], labels[1])
     assert labels[7] == 'Delivery' and heads[8] == 'Status', (heads[8], labels[7])
     assert labels[8] == 'Meta' and heads[9] == 'Note', (heads[9], labels[8])
     # Книжные числа названы ровно так, как их зовёт шапка.
