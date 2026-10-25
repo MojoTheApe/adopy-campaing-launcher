@@ -44,6 +44,12 @@ def test_clean_spec_passes_the_registry(tmp_path):
                                       ("CTA_TYPE", "NOT_A_CTA"), ("OBJECTIVE", "NOT_AN_OBJECTIVE")])
 def test_violating_spec_is_stopped_before_any_post(tmp_path, monkeypatch, name, bad):
     monkeypatch.setattr(cr, name, bad)
+    if name == "CTA_TYPE":
+        # Кнопки проверяет и список создателя, и политика записи: пускаем «чужую» кнопку через оба,
+        # чтобы остановка шла именно реестром правил Meta (ACL-1805), а не списком кнопок (ACL-1767).
+        from src.fb_api import write_policy as wp
+        monkeypatch.setattr(cr, "CTA_WEBSITE", tuple(cr.CTA_WEBSITE) + (bad,))
+        monkeypatch.setattr(wp, "CTA_WEBSITE", tuple(wp.CTA_WEBSITE) + (bad,))
     meta = FakeMeta()
     out, client = _run(meta, _draft(tmp_path))
     assert meta.posts == [] and client.writes == 0 and out.campaign_id == ""
