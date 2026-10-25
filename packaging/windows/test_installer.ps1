@@ -124,6 +124,20 @@ if (-not $Launch.WaitForExit(70000)) { throw "Normal launcher did not return aft
 if ($Launch.ExitCode -ne 0) { throw "Normal launcher failed with exit code $($Launch.ExitCode)." }
 $Health = Invoke-RestMethod -Uri "http://127.0.0.1:9090/health" -TimeoutSec 5
 if ($Health.ok -ne $true -or $Health.app -ne "ACL") { throw "Normal launcher health response is invalid." }
+# ACL-1358: once the dashboard has answered /health as this version, it moves the
+# Google token file into Windows protected storage (about 15 s later).
+$TokenFile = Join-Path $ConfigDirectory "token_accounts.json"
+$Magic = [System.Text.Encoding]::ASCII.GetBytes("ACLDPAPI1`n")
+$TokenProtected = $false
+for ($Wait = 0; $Wait -lt 60 -and -not $TokenProtected; $Wait++) {
+    $Head = [System.IO.File]::ReadAllBytes($TokenFile)
+    $TokenProtected = $Head.Length -gt $Magic.Length
+    for ($i = 0; $TokenProtected -and $i -lt $Magic.Length; $i++) {
+        if ($Head[$i] -ne $Magic[$i]) { $TokenProtected = $false }
+    }
+    if (-not $TokenProtected) { Start-Sleep -Seconds 1 }
+}
+if (-not $TokenProtected) { throw "token_accounts.json was not moved to protected storage after the healthy start." }
 $SecondLaunch = Start-Process -FilePath $GuiExecutable -ArgumentList "--launcher-test" -PassThru
 if (-not $SecondLaunch.WaitForExit(10000)) { throw "Second launcher invocation did not return." }
 if ($SecondLaunch.ExitCode -ne 0) { throw "Second launcher invocation failed." }
