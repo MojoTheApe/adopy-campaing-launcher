@@ -332,7 +332,7 @@ the visual Ads Manager presentation check remains pending):
   the same folder fills the empty Stories / Reels field from `creative_pairing` (the person can
   change or clear it; an ad with several texts is not prefilled).
 - Over-length texts (1024 body, 255 headline/description) are refused before any write with a message
-  naming the length. The vertical file upload is labelled "Stories / Reels image/video" in progress.
+  naming the length. The vertical file upload is labelled "Stories / Reels file image/video" in progress.
 - Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
   the existing confirmed-parent guard. This work adds no live activation. ACL-1767 is merged.
   The RPA backend is out of scope (owner decision 2026-10-25). Open conditions: the live checks on

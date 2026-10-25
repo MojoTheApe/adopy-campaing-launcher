@@ -838,4 +838,4 @@ def test_the_vertical_file_upload_has_its_own_progress_label(tmp_path, monkeypat
     monkeypatch.setattr(cr.CampaignCreator, "_write", spy)
     out, _ = _run(FakeMeta(), _ad_with(tmp_path))
     assert out.error == ""
-    assert sorted(k for _, k in seen) == ["Stories / Reels image", "image"]
+    assert sorted(k for _, k in seen) == ["Stories / Reels file image", "image"]
