@@ -1420,6 +1420,7 @@
     .cb-sel-opt:hover, .cb-sel-opt.cb-sel-focused { background: var(--bg-hover); color: var(--accent); }
     .cb-sel-opt[data-val=""] { color: var(--muted); }
     .cb-sel-opt[hidden] { display: none; }
+    .cb-sel-opt[aria-disabled="true"] { opacity: 0.45; pointer-events: none; cursor: not-allowed; }
 
     /* Campaign name headline in slot */
     .cb-slot-name {
@@ -6158,13 +6159,33 @@ window.cbDrawer = (function () {
  */
 window.cbKeep = (function () {
   var KEY = 'acl.builder.v2';
-  var VERSION = 2;
+  var VERSION = 3;
   /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
      нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
   var STALE_MS = 14 * 24 * 60 * 60 * 1000;
 
   var state = { v: VERSION, forms: {} };
   var restoring = false;
+
+  /* v2 -> v3 (ACL-1767): появились пол, языки, устройства, версия ОС и старт. Поля v2
+     сохраняются как есть; новые - пустые (умолчание = прежнее поведение). Кнопку не трогаем:
+     у объявления без сохранённого значения остаётся Learn more. */
+  var NEW_V3_FIELDS = ['gender', 'languages', 'device', 'os_min', 'start_time'];
+  function migrate(parsed) {
+    if (!parsed || typeof parsed !== 'object' || !parsed.forms || typeof parsed.forms !== 'object') return parsed;
+    if (parsed.v === 2) {
+      Object.keys(parsed.forms).forEach(function (k) {
+        var entry = parsed.forms[k];
+        if (!entry || !Array.isArray(entry.campaigns)) return;
+        entry.campaigns.forEach(function (c) {
+          if (!c || !c.fields || typeof c.fields !== 'object') return;
+          NEW_V3_FIELDS.forEach(function (f) { if (!(f in c.fields)) c.fields[f] = ''; });
+        });
+      });
+      parsed.v = 3;
+    }
+    return parsed;
+  }
 
   function read() {
     var raw;
@@ -6177,6 +6198,7 @@ window.cbKeep = (function () {
 
   /* Годен ли документ: и из localStorage, и с сервера (ACL-1681) — те же правила. */
   function validate(parsed) {
+    parsed = migrate(parsed);
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
     var fresh = {}, now = Date.now();
     Object.keys(parsed.forms).forEach(function (k) {
@@ -6410,6 +6432,7 @@ window.cbKeep = (function () {
 
   return {
     save: save,
+    migrate: migrate,
     saveSoon: saveSoon,
     restore: restore,
     watch: watchStructure,
@@ -6449,9 +6472,6 @@ window.cbLayout = (function () {
     texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
     placements: { task: 'ACL-1772', what: 'Placement editor' },
     media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
-    gender:     { task: 'ACL-1767', what: 'Gender' },
-    languages:  { task: 'ACL-1767', what: 'Several languages' },
-    cta:        { task: 'ACL-1767', what: 'CTA list' },
     copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
   };
 
@@ -6722,7 +6742,8 @@ window.cbPreflight = (function () {
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
-        var allowed = (C.allowed_cta || {})[s(inp.objective).toLowerCase() || C.default_objective] || [];
+        var allowed = (C.allowed_cta || {})[(s(inp.objective).toLowerCase() || C.default_objective)
+          + (dest === 'instant_form' ? '_instant_form' : '')] || [];
         out.push(perAd(id, inp, function (a) { return allowed.indexOf(s(a.cta) || 'LEARN_MORE') === -1; }));
       } else if (id === 'budget_set') {
         var b = inp.budget, n = Number(b);
@@ -6732,6 +6753,20 @@ window.cbPreflight = (function () {
         var good = isFinite(lo) && isFinite(hi) && lo >= C.age_min && lo <= C.age_max
           && hi >= C.age_min && hi <= C.age_max && lo <= hi;
         out.push(v(id, good ? 'ok' : 'error'));
+      } else if (id === 'devices_consistent') {
+        var os = s(inp.os).toLowerCase() || 'all', dev = s(inp.device).toLowerCase(), ver = s(inp.os_min);
+        var mobile = os === 'ios' || os === 'android';
+        if (mobile && dev === 'desktop') out.push(v(id, 'error', 'mobile_os_desktop'));
+        else if (ver && !mobile) out.push(v(id, 'error', 'version_needs_os'));
+        else if (ver && !(new RegExp(C.os_min_re || '^$').test(ver)
+          && ((C.os_versions || {})[os] || []).indexOf(ver.indexOf('.') === -1 ? ver + '.0' : ver) !== -1)) out.push(v(id, 'error', 'bad_version'));
+        else out.push(v(id, 'ok'));
+      } else if (id === 'start_time_valid') {
+        var st = s(inp.start_time), nw = s(inp.now), stRe = new RegExp(C.start_re || '^$');
+        if (!st) out.push(v(id, 'ok'));
+        else if (!stRe.test(st)) out.push(v(id, 'error', 'format'));
+        else if (stRe.test(nw) && st.slice(0, 10) < nw.slice(0, 10)) out.push(v(id, 'error', 'past'));
+        else out.push(v(id, 'ok'));
       } else if (id === 'ad_names_unique') {
         var names = ads.map(function (a) { return s(a.name); }), bad = [];
         names.forEach(function (nm, i) {
@@ -7626,6 +7661,11 @@ window.cbTree = (function () {
   }
   window.cbPfRev = pfRev;
 
+  function cbNowLocal() {
+    var d = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes());
+  }
+
   function formMode(row) {
     var sel = row.querySelector('.cb-form-source');
     return L.formSource(sel ? sel.value : '');
@@ -7659,13 +7699,17 @@ window.cbTree = (function () {
         file: file, body: entry ? String(entry.body || '') : '',
         headline: entry ? String(entry.headline || entry.ad_title || '') : '',
         form_id: formMode(row) === 'template' ? '' : val(row, 'input[type="hidden"][name$="_form_id"]').trim(),
-        template: templateAudit(row), cta: 'LEARN_MORE'
+        template: templateAudit(row), cta: val(row, 'select[name$="_cta"]').trim() || 'LEARN_MORE'
       });
     });
     return {
       destination: L.destination(destEl ? destEl.value : 'website'), objective: 'leads',
       link: val(form, 'input[name="tracking_link"]'), country: val(form, '[name="country"]'),
-      budget: budget === '' ? null : budget, age_min: age, age_max: age, ads: ads
+      budget: budget === '' ? null : budget, age_min: age, age_max: age, ads: ads,
+      /* ACL-1767: устройства, версия ОС и старт; «сейчас» - часы страницы (сверка по дате). */
+      os: val(slot, 'input[name$="_os"]').trim() || 'All', device: val(slot, '[name$="_device"]').trim(),
+      os_min: val(slot, '[name$="_os_min"]').trim(), start_time: val(slot, '[name$="_start_time"]').trim(),
+      now: cbNowLocal()
     };
   }
 
@@ -13976,8 +14020,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var copyHidden = row.querySelector('input[type="hidden"][name$="_copy"]');
       var copySearch = row.querySelector('.cb-adtitle-search');
       var copyVal = ((copyHidden && copyHidden.value) || (copySearch && copySearch.value) || '').trim();
-      // ACL-1344: выбор CTA убран из билдера — превью показывает постоянную.
-      var cta = CB_PREVIEW_CTA;
+      // ACL-1767: превью показывает выбранную кнопку; без выбора - постоянную «Learn More».
+      var ctaSel = row.querySelector('select[name$="_cta"]');
+      var cta = ctaSel && ctaSel.value
+        ? ctaSel.value.toLowerCase().split('_').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ')
+        : CB_PREVIEW_CTA;
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
@@ -14618,7 +14665,37 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     });
     if (instant) window.cbLoadFormTemplates();
     window.cbFillFormSelects(slot);
+    /* ACL-1767: список кнопок зависит от места конверсии. */
+    slot.querySelectorAll('select.cb-cta').forEach(function (cta) {
+      var dest = instant ? 'instant_form' : 'website';
+      if (cta.dataset.dest === dest) return;
+      var cur = cta.value || 'LEARN_MORE';
+      cta.innerHTML = cbCtaOptionsHtml(dest, cur);
+      cta.value = cur;
+      cta.dataset.dest = dest;
+    });
     window.cbFillTemplateSelects(slot);
+    window.cbSyncApiOnly(slot);
+  };
+
+  /* ACL-1767: поля только для API. RPA: пустое поле выключено с причиной; заполненное
+     остаётся рабочим, чтобы сервер отказал вслух, а не молча сбросил значение. */
+  window.cbSyncApiOnly = function (slot) {
+    if (!slot || !slot.querySelectorAll) return;
+    var api = window.ACL_FB_BACKEND === 'api';
+    slot.querySelectorAll('.cb-api-field').forEach(function (el) {
+      var off = !api && String(el.value || '') === String(el.dataset.default || '');
+      if (el.disabled !== off) el.disabled = off;
+      var tip = off ? 'API backend only: ' + (el.dataset.tip || 'this field') + ' is set through the Graph API' : (el.dataset.tip || '');
+      if (el.title !== tip && el.dataset.tip) el.title = tip;
+    });
+    var note = slot.querySelector('[data-api-fields-note]');
+    if (note && note.hidden === !api) note.hidden = api;
+    slot.querySelectorAll('.cb-sel-opt[data-val="Android"]').forEach(function (o) {
+      var bad = !api ? 'true' : 'false';
+      if (o.getAttribute('aria-disabled') !== bad) o.setAttribute('aria-disabled', bad);
+      o.title = api ? '' : 'API backend only: Android targeting is set through the Graph API';
+    });
   };
 
   window.cbDestinationChanged = function (sel) {
@@ -14666,6 +14743,24 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         done({ state: 'failed', ok: false, forms: [], message: 'The dashboard did not answer; try again' });
       });
   };
+
+  /* ACL-1767: список кнопок приходит с сервера (CB_PREFLIGHT_RULES.consts.allowed_cta). */
+  var CB_CTA_FALLBACK = ['LEARN_MORE'];
+  function cbCtaLabel(t) { var x = String(t).toLowerCase().replace(/_/g, ' '); return x.charAt(0).toUpperCase() + x.slice(1); }
+  function cbCtaOptionsHtml(dest, current) {
+    var all = (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.consts && window.CB_PREFLIGHT_RULES.consts.allowed_cta) || {};
+    var list = (all[dest === 'instant_form' ? 'leads_instant_form' : 'leads'] || CB_CTA_FALLBACK).slice();
+    /* Значение вне списка (ушли на Instant Form с «Order now») не пропадает молча: остаётся
+       выбранным с пометкой, а проверка называет ошибку. */
+    if (current && list.indexOf(current) === -1) list.push(current);
+    var html = '';
+    list.forEach(function (t) {
+      var off = all && (all[dest === 'instant_form' ? 'leads_instant_form' : 'leads'] || CB_CTA_FALLBACK).indexOf(t) === -1;
+      html += '<option value="' + aclEscHtml(t) + '"' + (t === (current || 'LEARN_MORE') ? ' selected' : '') + '>'
+        + aclEscHtml(cbCtaLabel(t) + (off ? ' (not available here)' : '')) + '</option>';
+    });
+    return html;
+  }
 
   /* ACL-1776: шаблоны форм. Библиотека лежит на этом компьютере (в Meta не ходит);
      форму из шаблона создаёт РОБОТ при публикации, в билдере её нет. */
@@ -14926,7 +15021,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</div>' +
       '</div>' +
       '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
-      '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
+      /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
+         Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
+      '<span class="cb-label">CTA</span>' +
+      '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
+      cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
       '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
       '</div></div>';
   }
@@ -14991,6 +15090,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var thSrc = srcTitle.querySelector('input[type=hidden]');
       var thNew = newTitle.querySelector('input[type=hidden]');
       if (thSrc && thNew) thNew.value = thSrc.value;
+    }
+    // ACL-1767: кнопка объявления едет в копию.
+    var srcCta = srcRow.querySelector('select[name$="_cta"]');
+    var newCta = newRow.querySelector('select[name$="_cta"]');
+    if (srcCta && newCta) {
+      newCta.innerHTML = cbCtaOptionsHtml(srcCta.dataset.dest || 'website', srcCta.value);
+      newCta.value = srcCta.value;
+      newCta.dataset.dest = srcCta.dataset.dest || 'website';
     }
     // ACL-1775: выбранная форма Страницы едет в копию.
     var srcForm = srcRow.querySelector('input[name$="_form_id"]');
@@ -15281,7 +15388,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<div class="cb-targeting-hint" style="font-size:var(--adopy-text-xs);color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
       '</div>' +
       '<span class="cb-label">OS / Age / Language</span>' +
-      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS'], 'OS') +
+      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS') +
       '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
       /* Язык — и здесь тоже. Карточку строит одно место — эта функция по
          «+ Add Campaign»; поле, добавленное не сюда, выглядит добавленным, а
@@ -15289,8 +15396,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
          из `data-language` формы, чтобы правило считалось в одном месте. */
       '<input type="text" name="camp_' + idx + '_language" class="cb-input cb-input-sm cb-language" value="" placeholder="Language" oninput="cbLanguageChanged(this)" title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
       '</div>' +
-      '<span class="cb-label">Gender</span>' + future('gender', 'select', 'All') +
-      '<span class="cb-label">Several languages</span>' + future('languages', 'button', 'Choose languages') +
+      /* ACL-1767: поля набора только для API-бэкенда. Пусто = ключа в форме нет по сути, план прежний.
+         При RPA пустое поле выключено с причиной, заполненное остаётся рабочим (cbSyncApiOnly). */
+      '<span class="cb-label">Gender</span>' +
+      '<select name="camp_' + idx + '_gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
+      '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
+      '<span class="cb-label">More languages</span>' +
+      '<input type="text" name="camp_' + idx + '_languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + idx + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
+      '<datalist id="cb-lang-' + idx + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
+      '<span class="cb-label">Devices</span>' +
+      '<div class="cb-inline"><select name="camp_' + idx + '_device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
+      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop" disabled>Desktop only (unavailable: Instagram, Stories and Reels placements need mobile)</option></select>' +
+      '<input type="text" name="camp_' + idx + '_os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
+      '<span class="cb-label">Start time</span>' +
+      '<input type="datetime-local" name="camp_' + idx + '_start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
+      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android and Start time work only with the API backend.</div>' +
       /* ACL-1775: Website / Instant Form. При бэкенде RPA выключено с причиной
          (cbSyncDestination); без `name` оно не уходит, а значение сайта - умолчание сервера. */
       '<span class="cb-label">Conversion location</span>' +
@@ -16501,6 +16621,12 @@ function cbPlanHtml(data) {
           + ' · age ' + aclEscHtml(a.age) + ' · language ' + aclEscHtml(a.language || 'any')
           + ' · interests ' + aclEscHtml(interests || 'none') + ' · placements '
           + aclEscHtml(a.placements || '') + (a.destination ? ' · ' + aclEscHtml(a.destination) : '')
+          + (a.gender ? ' · gender ' + aclEscHtml(a.gender) : '')
+          + (a.languages_picked ? ' · languages picked ' + aclEscHtml(a.languages_picked.join(', ')) : '')
+          + (a.devices ? ' · devices ' + aclEscHtml(a.devices) : '')
+          + (a.os_min ? ' · OS ' + aclEscHtml(a.os_min) : '')
+          + (a.start_time ? ' · starts ' + aclEscHtml(a.start_time) : '')
+          + (a.multi_advertiser ? ' · multi-advertiser ads ' + aclEscHtml(a.multi_advertiser) : '')
           + '</div><ol class="cbd-plan-ads" style="font-size:var(--adopy-text-sm);margin:0.1rem 0 0 1rem">';
         (a.ads || []).forEach(function (ad) {
           h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
