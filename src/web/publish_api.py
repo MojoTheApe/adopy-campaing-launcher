@@ -29,6 +29,7 @@ from typing import Any, Callable
 
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
+    resolve_page,
     AccountFacts,
     CampaignCreator,
     Outcome,
@@ -434,7 +435,14 @@ class ApiPublisher:
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
             try:
+                # ACL-2192: черновик без Страницы («Automatic») - выбрать её ДО закрепления:
+                # pin_page принимает только числовой id, а creator выбирает Страницу позже
+                # (повторный resolve_page в _prepare идемпотентен: page_id уже задан и на кабинете).
+                if not plan.page_id:
+                    resolve_page(plan, self._facts)
                 pinned = self._client.transport.pin_page(plan.page_id)
+            except PlanError as exc:
+                return result_dict(Outcome(campaign_name=name), error=f"{exc}. Nothing was created.")
             except ValueError as exc:
                 return result_dict(Outcome(campaign_name=name),
                                    error=f"The Page of this draft cannot be used in this run ({exc}). "
