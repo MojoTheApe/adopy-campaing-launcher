@@ -193,6 +193,10 @@ class SpendReading:
     source: str = "rpa"           # rpa | token
     spend: float | None = None
     currency: str = ""
+    # Канонические единицы отдельно от знака валюты, который уже читает экран.
+    currency_code: str = ""
+    timezone: str = ""
+    day_boundary: str = ""
     state: str = "idle"           # idle | running | ok | failed
     how: str = ""                 # каким приёмом прочитано — чтобы знать, что сломалось
     error: str = ""
@@ -233,6 +237,7 @@ class SpendReading:
         # details» — без id кабинета и адресов. Чистим здесь, на выходе, чтобы
         # это касалось и записей, сохранённых до правки.
         out["objects_error"] = scrub_tree_error(self.objects_error)
+        out["next_step"] = _next_step(self.status, self.status_text)  # ACL-123
         if tree_not_read(self):
             out["objects_problem"] = tree_problem(self.objects_error)
         return out
@@ -386,6 +391,10 @@ def _restore_reading(key: str, raw: dict) -> SpendReading:
     known = SpendReading.__dataclass_fields__
     reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
     if reading.source == "api":
+        if not reading.currency_code:
+            from src.analysis_agent.bi_compare import currency_code
+
+            reading.currency_code = currency_code(reading.currency)
         # API-чтения до 10.10 сохраняли ISO-код («USD 179.47» не влезал в ячейку);
         # показываем знаком, как новые чтения (`account_spend_api.display_currency`).
         reading.currency = _API_SIGNS.get(str(reading.currency or "").strip().upper(), reading.currency)
@@ -463,6 +472,12 @@ def _put(reading: SpendReading) -> None:
         _UNSAVED.pop(key, None)
 
 
+def _next_step(status: str, status_text: str) -> str:
+    from src.analysis_agent.account_next_step import next_step
+
+    return next_step(status, status_text)
+
+
 def get_status(account: str) -> dict[str, str]:
     """Последнее известное состояние кабинета — или пусто, если не спрашивали.
 
@@ -491,6 +506,7 @@ def get_status(account: str) -> dict[str, str]:
         "shot_id": "",
         "shot_at": "",
     }
+    out["next_step"] = _next_step(out["status"], out["status_text"])
     # Кнопка «Copy screenshot» — только у снимка, который ещё лежит на диске.
     shot_id = str(raw.get("shot_id") or "")
     if shot_id and out["status"] != "clear" and status_shot_path(shot_id) is not None:
@@ -521,16 +537,28 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     Ярлыков может оказаться несколько на один профиль: карта этого не
     запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
-    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
-    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
-    занять нужное.
+    защищает. Без физического UUID отказываем до открытия браузера: ярлык
+    не защищает тот же профиль в другом процессе.
     """
     try:
         entry = _entry_for(account)
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or str(account or "")
+    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
+
+    if entry is None:
+        raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    if not profile:
+        raise ProfileLeaseError(f"{account} has no profile_id in the account map.")
+    return physical_profile_key(profile)
+
+
+def _failure_text(exc: BaseException) -> str:
+    """Текст сбоя чтения для человека; отказ замка профиля уже написан словами."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    return str(exc) if isinstance(exc, ProfileLeaseError) else f"{type(exc).__name__}: {exc}"
 
 
 def _lock_for(account: str):
@@ -602,9 +630,11 @@ def start_read(
 
             # ACL-1826: вход в прокси (ERR_INVALID_AUTH_CREDENTIALS) читается одной фразой.
             text, code = _mlx.humanize(exc, "", account)
+            if _hand_refusal(exc, account):   # ACL-1184
+                text, code = hand_message(), HAND_OPEN_CODE
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
+                state="failed", error=text or _failure_text(exc), error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -687,6 +717,25 @@ def hand_message() -> str:
 
     return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
         else HAND_OPEN_MESSAGE
+
+
+def _running_by_hand(direct, udd, profile_id: str) -> bool:
+    """Запущен ли профиль — единой проверкой слоя RPA (ACL-1184).
+
+    `profile_is_running` сам перебирает написания папки, а без папки
+    (`udd is None`) ищет по id профиля: «папка не найдена» больше не
+    пропускает проверку.
+    """
+    return bool(direct.profile_is_running(str(udd) if udd is not None else "", profile_id))
+
+
+def _hand_refusal(exc: BaseException, account_label: str) -> bool:
+    """Отказ слоя RPA «профиль открыт руками» — исходник в лог, человеку текст (ACL-1184)."""
+    if not (isinstance(exc, _profile_trouble.ProfileStop) and exc.code == _profile_trouble.OPEN_BY_HAND):
+        return False
+    log.warning("%s: the profile is open by hand; showing the way out instead of %s: %s",
+                account_label, type(exc).__name__, exc)
+    return True
 
 
 #: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
@@ -847,7 +896,8 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
-    why = _stop_log.refusal(profile_id)
+    # ACL-2117: пока MLX досохраняет профиль, чтение ждёт (а не отказывает).
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _set_wait_note(account_label, text))
     if why:
         raise ProfileNotAttachable(why, code="restart_cooldown")
     queue = _slot_queue()
@@ -883,6 +933,14 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
         _record("spend_profile_started", False, time.monotonic() - began,
                 {"account": account_label, "slot_wait_s": round(waited_s, 1),
                  "error": type(exc).__name__})
+        if _hand_refusal(exc, account_label):
+            raise ProfileNotAttachable(hand_message(), code=HAND_OPEN_CODE) from exc
+        from src.fb_ads_rpa import profile_trouble
+
+        if isinstance(exc, profile_trouble.ProfileStop):
+            # ACL-1138: причина в профиле (нет прокси) — её текст, а не «профиль закрыт».
+            raise ProfileNotAttachable(f"{account_label}: {profile_trouble.message(exc.code) or exc}",
+                                       code=exc.code) from exc
         # ACL-1826: 403 «restricted permission» на слоте B / вход в прокси — понятный текст и код.
         from src.fb_api import mlx_session as _mlx
 
@@ -972,22 +1030,51 @@ def _publish_touched(opened: _ReadOpen) -> bool:
 
 def _close_if_still_pending(opened: _ReadOpen) -> None:
     """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
-    with browser_operation.reading(), profile_lock(opened.profile_id):
-        with _PENDING_LOCK:
-            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
-                return
-            _PENDING_CLOSE.pop(opened.profile_id, None)
-        _close_started(opened)
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    # ACL-1853: таймер в своём потоке — отказ замка не должен его ронять; запись остаётся
+    # в `_PENDING_CLOSE`, следующая операция с этим профилем возьмёт её или закроет.
+    try:
+        with browser_operation.reading(), profile_lock(opened.profile_id):
+            with _PENDING_LOCK:
+                if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                    return
+                _PENDING_CLOSE.pop(opened.profile_id, None)
+            _close_started(opened)
+    except ProfileLeaseError as exc:
+        log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
-def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
-    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
+                    grace_s: float | None = None, convenience: bool = False) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
+    человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
+    """
     if not opened.started:
         return
-    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+    if keep_for_next and convenience and opened.slot_id:
+        # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
+        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
+        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
+        return
+    grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
+    if keep_for_next and grace > 0 and opened.profile_id:
+        if grace_s is not None and opened.slot_id:
+            # ACL-2117: окно, которое держим под Publish, — оставленное (kept): Publish берёт его
+            # место (`_reuse_kept`) и не стоит в очереди за обычным местом чтения.
+            try:
+                _slot_queue().keep(opened.slot_id, opened.account)
+            except Exception:
+                log.exception("Could not mark the kept window of %s", opened.account)
         with _PENDING_LOCK:
             _PENDING_CLOSE[opened.profile_id] = opened
-        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer = threading.Timer(grace, _close_if_still_pending, args=(opened,))
         timer.daemon = True
         timer.start()
         return
@@ -1011,96 +1098,43 @@ def _logged_out(page, *, deep: bool = False) -> bool:
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
-    """Папка профиля Multilogin — по адресу, а не обходом дерева.
+    """Папка профиля Multilogin — по адресу, без обхода дерева.
 
-    Штатный `_find_mlx_profile_dir` делает `rglob` по всему `~/mlx/profiles`, а
-    там лежат полные каталоги Chrome. Замерено на этой машине: **около десяти
-    секунд на каждый вызов**, и не только на первый. Адресный поиск — 0.001 с,
-    ответ тот же.
-
-    Путь описан в самом слое RPA: `profiles/{ws}/{folder_id}/{profile_id}`.
-    Раскладку проверяем в трёх видах, все — на глубину не больше двух уровней.
-
-    Живёт здесь, а не в `src/fb_ads_rpa`, потому что тот файл принадлежит
-    другому треку. Эти десять секунд платит и каждый прогон публикации —
-    заведено как `acl-144`.
+    Логика живёт в одном месте: `fb_ads_rpa.browser._find_mlx_profile_dir`
+    (ACL-144 — тот же адресный поиск теперь и у прогона публикации).
     """
-    profile_id = (profile_id or "").strip()
-    if not profile_id:
-        return None
-    root = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx"))) / "profiles"
-    if not root.is_dir():
-        return None
-    folder_id = (folder_id or "").strip()
-    try:
-        for ws in root.iterdir():
-            if not ws.is_dir():
-                continue
-            if folder_id:
-                p = ws / folder_id / profile_id
-                if p.is_dir():
-                    return p
-            p = ws / profile_id
-            if p.is_dir():
-                return p
-            for folder in ws.iterdir():
-                if not folder.is_dir():
-                    continue
-                p = folder / profile_id
-                if p.is_dir():
-                    return p
-    except OSError:
-        return None
-    return None
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    return rpa_browser._find_mlx_profile_dir(profile_id, folder_id)
 
 
 def _dir_spellings(path) -> list[str]:
-    """Написания одной и той же папки, которые Windows считает равными.
+    """Написания одной и той же папки (длинное и 8.3) — см. `fb_ads_rpa.profile_dir`.
 
-    9 сентября чтение спенда X84 отказывало словами «профиль открыт вручную»
-    сразу после того, как дешборд сам его и открыл. Прицепиться мешало
-    единственное: **у папки два написания**. Multilogin запускает Mimic с
-    коротким именем 8.3 —
-
-        C:\\Users\\EXAMPL~1\\mlx\\profiles\\WORKSP~1\\FOLDER~1\\PROFIL~1
-
-    — а мы вычисляем длинное, и проверка владения портом сравнивает их как
-    строки. `os.path.abspath` и `normcase` короткое имя не разворачивают, и
-    два имени одной папки расходятся.
-
-    Проверять владение по папке — правильно: без этого можно прицепиться к
-    браузеру **другого** аккаунта, а это хуже любого непрочитанного числа.
-    Поэтому сравнение остаётся, а сюда добавляется второе написание.
-
-    Разворачивать короткое в длинное было бы половиной решения: неизвестно,
-    какое из двух придёт следующим, и на машине с выключенным 8.3 короткого
-    имени нет вовсе. Поэтому возвращаются оба, без повторов и в понятном
-    порядке — длинное первым.
+    ACL-1184: реализация переехала к проверке «профиль запущен», чтобы
+    дешборд и RPA отвечали на этот вопрос одинаково.
     """
-    out: list[str] = []
-    text = str(path)
-    for value in (text, _short_path(text)):
-        if value and value not in out:
-            out.append(value)
-    return out
+    from src.fb_ads_rpa import profile_dir
+
+    return profile_dir.spellings(path, _short_path)
 
 
 def _short_path(path: str) -> str:
-    """Имя 8.3 для существующей папки — или пусто, если его нет.
+    """Имя 8.3 для существующей папки — или пусто (`fb_ads_rpa.profile_dir`)."""
+    from src.fb_ads_rpa import profile_dir
 
-    Пусто — обычный ответ, а не сбой: на томах с выключенным 8.3 короткого
-    имени не существует, и тогда написание всего одно.
-    """
-    if os.name != "nt":
-        return ""
+    return profile_dir.short_path(path)
+
+
+def _attach_existing(direct, profile_id: str, spelling: str, **kw):
+    """`attach_existing_only`, где отказ профиля (ACL-1138: нет прокси) — `ProfileNotAttachable`."""
+    from src.fb_ads_rpa import profile_trouble
+
     try:
-        import ctypes
-
-        buf = ctypes.create_unicode_buffer(4096)
-        length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 4096)
-        return buf.value if 0 < length < 4096 and buf.value != str(path) else ""
-    except Exception:
-        return ""
+        return direct.attach_existing_only(profile_id, spelling, **kw)
+    except profile_trouble.ProfileStop as stop:
+        raise ProfileNotAttachable(profile_trouble.message(stop.code) or str(stop),
+                                   code=stop.code) from stop
 
 
 def _attach_open(direct_cls, entry, profile_id: str):
@@ -1110,7 +1144,7 @@ def _attach_open(direct_cls, entry, profile_id: str):
         return None
     direct = direct_cls()
     for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        conn = _attach_existing(direct, profile_id, spelling, new_page=True)
         if conn is not None:
             return conn
     return None
@@ -1147,6 +1181,10 @@ def _attach_only(entry, account_label: str):
     if not profile_id:
         raise ProfileNotAttachable(f"{account_label} has no profile_id in the account map")
 
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+
+    require_profile_lease(profile_id)
+
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         raise ProfileNotAttachable(
@@ -1154,28 +1192,23 @@ def _attach_only(entry, account_label: str):
         )
 
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
-    if udd is None:
-        # Папку создаёт сам Multilogin при первом запуске — у профиля, ни разу
-        # не запускавшегося здесь, её нет; открытым он быть не может.
-        if opening is not None:
-            return _start_closed(entry, account_label, opening,
-                                 recheck=lambda: _attach_open(direct_cls, entry, profile_id))
-        raise ProfileNotAttachable(
-            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
-        )
-
     direct = direct_cls()
-    for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
-        if conn is not None:
-            # Профиль, который прошлое чтение запустило и ещё не закрыло
-            # (`CLOSE_GRACE_S`), закроет теперь это чтение.
-            _take_over_pending(profile_id, opening)
-            return conn
+    if udd is not None:
+        for spelling in _dir_spellings(udd):
+            conn = _attach_existing(direct, profile_id, spelling, new_page=True)
+            if conn is not None:
+                # Профиль, который прошлое чтение запустило и ещё не закрыло
+                # (`CLOSE_GRACE_S`), закроет теперь это чтение.
+                _take_over_pending(profile_id, opening)
+                return conn
 
+    # ACL-1184: проверяем и без папки. Обычно у профиля без папки (её создаёт сам
+    # Multilogin при первом запуске) открытого окна нет, но папку мы ищем своей
+    # раскладкой и можем не найти — тогда окно, открытое руками, раньше
+    # доходило до запуска и голого RuntimeError вместо подсказки.
     running = False
     try:
-        running = any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd))
+        running = _running_by_hand(direct, udd, profile_id)
     except Exception:
         pass
     if running:
@@ -1186,13 +1219,30 @@ def _attach_only(entry, account_label: str):
     if opening is not None:
         return _start_closed(entry, account_label, opening,
                              recheck=lambda: _attach_open(direct_cls, entry, profile_id))
+    if udd is None:
+        raise ProfileNotAttachable(
+            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
+        )
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
     )
 
 
-@serialized_browser(reading=True)
+def _probe_lease_error(exc, *_args, **_kwargs):
+    return {"ok": False, "act": "", "account_name": "", "error": str(exc)}
+
+
+def _open_lease_error(exc, *_args, **_kwargs):
+    return False, str(exc)
+
+
+def _spend_lease_error(exc, account, date_from, date_to=""):
+    return SpendReading(account=account, date_from=date_from, date_to=date_to or date_from,
+                        source="rpa", state="failed", error=str(exc))
+
+
+@serialized_browser(reading=True, on_lease_error=_probe_lease_error)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -1236,6 +1286,10 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
         out["act"] = act
         out["account_name"] = _ads_manager_account_name(page)
         out["ok"] = True
+        # ACL-142: Ads Manager без параметров открывает кабинет профиля ПО
+        # УМОЛЧАНИЮ. Прочитанное — предложение, а не выбор: экран обязан
+        # дать человеку подтвердить его или вписать другой номер.
+        out["needs_confirmation"] = True
         return out
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
         out["error"] = f"{type(exc).__name__}: {exc}"
@@ -1318,7 +1372,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser(reading=True)
+@serialized_browser(reading=True, on_lease_error=_open_lease_error)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -1357,20 +1411,27 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         return False, "The RPA browser layer changed (see acl-108e)"
 
     udd = _mlx_profile_dir(profile_id, folder_id)
+    direct = direct_cls()
     if udd is not None:
-        direct = direct_cls()
         for spelling in _dir_spellings(udd):
-            attached = direct.attach_existing_only(profile_id, spelling)
+            try:
+                attached = _attach_existing(direct, profile_id, spelling)
+            except ProfileNotAttachable as exc:
+                return False, CodedMessage(str(exc), exc.code)
             if attached is not None:
                 attached.close(keep_browser_open=True)
                 return True, "The profile is already open through automation. You can read it."
-        try:
-            if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
-                # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
-                return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
-        except Exception as exc:
+    try:
+        # ACL-1184: и без найденной папки — по id профиля (та же проверка, что у RPA).
+        if _running_by_hand(direct, udd, profile_id):
+            # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
+            return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
+    except Exception as exc:
+        if udd is not None:
             return False, f"Could not check open profiles: {exc}. Nothing was launched."
-
+        # Без папки до ACL-1184 проверки не было вовсе: сбой проверки не мешает
+        # запуску, а окно, открытое руками, остановит сам запуск (`open`).
+        log.warning("%s: could not check open profiles (%s); starting through Multilogin", who, exc)
 
     # ACL-1812 (B1-bis): обе кнопки («open profile» на строке и Connect) идут через общий журнал.
     from src.fb_api import stop_log as _stop_log
@@ -1384,8 +1445,13 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(
             entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
+        if _hand_refusal(exc, who):
+            return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
+        from src.fb_ads_rpa import profile_trouble
         from src.fb_api import mlx_session as _mlx
 
+        if isinstance(exc, profile_trouble.ProfileStop):   # ACL-1138: нет прокси
+            return False, CodedMessage(profile_trouble.message(exc.code) or str(exc), exc.code)
         text, code = _mlx.humanize(exc, instance, who)   # ACL-1826
         if code:
             return False, CodedMessage(text, code)
@@ -1413,7 +1479,7 @@ class CodedMessage(str):
         return obj
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_open_lease_error)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -1427,7 +1493,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_spend_lease_error)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -3214,45 +3280,6 @@ def _mark_object_off(account: str, object_id: str, delivery: str = "") -> int:
     return touched
 
 
-def _mark_object_off_by_name(account: str, level: str, name: str, delivery: str = "") -> int:
-    """То же, что `_mark_object_off`, для строки без id: по уровню и точному имени.
-
-    Трогаем только объекты **без id** этого уровня — те самые, что прочитаны
-    по имени. Имя, которое в чтении встретилось дважды, не трогаем вовсе:
-    выключили одну из них, и какую — по сохранённому чтению не сказать.
-    """
-    want = _page_clean_name(name)
-    if not want:
-        return 0
-
-    def _fix(objects: list) -> int:
-        same = [o for o in (objects or []) if isinstance(o, dict)
-                and o.get("level") == level and not str(o.get("id") or "")
-                and _page_clean_name(o.get("name")) == want]
-        if len(same) != 1:
-            return 0
-        same[0]["switch"] = "off"
-        if delivery:
-            same[0]["delivery"] = delivery
-        return 1
-
-    touched = 0
-    with _STORE_LOCK:
-        data = _load_all()
-        prefix = account + "|"
-        saved = 0
-        for key, raw in data.items():
-            if key.startswith(prefix) and isinstance(raw, dict):
-                saved += _fix(raw.get("objects") or [])
-        if saved:
-            _save_all(data)
-        touched += saved
-        for key, reading in list(_UNSAVED.items()):
-            if key.startswith(prefix):
-                touched += _fix(reading.objects or [])
-    return touched
-
-
 def _same_account(a: str, b: str) -> bool:
     """Одна и та же подпись аккаунта, записанная по-разному.
 
@@ -3329,7 +3356,7 @@ class TurnOffResult:
     #: и забудет представиться, журнал промолчит, а не соврёт, что это был RPA.
     route: str = ""
     #: Как найдена строка: пусто — по id (как всегда было), `name` — по точному
-    #: имени в таблице без id (ACL-1379). В журнале без этого не отличить
+    #: имени кампании: оно превращено в единственный id чтением списка через API (ACL-1379). В журнале без этого не отличить
     #: «выключили объект 123» от «выключили единственную строку с таким именем».
     matched_by: str = ""
 
@@ -3427,227 +3454,19 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-#: Пробелы ровно в том наборе, что `\s` и `trim()` в JS страницы (ACL-1379,
-#: ревью B1). `_name_key` (`str.split`) считает пробелами ещё `\x1c-\x1f` и
-#: `\x85`, а `\ufeff` — нет: «Campaign\x851» превращалось в «Campaign 1»,
-#: страница находила единственную строку «Campaign 1» — ЧУЖУЮ кампанию — и
-#: нажимала её. Для выключения по имени — одна нормализация, как у страницы.
-_PAGE_SPACES = "\t\n\v\f\r \xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
-_PAGE_SPACE_RUN = re.compile("[" + _PAGE_SPACES + "]+")
+def _turn_off_lease_error(exc, account, level, object_id, *, expected_name="", requester="", **_kwargs):
+    # No browser action started: this is a refusal, not an unconfirmed click.
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, state="failed", error=str(exc), at=_now(),
+                        requester=(requester or "").strip(), route="rpa")
+    _record_turn_off(out)
+    return out
 
 
-def _page_name(name: Any) -> str:
-    """Имя так, как его нормализует страница: `s.replace(/\\s+/g, ' ').trim()`."""
-    return _PAGE_SPACE_RUN.sub(" ", str(name or "")).strip(" ")
-
-
-def _page_clean_name(name: Any) -> str:
-    """`_page_name` без надписей Meta в конце — как `cleanName` страницы.
-
-    Чтение с ACL-1395 отдаёт имена уже без «Unpublished edits» и соседей, и
-    дешборд присылает чистое имя. Поиск по имени чистит строки таблицы так же,
-    иначе кампанию с надписью не выключить. Две кампании, чьи имена совпали
-    после чистки («X» и «X Draft»), — два совпадения, то есть отказ.
-    """
-    text = _page_name(name)
-    while True:
-        for label in META_NAME_LABELS:
-            if text.endswith(" " + label):
-                text = text[: -len(label) - 1].strip(" ")
-                break
-        else:
-            return text
-
-
-def _unsafe_name_chars(name: str) -> list[str]:
-    """Управляющие и форматные символы (Cc/Cf) вне набора пробелов страницы.
-
-    Они не видны или выглядят как соседние имена, а разные части системы
-    обходятся с ними по-разному. Выключать по такому имени не берёмся.
-    """
-    import unicodedata
-
-    return sorted({f"U+{ord(ch):04X}" for ch in name
-                   if unicodedata.category(ch) in ("Cc", "Cf")
-                   and not _PAGE_SPACE_RUN.fullmatch(ch)})
-
-
-#: Метка строки, найденной по имени. Тумблер метится `SEL_MARKED_SWITCH`, а
-#: строка — отдельно: перед нажатием проверяется, что это та же самая строка
-#: (тот же узел), а не перерисованная на её месте соседка.
-SEL_MARKED_ROW = '[data-acl-row="1"]'
-
-#: Найти кампанию по точному имени в таблице без id (Doc19/Doc20/Doc21, с
-#: 18.09) и рассказать про её тумблер. С `click` — ещё раз всё сверить и нажать
-#: в той же задаче браузера (ACL-1379).
-#:
-#: Разбор строк — тот же, что у чтения (`_READ_TREE_JS`, ветка by-name): имя —
-#: подсказка у ссылки, строка — ближайший `role=presentation`. Отличия — только
-#: в строгости: здесь мы не читаем, а собираемся нажать.
-#:
-#: - Имя должно встретиться ровно один раз. Одинаковые имена по имени не
-#:   различить — и выключить не ту кампанию хуже, чем не выключить никакую.
-#: - Строк на экране должно быть столько, сколько таблица насчитала сама
-#:   («Results from 5 campaigns»). Иначе часть списка не отрисована, и
-#:   двойник мог остаться за краем: «одна на экране» ещё не «одна в таблице».
-#: - Уровень подтверждён самой страницей (метки level= или заголовок
-#:   «Campaign»), а меток table_row нет вовсе: таблица с id выключается по id.
-#: - Нажимается только единственный `role=switch` этой строки. Ни шапка, ни
-#:   массовые действия, ни меню строки сюда не попадают.
-_FIND_BY_NAME_JS = r"""
-(args) => {
-  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
-  const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
-  const visible = e => hasBox(e) && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
-  const fail = (why, extra) => Object.assign({found: false, why}, extra || {});
-  /*ACL_CLEAN_NAME*/
-  // Имена без надписей Meta в конце, как у чтения (ACL-1395).
-  const want = cleanName(args.name);
-  if (!want) return fail('no campaign name was given');
-  // Метки прошлого поиска: при нажатии сверяем именно их.
-  const markedRow = args.click ? document.querySelector('[data-acl-row="1"]') : null;
-  const markedSwitch = args.click ? document.querySelector('[data-acl-switch="1"]') : null;
-  if (!args.click) {
-    document.querySelectorAll('[data-acl-row]').forEach(e => e.removeAttribute('data-acl-row'));
-    document.querySelectorAll('[data-acl-switch]').forEach(e => e.removeAttribute('data-acl-switch'));
-  }
-  const tables = [...document.querySelectorAll('[role="table"],[role="grid"]')]
-    .filter(visible).filter(e => !e.parentElement.closest('[role="table"],[role="grid"]'));
-  if (tables.length !== 1) return fail('expected one visible table');
-  const t = tables[0];
-  if (t.closest('[aria-busy="true"]') || [...t.querySelectorAll('[role="progressbar"],[aria-busy="true"]')].some(visible)) return fail('table is still loading');
-  if (t.querySelector('[data-surface*="table_row:"]')) return fail('this table shows row ids; read the account again');
-
-  // Уровень — как у чтения: метки подсказок Meta, иначе слово в заголовке имени.
-  const lk = new Set();
-  [...t.querySelectorAll('[data-surface*="level="]')].filter(visible).forEach(e => {
-    const m = (e.getAttribute('data-surface') || '').match(/level=([A-Z_]+)/);
-    if (m) lk.add(m[1]);
-  });
-  if (!lk.size) {
-    const head = t.querySelector('[data-surface*="table_column_header:name"]');
-    const word = head ? norm(head.textContent) : '';
-    const byWord = {'Campaign': 'CAMPAIGN_GROUP', 'Ad set': 'CAMPAIGN', 'Ad': 'ADGROUP'};
-    if (byWord[word]) lk.add(byWord[word]);
-  }
-  if (lk.size !== 1 || !lk.has(args.kind)) return fail('the page did not confirm that these rows are campaigns');
-
-  const tips = [...t.querySelectorAll('[data-tooltip-content]')].filter(e => visible(e) && norm(e.getAttribute('data-tooltip-content')));
-  let nameEls = tips.filter(e => e.querySelector('a'));
-  if (!nameEls.length) {
-    nameEls = tips.filter(e => {
-      const row = e.closest('[role="presentation"]');
-      return row && t.contains(row) && row.querySelector('[role="switch"]');
-    });
-  }
-  if (!nameEls.length) return fail('no campaign rows on screen');
-  const rows = [];
-  for (const n of nameEls) {
-    const row = n.closest('[role="presentation"]');
-    if (!row || !t.contains(row) || nameEls.filter(e => row.contains(e)).length !== 1)
-      return fail('a row could not be told apart from its neighbours');
-    rows.push({row, el: n, name: cleanName(n.getAttribute('data-tooltip-content'))});
-  }
-
-  // Полнота: таблица сама пишет, сколько в ней кампаний. Строкой кампании
-  // считается только строка со своим единственным тумблером: посторонняя
-  // подсказка-ссылка не должна «дополнить» счёт до N за недорисованную строку.
-  // Число — целиком после «from»: «1.234» и «1 234» не читаются как 234,
-  // а не читаются вовсе (и тогда отказ).
-  const counted = rows.filter(r => [...r.row.querySelectorAll('[role="switch"]')].filter(visible).length === 1);
-  const counts = [...document.querySelectorAll('[data-surface$="/total_count"]')].filter(visible)
-    .map(e => norm(e.innerText).match(/\bfrom\s+(\d{1,3}(?:,\d{3})+|\d+)\s+campaigns?\b/i)).filter(Boolean)
-    .map(m => parseInt(m[1].replace(/,/g, ''), 10));
-  if (new Set(counts).size !== 1) return fail('the table does not say how many campaigns it has, so the name cannot be confirmed unique');
-  if (counts[0] !== counted.length) return fail(`only ${counted.length} of ${counts[0]} campaigns are on screen, so the name cannot be confirmed unique`);
-
-  // Перед нажатием: помеченная при поиске строка на месте и с тем же именем.
-  if (args.click) {
-    const mine = rows.find(r => r.row === markedRow);
-    if (!mine || mine.name !== want) return fail('the row changed before action');
-  }
-  const hits = rows.filter(r => r.name === want);
-  if (!hits.length) return fail('no campaign with this exact name is in the table', {matches: 0});
-  if (hits.length > 1) return fail(`${hits.length} campaigns in the table have this exact name; without ids they cannot be told apart`, {matches: hits.length});
-  const hit = hits[0], row = hit.row;
-
-  const switches = [...row.querySelectorAll('[role="switch"]')].filter(visible);
-  if (switches.length !== 1) return fail('the row does not have exactly one on/off switch');
-  const sw = switches[0];
-  if (sw.disabled || sw.closest('[aria-disabled="true"]') || sw.getAttribute('aria-disabled') === 'true') return fail('switch is disabled');
-  const aria = sw.getAttribute('aria-checked');
-  const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
-    aria === null && sw.matches('input[type="checkbox"]') && !sw.indeterminate ? (sw.checked ? 'on' : 'off') : 'unknown';
-  // Подпись тумблера: aria-label, а у живой разметки Doc19 — текст по
-  // aria-labelledby (aria-label там нет, и запрет на подписи проверял бы пустоту).
-  const label = norm(sw.getAttribute('aria-label')) || norm((sw.getAttribute('aria-labelledby') || '')
-    .split(/\s+/).map(id => { const e = id && document.getElementById(id); return e ? e.textContent : ''; }).join(' '));
-  // Доставка — справа от имени, в порядке заголовков (как у чтения).
-  const heads = [...t.querySelectorAll('[data-surface*="table_column_header:"]')].filter(visible)
-    .map(h => (h.getAttribute('data-surface') || '').split(':').pop());
-  const dataCols = heads.filter(c => c !== 'toggle' && c !== 'name');
-  let wide = row; const q = [row];
-  while (q.length) { const x = q.shift(); if (x.children.length > wide.children.length) wide = x; q.push(...x.children); }
-  const cells = [...wide.children], di = dataCols.indexOf('delivery');
-  let delivery = '';
-  if (di >= 0 && di < cells.length) {
-    const leaf = [...cells[di].querySelectorAll('*')].find(e => visible(e) && !e.children.length && norm(e.textContent));
-    delivery = leaf ? norm(leaf.textContent) : norm(cells[di].innerText);
-  }
-  const result = {found: true, name: hit.name, rows: rows.length, delivery, on: state === 'on', off: state === 'off', label};
-
-  if (args.click) {
-    // Та же строка, что при поиске, — тот же узел, с тем же именем и тем же
-    // тумблером. Перерисовка (новый узел), переименование, соседка на месте
-    // строки — всё это отказ, а не «найдём заново и нажмём».
-    if (!markedRow || markedRow !== row || !markedSwitch || markedSwitch !== sw)
-      return fail('the row changed before action');
-    if (location.href !== args.url || label !== args.label || state === 'unknown')
-      return fail('context or switch changed before action');
-    if (state === 'on') {
-      const r = sw.getBoundingClientRect(), at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-      // Свой тумблер: сам input или то, что лежит в его обёртке, где кроме
-      // него никаких других элементов управления нет (нарисованная дорожка).
-      const CONTROL = 'button,a,input,select,textarea,[role="button"],[role="link"],[role="switch"],[role="checkbox"],[role="menuitem"],[contenteditable="true"]';
-      let wrap = sw;
-      while (wrap.parentElement && wrap.parentElement !== row && row.contains(wrap.parentElement) &&
-             [...wrap.parentElement.querySelectorAll(CONTROL)].every(c => c === sw)) wrap = wrap.parentElement;
-      const overlay = at && at.closest('[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],[role="tooltip"]');
-      const control = at && at.closest(CONTROL);
-      const own = at && !overlay && (at === sw || sw.contains(at) ||
-        (wrap.contains(at) && (!control || control === sw || control.contains(sw))));
-      if (!own) {
-        const d = at ? (at.tagName + (at.getAttribute('role') ? '[' + at.getAttribute('role') + ']' : '') + ' ' + norm(at.innerText || '').slice(0, 40)) : 'nothing';
-        return {found: false, why: 'switch is covered', covered_by: d};
-      }
-      sw.click();
-      result.clicked = true;
-    }
-    return result;
-  }
-  row.setAttribute('data-acl-row', '1');
-  sw.setAttribute('data-acl-switch', '1');
-  return result;
-}
-""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
-
-# Период сверяется в той же задаче браузера, что и нажатие, — как у `_SWITCH_ACTION_JS`.
-_BY_NAME_ACTION_JS = """args => {
-  const period = (""" + _FIND_PERIOD_JS + """)(args.period_args);
-  if (!period || period !== args.period) return {found:false, why:'period changed before action'};
-  return (""" + _FIND_BY_NAME_JS + """)(args);
-}"""
-
-#: Отказ, пока в этом же профиле идёт сборка кампаний (ACL-1379). Выключение
-#: посреди публикации делило бы с роботом один браузер.
-PROFILE_BUSY_ERROR = "The robot is building campaigns in this profile — wait for it to finish."
-
-
-@serialized_browser(key=_profile_key)
+@serialized_browser(key=_profile_key, on_lease_error=_turn_off_lease_error)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
-             requester: str = "", match: str = "",
-             profile_busy: Callable[[str], bool] | None = None) -> "TurnOffResult":
+             requester: str = "") -> "TurnOffResult":
     """Выключить и записать, что вышло.
 
     Запись стоит здесь, а не внутри: у `_turn_off` двадцать путей выхода, и
@@ -3674,34 +3493,16 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
     которой потом делают вывод «значит, оно ещё крутится».
     """
     who = (requester or "").strip()
-    # Сборка кампаний в этом профиле — отказ, а не очередь (ACL-1379).
-    # Спрашиваем уже под замком профиля: публикация, поставленная в очередь
-    # после проверки маршрута, сюда не проскочит — а та, что успела пройти и
-    # закончиться, пока мы ждали замок, тоже видна (`profile_busy` помнит её).
-    # Не смогли спросить — считаем занятым: нажимать вслепую незачем.
-    busy = False
-    if profile_busy is not None:
-        try:
-            busy = bool(profile_busy(_profile_key(account)))
-        except Exception:
-            busy = True
-    if busy:
-        out = TurnOffResult(account=account, level=level, object_id=str(object_id),
-                            name=expected_name, error=PROFILE_BUSY_ERROR, at=_now(),
-                            matched_by="name" if match == "name" and not str(object_id).strip() else "")
-    else:
-        try:
-            out = _turn_off(account, level, object_id, parent_id=parent_id,
-                            expected_name=expected_name, date_from=date_from, date_to=date_to,
-                            match=match)
-        except Exception as exc:
-            _record_turn_off(TurnOffResult(
-                account=account, level=level, object_id=object_id, name=expected_name,
-                state="unconfirmed", error=f"{type(exc).__name__}: {exc}"[:300],
-                at=_now(), requester=who, route="rpa",
-                matched_by="name" if (match == "name" and not str(object_id).strip()) else "",
-            ))
-            raise
+    try:
+        out = _turn_off(account, level, object_id, parent_id=parent_id,
+                        expected_name=expected_name, date_from=date_from, date_to=date_to)
+    except Exception as exc:
+        _record_turn_off(TurnOffResult(
+            account=account, level=level, object_id=object_id, name=expected_name,
+            state="unconfirmed", error=f"{type(exc).__name__}: {exc}"[:300],
+            at=_now(), requester=who, route="rpa",
+        ))
+        raise
     out.requester = who
     out.route = "rpa"
     if out.state in ("off", "already_off"):
@@ -3709,35 +3510,15 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         # исходы, и сохранённое дерево обязано их отражать — иначе оно врёт
         # ровно про то, что человек только что сделал.
         try:
-            if out.object_id:
-                _mark_object_off(out.account, out.object_id, out.delivery)
-            elif out.matched_by == "name":
-                # Пустой id совпал бы со всеми строками без id — только по имени.
-                _mark_object_off_by_name(out.account, out.level, out.name, out.delivery)
+            _mark_object_off(out.account, out.object_id, out.delivery)
         except Exception:
             pass
     _record_turn_off(out)
     return out
 
 
-def refuse_turn_off(account: str, level: str, object_id: str, *, name: str = "",
-                    error: str, requester: str = "", matched_by: str = "") -> "TurnOffResult":
-    """Отказ, при котором браузер не трогали, — тоже запись в журнале.
-
-    Маршрут отказывает сам, не дожидаясь замка профиля (робот строит кампании
-    в этом профиле, ACL-1379). Нажатие человека было — след должен остаться,
-    как у любого другого исхода `turn_off`.
-    """
-    out = TurnOffResult(account=account, level=level, object_id=str(object_id or ""),
-                        name=name, error=error, at=_now(), requester=(requester or "").strip(),
-                        route="rpa", matched_by=matched_by)
-    _record_turn_off(out)
-    return out
-
-
 def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
-              expected_name: str = "", date_from: str = "", date_to: str = "",
-              match: str = "") -> "TurnOffResult":
+              expected_name: str = "", date_from: str = "", date_to: str = "") -> "TurnOffResult":
     """Выключить одну кампанию или одно объявление. Включить отсюда нельзя.
 
     Период нужен не ради чисел, а ради сверки: на экране должен стоять тот же
@@ -3755,22 +3536,8 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         out.error = "row name is required — read the account again"
         return out
     if not str(object_id).strip():
-        if level == "ad":
-            # Объявления по имени не выключаем (ACL-1379). Список объявлений
-            # сужается фильтром по кампании, а в строке таблицы без id ни
-            # кампании, ни id нет: применила ли Meta фильтр, по строке не
-            # проверить (19.09 Doc20 фильтр однажды проигнорирован), а у
-            # клонов имена объявлений одинаковы во всех кампаниях. «Имя
-            # единственное» тогда могло бы значить «единственное в чужом списке».
-            out.error = ("Ads on an account without ids cannot be turned off from here: "
-                         "their campaign cannot be confirmed from the row. Turn off the "
-                         "campaign, or turn the ad off in Ads Manager.")
-            return out
-        if match == "name":
-            return _turn_off_by_name(out, account, expected_name,
-                                     date_from=date_from, date_to=date_to)
         out.error = ("This account shows the new Ads Manager table without campaign ids. "
-                     "Read the account again and turn it off by its exact name.")
+                     "Turning off by name is not available yet; turn it off in Ads Manager.")
         return out
     if not str(object_id).isdigit():
         out.error = "object id must contain only digits"
@@ -3944,217 +3711,6 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         out.error = "after reload the toggle is on again; Meta did not accept it"
         return out
     except Exception as exc:                      # noqa: BLE001
-        out.error = f"failed: {exc}"
-        return out
-    finally:
-        if conn is not None:
-            try:
-                conn.page.close()
-            except Exception:
-                pass
-            try:
-                conn.close(keep_browser_open=True)
-            except Exception:
-                pass
-
-
-def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
-                      date_from: str = "", date_to: str = "") -> "TurnOffResult":
-    """Выключить кампанию по точному имени в таблице без id (ACL-1379).
-
-    Только для кампаний и только когда имя в таблице ровно одно. Порядок тот же,
-    что у выключения по id, и каждая сверка оттуда осталась: кабинет, уровень,
-    период, запрет на опасные подписи, «уже выключено — не нажимаем»,
-    подтверждение после перезагрузки. Добавлено то, что заменяет id:
-
-    - строк на экране столько, сколько насчитала сама таблица, и имя среди них
-      одно; в данных страницы (`campaign_structure_tree`) оно тоже не двоится;
-    - перед нажатием — в той же задаче браузера — та же строка (тот же узел) с
-      тем же именем и тем же тумблером; перерисовка между поиском и нажатием —
-      отказ;
-    - после нажатия — единственная строка с этим именем выключена, и так же
-      после перезагрузки.
-    """
-    from src.fb_ads_rpa import wizard_guard as wg
-
-    out.matched_by = "name"
-    out.object_id = ""
-    odd = _unsafe_name_chars(str(expected_name or ""))
-    if odd:
-        out.error = ("the campaign name contains invisible or control characters ("
-                     + ", ".join(odd) + "); turn it off in Ads Manager — nothing was touched")
-        return out
-    # Одна нормализация на обе стороны — та же, что у страницы.
-    name = _page_clean_name(expected_name)
-    out.name = name
-    if not name:
-        out.error = "row name is required — read the account again"
-        return out
-    entry = _entry_for(account)
-    if entry is None:
-        out.error = f"{account} is not in the account map"
-        return out
-    act = (entry.ad_account_id or "").strip()
-    if not act:
-        out.error = f"{account} has no ad_account_id in the account map"
-        return out
-    date_from = date_from or yesterday()
-    date_to = date_to or date_from
-    url = _tree_url(act, "campaign", date_from, date_to)
-    args = {"name": name, "kind": _LEVEL_KIND["campaign"]}
-
-    conn = None
-    clicked = False
-    try:
-        try:
-            conn = _attach_only(entry, account)
-        except ProfileNotAttachable as exc:
-            out.error = str(exc)
-            return out
-        page = conn.page
-        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
-        if not _wait_for_grid(page):
-            out.error = "Ads Manager did not finish loading in time"
-            return out
-
-        from urllib.parse import urlsplit
-        expected_act = act if act.startswith("act_") else "act_" + act
-        approved_url = page.url
-
-        def context_matches() -> bool:
-            return (page.url == approved_url and wg.is_ads_manager_url(page.url)
-                    and urlsplit(page.url).path == urlsplit(ADS_MANAGER_LEVELS["campaign"]).path
-                    and _act_from_url(page, tries=1) == expected_act
-                    and _period_matches(_shown_period(page), date_from, date_to))
-
-        def find() -> dict:
-            got = None
-            for _attempt in range(TABLE_BUSY_TRIES):
-                got = page.evaluate(_FIND_BY_NAME_JS, args)
-                if not (isinstance(got, dict) and got.get("why") == "table is still loading"):
-                    break
-                page.wait_for_timeout(1000)
-            return got if isinstance(got, dict) else {}
-
-        if not context_matches():
-            out.error = "account, period or level changed — nothing touched"
-            return out
-        found = find()
-        if not found.get("found"):
-            out.error = f"{found.get('why') or 'row not found'}; nothing was touched"
-            return out
-        if not context_matches():
-            out.error = "context changed during lookup — nothing touched"
-            return out
-        # Данные, которые Meta вшивает в страницу: если там у этого имени два
-        # id, таблица могла показать не всё — не нажимаем.
-        # Ключи там чищены `_name_key`; сравниваем той же нормализацией, что
-        # у страницы, и любое второе совпадение — отказ.
-        same = [v for k, v in _campaigns_from_page_data(page).items() if _page_clean_name(k) == name]
-        if len(same) > 1 or any(not v.get("id") for v in same):
-            out.error = ("more than one campaign has this exact name; without ids they "
-                         "cannot be told apart — nothing was touched")
-            return out
-        if str(found.get("name") or "") != name:
-            out.error = "the row name did not match; nothing was touched"
-            return out
-
-        why = wg.forbidden_click_reason(found.get("label"))
-        if why:
-            out.error = f"this cannot be clicked: {why}"
-            return out
-        if found.get("off"):
-            out.delivery = str(found.get("delivery") or "")
-            out.state = "already_off"
-            out.how = "found by exact name; the toggle is already off, nothing was clicked"
-            return out
-        if not found.get("on"):
-            out.error = "the toggle state is unclear; nothing was touched"
-            return out
-
-        page.locator(SEL_MARKED_SWITCH).scroll_into_view_if_needed(timeout=15_000)
-        if not context_matches():
-            out.error = "context changed before action — nothing touched"
-            return out
-        period = _period_once(page)
-        if not _period_matches(period, date_from, date_to):
-            out.error = "period could not be confirmed before action"
-            return out
-        acted = None
-        for _attempt in range(3):
-            try:
-                acted = page.evaluate(_BY_NAME_ACTION_JS, dict(
-                    args, click=True, url=approved_url, label=found.get("label"), period=period,
-                    period_args=[list(SEL_PERIOD), SEL_PERIOD_FALLBACK, RE_PERIOD_DATE]))
-            except Exception:
-                # Обрыв внутри задачи, которая могла уже нажать: «не знаем».
-                clicked = True
-                raise
-            if not (isinstance(acted, dict) and acted.get("why") == "switch is covered"):
-                break
-            try:
-                page.evaluate(
-                    "sel => { const e = document.querySelector(sel); if (e) e.scrollIntoView({block: 'center', behavior: 'instant'}); }",
-                    SEL_MARKED_SWITCH,
-                )
-            except Exception:
-                pass
-            page.wait_for_timeout(1000)
-        if not isinstance(acted, dict) or not acted.get("found"):
-            why = (acted.get("why") if isinstance(acted, dict) else "") or "action refused"
-            if isinstance(acted, dict) and acted.get("covered_by"):
-                why = f"{why} by {acted['covered_by']}"
-            out.error = f"{why}; nothing was touched"
-            return out
-        if not acted.get("clicked"):
-            out.state = "already_off"
-            out.delivery = str(acted.get("delivery") or "")
-            out.how = "already off at the final check; no click"
-            return out
-        clicked = True
-
-        # Единственная строка с этим именем должна стать выключенной.
-        for _ in range(TURN_OFF_TRIES):
-            now = find()
-            if now.get("found") and now.get("off") and now.get("name") == name:
-                break
-            page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
-        else:
-            out.state = "unconfirmed"
-            out.error = "clicked but off was not confirmed; read the account again"
-            return out
-
-        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
-        if not _wait_for_grid(page):
-            out.state = "unconfirmed"
-            out.error = "confirmation table did not load; state unknown"
-            return out
-        again: dict = {}
-        for attempt in range(TURN_OFF_TRIES):
-            if attempt:
-                page.wait_for_timeout(int(TURN_OFF_PAUSE_S * 1000))
-            if not context_matches():
-                out.state = "unconfirmed"
-                out.error = "confirmation context changed; state unknown"
-                return out
-            again = find()
-            if (again.get("found") and again.get("off") and again.get("name") == name
-                    and context_matches()):
-                out.delivery = str(again.get("delivery") or "")
-                out.state = "off"
-                out.how = f"found by exact name; confirmed off after reload (observation {attempt + 1})"
-                return out
-        if not again.get("found"):
-            out.state = "unconfirmed"
-            out.error = ("after reload the row could not be confirmed "
-                         f"({again.get('why') or 'not found'}); state unknown")
-            return out
-        out.error = "after reload the toggle is on again; Meta did not accept it"
-        return out
-    except Exception as exc:                      # noqa: BLE001
-        # После нажатия обрыв — не «не выключилось», а «не знаем».
-        if clicked:
-            out.state = "unconfirmed"
         out.error = f"failed: {exc}"
         return out
     finally:

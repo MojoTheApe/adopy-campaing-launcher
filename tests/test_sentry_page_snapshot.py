@@ -27,6 +27,7 @@ import sys
 from contextlib import contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -37,6 +38,7 @@ from src import acl_sentry  # noqa: E402
 from src.fb_ads_rpa import page_capture as pc  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 from src.fb_ads_rpa import sentry_signal  # noqa: E402
+from tests.profile_lease_fakes import fake_profile
 
 FIXTURES = ROOT / "tests" / "fixtures" / "ads_manager"
 SUGGEST = (FIXTURES / "audience_suggest_layout_2026_09_26.html").read_text(encoding="utf-8")
@@ -529,6 +531,8 @@ def test_an_attach_time_stop_of_the_next_campaign_carries_no_section_and_no_old_
     from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
     from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 
+    monkeypatch.setattr("src.fb_ads_rpa.rpa_publisher.load_ad_account_map", lambda _: {
+        "FacebookDoc19": SimpleNamespace(profile_id=fake_profile("FacebookDoc19"))})
     sent = _profile_stop_calls(monkeypatch)
     rt.set_current_job("job-7")
     rt.set_current_run("runA", _ALPHA)

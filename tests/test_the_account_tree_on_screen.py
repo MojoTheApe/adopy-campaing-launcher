@@ -29,7 +29,7 @@ REPORT = TPL / "report.html"
 def _script() -> str:
     """Обе функции показа — из шаблона, а не по памяти."""
     src = REPORT.read_text(encoding="utf-8")
-    start = src.index("function amapTreeLine(o, adCount, nameCounts) {")
+    start = src.index("function amapTreeLine(o, adCount) {")
     tail = "  amapTurnOffDisarm();\n});"
     end = src.index(tail, start) + len(tail)
     block = src[start:end]
@@ -956,13 +956,11 @@ def test_a_nameless_table_puts_ads_under_their_campaign(page):
       kids: Array.from(document.querySelectorAll('.amap-tree-kids'))
         .map(k => k.querySelectorAll('.amap-tree-line').length),
       heads: Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent),
-      buttons: Array.from(document.querySelectorAll('button.amap-tree-sw'))
-        .map(b => b.dataset.level + ':' + (b.dataset.match || '')),
+      buttons: document.querySelectorAll('button.amap-tree-sw').length,
     })""")
     assert got["kids"] == [2, 1]
     assert not any("whose campaign is not in this answer" in h for h in got["heads"])
-    # ACL-1379: кампании без id выключаются по точному имени; объявления — нет.
-    assert got["buttons"] == ["campaign:name", "campaign:name"]
+    assert got["buttons"] == 0, "без id выключать нечем — кнопки быть не должно"
 
 
 # ── числа книги под колонками аккаунта (ACL-1256) ─────────────────────────
@@ -1007,6 +1005,39 @@ def test_a_row_the_workbook_does_not_know_gets_dashes(page):
     _fill(page, [other], ATTR)
     assert set(_attr(page).values()) == {"—"}
     assert "No rows" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
+
+
+def _nowb(page):
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-line'))
+      .map(l => { const t = l.querySelector('.amap-tree-nowb'); return t ? t.textContent.trim() : ''; })""")
+
+
+def test_a_meta_only_campaign_says_it_is_not_in_the_workbook(page):
+    """ACL-1377: прогревочная кампания (MaxWarmup на Doc19) с числами Meta и
+    без строк в книге. Прочерки там — не поломка, и это сказано пометкой."""
+    warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    draft = dict(ADSET, id="998", name="Draft", spend="", results="", cost_per_result="")
+    zero = dict(ADSET, id="997", name="Zero", spend="$0.00", results="0", cost_per_result="")
+    _paint(page, [ADSET, warm, draft, zero])
+    _fill(page, [ADSET, warm, draft, zero], ATTR)
+    assert _nowb(page) == ["", "· not in workbook", "", ""], (
+        "пометка — только у кампании с числами Meta и без строк книги")
+    assert set(_attr(page, 1).values()) == {"—"}, "прочерки в колонках книги остаются"
+    assert "not an error" in page.evaluate("() => document.querySelector('.amap-tree-nowb').title")
+
+
+def test_the_not_in_workbook_hint_goes_when_the_workbook_finds_the_campaign(page):
+    warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    _paint(page, [warm])
+    _fill(page, [warm], ATTR)
+    assert _nowb(page) == ["· not in workbook"]
+    found = {"ok": True, "has_data": True, "ads": {},
+             "campaigns": {"MaxWarmup Engagement": {"spend": "$5", "leads": 1, "deposits": 0,
+                                                    "cpl": "$5", "cpa": None, "cr": None}}}
+    _fill(page, [warm], found)
+    assert _nowb(page) == [""], "пометка пережила ответ, в котором кампания нашлась"
+    _fill(page, [warm], {"ok": False, "error": "busy"})
+    assert _nowb(page) == [""], "непрочитанная книга — не «нет в книге»"
 
 
 SHARED_TIP = ("The workbook cannot tell ads with the same name apart; "
@@ -1478,8 +1509,8 @@ def test_the_labels_are_the_words_from_the_table_head(page):
     Три подписи нарочно не совпадают с шапкой, и каждая — решение, а не
     оплошность:
 
-    * «Account spend» → «Meta spend». В строке аккаунта это прочитанный
-      спенд кабинета; в строке кампании — спенд самой кампании словами Meta.
+    * «Campaign list» не обозначает сумму: ACL-2063 заменяет ею спенд аккаунта.
+      Совместимый старый форматтер дерева сохраняет отдельную подпись «Meta spend».
     * «Status» → «Delivery». Status строки аккаунта — предупреждение
       кабинета; здесь стоит доставка Meta.
     * «Note» → «Meta». Note аккаунта — заметка менеджера (ACL-1620; раньше Setup), а в дереве
@@ -1493,7 +1524,9 @@ def test_the_labels_are_the_words_from_the_table_head(page):
     _open(page)
     labels = page.evaluate("""() => Array.from(
       document.querySelectorAll('.amap-tree-line > [data-label]')).map(c => c.dataset.label)""")
-    assert labels[1] == 'Meta spend' and heads[2] == 'Account spend', (heads[2], labels[1])
+    # ACL-2063: в текущей карте вместо расхода Meta — состояние списка.
+    # Старое дерево сохраняет собственную подпись для совместимого ответа.
+    assert labels[1] == 'Meta spend' and heads[2] == 'Campaign list', (heads[2], labels[1])
     assert labels[7] == 'Delivery' and heads[8] == 'Status', (heads[8], labels[7])
     assert labels[8] == 'Meta' and heads[9] == 'Note', (heads[9], labels[8])
     # Книжные числа названы ровно так, как их зовёт шапка.
@@ -1706,58 +1739,23 @@ def test_the_failure_line_stands_with_the_numbers_not_under_the_log(page):
         assert order["note"] < order["log"], "оговорка встала под журналом"
 
 
-# ── выключение по имени на аккаунте без id (ACL-1379) ─────────────────────
+# ── ACL-1379: кампания без id выключается по имени только под API-бэкендом ──
 
-NAMELESS = dict(ADSET, id="", id_from="none", name="GT_Example_Video_35")
-
-
-def test_a_nameless_campaign_is_a_button_and_sends_its_name(page):
-    """Таблица без id: кампания выключается по точному имени — и это видно в запросе."""
-    _paint(page, [NAMELESS, dict(NAMELESS, name="Other campaign")])
-    assert _sw(page)["tag"] == "BUTTON"
-    assert "exact name" in _sw(page)["title"]
-    _stub_server(page, {"ok": True, "result": {"state": "off", "how": "found by exact name"}})
-    _armed(page); _armed(page)
-    page.wait_for_function("() => window.__sent.length === 1")
-    body = page.evaluate("() => window.__sent[0].body")
-    assert "match=name" in body and "object_id=&" in body
-    assert "name=GT_Example_Video_35" in body and "level=campaign" in body
-    page.wait_for_function("() => document.querySelector('.amap-tree-sw').tagName === 'SPAN'")
-    said = page.evaluate("() => document.querySelector('.amap-tree-said').textContent")
-    assert said.startswith("Turned off.")
+def _noid_buttons(page, backend):
+    page.evaluate("(b) => { window.ACL_FB_BACKEND = b; }", backend)
+    camp = dict(ADSET, id="", name="No Id Camp")
+    ad = dict(AD, id="", parent_id="111", name="ad of it")
+    _paint(page, [camp, ad])
+    _open(page)
+    return page.evaluate(
+        "() => Array.from(document.querySelectorAll('.amap-tree-sw[data-object-id]'))"
+        ".map(b => [b.dataset.level, b.dataset.objectId, b.dataset.name])"
+    )
 
 
-def test_two_nameless_campaigns_with_one_name_are_not_buttons(page):
-    _paint(page, [NAMELESS, dict(NAMELESS, spend="$1.00")])
-    for i in (0, 1):
-        got = _sw(page, i)
-        assert got["tag"] == "SPAN" and "same name" in got["title"]
+def test_a_campaign_without_an_id_gets_a_button_under_the_api_backend(page):
+    assert _noid_buttons(page, "api") == [["campaign", "", "No Id Camp"]]
 
 
-def test_a_nameless_ad_is_still_not_a_button(page):
-    _paint(page, [dict(AD, id="", parent_id="1234")])
-    got = _sw(page)
-    assert got["tag"] == "SPAN" and "ads on an account without ids" in got["title"]
-
-
-def test_a_refusal_by_name_is_shown_in_words(page):
-    _paint(page, [NAMELESS])
-    _stub_server(page, {"ok": True, "result": {
-        "state": "failed", "error": "2 campaigns in the table have this exact name; nothing was touched"}})
-    _armed(page); _armed(page)
-    page.wait_for_function("() => document.querySelector('.amap-tree-said')")
-    said = page.evaluate("() => document.querySelector('.amap-tree-said').textContent")
-    assert "2 campaigns in the table have this exact name" in said
-    assert _sw(page)["text"] == "Check"
-
-
-def test_a_busy_profile_keeps_the_button_and_says_why(page):
-    _paint(page, [NAMELESS])
-    _stub_server(page, {"ok": False, "busy": True,
-                        "error": "The robot is building campaigns in this profile — wait for it to finish."})
-    _armed(page); _armed(page)
-    page.wait_for_function("() => document.querySelector('.amap-tree-said')")
-    got = _sw(page)
-    assert got["tag"] == "BUTTON" and got["text"] == "On", "ничего не тронуто — кнопка остаётся"
-    said = page.evaluate("() => document.querySelector('.amap-tree-said').textContent")
-    assert "building campaigns" in said
+def test_a_campaign_without_an_id_has_no_button_under_the_rpa_backend(page):
+    assert _noid_buttons(page, "rpa") == []

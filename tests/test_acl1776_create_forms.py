@@ -84,7 +84,7 @@ class FormsMeta(FormMeta):
             if mode == "lost":
                 return {"error": "call_unknown"}
             return {"status": 200, "body": {"id": fid}}
-        return super().write(path, params, files, filename, on_ad)
+        return super().write(path, params, files, filename, on_ad, **_k)
 
     def _get(self, path, params):
         parts = path.strip("/").split("/")
@@ -172,7 +172,7 @@ BAD_TEMPLATES = [
     ("junk_privacy", {"privacy_url": "https://nodot"}, "must start with https://"),
     ("no_thanks", {"thank_you_text": ""}, "Thank-you screen text is required"),
     ("http_site", {"website_url": "http://example.com"}, "Website link"),
-    ("bad_locale", {"locale": "english"}, "Locale must look like"),
+    ("bad_locale", {"locale": "english"}, "Unknown locale"),
     ("six_questions", {"questions": [{"label": f"q{i}", "type": "short_answer"} for i in range(6)]}, "At most 5"),
     ("empty_question", {"questions": [{"label": " ", "type": "short_answer"}]}, "Question 1: text is required"),
     ("one_option", {"questions": [{"label": "q", "type": "multiple_choice", "options": ["a"]}]}, "at least 2 options"),
@@ -202,7 +202,8 @@ def test_the_name_is_stable_per_content_and_changes_with_content():
 def test_the_library_saves_loads_replaces_and_deletes_locally(tmp_path):
     saved = _saved()
     assert ft.library_path().parent == tmp_path / "acl" and ft.load() == [saved]
-    again = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed"})
+    row = ft.listing()["rows"][0]
+    again = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed", "_expected_revision": row["revision"]})
     assert again["id"] == saved["id"] and [t["headline"] for t in ft.load()] == ["Changed"]
     with pytest.raises(ft.TemplateError, match="already exists"):
         ft.save(TEMPLATE)
@@ -267,6 +268,14 @@ FORM_MATRIX = [
     ("ok_json_strings", PAGE, "leadgen_forms", {**BASE, "questions": json.dumps(BASE["questions"]),
                                                 "privacy_policy": json.dumps(BASE["privacy_policy"])}, True),
     ("ok_follow_up_https", PAGE, "leadgen_forms", _p(follow_up_action_url="https://example.com/after"), True),
+    ("ok_settings_bool", PAGE, "leadgen_forms",
+     _p(is_optimized_for_quality=True, block_display_for_non_targeted_viewer=True), True),
+    ("ok_first_last_name", PAGE, "leadgen_forms",
+     _p(questions=[{"type": "FIRST_NAME"}, {"type": "LAST_NAME"}, {"type": "PHONE"}]), True),
+    ("setting_string_bool", PAGE, "leadgen_forms", _p(is_optimized_for_quality="false"), False),
+    ("setting_number_bool", PAGE, "leadgen_forms", _p(block_display_for_non_targeted_viewer=1), False),
+    ("follow_up_too_long", PAGE, "leadgen_forms", _p(follow_up_action_url="https://example.com/" + "a" * 1100), False),
+    ("first_name_with_label", PAGE, "leadgen_forms", _p(questions=[{"type": "FIRST_NAME", "label": "x"}]), False),
     ("tos_top_level", PAGE, "leadgen_forms", _p(tos_accepted=True), False),
     ("tos_false_too", PAGE, "leadgen_forms", _p(tos_accepted=False), False),
     ("tos_upper", PAGE, "leadgen_forms", _p(TOS_ACCEPTED=True), False),
@@ -355,7 +364,8 @@ def test_the_two_policy_chains_do_not_overlap():
         wp.check_form_create(PAGE, "POST", f"/{ACT}/campaigns", {"name": "x · ACL abcdef"}, pinned_page=PAGE)
     assert "tos_accepted" in wp.FORBIDDEN_ANYWHERE and "tos_accepted" not in wp.FORM_KEYS
     assert wp.FORM_KEYS == frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
-                                      "question_page_custom_headline", "locale", "follow_up_action_url"})
+                                      "question_page_custom_headline", "locale", "follow_up_action_url",
+                                      "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 
 
 def test_the_policy_does_not_mutate_the_callers_params():
@@ -828,7 +838,7 @@ def test_the_missing_permission_is_only_a_warning_because_the_token_list_may_lie
 
 def test_a_missing_or_invalid_template_and_a_double_choice_stop_the_plan(tmp_path):
     d = _tpl_draft(tmp_path, ["0123456789ab"])
-    with pytest.raises(cr.PlanError, match="not found in the Forms library"):
+    with pytest.raises(cr.PlanError, match="not found in the team Forms library"):
         cr.plan_from_draft(d)
     tid = _saved()["id"]
     d2 = _tpl_draft(tmp_path, [tid])
@@ -839,6 +849,13 @@ def test_a_missing_or_invalid_template_and_a_double_choice_stop_the_plan(tmp_pat
     bad.update(id="aaaaaaaaaaaa", privacy_url="http://x.example.com")
     with pytest.raises(cr.PlanError, match="Privacy policy URL must start with https://"):
         cr.plan_from_draft(_tpl_draft(tmp_path, ["aaaaaaaaaaaa"]), template_loader=lambda _i: bad)
+
+
+def test_a_saved_template_with_a_legacy_locale_still_builds_a_plan(tmp_path):
+    # ACL-2053: язык старого шаблона вне закрытого списка не должен ломать публикацию.
+    legacy = {**copy.deepcopy(ft.validate(TEMPLATE)[0]), "id": "bbbbbbbbbbbb", "locale": "ES_MX"}
+    plan = cr.plan_from_draft(_tpl_draft(tmp_path, ["bbbbbbbbbbbb"]), template_loader=lambda _i: legacy)
+    assert plan.ad_sets[0].ads[0].form_template["locale"] == "ES_MX"
 
 
 def test_a_website_ad_set_ignores_a_stray_template(tmp_path):

@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -168,6 +170,7 @@ DAY = "2026-09-22"
 
 @pytest.fixture
 def stores(monkeypatch, tmp_path):
+    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(profile_id=fake_profile(account)))
     monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
     monkeypatch.setattr(sp, "_UNSAVED", {})
     monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")
@@ -424,18 +427,21 @@ def test_the_status_route_asks_for_countries_on_the_press_that_changed_the_money
 
 
 def test_the_row_says_which_spend_its_country_split_explains():
-    """Критерий из тикета: по экрану должно быть видно, к какому числу
-    относится пострановая разбивка. «В стране столько-то» рядом с другой
-    суммой — две правды про разные деньги."""
+    """Keep the actual source caption and ACL-2063's removal of Meta split cells."""
+    import pandas as pd
+    from src.analysis_agent import bi_compare
+    from src.web.app import templates
+
     row = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
-    cell = row[row.index('class="amap-live-ok"'):]
-    cell = cell[:cell.index("</span>")]
-    assert "countries" in cell and "sp.spend" in cell, (
-        "подсказка не говорит, какую сумму объясняет разбивка"
-    )
-    assert "not the" in cell, (
-        "расхождение разбивки со спендом ничем не отмечено"
-    )
+    assert 'class="amap-live' not in row and 'class="amap-list"' in row
+    head = row[row.index("<thead>"):row.index("</thead>")]
+    for sources, description in [(None, "the selected statistics"),
+            (["workbook"], "the Stats workbook"), (["bi"], "the BI data"),
+            (["bi", "workbook"], "the selected source data")]:
+        info = bi_compare.provenance(frame=pd.DataFrame({"_stats_source": sources})) if sources else None
+        shown = templates.env.from_string(head).render(amap={"source_info": info})
+        assert f'Spend from {description} for the chosen period' in shown
+        assert 'Campaign list' in shown and 'Account spend' not in shown
 
 
 def test_a_never_split_account_is_not_read_from_disk_twice(stores):
@@ -473,19 +479,22 @@ def _render_row(*, spend, split_spend, currency="$", split_currency="$",
     """Строка аккаунта, отрисованная настоящим шаблоном."""
     from jinja2 import Environment, FileSystemLoader
 
-    from src.analysis_agent.money_format import fmt_currency
+    from src.analysis_agent.money_format import fmt_currency, fmt_usd
+    from src.analysis_agent.metric_columns import metric_values
 
     env = Environment(loader=FileSystemLoader(str(ROOT / "src" / "web" / "templates")),
                       autoescape=True)
     env.filters["fmt_currency"] = fmt_currency
-    env.filters["fmt_usd"] = str
+    env.filters["fmt_usd"] = fmt_usd
+    env.globals["metric_values"] = metric_values
     account = "Doc19"
     reading = {"state": "ok", "spend": spend, "currency": currency,
                "date_from": date_from, "date_to": date_to,
                "finished_at": "2026-09-22 18:00:00", "how": "rpa"}
     split = {"state": "ok", "spend": split_spend, "spend_currency": split_currency}
     country = {"country": "Saudi Arabia", "key": "SA", "virtual": False,
-               "rows": [{"account": account, "has_data": False, "ready": True,
+               "rows": [{"account": account, "has_data": True, "spend": 202.25,
+                         "leads": 7, "deposits": 2, "ready": True,
                          "in_workbook": True, "status": {}, "to_do": ""}]}
     return env.get_template("_account_map_country.html").render(
         mc=country, mlx={},
@@ -495,28 +504,37 @@ def _render_row(*, spend, split_spend, currency="$", split_currency="$",
               "date_to": date_to, "span": ""})
 
 
+def _assert_bi_list_only(html):
+    # The BI account summary uses the established upward whole-dollar format.
+    assert '<td class="num">$203</td>' in html
+    assert 'Campaign list' in html and 'list not read' in html
+    assert 'class="amap-live' not in html and 'countries read' not in html
+    assert 'class="amap-split' not in html
+
+
 def test_the_server_calls_half_a_cent_the_same_money_too():
     """Та же мера, что у правила и у клиента: до половины копейки."""
     html = _render_row(spend=41.50, split_spend=41.502)
-    assert "countries read for $41.50" in html
-    assert "not the" not in html, "сервер обвиняет разбивку в отставании, которого нет"
+    _assert_bi_list_only(html)
+    assert '$41.50' not in html and '$41.502' not in html
 
 
 def test_the_server_says_when_the_split_explains_other_money():
     html = _render_row(spend=41.50, split_spend=10.0)
-    assert "countries read for $10.00, not the $41.50 above" in html
+    _assert_bi_list_only(html)
+    assert '$10.00' not in html and '$41.50' not in html
 
 
 def test_the_server_says_when_the_split_does_not_remember_its_spend():
     """Записи до ACL-1282 суммы не помнят, и молчать о них — значит выдать их
     за свежие. Эту ветку шаблона не проверял никто (ревью 23.09)."""
-    assert "countries read before this spend was known" in _render_row(
-        spend=41.50, split_spend=None)
+    _assert_bi_list_only(_render_row(spend=41.50, split_spend=None))
 
 
 def test_the_server_calls_another_currency_another_number():
     html = _render_row(spend=41.50, split_spend=41.50, split_currency="EUR")
-    assert "countries read for EUR 41.50, not the $41.50 above" in html
+    _assert_bi_list_only(html)
+    assert 'EUR 41.50' not in html and '$41.50' not in html
 
 
 def test_the_server_writes_one_day_as_one_day():
@@ -524,7 +542,8 @@ def test_the_server_writes_one_day_as_one_day():
     подсказка мигает при первой же перерисовке — только зеркально."""
     html = _render_row(spend=41.50, split_spend=41.50,
                        date_from="2026-09-01", date_to="2026-09-01")
-    assert "2026-09-01 · read" in html and "2026-09-01…2026-09-01" not in html
+    _assert_bi_list_only(html)
+    assert '2026-09-01 · read' not in html and '2026-09-01…2026-09-01' not in html
 
 
 def test_the_server_and_the_client_write_the_same_sentence():
@@ -540,4 +559,7 @@ def test_the_server_and_the_client_write_the_same_sentence():
     for phrase in ("countries read for ", ", not the ", " above",
                    "countries read before this spend was known"):
         assert phrase in note, f"клиент не пишет «{phrase}»"
-        assert phrase in rendered, f"сервер не пишет «{phrase}»"
+        # Keep the still-supported legacy helper contract, without restoring its
+        # superseded screen cells in the BI/structure-only dashboard.
+        assert phrase not in rendered
+    _assert_bi_list_only(rendered)

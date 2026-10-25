@@ -1,6 +1,5 @@
-name: Delivery setup (draft adoption)
+name: Delivery setup
 on:
-  # ACL-1649: a branch push with an open PR ran this twice (push + pull_request); the PR run covers it.
   push:
     branches: [master, main, stage]
   pull_request:
@@ -14,9 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Fetch immutable official provider
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          repository: MojoTheApe/task-tracker
+          ref: 771d55f3317397e7d56471aa966f0a9de37d1a2e
+          path: trusted/provider
+          ssh-key: ${{ secrets.TRACKER_PROVIDER_READ_KEY }}
+          ssh-strict: true
           persist-credentials: false
-      - uses: MojoTheApe/master-repo@6f7e9416e68c66484a3b6c0213eab24847005b8f
+      - name: Fetch consumer as data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          allow-draft: 'true'
+          path: trusted/consumer
+          persist-credentials: false
+      - name: Validate consumer with official provider
+        shell: bash
+        run: python3 -I trusted/provider/scripts/workflow_provider.py validate --root trusted/consumer --allow-draft

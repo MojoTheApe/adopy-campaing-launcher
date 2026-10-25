@@ -1,5 +1,76 @@
 # Portable export contract 1
 
+## One selection-task record — TT-203
+
+The3.13.1 source candidate adds `selection_task_fragment:[1]`, keeping contract1,
+14raw/28separated helpers and actual Python3.9 support. Canonical and exported
+receipt readers derive the sole optional new fragment from the genuine singleton
+batch's frozen Issue and unchanged immutable preselection IDs. They retain the
+five exact governance files, four pristine consequences, original authorization,
+complete source/main binding, package-first delivery and separate owned adoption.
+No extra file, replaced record, unsafe/invalid fragment or caller-selected task
+qualifies. The precise [selection boundary](DELIVERY_POLICY.md#one-policy-selection-package-before-activation)
+and existing five-file behavior remain in force.
+
+Maintained native receipt fixtures append three sixth-fragment context/completion/
+retry scenarios while preserving all four previous scenarios exactly. The real
+raw/separated CLI resolve, one native fixture CAS, idempotence and post-delivery
+adoption replay at each entry point on the actual portable runtime. Publication
+requires independent exact-source review, mandatory checks and an immutable
+engine release, followed by its matching separately reviewed Master closure.
+No source-only hash refresh creates a published pair or activates a consumer.
+
+## Terminal generated changelog admission — TT-201
+
+The Tracker3.13.0 source candidate adds `batch_changelog_fold:[1]` without
+changing format1,14raw/28separated helpers or their Python3.9 runtime floor.
+The canonical batch policy contains the exact immutable-content verifier;
+both exported layouts carry the same source bytes. Prefix-aware composition
+supports only the complete deterministic terminal fold described in
+[batch integration](BATCH_INTEGRATION.md#verified-terminal-changelog-fold).
+Default prefix-omitting callers retain merge-only admission. New source and
+manifest bytes require genuine independent review, maintained checks and an
+immutable engine release, then the matching full-closure Master release and
+ordinary consumer update. Old anchored manifests reject changed helper bytes;
+rehashing a consumer artifact never creates trust. No live state is migrated,
+service deployed, old receipt reinterpreted or product release waived.
+
+## Current correction observations — TT-183
+
+Tracker3.9.2 adds genuine native correction return/claim observations and the
+Needs fixes/Fixing projection. The optional private observations grant no
+ownership, approval or delivery; current native pending returns retain their
+operation until same-owner reconciliation. Legacy origin binds actual work
+history, and execution origin binds the actual current claim. Unsupported old
+observations stay neutral. Compatible current writers execute the new return
+command; installing a shared reader does not update consumer clients.
+The canonical engine and exported admission helper also reject a genuine pending
+legacy return before new approval, main admission or completion. Source-owned
+native fixtures replay this refusal on actual portable Python3.9 in both layouts,
+without importing the engine or exposing the private report.
+Contract1,14raw/28separated helpers and existing task_pause1/outer8 remain intact.
+Master74 refreshes the full exact published61-file closure and clean portable
+pair without selecting policies, migrating live state or adopting ACL.
+
+## Ready delivery correction — TT-181
+
+Compatible3.9.1 retains contract1,14raw/28separated helpers and task_pause1/outer8.
+Its pause projection maps native approved work to Delivery, matching the central
+Ready for integration presentation. The central UI also reads older Review-category
+pause observations by their preserved approved phase. Exact helper hashes change;
+Master72 consumes the actual published source through the maintained full refresh
+and clean actualPython3.9 pair, without new policies or live activation. Native
+public task approval timestamps are safe optional observation data, not new authority.
+
+## Pause-compatible closure — TT-179
+
+Tracker3.9.0 exports14raw/28separated helpers including the canonical
+`tracker_pause_policy.py`, with capability `task_pause:[1]`. The source-owned
+`portable_pause.json` fixture and offline runner replay real native1..4
+paused/resumed histories and contradictory-state refusal on actual Python3.9.
+Outer8 preserves the entire incumbent guard bundle; older readers fail closed.
+Publication/export changes no live state. See [activation](TASK_PAUSE.md).
+
 TT-143 makes Tracker the technical owner of the portable CI frontend, helper
 bytes and structural CI policy. Version3.4.0 is the published9/18-helper baseline;
 the version3.5.0 candidate adds generic accounting and a fixed canonical retry
@@ -95,8 +166,8 @@ service migration and consumer activation are separate facts.
 ## Maintained checks and saved fixtures
 
 `Portable source conformance` runs for relevant helper/export/test changes. It
-uses the actual engine checkout plus immutable published Master1.2.0
-`864ca7a5814e703dd6e61207362d24cbc26dc9ad` as a **negative trusted peer**.
+uses the actual engine checkout plus immutable published Master1.5.0
+`37090f0cf11eca5203a40932e2192f7eb47e2566` as a **negative trusted peer**.
 There is no override or positive pair claim in this source gate.
 The source command is:
 
