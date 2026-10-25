@@ -80,7 +80,7 @@ def test_the_plan_has_every_ad_set_and_numbers_ads_across_the_campaign(tmp_path)
     assert plan.daily_budget == 20.0
 
 
-def test_two_ad_sets_three_ads_each_are_created_paused_and_read_back(tmp_path):
+def test_two_ad_sets_three_ads_each_are_created_and_read_back(tmp_path):
     meta = FakeMeta()
     out, _client = _run(meta, _draft(tmp_path))
     assert out.error == "", out.error
@@ -88,7 +88,9 @@ def test_two_ad_sets_three_ads_each_are_created_paused_and_read_back(tmp_path):
     assert edges.count("campaigns") == 1 and edges.count("adsets") == 2 and edges.count("ads") == 6
     for path, params in meta.posts:
         if path.rsplit("/", 1)[1] in ("campaigns", "adsets", "ads"):
-            assert params["status"] == "PAUSED"
+            # ACL-2114: только кампания PAUSED, наборы и объявления ACTIVE под ней.
+            want = "PAUSED" if path.rsplit("/", 1)[1] == "campaigns" else "ACTIVE"
+            assert params["status"] == want
     sets = [o for o in meta.objects.values() if o["_kind"] == "adset"]
     assert len(sets) == 2 and len({o["name"] for o in sets}) == 2
     assert {o["campaign_id"] for o in sets} == {out.campaign_id}

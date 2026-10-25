@@ -3623,7 +3623,11 @@
     .cbd-set-sub { color: var(--muted); font-size: var(--adopy-text-sm); flex-shrink: 0; font-weight: 400; }
     #cbd-panel[data-names-only="1"] .cbd-sets { display: none; }
     .cbd-camp-sets::before { content: "·"; margin-right: var(--space-xs); }
-    .cbd-ed-actions { gap: var(--space-xs); }
+    .cbd-ed-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); }
+    /* Кнопки набора и список объявлений - компактные чипы, а не полосы на всю ширину. */
+    .cbd-ed-actions .cbd-add, .cbd-ed-inset .cbd-add {
+      display: inline-block; width: auto; margin-top: 0; padding: 0.15rem 0.55rem;
+    }
     .cbd-ed-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
     .cbd-ed-note { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin-top: var(--space-xs); }
     .cbd-ed-inset { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
@@ -7769,13 +7773,15 @@ window.cbTree = (function () {
             return '<option value="' + st.idx + '"' + (st.idx === setIdx ? ' selected' : '') + '>'
               + aclEscHtml(L.adsetLabel(c.name, st.idx, st.own, st.ads)) + '</option>';
           }).join('')
-        + '</select></div>'
-        + '<div class="cbd-ed-pick cbd-ed-actions">'
+        + '</select>'
+        /* Кнопки набора в одной строке с выбором набора: столбец кнопок на всю ширину
+           занимал полэкрана и прятал форму набора. */
+        + '<span class="cbd-ed-actions">'
         + '<button type="button" class="cbd-add" data-act="add-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Add an ad set to this campaign"') + '>+ Ad set</button>'
         + '<button type="button" class="cbd-add" data-act="copy-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Copy this ad set with its ads"') + '>Copy ad set</button>'
         + '<button type="button" class="cbd-add" data-act="remove-adset"'
         + (setIdx === 0 ? ' disabled title="The first ad set stays; remove the campaign instead"' : ' title="Remove this ad set and its ads"')
-        + '>Remove ad set</button></div>'
+        + '>Remove ad set</button></span></div>'
         + (atMax ? '<div class="cbd-ed-note" role="note">A campaign can have at most 10 ad sets.</div>' : '');
       /* Объявления выбранного набора: открыть любое одним нажатием. */
       var mine = [], all = slot.querySelectorAll('.cb-ad-row');
