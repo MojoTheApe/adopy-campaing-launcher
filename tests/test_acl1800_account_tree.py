@@ -220,7 +220,7 @@ def test_the_unread_account_says_so_inside_its_section_and_has_no_header():
       H.Fresh.row.listeners.click[0]({target: T({})}); await tick(10); out.fresh = H.Fresh.table.innerHTML;
       H.Acc.row.listeners.click[0]({target: T({})}); await tick(10); out.acc = H.Acc.table.innerHTML;
     """)
-    assert "Not read yet — press Read campaigns" in out["fresh"] and "hc-heads" not in out["fresh"]
+    assert "No saved list yet. Expand this account" in out["fresh"] and "hc-heads" not in out["fresh"]
     assert "hc-heads" in out["acc"] and 'class="hc-groups"' in out["acc"]             # заголовок кампаний — первая строка раскрытого аккаунта
 
 
@@ -233,10 +233,10 @@ def test_the_account_row_carries_the_snapshot_line_and_its_own_read_button():
       H.Fresh.readBtn.listeners.click[0](); await tick(80);
       out.posts = posts.slice();
     """)
-    assert out["snap"]["Acc"].startswith("Campaigns: 3 campaigns") and "read" in out["snap"]["Acc"]
-    assert out["snap"]["Fresh"] == "Campaigns: not read yet"
-    assert all(v == ["Read campaigns", False] for v in out["btn"].values())
-    assert out["posts"] == ["Fresh"]                                                  # нажатие читает именно этот аккаунт
+    assert out["snap"]["Acc"] == "list 12:00"
+    assert out["snap"]["Fresh"] == "list not read"
+    assert all(v == ["Retry", False] for v in out["btn"].values())
+    assert out["posts"] == []  # no old inventory POST; the shared coordinator owns requests                                                  # нажатие читает именно этот аккаунт
 
 
 def test_a_read_failure_is_one_line_on_the_row_and_the_details_row_inside():
@@ -247,20 +247,15 @@ def test_a_read_failure_is_one_line_on_the_row_and_the_details_row_inside():
       out.snap = [H.Acc.snap.textContent, H.Acc.snap.dataset.tone, H.Acc.snap.title];
       out.row = /data-msg="acct:Acc:read".*?<\\/tr>/s.exec(H.Acc.table.innerHTML)[0];
     """)
-    assert out["snap"][0] == "Campaigns: last read failed — Multilogin isn't running — start it and try again" and out["snap"][1] == "bad"
+    assert out["snap"][0] == "list failed — Multilogin isn't running — start it and try again" and out["snap"][1] == "bad"
     assert "WinError" in out["snap"][2] and "WinError" not in out["snap"][0]
     assert "The last read failed (2026-10-12 08:54:22)" in out["row"] and 'data-details="acct:Acc:read"' in out["row"] and "WinError" not in out["row"]
 
 
-def test_the_period_gate_blocks_reads():
-    out = _node("out.dis = H.Acc.readBtn.disabled; out.title = H.Acc.readBtn.title; await inst.readAll(); out.posts = posts.slice();", period_ok=False)
-    assert out["dis"] is True and "Select dates" in out["title"] and out["posts"] == []
-
-
-def test_reading_a_country_queues_one_account_at_a_time_and_posts_only_there():
-    out = _node("await inst.readAll(); out.posts = posts.slice(); out.busy = inst.state.busy; out.reads = calls.filter(c => c.startsWith('POST'));")
-    assert out["posts"] == ["Acc", "Other", "Fresh"] and out["busy"] is False
-    assert out["reads"] == ["POST /campaign-inventory/read"] * 3
+def test_maximum_keeps_structure_available_and_removes_manual_country_reads():
+    out = _node(OPEN_ALL + "out.html=H.Acc.table.innerHTML; out.retryHidden=H.Acc.readBtn.hidden; out.readAll=typeof inst.readAll; out.posts=posts.slice();", period_ok=False)
+    assert 'Evergreen' in out['html']
+    assert out['retryHidden'] is True and out['readAll'] == 'undefined' and out['posts'] == []
 
 
 # ───────────────────────── колонки и данные (как в макете) ─────────────────────────
@@ -273,7 +268,7 @@ def _acc_table():
 def test_toolbar_and_count_line_are_compact_and_the_template_has_no_separate_table_frame():
     tpl = _render_table()
     for needle in ("Search campaigns, ad sets or ads", "All delivery", "Enabled campaigns", "Paused campaigns", ">Controls<", ">BI metrics<",
-                   ">Meta metrics<", ">Tracking<", "Expand all", "Collapse all", "Switch on", "Set bid…", "What was changed here"):
+                   ">Structure<", ">Tracking<", "Expand all", "Collapse all", "Switch on", "Set bid…", "What was changed here"):
         assert needle in tpl, needle
     assert 'data-hc="frame"' not in tpl and 'data-hc="table"' not in tpl and "Identity stays pinned" not in tpl     # отдельной таблицы нет
     assert _acc_table()["count"] == "4 campaigns"                                                                  # Acc: 3, Other: 1

@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import expect, sync_playwright
 from test_builder_per_account import _render
-from test_drawer_review_browser import add, all_confirm, fields, ready
+from test_drawer_review_browser import OFFLINE_FILES, add, all_confirm, fields, ready
 
 from tests._retry_once import goto, launch_chromium
 
@@ -50,7 +50,7 @@ def ui(browser):
         if r.request.resource_type == "document":
             r.fulfill(content_type="text/html", body=html)
             return
-        data = {"files": [], "texts": [], "profiles": [], "waiting": False}
+        data = {"files": OFFLINE_FILES, "texts": [], "profiles": [], "waiting": False}
         if path == "/api/ad-copy":
             data = {"rows": TEXTS}
         elif path == "/preview-publish":

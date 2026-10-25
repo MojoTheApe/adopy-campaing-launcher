@@ -22,12 +22,15 @@ from __future__ import annotations
 import ast
 import contextlib
 import errno
+import faulthandler
 import hashlib
 import json
+import math
 import multiprocessing
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -255,25 +258,161 @@ def busy_machine():
             proc.wait(10)
 
 
-def _run_processes(target, *extra) -> None:
+_WRITER_STATE = None
+_WRITER_FIELDS = 6
+_WRITER_PHASES = {"diagnostic-setup": 1, "call-prepared": 2, "target-entry": 3,
+                  "before-write": 4, "after-write": 5}
+
+
+def _writer_progress(phase: str, iteration: int) -> None:
+    """Best-effort observations only: no queue, extra lock or acceptance input."""
+    if _WRITER_STATE is not None:
+        state, index = _WRITER_STATE
+        offset = index * _WRITER_FIELDS
+        state[offset + 2] = iteration
+        state[offset + 1] = _WRITER_PHASES[phase]
+        if phase == "target-entry":
+            state[offset + 5] = 1  # Only a real target body records this event.
+
+
+def _diagnosed_writer(target, start, index, extra, state, trace_dir, diagnostic_after):
+    global _WRITER_STATE
+    _WRITER_STATE = (state, index)
+    offset = index * _WRITER_FIELDS
+    state[offset] = 1  # Wrapper entered; not yet evidence of target entry.
+    state[offset + 3] = os.getpid()
+    _writer_progress("diagnostic-setup", -1)
+    trace = None
+    armed = False
+    try:
+        try:
+            if trace_dir is None:
+                raise OSError("diagnostic directory unavailable")
+            trace = open(Path(trace_dir) / f"writer-{index}.trace", "w", encoding="utf-8")
+            trace.write(f"writer_pid={os.getpid()} index={index} target={target.__name__}\n")
+            trace.flush()
+            faulthandler.dump_traceback_later(diagnostic_after, file=trace, repeat=False)
+            armed = True
+            state[offset + 4] = 1
+        except (OSError, RuntimeError):
+            # Missing diagnostics never replaces or skips the actual workload.
+            state[offset + 4] = -1
+        _writer_progress("call-prepared", -1)
+        state[offset] = 2
+        try:
+            target(start, index, *extra)
+        except BaseException:
+            state[offset] = 4
+            raise
+        else:
+            state[offset] = 3
+    finally:
+        if armed:
+            faulthandler.cancel_dump_traceback_later()
+        if trace is not None:
+            with contextlib.suppress(OSError):
+                trace.close()
+        _WRITER_STATE = None
+
+
+def _writer_observations(procs, state):
+    phases = {v: k for k, v in _WRITER_PHASES.items()}
+    observed = []
+    for index, proc in enumerate(procs):
+        offset = index * _WRITER_FIELDS
+        status = state[offset]
+        observed.append({
+            "index": index, "pid": proc.pid, "name": proc.name,
+            "alive_at_failure": proc.is_alive(), "exitcode_at_failure": proc.exitcode,
+            "wrapper_entered": status != 0, "target_entry_observed": bool(state[offset + 5]),
+            "last_wrapper_event": {0: "not-observed", 1: "diagnostic-setup", 2: "call-prepared", 3: "call-returned", 4: "call-raised"}[status],
+            "observed_pid": state[offset + 3] or None,
+            "phase": phases.get(state[offset + 1], "not-observed"),
+            "iteration": state[offset + 2] if status else None,
+            "capture": {0: "not-armed", 1: "armed", -1: "unavailable"}[state[offset + 4]],
+        })
+    return observed
+
+
+def _writer_evidence_note(target, observed, trace_dir, cleanup_errors):
+    # Read only after children are reaped. Never wait for a message/queue flush.
+    for item in observed:
+        if trace_dir is None:
+            item["trace"] = ""
+            item["trace_read_error"] = "DirectoryUnavailable"
+            continue
+        try:
+            with open(Path(trace_dir) / f"writer-{item['index']}.trace", "rb") as stream:
+                raw = stream.read(4_097)
+            item["trace"] = raw[:4_096].decode("utf-8", errors="replace")
+            if len(raw) > 4_096:
+                item["trace"] += "\n[truncated]"
+        except OSError as exc:
+            item["trace"] = ""
+            item["trace_read_error"] = type(exc).__name__
+    return "Windows writer diagnostics: " + json.dumps({
+        "target": target.__name__, "progress_is_last_observation": True,
+        "observations_are_not_an_atomic_snapshot": True,
+        "planned_writers": PROCS,
+        "writers": observed, "cleanup_errors": cleanup_errors,
+    }, ensure_ascii=True)
+
+
+@contextlib.contextmanager
+def _writer_trace_directory():
+    try:
+        directory = tempfile.TemporaryDirectory(prefix="acl-writer-diagnostics-", ignore_cleanup_errors=True)
+    except OSError:
+        # Diagnostic storage is optional; the original real workload is not.
+        yield None
+    else:
+        with directory as path:
+            yield path
+
+
+def _run_processes(target, *extra, join_timeout=180, diagnostic_after=150) -> None:
+    if not (math.isfinite(join_timeout) and math.isfinite(diagnostic_after)
+            and 0 < diagnostic_after < join_timeout):
+        raise ValueError("diagnostic timing must be finite and precede the writer join limit")
     ctx = multiprocessing.get_context("spawn")
     start = ctx.Event()
-    procs = [ctx.Process(target=target, args=(start, i, *extra)) for i in range(PROCS)]
-    for proc in procs:
-        proc.start()
-    start.set()
-    try:
-        for proc in procs:
-            proc.join(180)
-            assert proc.exitcode == 0, f"writer {proc.name} exit code {proc.exitcode}"
-    finally:
-        for proc in procs:
-            if proc.is_alive():
-                proc.terminate()
-            proc.join()
+    # Lock-free per-writer observations cannot become a new IPC deadlock.
+    state = ctx.RawArray("q", PROCS * _WRITER_FIELDS)
+    # A scanner retaining a diagnostic file must not replace the original failure.
+    with _writer_trace_directory() as trace_dir:
+        procs = []
+        failure = None
+        try:
+            for index in range(PROCS):
+                proc = ctx.Process(target=_diagnosed_writer,
+                                   args=(target, start, index, extra, state, trace_dir, diagnostic_after))
+                proc.start()
+                procs.append(proc)
+            start.set()
+            for proc in procs:
+                proc.join(join_timeout)
+                assert proc.exitcode == 0, f"writer {proc.name} exit code {proc.exitcode}"
+        except BaseException as exc:
+            failure = exc
+            raise
+        finally:
+            observed = _writer_observations(procs, state) if failure is not None else []
+            cleanup_errors = []
+            for proc in procs:
+                try:
+                    if proc.is_alive():
+                        proc.terminate()
+                    proc.join()
+                except Exception as exc:
+                    cleanup_errors.append({"pid": proc.pid, "error": type(exc).__name__})
+            if failure is not None:
+                failure.add_note(_writer_evidence_note(target, observed, trace_dir, cleanup_errors))
+            elif cleanup_errors:
+                raise RuntimeError("writer cleanup failed: " + json.dumps(cleanup_errors))
 
 
 def _journal_writer(start, index, path):
+    _writer_progress("target-entry", -1)
     assert start.wait(60)
     for n in range(PER_PROC):
         acl_log.append_line(path, json.dumps({"who": index, "n": n, "diag": "x" * 400}))
@@ -289,6 +428,7 @@ def test_journal_processes_keep_every_line(tmp_path, busy_machine):
 
 
 def _ad_text_writer(start, index):
+    _writer_progress("target-entry", -1)
     assert start.wait(60)
     for n in range(PER_PROC):
         ar.add(f"T{index}-{n}", f"Headline {index} {n}", f"Body {index} {n}")
@@ -323,10 +463,13 @@ class FileBackend:
 
 
 def _library_writer(start, index, root):
+    _writer_progress("target-entry", -1)
     tl.use_backend(FileBackend(root))
     assert start.wait(60)
     for n in range(PER_PROC):
+        _writer_progress("before-write", n)
         ar.add(f"L{index}-{n}", f"Headline {index} {n}", f"Body {index} {n}")
+        _writer_progress("after-write", n)
 
 
 def test_team_library_processes_keep_every_text(tmp_path, busy_machine):

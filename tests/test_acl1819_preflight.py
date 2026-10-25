@@ -166,11 +166,12 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "cta_ok": (_with(), "cta_allowed", "ok", []),
     "cta_wrong": (_with(ads=_ad(0, cta="SHOP_NOW")), "cta_allowed", "error", [1]),
     # ACL-1767: список кнопок по месту конверсии, устройства и старт набора.
-    "cta_new_website_ok": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "ok", []),
+    "cta_new_website_ok": (_with(ads=_ad(0, cta="CONTACT_US")), "cta_allowed", "ok", []),
+    "cta_book_now_not_for_website_leads": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "error", [1]),
     "cta_order_now_not_for_forms": (_with(destination="instant_form",
                                           ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]]),
                                     "cta_allowed", "error", [1, 2]),
-    "cta_order_now_on_website_ok": (_with(ads=_ad(1, cta="ORDER_NOW")), "cta_allowed", "ok", []),
+    "devices_version_not_listed": (_with(os="iOS", os_min="99", device="mobile"), "devices_consistent", "error", []),
     "devices_ok": (_with(), "devices_consistent", "ok", []),
     "devices_ios_version_ok": (_with(os="iOS", os_min="14.0", device="mobile"), "devices_consistent", "ok", []),
     "devices_ios_desktop": (_with(os="iOS", device="desktop"), "devices_consistent", "error", []),
@@ -372,6 +373,27 @@ def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path
     assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
     assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
+
+
+def test_page_not_chosen_takes_the_first_page(tmp_path):
+    # ACL-1897: пустой выбор берёт первую Страницу кабинета, одна она или несколько.
+    d = _draft(tmp_path, ads=1)
+    d.page_id = ""
+    out = _audit(AuditMeta(pages=("111", "222")), d)
+    assert _by(out)["page_ok"]["status"] == "ok"
+    assert any("the first available page" in w for w in out.warnings)
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"  # ACL-1880: website manual completion
+
+
+def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    d.page_id = "222"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    d.page_id = "333"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
 
 
 def test_pixel_missing_for_website_conversions(tmp_path):
@@ -685,3 +707,12 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
     assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
+
+
+def test_resolve_page_sets_the_account_default_source():
+    # ACL-1897: прямая проверка источника; кабинет с несколькими Страницами не стопорит запуск.
+    plan = cr.CampaignPlan.__new__(cr.CampaignPlan)
+    plan.page_id, plan.page_source = "", ""
+    facts = cr.AccountFacts(act=ACT, currency="USD", pages=["111", "222"], pixels=[])
+    cr.resolve_page(plan, facts)
+    assert (plan.page_id, plan.page_source) == ("111", "account default")

@@ -123,7 +123,7 @@ class FakeQueue:
     def release(self, job_id):
         self.calls.append(("release", job_id))
 
-    def keep(self, job_id, label=""):
+    def keep(self, job_id, label="", kind="review"):
         self.calls.append(("keep", job_id, label))
 
 
@@ -579,11 +579,23 @@ def test_started_profile_is_softly_stopped_and_its_slot_released(world):
 def test_failed_read_still_stops_what_it_started_and_releases_the_slot(world):
     world.local = ("none", None)
     world.started_now = True
+    world.page.routes["/ACT||"] = err(100)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    assert world.soft_stops == [ACCOUNT]
+    assert world.cdp.closed_targets == ["T-mine"]
+
+
+def test_logged_out_read_keeps_the_profile_it_started_open(world):
+    """ACL-2091: разлогинен — окно остаётся открытым, место держится «на проверку»."""
+    world.local = ("none", None)
+    world.started_now = True
     world.page.state_value = {"kind": "login", "has_token": False}
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.state == "failed" and r.error_code == "profile_logged_out"
-    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
-    assert world.soft_stops == [ACCOUNT]
+    assert [c[0] for c in world.queue.calls] == ["acquire", "keep"]
+    assert world.soft_stops == []
     assert world.cdp.closed_targets == ["T-mine"]
 
 

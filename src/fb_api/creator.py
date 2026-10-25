@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
+from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api import instagram as _ig
@@ -155,6 +156,8 @@ RECONCILE_WAIT_S = 5.0
 UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
 #: Не чаще раза в секунду показываем процент загрузки файла.
 UPLOAD_PROGRESS_EVERY_S = 1.0
+#: Как часто (с) загрузка кусками пишет шаг «uploaded X/Y MB», чтобы панель не краснила её как зависшую (ACL-1998).
+UPLOAD_STEP_EVERY_S = 12.0
 #: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
@@ -269,6 +272,8 @@ class AdPlan:
         return self.multi_text or bool(self.vertical_path)
     #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
     form_template: dict | None = None
+    #: ACL-2180: «Form locale: ES_LA (Spanish, Colombia)», если шаблон с locale Auto (иначе пусто).
+    form_locale_note: str = ""
 
 
 @dataclass
@@ -471,6 +476,9 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
             problems.append(f"Ad set {name!r}: minimum OS version {os_min!r} is not a number like 14 or 14.0")
         else:
             plan_set.os_min = os_min
+            if not _wpol.os_version_ok(plan_set.os, os_min):
+                problems.append(f"Ad set {name!r}: Meta does not list {plan_set.os} {os_min} as a minimum version "
+                                f"(use one of: {', '.join(_wpol.OS_VERSIONS[plan_set.os.casefold()])})")
     seen: set[str] = set()
     for lang in getattr(src, "languages", None) or []:
         lang = str(lang).strip()
@@ -566,7 +574,14 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
                     else:
-                        plan_set.ads[-1].form_template = clean
+                        try:   # ACL-2180: Auto -> код из языка и страны, до любой записи
+                            clean, note = _fl.resolve_template(
+                                clean, str(getattr(draft, "language", "") or ""), str(draft.country or ""))
+                        except _fl.LocaleRefused as exc:
+                            problems.append(f"Ad {i}: {exc}")
+                        else:
+                            plan_set.ads[-1].form_template = clean
+                            plan_set.ads[-1].form_locale_note = note
             elif plan_set.instant and not plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms "
                                 "or a template)")
@@ -616,8 +631,6 @@ class AccountFacts:
     #: IANA-имя часового пояса кабинета (`timezone_name`, тот же ответ, что и смещение).
     #: Время старта переводится по нему, а не по текущему смещению (ACL-1767: переход на летнее время).
     timezone_name: str = ""
-
-
     page_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
@@ -1521,6 +1534,10 @@ class CampaignCreator:
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
         guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
         failures = 0
+        # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
+        # Шаг «uploaded X/Y MB» - не чаще раза в UPLOAD_STEP_EVERY_S секунд, но не реже каждых 10% файла.
+        mb_total = max(size // (1024 * 1024), 1)
+        last_step_at, last_step_off = self.clock(), offset
         while offset < size:
             guard -= 1
             if guard < 0:
@@ -1552,6 +1569,11 @@ class CampaignCreator:
                 continue
             failures = 0
             offset, end = self._offsets(body, size, offset, what)
+            now = self.clock()
+            if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
+                                  or (offset - last_step_off) * 10 >= size):
+                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
+                last_step_at, last_step_off = now, offset
         try:
             done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
                                                         "title": title, "name": title,
@@ -2332,6 +2354,8 @@ class CampaignCreator:
                     if ad.form_template:
                         step = self._form_steps.get(ad.form_template["id"])
                         item["form_template"] = ad.form_template["name"]
+                        if ad.form_locale_note:
+                            item["form_locale"] = ad.form_locale_note
                         if step is not None:
                             item["form_name"] = step.form_name
                             item["form_id"] = step.existing_id

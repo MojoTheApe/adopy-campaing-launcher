@@ -12,6 +12,7 @@ restricted. До этой правки снимок страницы остав�
 """
 from __future__ import annotations
 
+import base64
 import os
 import re
 import sys
@@ -151,12 +152,21 @@ def _spy_read(monkeypatch, status, *, env=None, **fakes):
 
     def new_cdp_session(*_a, **_k):
         calls.append("new_cdp_session")
-        raise AssertionError("CDP-сессия во время чтения состояния")
+
+        def send(method, params):
+            assert method == "Page.captureScreenshot"
+            # ACL-1529: no clip/scale or device-metrics override may be sent.
+            assert params == {"format": "png", "captureBeyondViewport": False}
+            calls.append("captureScreenshot")
+            return {"data": base64.b64encode(PNG).decode("ascii")}
+
+        return NS(send=send, detach=lambda: calls.append("detach"))
 
     ctx = NS(new_cdp_session=new_cdp_session)
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None,
               close=lambda: None, screenshot=screenshot, context=ctx,
-              new_cdp_session=new_cdp_session)
+              new_cdp_session=new_cdp_session,
+              evaluate=lambda *a: {"width": 1, "height": 1, "visible": True})
     monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111", profile_id=fake_profile(ACC)))
     monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **k: None))
     monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
@@ -180,9 +190,9 @@ def test_by_default_a_status_read_takes_no_screenshot(local, monkeypatch, status
     assert not (local / "spend_shots").exists() or not list((local / "spend_shots").glob("*.png"))
 
 
-def test_with_the_switch_on_the_old_behaviour_returns(local, monkeypatch):
+def test_with_the_switch_on_the_unclipped_capture_is_used(local, monkeypatch):
     out, calls = _spy_read(monkeypatch, ("disabled", "Account disabled"), env="1")
-    assert calls == ["screenshot"]
+    assert calls == ["new_cdp_session", "captureScreenshot", "detach"]
     assert out.status_shot and sp.status_shot_path(out.status_shot) is not None
 
 

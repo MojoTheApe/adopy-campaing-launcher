@@ -182,6 +182,8 @@ def main() -> None:
         help="Do not open the browser automatically",
     )
     args = parser.parse_args()
+    if args.reload:
+        os.environ.setdefault("ACL_AUTO_REFRESH", "0")  # dev reload never starts scheduled profiles by default
 
     _configure_logging()
 

@@ -1509,8 +1509,8 @@ def test_the_labels_are_the_words_from_the_table_head(page):
     Три подписи нарочно не совпадают с шапкой, и каждая — решение, а не
     оплошность:
 
-    * «Account spend» → «Meta spend». В строке аккаунта это прочитанный
-      спенд кабинета; в строке кампании — спенд самой кампании словами Meta.
+    * «Campaign list» не обозначает сумму: ACL-2063 заменяет ею спенд аккаунта.
+      Совместимый старый форматтер дерева сохраняет отдельную подпись «Meta spend».
     * «Status» → «Delivery». Status строки аккаунта — предупреждение
       кабинета; здесь стоит доставка Meta.
     * «Note» → «Meta». Note аккаунта — заметка менеджера (ACL-1620; раньше Setup), а в дереве
@@ -1524,7 +1524,9 @@ def test_the_labels_are_the_words_from_the_table_head(page):
     _open(page)
     labels = page.evaluate("""() => Array.from(
       document.querySelectorAll('.amap-tree-line > [data-label]')).map(c => c.dataset.label)""")
-    assert labels[1] == 'Meta spend' and heads[2] == 'Account spend', (heads[2], labels[1])
+    # ACL-2063: в текущей карте вместо расхода Meta — состояние списка.
+    # Старое дерево сохраняет собственную подпись для совместимого ответа.
+    assert labels[1] == 'Meta spend' and heads[2] == 'Campaign list', (heads[2], labels[1])
     assert labels[7] == 'Delivery' and heads[8] == 'Status', (heads[8], labels[7])
     assert labels[8] == 'Meta' and heads[9] == 'Note', (heads[9], labels[8])
     # Книжные числа названы ровно так, как их зовёт шапка.

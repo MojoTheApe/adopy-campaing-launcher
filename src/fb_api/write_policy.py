@@ -124,11 +124,15 @@ MULTI_ADS_KEY = "contextual_multi_ads"
 #: Имена — из справочника Graph «Ad Creative Link Data Call To Action» (enum проверен);
 #: какие из них принимает именно цель OUTCOME_LEADS, Meta не публикует списком — берём
 #: те, что предлагает Ads Manager для лидов; лишнее Meta отвергнет известной ошибкой #100.
+#: BOOK_NOW, ORDER_NOW, REQUEST_TIME убраны (ревью ACL-1767): в справочнике Meta они есть в enum,
+#: но для сайта с целью Leads нигде не документированы.
 CTA_WEBSITE = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
-               "DOWNLOAD", "GET_OFFER", "BOOK_NOW", "ORDER_NOW", "REQUEST_TIME")
-#: Для Instant Form (форма Страницы вместо сайта) — без «Order now».
-CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
-            "DOWNLOAD", "GET_OFFER", "BOOK_NOW", "REQUEST_TIME")
+               "DOWNLOAD", "GET_OFFER")
+#: Для Instant Form (link_data + lead_gen_form_id) Meta документирует РОВНО шесть кнопок
+#: (Marketing API, Lead Ads: «call_to_action must be one of …»). Остальные из списка сайта
+#: (CONTACT_US, GET_OFFER, BOOK_NOW, REQUEST_TIME, ORDER_NOW) для формы не предлагаются и
+#: не подменяются другими: Meta отвергла бы их, а молчаливая замена меняла бы смысл кнопки.
+CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "DOWNLOAD")
 CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
 
 #: Тексты и вертикальный файл (ACL-1774): ключ креатива `asset_feed_spec` с ЗАКРЫТОЙ схемой.
@@ -172,6 +176,23 @@ GENDER_VALUES = frozenset({1, 2})
 #: device_platforms: Graph «Targeting» — mobile, desktop.
 DEVICE_PLATFORMS = frozenset({"mobile", "desktop"})
 #: user_os: «iOS» / «Android» или с минимальной версией «iOS_ver_14.0_and_above».
+#: Минимальные версии ОС, которые Meta перечисляет в справочнике таргетинга (user_os,
+#: «iOS_ver_14.0_and_above»). Статический список: вне него отказ ДО записи, а не ошибка #100
+#: после создания кампании. Ключ - ОС в нижнем регистре; значения - «N.M».
+OS_VERSIONS = {
+    "ios": ["2.0", "3.0"] + [f"{v}.0" for v in range(4, 19)],
+    "android": ["2.0", "2.1", "2.2", "2.3", "3.0", "3.1", "3.2", "4.0", "4.1", "4.2", "4.3", "4.4",
+                "5.0", "5.1", "6.0", "7.0", "7.1"] + [f"{v}.0" for v in range(8, 17)],
+}
+
+
+def os_version_ok(os_name: str, ver: str) -> bool:
+    """«14» или «14.0» из списка версий этой ОС."""
+    ver = str(ver or "").strip()
+    ver = ver if "." in ver else ver + ".0"
+    return ver in OS_VERSIONS.get(str(os_name or "").strip().lower(), [])
+
+
 USER_OS_RE = re.compile(r"^(iOS|Android)(_ver_[0-9]{1,2}(\.[0-9]{1,2})?_and_above)?$")
 
 _PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
@@ -211,8 +232,6 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "cta_form": list(CTA_FORM),
         "targeting": {"keys": sorted(TARGETING_KEYS), "genders": sorted(GENDER_VALUES),
                       "devices": sorted(DEVICE_PLATFORMS), "user_os_re": USER_OS_RE.pattern},
-
-
         "instagram": {"key": INSTAGRAM_KEY, "id_re": INSTAGRAM_ID_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},

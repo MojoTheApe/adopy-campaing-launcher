@@ -15,6 +15,7 @@ from config.paths import get_draft_status_path
 from src.fb_ads_rpa.draft import RpaPublishResult
 from src.web import publish_jobs as jobs
 from tests.test_publish_safety_contract import _render_badge, _result
+from tests.profile_lease_fakes import fake_profile
 
 web = importlib.import_module("src.web.app")
 
@@ -35,7 +36,7 @@ def run(monkeypatch):
     monkeypatch.setattr(jobs, "_active_publishers", {})
     monkeypatch.setattr(jobs, "_job_ended", {})
     monkeypatch.setattr(jobs, "use_rpa_publish", lambda: True)
-    monkeypatch.setattr(jobs, "profile_key_for", lambda label: label)
+    monkeypatch.setattr(jobs, "profile_key_for", fake_profile)
     monkeypatch.setattr(jobs, "_publish_serial", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(jobs, "keep_display_awake", lambda *a: contextlib.nullcontext())
     monkeypatch.setattr(jobs, "_watch_screen_lock", lambda *a: contextlib.nullcontext())

@@ -155,7 +155,7 @@ def test_an_unknown_extra_language_stops_the_plan_and_the_audit_names_it(tmp_pat
     ({"os": "iOS"}, ["mobile"], ["iOS"]),
     ({"os": "Android"}, ["mobile"], ["Android"]),
     ({"os": "iOS", "os_min": "14"}, ["mobile"], ["iOS_ver_14.0_and_above"]),
-    ({"os": "Android", "os_min": "9.1", "device": "mobile"}, ["mobile"], ["Android_ver_9.1_and_above"]),
+    ({"os": "Android", "os_min": "9.0", "device": "mobile"}, ["mobile"], ["Android_ver_9.0_and_above"]),
 ])
 def test_devices_and_os_reach_the_payload_and_the_readback(tmp_path, over, platforms, user_os):
     out = _run(AudienceMeta(), _with_fields(tmp_path, **over))
@@ -279,7 +279,7 @@ def test_a_null_cta_is_refused_like_in_the_page_layer():
 
 
 def test_the_policy_cta_list_is_per_destination_when_the_destination_is_known():
-    params = _cta("ORDER_NOW")
+    params = _cta("CONTACT_US")
     assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", params) == "adcreatives"
     with pytest.raises(wp.WriteRefused):
         wp.check(ACT, "POST", f"/{ACT}/adcreatives", params, on_ad=True)
@@ -316,8 +316,38 @@ def test_the_default_cta_is_learn_more_and_a_foreign_one_is_refused(tmp_path):
     form.ad_sets[0].ads[0].lead_form_id = "7000001"
     with pytest.raises(cr.PlanError, match="ORDER_NOW"):
         cr.plan_from_draft(form)
-    ok = _with_fields(tmp_path, cta="ORDER_NOW")                                # на сайте он допустим
-    assert cr.plan_from_draft(ok).ad_sets[0].ads[0].cta == "ORDER_NOW"
+    ok = _with_fields(tmp_path, cta="CONTACT_US")                               # на сайте он допустим
+    assert cr.plan_from_draft(ok).ad_sets[0].ads[0].cta == "CONTACT_US"
+    for undocumented in ("BOOK_NOW", "ORDER_NOW", "REQUEST_TIME"):              # Meta их для сайта-Leads не описывает
+        with pytest.raises(cr.PlanError, match=undocumented):
+            cr.plan_from_draft(_with_fields(tmp_path, cta=undocumented))
+
+
+def test_minimum_os_version_must_be_one_meta_lists(tmp_path):
+    assert wp.os_version_ok("iOS", "14") and wp.os_version_ok("android", "9.0")
+    assert all(wp.os_version_ok("android", v) for v in ("2.1", "2.2", "3.1", "3.2", "5.1", "7.1", "16"))
+    assert wp.os_version_ok("iOS", "2.0") and wp.os_version_ok("iOS", "3.0")
+    assert not wp.os_version_ok("iOS", "99") and not wp.os_version_ok("iOS", "14.5")
+    d = _with_fields(tmp_path, os="iOS", os_min="14")
+    assert cr.plan_from_draft(d).ad_sets[0].os_min == "14"
+    with pytest.raises(cr.PlanError, match="does not list"):
+        cr.plan_from_draft(_with_fields(tmp_path, os="iOS", os_min="99"))
+
+
+def test_instant_form_offers_exactly_the_six_buttons_meta_documents(tmp_path):
+    """Meta (Lead Ads, link_data + lead_gen_form_id): APPLY_NOW, DOWNLOAD, GET_QUOTE, LEARN_MORE,
+    SIGN_UP, SUBSCRIBE. CONTACT_US / GET_OFFER / BOOK_NOW / REQUEST_TIME are not offered for a form
+    and are refused, never swapped for another button."""
+    assert set(wp.CTA_FORM) == {"APPLY_NOW", "DOWNLOAD", "GET_QUOTE", "LEARN_MORE", "SIGN_UP", "SUBSCRIBE"}
+    assert wp.CTA_FORM[0] == "LEARN_MORE"
+    for extra in ("CONTACT_US", "GET_OFFER", "BOOK_NOW", "REQUEST_TIME"):
+        form = _with_fields(tmp_path, cta=extra)
+        form.ad_sets[0].destination = "instant_form"
+        form.ad_sets[0].ads[0].lead_form_id = "7000001"
+        with pytest.raises(cr.PlanError, match=extra):
+            cr.plan_from_draft(form)
+        with pytest.raises(wp.WriteRefused):
+            wp.check(ACT, "POST", f"/{ACT}/adcreatives", _cta(extra), on_ad=True)
 
 
 def test_every_cta_the_creator_offers_passes_the_write_policy():

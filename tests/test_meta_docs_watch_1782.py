@@ -1,7 +1,12 @@
 """ACL-1782: наблюдатель за документацией Meta — без сети, с подменой загрузчика."""
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("meta_docs_watch", ROOT / "scripts" / "meta_docs_watch.py")
@@ -134,4 +139,99 @@ def test_obsidian_noop_when_empty_or_no_vault(tmp_path, capsys):
     assert watch.append_obsidian(empty, vault) is False
     assert not (vault / watch.OBSIDIAN_NOTE).exists()
     assert watch.append_obsidian(_changed_digest(tmp_path), tmp_path / "missing") is False
-    assert "skipped" in capsys.readouterr().out
+    assert "ACL_OBSIDIAN_DIR" in capsys.readouterr().err
+
+
+def _prepare_cli(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("ACL_OBSIDIAN_DIR", raising=False)
+    sources = tmp_path / "sources.json"
+    sources.write_text(json.dumps([SRC_A]), encoding="utf-8")
+    snapshots = tmp_path / "snapshots"
+    watch.run_watch([SRC_A], make_fetch({SRC_A["url"]: PAGE_V1}), snapshots, None)
+    monkeypatch.setattr(watch, "http_fetch", make_fetch({SRC_A["url"]: PAGE_V2}))
+    return ["--sources", str(sources), "--snapshots", str(snapshots),
+            "--out", str(tmp_path / "digests"), "--delay", "0"]
+
+
+@pytest.mark.parametrize("mode", ["default", "explicit", "missing-override"])
+def test_cli_missing_vault_warns(tmp_path, monkeypatch, capfd, mode):
+    args = _prepare_cli(tmp_path, monkeypatch)
+    if mode == "explicit":
+        args += ["--obsidian"]
+    elif mode == "missing-override":
+        default = tmp_path / "default"
+        default.mkdir()
+        monkeypatch.setenv("ACL_OBSIDIAN_DIR", str(default))
+        args += ["--vault", str(tmp_path / "missing")]
+    assert watch.main(args) == 0
+    captured = capfd.readouterr()
+    assert "Obsidian vault not found; set ACL_OBSIDIAN_DIR" in captured.err
+    assert not list(tmp_path.rglob(watch.OBSIDIAN_NOTE))
+
+
+def test_cli_default_appends_to_real_vault(tmp_path, monkeypatch, capfd):
+    args = _prepare_cli(tmp_path, monkeypatch)
+    vault = tmp_path / "home" / "Desktop" / "Obsidian" / "дешборд"
+    vault.mkdir(parents=True)
+    assert watch.main(args) == 0
+    assert SRC_A["url"] in (vault / watch.OBSIDIAN_NOTE).read_text(encoding="utf-8")
+    assert not capfd.readouterr().err
+
+
+def test_cli_explicit_vault_overrides_default(tmp_path, monkeypatch, capfd):
+    args = _prepare_cli(tmp_path, monkeypatch)
+    default = tmp_path / "default"
+    default.mkdir()
+    monkeypatch.setenv("ACL_OBSIDIAN_DIR", str(default))
+    vault = tmp_path / "chosen"
+    vault.mkdir()
+    assert watch.main(args + ["--obsidian", "--vault", str(vault)]) == 0
+    assert SRC_A["url"] in (vault / watch.OBSIDIAN_NOTE).read_text(encoding="utf-8")
+    assert not (default / watch.OBSIDIAN_NOTE).exists()
+    assert not capfd.readouterr().err
+
+
+def test_cli_disabled_obsidian_skips_lookup_and_write(tmp_path, monkeypatch, capfd):
+    args = _prepare_cli(tmp_path, monkeypatch)
+
+    def unexpected_lookup():
+        pytest.fail("disabled Obsidian output must not look up a vault")
+
+    monkeypatch.setattr(watch, "default_vault_dir", unexpected_lookup)
+    assert watch.main(args + ["--no-obsidian"]) == 0
+    assert not capfd.readouterr().err
+    assert not list(tmp_path.rglob(watch.OBSIDIAN_NOTE))
+
+
+def test_cli_dry_run_writes_nothing(tmp_path, monkeypatch, capfd):
+    args = _prepare_cli(tmp_path, monkeypatch)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    snapshot = watch._snap_path(tmp_path / "snapshots", SRC_A["url"])
+    before = snapshot.read_bytes()
+    assert watch.main(args + ["--dry-run", "--obsidian", "--vault", str(vault)]) == 0
+    assert snapshot.read_bytes() == before
+    assert not (tmp_path / "digests").exists()
+    assert not (vault / watch.OBSIDIAN_NOTE).exists()
+    assert "Meta docs digest" in capfd.readouterr().out
+
+
+def test_direct_cli_resolves_config_from_another_cwd(tmp_path):
+    sources = tmp_path / "sources.json"
+    sources.write_text("[]", encoding="utf-8")  # no fetches
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    env = dict(os.environ, ACL_OBSIDIAN_DIR=str(tmp_path / "missing"),
+               HOME=str(tmp_path / "home"), USERPROFILE=str(tmp_path / "home"))
+    result = subprocess.run(
+        [sys.executable, "-I", str(ROOT / "scripts" / "meta_docs_watch.py"),
+         "--sources", str(sources), "--snapshots", str(tmp_path / "snapshots"),
+         "--out", str(tmp_path / "digests"), "--obsidian"],
+        cwd=elsewhere, env=env, capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == 1  # the empty source list has no successful fetch
+    assert "Obsidian vault not found; set ACL_OBSIDIAN_DIR" in result.stderr
+    assert "Traceback" not in result.stderr

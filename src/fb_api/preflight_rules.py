@@ -188,8 +188,8 @@ def export_rules() -> dict[str, Any]:
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
                    "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
-                   "os_min_re": _OS_MIN_RE, "start_re": _START_RE,
-                   "max_texts": MAX_TEXTS},
+                   "os_min_re": _OS_MIN_RE, "os_versions": {k: list(v) for k, v in _wp.OS_VERSIONS.items()},
+                   "start_re": _START_RE, "max_texts": MAX_TEXTS},
     }
 
 
@@ -331,7 +331,7 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append(_v(rid, ERROR, "mobile_os_desktop"))
             elif ver and not mobile:
                 out.append(_v(rid, ERROR, "version_needs_os"))
-            elif ver and not re.fullmatch(_OS_MIN_RE, ver):
+            elif ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
                 out.append(_v(rid, ERROR, "bad_version"))
             else:
                 out.append(_v(rid, OK))

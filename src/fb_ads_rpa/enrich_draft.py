@@ -366,7 +366,13 @@ def enrich_campaign_drafts(
                 if ad.creative_filename and not preview_mode:
                     try:
                         ad.creative_path = str(find_creative_file(root, ad.creative_filename, fresh=True))
-                    except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
+                    except CreativeNotFoundError:
+                        # ACL-1668: выбранный файл удалили или переименовали после выбора.
+                        draft.errors.append(
+                            f"Creative file missing: {ad.creative_filename!r} was deleted or renamed "
+                            f"in the creatives folder - pick the file again"
+                        )
+                    except (AmbiguousCreativeError, FileNotFoundError) as exc:
                         draft.errors.append(str(exc))
                 elif ad.creative_filename:
                     ad.creative_path = str(Path(root) / ad.creative_filename)
