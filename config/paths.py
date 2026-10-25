@@ -83,6 +83,24 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+def config_identity(directory: str | os.PathLike | None = None) -> str:
+    """Чей это ACL: короткий отпечаток каталога настроек, а не сам путь.
+
+    На одной машине могут жить два человека — два пользователя Windows или
+    удалённый стол, — и у каждого свой %LOCALAPPDATA%, а порт общий. Лаунчер
+    видел на 9090 «какой-то ACL» и открывал его как свой: второй человек
+    молча попадал в дешборд первого, с чужими аккаунтами (ACL-1309, 24.09).
+
+    Отпечаток, а не путь: `/health` доступен любому процессу на машине, и
+    путь в нём выдал бы имя чужой учётной записи. Для сравнения «мой или
+    нет» хватает хэша.
+    """
+    import hashlib
+
+    path = os.path.normcase(os.path.realpath(str(directory or get_local_config_dir())))
+    return hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
+
+
 # --- One settings folder for every launch path (ACL-1680) -------------------
 # A process started from Claude Desktop runs inside its MSIX package, where
 # Windows hands it a *virtualised* %LOCALAPPDATA%:
@@ -547,8 +565,11 @@ def update_machine_env(values: dict[str, str]) -> str:
     for line in lines:
         match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
         key = match.group(1) if match else None
-        if key in pending:
-            out.append(_dotenv_line(key, pending.pop(key)))
+        if key in values:
+            if key in pending:
+                out.append(_dotenv_line(key, pending.pop(key)))
+            # Remove obsolete duplicate assignments for this updated key: dotenv
+            # uses the last value, so a later old token would survive Disconnect.
         else:
             out.append(line)
     if pending and out and out[-1].strip():

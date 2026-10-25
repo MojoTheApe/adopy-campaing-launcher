@@ -50,6 +50,7 @@ from __future__ import annotations
 import os
 import platform
 import re
+import uuid
 from typing import Any
 
 #: Общий приёмник ACL. Право только на запись.
@@ -623,14 +624,28 @@ def report_problem(text: str, *, context: dict | None = None) -> str:
     Смысл ACL-354 в том, что байер пишет, что сломалось, а окружение
     собирается без него: сегодня это сообщение в переписке и фотография
     экрана — пересказанные, с опозданием и без фактов самой машины.
+
+    **Каждое обращение — свой тикет Sentry (ACL-1273).** Раньше отпечаток был
+    постоянным (`["acl-report", "manual"]`), и все обращения со всех машин
+    складывались в один тикет с заголовком самого первого сообщения. Sentry
+    уведомляет о новых тикетах, а не о новых событиях в старом, поэтому
+    после первого обращения команда не узнала ни об одном. Теперь в отпечатке
+    номер, свой на каждый вызов (он же тег `report_id`): даже повтор «всё ещё
+    сломано» тем же текстом — новое обращение, а не дубль. Отказы шагов (`report_step_failure`)
+    по-прежнему группируются по шагу и причине — там группировка и нужна.
     """
     if not init():
         return ""
     import sentry_sdk
 
+    # Буква впереди — не украшение: вычиститель меняет длинные ряды цифр на
+    # `<digits>`, и номер из одних цифр (бывает и у uuid4().hex) склеил бы
+    # такие обращения в один тикет снова.
+    report_id = "r" + uuid.uuid4().hex
     with sentry_sdk.new_scope() as scope:
-        scope.fingerprint = ["acl-report", "manual"]
+        scope.fingerprint = ["acl-report", "manual", report_id]
         scope.set_tag("kind", "report")
+        scope.set_tag("report_id", report_id)
         scope.set_context("report", {"text": _scrub_deep(text or "")[:4000]})
         if context:
             scope.set_context("acl", _scrub_deep(context))

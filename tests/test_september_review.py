@@ -177,4 +177,5 @@ def test_row_states_render_with_account_actions_and_matching_drill_width(ready, 
     # `ncols=11` проверялось здесь же: это была ширина книжной строки
     # раскрытия. 12.09 книжная детализация ушла со стрелки — у живого дерева
     # colspan берётся из самой строки.
-    assert "amapReadSpend(this)" in html and "amapUnlink(" in html
+    assert "amapReadSpend(this)" not in html and "amapUnlink(" in html
+    assert "amap-list" in html

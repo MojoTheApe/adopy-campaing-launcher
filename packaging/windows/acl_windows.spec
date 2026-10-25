@@ -23,9 +23,11 @@ playwright_datas, playwright_binaries, playwright_hiddenimports = collect_all("p
 datas = [
     (str(PROJECT_ROOT / ".env.example"), "."),
     (str(PROJECT_ROOT / "config" / "ad_account_map.example.csv"), "config"),
+    (str(PROJECT_ROOT / "config" / "account_name_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "ads_manager_selectors.yaml"), "config"),
     (str(PROJECT_ROOT / "config" / "analysis_reading_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "benchmarks.json"), "config"),
+    (str(PROJECT_ROOT / "config" / "bi_cm_map.json"), "config"),
     (str(PROJECT_ROOT / "config" / "content_plan_week.example.json"), "config"),
     (str(PROJECT_ROOT / "config" / "knowledge_base.json"), "config"),
     (str(PROJECT_ROOT / "config" / "rpa_forbidden_zones.yaml"), "config"),
@@ -44,6 +46,7 @@ datas = [
 # runtime. PyInstaller cannot infer those string-based imports statically.
 hiddenimports = collect_submodules("uvicorn") + playwright_hiddenimports + [
     "diagnostics",
+    "local_dashboard",
     "machine_config",
     "setup_wizard",
     "updater",

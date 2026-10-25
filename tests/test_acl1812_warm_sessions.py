@@ -915,7 +915,7 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
     assert page.count('<script src="/static/warm_sessions.js"></script>') == 1
     assert "setInterval" not in js, "no timers: the screen never polls on its own"
     assert js.count("setTimeout") == 2, "the only waits: the local open-job status and the refresh debounce"
-    assert "window.confirm(" in js and "confirm: true" in js
+    assert "window.aclConfirm(" in js and "confirm: true" in js
     for url in ("/warm/state", "/warm/open", "/warm/close", "/warm/job/"):
         assert url in js
     for forbidden in ("/account-spend", "/campaign-inventory", "/campaign-commands", "/publish"):
@@ -1531,10 +1531,21 @@ def test_row_open_profile_answers_200_with_open_by_hand_over_http(hand_world, mo
     assert hand_world.opened == []
 
 
+from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider as _REAL_DIRECT  # noqa: E402
+
+
 def test_a_hand_window_is_found_by_its_short_8_3_folder_name(hand_world, monkeypatch):
-    """Профиль открыт руками, а процесс называет папку по-короткому (`SHORT~1`)."""
-    hand_world.provider.profile_is_running = lambda path, profile="": path == "SHORT~1"
-    monkeypatch.setattr(sp, "_dir_spellings", lambda p: ["LONG", "SHORT~1"])
+    """Профиль открыт руками, а процесс называет папку по-короткому (`SHORT~1`).
+
+    ACL-1184: написания перебирает сама проверка слоя RPA (`profile_is_running`),
+    дешборд передаёт ей папку один раз.
+    """
+    from src.fb_ads_rpa import profile_dir
+
+    real = _REAL_DIRECT  # в `hand_world` класс уже подменён
+    monkeypatch.setattr(profile_dir, "short_path", lambda p: "SHORT~1" if p == "LONG" else "")
+    probe = SimpleNamespace(_profile_process_running=lambda path, profile="": path == "SHORT~1")
+    hand_world.provider.profile_is_running = lambda path, profile="": real.profile_is_running(probe, path, profile)
     ok, message = sp.open_profile_for_automation(PID, "F", "A", "Acc")
     assert ok is False and getattr(message, "code", "") == "open_by_hand"
     assert hand_world.opened == [], "the hand-opened window was started again"

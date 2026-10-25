@@ -36,8 +36,9 @@ INSTALLER_FILES = {
 # всё равно проверяет его целиком), но добавление, удаление или переименование такого файла меняет
 # состав пакета, поэтому на PR в stage оно запускает установщик. Список сверяет тест со spec.
 BUNDLED_FILES = {
-    ".env.example", "config/ad_account_map.example.csv", "config/ads_manager_selectors.yaml",
+    ".env.example", "config/account_name_rules.json", "config/ad_account_map.example.csv", "config/ads_manager_selectors.yaml",
     "config/analysis_reading_rules.json", "config/benchmarks.json", "config/content_plan_week.example.json",
+    "config/bi_cm_map.json",
     "config/knowledge_base.json", "config/rpa_forbidden_zones.yaml",
 }
 BUNDLED_DIRS = ("config/meta_rules/", "config/rpa_intents/", "config/rpa_recipes/", "config/rpa_variations/", "knowledge_base/",

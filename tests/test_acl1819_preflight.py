@@ -339,6 +339,27 @@ def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
 
 
+def test_page_not_chosen_takes_the_first_page(tmp_path):
+    # ACL-1897: пустой выбор берёт первую Страницу кабинета, одна она или несколько.
+    d = _draft(tmp_path, ads=1)
+    d.page_id = ""
+    out = _audit(AuditMeta(pages=("111", "222")), d)
+    assert _by(out)["page_ok"]["status"] == "ok"
+    assert any("the first available page" in w for w in out.warnings)
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"  # ACL-1880: website manual completion
+
+
+def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    d.page_id = "222"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    d.page_id = "333"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
+
+
 def test_pixel_missing_for_website_conversions(tmp_path):
     d = _draft(tmp_path, ads=1)
     out = _audit(AuditMeta(pixels=[]), d)
@@ -650,3 +671,12 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
     assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
+
+
+def test_resolve_page_sets_the_account_default_source():
+    # ACL-1897: прямая проверка источника; кабинет с несколькими Страницами не стопорит запуск.
+    plan = cr.CampaignPlan.__new__(cr.CampaignPlan)
+    plan.page_id, plan.page_source = "", ""
+    facts = cr.AccountFacts(act=ACT, currency="USD", pages=["111", "222"], pixels=[])
+    cr.resolve_page(plan, facts)
+    assert (plan.page_id, plan.page_source) == ("111", "account default")
