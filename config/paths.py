@@ -749,6 +749,40 @@ def protect_machine_secrets() -> list[str]:
     return notes
 
 
+def unprotect_machine_secrets(*, from_backup: bool = False) -> list[str]:
+    """ACL-1358 rollback: write the protected tokens back as plain text.
+
+    For the same Windows user only (DPAPI). Meant to run before going back to
+    a version older than ACL-1358, which cannot read ``dpapi:v1:`` values or
+    ``ACLDPAPI1`` files. A live file that cannot be opened is restored from the
+    newest encrypted backup in ``protected-backup/``; ``from_backup`` forces
+    that for every file. The next start of a current version protects the
+    tokens again.
+    """
+    from config import token_vault
+
+    if not token_vault.available():
+        return []
+    config_dir = Path(get_local_config_dir())
+    notes: list[str] = []
+    env_path = Path(get_machine_env_path())
+    if env_path.is_file() or from_backup:
+        try:
+            with machine_file_lock(env_path.with_name(".env.lock")):
+                note = token_vault.unprotect_env_file(env_path, config_dir, from_backup=from_backup)
+        except Exception as exc:
+            note = f".env: could not restore tokens ({type(exc).__name__})"
+        if note:
+            notes.append(note)
+    token_files = {Path(get_google_oauth_token_path())}
+    token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
+    for path in sorted(token_files):
+        note = token_vault.unprotect_file(path, config_dir, from_backup=from_backup)
+        if note:
+            notes.append(note)
+    return notes
+
+
 def ensure_machine_config() -> list[str]:
     """Idempotent install/upgrade provisioning, migration before examples."""
     Path(get_local_config_dir()).mkdir(parents=True, exist_ok=True)
@@ -801,6 +835,15 @@ DEFAULT_TELEMETRY_SHEET_ID = "1M0FYL0EnxWFtTsCmKvFwJwuV0l2jWyvHmxfQdwcH6bs"
 
 def load_env() -> list[str]:
     """Load the machine's settings. Returns the files actually loaded."""
+    # ACL-1358: the packaged app (ACL.exe -> launcher -> serve.py) never runs
+    # ensure_machine_config, so plain tokens would stay plain on installer
+    # based machines. Every start comes through here: protect them first.
+    # Idempotent and cheap once done; a failure leaves the files as they were.
+    try:
+        for note in protect_machine_secrets():
+            print(f"[config] {note}", file=sys.stderr)
+    except Exception:
+        pass
     try:
         from dotenv import load_dotenv
     except Exception:

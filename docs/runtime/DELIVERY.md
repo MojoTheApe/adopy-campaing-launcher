@@ -73,3 +73,24 @@ material and the prior usable installation until verified replacement. Unknown
 partial actions need inspection before retry. Do not use production accounts or
 shared browser sessions for a test. The standing manual-pilot deferral is a recorded
 limitation, never a claim that installation passed or a release approval.
+
+### Protected tokens and going back to an older version (ACL-1358)
+
+Since ACL-1358 the Multilogin automation tokens (`MULTILOGIN_AUTOMATION_TOKEN_*` in
+`%LOCALAPPDATA%\ACL\.env`, stored as `dpapi:v1:...`) and the Google token files
+(`token_accounts.json`, `token_telemetry.json`, header `ACLDPAPI1`) are encrypted with
+Windows DPAPI for the current user. Every start (`load_env`, also on the packaged
+`ACL.exe` path) protects any plain token it finds, after saving an encrypted copy in
+`%LOCALAPPDATA%\ACL\protected-backup\`.
+
+A version older than ACL-1358 cannot read these values (it would send the ciphertext as
+a bearer token). Before a manual reinstall or downgrade, as the same Windows user:
+
+    python scripts/acl_migrate_config.py --unprotect
+
+This writes the tokens back as plain text. If a live file cannot be opened, the newest
+readable encrypted backup is used; `--unprotect --from-backup` forces the backup for
+every file. The next start of a current version protects the tokens again. The updater's
+automatic "start the previous version" fallback does not run this step, so a failed
+update to a version with protected tokens needs `--unprotect` before the old version is
+used. Another Windows user cannot open the values: the app then asks to connect again.

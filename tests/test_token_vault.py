@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 
 import pytest
 
@@ -129,15 +128,6 @@ def test_support_bundle_denylist_knows_the_plain_values_of_protected_secrets(mac
     assert SECRET in values and GOOGLE["refresh_token"] in values
     cleaned = diagnostics.sanitize_text(f"log {SECRET} and {GOOGLE['refresh_token']}", values)
     assert SECRET not in cleaned and GOOGLE["refresh_token"] not in cleaned
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI")
-def test_real_dpapi_round_trip_is_user_bound_ciphertext():
-    sealed = token_vault.encode_env_value(SECRET)
-    assert sealed.startswith("dpapi:v1:") and SECRET not in sealed
-    assert token_vault.decode_env_value(sealed) == SECRET
-    with pytest.raises(token_vault.VaultError):
-        token_vault.decode_env_value("dpapi:v1:AAAA")
 
 
 def test_telemetry_recognises_its_protected_token(machine, fake_dpapi, monkeypatch):

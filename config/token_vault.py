@@ -16,6 +16,11 @@ Migration is one-way but safe: the original bytes are first saved as an
 encrypted backup, the protected result is decrypted again and compared, and
 only then is the plain text replaced. Any failure leaves the file untouched.
 
+Rollback: ``unprotect_*`` write the plain text back for the same Windows user
+(``scripts/acl_migrate_config.py --unprotect``), from the live files or, when a
+live file cannot be opened, from the newest encrypted backup in
+``protected-backup/``. Run it before going back to a version older than ACL-1358.
+
 Secret values are never logged or put into exception messages.
 """
 from __future__ import annotations
@@ -254,3 +259,171 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
         return f".env: {changed} Multilogin token(s) moved to protected storage (encrypted backup kept)"
     except Exception as exc:
         return f".env: could not move tokens to protected storage ({type(exc).__name__}); left as it was"
+
+
+# ── rollback / restore ────────────────────────────────────────────────────────
+
+def backups_of(name: str, config_dir: str | Path) -> list[Path]:
+    """Encrypted backups of one file, oldest first."""
+    folder = Path(config_dir) / BACKUP_DIR_NAME
+    return sorted(folder.glob(f"{name}.*.dpapi")) if folder.is_dir() else []
+
+
+def _open_backup(path: Path) -> bytes:
+    raw = path.read_bytes()
+    if not is_protected_bytes(raw):
+        raise VaultError("backup is not in protected form")
+    return unprotect_bytes(raw[len(FILE_MAGIC):])
+
+
+def _newest_backup_bytes(name: str, config_dir: Path) -> bytes | None:
+    for candidate in reversed(backups_of(name, config_dir)):
+        try:
+            return _open_backup(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def unprotect_file(path: str | Path, config_dir: str | Path, *, from_backup: bool = False) -> str | None:
+    """Write one protected secret file back as plain text. Returns a note or None.
+
+    ``from_backup`` (or a live file that cannot be opened) restores the newest
+    readable encrypted backup instead. A plain file is left alone.
+    """
+    target = Path(path)
+    if not available():
+        return None
+    from config.paths import _atomic_write
+
+    try:
+        plain: bytes | None = None
+        source = "protected file"
+        if target.is_file() and not from_backup:
+            raw = target.read_bytes()
+            if not is_protected_bytes(raw):
+                return None
+            try:
+                plain = unprotect_bytes(raw[len(FILE_MAGIC):])
+            except VaultError:
+                plain = None
+        if plain is None:
+            plain = _newest_backup_bytes(target.name, Path(config_dir))
+            source = "encrypted backup"
+        if plain is None:
+            if target.is_file() and not from_backup:
+                return f"{target.name}: cannot be opened and has no readable backup; left as it was"
+            return None
+        _atomic_write(target, plain)
+        return f"{target.name} restored to plain text from the {source}"
+    except Exception as exc:
+        return f"{target.name}: could not restore ({type(exc).__name__}); left as it was"
+
+
+def unprotect_env_file(env_path: str | Path, config_dir: str | Path, *, from_backup: bool = False) -> str | None:
+    """Replace ``dpapi:v1:`` values in .env by plain ones (same Windows user)."""
+    target = Path(env_path)
+    if not available():
+        return None
+    from config.paths import _atomic_write, _dotenv_line
+
+    try:
+        if from_backup:
+            plain = _newest_backup_bytes(target.name, Path(config_dir))
+            if plain is None:
+                return None
+            _atomic_write(target, plain)
+            return ".env restored to plain text from the encrypted backup"
+        if not target.is_file():
+            return None
+        lines = target.read_bytes().decode("utf-8").splitlines()
+        out: list[str] = []
+        changed = 0
+        unreadable = 0
+        for line in lines:
+            m = _ENV_LINE.match(line)
+            if m and is_secret_env_key(m.group(2)):
+                stored = _unquote(m.group(4))
+                if is_protected_value(stored):
+                    try:
+                        line = _dotenv_line(m.group(2), decode_env_value(stored))
+                        changed += 1
+                    except VaultError:
+                        unreadable += 1
+            out.append(line)
+        if unreadable and not changed:
+            backup = _newest_backup_bytes(target.name, Path(config_dir))
+            if backup is not None:
+                _atomic_write(target, backup)
+                return ".env restored to plain text from the encrypted backup"
+            return ".env: tokens cannot be opened (other Windows user?) and there is no readable backup; left as it was"
+        if not changed:
+            return None
+        _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
+        note = f".env: {changed} Multilogin token(s) restored to plain text"
+        if unreadable:
+            note += f"; {unreadable} could not be opened and stay protected"
+        return note
+    except Exception as exc:
+        return f".env: could not restore tokens ({type(exc).__name__}); left as it was"
+
+
+# ── configured values, for scrubbers ──────────────────────────────────────────
+
+_GOOGLE_SECRET_KEYS = frozenset({"refresh_token", "token", "access_token", "id_token", "client_secret"})
+_file_cache: dict[str, tuple[tuple[int, int], frozenset[str]]] = {}
+
+
+def _google_values(path: Path) -> frozenset[str]:
+    import json
+
+    try:
+        info = path.stat()
+        signature = (info.st_mtime_ns, info.st_size)
+    except OSError:
+        return frozenset()
+    cached = _file_cache.get(str(path))
+    if cached and cached[0] == signature:
+        return cached[1]
+    values: frozenset[str] = frozenset()
+    try:
+        document = json.loads(read_secret_text(path))
+        if isinstance(document, dict):
+            values = frozenset(v for k, v in document.items()
+                               if k in _GOOGLE_SECRET_KEYS and isinstance(v, str) and len(v) >= 8)
+    except Exception:
+        values = frozenset()
+    _file_cache[str(path)] = (signature, values)
+    return values
+
+
+def configured_secret_values() -> set[str]:
+    """Plain values of this machine's tokens, for scrubbers that must hide them.
+
+    Multilogin automation tokens from the process environment and the secrets
+    in the Google token files. Never raises, never logs; a value shorter than
+    8 characters is ignored so a placeholder cannot blank ordinary text.
+    """
+    values: set[str] = set()
+    try:
+        for key, value in list(os.environ.items()):
+            if is_secret_env_key(key) and value:
+                if is_protected_value(value):
+                    try:
+                        value = decode_env_value(value)
+                    except VaultError:
+                        continue
+                if len(value) >= 8:
+                    values.add(value)
+    except Exception:
+        pass
+    try:
+        from config.paths import get_google_oauth_token_path, get_local_config_dir
+
+        folder = Path(get_local_config_dir())
+        paths = {Path(get_google_oauth_token_path())} | {folder / name for name in TOKEN_FILES}
+        for path in paths:
+            values |= _google_values(path)
+    except Exception:
+        pass
+    return values

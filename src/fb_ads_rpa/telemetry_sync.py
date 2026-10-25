@@ -232,7 +232,9 @@ def flow_version() -> str:
 def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> list[str]:
     diag = rec.get("diag")
     ok = rec.get("ok")
-    return [
+    # ACL-1358: last gate before the shared sheet - an older journal line may
+    # still hold the value of a token this machine has since stored.
+    return [run_telemetry._hide_configured_secrets(cell) for cell in [
         str(rec.get("ts", "")),
         label,
         machine_id,
@@ -244,7 +246,7 @@ def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> li
         "" if rec.get("duration_s") is None else str(rec.get("duration_s")),
         json.dumps(diag, ensure_ascii=False)[:900] if diag else "",
         str(rec.get("note", "")),
-    ]
+    ]]
 
 
 def pending(limit: int | None = None, *, since: int | None = None) -> tuple[list[list[str]], int]:
@@ -546,7 +548,7 @@ def upload(*, limit: int | None = 2000, dry_run: bool = False) -> dict[str, Any]
                 body={"values": rows},
             ).execute()
     except Exception as exc:  # noqa: BLE001 - reported, never raised
-        result["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        result["error"] = run_telemetry._hide_configured_secrets(f"{type(exc).__name__}: {exc}")[:300]
         return result
     # Advance the cursor only after the write is acknowledged: a failed upload
     # must be retried, not silently skipped.

@@ -251,9 +251,37 @@ def _hide_configured_bi(text: str) -> str:
     return text
 
 
+def _hide_configured_secrets(text: str) -> str:
+    """ACL-1358: спрятать сами значения токенов этой машины (Multilogin, Google).
+
+    Токен без имени ключа рядом (`eyJ…` в тексте ошибки, `refresh_token` в
+    выдержке страницы) шаблоны не опознают; значения берутся из окружения и
+    файлов токенов, в том числе из защищённого хранилища.
+    """
+    try:
+        from config import token_vault
+
+        for value in sorted(token_vault.configured_secret_values(), key=len, reverse=True):
+            if value in text:
+                text = text.replace(value, "<hidden>")
+    except Exception:
+        pass
+    return text
+
+
+def hide_secrets_deep(value):
+    """`_hide_configured_secrets` по всем строкам вложенной структуры (ключи тоже)."""
+    if isinstance(value, dict):
+        return {(_hide_configured_secrets(k) if isinstance(k, str) else k): hide_secrets_deep(v)
+                for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [hide_secrets_deep(v) for v in value]
+    return _hide_configured_secrets(value) if isinstance(value, str) else value
+
+
 def scrub(text: str) -> str:
     """Убрать из строки всё, по чему опознаётся аккаунт или профиль."""
-    out = _hide_configured_bi(str(text or ""))
+    out = _hide_configured_secrets(_hide_configured_bi(str(text or "")))
     for pattern, replacement in _SCRUB:
         out = pattern.sub(replacement, out)
     return out
@@ -734,7 +762,9 @@ def record(
         if diag:
             rec["diag"] = scrub_diag(diag)
         if note:
-            rec["note"] = note
+            # ACL-1358: примечание не чистится шаблонами (оно уже человеческий
+            # текст), но значение токена этой машины в нём быть не может.
+            rec["note"] = _hide_configured_secrets(note)
         # Через `acl_log`, а не `open(..., "a")`. Обоснование формата выше
         # («concurrent runs ... can't lose or truncate history») верно для
         # POSIX и неверно для Windows: там режим «a» эмулируется как «перейти
