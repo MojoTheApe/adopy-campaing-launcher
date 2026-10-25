@@ -85,11 +85,73 @@ def test_the_windows_job_runs_the_marked_files_the_smoke_set_and_the_app_smoke_c
     pythons = tuple(job["strategy"]["matrix"]["python-version"])
     assert pythons == reuse.CI_WINDOWS_PYTHONS and "3.13" in pythons
     run = _run("test-windows")
-    assert "scripts/acl_test_shard.py --platform windows 1 1" in run
+    assert '"scripts/acl_test_shard.py", "--platform", "windows", "1", "1"' in run
     assert "python scripts/acl_smoke.py" in run
     assert "python scripts/acl_scan_secrets.py" in run
     assert "python -m playwright install chromium" in run
     assert "scripts/ci_retry.sh" in run  # ACL-1710
+
+
+def _windows_plan_script():
+    step = next(s for s in JOBS["test-windows"]["steps"] if s.get("id") == "windows-test-plan")
+    assert step["shell"] == "python"
+    assert "if" not in step and not step.get("continue-on-error")
+    return step["run"]
+
+
+def test_the_actual_windows_planner_keeps_every_selected_file_once_and_isolates_global_resources(tmp_path):
+    output = tmp_path / "github-output"
+    env = dict(os.environ, GITHUB_OUTPUT=str(output))
+    result = subprocess.run([sys.executable, "-c", _windows_plan_script()], cwd=ROOT,
+                            env=env, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    values = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+    selected = subprocess.check_output([sys.executable, "scripts/acl_test_shard.py", "--platform", "windows", "1", "1"],
+                                       cwd=ROOT, text=True, timeout=30).splitlines()
+    parallel = json.loads(values["parallel_files"])
+    isolated = [values[key] for key in ("native_1309", "native_2063", "stress")]
+    assert isolated == ["tests/test_acl1309_two_windows_people.py", "tests/test_acl2063_two_windows_people.py",
+                        "tests/test_shared_file_locks.py"]
+    assert sorted(parallel + isolated) == sorted(selected)
+    assert len(set(parallel + isolated)) == len(selected)
+    steps = JOBS["test-windows"]["steps"]
+    ids = ["windows-parallel-tests", "windows-native-1309", "windows-native-2063", "windows-lock-stress"]
+    phases = [next(s for s in steps if s.get("id") == key) for key in ids]
+    assert [steps.index(s) for s in phases] == sorted(steps.index(s) for s in phases)
+    assert steps.index(next(s for s in steps if s.get("id") == "windows-test-plan")) < steps.index(phases[0])
+    assert phases[0]["env"]["WINDOWS_PARALLEL_FILES"] == "${{ steps.windows-test-plan.outputs.parallel_files }}"
+    assert "ConvertFrom-Json $env:WINDOWS_PARALLEL_FILES" in phases[0]["run"]
+    assert "python -m pytest @files -q -n auto --dist loadfile" in phases[0]["run"]
+    for phase, key in zip(phases[1:], ("native_1309", "native_2063", "stress")):
+        assert phase["env"]["WINDOWS_TEST_FILE"] == "${{ steps.windows-test-plan.outputs." + key + " }}"
+        assert 'python -m pytest "$env:WINDOWS_TEST_FILE" -q -n 0' in phase["run"]
+    for phase in phases:
+        assert "if" not in phase and not phase.get("continue-on-error")
+        assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in phase["run"]
+
+
+def test_the_actual_windows_planner_refuses_missing_or_duplicate_coverage():
+    namespace = {"__name__": "windows_ci_plan_test"}
+    exec(compile(_windows_plan_script(), "<actual-ci-windows-planner>", "exec"), namespace)
+    selected = ["tests/test_acl1309_two_windows_people.py", "tests/test_acl2063_two_windows_people.py",
+                "tests/test_shared_file_locks.py", "tests/test_acl_test_platform.py"]
+    invalid = [[], selected + selected[:1], selected[:3]]
+    invalid += [[p for p in selected if p != missing] for missing in selected[:3]]
+    for files in invalid:
+        with pytest.raises(ValueError):
+            namespace["plan_windows_tests"](files)
+    isolated = selected[:3]
+    parallel = selected[3:]
+    for wrong_parallel, wrong_isolated in (
+        ([], isolated), (parallel * 2, isolated), (parallel + isolated[:1], isolated),
+        (parallel + ["tests/test_unselected_extra.py"], isolated),
+        (parallel, isolated[:-1]), (parallel, [*isolated[:-1], "tests/test_renamed_stress.py"]),
+    ):
+        with pytest.raises(ValueError):
+            namespace["validate_windows_plan"](selected, wrong_parallel, wrong_isolated)
+    future = "tests/test_future_windows_probe.py"
+    planned, same_isolated = namespace["plan_windows_tests"]([*selected, future])
+    assert future in planned and list(same_isolated) == isolated
 
 
 @pytest.mark.parametrize("job", ["test-linux", "test-windows"])
