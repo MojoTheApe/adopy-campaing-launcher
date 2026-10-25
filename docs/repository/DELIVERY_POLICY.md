@@ -339,11 +339,26 @@ non-executable files in a separated Master package project:
 - `.workflow/template-base.json`, preserving the standard revision, file set and
   every other pristine input/file while adding the same explicit selection.
 
+Published `selection_task_fragment:[1]` support also permits one optional newly
+added `docs/system/changelog.d/PREFIX-N.md` for that actual singleton frozen task.
+Derive its public ID from the unchanged immutable B configuration, including the
+existing Issue offset and legacy alias mapping; a filename or body mention grants
+no authority. The fragment must be a normal100644 authenticated UTF-8 blob within
+the existing1MiB bound, with a nonempty exact first heading
+`## PREFIX-N — Title — YYYY-MM-DD` and a real calendar date. One UTF-8 BOM and
+universal newlines are supported. No preexisting record may be edited/deleted;
+extra/suffixed/nested/foreign-task paths, further files, unsafe modes, NULs and
+ambiguous IDs are refused. Keep these five governance changes mandatory. The task
+fragment is outside the pristine generated file set: its addition must not widen
+the four exact original template-file consequences. Existing five-file selections
+retain their previous behavior. This optional record grants no selection or
+activation permission and still needs the full ordinary reviews and delivery.
+
 The portable recorder validates the complete tree, actual Git blob identities,
 unambiguous JSON and these exact structural consequences. Independent source and
 combined review cover the full documentation text; the recorder does not contain
 a second Master renderer. Runtime, engine pin, helper/manifest, workflow, capacity,
-namespace, target, existing policies or additional-file changes require a
+namespace, target, existing policies or any further additional-file changes require a
 separate source first. Other layouts, Stage, multiple members/new selections,
 missing original receipts/review, another pending delivery or an unresolved retry
 effect stop this continuation. There is no flag that relaxes those boundaries.
@@ -366,7 +381,10 @@ effect; never redispatch a package merely because the response was lost. A final
 GET cannot make GitHub and an external target globally atomic.
 
 Source support is tracked by [TT-160](https://github.com/MojoTheApe/task-tracker/issues/160)
-and [Master54](https://github.com/MojoTheApe/master-repo/issues/54). Consumer
+and [Master54](https://github.com/MojoTheApe/master-repo/issues/54).
+[TT-203](https://github.com/MojoTheApe/task-tracker/issues/203) adds only the bounded
+optional task record and requires its own published engine/compatible Master pair.
+Consumer
 selection, real activation, reader recovery and ordinary before/after outcomes
 remain separately owned and verified.
 

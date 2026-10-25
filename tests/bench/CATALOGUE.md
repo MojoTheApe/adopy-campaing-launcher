@@ -6,12 +6,13 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**24 robot steps × 122 layouts, 67 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**25 robot steps × 123 layouts, 68 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
 | Step | Layouts | pass | xfail | reference |
 | --- | --- | --- | --- | --- |
+| Graph reconciliation after CDP session detachment | 1 | 1 | 0 | 0 |
 | objective | 5 | 5 | 0 | 0 |
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
@@ -36,6 +37,14 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 | ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 | Graph read permission diagnostics (ACL-1886) | 1 | 1 | 0 | 0 |
+
+## Graph reconciliation after CDP session detachment
+
+Robot: PageTab / InPageGraph local helper recovery before the next Graph read (ACL-1836)
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Transport trace: paused campaign/ad set, uncertain video upload, lost readback session | anonymized 2026-10-12 incident, ACL-1836 | `fb_api_session_lost_2026_10_12.json` | `tests/test_acl1836_session_recovery.py` | one reattach to the same verified owned target; no replay of sent calls; unavailable/changed target becomes a typed stop | pass |
 
 ## objective
 

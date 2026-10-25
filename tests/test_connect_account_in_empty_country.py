@@ -68,11 +68,11 @@ def test_the_dead_end_text_is_gone():
     ещё и сообщение «No countries yet» — там совет уместен: подключать
     действительно негде, пока нет ни одной страны.
     """
-    body = MAP.read_text(encoding="utf-8")
-    branch = body[body.index("has workbook money"):]
-    branch = branch[: branch.index("{% endif %}")]
+    # Render the virtual-country branch instead of slicing at source-specific prose.
+    branch = _render(virtual=True)
     assert "Accounts section" not in branch, "совет идти в другой раздел остался"
     assert "Connect one below" in branch, "не сказано, что подключить можно тут же"
+    assert 'data-amap-country="Guatemala"' in branch and 'class="amap-add"' in branch
 
 
 # ── отрисовка ─────────────────────────────────────────────────────────────

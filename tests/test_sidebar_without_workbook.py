@@ -22,6 +22,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -48,14 +50,44 @@ def _piece() -> str:
     return piece.replace('{% include "_account_map.html" %}', "MAP")
 
 
-def _render(countries, *, date_from="2026-09-09", date_to=None, dates=("2026-09-07", "2026-09-08")):
+def _render(countries, *, date_from="2026-09-09", date_to=None, dates=("2026-09-07", "2026-09-08"), source_info=None):
+    account_map = {"date_from": date_from, "date_to": date_from if date_to is None else date_to, "dates": list(dates)}
+    if source_info is not None:
+        account_map["source_info"] = source_info
     return templates.env.from_string(_piece()).render(
         report={"countries": list(countries)},
-        account_map={"date_from": date_from, "date_to": date_from if date_to is None else date_to, "dates": list(dates)},
+        account_map=account_map,
     )
 
 
 ONE_COUNTRY = [{"country": "Saudi Arabia"}]
+
+
+@pytest.mark.parametrize("sources,caption,advice", [
+    (["workbook"], "The workbook has no rows", "the workbook may need updating"),
+    (["bi"], "The BI data have no rows", "the statistics source may need updating"),
+    (["bi", "workbook"], "The selected statistics have no rows", "the statistics source may need updating"),
+    ([], "The selected statistics have no rows", "the statistics source may need updating"),
+])
+@pytest.mark.parametrize("dates", [("2026-09-07", "2026-09-08"), ()])
+def test_empty_period_names_its_actual_source_without_losing_dates_or_map(sources, caption, advice, dates):
+    out = _render([], source_info={"sources": sources}, dates=dates)
+    assert caption in out and advice in out
+    assert "2026-09-09" in out
+    if dates:
+        assert "It runs to 2026-09-08" in out
+    else:
+        assert "readable dates" in out and "It runs to" not in out
+    assert out.count('id="workbook-period-notice"') == 1 and out.count("MAP") == 1
+    if sources != ["workbook"]:
+        assert "The workbook has no rows" not in out and "the workbook may need updating" not in out
+
+
+@pytest.mark.parametrize("sources", [["bi"], ["bi", "workbook"]])
+@pytest.mark.parametrize("start,end", [("2026-09-08", "2026-09-08"), ("2026-09-06", ""), ("", "2026-09-08")])
+def test_source_aware_covered_and_open_periods_do_not_show_a_false_empty_notice(sources, start, end):
+    out = _render(ONE_COUNTRY, date_from=start, date_to=end, source_info={"sources": sources})
+    assert 'id="workbook-period-notice"' not in out
 
 
 # ── период, которого книга не знает ───────────────────────────────────────
@@ -70,12 +102,12 @@ def test_a_period_outside_the_workbook_names_itself():
 
 def test_a_period_the_workbook_covers_says_nothing():
     out = _render(ONE_COUNTRY, date_from="2026-09-08")
-    assert "The workbook has no rows" not in out
+    assert 'id="workbook-period-notice"' not in out
 
 
 def test_all_dates_says_nothing():
     """У «всех дат» периода нет, и жаловаться не на что."""
-    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="")
+    assert 'id="workbook-period-notice"' not in _render(ONE_COUNTRY, date_from="")
 
 
 def test_a_workbook_with_no_dates_at_all_still_speaks():
@@ -113,14 +145,14 @@ def test_this_check_would_notice_the_old_behaviour():
         report={"countries": ONE_COUNTRY},
         account_map={"date_from": "2026-09-09", "dates": ["2026-09-08"]},
     )
-    assert "The workbook has no rows" not in out, (
+    assert 'id="workbook-period-notice"' not in out, (
         "прежнее условие сообщение показывает — значит проверка ничего не ловит"
     )
 
 
 def test_a_range_with_rows_after_its_first_day_is_not_empty():
     out = _render(ONE_COUNTRY, date_from="2026-09-06", date_to="2026-09-08")
-    assert "The workbook has no rows" not in out
+    assert 'id="workbook-period-notice"' not in out
 
 
 def test_a_gap_inside_the_workbook_is_empty():
@@ -129,14 +161,14 @@ def test_a_gap_inside_the_workbook_is_empty():
 
 
 def test_open_ended_periods_match_the_report_filter():
-    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="2026-09-06", date_to="")
-    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="", date_to="2026-09-08")
+    assert 'id="workbook-period-notice"' not in _render(ONE_COUNTRY, date_from="2026-09-06", date_to="")
+    assert 'id="workbook-period-notice"' not in _render(ONE_COUNTRY, date_from="", date_to="2026-09-08")
     out = _render(ONE_COUNTRY, date_from="", date_to="2026-09-06")
     assert "The workbook has no rows" in out and "dates through 2026-09-06" in out
 
 
 def test_a_partial_overlap_is_not_described_as_no_rows():
-    assert "The workbook has no rows" not in _render(ONE_COUNTRY, date_from="2026-09-08", date_to="2026-09-12")
+    assert 'id="workbook-period-notice"' not in _render(ONE_COUNTRY, date_from="2026-09-08", date_to="2026-09-12")
 
 
 def _full_page(countries=True):

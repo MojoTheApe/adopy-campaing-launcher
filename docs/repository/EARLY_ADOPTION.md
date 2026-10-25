@@ -1,6 +1,50 @@
 # ACL early adoption: released support, then separate owned selections
 
-## Current instruction pin
+## Current executable provider: ACL-2156 candidate — 24 October 2026
+
+The owner selected the separately published standalone Task Tracker3.14.1
+provider at `771d55f3317397e7d56471aa966f0a9de37d1a2e`. Read
+[the exact ACL adoption boundary](STANDALONE_PROVIDER_ACL.md). Master1.8.0
+`fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` remains the unchanged documentation
+reference; this opt-in route needs no Master write or companion publication.
+The native configuration, adopted execution3/5-5-5, disabled Stage, product,
+target, required checks, owners, IDs and original requirements are preserved.
+The descriptor uses the source-owned immutable private-checkout transport; its
+dedicated read-only access requires the separate operator authorization and
+actual trusted-branch verification. Source selection is not live optional-policy
+adoption or verified delivery.
+This migration retains normal source/combined review, frozen-batch admission,
+actual Main checks and the expressly authorized stable package receipt.
+
+ACL-2046's ordinary terminal fold and ACL-2099's separate one-policy selection
+remain their own full tasks. Deliver the former before the latter. Retain the
+real preselection configuration for the latter's own frozen package continuation;
+do not remove a selected key to fabricate an operative config. All readiness,
+every-writer, recovery and separately owned idle adoption controls below remain.
+
+## Earlier instruction pin: ACL-2079 — retained history
+
+[ACL-2079](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1079)
+selects published Master1.8.0
+`fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` and Tracker3.10.0
+`e71c9829247e60d79031dbb1bb038896fcedf4cc` for compatible shared support.
+The exact upstream main checks, immutable Python3.9 pair and canonical skill
+mirror/catalog passed. Ordinary source approval, frozen integration, independent
+combined review and actual main checks still apply to this consumer candidate.
+Use the actual current-main pinned ACL adapter for ownership and admission;
+the candidate cannot authorize itself. Compatible deployed readers must precede
+new isolated receipt writers. Source/skill publication is not ACL adoption.
+
+Tracker config, non-pin descriptor choices, ACL operator/adoption safeguards,
+capacities, original scopes/history and genuine publication requests remain
+unchanged. Canonical process_support1 and instruction schema1 are retained;
+isolated_verification1 supplies a separate bounded supplemental outcome only
+after all original admission/acceptance and actual independent isolation/run
+evidence. It neither activates an optional policy nor publishes an unchanged
+installer. ACL-2071 completion and ACL-2069's original owner/scope remain separate.
+See [current boundary evidence](PROCESS_SUPPORT_ACL.md).
+
+## Earlier ACL-2026 instruction pin: 2026-10-20 history
 
 [ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026)
 selects published Master 1.7.2
@@ -70,6 +114,7 @@ use the guarded ACL adapter as mapped in [AGENTS.md](../../AGENTS.md).
 | Execution v3, five Workers/five source reviews/batch five | Yes | Existing activated choice, preserved; no repeat migration |
 | No Stage, permanent stage retained | Yes | Existing activated choice, preserved |
 | Process instructions schema1 | Yes | Existing activated choice and exact checks, preserved |
+| Isolated manual verification completion | isolated_verification1, published Tracker3.10.0 | ACL-2079 candidate only; requires deployed reader, admitted main adoption and original independent acceptance/isolation/run evidence |
 | Readiness, terminal journal, Approved compatibility | Context1, plus separately selected modern Context2 | Absent; the initial pilot retains Context1 rather than importing modern defaults |
 | Accepted-scope completion | Completion1 | Absent; no completion-state transition here |
 | Bounded full retry and accounting | Retry1 and independent read-only report | Retry absent; retained accounting works without state/engine activation |
