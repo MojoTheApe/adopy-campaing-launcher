@@ -446,7 +446,7 @@ def _pct(v: Optional[float]) -> str:
     return "—" if v is None else f"{v:.1f}%"
 
 
-def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
+def home_kpi_tiles(cmp_: Dict[str, Any], *, money=None) -> List[Dict[str, Any]]:
     """Шесть плиток Home: FTDs, CPA, Leads, CPL, Spend, Lead→FTD.
 
     Каждая плитка — готовые строки для шаблона: «вы», «другие», пояснение и
@@ -455,6 +455,7 @@ def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
     у Workbench). Объёмные плитки (FTDs, Leads, Spend) не сравниваются: у
     байеров разный размер, «лучше/хуже» по ним ничего не значит.
     """
+    source_money = money or _money
     th = cmp_["thresholds"]
     you, oth, st = cmp_["you"], cmp_["others"], cmp_["status"]
     metrics = cmp_["metrics"]
@@ -468,7 +469,7 @@ def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
         state = m[f"{side}_state"]
         if state == "unavailable":
             return "— · 0 FTDs" if (name == "cpa" and k["spend"] > 0 and not k["ftds"]) else "—"
-        return _pct(m[side]) if name == "cr" else _money(m[side])
+        return _pct(m[side]) if name == "cr" else source_money(m[side])
 
     def ratio(name: str, label: str, caption: str) -> Dict[str, Any]:
         m = metrics[name]
@@ -507,6 +508,6 @@ def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
         ratio("cpa", "CPA", ""),
         volume("leads", "Leads", n),
         ratio("cpl", "CPL", ""),
-        volume("spend", "Spend", _money),
+        volume("spend", "Spend", source_money),
         ratio("cr", "Lead → FTD", ""),
     ]

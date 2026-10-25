@@ -3,7 +3,7 @@
   clickable <tr>. It MUST emit exactly ONE <tr> with ONE <td colspan="N">,
   or the browser foster-parents it out of the table.
 #}
-{% import "_metrics.html" as mx %}
+{% import "_metrics.html" as mx with context %}
 <tr class="drill-detail">
   <td colspan="{{ ncols }}">
     <div class="drill-inner">

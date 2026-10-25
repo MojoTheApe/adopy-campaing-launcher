@@ -193,7 +193,7 @@ def test_policy_refuses_degrees_of_freedom_spec_below_the_top(story):
 @pytest.mark.parametrize("edge,params", [
     ("adcreatives", {"name": "x", "object_story_spec": {"page_id": "1", "link_data": {"enroll_status": "OPT_IN"}}}),
     ("adcreatives", {"name": "x", "object_story_spec": '{"page_id": "1", "enroll_status": "OPT_IN"}'}),
-    ("adsets", {"name": "s", "status": "PAUSED", "targeting": {"enroll_status": "OPT_IN"}}),
+    ("adsets", {"name": "s", "status": "PAUSED", "targeting": {"geo_locations": {"enroll_status": "OPT_IN"}}}),
     ("campaigns", {"name": "c", "status": "PAUSED", "adlabels": [{"name": "l", "enroll_status": "OPT_IN"}]}),
 ])
 def test_policy_refuses_opt_in_outside_degrees_of_freedom_spec(edge, params):
@@ -246,7 +246,7 @@ const creative = (v) => ({ name: 'x', object_story_spec: { page_id: '1' },
   out.opt_in_outside = await h.call({ method: 'POST', path: PATH,
     params: { name: 'x', object_story_spec: { page_id: '1', link_data: { enroll_status: 'OPT_IN' } } } });
   out.opt_in_targeting = await h.call({ method: 'POST', path: PATH.replace('/adcreatives', '/adsets'),
-    params: { name: 's', status: 'PAUSED', targeting: { enroll_status: 'OPT_IN' } } });
+    params: { name: 's', status: 'PAUSED', targeting: { geo_locations: { enroll_status: 'OPT_IN' } } } });
   out.calls = calls.length;
   process.stdout.write(JSON.stringify(out));
 })();

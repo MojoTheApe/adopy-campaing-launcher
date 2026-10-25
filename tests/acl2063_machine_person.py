@@ -16,11 +16,15 @@ import traceback
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from tests.synthetic_json_ipc import read_json
+
 
 def write(path, value):
+    from config.paths import _replace_when_free
+
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value), encoding='utf-8')
-    os.replace(temporary, path)
+    _replace_when_free(temporary, path)
 
 
 def main():
@@ -63,7 +67,7 @@ def main():
     def reader(account, trigger):
         trace = ipc / 'trace.json'
         with machine_file_lock(ipc / 'trace.lock', timeout=10):
-            value = json.loads(trace.read_text()) if trace.exists() else {'active': 0, 'max': 0, 'reads': []}
+            value = read_json(trace) if trace.exists() else {'active': 0, 'max': 0, 'reads': []}
             assert value['active'] == 0, 'two actual machine readers overlapped'
             value['active'] += 1
             value['max'] = max(value['max'], value['active'])
@@ -71,7 +75,7 @@ def main():
             write(trace, value)
         time.sleep(.04)
         with machine_file_lock(ipc / 'trace.lock', timeout=10):
-            value = json.loads(trace.read_text()); value['active'] -= 1; write(trace, value)
+            value = read_json(trace); value['active'] -= 1; write(trace, value)
         if mode[0] == 'checkpoint':
             return ci.Snapshot(account=account, state='failed', stop='checkpoint',
                                finished_at_utc=stamp.isoformat(), error='synthetic checkpoint')
@@ -118,7 +122,7 @@ def main():
         deadline = time.monotonic() + 240
         while time.monotonic() < deadline:
             command = ipc / (label + '.command.json')
-            value = json.loads(command.read_text()) if command.exists() else {}
+            value = read_json(command) if command.exists() else {}
             if value.get('sequence', 0) <= sequence:
                 time.sleep(.02); continue
             sequence = value['sequence']; action = value['action']; extra = {}
@@ -172,6 +176,6 @@ if __name__ == '__main__':
         if len(sys.argv) > 2:
             settings = json.loads(Path(sys.argv[1]).read_text())
             path = Path(settings['ipc']) / (sys.argv[2] + '.json')
-            previous = json.loads(path.read_text()) if path.exists() else {}
+            previous = read_json(path) if path.exists() else {}
             write(path, {**previous, 'phase': 'error', 'error': traceback.format_exc()})
         raise

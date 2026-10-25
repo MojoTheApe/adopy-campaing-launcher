@@ -35,13 +35,19 @@ MAX_HEADLINE = 40
 MAX_PRIMARY_VISIBLE = 125
 AGE_MIN, AGE_MAX = 18, 65
 
-#: Допустимые CTA по цели кампании. Билдер сегодня шлёт только LEARN_MORE; список — те CTA
-#: для лидов, которые принимает Meta для ссылочного/лид-креатива.
+#: Допустимые CTA по цели кампании и месту конверсии (ACL-1767). Единый список - в
+#: `write_policy` (CTA_WEBSITE / CTA_FORM): тот же набор разрешает и политика записи.
+#: Ключ `<цель>_instant_form` - список для лид-формы.
+from src.fb_api import write_policy as _wp  # noqa: E402
+
 ALLOWED_CTA = {
-    "leads": ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
-              "DOWNLOAD", "GET_OFFER"),
+    "leads": _wp.CTA_WEBSITE,
+    "leads_instant_form": _wp.CTA_FORM,
 }
 DEFAULT_OBJECTIVE = "leads"
+#: Версия iOS/Android: «14» или «14.0»; старт набора: «YYYY-MM-DDTHH:MM» (ACL-1767).
+_OS_MIN_RE = r"^[0-9]{1,2}(\.[0-9]{1,2})?$"
+_START_RE = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$"
 
 #: Минимальный дневной бюджет Meta по валюте кабинета, в единицах валюты (не в центах).
 #: Meta не публикует полной таблицы по валютам (Marketing API: «bid and budget are at the
@@ -144,6 +150,12 @@ RULES: list[dict[str, Any]] = [
        sel='[name$="_budget"]', level="campaign"),
     _r("age_range", "Age 18-65", ERROR, "client", "age must be between 18 and 65, and min not above max",
        sel='[name$="_age"]', level="adset"),
+    _r("devices_consistent", "Devices and OS version fit together", ERROR, "client",
+       "iOS and Android are mobile only (not desktop only), and a minimum version needs iOS or Android "
+       "and looks like 14 or 14.0", sel='[name$="_os"]', level="adset"),
+    _r("start_time_valid", "Start time", ERROR, "client",
+       "enter the start as date and time, not earlier than today (ad account time zone)",
+       sel='[name$="_start_time"]', level="adset"),
     _r("ad_names_unique", "Ad names are unique", ERROR, "client",
        "give the ads different creatives or texts: their names must differ inside a campaign",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -163,7 +175,9 @@ def export_rules() -> dict[str, Any]:
         "rules": RULES,
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
-                   "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE},
+                   "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
+                   "os_min_re": _OS_MIN_RE, "os_versions": {k: list(v) for k, v in _wp.OS_VERSIONS.items()},
+                   "start_re": _START_RE},
     }
 
 
@@ -180,7 +194,9 @@ def load_json() -> dict[str, Any]:
 # Вход аудита (одна кампания; сегодня у неё один набор объявлений):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}]}
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
+#    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
+#    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
@@ -244,7 +260,8 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "primary_len":
             out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
-            allowed = ALLOWED_CTA.get(_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE, ())
+            key = (_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE) + ("_instant_form" if dest == "instant_form" else "")
+            allowed = ALLOWED_CTA.get(key, ())
             out.append(_per_ad(rid, inp, lambda a: (_s(a.get("cta")) or "LEARN_MORE") not in allowed))
         elif rid == "budget_set":
             b = inp.get("budget")
@@ -261,6 +278,28 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             except (TypeError, ValueError):
                 good = False
             out.append(_v(rid, OK if good else ERROR))
+        elif rid == "devices_consistent":
+            os_ = _s(inp.get("os")).lower() or "all"
+            dev, ver = _s(inp.get("device")).lower(), _s(inp.get("os_min"))
+            mobile = os_ in ("ios", "android")
+            if mobile and dev == "desktop":
+                out.append(_v(rid, ERROR, "mobile_os_desktop"))
+            elif ver and not mobile:
+                out.append(_v(rid, ERROR, "version_needs_os"))
+            elif ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
+                out.append(_v(rid, ERROR, "bad_version"))
+            else:
+                out.append(_v(rid, OK))
+        elif rid == "start_time_valid":
+            st, now = _s(inp.get("start_time")), _s(inp.get("now"))
+            if not st:
+                out.append(_v(rid, OK))
+            elif not re.fullmatch(_START_RE, st):
+                out.append(_v(rid, ERROR, "format"))
+            elif re.fullmatch(_START_RE, now) and st[:10] < now[:10]:
+                out.append(_v(rid, ERROR, "past"))
+            else:
+                out.append(_v(rid, OK))
         elif rid == "ad_names_unique":
             names = [_s(a.get("name")) for a in ads]
             dup = {n for n in names if n and names.count(n) > 1}
@@ -447,7 +486,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
 
     resolver = creator.resolver
     guarded("country_resolves", lambda: (resolver.country(plan.country), put("country_resolves", OK)))
-    guarded("language_resolves", lambda: (resolver.locale(plan.language), put("language_resolves", OK)))
+
+    def languages() -> None:
+        resolver.locale(plan.language)
+        for s in plan.ad_sets:          # ACL-1767: дополнительные языки - тоже только точные совпадения
+            for extra in s.languages:
+                resolver.locale(extra)
+        put("language_resolves", OK)
+    guarded("language_resolves", languages)
 
     def interests() -> None:
         for s in plan.ad_sets:

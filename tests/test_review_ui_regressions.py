@@ -118,7 +118,7 @@ function cell() {
   return {dataset:{account:'Acc',running:'1'},closest:()=>row,btn,status,set innerHTML(v){this.firstChild={};}};
 }
 const cells=[cell(),cell()];
-const ctx={window:{addEventListener(){}},document:{readyState:'loading',addEventListener:(e,fn)=>callbacks[e]=fn,querySelectorAll:s=>s.startsWith('.amap-live')?cells:[]},
+const ctx={window:{addEventListener(){}},document:{readyState:'loading',getElementById:id=>id==='acl-source-info'?{dataset:{sourceName:'the selected source data'}}:null,addEventListener:(e,fn)=>callbacks[e]=fn,querySelectorAll:s=>s.startsWith('.amap-live')?cells:[]},
   amapPeriod:()=>({from:'2026-09-06',to:'2026-09-06'}),
   setTimeout:fn=>queue.push(fn),
   fetch:async url=>{requests.push(url);return {json:async()=>({ok:true,reading:{state:'ok',spend:1234.56,currency:'EUR',status:'disabled',status_text:'Account disabled',finished_at:'now'}})};},

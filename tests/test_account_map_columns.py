@@ -15,10 +15,8 @@ TPL = (
     / "src" / "web" / "templates" / "_account_map_country.html"
 )
 
-#: порядок, о котором просил пользователь: спенд из книги, спенд с кабинета,
-#: затем лиды, депозиты и производные, и состояние кабинета последним.
-#: «On account» переименовано в «Account spend» — прежнее название читалось
-#: как состояние, а состояние теперь стоит рядом отдельной колонкой.
+#: Source spend remains; newer ACL-2063 replaces the Meta amount with list status.
+#: Leads, FTDs, ratios and account status keep their established relative order.
 WANT = ["Account", "Spend", "Campaign list", "Leads", "FTDs", "CPL", "CPA", "CR", "Status"]
 
 
@@ -70,9 +68,13 @@ def test_the_drill_no_longer_needs_a_hand_written_width():
 
 
 def test_workbook_spend_is_kept_and_meta_spend_is_replaced_by_structure_status():
-    """Рядом стоят два спенда — из книги и с кабинета. Порознь их путают."""
+    """Keep the actual source caption without restoring the retired Meta column."""
     t = TPL.read_text(encoding="utf-8")
     head = t[t.index("<thead>"): t.index("</thead>")]
-    assert "workbook" in head, "не сказано, что первый спенд — из книги"
-    assert "Campaign list" in head and "Account spend" not in head
+    from src.web.app import templates
+    # ACL-103 source captions and newer ACL-2063 structure-only columns both apply.
+    for description in ("the Stats workbook", "the BI data", "the selected source data"):
+        shown = templates.env.from_string(head).render(amap={"source_info": {"description": description}})
+        assert f"Spend from {description} for the chosen period" in shown
+        assert "Campaign list" in shown and "Account spend" not in shown
     assert "amap-live" not in t and "amapReadSpend" not in t

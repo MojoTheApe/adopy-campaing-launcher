@@ -47,6 +47,11 @@ class Dashboard:
         self.entered, self.release = threading.Event(), threading.Event()
         self.hold = False
         self.now = datetime(2026, 10, 24, 8).astimezone().timestamp()
+        # The queue and rendered snapshot age must use the same fixture clock.
+        # Clone this module's binding; never patch the shared stdlib time module.
+        inventory_clock = SimpleNamespace(**vars(ci.time))
+        inventory_clock.time = lambda: self.now
+        monkeypatch.setattr(ci, 'time', inventory_clock)
         monkeypatch.setenv('ACL_AUTO_REFRESH', '1')
         monkeypatch.setenv('ACL_FB_BACKEND', 'api')
         monkeypatch.setattr(ar, 'dashboard_accounts', lambda: list(self.accounts))

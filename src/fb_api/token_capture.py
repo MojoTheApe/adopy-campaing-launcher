@@ -210,7 +210,7 @@ _HELPER_JS = r"""
         const low = String(k).toLowerCase();
         if (WRITE.forbidden.indexOf(low) >= 0) return false;
         // Ревью R6: degrees_of_freedom_spec — только на верхнем уровне креатива.
-        if (low === 'degrees_of_freedom_spec' && depth > 0) return false;
+        if ((low === 'degrees_of_freedom_spec' || low === WRITE.multi_ads_key) && depth > 0) return false;
         if (WRITE.opt_out_keys.indexOf(low) >= 0) { if (value[k] !== 'OPT_OUT') return false; }
         else if (low.indexOf('status') >= 0 && value[k] !== 'PAUSED') return false;
         if (!statusOk(value[k], depth + 1)) return false;
@@ -295,6 +295,34 @@ _HELPER_JS = r"""
       return copy;
     }
     return checked;
+  }
+
+  // ACL-1767: зеркало write_policy._check_multi_ads / _check_cta / _check_targeting.
+  function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+  function multiAdsOk(v) {
+    return isObj(v) && Object.keys(v).length === 1 && v.enroll_status === 'OPT_OUT';
+  }
+  function ctaOk(spec, onAd) {
+    if (!isObj(spec)) return true;
+    const allowed = onAd ? WRITE.cta_form : WRITE.cta_website;
+    for (const fmt of WRITE.lead_form.formats) {
+      const data = spec[fmt];
+      if (!isObj(data) || !('call_to_action' in data)) continue;
+      const cta = data.call_to_action;
+      if (!isObj(cta) || allowed.indexOf(cta.type) < 0) return false;
+    }
+    return true;
+  }
+  function listOf(v, ok) { return Array.isArray(v) && v.length > 0 && v.every(ok); }
+  function targetingOk(t) {
+    if (!isObj(t)) return false;
+    const T = WRITE.targeting;
+    for (const k of Object.keys(t)) if (T.keys.indexOf(k) < 0) return false;
+    if ('genders' in t && !listOf(t.genders, (x) => Number.isInteger(x) && T.genders.indexOf(x) >= 0)) return false;
+    if ('device_platforms' in t && !listOf(t.device_platforms, (x) => T.devices.indexOf(x) >= 0)) return false;
+    if ('user_os' in t && !listOf(t.user_os, (x) => typeof x === 'string' && new RegExp(T.user_os_re).test(x))) return false;
+    if ('locales' in t && !listOf(t.locales, (x) => Number.isInteger(x) && x > 0)) return false;
+    return true;
   }
 
   // ACL-1776: отдельная цепочка создания формы лидов (зеркало
@@ -456,6 +484,9 @@ _HELPER_JS = r"""
         if (ik.length !== 1 || ik[0] !== 'enroll_status' || it.enroll_status !== 'OPT_OUT') return refused('dof');
       }
     }
+    if ('contextual_multi_ads' in checked && !multiAdsOk(checked.contextual_multi_ads)) return refused('multi_ads');
+    if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
+    if (edge === 'adsets' && 'targeting' in checked && !targetingOk(checked.targeting)) return refused('targeting');
     // Объявление — только ссылка на готовый креатив.
     if (edge === 'ads' && 'creative' in checked) {
       const c = checked.creative;

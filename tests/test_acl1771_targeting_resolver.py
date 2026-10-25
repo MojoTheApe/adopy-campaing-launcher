@@ -558,3 +558,39 @@ def test_check_plan_renders_candidates_and_saved_choices_without_substitution():
     assert 'Role [work_positions]' in html and 'data-act="clear-target"' in html
     assert tr.UNKNOWN_MESSAGE in unescape(html)
     assert out['fetched'] == [{'url': '/publish-plan', 'dry_run': '1', 'activate': '0'}]
+
+
+def test_editing_the_term_text_drops_the_previous_pick(web):
+    """A candidate shown for "Forex Trading" cannot be confirmed for an edited term text."""
+    tr.register_candidates([{"term": "Forex Trading", "state": "pending",
+                             "candidates": [{"id": "6", "type": "interests", "name": "Forex Trading Tips"}],
+                             "suggested": {"id": "6", "type": "interests", "name": "Forex Trading Tips"}}])
+    code, _ = _call(web.targeting_resolver_confirm, {"term": "Forex Trading Pro", "id": "6", "type": "interests"})
+    assert code == 400, "the edited text has no shown candidate; nothing carries over"
+    assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+def test_ambiguous_term_lists_every_near_candidate_and_picks_none(tmp_path):
+    near = {"yoga": [{"id": "1", "name": "Yoga Classes"}, {"id": "2", "name": "Yoga Mats"},
+                     {"id": "3", "name": "Hot Yoga"}]}
+    res = _one(_resolver(FakeSearch(interests=near), tmp_path), "yoga")
+    assert res["state"] in ("pending", "unresolved") and res["picks"] == []
+    assert {c["name"] for c in res["candidates"]} == {"Yoga Classes", "Yoga Mats", "Hot Yoga"}
+    with pytest.raises(cr.TargetingUnresolved):
+        cr.TargetingResolver(FakeSearch(interests=near), _store(tmp_path)).interests([["yoga"]])
+
+
+def test_audience_languages_and_detailed_targeting_share_one_resolver(tmp_path):
+    """ACL-1767 locale names and ACL-1771 terms live side by side on TargetingResolver."""
+
+    class Both(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if params and params.get("type") == "adlocale":
+                return [{"key": 23, "name": "Spanish (All)"}]
+            return super().get_all(path, params, max_pages=max_pages)
+
+    resolver = cr.TargetingResolver(Both(valid={"Forex": ("Forex", "5")}), _store(tmp_path))
+    assert resolver.locale("Spanish") == 23 and resolver.locale_names == {"Spanish": "Spanish (All)"}
+    spec = resolver.interests([["forex"]])
+    assert spec == [{"interests": [{"id": "5", "name": "Forex"}]}]
+    assert resolver.targeting_report()[0]["state"] == "exact"

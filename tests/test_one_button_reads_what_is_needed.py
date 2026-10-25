@@ -427,10 +427,21 @@ def test_the_status_route_asks_for_countries_on_the_press_that_changed_the_money
 
 
 def test_the_row_says_which_spend_its_country_split_explains():
-    """ACL-2063 removes Meta spend/split cells; the remaining spend is BI."""
+    """Keep the actual source caption and ACL-2063's removal of Meta split cells."""
+    import pandas as pd
+    from src.analysis_agent import bi_compare
+    from src.web.app import templates
+
     row = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
     assert 'class="amap-live' not in row and 'class="amap-list"' in row
-    assert 'Spend from the stats workbook for the chosen period' in row
+    head = row[row.index("<thead>"):row.index("</thead>")]
+    for sources, description in [(None, "the selected statistics"),
+            (["workbook"], "the Stats workbook"), (["bi"], "the BI data"),
+            (["bi", "workbook"], "the selected source data")]:
+        info = bi_compare.provenance(frame=pd.DataFrame({"_stats_source": sources})) if sources else None
+        shown = templates.env.from_string(head).render(amap={"source_info": info})
+        assert f'Spend from {description} for the chosen period' in shown
+        assert 'Campaign list' in shown and 'Account spend' not in shown
 
 
 def test_a_never_split_account_is_not_read_from_disk_twice(stores):
