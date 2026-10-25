@@ -1,9 +1,9 @@
 """Shared assertions for real processes and real Windows standard users."""
-import json
 from pathlib import Path
 import time
 
 from tests.acl2063_machine_person import write
+from tests.synthetic_json_ipc import read_json
 
 
 class MachinePeople:
@@ -17,7 +17,7 @@ class MachinePeople:
         while time.monotonic() < deadline:
             path = self.ipc / (person + '.json')
             if path.exists():
-                value = json.loads(path.read_text())
+                value = read_json(path)
                 assert value.get('phase') != 'error', value
                 if predicate(value):
                     return value
@@ -54,7 +54,7 @@ class MachinePeople:
             actual_reads += sum(v['reads'] for v in drained)
         assert not any(v['state']['queued'] for v in drained), drained
         assert actual_reads == 3
-        trace = json.loads((self.ipc / 'trace.json').read_text())
+        trace = read_json(self.ipc / 'trace.json')
         assert trace['max'] == 1 and trace['active'] == 0
         assert sorted(row[1] for row in trace['reads']) == ['A', 'B', 'C']
         for p in self.people:

@@ -257,3 +257,11 @@ without confirmation freezes the work clock and shows activity unconfirmed;
 it never frees a claim. Do not run a detached heartbeat or impersonate another
 executor. Missing producers and historical gaps remain unknown. Installing a
 pin does not restart existing agents or select a new execution policy.
+
+The separately labeled current-stage clock includes waiting, not measured work.
+A recorded new stage starts its clock; explicit pause freezes it and supported
+resume continues it. Backlog has no clock; missing entry facts stay unknown.
+Activity loss does not restart a stage or release ownership. Confirmed
+Work/Review/Merge totals remain in task details. Compatible successful owned
+launch/resume commands seed only that caller's first report; minute renewal still
+requires the actual executor or its real foreground child wrapper.
