@@ -33,6 +33,7 @@ from typing import Any, Callable
 
 from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
+from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api import instagram as _ig
@@ -221,6 +222,8 @@ class AdPlan:
     form_id: str = ""
     #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
     form_template: dict | None = None
+    #: ACL-2180: «Form locale: ES_LA (Spanish, Colombia)», если шаблон с locale Auto (иначе пусто).
+    form_locale_note: str = ""
 
 
 @dataclass
@@ -361,7 +364,14 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
                     else:
-                        plan_set.ads[-1].form_template = clean
+                        try:   # ACL-2180: Auto -> код из языка и страны, до любой записи
+                            clean, note = _fl.resolve_template(
+                                clean, str(getattr(draft, "language", "") or ""), str(draft.country or ""))
+                        except _fl.LocaleRefused as exc:
+                            problems.append(f"Ad {i}: {exc}")
+                        else:
+                            plan_set.ads[-1].form_template = clean
+                            plan_set.ads[-1].form_locale_note = note
             elif plan_set.instant and not plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms "
                                 "or a template)")
@@ -1944,6 +1954,8 @@ class CampaignCreator:
                     if ad.form_template:
                         step = self._form_steps.get(ad.form_template["id"])
                         item["form_template"] = ad.form_template["name"]
+                        if ad.form_locale_note:
+                            item["form_locale"] = ad.form_locale_note
                         if step is not None:
                             item["form_name"] = step.form_name
                             item["form_id"] = step.existing_id
