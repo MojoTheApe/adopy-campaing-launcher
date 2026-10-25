@@ -193,6 +193,10 @@ class SpendReading:
     source: str = "rpa"           # rpa | token
     spend: float | None = None
     currency: str = ""
+    # Канонические единицы отдельно от знака валюты, который уже читает экран.
+    currency_code: str = ""
+    timezone: str = ""
+    day_boundary: str = ""
     state: str = "idle"           # idle | running | ok | failed
     how: str = ""                 # каким приёмом прочитано — чтобы знать, что сломалось
     error: str = ""
@@ -386,6 +390,10 @@ def _restore_reading(key: str, raw: dict) -> SpendReading:
     known = SpendReading.__dataclass_fields__
     reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
     if reading.source == "api":
+        if not reading.currency_code:
+            from src.analysis_agent.bi_compare import currency_code
+
+            reading.currency_code = currency_code(reading.currency)
         # API-чтения до 10.10 сохраняли ISO-код («USD 179.47» не влезал в ячейку);
         # показываем знаком, как новые чтения (`account_spend_api.display_currency`).
         reading.currency = _API_SIGNS.get(str(reading.currency or "").strip().upper(), reading.currency)
@@ -533,6 +541,8 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     if entry is None:
         raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    if not profile:
+        raise ProfileLeaseError(f"{account} has no profile_id in the account map.")
     return physical_profile_key(profile)
 
 
@@ -1268,6 +1278,10 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
         out["act"] = act
         out["account_name"] = _ads_manager_account_name(page)
         out["ok"] = True
+        # ACL-142: Ads Manager без параметров открывает кабинет профиля ПО
+        # УМОЛЧАНИЮ. Прочитанное — предложение, а не выбор: экран обязан
+        # дать человеку подтвердить его или вписать другой номер.
+        out["needs_confirmation"] = True
         return out
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
         out["error"] = f"{type(exc).__name__}: {exc}"

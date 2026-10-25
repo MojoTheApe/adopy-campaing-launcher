@@ -736,19 +736,19 @@ def test_the_takeover_and_teach_loops_send_the_heartbeat(monkeypatch):
     def beat():
         beats.append(1)
         pacing.release_takeover()
-        pacing._TEACH_WAITING = False
+        pacing.end_teach_wait()
 
     monkeypatch.setattr(job_cancel, "heartbeat", beat)
     pacing.request_takeover()
     try:
         assert pacing.wait_for_human_release(None, max_wait_s=5) is True
         assert len(beats) == 1
-        pacing._TEACH_WAITING = True
+        pacing.begin_teach_wait("website_click")
         assert pacing.wait_for_teach_resume(5) is True
         assert len(beats) == 2
     finally:
         pacing.release_takeover()
-        pacing._TEACH_WAITING = False
+        pacing.end_teach_wait()
 
 
 def test_a_job_queued_before_the_abandon_gives_its_slot_back(env):

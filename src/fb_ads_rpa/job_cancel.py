@@ -24,13 +24,24 @@ class JobCancelled(BaseException):
 _tls = threading.local()
 
 
-def bind(event: "threading.Event | None") -> None:
-    """Привязать Event отмены к ЭТОМУ потоку (вызывает поток задания)."""
+def bind(event: "threading.Event | None", job_id: str | None = None) -> None:
+    """Привязать Event отмены к ЭТОМУ потоку (вызывает поток задания).
+
+    ACL-1142: `job_id` — чьё это задание; по нему `pacing` ведёт состояние
+    обучения (teach) отдельно для каждого задания.
+    """
     _tls.event = event
+    _tls.job_id = job_id
 
 
 def unbind() -> None:
     _tls.event = None
+    _tls.job_id = None
+
+
+def current_job_id() -> str | None:
+    """Задание, которому принадлежит этот поток, или None (вне задания)."""
+    return getattr(_tls, "job_id", None)
 
 
 def requested() -> bool:

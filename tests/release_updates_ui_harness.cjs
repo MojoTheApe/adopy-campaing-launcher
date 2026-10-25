@@ -18,6 +18,10 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
       url === '/health' ? { app: 'ACL', ok: true, version: '2026-09-20' } : { ok: true } }),
     setInterval: f => intervals.push(f), setTimeout: () => {},
     alert: s => alerts.push(s), confirm: () => true,
+    // ACL-141: окна страницы асинхронные; «да» на обновление, текст — как у alert.
+    aclAlert: s => { alerts.push(s); return Promise.resolve(); },
+    aclConfirm: () => Promise.resolve(true),
+    aclInlineError: (_a, s) => { if (s) alerts.push(s); },
     localStorage: { getItem: () => null, setItem: () => {} },
     location: { reload: () => reloads++ }, Date,
   };
