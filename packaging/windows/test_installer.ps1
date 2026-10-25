@@ -20,9 +20,29 @@ $PreservedFiles = @{}
 foreach ($Name in @(".env", "ad_account_map.csv", "oauth_client.json", "token_accounts.json", "targeting_registry.json")) {
     $PreservedFiles[$Name] = "synthetic-preservation-$Name"
 }
+# ACL-1358: the dashboard moves the Google token files into Windows protected
+# storage (header ACLDPAPI1 + DPAPI ciphertext, current user) once it is healthy.
+# That is the app, not the installer, changing the file: open it and compare the
+# content, so a replaced or emptied file is still caught.
+function Read-ConfigurationText([string]$Path) {
+    $Bytes = [System.IO.File]::ReadAllBytes($Path)
+    $Magic = [System.Text.Encoding]::ASCII.GetBytes("ACLDPAPI1`n")
+    $Protected = $Bytes.Length -gt $Magic.Length
+    for ($i = 0; $Protected -and $i -lt $Magic.Length; $i++) {
+        if ($Bytes[$i] -ne $Magic[$i]) { $Protected = $false }
+    }
+    if ($Protected) {
+        Add-Type -AssemblyName System.Security
+        $Cipher = $Bytes[$Magic.Length..($Bytes.Length - 1)]
+        $Entropy = [System.Text.Encoding]::ASCII.GetBytes("ACL-token-vault-v1")
+        $Bytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+            $Cipher, $Entropy, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    }
+    return [System.Text.Encoding]::UTF8.GetString($Bytes).TrimStart([char]0xFEFF)
+}
 function Assert-ConfigurationPreserved {
     foreach ($Name in $PreservedFiles.Keys) {
-        $Content = Get-Content (Join-Path $ConfigDirectory $Name) -Raw
+        $Content = Read-ConfigurationText (Join-Path $ConfigDirectory $Name)
         if ($Content.Trim() -ne $PreservedFiles[$Name]) { throw "Configuration changed: $Name" }
     }
 }
