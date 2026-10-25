@@ -1,5 +1,52 @@
 # System history
 
+## ACL-1529 — Copy for group copies a sharp, cropped screenshot without the header band — 2026-10-23
+
+Owner feedback on 2026-10-03 (Facebook_9943, Account Disabled): the red band from
+ACL-1520 covered the top of the picture, and the picture was small. The Multilogin
+window is larger than the rendered page, so at scale 1 Ads Manager sat in the top-left
+~1920×1080 of a 3837×2157 shot and the rest was white.
+
+- "Copy for group" copies the screenshot itself. No band and no 960 px canvas; the
+  account name and status stay on the dashboard row, the ad account number is in Ads
+  Manager's account selector inside the picture. `data-head` remains only as the title
+  of the fallback tab.
+- The status shot (`account_spend._status_shot`) is now a plain CDP
+  `Page.captureScreenshot` of the visible area, with no `clip` and no `scale`. The frame
+  (the visible area, cut below the last text of the top campaigns table plus 24 px) is
+  cut out afterwards in Python (Pillow), then empty white columns on the right and rows
+  at the bottom are trimmed, and the result is capped at 2600 px wide. The top (account
+  selector, Meta's banner, table header) is never cut; without a table the whole visible
+  area is kept. Pixels per CSS px are taken from the image itself (image width / visible
+  width): with a DPR override held by the profile, Chromium returns host pixels, not the
+  page's devicePixelRatio.
+- Why no clip (owner decision 2026-10-03, review of PR #530): any `clip` from a new CDP
+  session — with or without `scale` — and the old `page.screenshot(full_page=False)`
+  permanently reset a device-metrics override that another DevTools session holds
+  (measured on Chromium 149: DPR 1.5 → 1, screen 1920×1080 → the real window size). The
+  earlier note here that "Chromium restores the scale itself, no override is set or
+  cleared" was only true when no override exists. A capture without a clip leaves the
+  override, screen size, DPR and resolution media queries unchanged (tested with a
+  foreign override held by a second session). For the same reason a failed capture no
+  longer retries with `page.screenshot`: no shot is better than a reset profile screen.
+  `page.screenshot` is kept only for a page without CDP at all.
+- The capture never hangs a read: a page whose `document.visibilityState` is not
+  `visible` (minimised or occluded window) is not captured, and the frame read plus the
+  capture are bounded by a 10 s deadline. Which path was used (`full`, `fallback`,
+  `none`) is recorded with `run_telemetry.record("status_shot", …)`; a failed capture is
+  reported as a scrubbed Sentry warning, at most once per account every 6 hours.
+- Pillow moves from `requirements-dev.txt` to `requirements.txt`. Without it the shot is
+  saved uncropped and `amapTrimShot` trims it on copy.
+- Not yet proven live: the unclipped capture inside a Multilogin profile has not been
+  measured with the window restored (ACL-1532 found it minimised). Status shots are off
+  by default since ACL-1535 (`ACL_STATUS_SHOT=1`).
+- Shots already stored are trimmed on copy: empty white columns on the right and rows at
+  the bottom are cut (`amapTrimShot`). Measured on the stored 9943 shot: 3837×2157 →
+  1938×1098; 6540: 2561×1331 → 1933×1011; Doc20: 2528×1314 → 1909×999.
+- Unchanged: the disabled button without a shot, the new-tab fallback ("Right-click →
+  Copy image", then the `/view` page), and nothing is sent or stored besides the
+  clipboard.
+
 ## ACL-1273 — Each manual problem report is its own Sentry issue — 2026-10-23
 
 `report_problem()` used a constant fingerprint, so every "Report a problem" from every
