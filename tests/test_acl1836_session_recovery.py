@@ -43,6 +43,8 @@ class Browser:
             self.detached = True
         if session_id and (self.detached or session_id != self.session):
             raise CdpError(INCIDENT["reconciliation_error"])
+        if method == "Target.getTargets":
+            return {"targetInfos": [{"targetId": INCIDENT["target_id"], "type": "page", "url": self.url}]}
         if method == "Target.createTarget":
             return {"targetId": INCIDENT["target_id"]}
         if method == "Target.getTargetInfo":

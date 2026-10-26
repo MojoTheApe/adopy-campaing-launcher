@@ -1,5 +1,9 @@
 # System history
 
+## ACL-2217 — Preserve the profile context for owned Graph tabs — 2026-10-26
+
+- Owned Graph tabs inherit a uniquely identified profile browser context; ambiguous or failed discovery stops before opening a tab. Context telemetry contains only a mode and page count. The reported live SSL differential still requires verification on the affected profiles.
+
 ## ACL-2124 — Keep header controls accessible with Builder open — 2026-10-26
 
 Builder starts below the actual header and follows wrapping, window resizing and page scrolling. Date range, buyer, theme and Refresh remain reachable with the drawer open; the calendar appears above the drawer. Existing drawer state and width controls stay intact.
