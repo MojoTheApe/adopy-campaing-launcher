@@ -261,7 +261,7 @@ def test_the_installer_and_support_bundle_never_pick_the_cache_up():
     diagnostics = (ROOT / "packaging/windows/diagnostics.py").read_text(encoding="utf-8")
     assert "report_cache" not in iss and "report_cache" not in diagnostics
     # The installer copies the build, never the machine folder's files.
-    assert "{localappdata}\ACL\report_cache" not in iss
+    assert r"{localappdata}\ACL\report_cache" not in iss  # linux-ok: installer text assertion only; this path is never accessed
 
 
 # ── what the person sees ───────────────────────────────────────────────
