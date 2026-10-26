@@ -84,7 +84,7 @@ RULES: list[dict[str, Any]] = [
        "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
     _r("instagram_identity", "Instagram account of the Page", ERROR, "server",
        "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, "
-       "or wait for manual placements (ACL-1772) to publish Facebook-only"),
+       "or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -736,7 +736,9 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                     size = (int(vi["width"]), int(vi["height"]))
             else:
                 size = image_size(data)
-            if ad.vertical_path:
+            selected = cr.placement_targeting(s.placements)
+            uses_vertical = not selected or any(p in selected.get("facebook_positions", []) for p in cr.VERTICAL_FACEBOOK) or any(p in selected.get("instagram_positions", []) for p in cr.VERTICAL_INSTAGRAM)
+            if ad.vertical_path or not uses_vertical:
                 pass                      # вертикальный файл есть: «обрежет сама» не про это объявление
             elif size and size[1]:
                 if size[0] / size[1] > VERTICAL_MAX_RATIO:

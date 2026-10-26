@@ -305,6 +305,8 @@ class AdPlan:
     #: ACL-1774: необязательный вертикальный файл Stories/Reels (того же вида, что основной).
     vertical_path: str = ""
     vertical_kind: str = ""
+    #: ACL-1772: точный выбор набора для правил двух файлов и их сверки.
+    placements: dict | None = None
 
     @property
     def multi_text(self) -> bool:
@@ -344,6 +346,8 @@ class AdSetPlan:
     index: int = 1                   # 1-based порядковый номер набора в кампании
     language: str = ""               # язык набора вместо языка кампании
     pixel_id: str = ""               # пиксель набора вместо пикселя кампании
+
+    placements: dict | None = None
 
     @property
     def instant(self) -> bool:
@@ -501,6 +505,45 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
                         "use one text and one file, or switch the ad set to Website")
 
 
+def placement_targeting(placements: dict | None) -> dict:
+    """None — прежний ручной список; Advantage+ — без ограничений платформ/позиций."""
+    if placements is None:
+        return {"publisher_platforms": list(PUBLISHER_PLATFORMS),
+                "facebook_positions": list(FACEBOOK_POSITIONS),
+                "instagram_positions": list(INSTAGRAM_POSITIONS)}
+    if placements["mode"] == "advantage_plus":
+        return {}
+    out = {k: list(placements[k]) for k in ("facebook_positions", "instagram_positions") if placements[k]}
+    out["publisher_platforms"] = [p for p in PUBLISHER_PLATFORMS if out.get(p + "_positions")]
+    return out
+
+
+def _plan_placements(src: Any, problems: list[str], name: str) -> dict | None:
+    raw = getattr(src, "placements", None)
+    if raw is None:
+        return None
+    error = f"Ad set {name!r}: Placement selection is invalid; choose Advantage+ or supported Manual positions"
+    if not isinstance(raw, dict) or raw.get("mode") not in ("manual", "advantage_plus"):
+        problems.append(error)
+        return None
+    if raw["mode"] == "advantage_plus":
+        if set(raw) != {"mode"}:
+            problems.append(error)
+        return {"mode": "advantage_plus"}
+    out = {"mode": "manual"}
+    if set(raw) - {"mode", "facebook_positions", "instagram_positions"}:
+        problems.append(error)
+    for key, supported in (("facebook_positions", FACEBOOK_POSITIONS), ("instagram_positions", INSTAGRAM_POSITIONS)):
+        values = raw.get(key, [])
+        if not isinstance(values, list) or any(not isinstance(v, str) or v not in supported for v in values):
+            problems.append(error)
+            values = []
+        out[key] = [v for v in supported if v in values]
+    if not out["facebook_positions"] and not out["instagram_positions"]:
+        problems.append(error)
+    return out
+
+
 def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
     """Пол, языки, устройства, версия ОС и старт набора (ACL-1767). Незнакомое - отказ вслух."""
     name = plan_set.name
@@ -519,10 +562,9 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
     mobile_os = plan_set.os.casefold() in ("ios", "android")
     if mobile_os and device == "desktop":
         problems.append(f"Ad set {name!r}: {plan_set.os} is a mobile system and cannot be combined with desktop only")
-    elif device == "desktop":
-        # ACL-1767 review B2: создатель всегда шлёт Instagram, Stories и Reels (только мобильные),
-        # поэтому «только десктоп» Meta отвергнет уже после создания кампании. Настоящее решение -
-        # ручные плейсменты (ACL-1772); до тех пор отказ здесь, до любой записи.
+    elif device == "desktop" and placement_targeting(plan_set.placements) != {"publisher_platforms": ["facebook"], "facebook_positions": ["feed"]}:
+        # ACL-1772: проверенная Desktop-комбинация — только ручной Facebook Feed.
+        # Другие комбинации не объявляем поддержанными без проверки возможностей API.
         problems.append(f"Ad set {name!r}: Desktop only isn't possible with automatic placements "
                         "(Instagram, Stories and Reels need mobile). Pick All devices or Mobile, "
                         "or wait for manual placements.")
@@ -593,6 +635,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     if not budget or float(budget) <= 0:
         problems.append("Daily budget missing")
     ad_sets: list[AdSetPlan] = []
+    warnings = [str(w) for w in (getattr(draft, "warnings", None) or [])]
     ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
     for set_no, s in enumerate(ad_sets_src, start=1):
         plan_set = AdSetPlan(
@@ -610,6 +653,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             problems.append(f"Unknown conversion location {dest!r} in ad set {plan_set.name!r}")
         else:
             plan_set.destination = dest
+        plan_set.placements = _plan_placements(s, problems, plan_set.name)
         _plan_audience(plan_set, s, problems)
         if not s.ads:
             problems.append(f"No ads in ad set {plan_set.name!r}")
@@ -626,6 +670,22 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else ""),
                 cta=_plan_cta(ad, plan_set, i, problems)))
             _plan_texts_and_vertical(plan_set.ads[-1], ad, plan_set, problems)
+            planned_ad = plan_set.ads[-1]
+            planned_ad.placements = plan_set.placements
+            if plan_set.placements is not None:
+                targets = placement_targeting(plan_set.placements)
+                has_vertical = not targets or any(
+                    x in targets.get("facebook_positions", []) for x in VERTICAL_FACEBOOK) or any(
+                    x in targets.get("instagram_positions", []) for x in VERTICAL_INSTAGRAM)
+                if has_vertical and not planned_ad.vertical_path:
+                    warnings.append(f"Ad {i}: no separate vertical Stories / Reels file; Meta will crop the main file")
+                if planned_ad.vertical_path:
+                    main_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
+                    if not targets:
+                        problems.append(f"Ad {i}: Advantage+ placements with two files is not supported; use one file or Manual placements")
+                    elif not main_pos or not vert_pos:
+                        # Один тип площадок не требует непроверенных правил для пустой второй группы.
+                        problems.append(f"Ad {i}: the current app mapping for a two-file pair needs both Feed and Stories / Reels placements; clear the unused file and use the required file as main")
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -675,7 +735,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
         daily_budget=float(budget), ad_sets=ad_sets,
         page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
-        warnings=[str(w) for w in (getattr(draft, "warnings", None) or [])])
+        warnings=warnings)
 
 
 def budget_minor(amount: float, currency: str) -> int:
@@ -999,10 +1059,7 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
         t["genders"] = [GENDER_IDS[ad_set.gender]]
     if ad_set.interest_groups:
         t["flexible_spec"] = resolver.interests(ad_set.interest_groups)
-    # Площадки — вручную, как у робота (не Advantage+ placements).
-    t["publisher_platforms"] = list(PUBLISHER_PLATFORMS)
-    t["facebook_positions"] = list(FACEBOOK_POSITIONS)
-    t["instagram_positions"] = list(INSTAGRAM_POSITIONS)
+    t.update(placement_targeting(ad_set.placements))
     os_val = ad_set.os.casefold()
     if os_val in ("ios", "android"):
         # Как в билдере (решение по Android — за владельцем, пока как было).
@@ -1023,14 +1080,14 @@ def user_os_value(os_val: str, os_min: str = "") -> str:
 
 
 def plan_has_instagram(targetings: list[dict]) -> bool:
-    """В каком-либо наборе плана есть площадки Instagram (ACL-1896; ACL-1772 сделает их выбираемыми)."""
-    return any("instagram" in (t.get("publisher_platforms") or []) and bool(t.get("instagram_positions"))
+    """Любой автоматический или явно выбранный Instagram-набор требует проверки identity."""
+    return any(not t.get("publisher_platforms") or "instagram" in t["publisher_platforms"]
                for t in targetings)
 
 
 def plan_has_instagram_placements(plan: "CampaignPlan") -> bool:
-    """То же без чтения таргетинга: пока площадки зашиты в создателе, они всегда с Instagram."""
-    return "instagram" in PUBLISHER_PLATFORMS and bool(INSTAGRAM_POSITIONS)
+    """До чтения таргетинга: автоматические площадки могут включать Instagram."""
+    return plan_has_instagram([placement_targeting(s.placements) for s in plan.ad_sets])
 
 
 def placements_text(t: dict) -> str:
@@ -1802,7 +1859,7 @@ class CampaignCreator:
                 "adlabels": [{"name": plan.label}]}
 
     @staticmethod
-    def rule_positions() -> tuple[dict, dict]:
+    def rule_positions(placements: dict | None = None) -> tuple[dict, dict]:
         """Площадки двух правил: вертикальный файл — Stories и Reels, основной — всё остальное."""
         vertical = {"publisher_platforms": list(PUBLISHER_PLATFORMS),
                     "facebook_positions": list(VERTICAL_FACEBOOK),
@@ -1810,6 +1867,15 @@ class CampaignCreator:
         main = {"publisher_platforms": list(PUBLISHER_PLATFORMS),
                 "facebook_positions": [x for x in FACEBOOK_POSITIONS if x not in VERTICAL_FACEBOOK],
                 "instagram_positions": [x for x in INSTAGRAM_POSITIONS if x not in VERTICAL_INSTAGRAM]}
+        if placements is not None:
+            selected = placement_targeting(placements)
+            for group in (main, vertical):
+                for platform in PUBLISHER_PLATFORMS:
+                    key = platform + "_positions"
+                    group[key] = [x for x in group[key] if x in selected.get(key, [])]
+                group["publisher_platforms"] = [p for p in PUBLISHER_PLATFORMS if group[p + "_positions"]]
+            main = {k: v for k, v in main.items() if v} if main["publisher_platforms"] else {}
+            vertical = {k: v for k, v in vertical.items() if v} if vertical["publisher_platforms"] else {}
         return main, vertical
 
     @staticmethod
@@ -1839,7 +1905,7 @@ class CampaignCreator:
         if ad.vertical_path:
             spec[key].append(item(media["vertical"], LABEL_VERTICAL))
             label_key = "video_label" if ad.kind == "video" else "image_label"
-            main_pos, vert_pos = CampaignCreator.rule_positions()
+            main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
             spec["asset_customization_rules"] = [
                 {"customization_spec": vert_pos, label_key: {"name": LABEL_VERTICAL}},
                 {"customization_spec": main_pos, label_key: {"name": LABEL_MAIN}}]
@@ -2749,7 +2815,7 @@ class CampaignCreator:
                 extra.append((aobj, path, got))
         if ad.vertical_path:
             # Какие площадки получили какой файл: правило на метку должно нести ровно наши площадки.
-            main_pos, vert_pos = self.rule_positions()
+            main_pos, vert_pos = self.rule_positions(ad.placements)
             label_key = "video_label" if ad.kind == "video" else "image_label"
             rules: dict[str, dict] = {}
             for r in fs.get("asset_customization_rules") or []:
@@ -2760,7 +2826,7 @@ class CampaignCreator:
                                                ("publisher_platforms", "facebook_positions", "instagram_positions")}
             for label, want in ((LABEL_VERTICAL, vert_pos), (LABEL_MAIN, main_pos)):
                 check(aobj, "placements_" + ("stories_reels" if label == LABEL_VERTICAL else "main"),
-                      {k: sorted(v) for k, v in want.items()}, rules.get(label, {}))
+                      {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")}, rules.get(label, {}))
         return extra
 
     def readback(self, plan: CampaignPlan, out: Outcome, targetings: list[dict],

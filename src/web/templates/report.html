@@ -15101,6 +15101,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   /* Место конверсии набора -> что видно и что уходит на сервер. Набор у каждого свой:
      у одного Instant Form, у другого сайт. */
   window.cbSyncDestination = function (slot) {
+    if (window.cbSyncPlacements) window.cbSyncPlacements(slot);
     if (window.cbSyncPages) window.cbSyncPages(slot);
     var L = window.cbLayout;
     if (!L || !slot || !slot.querySelectorAll) return;
@@ -16060,6 +16061,90 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
 
   /* ACL-1768: раздел «Ad set». Набор 0 живёт под прежними именами `camp_N_*`; остальные -
      под `camp_N_adset_K_*`. Имя набора - `camp_N_adset_K_name` у всех. */
+  /* ACL-1772: именованное поле хранит канонический выбор; видимые контролы его редактируют.
+     Это тот же путь cbKeep/copy/form, без отдельного хранилища или скрытых defaults при submit. */
+  function buildPlacementHTML(pfx) {
+    var html = '<div class="cb-placements"><input type="hidden" class="cb-placement-value cb-api-field" data-default="" data-tip="Placements" name="' + pfx + 'placements" value="">' +
+      '<input type="hidden" class="cb-placement-manual" name="' + pfx + 'placements_manual" value="">' +
+      '<select class="cb-placement-mode cb-input cb-select" aria-label="Placement mode" oninput="cbPlacementsChanged(this)">' +
+      '<option value="manual">Manual</option><option value="advantage_plus">Advantage+</option></select>' +
+      '<div class="cb-placement-options">';
+    [['facebook', 'Facebook', [['feed', 'Feed'], ['story', 'Stories'], ['facebook_reels', 'Reels'], ['instream_video', 'In-stream reels']]],
+     ['instagram', 'Instagram', [['stream', 'Feed'], ['story', 'Stories'], ['reels', 'Reels']]]].forEach(function (group) {
+      html += '<div><label><input type="checkbox" checked data-placement-platform="' + group[0] + '" oninput="cbPlacementPlatformChanged(this)"> ' + group[1] + '</label>';
+      group[2].forEach(function (position) {
+        html += '<label style="display:block;margin-left:1rem"><input type="checkbox" checked data-placement-position="' + position[0] + '" data-platform="' + group[0] + '" oninput="cbPlacementsChanged(this)"> ' + position[1] + '</label>';
+      });
+      html += '</div>';
+    });
+    return html + '</div><div class="cb-api-note" data-placement-note>Manual: Facebook and Instagram placements. A separate vertical file is optional.</div></div>';
+  }
+
+  window.cbPlacementPlatformChanged = function (el) {
+    var wrap = el.closest('.cb-placements');
+    wrap.querySelectorAll('[data-platform="' + el.dataset.placementPlatform + '"]').forEach(function (p) { p.checked = el.checked; });
+    window.cbPlacementsChanged(el);
+  };
+  window.cbPlacementsChanged = function (el) {
+    var wrap = el.closest('.cb-placements'), mode = wrap.querySelector('.cb-placement-mode').value;
+    var stash = wrap.querySelector('.cb-placement-manual');
+    if (mode === 'manual' && el.classList.contains('cb-placement-mode') && stash.value) {
+      try {
+        var previous = JSON.parse(stash.value);
+        wrap.querySelectorAll('[data-placement-position]').forEach(function (p) {
+          p.checked = (previous[p.dataset.platform + '_positions'] || []).indexOf(p.dataset.placementPosition) !== -1;
+        });
+      } catch (e) { /* повреждённый запас не меняет текущий явный выбор */ }
+    }
+    var value = { mode: mode };
+    if (mode === 'manual') {
+      ['facebook', 'instagram'].forEach(function (platform) {
+        value[platform + '_positions'] = Array.prototype.filter.call(wrap.querySelectorAll('[data-platform="' + platform + '"]'), function (p) { return p.checked; })
+          .map(function (p) { return p.dataset.placementPosition; });
+      });
+    }
+    var input = wrap.querySelector('.cb-placement-value');
+    if (mode === 'manual') stash.value = JSON.stringify(value);
+    input.value = JSON.stringify(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    window.cbSyncDestination(el.closest('.cb-slot'));
+  };
+  window.cbSyncPlacements = function (slot) {
+    var api = window.ACL_FB_BACKEND === 'api';
+    slot.querySelectorAll('.cb-placements').forEach(function (wrap) {
+      var raw = wrap.querySelector('.cb-placement-value').value, value;
+      try { value = raw ? JSON.parse(raw) : { mode: 'manual', facebook_positions: ['feed', 'story', 'facebook_reels', 'instream_video'], instagram_positions: ['stream', 'story', 'reels'] }; }
+      catch (e) { value = { mode: 'invalid' }; }
+      if (!value || typeof value !== 'object' || ['manual', 'advantage_plus'].indexOf(value.mode) === -1 ||
+          (value.mode === 'manual' && (!Array.isArray(value.facebook_positions) || !Array.isArray(value.instagram_positions)))) value = { mode: 'invalid' };
+      var automatic = value.mode === 'advantage_plus', manual = value;
+      if (automatic) {
+        try { manual = JSON.parse(wrap.querySelector('.cb-placement-manual').value || 'null') || { facebook_positions: ['feed', 'story', 'facebook_reels', 'instream_video'], instagram_positions: ['stream', 'story', 'reels'] }; }
+        catch (e) { manual = {}; }
+      }
+      wrap.querySelector('.cb-placement-mode').value = value.mode;
+      if (wrap.querySelector('.cb-placement-mode').disabled === api) wrap.querySelector('.cb-placement-mode').disabled = !api;
+      if (wrap.querySelector('.cb-placement-options').hidden !== automatic) wrap.querySelector('.cb-placement-options').hidden = automatic;
+      wrap.querySelectorAll('[data-placement-position]').forEach(function (p) {
+        p.checked = (manual[p.dataset.platform + '_positions'] || []).indexOf(p.dataset.placementPosition) !== -1;
+        if (p.disabled !== (!api || automatic)) p.disabled = !api || automatic;
+      });
+      wrap.querySelectorAll('[data-placement-platform]').forEach(function (p) {
+        var count = (manual[p.dataset.placementPlatform + '_positions'] || []).length;
+        p.checked = count > 0;
+        p.indeterminate = count > 0 && count < wrap.querySelectorAll('[data-platform="' + p.dataset.placementPlatform + '"]').length;
+        if (p.disabled !== (!api || automatic)) p.disabled = !api || automatic;
+      });
+      var noteText = !api ? 'API backend only. Saved placement choices are preserved.' :
+        value.mode === 'invalid' ? 'Placement selection is invalid. Choose a placement mode.' :
+        automatic ? 'Meta chooses placements. Instagram identity may be required. Use one media file.' :
+        !(value.facebook_positions || []).length && !(value.instagram_positions || []).length ? 'Choose at least one placement.' :
+        'Manual placements. Stories / Reels without a separate vertical file use the main file with a warning. Two files require both Feed and Stories / Reels.';
+      var note = wrap.querySelector('[data-placement-note]');
+      if (note.textContent !== noteText) note.textContent = noteText;
+    });
+  };
+
   function buildAdsetSectionHTML(idx, k) {
     var pfx = k === 0 ? 'camp_' + idx + '_' : 'camp_' + idx + '_adset_' + k + '_';
     var lang = k === 0 ? idx + '' : idx + '-' + k;
@@ -16089,7 +16174,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<datalist id="cb-lang-' + lang + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
       '<span class="cb-label">Devices</span>' +
       '<div class="cb-inline"><select name="' + pfx + 'device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
-      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop" disabled>Desktop only (unavailable: Instagram, Stories and Reels placements need mobile)</option></select>' +
+      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only (Manual Facebook Feed)</option></select>' +
       '<input type="text" name="' + pfx + 'os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
       '<span class="cb-label">Start time</span>' +
       '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
@@ -16102,7 +16187,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</select>' +
       '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
       '</div>' +
-      '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
+      '<span class="cb-label">Placements</span>' + buildPlacementHTML(pfx) +
       '</div>' +
       '</section>';
   }
