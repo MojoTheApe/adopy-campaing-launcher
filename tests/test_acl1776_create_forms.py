@@ -976,3 +976,51 @@ def test_only_the_exact_name_is_reused_a_similar_name_is_not(tmp_path):
     out, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
     assert out.error == "" and len(meta.form_posts) == 1
     assert out.created["forms"] and "forms" not in out.reused
+
+
+def test_pinning_the_page_installs_the_helper_in_a_new_world():
+    """ACL-2194: the same world would keep the old helper (`if (g[NAME]) return`) without a Page - form_no_page."""
+    class Tab:
+        def __init__(self):
+            self.world_names = []
+
+        def create_isolated_world(self, name):
+            self.world_names.append(name)
+            return 7 + len(self.world_names)
+
+        def evaluate_in(self, ctx, expr, timeout=60.0):
+            if expr.lstrip().startswith("(() =>"):
+                return None
+            return {"kind": "ads_manager", "has_token": True}
+
+    tab = Tab()
+    t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
+    t._ensure()                                               # helper without a Page (preflight)
+    first = tab.world_names[-1]
+    t.pin_page(PAGE)
+    t._ensure()
+    assert tab.world_names[-1] != first and len(tab.world_names) >= 2
+
+
+def test_after_pin_page_the_installed_helper_policy_carries_the_page():
+    """ACL-2194: the policy injected into the new world has the pinned Page, so checkForm is not form_no_page."""
+    injected = []
+
+    class Tab:
+        def create_isolated_world(self, name):
+            return 5
+
+        def evaluate_in(self, ctx, expr, timeout=60.0):
+            if expr.lstrip().startswith("(() =>"):
+                injected.append(expr)
+                return None
+            return {"kind": "ads_manager", "has_token": True}
+
+    t = tc.InPageGraph(Tab(), allow_writes=True, write_act=ACT)
+    t._ensure()
+    assert t._write_policy["form_create"]["page"] == ""
+    t.pin_page(PAGE)
+    t._ensure()
+    assert len(injected) == 2
+    assert t._write_policy["form_create"]["page"] == PAGE
+    assert json.dumps(PAGE) in injected[-1]
