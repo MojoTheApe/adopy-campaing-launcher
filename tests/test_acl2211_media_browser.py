@@ -116,7 +116,7 @@ def test_legacy_selection_stays_visible_when_ad_and_ad_set_are_copied(page):
             assert _form_value(page, row, suffix) == expected
 
 
-@pytest.mark.parametrize('alias', ['a\\story_9x16.png', 'A/STORY_9X16.PNG', 'STORY_9X16.PNG'])
+@pytest.mark.parametrize('alias', ['a\\story_9x16.png', 'A/STORY_9X16.PNG', 'STORY_9X16.PNG'])  # linux-ok: backslash filename is input data normalized by creative_finder on every OS
 def test_accepted_path_aliases_do_not_block_multiple_texts_in_real_client_audit(page, tmp_path, alias):
     from src.meta_campaign_agent.creative_finder import find_creative_file
     from src.fb_api.creator import _same_media_file
