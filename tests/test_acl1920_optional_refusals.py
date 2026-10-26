@@ -233,3 +233,47 @@ def test_check_plan_without_refusals_has_no_new_warnings(tmp_path):
     out, got = _plan_check(meta, tmp_path, "Forex")
     assert out.error == "" and not any("Meta refused" in w for w in out.warnings)
     assert got["interests_resolve"]["status"] == "ok"
+
+
+@pytest.mark.parametrize("count_term", [True, False])
+def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_path, count_term):
+    class Transport:
+        def request(self, method, path, params):
+            if params["type"] == "adTargetingCategory":
+                page = int(params.get("after", "0"))
+                body = ({"error": {"code": 10, "message": "Permission Denied"}} if page == 2 else
+                        {"data": [{"id": str(page), "name": "other"}],
+                         "paging": {"next": "yes", "cursors": {"after": str(page + 1)}}})
+            else:
+                body = {"data": []}
+            return {"status": 200, "body": body}
+
+    client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
+                           sleep=lambda _: None, max_calls=100)
+    resolver = tr.TermResolver(client, _store(tmp_path), term_cap=3, job_cap=3)
+    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3,
+                            count_term=count_term) == []
+    assert client.calls == 3
+    assert resolver.reads == 3
+    assert resolver._term_reads == (3 if count_term else 0)
+    assert "adTargetingCategory" in resolver.refused
+    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3,
+                            count_term=count_term) == []
+    with pytest.raises(tr._Spent):
+        resolver._lookup("adworkposition", {"type": "adworkposition"}, 1)
+    assert client.calls == 3 and client.writes == 0
+
+
+@pytest.mark.parametrize("count_term", [True, False])
+def test_refused_client_without_call_counter_still_charges_one_read(tmp_path, count_term):
+    class NoCounterClient:
+        def get_all(self, path, params, *, max_pages):
+            raise _denied()
+
+    resolver = tr.TermResolver(NoCounterClient(), _store(tmp_path), term_cap=1, job_cap=1)
+    assert resolver._lookup("adworkposition", {"type": "adworkposition"}, 1,
+                            count_term=count_term) == []
+    assert resolver.reads == 1
+    assert resolver._term_reads == (1 if count_term else 0)
+    with pytest.raises(tr._Spent):
+        resolver._lookup("adworkemployer", {"type": "adworkemployer"}, 1)

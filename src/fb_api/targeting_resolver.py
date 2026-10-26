@@ -362,15 +362,18 @@ class TermResolver:
         if search_type in self.refused:
             return []                      # уже отказано в этом задании: повторов нет
         optional = search_type in OPTIONAL_LOOKUPS
+        before = getattr(self.client, "calls", None)
         try:
             return self._get_all(params, pages, count_term=count_term)
         except GraphError as exc:
             if not (optional and is_permission_refusal(exc)):
                 raise name_lookup(exc, search_type) from exc
         # Отказанный запрос тоже был чтением: он остаётся в бюджете.
-        self.reads += 1
+        after = getattr(self.client, "calls", None)
+        spent = max(1, after - before) if isinstance(before, int) and isinstance(after, int) else 1
+        self.reads += spent
         if count_term:
-            self._term_reads += 1
+            self._term_reads += spent
         label, effect = OPTIONAL_LOOKUPS[search_type]
         self.refused[search_type] = f"Meta refused the {label} ({search_type}) on this account; {effect}."
         return []
