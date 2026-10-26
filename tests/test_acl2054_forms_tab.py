@@ -73,7 +73,7 @@ def test_the_tab_refreshes_the_builder_picker_and_nothing_says_this_computer_onl
     assert "save it on this computer" not in t and "Saving the template on this computer" not in t
 
 
-@pytest.mark.parametrize("scenario", ["default", "contacts", "legacy-locale", "auto-locale"])
+@pytest.mark.parametrize("scenario", ["default", "contacts", "legacy-locale", "auto-locale", "legacy-name"])
 def test_the_forms_tab_behaves_when_the_code_is_actually_run(scenario):
     node = shutil.which("node")
     if not node:
