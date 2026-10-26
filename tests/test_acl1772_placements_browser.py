@@ -54,3 +54,20 @@ def test_legacy_draft_and_rpa_do_not_erase_saved_selection(page):
     assert 'API backend only' in sec.locator('[data-placement-note]').inner_text()
     _backend(page, 'api')
     assert sec.locator('.cb-placement-value').input_value() == raw
+
+
+def test_invalid_facebook_stories_explains_the_reason_without_changing_choices(page):
+    sec = setup(page)
+    sec.locator('[data-placement-platform="instagram"]').uncheck()
+    for position in ['feed', 'facebook_reels', 'instream_video']:
+        sec.locator(f'[data-platform="facebook"][data-placement-position="{position}"]').uncheck()
+    expected = {'mode': 'manual', 'facebook_positions': ['story'], 'instagram_positions': []}
+    assert json.loads(sec.locator('.cb-placement-value').input_value()) == expected
+    assert 'Facebook Feed or Instagram Stories' in sec.locator('[data-placement-note]').inner_text()
+    sec.locator('.cb-placement-mode').select_option('advantage_plus')
+    sec.locator('.cb-placement-mode').select_option('manual')
+    assert json.loads(sec.locator('.cb-placement-value').input_value()) == expected
+    assert 'Facebook Feed or Instagram Stories' in sec.locator('[data-placement-note]').inner_text()
+    sec.locator('[data-platform="facebook"][data-placement-position="feed"]').check()
+    assert json.loads(sec.locator('.cb-placement-value').input_value())['facebook_positions'] == ['feed', 'story']
+    assert 'require Facebook Feed' not in sec.locator('[data-placement-note]').inner_text()

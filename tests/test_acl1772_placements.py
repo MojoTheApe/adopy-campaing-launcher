@@ -63,7 +63,7 @@ def test_feed_only_needs_no_vertical_and_desktop_is_allowed(tmp_path):
 def test_stories_without_vertical_warns_instead_of_blocking(tmp_path):
     draft = _draft(tmp_path, ads=1)
     for adset in draft.ad_sets:
-        adset.placements = manual(facebook=['story'])
+        adset.placements = manual(facebook=['feed', 'story'])
     plan = cr.plan_from_draft(draft)
     assert any('vertical' in warning.lower() for warning in plan.warnings)
     assert not cr.plan_has_instagram_placements(plan)
@@ -291,3 +291,61 @@ def test_existing_auto_campaign_with_wrong_state_is_not_reused_or_verified(tmp_p
     assert len(meta.posts) > before
     assert not second.readback['ok']
     assert any(x['field'] == 'advantage_placement_state' for x in second.mismatches)
+
+
+@pytest.mark.parametrize('os,device,state,ok', [
+    ('All', 'mobile', 'DISABLED', True), ('All', 'mobile', 'ENABLED', False),
+    ('iOS', '', 'DISABLED', True), ('iOS', '', 'ENABLED', False),
+    ('Android', '', 'DISABLED', True), ('Android', '', 'ENABLED', False),
+])
+def test_automatic_positions_keep_device_restrictions_in_payload_and_aggregate(tmp_path, os, device, state, ok):
+    from src.web import publish_api
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = {'mode': 'advantage_plus'}
+    draft.ad_sets[0].os, draft.ad_sets[0].device = os, device
+    meta = FakeMeta()
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {'advantage_placement_state': state}
+    out, _ = _run(meta, draft)
+    assert out.readback['ok'] is ok, out.mismatches
+    assert publish_api.result_dict(out)['publishable'] is ok
+    sets = [params for path, params in meta.posts if path.endswith('/adsets')]
+    assert sets[0]['targeting']['device_platforms'] == ['mobile']
+    assert sets[1]['targeting']['device_platforms'] == ['mobile', 'desktop']
+    assert all('publisher_platforms' not in row['targeting'] for row in sets)
+    if os != 'All':
+        assert sets[0]['targeting']['user_os'] == [os]
+    assert (draft.ad_sets[0].os, draft.ad_sets[0].device) == (os, device)
+
+
+@pytest.mark.parametrize('selection', [
+    manual(facebook=['story']),
+    manual(facebook=['story', 'facebook_reels']),
+    manual(facebook=['story'], instagram=['stream']),
+])
+def test_invalid_facebook_story_combination_refuses_at_publisher_before_writes(tmp_path, selection):
+    from tests.test_acl1761_api_create import _publisher
+    draft = _draft(tmp_path, ads=1)
+    draft.ad_sets[0].placements = selection
+    meta = FakeMeta()
+    publisher = _publisher(meta)
+    result = publisher.publish_draft(draft)
+    assert not result.get('success')
+    assert 'Facebook Stories' in result['error'] and 'Facebook Feed or Instagram Stories' in result['error']
+    assert not meta.posts and publisher._client.writes == 0
+    assert draft.ad_sets[0].placements == selection
+
+
+@pytest.mark.parametrize('selection', [manual(facebook=['feed', 'story']), manual(facebook=['story'], instagram=['story'])])
+def test_valid_stories_combination_without_vertical_warns_and_creates_unchanged(tmp_path, selection):
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = selection
+    meta = FakeMeta()
+    out, _ = _run(meta, draft)
+    assert not out.error and out.readback['ok'], out.mismatches
+    assert any('vertical' in warning.lower() for warning in out.warnings)
+    sets = [params for path, params in meta.posts if path.endswith('/adsets')]
+    assert all(row['targeting']['facebook_positions'] == selection['facebook_positions'] for row in sets)
+    assert all(row['targeting'].get('instagram_positions', []) == selection['instagram_positions'] for row in sets)
+    assert all(not ad.vertical_path for adset in draft.ad_sets for ad in adset.ads)

@@ -560,6 +560,12 @@ def _plan_placements(src: Any, problems: list[str], name: str) -> dict | None:
         out[key] = [v for v in supported if v in values]
     if not out["facebook_positions"] and not out["instagram_positions"]:
         problems.append(error)
+    # Ограничение комбинации отдельно от необязательного вертикального файла.
+    # https://developers.facebook.com/docs/marketing-api/audiences/reference/placement-targeting/
+    if ('story' in out['facebook_positions'] and 'feed' not in out['facebook_positions']
+            and 'story' not in out['instagram_positions']):
+        problems.append(f"Ad set {name!r}: Facebook Stories placements require Facebook Feed or Instagram Stories; "
+                        "add one of these placements or turn off Facebook Stories")
     return out
 
 
@@ -1057,6 +1063,13 @@ class TargetingResolver:
         return self.terms.warnings()
 
 
+def _placement_devices(ad_set: AdSetPlan) -> list[str]:
+    """Тот же фактический список устройств для API и агрегатной сверки режима площадок."""
+    if ad_set.os.casefold() in ("ios", "android"):
+        return ["mobile"]
+    return [ad_set.device] if ad_set.device else ["mobile", "desktop"]
+
+
 def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingResolver) -> dict:
     t: dict[str, Any] = {
         "geo_locations": {"countries": [resolver.country(plan.country)]},
@@ -1083,9 +1096,7 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
     if os_val in ("ios", "android"):
         # Как в билдере (решение по Android — за владельцем, пока как было).
         t["user_os"] = [user_os_value(os_val, ad_set.os_min)]
-        t["device_platforms"] = ["mobile"]
-    else:
-        t["device_platforms"] = [ad_set.device] if ad_set.device else ["mobile", "desktop"]
+    t["device_platforms"] = _placement_devices(ad_set)
     return t
 
 
@@ -1982,14 +1993,17 @@ class CampaignCreator:
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
         # ACL-1772: агрегат ENABLED только когда ВСЕ наборы без ограничений площадок.
-        # Любой ручной набор (включая прежнее умолчание и mixed) означает DISABLED.
+        # Ручной набор или device_platforms только mobile/desktop — ограничение: DISABLED.
+        # Устройства — placement restriction по тому же первичному placement-targeting reference;
+        # расчёт пользуется тем же helper, который строит фактический API payload.
         # Первичный источник: https://developers.facebook.com/docs/marketing-api/advantage-campaigns/
         # раздел Advantage+ placement state automation criteria. Сверка каждого набора остаётся ниже.
         # Нет поля — прежняя явная диагностика unverified; незнакомый/пустой ответ — расхождение.
         state = _advantage_info(camp).get("advantage_placement_state")
         if state is not None:
             automatic = bool(plan.ad_sets) and all(
-                s.placements is not None and s.placements.get("mode") == "advantage_plus" for s in plan.ad_sets)
+                not placement_targeting(s.placements) and _placement_devices(s) == ["mobile", "desktop"]
+                for s in plan.ad_sets)
             check("advantage_placement_state", "ENABLED" if automatic else "DISABLED", state)
         return checks
 
