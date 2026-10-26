@@ -875,6 +875,10 @@ class InPageGraph:
 
         self.write_page = page
         self._write_policy = _wp.policy_for_page(self.write_act, page)
+        # ACL-2194: the helper from the preflight (no Page) still lives in the world with this name and
+        # `if (g[NAME]) return` would not install a new one - the old policy would stay and a form write
+        # is refused as form_no_page. A new world name = a fresh helper with the Page policy.
+        self.world_name = f"acl_{secrets.token_hex(6)}"
         self._reset_world()
         return self.wait_ready(timeout=timeout)
 
