@@ -2754,7 +2754,10 @@ def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLRespon
         before = _store_key(entry_source_key())
     except Exception:  # noqa: BLE001
         before = None
-    response = _render_report(request, **kwargs)
+    from src.web.buyer import rendering_cm
+
+    with rendering_cm(inputs["cm"]):
+        response = _render_report(request, **kwargs)
     try:
         template = getattr(response, "template", None)
         if (
