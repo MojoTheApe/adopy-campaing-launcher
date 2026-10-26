@@ -2800,8 +2800,34 @@ class CampaignCreator:
         on_page = bool(page_forms and page_forms.ok and ad.form_id in page_forms.by_id())
         check(aobj, "form_on_page", True, on_page)
 
+    def _video_file_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str,
+                           id_field: str, content_field: str, uploaded_id: str, actual_id: str,
+                           tag: str, data: Any, identities: list[dict] | None = None) -> None:
+        """ACL-2224: a creative may reference a copy, not the uploaded video ID.
+
+        Verify the returned video's existing deterministic content title. A changed
+        ID is acceptable only with that positive evidence; never infer equivalence
+        from a label binding, a successful upload or an unreadable/missing title.
+        Titles are application-generated file fingerprints, not downloaded bytes.
+        """
+        expected_title = video_title(tag, data) if data else ""
+        actual_title = (self.client.get(f"/{actual_id}", {"fields": "title"}).get("title")
+                        if data and actual_id else "")
+        verified = bool(expected_title and actual_title == expected_title)
+        if uploaded_id and not verified:
+            check(aobj, id_field, str(uploaded_id), actual_id)
+        if data:
+            check(aobj, content_field, expected_title, actual_title)
+        if identities is not None:
+            identities.append({"object": aobj, "field": id_field,
+                               "uploaded_id": str(uploaded_id or ""),
+                               "creative_video_id": actual_id,
+                               "content_verified": verified,
+                               "verified_by": "content_title" if verified else "unverified"})
+
     def _feed_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str, plan: CampaignPlan,
-                     ad: AdPlan, creative: dict, rec: dict, files: dict[str, bytes]) -> list[tuple[str, str, str]]:
+                     ad: AdPlan, creative: dict, rec: dict, files: dict[str, bytes],
+                     identities: list[dict] | None = None) -> list[tuple[str, str, str]]:
         """Сверка ленты ассетов (ACL-1774): все тексты как набор и привязка файлов к площадкам.
 
         Возвращает картинки, чей хэш не равен md5 нашего файла, — по ним ещё сверяется имя в библиотеке.
@@ -2848,16 +2874,15 @@ class CampaignCreator:
         for slot, name, path, made in wants:
             got = bound[slot] or ""
             check(aobj, name + "_binding", True, bool(got))
-            if made:
-                check(aobj, name, str(made), got)
             data = files.get(path, b"")
-            if not (data and got):
-                continue
             if ad.kind == "video":
-                title = self.client.get(f"/{got}", {"fields": "title"}).get("title")
-                check(aobj, name + "_content", video_title(plan.tag, data), title)
-            elif got != _md5(data):
-                extra.append((aobj, path, got))
+                self._video_file_checks(check, aobj, name, name + "_content", made, got,
+                                        plan.tag, data, identities)
+            else:
+                if made:
+                    check(aobj, name, str(made), got)
+                if data and got and got != _md5(data):
+                    extra.append((aobj, path, got))
         if ad.vertical_path:
             # Какие площадки получили какой файл: правило на метку должно нести ровно наши площадки.
             main_pos, vert_pos = self.rule_positions(ad.placements)
@@ -2963,7 +2988,8 @@ class CampaignCreator:
                           str(spec.get(_ig.IG_KEY) or creative.get(_ig.IG_KEY) or ""))
                 if ad.uses_feed:
                     # ACL-1774: тексты и файлы в ленте ассетов, а не в object_story_spec.
-                    image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files)
+                    image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files,
+                                                   diag.setdefault("video_identity", []))
                     continue
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
@@ -2971,11 +2997,9 @@ class CampaignCreator:
                     cta = vd.get("call_to_action") or {}
                     check(aobj, "format", "video", "video" if vd else "image")
                     vid = str(vd.get("video_id") or "")
-                    if rec.get("video_id"):
-                        check(aobj, "video_id", rec["video_id"], vid)
-                    if data and vid:
-                        title = self.client.get(f"/{vid}", {"fields": "title"}).get("title")
-                        check(aobj, "video_file", video_title(plan.tag, data), title)
+                    self._video_file_checks(check, aobj, "video_id", "video_file",
+                                            rec.get("video_id"), vid, plan.tag, data,
+                                            diag.setdefault("video_identity", []))
                     check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
