@@ -119,3 +119,41 @@ is unchanged. Fresh comparison must report any other drift before cutover.
 | [ACL-1226](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/226) | merged | No | Country is not added when location suggestions do not open |
 | [ACL-1234](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/234) | merged | No | Read spend restarts a manually opened profile the way Publish does |
 | [ACL-1240](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/240) | merged | No | Deliver updates as GitHub Release archives with an in-dashboard Update button |
+
+## ACL-1250 amendment (2026-10-26)
+
+Tracker task: ACL-2200 (Issue #1200). The owner approved recording ACL-1250 (Issue #250,
+"Verify and finish collapsed audience fields and age readback") as historically completed,
+shown as **Done · Accepted before adoption**: [Issue 250 comment 6400546760](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/250#issuecomment-6400546760)
+(2026-10-25), repeated on 2026-10-26. This is not a claim of package delivery under the
+current policy. PR #247 merged on 2026-09-21 as 79caea74d4f88c559d79caf6fc86ef9b7b43f9e8 and its code first shipped in
+`acl-release-2026-09-23`; Issue #250 has no tracker execution record.
+
+The engine's `audit-history` refuses to extend an existing manifest, so this is a reviewed,
+hand-merged amendment of `historical_completion` in `tracker/config.json`:
+
+- Only Issue #250 is added; the manifest now lists 75 tasks. The 74 original rows are
+  byte-identical (their canonical-JSON SHA-256 is pinned in
+  `tests/test_historical_completion_manifest.py`). A fresh read-only `audit-history` run
+  against current Issues reproduces every one of them.
+- The manifest records one top-level provenance block, so it now describes the latest
+  audit. The original provenance of the 74 rows is preserved here: audited
+  2026-09-21T10:55:31.841147+00:00; owner approval of 2026-09-21 recorded in the ACL-1248
+  adoption PR; original pre-policy configuration from master
+  `6e871edd425afe1c74b955d7ba7b9793e06a7022`, config SHA-256
+  `0c19cf33cae0555059eb6af9ab2d0a344a65b4916572de934c9b685404b61d18`; report = the sections above.
+- The pre-policy configuration is also reachable at 79caea74d4f88c559d79caf6fc86ef9b7b43f9e8
+  (the #247 merge): `tracker/config.json` there is the identical blob (`70c9f43c`) and has
+  the same SHA-256, so `source_revision` now names 79caea74 and `source_config_sha256` is
+  unchanged. The target policy fingerprint (`1bd91869...`) is unchanged.
+- The Issue #250 `issue_sha256` is the accepted-scope digest of its final state:
+  open, labels `status:merged`, `module:campaigns`, `type:bug` (priority and release labels
+  are excluded from the digest) and **without** `flag:blocked`. While the Issue still carries
+  `flag:blocked`, the engine does not accept it as historical. The blocker is removed by the
+  authorized tracker actor with `python -m tracker set ACL-1250 --no-blocked`, not by this PR.
+  Any later edit of the Issue's title, body, state or functional/workflow labels invalidates the
+  entry and requires a new explicit decision.
+
+Fresh in-memory engine check (Tracker 771d55f3): manifest validates with 75 tasks, the original 74
+unchanged, #250 historically accepted once unblocked and not accepted while blocked.
+

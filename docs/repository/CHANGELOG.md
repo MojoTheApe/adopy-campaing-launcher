@@ -1,5 +1,14 @@
 # Repository process history
 
+## 2026-10-26 — ACL-2200 owner-approved historical completion of ACL-1250
+
+Add Issue #250 (ACL-1250) to the owner-approved `historical_completion` manifest as
+"Done · Accepted before adoption", by the owner's decision of 2026-10-25/26. The 74
+original rows are unchanged and the delivery policy fingerprint is the same; the
+manifest provenance now cites the pre-policy configuration at 79caea74. Not a claim of
+package delivery. The Issue's blocker must be removed separately before the engine
+accepts the entry. See HISTORICAL_COMPLETION.md.
+
 ## 2026-10-22 — ACL-2079 isolated manual verification support candidate
 
 Select independently reviewed published Master1.8.0 / Tracker3.10.0 and their

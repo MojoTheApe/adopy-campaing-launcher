@@ -176,10 +176,10 @@
     "schema_version": 1,
     "repository": "MojoTheApe/adopy-campaing-launcher",
     "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-    "audited_at": "2026-09-21T10:55:31.841147+00:00",
-    "approved_by": "Owner explicitly approved preserving the 74 audited completed tasks on 2026-09-21; recorded in ACL-1248 adoption PR.",
-    "report": "docs/repository/HISTORICAL_COMPLETION.md at the reviewed ACL-1248 adoption revision",
-    "source_revision": "6e871edd425afe1c74b955d7ba7b9793e06a7022",
+    "audited_at": "2026-10-26T09:37:54.699643+00:00",
+    "approved_by": "Owner decisions: (1) 2026-09-21, preserving the 74 audited completed tasks, recorded in the ACL-1248 adoption PR; (2) 2026-10-25 and 2026-10-26, adding only Issue 250 (ACL-1250), Issue 250 comment 6400546760 and the repeated 2026-10-26 approval, recorded in ACL-2200.",
+    "report": "docs/repository/HISTORICAL_COMPLETION.md section ACL-1250 amendment (2026-10-26); the original 74-task audit is the preceding sections of that file at the reviewed ACL-1248 adoption revision",
+    "source_revision": "79caea74d4f88c559d79caf6fc86ef9b7b43f9e8",
     "source_config_sha256": "0c19cf33cae0555059eb6af9ab2d0a344a65b4916572de934c9b685404b61d18",
     "tasks": {
       "12": {
@@ -477,6 +477,10 @@
       "240": {
         "id": "ACL-1240",
         "issue_sha256": "430ad30bb76e6d1b548da791c7af3d4a25914afa8c6d3c515d68169ac382399c"
+      },
+      "250": {
+        "id": "ACL-1250",
+        "issue_sha256": "697bdfab549392584958874e2579a468a8dc006e6951eb2d46773a721cb76525"
       }
     }
   },
