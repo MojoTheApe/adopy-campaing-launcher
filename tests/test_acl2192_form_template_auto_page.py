@@ -61,8 +61,39 @@ def test_automatic_page_is_resolved_before_pinning(tmp_path):
 def test_no_pages_available_is_a_clear_refusal_and_nothing_is_created(tmp_path):
     meta = PinMeta(pages=())
     res = _publisher(meta).publish_draft(_draft_for(tmp_path, None))
-    assert "Nothing was created." in res["error"] and "Page" in res["error"]
+    # Именно новый текст resolve_page + ". Nothing was created." (старый ValueError-путь говорит иначе).
+    assert res["error"] == ("Instant Forms require a Facebook Page. Refresh pages or choose a website "
+                            "destination.. Nothing was created.")
     assert meta.pinned == [] and meta.posts == []
+
+
+def test_automatic_page_note_reaches_the_result_warnings(tmp_path):
+    meta = PinMeta()
+    res = _publisher(meta).publish_draft(_draft_for(tmp_path, None))
+    assert not res.get("error"), res
+    assert any(w.startswith("Automatic Facebook Page") for w in res["warnings"]), res["warnings"]
+    assert len([w for w in res["warnings"] if w.startswith("Automatic Facebook Page")]) == 1
+
+
+def test_graph_stop_while_choosing_the_page_is_a_refusal_with_a_stop(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    monkeypatch.setattr(publish_api, "_start_cooldown", lambda *_a, **_k: None)
+    monkeypatch.setattr(publish_api._tm, "report_stop", lambda *_a, **_k: None)
+    meta = PinMeta(pages=())
+    pub = _publisher(meta)
+    from src.fb_api import graph as g
+
+    def loader(_facts):                  # preflight уже читает Страницы профиля; здесь - редкий повторный путь
+        raise g.RateLimited("Graph API rate limit (4): Application request limit reached", code=4)
+
+    pub._facts.profile_loaded, pub._facts.profile_loader = False, loader
+    draft = _draft_for(tmp_path, None)
+    res = pub.publish_draft(draft)                             # не должен вылететь исключением
+    assert "while choosing the Page" in res["error"] and "Nothing was created." in res["error"]
+    assert pub.stop is not None and meta.pinned == [] and meta.posts == []
+    again = pub.publish_draft(draft)
+    assert "Not started: Graph API stopped earlier" in again["error"]
 
 
 def test_explicit_page_id_path_is_unchanged(tmp_path):
