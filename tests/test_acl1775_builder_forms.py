@@ -41,7 +41,7 @@ def _code(start: str, end: str) -> str:
 
 def _slot_code() -> str:
     page = _page()
-    slot = page[page.index("function buildBlankSlotHTML"):]
+    slot = page[page.index("function buildAdsetSectionHTML"):]
     return re.sub(r"/\*.*?\*/", "", slot[: slot.index("// ── Tracking link save")], flags=re.S)
 
 
@@ -63,7 +63,7 @@ def test_the_page_code_behaves_in_node():
 def test_the_ad_set_has_a_real_conversion_location_choice_not_a_stub():
     slot = _slot_code()
     assert "future('forms'" not in slot, "заглушка ACL-1775 осталась"
-    assert "'<select name=\"camp_' + idx + '_destination\"" in slot
+    assert "'<select name=\"' + pfx + 'destination\"" in slot
     assert '<option value="website" selected>Website</option>' in slot
     assert '<option value="instant_form">Instant Form</option>' in slot
     # Умолчание - сайт: старая карточка и старые черновики ничего не меняют.
@@ -113,11 +113,16 @@ def test_a_stored_draft_restores_the_destination_and_resyncs():
 
 def test_every_place_that_builds_or_copies_rows_resyncs_the_destination():
     page = _page()
-    for anchor in ("window.cbAddSlot = function(form) {", "window.cbAddAd = function(btn) {",
-                   "window.cbDuplicateAd = function(btn) {", "window.cbDuplicateSlot = function(btn) {"):
+    for anchor in ("window.cbAddSlot = function(form) {", "function addAdRow(slot, k) {",
+                   "window.cbDuplicateAd = function(btn) {", "window.cbDuplicateSlot = function(btn) {",
+                   "window.cbAddAdset = function (slot, opts) {", "window.cbCopyAdset = function (slot, k) {",
+                   "window.cbRemoveAdset = function (slot, k) {"):
         body = page[page.index(anchor):]
-        body = body[: body.index("\n  };\n")]
+        body = body[: body.index("\n  };\n" if anchor.startswith("window.") else "\n  }\n")]
         assert "cbSyncDestination(" in body, anchor
+    # «+ Ad» идёт через addAdRow, а он досинхронизирует место конверсии
+    ad = page[page.index("window.cbAddAd = function(btn) {"):]
+    assert "addAdRow(" in ad[: ad.index("\n  };\n")]
     sync = page[page.index("function syncHost(found) {"):]
     assert "cbSyncDestination(found.camp.slot)" in sync[: sync.index("function paintEditor")]
 
@@ -134,7 +139,8 @@ def test_the_page_and_the_server_agree_on_destinations_and_form_statuses():
     assert m.group(1) == fm.USABLE_STATUS == "ACTIVE"
     # имя поля, которое разбирает сервер
     src = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
-    assert 'f"camp_{idx}_destination"' in src and 'f"camp_{idx}_ad_{a_idx}_form_id"' in src
+    # ACL-1768: поля набора читаются с префиксом набора (набор 0 - прежние имена camp_N_*).
+    assert 'pfx + "destination"' in src and 'f"camp_{idx}_ad_{a_idx}_form_id"' in src
 
 
 def test_the_page_never_names_a_way_to_create_a_form_or_accept_terms():

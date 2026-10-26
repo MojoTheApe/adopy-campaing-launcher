@@ -53,11 +53,15 @@ from src.web.cache import (
     background_progress_callback,
     cache_built_at,
     cache_clear,
+    entry_source_key,
     forget_background_error,
     get_cached_report,
     peek_cached_report,
     start_background_build,
+    verified_source_key,
 )
+from src.analysis_agent import bi_stats
+from src.web import report_store
 from src.web.request_limits import (
     BUILDER_FORM,
     DEFAULT_MAX_BODY,
@@ -2431,35 +2435,63 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
     ddmm = _date.today().strftime("%d.%m")
     country_val = _country_code(country)
 
-    for idx in range(camp_count):
-        targeting = (form.get(f"camp_{idx}_targeting") or "").strip()
-        os_val    = (form.get(f"camp_{idx}_os") or "All").strip()
-        age_val   = (form.get(f"camp_{idx}_age") or "35").strip()
-        # Пусто — это ответ, а не пропуск: язык сняли намеренно, и правило по
-        # стране подставится при обогащении только если поле не трогали.
-        language  = (form.get(f"camp_{idx}_language") or "").strip()
-        asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
-        budget    = (form.get(f"camp_{idx}_budget") or "").strip()
-        name      = (form.get(f"camp_{idx}_name") or "").strip()
+    def _set_fields(idx: int, k: int) -> dict:
+        """Поля уровня набора. Набор 0 живёт под прежними именами `camp_N_*`, остальные -
+        под `camp_N_adset_K_*` (ACL-1768); значения читаются одинаково."""
+        pfx = f"camp_{idx}_" if k == 0 else f"camp_{idx}_adset_{k}_"
         # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
-        destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
+        destination = (form.get(pfx + "destination") or "website").strip().lower()
         # ACL-1767 (только API-бэкенд): поля набора. Пусто = ключа в слоте нет, и
         # прежние черновики не меняются ни байтом. Незнакомое значение уходит как есть,
         # а план откажет вслух, молча в умолчание оно не превращается.
-        gender_val = (form.get(f"camp_{idx}_gender") or "").strip().lower()
+        gender_val = (form.get(pfx + "gender") or "").strip().lower()
         if gender_val == "all":
             gender_val = ""
-        device_val = (form.get(f"camp_{idx}_device") or "").strip().lower()
+        device_val = (form.get(pfx + "device") or "").strip().lower()
         if device_val == "all":
             device_val = ""
-        os_min_val = (form.get(f"camp_{idx}_os_min") or "").strip()
-        start_val = (form.get(f"camp_{idx}_start_time") or "").strip()
-        langs_val = [x.strip() for x in (form.get(f"camp_{idx}_languages") or "").split(",") if x.strip()]
+        return {
+            "targeting": (form.get(pfx + "targeting") or "").strip(),
+            "os": (form.get(pfx + "os") or "All").strip(),
+            "age": (form.get(pfx + "age") or "35").strip(),
+            # Пусто — это ответ, а не пропуск: язык сняли намеренно, и правило по
+            # стране подставится при обогащении только если поле не трогали.
+            "language": (form.get(pfx + "language") or "").strip(),
+            "language_provided": (pfx + "language") in form,
+            "destination": destination,
+            "gender": gender_val,
+            "device": device_val,
+            "os_min": (form.get(pfx + "os_min") or "").strip(),
+            "start_time": (form.get(pfx + "start_time") or "").strip(),
+            "languages": [x.strip() for x in (form.get(pfx + "languages") or "").split(",") if x.strip()],
+            "adset_name": (form.get(f"camp_{idx}_adset_{k}_name") or "").strip(),
+            "pixel": (form.get(f"camp_{idx}_adset_{k}_pixel") or "").strip(),
+        }
+
+    camp_spans: list[tuple[str, int, int, list[str]]] = []
+    for idx in range(camp_count):
+        asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
+        budget    = (form.get(f"camp_{idx}_budget") or "").strip()
+        name      = (form.get(f"camp_{idx}_name") or "").strip()
+        first_set = _set_fields(idx, 0)
+        targeting, os_val, age_val = first_set["targeting"], first_set["os"], first_set["age"]
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
         except (TypeError, ValueError):
             ad_count = 1
+        # ACL-1768: сколько наборов; нет поля (старая страница, RPA) - один.
+        try:
+            adset_count = max(1, int(form.get(f"camp_{idx}_adset_count") or 1))
+        except (TypeError, ValueError):
+            adset_count = 1
+        # Ошибки формы этой кампании: уходят в слот и становятся ошибками черновика (отказ вслух).
+        form_errors: list[str] = []
+        from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR
+        if adset_count > MAX_AD_SETS:
+            form_errors.append(MAX_AD_SETS_ERROR)
+            adset_count = MAX_AD_SETS
+        first_slot = len(slots)
 
         # Build auto-name from campaign-level fields if not set
         if not name:
@@ -2469,73 +2501,115 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         if not name:
             continue
 
+        # Объявление -> набор: `camp_N_ad_M_adset`; нет поля - набор 0.
+        ads_by_set: dict[int, list[int]] = {k: [] for k in range(adset_count)}
         for a_idx in range(ad_count):
-            creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
-            creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
-            copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
-            # ACL-1344: необязательный второй вариант основного текста —
-            # название записи библиотеки текстов, как у `copy`.
-            copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
-            # ACL-1774 (только API-бэкенд): тексты 3-5 и вертикальный файл Stories/Reels.
-            copy_more     = [(form.get(f"camp_{idx}_ad_{a_idx}_copy{n}") or "").strip()
-                             for n in (3, 4, 5)]
-            while copy_more and not copy_more[-1]:
-                copy_more.pop()
-            file_vertical = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file_vertical") or "").strip()
+            # Нет ключа - набор 0 (старые формы); есть, но не целое в [0, число наборов) - отказ,
+            # объявление не угадывается в набор 0 и новый набор не придумывается.
+            key = f"camp_{idx}_ad_{a_idx}_adset"
+            if key not in form:
+                k = 0
+            else:
+                from src.fb_ads_rpa.build_draft import bad_adset_message, parse_adset_index
+                raw_k = form.get(key)
+                k = parse_adset_index(raw_k, adset_count)
+                if k is None:
+                    form_errors.append(bad_adset_message(a_idx + 1, raw_k))
+                    continue
+            ads_by_set.setdefault(k, []).append(a_idx)
 
-            # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
-            if not creative_file and a_idx == 0:
-                creative_file = (form.get(f"camp_{idx}_creative_file") or "").strip()
-            if not copy and a_idx == 0:
-                copy = (form.get(f"camp_{idx}_copy") or "").strip()
-
-            slot = {
+        for k in sorted(ads_by_set):
+            sf = first_set if k == 0 else _set_fields(idx, k)
+            destination = sf["destination"]
+            # Набор без объявлений не пропадает молча: слот без объявления, план откажет вслух.
+            ad_idxs = ads_by_set[k] or [None]
+            for a_idx in ad_idxs:
+                slot = {
                     "name": name,
-                    "creative_type": creative_type,
-                    "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
-                    "creative_file": creative_file,
-                    "copy": copy,
-                    "targeting": targeting,
-                    "os": os_val,
-                    "age": age_val,
+                    "targeting": sf["targeting"],
+                    "os": sf["os"],
+                    "age": sf["age"],
                     "budget": budget,
                     "asset": asset_val,
                     "tracking_link": tracking_link,
                     "tracking_link_provided": "tracking_link" in form,
-                    "language": language,
-                    "language_provided": f"camp_{idx}_language" in form,
+                    "language": sf["language"],
+                    "language_provided": sf["language_provided"],
                 }
-            # Ключ — только у объявлений со вторым текстом: остальные слоты
-            # (и записанные из них задания) остаются прежними.
-            if f"camp_{idx}_page_id" in form:
-                slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
-            if copy2:
-                slot["copy2"] = copy2
-            if copy_more:
-                slot["copy_more"] = copy_more
-            if file_vertical:
-                slot["creative_file_vertical"] = file_vertical
-            # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
-            # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
-            # лишних ключей нет - прежние черновики не меняются ни байтом.
-            if destination != "website":
-                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
-                # и план откажет вслух ("Unknown conversion location").
-                slot["destination"] = destination
-            for key, val in (("gender", gender_val), ("languages", langs_val), ("device", device_val),
-                             ("os_min", os_min_val), ("start_time", start_val)):
-                if val:
-                    slot[key] = val
-            cta_val = (form.get(f"camp_{idx}_ad_{a_idx}_cta") or "").strip().upper()
-            if cta_val and cta_val != "LEARN_MORE":
-                slot["cta"] = cta_val
-            if destination == "instant_form":
-                slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
-                # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
-                template = (form.get(f"camp_{idx}_ad_{a_idx}_form_template") or "").strip()
-                if template:
-                    slot["lead_form_template"] = template
-            slots.append(slot)
+                if a_idx is None:
+                    slot.update({"creative_type": "Image", "creative_id": "", "creative_file": "",
+                                 "copy": "", "no_ad": True})
+                else:
+                    creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
+                    creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
+                    copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
+                    # ACL-1344: необязательный второй вариант основного текста —
+                    # название записи библиотеки текстов, как у `copy`.
+                    copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
+                    # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
+                    if not creative_file and a_idx == 0:
+                        creative_file = (form.get(f"camp_{idx}_creative_file") or "").strip()
+                    if not copy and a_idx == 0:
+                        copy = (form.get(f"camp_{idx}_copy") or "").strip()
+                    slot.update({
+                        "creative_type": creative_type,
+                        "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
+                        "creative_file": creative_file,
+                        "copy": copy,
+                    })
+                    # ACL-1774 (только API-бэкенд): тексты 3-5 и вертикальный файл Stories/Reels.
+                    copy_more = [(form.get(f"camp_{idx}_ad_{a_idx}_copy{n}") or "").strip()
+                                 for n in (3, 4, 5)]
+                    while copy_more and not copy_more[-1]:
+                        copy_more.pop()
+                    file_vertical = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file_vertical") or "").strip()
+                    # Ключ — только у объявлений со вторым текстом: остальные слоты
+                    # (и записанные из них задания) остаются прежними.
+                    if copy2:
+                        slot["copy2"] = copy2
+                    if copy_more:
+                        slot["copy_more"] = copy_more
+                    if file_vertical:
+                        slot["creative_file_vertical"] = file_vertical
+                    cta_val = (form.get(f"camp_{idx}_ad_{a_idx}_cta") or "").strip().upper()
+                    if cta_val and cta_val != "LEARN_MORE":
+                        slot["cta"] = cta_val
+                    if destination == "instant_form":
+                        slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
+                        # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
+                        template = (form.get(f"camp_{idx}_ad_{a_idx}_form_template") or "").strip()
+                        if template:
+                            slot["lead_form_template"] = template
+                # ACL-1768: ключи набора только у кампаний с несколькими наборами - слоты
+                # одного набора остаются прежними ни байтом.
+                if adset_count > 1 or len(ads_by_set) > 1:
+                    slot["adset_index"] = k
+                    slot["adset_count"] = adset_count
+                # Страница - на кампании: ключ есть только когда поле пришло в форме.
+                if f"camp_{idx}_page_id" in form:
+                    slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
+                if sf["adset_name"]:
+                    slot["adset_name"] = sf["adset_name"]
+                if sf["pixel"]:
+                    slot["pixel_id"] = sf["pixel"]
+                # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
+                # другого назначения (сайта) не уходят вовсе.
+                if destination != "website":
+                    # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                    # и план откажет вслух ("Unknown conversion location").
+                    slot["destination"] = destination
+                for key in ("gender", "languages", "device", "os_min", "start_time"):
+                    if sf[key]:
+                        slot[key] = sf[key]
+                slots.append(slot)
+        camp_spans.append((name, first_slot, len(slots), form_errors))
+    # ACL-1768: две карточки с одним именем склеили бы наборы друг друга - отказ вслух.
+    for name, start, end, errs in camp_spans:
+        if sum(1 for n, *_ in camp_spans if n == name) > 1 and start < end:
+            errs.append(f"Two campaigns are named {name}. Give each campaign a distinct name.")
+    for name, start, end, errs in camp_spans:
+        if errs and start < end:
+            slots[start]["form_errors"] = list(dict.fromkeys(errs))
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
     # the GCC/LatAm language rule and the Excel Countries lookup expect
@@ -2583,22 +2657,153 @@ def _start_warm(date_from: str, date_to: str, span: str) -> None:
     )
 
 
+# ── ACL-2207: the last finished page on disk ───────────────────────────
+#
+# The report cache lives in memory, so every restart used to cost minutes of
+# "getting your dashboard ready". The page that was last rendered is kept in
+# the machine config folder (src/web/report_store.py) and shown at once after
+# a restart - marked "from cache" when nothing changed, OUTDATED when the code,
+# the data or the number-changing settings are not the ones it was built with.
+# The live report is still rebuilt in the background; once it is ready the
+# in-memory path below serves it, so template edits keep their no-restart
+# behaviour.
+_STORE_SETTING_ENV = (
+    "BI_CURRENCY", "STATS_CURRENCY", "BI_TIMEZONE", "STATS_TIMEZONE",
+    "BI_DAY_BOUNDARY", "STATS_DAY_BOUNDARY",
+)
+
+
+def _file_stamp(path) -> list:
+    try:
+        st = os.stat(path)
+        return [st.st_mtime_ns, st.st_size]
+    except OSError:
+        return []
+
+
+def _store_code_key() -> dict:
+    import hashlib
+
+    release = _installed_release()
+    digest = hashlib.sha256()
+    try:
+        for item in sorted(_TEMPLATES_DIR.rglob("*")):
+            if item.is_file() and item.suffix in (".html", ".css", ".js"):
+                digest.update(
+                    f"{item.relative_to(_TEMPLATES_DIR).as_posix()}|{_file_stamp(item)}".encode()
+                )
+    except OSError:
+        pass
+    return {
+        "version": release.get("sha") or release.get("tag") or "unknown",
+        "templates": digest.hexdigest()[:16],
+    }
+
+
+def _store_settings_key() -> dict:
+    import hashlib
+
+    from config.paths import get_ad_account_map_path
+
+    hidden: list[str] = []
+    try:
+        from src.web import account_links, hidden_accounts
+
+        hidden = sorted(hidden_accounts.load()) + sorted(account_links.hidden_keys())
+    except Exception:  # noqa: BLE001 - unreadable list: the digest below still changes
+        hidden = ["unreadable"]
+    try:
+        account_map = _file_stamp(get_ad_account_map_path())
+    except Exception:  # noqa: BLE001
+        account_map = []
+    return {
+        "env": {name: (os.environ.get(name) or "").strip() for name in _STORE_SETTING_ENV},
+        "hidden": hashlib.sha256(chr(10).join(hidden).encode("utf-8")).hexdigest()[:16],
+        "account_map": account_map,
+    }
+
+
+def _store_key(source) -> dict:
+    return {"code": _store_code_key(), "source": source, "settings": _store_settings_key()}
+
+
+def _store_inputs(date_from: str, date_to: str, span: str, compare: str,
+                  cmp_from: str, cmp_to: str) -> dict:
+    from src.web.buyer import get_selected_cm
+
+    return {
+        "cm": get_selected_cm() or "", "date_from": date_from.strip(), "date_to": date_to.strip(),
+        "span": span.strip(), "compare": compare.strip(),
+        "cmp_from": cmp_from.strip(), "cmp_to": cmp_to.strip(),
+    }
+
+
+def _stored_page(inputs: dict):
+    """The saved page for this view with what changed since, or None. Pool thread only."""
+    try:
+        if not report_store.enabled():
+            return None
+        return report_store.load(inputs, _store_key(verified_source_key()))
+    except Exception:  # noqa: BLE001 - a damaged store must never block the page
+        return None
+
+
+def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLResponse:
+    """Render the live page and keep it on disk if it was built from one state."""
+    try:
+        before = _store_key(entry_source_key())
+    except Exception:  # noqa: BLE001
+        before = None
+    from src.web.buyer import rendering_cm
+
+    with rendering_cm(inputs["cm"]):
+        response = _render_report(request, **kwargs)
+    try:
+        template = getattr(response, "template", None)
+        if (
+            before is not None and response.status_code == 200
+            and getattr(template, "name", "") == "report.html"
+            and _store_key(entry_source_key()) == before  # the data did not move meanwhile
+        ):
+            body = bytes(response.body).decode("utf-8")
+            threading.Thread(
+                target=report_store.save, args=(inputs, before, body),
+                name="acl-report-store", daemon=True,
+            ).start()
+    except Exception:  # noqa: BLE001 - the page is already rendered
+        pass
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = "",
     compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
+    inputs = _store_inputs(date_from, date_to, span, compare, cmp_from, cmp_to)
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
-    # а сразу ответить «цифры загружаются» и собрать его в фоне.
+    # а сразу ответить и собрать его в фоне. ACL-2207: отвечаем последней
+    # сохранённой страницей, если она есть, а не экраном ожидания.
     if not _page_ready(date_from, date_to, span):
-        if forget_background_error() is None:
+        failure = forget_background_error()
+        # Only a stat on the loop; the key work (git, BI) happens in the pool
+        # and only when there is something to show.
+        stored = await _in_report_pool(_stored_page, inputs) if report_store.exists(inputs) else None
+        if failure is None:
             _start_warm(date_from, date_to, span)
+            if stored is not None:
+                return HTMLResponse(report_store.decorate(stored))
             return templates.TemplateResponse(request, "loading.html", {"request": request})
+        if stored is not None:
+            # The rebuild failed: keep the last report and say why. The next
+            # load starts a new rebuild.
+            return HTMLResponse(report_store.decorate(
+                stored, error=bi_stats.redact(failure) or "the report could not be rebuilt."))
         # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
         # ту же ошибку по-человечески (нет файла, не тот формат).
     return await _in_report_pool(
-        _render_report, request, date_from=date_from, date_to=date_to, span=span,
-        compare=compare, cmp_from=cmp_from, cmp_to=cmp_to,
+        _render_and_remember, request, inputs, date_from=date_from, date_to=date_to,
+        span=span, compare=compare, cmp_from=cmp_from, cmp_to=cmp_to,
     )
 
 
@@ -5798,8 +6003,35 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+MULTI_ADSET_RPA_ERROR = ("Several ad sets need the API backend (ACL_FB_BACKEND=api). "
+                         "The RPA backend builds one ad set per campaign; remove the extra ad sets "
+                         "or use the API backend.")
+
+
+def _several_adsets(slots: list[dict]) -> list[str]:
+    """Имена кампаний, у которых больше одного набора (ACL-1768)."""
+    seen: dict[str, set] = {}
+    for slot in slots:
+        k = slot.get("adset_index") or 0
+        seen.setdefault(str(slot.get("name") or ""), set()).add(k if isinstance(k, int) else str(k))
+    return [n for n, idx in seen.items() if len(idx) > 1]
+
+
+def _multi_adset_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1768: больше одного набора при RPA-бэкенде - отказ вслух, лишний набор не отбрасывается молча."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    names = _several_adsets(slots)
+    if names:
+        return JSONResponse({"error": MULTI_ADSET_RPA_ERROR, "campaigns": names}, status_code=409)
+    return None
+
+
 #: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
-API_ONLY_SLOT_KEYS = {"gender": "Gender", "languages": "Several languages", "device": "Devices",
+API_ONLY_SLOT_KEYS = {"adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
+                      "gender": "Gender", "languages": "Several languages", "device": "Devices",
                       "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more",
                       "copy_more": "Primary text 3-5 (with their headlines and descriptions)",
                       "creative_file_vertical": "Stories / Reels file"}
@@ -5971,7 +6203,8 @@ async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
-    refused = _instant_form_refusal(slots) or _api_only_fields_refusal(slots)
+    refused = (_multi_adset_refusal(slots) or _instant_form_refusal(slots)
+               or _api_only_fields_refusal(slots))
     if refused is not None:
         return refused
     if not country:
@@ -6009,7 +6242,8 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     """
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
-    refused = _instant_form_refusal(slots) or _api_only_fields_refusal(slots)
+    refused = (_multi_adset_refusal(slots) or _instant_form_refusal(slots)
+               or _api_only_fields_refusal(slots))
     if refused is not None:
         return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
@@ -6415,6 +6649,22 @@ async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
+    if _several_adsets(slots):
+        # ACL-1768: таблица Upload FB знает один набор на кампанию - не отбрасывать лишние молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: [MULTI_ADSET_RPA_ERROR.split(" (")[0] + ": Upload FB cannot hold them."]}},
+        )
+    custom = [s for s in slots if s.get("adset_name") or s.get("pixel_id")]
+    if custom:
+        # ACL-1768: имя набора и пиксель набора таблица Upload FB не несёт - не отбрасывать молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Upload FB cannot hold a custom ad set name or pixel; "
+                                            "use Publish with the API backend."]}},
+        )
     if any(s.get("destination") == "instant_form" for s in slots):
         # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
         return await _in_report_pool(
