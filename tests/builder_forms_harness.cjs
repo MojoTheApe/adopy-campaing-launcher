@@ -83,7 +83,7 @@ function el(props) {
     dataset: {}, events: [], dispatchEvent(ev) { this.events.push(ev.type + (ev.bubbles ? ':bubbles' : '')); } }, props || {});
 }
 function build(opts) {
-  const o = Object.assign({ account: 'Acc', dest: 'website', formIds: ['', ''] }, opts || {});
+  const o = Object.assign({ account: 'Acc', dest: 'website', formIds: ['', ''], source: '' }, opts || {});
   const form = { querySelector: (s) => (s === '[name="account_label"]' ? { value: o.account } : null) };
   const optInstant = el({});
   const select = el({ value: o.dest, querySelector: (s) => (s === 'option[value="instant_form"]' ? optInstant : null) });
@@ -91,15 +91,17 @@ function build(opts) {
   const rows = o.formIds.map((id) => {
     const hid = el({ value: id, disabled: true });
     const only = [el({ hidden: true }), el({ hidden: true })];
+    const existing = [el({ hidden: true }), el({ hidden: true })];
+    const srcSel = el({ value: o.source, querySelector: () => null });
     const picker = el({ dataset: {} });
     const fnote = el({});
     const row = el({
       querySelector: (s) => (s === '.cb-form-select' ? picker : s === 'input[name$="_form_id"]' ? hid
-        : s === '[data-form-note]' ? fnote : null),
-      querySelectorAll: (s) => (s === '.cb-form-only' ? only : []),
+        : s === '[data-form-note]' ? fnote : s === '.cb-form-source' ? srcSel : null),
+      querySelectorAll: (s) => (s === '.cb-form-only' ? only : s === '.cb-form-existing' ? existing : []),
       closest: (s) => (s === 'form' ? form : null),
     });
-    row._ = { hid, only, picker, fnote };
+    row._ = { hid, only, existing, srcSel, picker, fnote };
     return row;
   });
   const slot = el({
@@ -156,6 +158,19 @@ assert.equal(t.select.disabled, false, 'непустой выбор пропал
 assert.equal(t.optInstant.disabled, true);
 assert.equal(t.rows[0]._.hid.disabled, false);
 assert.equal(t.note.hidden, false);
+
+// ACL-2189: в режиме «Use existing form» выбор формы и «Refresh forms» видны,
+// в режиме «Create from template» скрыты (раньше было наоборот).
+setBackend('api');
+t = build({ dest: 'instant_form', source: 'existing', formIds: ['7000001'] });
+W.cbSyncDestination(t.slot);
+assert.ok(t.rows[0]._.existing.every((x) => x.hidden === false), 'Use existing form: выбор формы и Refresh forms должны быть видны');
+t.rows[0]._.srcSel.value = 'template';
+W.cbSyncDestination(t.slot);
+assert.ok(t.rows[0]._.existing.every((x) => x.hidden === true), 'Create from template: выбор формы и Refresh forms должны быть скрыты');
+t.rows[0]._.srcSel.value = 'existing';
+W.cbSyncDestination(t.slot);
+assert.ok(t.rows[0]._.existing.every((x) => x.hidden === false), 'возврат на Use existing form не показал выбор формы');
 
 // Повторная синхронизация ничего не пишет (форму слушает наблюдатель дерева).
 setBackend('api');

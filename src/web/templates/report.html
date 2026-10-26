@@ -948,6 +948,12 @@
     }
 
     /* Multilogin connect panel */
+    .mlx-expiry { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 1rem 0;
+      padding: 0.5rem 0.85rem; border: 1px solid var(--warn, #b26a00); border-radius: 6px;
+      background: var(--bg-hover); color: var(--text); font-size: var(--adopy-text-table); }
+    .mlx-expiry[hidden] { display: none; }
+    .mlx-expiry.mlx-expired { border-color: var(--danger, #b00020); color: var(--danger, #b00020); font-weight: 600; }
+    .mlx-expiry button { margin-left: auto; }
     .ml-connect-panel {
       border: 1px solid var(--border); border-radius: 6px;
       margin-bottom: 1rem; overflow: hidden;
@@ -3640,6 +3646,11 @@
     .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
     .cb-headline-line[hidden] { display: none; }
     .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
+    .cb-textx-label[hidden], .cb-textx-sel-wrap[hidden] { display: none; }
+    .cb-textx-add-wrap { display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+    .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+    .cb-textx-add:disabled { opacity: 0.55; cursor: not-allowed; }
+    .cb-textx-note { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* ACL-1775: выбор формы Страницы в объявлении */
     .cb-form-wrap { min-width: 0; }
     .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
@@ -4122,6 +4133,17 @@
     </dl>
   </div>
 </header>
+
+{#- ACL-2185: токен автоматизации Multilogin живёт месяц и гаснет молча — после
+    этого каждый старт профиля отвечает 401. Плашка появляется за час до срока
+    (с точным временем) и становится ошибкой после него. Данные — из
+    /multilogin-token-expiry: срок читается из самого токена без сети, сам
+    токен на страницу не попадает. «Sign in again» открывает обычное подключение
+    Multilogin на странице Accounts. -#}
+<div id="mlx-expiry-banner" class="mlx-expiry" role="status" aria-live="polite" hidden>
+  <span id="mlx-expiry-text"></span>
+  <button type="button" class="head-btn" id="mlx-expiry-signin" onclick="aclMlxSignInAgain()">Sign in again</button>
+</div>
 
 {#- ACL-1827: «Robot health» открывается панелью под шапкой. Ссылка остаётся
     настоящей (/robot-health) — без скрипта и по прямой ссылке открывается
@@ -4749,17 +4771,16 @@ async function dashRefresh(ev) {
         <input id="fm-name" type="text" maxlength="60" placeholder="Demo form template" style="width:100%"></label>
       <label style="flex:2 1 16rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Headline</div>
         <input id="fm-headline" type="text" maxlength="60" placeholder="Get more information" style="width:100%"></label>
-      <label style="flex:0 0 7rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale</div>
-        <input id="fm-locale" type="text" maxlength="5" value="EN_US" style="width:100%"></label>
+      <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale (language of the built-in Meta labels)</div>
+        <select id="fm-locale" style="width:100%"></select></label>
     </div>
-    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Intro (optional)</div>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
-      <label><input type="checkbox" id="fm-c-name" checked> Full name</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-first_name"> First name</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name"> Last name</label>
+      <label><input type="checkbox" id="fm-c-first_name" checked> First name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name" checked> Last name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone"> Phone</label></div>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone" checked> Phone</label></div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
       <div id="fm-questions"></div>
       <button type="button" id="fm-add-q-btn" class="btn">+ Add question</button></div>
@@ -6470,9 +6491,7 @@ window.cbLayout = (function () {
   var FUTURE = {
     adsets:     { task: 'ACL-1768', what: 'Multiple ad sets' },
     copyAdset:  { task: 'ACL-1768', what: 'Copy ad set' },
-    texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
     placements: { task: 'ACL-1772', what: 'Placement editor' },
-    media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
     copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
   };
 
@@ -6531,8 +6550,10 @@ window.cbLayout = (function () {
      creator.plan_from_draft), а здесь только куда её показать. */
   var ROUTES = [
     [/primary text 2/i, '.cb-text2-search', 'ad'],
-    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
-    [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
+    [/primary text [3-5]/i, '.cb-textx-search', 'ad'],
+    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text [2-5]'],
+    [/stories ?\/ ?reels/i, '.cb-vertical-search', 'ad'],
+    [/creative|file|image|video/i, '.cb-creative-search', 'ad', 'stories ?\/ ?reels|dynamic creative'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
     [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
@@ -6601,6 +6622,23 @@ window.cbLayout = (function () {
   var FORM_LOCALES = ['AR_AR', 'CS_CZ', 'DA_DK', 'DE_DE', 'EL_GR', 'EN_GB', 'EN_US', 'ES_ES', 'ES_LA', 'FI_FI', 'FR_FR',
     'HE_IL', 'HI_IN', 'HU_HU', 'ID_ID', 'IT_IT', 'JA_JP', 'KO_KR', 'NB_NO', 'NL_NL', 'PL_PL', 'PT_BR',
     'PT_PT', 'RO_RO', 'RU_RU', 'SV_SE', 'TH_TH', 'TR_TR', 'VI_VN', 'ZH_CN', 'ZH_HK', 'ZH_TW'];
+  /* ACL-2180: Auto - язык формы из языка и страны набора. Зеркало src/fb_api/form_locale.py
+     (LOCALE_NAMES, RULES; сверяет тест). Форму задаёт основной язык набора, дополнительные не влияют. */
+  var FORM_LOCALE_AUTO = 'AUTO';
+  var FORM_LOCALE_AUTO_LABEL = "Auto (from the ad set language and country)";
+  var FORM_LOCALE_NAMES = {"AR_AR": "Arabic", "CS_CZ": "Czech", "DA_DK": "Danish", "DE_DE": "German", "EL_GR": "Greek", "EN_GB": "English (UK)", "EN_US": "English (US)", "ES_ES": "Spanish (Spain)", "ES_LA": "Spanish (Latin America)", "FI_FI": "Finnish", "FR_FR": "French", "HE_IL": "Hebrew", "HI_IN": "Hindi", "HU_HU": "Hungarian", "ID_ID": "Indonesian", "IT_IT": "Italian", "JA_JP": "Japanese", "KO_KR": "Korean", "NB_NO": "Norwegian (Bokmal)", "NL_NL": "Dutch", "PL_PL": "Polish", "PT_BR": "Portuguese (Brazil)", "PT_PT": "Portuguese (Portugal)", "RO_RO": "Romanian", "RU_RU": "Russian", "SV_SE": "Swedish", "TH_TH": "Thai", "TR_TR": "Turkish", "VI_VN": "Vietnamese", "ZH_CN": "Chinese (Simplified)", "ZH_HK": "Chinese (Hong Kong)", "ZH_TW": "Chinese (Taiwan)"};
+  var FORM_LOCALE_RULES = {"english": {"GB": "EN_GB", "*": "EN_US"}, "spanish": {"ES": "ES_ES", "AR": "ES_LA", "BO": "ES_LA", "CL": "ES_LA", "CO": "ES_LA", "CR": "ES_LA", "CU": "ES_LA", "DO": "ES_LA", "EC": "ES_LA", "GT": "ES_LA", "HN": "ES_LA", "MX": "ES_LA", "NI": "ES_LA", "PA": "ES_LA", "PE": "ES_LA", "PY": "ES_LA", "SV": "ES_LA", "UY": "ES_LA", "VE": "ES_LA"}, "portuguese": {"BR": "PT_BR", "*": "PT_PT"}, "chinese": {"CN": "ZH_CN", "HK": "ZH_HK", "TW": "ZH_TW"}, "arabic": {"*": "AR_AR"}, "french": {"*": "FR_FR"}, "german": {"*": "DE_DE"}, "italian": {"*": "IT_IT"}, "turkish": {"*": "TR_TR"}, "russian": {"*": "RU_RU"}, "czech": {"*": "CS_CZ"}, "danish": {"*": "DA_DK"}, "greek": {"*": "EL_GR"}, "finnish": {"*": "FI_FI"}, "hebrew": {"*": "HE_IL"}, "hindi": {"*": "HI_IN"}, "hungarian": {"*": "HU_HU"}, "indonesian": {"*": "ID_ID"}, "japanese": {"*": "JA_JP"}, "korean": {"*": "KO_KR"}, "norwegian": {"*": "NB_NO"}, "dutch": {"*": "NL_NL"}, "polish": {"*": "PL_PL"}, "romanian": {"*": "RO_RO"}, "swedish": {"*": "SV_SE"}, "thai": {"*": "TH_TH"}, "vietnamese": {"*": "VI_VN"}};
+  function formLocaleOptions(selected) {
+    var cur = squeeze(selected).toUpperCase().replace(/-/g, '_') || FORM_LOCALE_AUTO;
+    var out = '<option value="AUTO"' + (cur === FORM_LOCALE_AUTO ? ' selected' : '') + '>' + FORM_LOCALE_AUTO_LABEL + '</option>';
+    FORM_LOCALES.forEach(function (l) {
+      out += '<option value="' + l + '"' + (l === cur ? ' selected' : '') + '>' + (FORM_LOCALE_NAMES[l] || l) + ' (' + l + ')</option>';
+    });
+    if (cur !== FORM_LOCALE_AUTO && FORM_LOCALES.indexOf(cur) === -1 && /^[A-Z]{2}_[A-Z]{2}$/.test(cur)) {
+      out += '<option value="' + cur + '" selected>' + cur + ' (saved earlier)</option>';
+    }
+    return out;
+  }
 
   function httpsUrl(u) {
     return /^https:\/\/[^\s\/?#:]+\.[^\s\/?#:]+(:\d+)?([\/?#]\S*)?$/i.test(String(u == null ? '' : u).trim());
@@ -6652,7 +6690,7 @@ window.cbLayout = (function () {
     var site = String(t.website_url || '').trim();
     if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
     var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
-    if (FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
+    if (locale !== FORM_LOCALE_AUTO && FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
     var ftype = squeeze(t.form_type).toLowerCase() || 'more_volume';
     if (ftype !== 'more_volume' && ftype !== 'higher_intent') e.push('Form type must be More volume or Higher intent');
     return e;
@@ -6684,7 +6722,8 @@ window.cbLayout = (function () {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
     validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
-    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES,
+    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
+    FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -6708,6 +6747,16 @@ window.cbPreflight = (function () {
   function v(rule, status, detail, ads) { return { rule: rule, status: status, detail: detail || '', ads: ads || [] }; }
 
   function applies(rule, dest) { return rule.applies === 'always' || rule.applies === dest; }
+
+  /* Непустые тексты без повторов (пробелы не в счёт) — как creator._unique / _distinct на сервере. */
+  function distinct(items) {
+    var seen = {}, out = [];
+    (Array.isArray(items) ? items : []).forEach(function (x) {
+      var key = s(x).replace(/\s+/g, '');
+      if (key && !seen[key]) { seen[key] = 1; out.push(key); }
+    });
+    return out;
+  }
 
   function perAd(rule, inp, bad, status) {
     var ads = [];
@@ -6738,6 +6787,15 @@ window.cbPreflight = (function () {
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
       else if (id === 'media_chosen') out.push(perAd(id, inp, function (a) { return !s(a.file); }));
+      else if (id === 'vertical_needs_main') out.push(perAd(id, inp, function (a) { return !!s(a.vertical_file) && !s(a.file); }));
+      else if (id === 'texts_limit') out.push(perAd(id, inp, function (a) {
+        return ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > (C.max_texts || 5); });
+      }));
+      else if (id === 'texts_vertical' || id === 'texts_dynamic') out.push(perAd(id, inp, function (a) {
+        var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
+        return multi && (id === 'texts_vertical') === !!s(a.vertical_file)
+          && (id === 'texts_vertical' || (inp.ads || []).length > 1);
+      }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
@@ -7603,16 +7661,9 @@ window.cbTree = (function () {
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
     for (var i = 0; i < rows.length; i += 1) {
-      /* Создатель по API второй основной текст не принимает: пустое поле
-         выключено с причиной, непустое остаётся рабочим (иначе набранное
-         молча пропало бы из отправки) и проверка покажет ошибку на нём. */
-      var t2 = rows[i].querySelector('.cb-text2-search');
-      var note = rows[i].querySelector('[data-api-only]');
-      if (t2) {
-        t2.disabled = api && !t2.value;
-        if (t2.disabled) t2.title = 'API backend: a second primary text is not supported yet (ACL-1774)';
-      }
-      if (note) note.hidden = !api;
+      /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
+         кнопкой или когда в них уже есть значение (восстановленный черновик). */
+      if (window.cbSyncTextRows) window.cbSyncTextRows(rows[i], api);
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
@@ -7694,7 +7745,18 @@ window.cbTree = (function () {
       var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
       var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
       var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
+      /* ACL-1774: все тексты объявления — записи библиотеки 1-5 по порядку. */
+      var entries = [];
+      ['_copy', '_copy2', '_copy3', '_copy4', '_copy5'].forEach(function (suf) {
+        var nm = val(row, 'input[type="hidden"][name$="' + suf + '"]').trim();
+        var en = nm && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(nm) : null;
+        if (en) entries.push(en);
+      });
       ads.push({
+        bodies: entries.map(function (e) { return String(e.body || ''); }),
+        headlines: entries.map(function (e) { return String(e.headline || e.ad_title || ''); }),
+        descriptions: entries.map(function (e) { return String(e.description || ''); }),
+        vertical_file: val(row, 'input[type="hidden"][name$="_creative_file_vertical"]').trim(),
         /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
         name: window.cbPreflight.adName(file, copy),
         file: file, body: entry ? String(entry.body || '') : '',
@@ -12583,7 +12645,7 @@ function amapMlPaint(block) {
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
-  if (alive && signin) signin.remove();
+  if (alive && signin && !block.dataset.mlRenew) signin.remove();
 }
 function amapMlPaintAll() { document.querySelectorAll('.amap-add').forEach(amapMlPaint); }
 function amapMlRefresh(inst, force) {
@@ -12603,9 +12665,10 @@ function amapMlRefresh(inst, force) {
   AMAP_ML_PENDING[inst] = pending;
   return pending;
 }
-function amapMlOpen(btn) {
+function amapMlOpen(btn, force) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
-  if (AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  if (!force && AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  if (force && block.querySelector('.amap-ml-signin')) { block.querySelector('.amap-ml-email').focus(); return; }
   // A pending sign-in owns its form until its response; never detach its inputs.
   if (document.querySelector('.amap-ml-signin[data-busy]')) return;
   document.querySelectorAll('.amap-ml-signin').forEach(function (el) { el.remove(); });
@@ -12681,7 +12744,11 @@ async function amapMlSubmit(btn, paste) {
     });
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
+    /* ACL-2185: токен обновлён — форма, открытая кнопкой «Sign in again»,
+       больше не нужна (её уберёт перерисовка), плашка о сроке перечитывается. */
+    delete block.dataset.mlRenew;
     var state = await amapMlRefresh(inst, true);
+    aclMlxExpiryRefresh();
     amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
@@ -12721,6 +12788,78 @@ function amapMlWorkspacePicker(form, workspaces, chosen) {
   select.value = pick;
 }
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
+/* ACL-2185: плашка срока токена Multilogin. Срок приходит из
+   /multilogin-token-expiry (офлайн-разбор exp, токена в ответе нет). Между
+   запросами состояние пересчитывается по часам браузера, чтобы плашка
+   включилась ровно за час до срока без лишних обращений к серверу. */
+var ACL_MLX_EXPIRY = {slots: [], warn: 3600, timer: 0};
+function aclMlxPad(n) { return ('0' + n).slice(-2); }
+function aclMlxWhen(epoch) {
+  var d = new Date(epoch * 1000);
+  return d.getFullYear() + '-' + aclMlxPad(d.getMonth() + 1) + '-' + aclMlxPad(d.getDate())
+    + ' ' + aclMlxPad(d.getHours()) + ':' + aclMlxPad(d.getMinutes());
+}
+function aclMlxExpiryModel(slots, warn, nowEpoch) {
+  /* Самый срочный слот: истёкший важнее скоро истекающего. */
+  var worst = null;
+  (slots || []).forEach(function (s) {
+    if (typeof s.expires_epoch !== 'number') return;
+    var left = s.expires_epoch - nowEpoch;
+    var state = left <= 0 ? 'expired' : left <= warn ? 'warning' : 'ok';
+    if (state === 'ok') return;
+    var rank = state === 'expired' ? 0 : 1;
+    if (!worst || rank < worst.rank || (rank === worst.rank && s.expires_epoch < worst.epoch)) {
+      worst = {rank: rank, state: state, epoch: s.expires_epoch, instance: s.instance, left: left};
+    }
+  });
+  return worst;
+}
+function aclMlxExpiryPaint() {
+  var box = document.getElementById('mlx-expiry-banner'), text = document.getElementById('mlx-expiry-text');
+  if (!box || !text) return;
+  var m = aclMlxExpiryModel(ACL_MLX_EXPIRY.slots, ACL_MLX_EXPIRY.warn, Date.now() / 1000);
+  if (!m) { box.hidden = true; box.classList.remove('mlx-expired'); return; }
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[m.instance]) || m.instance;
+  var when = aclMlxWhen(m.epoch);
+  box.classList.toggle('mlx-expired', m.state === 'expired');
+  text.textContent = m.state === 'expired'
+    ? 'Multilogin token expired at ' + when + ' (' + label + '). Profiles cannot start until you sign in again.'
+    : 'Multilogin token (' + label + ') expires at ' + when + ' — in ' + Math.max(1, Math.ceil(m.left / 60)) + ' min. Sign in again to renew it.';
+  box.hidden = false;
+}
+function aclMlxExpiryRefresh() {
+  return fetch('/multilogin-token-expiry', {credentials: 'same-origin'})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (j && j.ok) { ACL_MLX_EXPIRY.slots = j.slots || []; ACL_MLX_EXPIRY.warn = j.warn_seconds || 3600; }
+      aclMlxExpiryPaint();
+    })
+    .catch(function () { aclMlxExpiryPaint(); });
+}
+function aclMlxExpiryBoot() {
+  aclMlxExpiryRefresh();
+  if (!ACL_MLX_EXPIRY.timer) ACL_MLX_EXPIRY.timer = setInterval(aclMlxExpiryRefresh, 60000);
+}
+/* «Sign in again» — то же подключение, что и «Connect Multilogin» на странице
+   Accounts, только форма открывается и при ещё живом токене. */
+function aclMlxSignInAgain() {
+  var worst = aclMlxExpiryModel(ACL_MLX_EXPIRY.slots, ACL_MLX_EXPIRY.warn, Date.now() / 1000);
+  var link = document.querySelector('.sidebar-link[data-view="accounts"]');
+  if (link) link.click();
+  var block = document.querySelector('#view-accounts .amap-add');
+  if (!block) return;
+  var sel = block.querySelector('.amap-inst');
+  if (sel && worst && sel.value !== worst.instance) {
+    sel.value = worst.instance;
+    amapMlRefresh(worst.instance, false);
+  }
+  block.dataset.mlRenew = '1';
+  amapMlPaint(block);
+  amapMlOpen(block.querySelector('.amap-ml-open') || block, true);
+  block.scrollIntoView({block: 'center'});
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aclMlxExpiryBoot);
+else aclMlxExpiryBoot();
 function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
@@ -13805,7 +13944,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   };
 
   function cbCreativeSig(f) {
-    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
+    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file, f.vertical_partner] : null;
   }
 
   // Карточки перерисовываем только там, где изменился выбранный файл:
@@ -13929,9 +14068,39 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbPrefillVertical(wrap, val);
         cbMarkMissingCreatives();
       });
     });
+  };
+
+  /* ACL-1774: «Reuse creative_pairing»: выбран квадратный файл с готовой вертикальной парой
+     (`N_post` + `N_story`) - пустое поле Stories / Reels заполняется этой парой. Только API.
+     Не трогаем: непустое поле (выбор человека главнее) и объявление с несколькими текстами
+     (вместе с вертикальным файлом такой запрос отказывается до записи). Подставляем только в момент
+     выбора основного файла, поэтому очищенное человеком поле само не возвращается. */
+  window.cbPrefillVertical = function (wrap, picked) {
+    if (window.ACL_FB_BACKEND !== 'api' || !wrap || wrap.classList.contains('cb-vertical-sel-wrap')) return;
+    var row = wrap.closest('.cb-ad-row');
+    var vwrap = row && row.querySelector('.cb-vertical-sel-wrap');
+    if (!vwrap) return;
+    var vh = vwrap.querySelector('input[type="hidden"]');
+    var vt = vwrap.querySelector('.cb-vertical-search');
+    if ((vh && vh.value.trim()) || (vt && vt.value.trim())) return;
+    var more = ['_copy2', '_copy3', '_copy4', '_copy5'].some(function (suf) {
+      var h = row.querySelector('input[type="hidden"][name$="' + suf + '"]');
+      return h && h.value.trim();
+    });
+    if (more) return;
+    var f = CREATIVES.filter(function (c) { return c.filename === picked || c.rel_path === picked; })[0];
+    var partner = f && f.vertical_partner;
+    if (!partner) return;
+    var pf = CREATIVES.filter(function (c) { return c.rel_path === partner; })[0];
+    if (!pf || pf.type !== f.type) return;
+    var dup = CREATIVES.filter(function (c) { return c.filename.toLowerCase() === pf.filename.toLowerCase(); }).length > 1;
+    var v = dup ? pf.rel_path : pf.filename;
+    if (vt) vt.value = v;
+    if (vh) vh.value = v;
   };
 
   // close creative dropdown on blur
@@ -13950,7 +14119,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (e.target.classList && e.target.classList.contains('cb-creative-search')) _cbMissLatched = false;
   });
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-creative-search')) {
+    if (e.target.classList && (e.target.classList.contains('cb-creative-search') || e.target.classList.contains('cb-vertical-search'))) {
       // ACL-1651: фокус в поиске обновляет список (не чаще раза в 10 с).
       window.cbRefreshCreatives(CB_CREATIVES_THROTTLE_MS).then(cbCreativesRedraw);
       if (e.target.value) cbCreativeSearch(e.target);
@@ -14651,7 +14820,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         var tTip = !api ? 'API backend only: the robot creates forms through the Graph API' : '';
         if (srcSel.title !== tTip) srcSel.title = tTip;
       }
-      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden === tmpl) el.hidden = !tmpl; });
+      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden !== tmpl) el.hidden = tmpl; });
       var panelOpen = row.querySelector('.cb-form-create') && !row.querySelector('.cb-form-create').hidden;
       row.querySelectorAll('.cb-form-templatebox').forEach(function (el) {
         var want = !(tmpl && !panelOpen);
@@ -14867,7 +15036,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       privacy_url: panelValue(panel, '.cb-fc-privacy'), thank_you_text: panelValue(panel, '.cb-fc-thanks'),
       website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
       form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
-      locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
+      locale: panelValue(panel, '.cb-fc-locale') || 'AUTO'
     };
   };
 
@@ -14922,13 +15091,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label class="cb-fc-label">Template name<input type="text" class="cb-input cb-fc-name" maxlength="60" placeholder="Demo form template"></label>' +
       '<label class="cb-fc-label">Headline<input type="text" class="cb-input cb-fc-headline" maxlength="60" placeholder="Get more information"></label>' +
       '<label class="cb-fc-label">Intro title <span class="cb-fc-opt">(optional, the headline is used if empty)</span><input type="text" class="cb-input cb-fc-intro-title" maxlength="60"></label>' +
-      '<label class="cb-fc-label">Intro <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
+      '<label class="cb-fc-label">Description <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
       '<div class="cb-fc-label">Contact fields<div class="cb-fc-checks">' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Full name</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="first_name"> First name</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="last_name"> Last name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="first_name" checked> First name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="last_name" checked> Last name</label>' +
       '<label><input type="checkbox" class="cb-fc-contact" value="email" checked> Email</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="phone" checked> Phone</label></div>' +
       '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
       '<div class="cb-fc-questions"></div>' +
@@ -14939,8 +15107,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label class="cb-fc-label">Follow-up URL <span class="cb-fc-opt">(optional, https; where the lead goes after submitting. Without a completion screen text the screen is skipped)</span><input type="text" class="cb-input cb-fc-followup" placeholder="https://example.com/thanks"></label>' +
       '<label class="cb-fc-label">Form type<select class="cb-input cb-select cb-fc-form-type">' +
       '<option value="more_volume" selected>More volume</option><option value="higher_intent">Higher intent</option></select></label>' +
-      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels)</span><select class="cb-input cb-select cb-fc-locale">' +
-      ((window.cbLayout && window.cbLayout.FORM_LOCALES) || ['EN_US']).map(function (l) { return '<option value="' + l + '"' + (l === 'EN_US' ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>' +
+      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels; Auto follows the ad set language and country)</span><select class="cb-input cb-select cb-fc-locale">' +
+      ((window.cbLayout && window.cbLayout.formLocaleOptions) ? window.cbLayout.formLocaleOptions('AUTO') : '<option value="EN_US" selected>EN_US</option>') + '</select></label>' +
       '<div class="cb-fc-actions">' +
       '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
@@ -14989,13 +15157,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<input type="text" class="cb-sel-text cb-text2-search" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional second primary text: the body of the chosen ad text is added as a second text option">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy2" value="">' +
-      /* ACL-1769: создатель по Graph API второй текст не принимает (ошибка
-         «Primary text 2 is not supported by the API backend yet»), поэтому при
-         бэкенде API поле гасится, пока пусто, и подпись говорит почему.
-         Набранное не теряется: непустое поле остаётся рабочим, а проверка
-         покажет ошибку на нём. Гасит cbTree.syncHost. */
-      '<div class="cb-api-note" data-api-only hidden>Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty.</div>' +
       '</div>' +
+      /* ACL-1774: тексты 3-5 — те же записи библиотеки (основной текст, заголовок и описание),
+         ряды скрыты, пока их не откроют кнопкой; максимум 5 текстов у объявления.
+         Подписи — «Primary text N», как просил владелец. Только API-бэкенд (cb-api-field). */
+      textxRowHtml(pfx, 3) + textxRowHtml(pfx, 4) + textxRowHtml(pfx, 5) +
+      '<span class="cb-label cb-textx-add-label">More primary texts</span>' +
+      '<div class="cb-textx-add-wrap"><button type="button" class="cb-textx-add" onclick="cbAddTextRow(this)">+ Primary text 3</button>' +
+      '<span class="cb-textx-note">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span></div>' +
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
@@ -15022,13 +15191,20 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<div class="cb-form-note" data-form-note></div>' +
       '</div>' +
       '</div>' +
-      '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
          Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
       '<span class="cb-label">CTA</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
-      '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
+      /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
+         (1:1 или 4:5). Соотношение и размер проверяет сервер до любой загрузки. Только API. */
+      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16, optional)</span></span>' +
+      '<div class="cb-sel-wrap cb-creative-sel-wrap cb-vertical-sel-wrap" data-ctype="Image">' +
+      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
+      '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +
+      '</div>' +
       '</div></div>';
   }
 
@@ -15122,6 +15298,25 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var t2hSrc = srcText2.querySelector('input[type=hidden]');
       var t2hNew = newText2.querySelector('input[type=hidden]');
       if (t2hSrc && t2hNew) t2hNew.value = t2hSrc.value;
+    }
+    // ACL-1774: тексты 3-5 и вертикальный файл едут в копию (открытые ряды остаются открытыми).
+    srcRow.querySelectorAll('.cb-textx-sel-wrap').forEach(function (sw) {
+      var nw = newRow.querySelector('.cb-textx-sel-wrap[data-textx="' + sw.dataset.textx + '"]');
+      if (!nw) return;
+      var a = sw.querySelector('.cb-textx-search'), b = nw.querySelector('.cb-textx-search');
+      if (a && b) b.value = a.value;
+      var ah = sw.querySelector('input[type=hidden]'), bh = nw.querySelector('input[type=hidden]');
+      if (ah && bh) bh.value = ah.value;
+    });
+    if (srcRow.dataset.textsShown) newRow.dataset.textsShown = srcRow.dataset.textsShown;
+    var srcVert = srcRow.querySelector('.cb-vertical-sel-wrap');
+    var newVert = newRow.querySelector('.cb-vertical-sel-wrap');
+    if (srcVert && newVert) {
+      newVert.dataset.ctype = srcVert.dataset.ctype;
+      var vsA = srcVert.querySelector('.cb-vertical-search'), vsB = newVert.querySelector('.cb-vertical-search');
+      if (vsA && vsB) vsB.value = vsA.value;
+      var vhA = srcVert.querySelector('input[type=hidden]'), vhB = newVert.querySelector('input[type=hidden]');
+      if (vhA && vhB) vhB.value = vhA.value;
     }
     initAllSelects(newRow);
   }
@@ -15273,12 +15468,61 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   // ── Ad type toggle (per-ad-row) ───────────────────────────────────────
+  /* ACL-1774: ряд текста N (3-5): запись библиотеки, скрыт до открытия. */
+  function textxRowHtml(pfx, n) {
+    return '<span class="cb-label cb-textx-label" data-textx="' + n + '" hidden>Primary text ' + n + '</span>' +
+      '<div class="cb-sel-wrap cb-text2-sel-wrap cb-textx-sel-wrap" data-textx="' + n + '" hidden>' +
+      '<input type="text" class="cb-sel-text cb-text2-search cb-textx-search cb-api-field" data-default="" data-tip="Primary text ' + n + ' with its headline and description" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional primary text ' + n + ': the library entry gives the text, its headline and its description">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'copy' + n + '" value="">' +
+      '</div>';
+  }
+
+  /* Показать ряды 3-5: открытые кнопкой или с непустым значением. Запись в DOM только при изменении. */
+  window.cbSyncTextRows = function (row, api) {
+    var shown = parseInt(row.dataset.textsShown || '2', 10) || 2;
+    var last = 2;
+    [3, 4, 5].forEach(function (n) {
+      var wrap = row.querySelector('.cb-textx-sel-wrap[data-textx="' + n + '"]');
+      var lab = row.querySelector('.cb-textx-label[data-textx="' + n + '"]');
+      if (!wrap) return;
+      var hid = wrap.querySelector('input[type="hidden"]');
+      var txt = wrap.querySelector('.cb-textx-search');
+      var has = !!((hid && hid.value) || (txt && txt.value.trim()));
+      var on = has || n <= shown;
+      if (on) last = n;
+      if (wrap.hidden === on) wrap.hidden = !on;
+      if (lab && lab.hidden === on) lab.hidden = !on;
+    });
+    var btn = row.querySelector('.cb-textx-add');
+    if (btn) {
+      var full = last >= 5;
+      var want = full ? 'All 5 primary texts in use' : '+ Primary text ' + (last + 1);
+      if (btn.textContent !== want) btn.textContent = want;
+      var off = full || !api;
+      if (btn.disabled !== off) btn.disabled = off;
+      var tip = full ? 'An ad takes up to 5 primary texts'
+        : (!api ? 'API backend only: several primary texts are set through the Graph API' : '');
+      if (btn.title !== tip) btn.title = tip;
+    }
+    var vnote = row.querySelector('[data-vertical-note]');
+    if (vnote && vnote.hidden === api) vnote.hidden = !api;
+  };
+
+  window.cbAddTextRow = function (btn) {
+    var row = btn.closest('.cb-ad-row');
+    if (!row || btn.disabled) return;
+    var n = Math.min(5, (parseInt(row.dataset.textsShown || '2', 10) || 2) + 1);
+    row.dataset.textsShown = String(n);
+    window.cbSyncTextRows(row, window.ACL_FB_BACKEND === 'api');
+  };
+
   window.cbAdTypeChange = function(radio) {
     var row = radio.closest('.cb-ad-row');
     if (!row) return;
     var ctype = radio.value;
-    var wrap = row.querySelector('.cb-creative-sel-wrap');
-    if (wrap) {
+    /* ACL-1774: тип относится к обоим файлам (основному и Stories / Reels). */
+    row.querySelectorAll('.cb-creative-sel-wrap').forEach(function (wrap) {
       wrap.dataset.ctype = ctype;
       var h = wrap.querySelector('input[type="hidden"]');
       var t = wrap.querySelector('.cb-sel-text');
@@ -15286,7 +15530,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       if (h) h.value = '';
       if (t) t.value = '';
       if (dd) dd.hidden = true;
-    }
+    });
   };
 
   // ── Remove campaign / Renumber ────────────────────────────────────────
@@ -16635,6 +16879,7 @@ function cbPlanHtml(data) {
             + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')
+            + (ad.form_locale ? '<br>' + aclEscHtml(ad.form_locale) : '')
             + (ad.form_note ? '<br>Instant Form: ' + aclEscHtml(ad.form_note)
                               + (ad.form_id ? ' (' + aclEscHtml(ad.form_id) + ')' : '')
               : ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
@@ -19602,7 +19847,7 @@ window.aclTeamLibrary = (function () {
 // (зеркало form_templates.validate); окончательно проверяет сервер.
 (function () {
   var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
-  var contactKeys = ['name', 'first_name', 'last_name', 'email', 'phone'];
+  var contactKeys = ['first_name', 'last_name', 'email', 'phone'];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -19740,11 +19985,15 @@ window.aclTeamLibrary = (function () {
     el('fm-name').value = tpl.name || '';
     el('fm-headline').value = tpl.headline || '';
     el('fm-intro').value = tpl.intro || '';
-    el('fm-locale').value = tpl.locale || 'EN_US';
+    var lay = window.cbLayout;
+    if (lay && lay.formLocaleOptions) el('fm-locale').innerHTML = lay.formLocaleOptions(tpl.locale || 'AUTO');
+    el('fm-locale').value = tpl.locale || 'AUTO';
     el('fm-privacy').value = tpl.privacy_url || '';
     el('fm-thanks').value = tpl.thank_you_text || '';
     el('fm-site').value = tpl.website_url || '';
-    var contacts = tpl.contact_fields || ['name', 'email'];
+    var contacts = tpl.contact_fields || ['first_name', 'last_name', 'email', 'phone'];
+    // Старые шаблоны с «Full name»: поле убрано из редактора, при правке имя превращается в имя + фамилию.
+    if (contacts.indexOf('name') !== -1) contacts = contacts.filter(function (k) { return k !== 'name'; }).concat(['first_name', 'last_name']);
     contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
     questions = (tpl.questions || []).map(function (q) {
       return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
@@ -19782,7 +20031,7 @@ window.aclTeamLibrary = (function () {
         return item;
       }),
       privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
-      website_url: el('fm-site').value, locale: el('fm-locale').value || 'EN_US'
+      website_url: el('fm-site').value, locale: el('fm-locale').value || 'AUTO'
     });
   }
 

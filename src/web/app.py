@@ -2476,6 +2476,12 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             # ACL-1344: необязательный второй вариант основного текста —
             # название записи библиотеки текстов, как у `copy`.
             copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
+            # ACL-1774 (только API-бэкенд): тексты 3-5 и вертикальный файл Stories/Reels.
+            copy_more     = [(form.get(f"camp_{idx}_ad_{a_idx}_copy{n}") or "").strip()
+                             for n in (3, 4, 5)]
+            while copy_more and not copy_more[-1]:
+                copy_more.pop()
+            file_vertical = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file_vertical") or "").strip()
 
             # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
             if not creative_file and a_idx == 0:
@@ -2505,6 +2511,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
             if copy2:
                 slot["copy2"] = copy2
+            if copy_more:
+                slot["copy_more"] = copy_more
+            if file_vertical:
+                slot["creative_file_vertical"] = file_vertical
             # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
             # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
             # лишних ключей нет - прежние черновики не меняются ни байтом.
@@ -3021,6 +3031,11 @@ def _add_story_labels(files: list[dict]) -> None:
             f["story_label"] = plan.builder_label()
             if plan.square_file != f["filename"]:
                 f["square_file"] = plan.square_file
+            elif plan.replace_vertical and plan.vertical_file != f["filename"]:
+                # ACL-1774: на пути API это готовая вертикальная пара к квадратному файлу -
+                # конструктор подставляет её в пустое поле Stories / Reels.
+                folder = f.get("folder") or ""
+                f["vertical_partner"] = (folder + "/" if folder else "") + plan.vertical_file
         except Exception:
             f["story_label"] = ""
 
@@ -5785,7 +5800,9 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
 
 #: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
 API_ONLY_SLOT_KEYS = {"gender": "Gender", "languages": "Several languages", "device": "Devices",
-                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more"}
+                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more",
+                      "copy_more": "Primary text 3-5 (with their headlines and descriptions)",
+                      "creative_file_vertical": "Stories / Reels file"}
 
 
 def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
@@ -6438,6 +6455,22 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
                          "expires_at": expires_at, "email": email,
                          # ACL-1441: в каком пространстве выдан токен слота.
                          "workspace": (os.environ.get(f"MULTILOGIN_WORKSPACE_{instance}") or "").strip()})
+
+
+@app.get("/multilogin-token-expiry")
+async def multilogin_token_expiry() -> JSONResponse:
+    """ACL-2185: когда истекают сохранённые токены Multilogin (оба слота).
+
+    Только офлайн-разбор `exp` у сохранённого токена — ни одного вызова
+    Multilogin. Токен в ответ не попадает: слот, состояние, время истечения.
+    Страница рисует по этому плашку за час до срока и после него.
+    """
+    from src.fb_api import mlx_session
+
+    slots = [mlx_session.token_expiry(inst) for inst in ("A", "B")]
+    return JSONResponse({"ok": True, "warn_seconds": int(mlx_session.EXPIRY_WARN_S),
+                         "slots": [s for s in slots if s["has_token"]]},
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.post("/multilogin-search")

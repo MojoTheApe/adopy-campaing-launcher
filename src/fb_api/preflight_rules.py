@@ -129,6 +129,21 @@ RULES: list[dict[str, Any]] = [
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 file: without one Facebook crops the picture itself",
        sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_needs_main", "Main file next to the Stories / Reels file", ERROR, "client",
+       "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
+       sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_ratio", "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16", ERROR, "server",
+       "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images "
+       "or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+       sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
+       "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
+       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
+       _wp.MSG_TEXTS_DYNAMIC_SET,
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline", "Headline", ERROR, "client", "the chosen text has no headline: pick another library entry",
@@ -174,7 +189,7 @@ def export_rules() -> dict[str, Any]:
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
                    "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
                    "os_min_re": _OS_MIN_RE, "os_versions": {k: list(v) for k, v in _wp.OS_VERSIONS.items()},
-                   "start_re": _START_RE},
+                   "start_re": _START_RE, "max_texts": MAX_TEXTS},
     }
 
 
@@ -191,9 +206,16 @@ def load_json() -> dict[str, Any]:
 # Вход аудита (одна кампания; сегодня у неё один набор объявлений):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str,
+#             ACL-1774 (необязательные): "bodies": [str], "headlines": [str], "descriptions": [str],
+#             "vertical_file": str}],
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
+
+def _multi_text(a: dict) -> bool:
+    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
+    return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
+
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
@@ -201,6 +223,22 @@ def _s(v: Any) -> str:
 
 def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None) -> dict[str, Any]:
     return {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+
+
+#: Сколько текстов каждого вида допускает одно объявление (ACL-1774; справочник Graph).
+MAX_TEXTS = _wp.ASSET_FEED_MAX_TEXTS
+
+
+def _distinct(items: Any) -> list[str]:
+    """Непустые тексты без повторов (пробелы не в счёт) — как на сервере (`creator._unique`)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in items if isinstance(items, list) else []:
+        key = "".join(_s(x).split())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
 
 
 def applies(rule: dict[str, Any], destination: str) -> bool:
@@ -248,6 +286,16 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append(_v(rid, OK if re.search(_TRACK_RE, link) else WARNING))
         elif rid == "media_chosen":
             out.append(_per_ad(rid, inp, lambda a: not _s(a.get("file"))))
+        elif rid == "vertical_needs_main":
+            out.append(_per_ad(rid, inp, lambda a: bool(_s(a.get("vertical_file"))) and not _s(a.get("file"))))
+        elif rid == "texts_limit":
+            out.append(_per_ad(rid, inp, lambda a: any(
+                len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
+        elif rid == "texts_vertical":
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+        elif rid == "texts_dynamic":
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))
+                                      and len(inp.get("ads") or []) > 1))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a: not _s(a.get("body"))))
         elif rid == "headline":
@@ -494,6 +542,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     # Файлы: читаем с диска как создатель (или берём уже прочитанные).
     readable: list[int] = []
     problems: dict[str, list[tuple[int, str]]] = {"media_readable": [], "media_limits": []}
+    ratio_bad: list[tuple[int, str]] = []
     vertical_bad: list[int] = []
     vertical_unknown: list[int] = []
     long_video: list[int] = []
@@ -517,6 +566,22 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
             size = None
+            if ad.vertical_path:
+                # ACL-1774: пара файлов — читаем вертикальный, сверяем соотношения и вид.
+                try:
+                    vdata = (files or {}).get(ad.vertical_path)
+                    if vdata is None:
+                        vdata = creator.load_media(ad.vertical_path, ad.vertical_kind)
+                except OSError as exc:
+                    problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
+                    vdata = b""
+                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                if vdata and len(vdata) > vlimit:
+                    problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
+                if vdata and ad.vertical_kind != ad.kind:
+                    ratio_bad.append((ad.index, f"Ad {ad.index}: the main file is {ad.kind} and the Stories / Reels file is {ad.vertical_kind}"))
+                elif vdata:
+                    ratio_bad += [(ad.index, m) for m in cr.pair_problems(ad.index, ad.kind, data, vdata)]
             if ad.kind == "video":
                 vi = video_info(data)
                 if vi and vi.get("seconds", 0) > VIDEO_MAX_SECONDS:
@@ -527,11 +592,17 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                     size = (int(vi["width"]), int(vi["height"]))
             else:
                 size = image_size(data)
-            if size and size[1]:
+            if ad.vertical_path:
+                pass                      # вертикальный файл есть: «обрежет сама» не про это объявление
+            elif size and size[1]:
                 if size[0] / size[1] > VERTICAL_MAX_RATIO:
                     vertical_bad.append(ad.index)
             else:
                 vertical_unknown.append(ad.index)
+    if ratio_bad:
+        put("vertical_ratio", ERROR, "; ".join(m for _, m in ratio_bad), sorted({i for i, _ in ratio_bad}))
+    else:
+        put("vertical_ratio", OK)
     for rid in ("media_readable", "media_limits"):
         if problems[rid]:
             put(rid, ERROR, "; ".join(m for _, m in problems[rid]), [i for i, _ in problems[rid]])
