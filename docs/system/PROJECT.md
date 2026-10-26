@@ -125,6 +125,15 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   stop the account with `profile_no_proxy` when none is configured. A failed check
   does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
   browser's `--proxy-server` flag is only logged as evidence.
+- `src/fb_api/targeting_resolver.py`: the API Builder resolves library names through
+  exact normalized interests, paged interest/behavior search and work/education
+  searches. Each job caches its reads and results within bounded Graph budgets.
+  A near match or a split into several targets remains a candidate in Check plan;
+  creation refuses it until the user explicitly confirms a displayed choice.
+  Confirmed choices live in machine-local `targeting_confirmed.json` and can be
+  cleared. A new result for the same term invalidates its previous candidates,
+  including when no candidates remain. These searches only read through the
+  existing guarded session; the RPA backend cannot use confirmation endpoints.
 - `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
