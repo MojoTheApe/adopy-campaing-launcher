@@ -636,7 +636,9 @@ def test_rpa_refuses_filled_api_only_fields_out_loud(monkeypatch):
 
 def test_both_publish_routes_use_the_refusal():
     src = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
-    assert src.count("_instant_form_refusal(slots) or _api_only_fields_refusal(slots)") == 2
+    # ACL-1768: перед ними - отказ при нескольких наборах.
+    assert src.count("_multi_adset_refusal(slots) or _instant_form_refusal(slots)") == 2
+    assert src.count("or _api_only_fields_refusal(slots)") == 2
 
 
 # ───────────────────────── страница ─────────────────────────
@@ -651,12 +653,17 @@ def _page():
 def test_the_builder_has_the_fields_with_stable_names_and_no_leftover_stubs():
     page = _page()
     for name in ("_gender", "_languages", "_device", "_os_min", "_start_time"):
-        assert f"name=\"camp_' + idx + '{name}\"" in page, name
+        # ACL-1768: поля набора строит одна функция с префиксом (набор 0 - прежние имена camp_N_*).
+        assert f"name=\"' + pfx + '{name[1:]}\"" in page, name
     assert "pfx + 'cta\"" in page
     for key in ("gender", "languages", "cta"):
         assert f"future('{key}'" not in page and f"{key}:" not in page[page.index("var FUTURE = {"):page.index("function esc(v)")]
     # Имена прежних полей не тронуты.
-    for name in ("_targeting", "_os", "_age", "_language", "_destination", "_budget", "_asset"):
+    for name in ("_targeting", "_age", "_language", "_destination"):
+        assert f"pfx + '{name[1:]}" in page, name
+    assert "mkSel(idx, 'os'" in page and ", pfx)" in page
+    assert "var pfx = k === 0 ? 'camp_' + idx + '_' : " in page, "набор 0 обязан жить под прежними именами"
+    for name in ("_budget", "_asset"):
         assert f"camp_' + idx + '{name}" in page, name
 
 
@@ -676,7 +683,7 @@ const empty = mk('', '', 'Audience gender'), filled = mk('women', '', 'Audience 
 const cta = mk('LEARN_MORE', 'LEARN_MORE', 'Button of the ad'), cta2 = mk('SIGN_UP', 'LEARN_MORE', 'Button of the ad');
 const note = { hidden: true };
 const opt = { _a: {}, setAttribute(k, v) { this._a[k] = v; }, getAttribute(k) { return this._a[k]; }, title: '' };
-const slot = { querySelectorAll: (s) => s === '.cb-api-field' ? [empty, filled, cta, cta2] : [opt],
+const slot = { querySelectorAll: (s) => s === '.cb-api-field' ? [empty, filled, cta, cta2] : s === '[data-api-fields-note]' ? [note] : [opt],
                querySelector: () => note };
 const win = { ACL_FB_BACKEND: 'rpa' };
 %s

@@ -221,6 +221,53 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
 }
 
 
+# ACL-1768: наборы. Те же фикстуры идут и через страницу (паритет), и через Python.
+def _set(name: str, ads=None, **over) -> dict:
+    base = {"name": name, "destination": "website", "age_min": 35, "age_max": 35, "os": "All",
+            "device": "", "os_min": "", "start_time": "", "ads": copy.deepcopy(ads if ads is not None else _ok_input()["ads"])}
+    base.update(over)
+    return base
+
+
+def _multi(*sets: dict, **over) -> dict:
+    inp = _ok_input()
+    inp.pop("ads")
+    inp["ad_sets"] = list(sets)
+    inp.update(over)
+    return inp
+
+
+CLIENT_CASES.update({
+    "adset_names_ok": (_with(), "adset_names_unique", "ok", []),
+    "adset_names_two_ok": (_multi(_set("A"), _set("B")), "adset_names_unique", "ok", []),
+    "adset_names_dup": (_multi(_set("A"), _set(" a ")), "adset_names_unique", "error", []),
+    "adset_has_ads_ok": (_with(), "adset_has_ads", "ok", []),
+    "adset_empty": (_multi(_set("A"), _set("B", ads=[])), "adset_has_ads", "error", []),
+    "second_set_age_bad": (_multi(_set("A"), _set("B", age_min=17, age_max=17)), "age_range", "error", []),
+    "second_set_devices_bad": (_multi(_set("A"), _set("B", os="iOS", device="desktop")),
+                               "devices_consistent", "error", []),
+    "second_set_start_past": (_multi(_set("A"), _set("B", start_time="2026-10-01T10:00"), now="2026-10-12T12:00"),
+                              "start_time_valid", "error", []),
+    "ads_numbered_across_sets": (_multi(_set("A"), _set("B", ads=_ad(0, file=""))), "media_chosen", "error", [3]),
+    "same_ad_names_in_two_sets_ok": (_multi(_set("A"), _set("B")), "ad_names_unique", "ok", []),
+    "same_ad_names_inside_a_set": (_multi(_set("A"), _set("B", ads=_ad(1, name="1000 - Text0"))),
+                                   "ad_names_unique", "error", [3, 4]),
+    "mixed_destinations_cta_per_set": (
+        _multi(_set("A"), _set("B", destination="instant_form",
+                               ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]])),
+        "cta_allowed", "error", [3, 4]),
+    # ACL-1768: «несколько текстов» считает объявления СВОЕГО набора, а не кампании.
+    "texts_dynamic_alone_in_its_set": (
+        _multi(_set("A", ads=_ad(0, bodies=["a", "b"])[:1]), _set("B")), "texts_dynamic", "ok", []),
+    "texts_dynamic_shared_set": (
+        _multi(_set("A", ads=_ad(0, bodies=["a", "b"])[:1]), _set("B", ads=_ad(0, bodies=["a", "b"]))),
+        "texts_dynamic", "error", [2]),
+    "mixed_destinations_forms_only_for_forms": (
+        _multi(_set("A"), _set("B", destination="instant_form", ads=_ad(0, form_id="7"))),
+        "form_chosen", "error", [4]),
+})
+
+
 @pytest.mark.parametrize("name", sorted(CLIENT_CASES))
 def test_client_fixture_verdict(name):
     inp, rule, want, ads = CLIENT_CASES[name]

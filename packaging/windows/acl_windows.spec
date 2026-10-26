@@ -16,6 +16,11 @@ MANIFEST_PATH = Path(
 
 if not MANIFEST_PATH.is_file():
     raise SystemExit(f"Build manifest not found: {MANIFEST_PATH}")
+# ACL-1175: страница установки едет в бандле; build.ps1 рендерит её рядом
+# с манифестом из docs/SETUP-NEW-PC.md.
+SETUP_GUIDE_PATH = MANIFEST_PATH.with_name("setup-guide.html")
+if not SETUP_GUIDE_PATH.is_file():
+    raise SystemExit(f"Setup guide not found: {SETUP_GUIDE_PATH}")
 
 
 playwright_datas, playwright_binaries, playwright_hiddenimports = collect_all("playwright")
@@ -40,6 +45,7 @@ datas = [
     (str(PROJECT_ROOT / "src" / "web" / "templates"), "src/web/templates"),
     (str(MANIFEST_PATH), "."),
     (str(MANIFEST_PATH.with_name("acl-update-channel.json")), "."),
+    (str(SETUP_GUIDE_PATH), "."),
 ] + playwright_datas
 
 # Uvicorn chooses its event loop, HTTP implementation and lifespan handler at
