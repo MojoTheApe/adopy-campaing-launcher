@@ -824,6 +824,9 @@ class TargetingResolver:
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
         self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope)
+        #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
+        #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
+        self.locale_groups: dict[int, dict[int, str]] = {}
 
     def country(self, value: str) -> str:
         key = (value or "").strip()
@@ -871,6 +874,15 @@ class TargetingResolver:
             raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search")
         self._locale[lang] = int(pick["key"])
         self.locale_names[lang] = str(pick.get("name") or lang)
+        pick_name = str(pick.get("name") or "")
+        if pick_name.casefold().endswith(" (all)"):
+            base = pick_name[:-len(" (All)")].strip().casefold()
+            self.locale_groups[self._locale[lang]] = {
+                int(r["key"]): str(r.get("name") or "") for r in rows
+                if r.get("key") is not None and r is not pick
+                and str(r.get("name") or "").strip().casefold() != pick_name.casefold()
+                and (str(r.get("name") or "").strip().casefold() == base
+                     or str(r.get("name") or "").strip().casefold().startswith(base + " ("))}
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
@@ -1799,9 +1811,36 @@ class CampaignCreator:
 
     # -- общие проверки кампании и группы (сверка после записи и предпроверка найденных)
     @staticmethod
-    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any) -> None:
-        checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
-                       "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
+    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any,
+                  note: str = "") -> None:
+        row = {"object": obj, "field": fld, "expected": expected, "actual": actual,
+               "ok": _same(expected, actual), "not_read": _not_read(expected, actual)}
+        if note:
+            row["note"] = note
+        checks.append(row)
+
+    def _language_check(self, checks: list[dict], obj: str, want: list, got: Any) -> None:
+        """ACL-1907: группа «Spanish (All)» равна набору локалей, на который её раскрыла Meta."""
+        self._mk_check(checks, obj, "languages", want, got)
+        groups = getattr(self.resolver, "locale_groups", None) or {}
+        if not isinstance(got, list) or checks[-1]["ok"] or not any(g in groups for g in want):
+            return
+        norm: list = []
+        unknown: list = []
+        for loc in want:
+            members = groups.get(loc) or {}
+            if loc in groups and loc not in got:
+                if members:
+                    norm += list(members)
+                    continue
+                unknown.append(loc)
+            norm.append(loc)
+        if _same(sorted(set(norm)), sorted(set(got))):
+            checks[-1]["ok"] = True
+            checks[-1]["expanded"] = True
+        elif unknown:
+            checks[-1]["note"] = ("language group " + ", ".join(map(str, unknown)) + " compared strictly: "
+                                  "Meta's search did not list the locales it expands into")
 
     def _campaign_checks(self, plan: CampaignPlan, camp: dict) -> list[dict]:
         checks: list[dict] = []
@@ -1861,8 +1900,8 @@ class CampaignCreator:
         # Локали: если Meta поле не вернула, это «Not read», а не «пусто».
         # None («Not read») только если локали ждали, а Meta их не вернула; иначе как раньше.
         want_locales = targeting.get("locales") or []
-        check("languages", want_locales,
-              None if want_locales and "locales" not in t else t.get("locales") or [])
+        self._language_check(checks, obj, want_locales,
+                             None if want_locales and "locales" not in t else t.get("locales") or [])
         check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
         check("os", targeting.get("user_os") or [], t.get("user_os") or [])
         if targeting.get("genders") or t.get("genders"):
@@ -2863,7 +2902,8 @@ def _describe_diffs(checks: list[dict]) -> list[str]:
         if c["field"] in _PLACEMENT_FIELDS:
             continue
         out.append(f"{_FIELD_TITLES.get(c['field'], c['field'])} "
-                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})")
+                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})"
+                   + (f" - {c['note']}" if c.get("note") else ""))
     return out
 
 
