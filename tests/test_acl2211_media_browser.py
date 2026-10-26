@@ -57,3 +57,31 @@ def test_client_file_identity_uses_paths_without_collapsing_distinct_basenames(p
     assert not page.evaluate("cbSameCreativeFile('a/story.png', 'b/story.png')")
     assert not page.evaluate("cbSameCreativeFile('', '')")
     assert not page.evaluate("cbSameCreativeFile('main_1x1.png', 'story_9x16.png')")
+
+
+def test_legacy_selection_stays_visible_when_ad_and_ad_set_are_copied(page):
+    _open_first(page, "ad")
+    _backend(page, "api")
+    _slot(page).evaluate("""slot => {
+        const data = cbKeep.readSlot(slot);
+        for (const suffix of ['_creative_file', '_creative_file_vertical']) {
+            const hidden = slot.querySelector('input[name$="' + suffix + '"]');
+            const key = hidden.name.replace(/^camp_\\d+_/, '');
+            data.fields[key] = suffix === '_creative_file' ? 'main_1x1.png' : 'story_9x16.png';
+            data.shown[key] = '';
+        }
+        cbKeep.writeSlot(slot, data);
+    }""")
+    _row(page).locator('.cb-dup-ad-btn').click()
+    page.locator(".cbd-seg [data-level='adset']").click()
+    page.locator("[data-act='copy-adset']").click()
+    rows = _slot(page).locator('.cb-ad-row')
+    assert rows.count() == 4
+    for row in rows.all():
+        for suffix, selector, expected in [
+            ('_creative_file', '.cb-creative-search', 'main_1x1.png'),
+            ('_creative_file_vertical', '.cb-vertical-search', 'story_9x16.png'),
+        ]:
+            assert row.locator(selector).input_value() == expected
+            assert _hidden(row, suffix).input_value() == expected
+            assert _form_value(page, row, suffix) == expected
