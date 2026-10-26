@@ -109,7 +109,8 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"placements", "copyTo"}
+    assert set(out) >= {"copyTo"}
+    assert "placements" not in out, "ACL-1772: placement editor has a backend and named saved fields"
     assert not {"adsets", "copyAdset"} & set(out), "ACL-1768: наборы - настоящие, а не заглушки"
     assert not {"texts", "media"} & set(out), "ACL-1774: тексты 3-5 и файл Stories / Reels - настоящие поля"
     assert not {"gender", "languages", "cta"} & set(out), "ACL-1767: это уже настоящие поля, а не заглушки"
@@ -122,7 +123,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"placements", "copyTo"}
+    assert used >= {"copyTo"}
 
 
 def test_old_drafts_load_without_the_new_field():
