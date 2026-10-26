@@ -6313,6 +6313,14 @@ window.cbKeep = (function () {
       if (wrap.classList.contains('cb-text2-sel-wrap'))
         text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
+    /* ACL-2197: источник формы хранится в черновике (`ad_N_form_source`). Старый черновик его не знает:
+       шаблон без form_id в нём = режим шаблона. */
+    slot.querySelectorAll('.cb-form-source').forEach(function (sel) {
+      var f = field(sel), row = sel.closest('.cb-ad-row');
+      if (!row || (f && f in data.fields)) return;
+      var t = row.querySelector('input[name$="_form_template"]'), i = row.querySelector('input[name$="_form_id"]');
+      if (t && t.value && !(i && i.value)) sel.value = 'template';
+    });
     var ov = slot.querySelector('.cb-name-override');
     if (ov && typeof data.fields.name_override === 'string') ov.value = data.fields.name_override;
     var hint = slot.querySelector('.cb-targeting-hint');
@@ -15171,7 +15179,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
       /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
-      '<select class="cb-input cb-select cb-form-source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
+      '<select class="cb-input cb-select cb-form-source" name="' + pfx + 'form_source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
       '<option value="existing">Use existing form</option><option value="template">Create from template</option></select>' +
       '<div class="cb-form-templatebox" hidden>' +
       '<div class="cb-form-line">' +
