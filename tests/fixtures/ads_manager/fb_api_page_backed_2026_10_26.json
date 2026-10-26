@@ -1,0 +1,28 @@
+{
+  "source": "Anonymized owner-observed Check plan result, 2026-10-26",
+  "observed": {
+    "campaigns": 2,
+    "advertising_writes": 0,
+    "blocking_rule": "instagram_identity",
+    "message": "This Facebook Page has no Instagram account, and the ad is set for Instagram placements.",
+    "other_checks": "account, Page, pixel, targeting and media passed"
+  },
+  "synthetic": {
+    "page_id": "111",
+    "instagram_id": "17841400000000777",
+    "edge_before": {
+      "data": []
+    },
+    "prepare_response": {
+      "id": "17841400000000777"
+    },
+    "edge_after": {
+      "data": [
+        {
+          "id": "17841400000000777"
+        }
+      ]
+    }
+  },
+  "evidence_limit": "Preparation responses are synthetic; no live identity POST or live publish acceptance captured yet."
+}

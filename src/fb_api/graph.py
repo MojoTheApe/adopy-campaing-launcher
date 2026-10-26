@@ -469,7 +469,7 @@ class GraphClient:
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
              filename: str = "", on_ad: bool = False, children_active: bool = False,
-             form_page: str = "", progress: Callable[[float], None] | None = None,
+             form_page: str = "", instagram_page: str = "", progress: Callable[[float], None] | None = None,
              cancelled: Callable[[], bool] | None = None) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 
@@ -499,6 +499,8 @@ class GraphClient:
             # ACL-1776: создание формы Страницы - своя цепочка политики, Страница плана.
             if form_page:
                 extra["form_page"] = str(form_page)
+            if instagram_page:
+                extra["instagram_page"] = instagram_page
             # ACL-1899: прогресс и Stop нужны только записи с файлом; прежние транспорты их не знают.
             if files and progress is not None:
                 extra["progress"] = progress

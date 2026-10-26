@@ -48,19 +48,21 @@ def test_the_doc120_case_is_in_the_fixture():
 
 # ───────────────────────── Check plan и создание ─────────────────────────
 
-def test_a_page_without_instagram_is_refused_before_any_write(tmp_path):
+def test_a_page_without_linked_instagram_plans_page_backed_preparation(tmp_path):
+    # ACL-2221 owner-authorized successor: Check remains read-only, preparation is on Publish.
+    from tests.test_acl2221_page_backed import dry
     meta = FakeMeta(instagram="none")
-    out, client = _run(meta, _draft(tmp_path, ads=1))
-    assert out.error == NO_IG_TEXT + " Nothing more was created." and out.stop_kind == "plan"
-    assert meta.posts == [] and client.writes == 0 and out.created == {}
+    out = dry(meta, _draft(tmp_path, ads=1))
+    assert not out.error and meta.posts == [] and out.created == {}
+    assert _by(out)["instagram_identity"]["status"] == "warning"
 
 
-def test_check_plan_refuses_with_the_new_rule_and_still_writes_nothing(tmp_path):
+def test_check_plan_warns_about_preparation_and_still_writes_nothing(tmp_path):
     meta = AuditMeta(instagram="none")
     out = _audit(meta, _draft(tmp_path, ads=1))
     row = _by(out)["instagram_identity"]
-    assert row["status"] == "error" and row["detail"] == NO_IG_TEXT
-    assert pf.blocks(out.audit)
+    assert row["status"] == "warning" and "Facebook Page" in row["detail"]
+    assert not pf.blocks(out.audit) and meta.posts == []
 
 
 def test_a_failed_instagram_read_is_never_a_pass(tmp_path):
@@ -73,10 +75,12 @@ def test_a_failed_instagram_read_is_never_a_pass(tmp_path):
 
 
 def test_an_ad_account_list_alone_does_not_confirm_the_page(tmp_path):
-    """У кабинета есть чужой аккаунт, у Страницы нет: чей он, неизвестно - не гадаем."""
+    from tests.test_acl2221_page_backed import dry
     meta = FakeMeta(instagram="ad_account_only")
-    out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.error.startswith(NO_IG_TEXT) and meta.posts == []
+    out = dry(meta, _draft(tmp_path, ads=1))
+    assert not out.error and not meta.posts
+    assert _by(out)["instagram_identity"]["status"] == "warning"
+    assert "17841499999999999" not in json.dumps(out.plan)
 
 
 def test_a_page_with_an_instagram_account_creates_paused_and_reads_it_back(tmp_path):
@@ -109,7 +113,7 @@ def test_the_identity_is_read_once_per_page_and_costs_at_most_two_reads(tmp_path
     first = creator.instagram_identity(plan)
     second = creator.instagram_identity(plan)
     assert first is second and ig.READS_PER_PAGE == 2
-    assert [p for p, _ in meta.gets[before:]] == [f"/{plan.page_id}", f"/{ACT}/instagram_accounts"]
+    assert [p for p, _ in meta.gets[before:]] == [f"/{plan.page_id}", f"/{plan.page_id}/page_backed_instagram_accounts"]
 
 
 def test_without_a_settled_page_the_identity_is_not_checked(tmp_path):

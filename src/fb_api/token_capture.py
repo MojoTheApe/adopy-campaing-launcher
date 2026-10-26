@@ -499,6 +499,16 @@ _HELPER_JS = r"""
     if (!WRITE) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    if (path.endsWith('/page_backed_instagram_accounts') || spec.instagram_page) {
+      const P = WRITE.instagram_prepare;
+      const page = P && P.page;
+      const params = spec.params;
+      if (WRITE.object_update || !page || !/^[0-9]{1,25}$/.test(page)
+          || spec.instagram_page !== page || path !== '/' + page + '/page_backed_instagram_accounts'
+          || !isObj(params) || Object.keys(params).length || (spec.files && Object.keys(spec.files).length)
+          || spec.form_page || spec.on_ad || spec.children_active) return refused('instagram_page');
+      return post(path, {}, undefined, null, spec, {}, null);
+    }
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
@@ -955,8 +965,8 @@ class InPageGraph:
         (`wait_ready`): свежий мир мог не найти его в буфере Resource Timing. Возвращает
         состояние страницы; без токена вызывающий не пишет.
         """
-        if not self.allow_writes:
-            raise ValueError("read-only: writes are not enabled for this page")
+        if not self.allow_writes or self.object_updates:
+            raise ValueError("only campaign creation can pin a Page")
         page = str(page or "")
         if not re.fullmatch(r"[0-9]{1,25}", page):
             raise ValueError("the Page to pin must be a numeric Page id")
@@ -1224,7 +1234,7 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              children_active: bool = False, form_page: str = "", progress: Callable[[float], None] | None = None,
+              children_active: bool = False, form_page: str = "", instagram_page: str = "", progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
@@ -1247,7 +1257,11 @@ class InPageGraph:
 
         from src.fb_api import write_policy as _wp
 
-        if form_page:
+        if instagram_page:
+            if self.object_updates or form_page or on_ad or children_active:
+                raise ValueError("Page identity preparation is only allowed in creation mode")
+            _wp.check_instagram_prepare(instagram_page, "POST", path, params, files, self.write_page or "")
+        elif form_page:
             # ACL-1776: цепочка форм - Страница плана; цепочка act_X для такого пути не годится.
             _wp.check_form_create(form_page, "POST", path, params, files, self.write_page or "")
         elif self.object_updates:
@@ -1258,6 +1272,8 @@ class InPageGraph:
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
+        if instagram_page:
+            spec["instagram_page"] = instagram_page
         if form_page:
             spec["form_page"] = str(form_page)
         if on_ad:

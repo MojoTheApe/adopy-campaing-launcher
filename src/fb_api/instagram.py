@@ -1,28 +1,14 @@
-"""Instagram-идентичность объявления (ACL-1896).
+"""Page-linked and Page-backed Instagram identity (ACL-1896, ACL-2221).
 
-Живой прогон Doc120 (2026-10-14): кампания, набор и креатив созданы на паузе, затем Meta
-отказала объявлению: Graph 100/1772103 «Instagram Account Is Missing». Создатель всегда
-шлёт площадки Instagram (лента, Stories, Reels), а у Страницы нет подключённого
-Instagram-аккаунта, и в креативе не было Instagram-идентичности.
-
-Что подтверждено справочником Meta (developers.facebook.com, 2026-10-14):
-- `object_story_spec.instagram_user_id` - строка из цифр, «аккаунт Instagram, от имени которого
-  публикуется объявление». Поле `instagram_actor_id` в справочнике не упомянуто - не шлём.
-- `GET /act_X/instagram_accounts` - рёбро только для чтения, список IGUser кабинета.
-- Поля узла Page (чтение): `connected_instagram_account` («подключён через настройки Страницы»),
-  `instagram_business_account` («привязан при переходе на бизнес-аккаунт Instagram»),
-  `connected_page_backed_instagram_account` («связанный Page-backed аккаунт Instagram»).
-  Рёбер Страницы `instagram_accounts` / `page_backed_instagram_accounts` в справочнике нет (404).
-
-Что требует живой проверки (см. docs/system/PROJECT.md): отдаёт ли токен профиля эти поля Страницы;
-принимает ли Meta именно этот id как `instagram_user_id`; возвращает ли чтение креатива поле
-внутри `object_story_spec` или на верхнем уровне креатива.
-
-Только чтения. Page-backed аккаунт сами не создаём (это запись; решение владельца).
+Discovery is read-only. Preparation is a separate, owner-authorized publish step.
+Meta SDK evidence and limitations: docs/system/PROJECT.md.
 """
 from __future__ import annotations
 
 import re
+import json
+import os
+from pathlib import Path
 from dataclasses import dataclass
 
 from src.fb_api.graph import GraphError
@@ -31,7 +17,11 @@ IG_KEY = "instagram_user_id"
 #: Id аккаунта - только цифры (тот же вид, что у id формы и видео).
 IG_ID_RE = re.compile(r"^[0-9]{5,25}$")
 
-FOUND, NONE, UNKNOWN = "found", "none", "unknown"
+FOUND, NONE, UNKNOWN, PREPARE = "found", "none", "unknown", "prepare"
+EDGE = "page_backed_instagram_accounts"
+PREPARE_NOTE = ("Use the Facebook Page to represent the business on Instagram. "
+                "Its Page-backed Instagram identity will be prepared and verified when you publish; "
+                "this check creates nothing.")
 
 MSG_NO_INSTAGRAM = ("This Facebook Page has no Instagram account, and the ad is set for Instagram placements. "
                     "Connect an Instagram account to the Page, or choose Manual Facebook-only placements.")
@@ -45,6 +35,7 @@ PAGE_FIELDS = (("connected_instagram_account", "page settings"),
 PAGE_FIELDS_PARAM = ",".join(f"{name}{{id,username}}" for name, _ in PAGE_FIELDS)
 #: Сколько чтений Graph стоит одна идентичность (1 - Страница, 2 - кабинет, если у Страницы пусто).
 READS_PER_PAGE = 2
+PREPARE_CALLS = 4
 
 
 @dataclass
@@ -56,6 +47,8 @@ class IgIdentity:
 
     @property
     def message(self) -> str:
+        if self.status == PREPARE:
+            return PREPARE_NOTE
         if self.status == NONE:
             return MSG_NO_INSTAGRAM
         return MSG_UNKNOWN.format(why=self.detail or "no answer")
@@ -72,15 +65,104 @@ def read_identity(client, act: str, page_id: str) -> IgIdentity:
         return IgIdentity(UNKNOWN, detail="the Page answer was not readable")
     for name, label in PAGE_FIELDS:
         item = row.get(name)
-        if not item:
+        if item is None:
             continue
         got = str(item.get("id") or "") if isinstance(item, dict) else ""
         if not IG_ID_RE.fullmatch(got):
             return IgIdentity(UNKNOWN, detail=f"{name} has no usable id")
+        if got == page_id:
+            return IgIdentity(UNKNOWN, detail="Meta returned the Facebook Page id instead of an Instagram identity")
+        if label == "Page-backed":
+            try:
+                if _intent(page_id):
+                    return read_page_backed(client, page_id)
+            except (OSError, ValueError) as exc:
+                return IgIdentity(UNKNOWN, detail=str(exc))
         return IgIdentity(FOUND, got, label)
-    # У Страницы ничего нет. Список кабинета - только для сведения (чей это аккаунт, неизвестно).
+    return read_page_backed(client, page_id)
+
+
+def intent_path(page_id: str) -> Path:
+    from config.paths import get_local_config_dir
+    if not re.fullmatch(r"[0-9]{1,25}", page_id):
+        raise ValueError("The Facebook Page id is invalid")
+    return Path(get_local_config_dir()) / "instagram_preparations" / (page_id + ".json")
+
+
+def _intent(page_id: str) -> dict | None:
+    path = intent_path(page_id)
     try:
-        rows = client.get_all(f"/{act}/instagram_accounts", {"fields": "id,username", "limit": 25}, max_pages=1)
-    except GraphError as exc:
-        return IgIdentity(UNKNOWN, detail=f"the ad account's Instagram accounts could not be read: {exc}")
-    return IgIdentity(NONE, detail=f"the ad account lists {len(rows)} Instagram account(s), none linked to the Page")
+        row = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if not isinstance(row, dict) or row.get("state") != "pending":
+        raise ValueError("unreadable Instagram preparation record")
+    return row
+
+
+def read_page_backed(client, page_id: str) -> IgIdentity:
+    """One complete Page edge, never an unrelated ad-account identity."""
+    try:
+        body = client.get(f"/{page_id}/{EDGE}", {"fields": "id", "limit": 2})
+        rows = body.get("data")
+        if not isinstance(rows, list) or not isinstance(body.get("paging", {}), dict):
+            raise ValueError("unreadable Page-backed response")
+        if body.get("paging", {}).get("next"):
+            raise ValueError("the Page-backed list is incomplete")
+        ids = {r["id"] for r in rows if isinstance(r, dict) and isinstance(r.get("id"), str)
+               and IG_ID_RE.fullmatch(r["id"]) and r["id"] != page_id}
+        if len(ids) != len(rows) or len(ids) > 1:
+            raise ValueError("the Page-backed identity is invalid or ambiguous")
+        pending = _intent(page_id)
+        if ids:
+            got = next(iter(ids))
+            if pending and pending.get("id") and pending["id"] != got:
+                raise ValueError("the prepared identity does not match this Page")
+            return IgIdentity(FOUND, got, "Page-backed")
+        if pending:
+            raise ValueError("a previous Facebook Page identity preparation is unconfirmed; "
+                             "check the Page in Ads Manager before trying again")
+        return IgIdentity(PREPARE, source="Facebook Page")
+    except (GraphError, ValueError, OSError) as exc:
+        return IgIdentity(UNKNOWN, detail=str(exc))
+
+
+def prepare_identity(client, page_id: str, *, before_write=lambda: None) -> IgIdentity:
+    """Exactly one POST per durable Page intent, followed by same-Page readback.
+
+    Exclusive file creation covers different profiles sharing the Page. A crash,
+    timeout, rejection or unconfirmed result leaves the record; empty subsequent
+    reads never authorize another POST. Existing identities can reconcile it.
+    """
+    current = read_page_backed(client, page_id)
+    if current.status != PREPARE:
+        return current
+    before_write()
+    path = intent_path(page_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="utf-8") as fh:
+            json.dump({"state": "pending"}, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except FileExistsError:
+        return read_page_backed(client, page_id)
+    try:
+        before_write()
+    except BaseException:
+        path.unlink()  # This invocation owns the intent and has not dispatched.
+        raise
+    body = client.post(f"/{page_id}/{EDGE}", {}, instagram_page=page_id)
+    got = body.get("id")
+    if not isinstance(got, str) or not IG_ID_RE.fullmatch(got) or got == page_id:
+        return IgIdentity(UNKNOWN, detail="Meta did not return a usable Facebook Page Instagram identity")
+    temporary = path.with_suffix(".tmp")
+    with temporary.open("w", encoding="utf-8") as fh:
+        json.dump({"state": "pending", "id": got}, fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(temporary, path)
+    confirmed = read_page_backed(client, page_id)
+    if confirmed.status != FOUND or confirmed.ig_id != got:
+        return IgIdentity(UNKNOWN, detail="Meta did not confirm the prepared identity on this Facebook Page")
+    return confirmed

@@ -531,6 +531,8 @@ class FakeMeta:
             return {"data": [self._out(o) for o in self._of("campaign")
                              if (o.get("name", "") == want if equal else want in o.get("name", ""))
                              and (not live or o.get("status") in live)]}
+        if len(parts) == 2 and parts[1] == "page_backed_instagram_accounts":
+            return {"data": []}
         oid = parts[0]
         if len(parts) == 2:
             if parts[1] == "adsets":

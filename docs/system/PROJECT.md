@@ -394,3 +394,44 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
+
+
+## ACL-2221 — Facebook Page identity for Instagram (2026-10-26)
+
+Owner-authorized successor to the historical read-only ACL-1896 behavior above.
+Instagram placements remain selected. Prefer the Page's linked Instagram; then
+existing Page-backed identity. When Page fields are empty, read the exact Page's
+`page_backed_instagram_accounts` edge (complete response only). An empty complete
+response is preparation-needed, not a confirmed Instagram id. Failed, partial,
+malformed or ambiguous reads remain errors. Unrelated ad-account IG ids are never used.
+
+Check plan and pre-flight audit make no writes and show a preparation warning.
+On explicit Publish only, after deterministic checks and name/reuse validation,
+pin the selected Page in the isolated helper and issue one empty POST on its
+Page-backed edge. Confirm the returned numeric IG id on that same Page edge
+before campaign, media, form or ad writes. Never substitute the Page id itself.
+The existing creative payload and final readback use `instagram_user_id`.
+Facebook-only plans do not discover or prepare an Instagram identity.
+
+The call estimate includes four extra preparation calls and checks the remaining
+budget before dispatch. The closed Python/JS policies accept only that exact
+pinned Page edge with no parameters/files, in campaign creation mode; readonly
+and object-command modes remain closed. No activation or placement changes.
+
+Private machine state: `instagram_preparations/<Page id>.json` under ACL_CONFIG_DIR.
+Exclusive creation plus fsync precedes POST, so different profiles sharing one Page
+cannot both prepare it. An uncertain, rejected or interrupted preparation is never
+automatically repeated, including after server restart. A fresh same-Page read can
+reconcile an existing identity; if a known returned id differs, stop for review.
+If the edge remains empty after a pending intent, inspect the Page in Ads Manager;
+do not clear the record and retry blindly. No tokens or proxy details are stored.
+
+Primary evidence: Meta's official Python Business SDK revision
+`efd8423a2e595ea8d4c04eb824ce113f2f1d68cd`, accessed 2026-10-26:
+[Page GET/POST Page-backed methods](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/page.py),
+[creative identity field](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativeobjectstoryspec.py).
+SDK methods do not establish permissions or successful support for every profile's
+captured API version. Developer reference was unavailable (429); no endpoint/version
+or token workaround was inferred. If Meta refuses preparation, retain the stop and
+show its diagnostic, without creating a campaign. Live Check/preparation/readback
+acceptance is separate from offline synthetic tests and remains explicit.
