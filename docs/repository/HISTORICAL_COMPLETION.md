@@ -150,7 +150,7 @@ hand-merged amendment of `historical_completion` in `tracker/config.json`:
   open, labels `status:merged`, `module:campaigns`, `type:bug` (priority and release labels
   are excluded from the digest) and **without** `flag:blocked`. While the Issue still carries
   `flag:blocked`, the engine does not accept it as historical. The blocker is removed by the
-  authorized tracker actor with `python -m tracker set ACL-1250 --no-blocked`, not by this PR.
+  authorized tracker actor with `python scripts/acl_task_tracker.py set 250 --no-blocked`, not by this PR.
   Any later edit of the Issue's title, body, state or functional/workflow labels invalidates the
   entry and requires a new explicit decision.
 
