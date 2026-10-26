@@ -174,6 +174,10 @@ RULES: list[dict[str, Any]] = [
     _r("ad_names_unique", "Ad names are unique", ERROR, "client",
        "give the ads different creatives or texts: their names must differ inside a campaign",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("adset_names_unique", "Ad set names are unique", ERROR, "client",
+       "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
+    _r("adset_has_ads", "Every ad set has an ad", ERROR, "client",
+       "add an ad to the ad set or remove the ad set", sel="", level="ad"),
     _r("existing_diffs", "Campaign name is free, or gets a _2, _3 suffix", ERROR, "server",
        "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... "
        "(up to _20); an error only when all 20 names are taken: rename the campaign"),
@@ -206,7 +210,7 @@ def load_json() -> dict[str, Any]:
 
 # ───────────────────────── клиентские правила ─────────────────────────
 #
-# Вход аудита (одна кампания; сегодня у неё один набор объявлений):
+# Вход аудита (одна кампания; ACL-1768: наборы - `ad_sets`, плоский вход = один набор):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
 #    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str,
@@ -224,8 +228,13 @@ def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
 
 
-def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None) -> dict[str, Any]:
-    return {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None,
+       sets: list[int] | None = None) -> dict[str, Any]:
+    out = {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+    if sets:
+        # ACL-1768: у кампании с несколькими наборами - какие наборы (1-based); иначе ключа нет.
+        out["sets"] = list(sets)
+    return out
 
 
 #: Сколько текстов каждого вида допускает одно объявление (ACL-1774; справочник Graph).
@@ -249,30 +258,81 @@ def applies(rule: dict[str, Any], destination: str) -> bool:
     return a == "always" or a == destination
 
 
-def _per_ad(rule: str, inp: dict, bad, status: str = ERROR) -> dict[str, Any]:
-    ads = [i + 1 for i, ad in enumerate(inp.get("ads") or []) if bad(ad)]
+def audit_sets(inp: dict[str, Any]) -> list[dict[str, Any]]:
+    """Наборы входа аудита. Старый плоский вход (без `ad_sets`) - один набор (ACL-1768)."""
+    given = inp.get("ad_sets")
+    if isinstance(given, list) and given:
+        return given
+    flat = {k: inp.get(k) for k in ("name", "destination", "age_min", "age_max", "os", "device", "os_min",
+                                     "start_time", "ads")}
+    return [flat]
+
+
+def _dest_of(a_set: dict[str, Any]) -> str:
+    return "instant_form" if _s(a_set.get("destination")) == "instant_form" else "website"
+
+
+def campaign_dests(inp: dict[str, Any]) -> set[str]:
+    """Какие места конверсии есть среди наборов: по ним правила показываются или нет."""
+    return {_dest_of(x) for x in audit_sets(inp)}
+
+
+def _numbered(inp: dict[str, Any]) -> list[tuple[int, int, dict[str, Any], dict[str, Any]]]:
+    """(номер набора 1-based, сквозной номер объявления 1-based, набор, объявление)."""
+    out = []
+    n = 0
+    for si, st in enumerate(audit_sets(inp), start=1):
+        for ad in st.get("ads") or []:
+            n += 1
+            out.append((si, n, st, ad))
+    return out
+
+
+def _per_ad(rule: str, inp: dict, bad, status: str = ERROR, only_dest: str = "") -> dict[str, Any]:
+    ads = [n for _si, n, st, ad in _numbered(inp)
+           if (not only_dest or _dest_of(st) == only_dest) and bad(ad, st)]
     return _v(rule, status if ads else OK, ("Ad " + ", ".join(map(str, ads))) if ads else "", ads)
 
 
+def _per_set(rule: str, inp: dict, check) -> dict[str, Any]:
+    """Правило уровня набора: `check(набор)` -> код ошибки или пустая строка."""
+    bad: list[tuple[int, str]] = []
+    for si, st in enumerate(audit_sets(inp), start=1):
+        code = check(st)
+        if code:
+            bad.append((si, code))
+    if not bad:
+        return _v(rule, OK)
+    if len(audit_sets(inp)) == 1:
+        return _v(rule, ERROR, bad[0][1])
+    return _v(rule, ERROR, "Ad set " + ", ".join(str(i) for i, _ in bad), sets=[i for i, _ in bad])
+
+
 def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
-    """Клиентские вердикты в порядке таблицы. Зеркало `cbPreflight.evaluate` в report.html."""
-    dest = "instant_form" if _s(inp.get("destination")) == "instant_form" else "website"
-    ads = inp.get("ads") or []
+    """Клиентские вердикты в порядке таблицы. Зеркало `cbPreflight.evaluate` в report.html.
+
+    ACL-1768: правила уровня набора считаются на КАЖДЫЙ набор (`inp["ad_sets"]`); плоский
+    вход прежней формы - один набор, вердикты те же.
+    """
+    sets = audit_sets(inp)
+    dests = campaign_dests(inp)
     out: list[dict[str, Any]] = []
     link = _s(inp.get("link"))
     link_ok = bool(re.match(_LINK_RE, link, re.I))
     for rule in RULES:
-        if rule["side"] != "client" or not applies(rule, dest):
+        if rule["side"] != "client" or not (rule["applies"] == "always" or rule["applies"] in dests):
             continue
         rid = rule["id"]
         if rid == "form_chosen":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("form_id")) and not a.get("template")))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("form_id")) and not a.get("template"), only_dest="instant_form"))
         elif rid == "form_template_privacy":
-            out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
-                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I)))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I),
+                               only_dest="instant_form"))
         elif rid == "form_template_contacts":
-            out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
-                               and not (a.get("template") or {}).get("contact_fields")))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not (a.get("template") or {}).get("contact_fields"),
+                               only_dest="instant_form"))
         elif rid == "country_set":
             out.append(_v(rid, OK if _s(inp.get("country")) else ERROR))
         elif rid == "link_https":
@@ -288,29 +348,32 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             else:
                 out.append(_v(rid, OK if re.search(_TRACK_RE, link) else WARNING))
         elif rid == "media_chosen":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("file"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("file"))))
         elif rid == "vertical_needs_main":
-            out.append(_per_ad(rid, inp, lambda a: bool(_s(a.get("vertical_file"))) and not _s(a.get("file"))))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(_s(a.get("vertical_file"))) and not _s(a.get("file"))))
         elif rid == "texts_limit":
-            out.append(_per_ad(rid, inp, lambda a: any(
+            out.append(_per_ad(rid, inp, lambda a, st: any(
                 len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
         elif rid == "texts_vertical":
-            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
-            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))
-                                      and len(inp.get("ads") or []) > 1))
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))
+                                      and len(st.get("ads") or []) > 1))
         elif rid == "primary_text":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("body"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
         elif rid == "headline":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("headline"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline"))))
         elif rid == "headline_len":
-            out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "primary_len":
-            out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
-            key = (_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE) + ("_instant_form" if dest == "instant_form" else "")
-            allowed = ALLOWED_CTA.get(key, ())
-            out.append(_per_ad(rid, inp, lambda a: (_s(a.get("cta")) or "LEARN_MORE") not in allowed))
+            objective = _s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE
+
+            def cta_bad(a, st, objective=objective):
+                key = objective + ("_instant_form" if _dest_of(st) == "instant_form" else "")
+                return (_s(a.get("cta")) or "LEARN_MORE") not in ALLOWED_CTA.get(key, ())
+            out.append(_per_ad(rid, inp, cta_bad))
         elif rid == "budget_set":
             b = inp.get("budget")
             try:
@@ -319,40 +382,57 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 good = False
             out.append(_v(rid, OK if good else ERROR))
         elif rid == "age_range":
-            lo, hi = inp.get("age_min"), inp.get("age_max")
-            try:
-                lo, hi = int(lo), int(hi)
-                good = AGE_MIN <= lo <= AGE_MAX and AGE_MIN <= hi <= AGE_MAX and lo <= hi
-            except (TypeError, ValueError):
-                good = False
-            out.append(_v(rid, OK if good else ERROR))
+            def age_bad(st):
+                try:
+                    lo, hi = int(st.get("age_min")), int(st.get("age_max"))
+                    return "" if AGE_MIN <= lo <= AGE_MAX and AGE_MIN <= hi <= AGE_MAX and lo <= hi else "range"
+                except (TypeError, ValueError):
+                    return "range"
+            out.append(_per_set(rid, inp, age_bad))
         elif rid == "devices_consistent":
-            os_ = _s(inp.get("os")).lower() or "all"
-            dev, ver = _s(inp.get("device")).lower(), _s(inp.get("os_min"))
-            mobile = os_ in ("ios", "android")
-            if mobile and dev == "desktop":
-                out.append(_v(rid, ERROR, "mobile_os_desktop"))
-            elif ver and not mobile:
-                out.append(_v(rid, ERROR, "version_needs_os"))
-            elif ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
-                out.append(_v(rid, ERROR, "bad_version"))
-            else:
-                out.append(_v(rid, OK))
+            def dev_bad(st):
+                os_ = _s(st.get("os")).lower() or "all"
+                dev, ver = _s(st.get("device")).lower(), _s(st.get("os_min"))
+                mobile = os_ in ("ios", "android")
+                if mobile and dev == "desktop":
+                    return "mobile_os_desktop"
+                if ver and not mobile:
+                    return "version_needs_os"
+                if ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
+                    return "bad_version"
+                return ""
+            out.append(_per_set(rid, inp, dev_bad))
         elif rid == "start_time_valid":
-            st, now = _s(inp.get("start_time")), _s(inp.get("now"))
-            if not st:
-                out.append(_v(rid, OK))
-            elif not re.fullmatch(_START_RE, st):
-                out.append(_v(rid, ERROR, "format"))
-            elif re.fullmatch(_START_RE, now) and st[:10] < now[:10]:
-                out.append(_v(rid, ERROR, "past"))
-            else:
-                out.append(_v(rid, OK))
+            now = _s(inp.get("now"))
+
+            def start_bad(st, now=now):
+                stt = _s(st.get("start_time"))
+                if not stt:
+                    return ""
+                if not re.fullmatch(_START_RE, stt):
+                    return "format"
+                if re.fullmatch(_START_RE, now) and stt[:10] < now[:10]:
+                    return "past"
+                return ""
+            out.append(_per_set(rid, inp, start_bad))
         elif rid == "ad_names_unique":
-            names = [_s(a.get("name")) for a in ads]
-            dup = {n for n in names if n and names.count(n) > 1}
-            bad = [i + 1 for i, n in enumerate(names) if n in dup]
+            # Имена объявлений различаются внутри набора (так создатель ищет и сверяет их).
+            bad: list[int] = []
+            for si, st in enumerate(sets, start=1):
+                nums = [(n, _s(ad.get("name"))) for s1, n, _s2, ad in _numbered(inp) if s1 == si]
+                names = [nm for _n, nm in nums]
+                dup = {nm for nm in names if nm and names.count(nm) > 1}
+                bad += [n for n, nm in nums if nm in dup]
             out.append(_v(rid, ERROR if bad else OK, ("Ad " + ", ".join(map(str, bad))) if bad else "", bad))
+        elif rid == "adset_names_unique":
+            names = [_s(st.get("name")).casefold() for st in sets]
+            bad_sets = [i + 1 for i, nm in enumerate(names) if nm and names.count(nm) > 1]
+            out.append(_v(rid, ERROR if bad_sets else OK,
+                          ("Ad set " + ", ".join(map(str, bad_sets))) if bad_sets else "", sets=bad_sets))
+        elif rid == "adset_has_ads":
+            empty = [i + 1 for i, st in enumerate(sets) if not (st.get("ads") or [])]
+            out.append(_v(rid, ERROR if empty else OK, ("Ad set " + ", ".join(map(str, empty))) if empty else "",
+                          sets=empty))
     return out
 
 
@@ -538,6 +618,8 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     def languages() -> None:
         resolver.locale(plan.language)
         for s in plan.ad_sets:          # ACL-1767: дополнительные языки - тоже только точные совпадения
+            if s.language:              # ACL-1768: свой язык набора
+                resolver.locale(s.language)
             for extra in s.languages:
                 resolver.locale(extra)
         put("language_resolves", OK)

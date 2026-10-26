@@ -552,6 +552,32 @@
     {
       "applies": "always",
       "field": {
+        "level": "adset",
+        "sel": ".cb-adset-name"
+      },
+      "hint": "give every ad set of the campaign its own name",
+      "id": "adset_names_unique",
+      "label": "Ad set names are unique",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ""
+      },
+      "hint": "add an ad to the ad set or remove the ad set",
+      "id": "adset_has_ads",
+      "label": "Every ad set has an ad",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
         "level": "campaign",
         "sel": ""
       },
