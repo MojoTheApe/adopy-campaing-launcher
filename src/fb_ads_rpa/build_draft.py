@@ -158,6 +158,7 @@ def slots_to_campaign_drafts(
                 device=(first.get("device") or "").strip(),
                 os_min=(first.get("os_min") or "").strip(),
                 start_time=(first.get("start_time") or "").strip(),
+                placements=first.get("placements"),
                 adset_index=idx,
                 # Язык набора 0 - язык кампании; у остальных свой, пусто = как у кампании.
                 language=(first.get("language") or "").strip() if idx != order[0] else "",
