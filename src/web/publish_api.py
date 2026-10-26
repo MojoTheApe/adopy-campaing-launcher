@@ -432,6 +432,7 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        early_notes: list[str] = []
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
             try:
@@ -439,10 +440,18 @@ class ApiPublisher:
                 # pin_page принимает только числовой id, а creator выбирает Страницу позже
                 # (повторный resolve_page в _prepare идемпотентен: page_id уже задан и на кабинете).
                 if not plan.page_id:
-                    resolve_page(plan, self._facts)
+                    early_notes = list(resolve_page(plan, self._facts))
                 pinned = self._client.transport.pin_page(plan.page_id)
             except PlanError as exc:
                 return result_dict(Outcome(campaign_name=name), error=f"{exc}. Nothing was created.")
+            except GraphStop as exc:
+                # Чтение Страниц профиля до закрепления тоже может упереться в стоп: как в creator.run.
+                if not isinstance(exc, CallBudget):
+                    self.stop = exc
+                    _start_cooldown(self.account_label, exc)
+                    _tm.report_stop(exc.kind, str(exc), {"source": "publish", "code": exc.code})
+                return result_dict(Outcome(campaign_name=name), error=(
+                    f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created."))
             except ValueError as exc:
                 return result_dict(Outcome(campaign_name=name),
                                    error=f"The Page of this draft cannot be used in this run ({exc}). "
@@ -500,6 +509,8 @@ class ApiPublisher:
             _start_cooldown(self.account_label, self.stop)
             _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
         res = result_dict(outcome)
+        # ACL-2192: заметка «Automatic Facebook Page» выбрана раньше creator - в итог она переносится здесь.
+        res["warnings"] = [n for n in early_notes if n not in res["warnings"]] + res["warnings"]
         _record("api_create_campaign", res["publishable"], campaign=name,
                 duration_s=round(time.monotonic() - began, 1),
                 diag={"calls": self._client.calls, "writes": self._client.writes,
