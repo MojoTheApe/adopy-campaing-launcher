@@ -1,5 +1,43 @@
 # System history
 
+## ACL-2204 — BI and stats workbook money figures show $ by default — 2026-10-26
+
+Owner decision: BI and stats-workbook money figures are USD when the source declares no currency. Home "You vs Others", country and account rows now show `$` instead of "currency unknown", and the yellow source notice reads "currency: USD (default)" (time zone and day boundary stay unknown when undeclared). An explicit `BI_CURRENCY` / `STATS_CURRENCY` still wins; rows declaring different currencies stay unknown and are never merged; per-account Meta reads with an empty currency keep their wording. Docs: ACL-103 "Currency and day boundary (103e)".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1204).
+
+## ACL-1903 — Builder: clearing a file box removes the file from the plan — 2026-10-26
+
+- The "File" and "Stories / Reels file" boxes of an ad are search inputs; the chosen file lives in a hidden
+  field that the plan, the pre-flight audit and the server read. Erasing the text used to leave the old file
+  there: the box looked empty but publish still uploaded it (live on TEST9095, 2026-10-14).
+- Now any edit that makes the text differ from the chosen file (including an empty box) clears the choice,
+  for the main file and for the Stories / Reels file. Picking again works as before.
+- Text put by code (filling a creative from another screen) also drops a previous choice that does not match.
+  Values placed as a whole pair (Send-to-Builder, Duplicate ad) are copied as they are; the Stories / Reels
+  prefill from the `_story` partner (ACL-1774) happens only when a main file is picked, so a cleared box stays cleared.
+- Ctrl+Z after clearing puts the file name back in the box; the choice comes back with it, so the box never looks filled while the plan has no file.
+- Regression browser test: `tests/test_acl1903_builder_file_clear_browser.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/903).
+
+## ACL-1768 — Builder: several ad sets in one campaign — 2026-10-25
+
+A campaign now holds several ad sets (up to 10) with explicit ad set indexes in the builder slots and `CampaignDraft.ad_sets[n]`; slots are no longer merged by name into one ad set. Audience, devices, languages, start time and pixel are per ad set; budget stays on the campaign (CBO). The API plan checks unique ad set names and that every ad set has ads, and sizes the call budget from the plan. Old local drafts load as one ad set. The ad set buttons sit in the picker row as compact chips (ACL-2020). RPA-backend behaviour is out of scope (owner decision 2026-10-25).
+The call budget of a campaign now includes a reserve for the targeting reads of all ad sets, and large-video chunks plus the writes of every ad set are checked against it before the first write. Check plan reports the unconfirmed targeting terms of all ad sets at once. An ad set's own pixel is checked even if the account lists no pixels. Note: an older page (draft version 3) does not open version 4 drafts, so a draft saved with several ad sets disappears if an older build is opened against the same draft store.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/768).
+
+## ACL-1175 — Setup guide for a new manager, shipped with the installer — 2026-10-25
+
+New `docs/SETUP-NEW-PC.md`, rendered to `setup-guide.html` at build time and shipped
+inside the installer (Start-menu shortcut, last installer page, wizard button). It
+covers install, first-run setup, Connect Multilogin, Update, and a table of every
+message the wizard, Connect and the Update button can show. Brought up to date with
+current main: port fallback (9090-9109), prefilled Stats workbook, "Did you mean" name
+hint, and rows for each Update-button failure (checked by `test_setup_guide.py`).
+Per the owner decision of 2026-10-25, the guide inside the installer meets the reach
+criterion; publishing it as a Release asset is ACL-2035. The live pass by a new
+manager happens after release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/175).
+
 ## ACL-2197 — Builder keeps the Instant Form source (existing form or template) after a page reload — 2026-10-26
 
 After a reload an ad whose Instant Form comes from a template fell back to "Use existing form", the template

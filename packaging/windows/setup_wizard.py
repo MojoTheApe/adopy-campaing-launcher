@@ -5,7 +5,9 @@ import json
 import os
 import platform
 import shutil
+import sys
 import tempfile
+import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -283,6 +285,27 @@ def enable_clipboard_shortcuts(widget, tk_module) -> None:
     widget.bind_all("<Button-3>", on_right_click, add="+")
 
 
+def setup_guide_path() -> Path:
+    """Страница установки (ACL-1175): в пакете — готовый HTML, из исходников — сам Markdown."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "setup-guide.html"
+    return Path(__file__).resolve().parents[2] / "docs" / "SETUP-NEW-PC.md"
+
+
+def open_setup_guide(opener: Callable[[str], bool] = webbrowser.open) -> str:
+    """Open the setup guide; return a message for the status line when it cannot be opened."""
+    path = setup_guide_path()
+    if not path.is_file():
+        return "The setup guide is missing from this installation. Ask Evgeni for the guide link."
+    try:
+        if opener(path.as_uri()):
+            return ""
+    except Exception:
+        pass
+    return f"Could not open the setup guide. Open this file yourself: {path}"
+
+
 def write_ready_state(config_directory: str | Path, version: str) -> None:
     path = setup_state_path(config_directory)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,6 +403,9 @@ class SetupWizard:
             wraplength=500,
             justify="left",
         )
+        # ACL-1175: страница установки всегда в одном клике от любого шага —
+        # человек сверяет экран с текстом, не выходя из мастера.
+        tk.Button(self.footer, text="Setup guide", command=self._open_guide).pack(side="left", padx=(0, 12))
         self.status_label.pack(side="left", fill="x", expand=True)
         self.back_button = tk.Button(self.footer, text="Back", width=10, command=self._back)
         self.back_button.pack(side="right", padx=(8, 0))
@@ -435,6 +461,8 @@ class SetupWizard:
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
         )
         self._text("New versions are offered in the dashboard and installed only when you click Update.")
+        self._text("Step-by-step instructions, with what you should see at each step: click Setup guide below. "
+                   "It is also in Start → Adopy Campaign Launcher → Setup guide.")
 
     def _system(self) -> None:
         self.system_checks = system_readiness(self.config_directory)
@@ -511,6 +539,11 @@ class SetupWizard:
             text="Copy sanitized setup summary",
             command=self._copy_summary,
         ).pack(anchor="w", pady=10)
+
+    def _open_guide(self) -> None:
+        problem = open_setup_guide()
+        if problem:
+            self.status.set(problem)
 
     def _copy_summary(self) -> None:
         if not self.configuration:

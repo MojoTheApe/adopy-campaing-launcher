@@ -149,6 +149,51 @@ def upload_calls(size: int) -> int:
 VIDEO_WAIT_S = 300.0
 VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
+
+#: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
+#: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
+#: Берём с запасом; видео добавляет опросы обработки, Instant Form - чтения форм Страницы.
+CALLS_BASE = 20
+CALLS_PER_AD_SET = 7
+CALLS_PER_AD = 5
+CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
+                                # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
+CALLS_INSTANT_FORM = 10
+
+
+def estimate_targeting_reads(plan: "CampaignPlan") -> int:
+    """Запас на чтения таргетинга (ACL-1771) по ВСЕМ наборам: они идут из того же бюджета, что и записи.
+
+    Как потолок задания у резолвера: база + шаг на каждую различную строку (целую и каждую её часть),
+    но не выше `JOB_READ_ABS_CAP`. Без интересов - 0.
+    """
+    seen: set[str] = set()
+    for ad_set in plan.ad_sets:
+        for group in ad_set.interest_groups:
+            for term in group:
+                seen.add(_tr.norm(term))
+                seen.update(_tr.norm(p) for p in _tr.split_term(term))
+    seen.discard("")
+    if not seen:
+        return 0
+    return min(_tr.JOB_READ_ABS_CAP, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
+
+
+def estimate_create_calls(plan: "CampaignPlan") -> int:
+    """Сколько вызовов Graph нужно на ЗАПИСИ кампании целиком (первый запуск, с запасом).
+
+    Чтения таргетинга не входят: их запас - `estimate_targeting_reads`, а `_prepare` сверяет остаток
+    бюджета именно с этим числом уже после чтений.
+    """
+    total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
+    for ad_set in plan.ad_sets:
+        total += CALLS_PER_AD * len(ad_set.ads)
+        total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.kind == "video")
+    if any(x.instant for x in plan.ad_sets):
+        total += CALLS_INSTANT_FORM
+    return total
+
+
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
 #: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
@@ -195,6 +240,8 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
                "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS",
                "WITH_ISSUES"]
 
+
+from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
 
 #: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
 FORM_ID_PLACEHOLDER = "0000000"
@@ -293,6 +340,10 @@ class AdSetPlan:
     device: str = ""                 # "mobile" | "desktop"
     os_min: str = ""                 # минимальная версия iOS/Android: "14" или "14.0"
     start_time: str = ""             # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    #: ACL-1768: номер набора и поля уровня набора; пусто = как у кампании.
+    index: int = 1                   # 1-based порядковый номер набора в кампании
+    language: str = ""               # язык набора вместо языка кампании
+    pixel_id: str = ""               # пиксель набора вместо пикселя кампании
 
     @property
     def instant(self) -> bool:
@@ -536,12 +587,18 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         problems.append("Tracking link is empty; the API backend needs it for the ads")
     if not ad_sets_src:
         problems.append("No ad sets in the campaign")
+    if len(ad_sets_src) > MAX_AD_SETS:
+        problems.append(MAX_AD_SETS_ERROR)      # ACL-1768: потолок наборов
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
     if not budget or float(budget) <= 0:
         problems.append("Daily budget missing")
     ad_sets: list[AdSetPlan] = []
-    for s in ad_sets_src:
+    ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
+    for set_no, s in enumerate(ad_sets_src, start=1):
         plan_set = AdSetPlan(
+            index=set_no,
+            language=str(getattr(s, "language", "") or "").strip(),
+            pixel_id=str(getattr(s, "pixel_id", "") or "").strip(),
             name=str(s.name or draft.name).strip(),
             age_min=int(getattr(s, "age_min", 18) or 18),
             age_max=int(getattr(s, "age_max", 65) or 65),
@@ -556,7 +613,9 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         _plan_audience(plan_set, s, problems)
         if not s.ads:
             problems.append(f"No ads in ad set {plan_set.name!r}")
-        for i, ad in enumerate(s.ads, start=1):
+        for ad in s.ads:
+            ad_no += 1
+            i = ad_no
             path = str(getattr(ad, "creative_path", "") or "").strip()
             if not path:
                 problems.append(f"Ad {i}: no creative file")
@@ -596,8 +655,9 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             problems.append(f"Ad set {plan_set.name!r}: " + _wpol.MSG_TEXTS_DYNAMIC_SET)
         ad_sets.append(plan_set)
     # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
-    set_names = [x.name for x in ad_sets]
-    for dup in sorted({n for n in set_names if set_names.count(n) > 1}):
+    # ACL-1768: сравнение без учёта регистра и пробелов по краям - Meta ищет наборы по имени.
+    set_names = [x.name.casefold() for x in ad_sets]
+    for dup in sorted({x.name for x in ad_sets if set_names.count(x.name.casefold()) > 1}):
         problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
     for x in ad_sets:
         names = [a.name for a in x.ads]
@@ -750,13 +810,19 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
     """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`."""
     if plan.ad_sets and all(s.instant for s in plan.ad_sets):
         # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775).
-        pass
-    elif plan.pixel_id:
+        return
+    for s in plan.ad_sets:
+        # ACL-1768: пиксель набора, если задан, тоже должен быть на кабинете.
+        if s.pixel_id and not s.instant and s.pixel_id not in facts.pixels:
+            raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.")
+    if plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
                             f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
+    elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
+        return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
@@ -920,7 +986,7 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
         # Возраст и интересы — как в билдере; Meta не расширяет аудиторию сама.
         "targeting_automation": {"advantage_audience": 0},
     }
-    loc = resolver.locale(plan.language)
+    loc = resolver.locale(ad_set.language or plan.language)
     locales = [loc] if loc is not None else []
     for extra in ad_set.languages:
         # Язык кампании остаётся первым; дополнительные - только точные совпадения /search.
@@ -1690,7 +1756,8 @@ class CampaignCreator:
             params = {"name": ad_set.name, "campaign_id": campaign_id, "status": CHILD_STATUS,
                       "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
                       "destination_type": DESTINATION,
-                      "promoted_object": {"pixel_id": plan.pixel_id, "custom_event_type": CUSTOM_EVENT},
+                      "promoted_object": {"pixel_id": ad_set.pixel_id or plan.pixel_id,
+                                          "custom_event_type": CUSTOM_EVENT},
                       "targeting": targeting, "adlabels": [{"name": plan.label}]}
         if ad_set.start_time:
             # ACL-1767: ключа нет, пока старт не задан - прежние планы не меняются.
@@ -1852,7 +1919,7 @@ class CampaignCreator:
             check("optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
             check("billing_event", BILLING_EVENT, row.get("billing_event"))
             check("destination_type", DESTINATION, row.get("destination_type"))
-            check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
+            check("pixel", ad_set.pixel_id or plan.pixel_id, str(po.get("pixel_id") or ""))
             check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
         # Оба направления: набор прошлого запуска мог быть динамическим, а объявление теперь с одним текстом.
         check("dynamic_creative", ad_set.dynamic,
@@ -1972,12 +2039,26 @@ class CampaignCreator:
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
                             "to the ad account in Business Manager. Nothing was created.")
 
-    def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
-        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
+    def _prepare(self, plan: CampaignPlan, out: Outcome, *,
+                 writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
+        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы.
+
+        `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
+        """
         out.warnings += resolve_page_pixel(plan, self.facts)
         self.check_profile_page(plan)
         try:
-            targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+            # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
+            # ждущие подтверждения, за один раз, а не по набору за круг.
+            targetings = []
+            unresolved: list[dict] = []
+            for s in plan.ad_sets:
+                try:
+                    targetings.append(targeting_for(plan, s, self.resolver))
+                except TargetingUnresolved as exc:
+                    unresolved += [i for i in exc.items if i not in unresolved]
+            if unresolved:
+                raise TargetingUnresolved(unresolved)
         finally:
             self._note_targeting_warnings(out)
         self._step(out, "preflight: targeting resolved")
@@ -2021,10 +2102,16 @@ class CampaignCreator:
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
         chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
-        if isinstance(budget, int) and chunk_calls and chunk_calls + CALLS_RESERVE_OTHER > budget:
-            raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks, more than "
-                            f"one run allows ({budget}). Use a smaller video or split the campaign. "
-                            "Nothing was created.")
+        # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
+        # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
+        # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
+        if isinstance(budget, int) and chunk_calls:
+            rest = estimate_create_calls(plan) if writing else CALLS_RESERVE_OTHER
+            if chunk_calls + rest > budget:
+                raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
+                                f"and the rest of the campaign about {rest}, more than "
+                                f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                                "Nothing was created.")
         self._check_planned(plan, targetings)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
@@ -2258,7 +2345,7 @@ class CampaignCreator:
         renamed = name_error = ""
         requested, skipped = plan.name, []
         try:
-            targetings, files = self._prepare(plan, out)
+            targetings, files = self._prepare(plan, out, writing=False)
             choice = self._resolve_name(plan, targetings)
             plan, existing, skipped = choice.plan, choice.existing, choice.skipped
             out.published_as = plan.name
@@ -2358,7 +2445,7 @@ class CampaignCreator:
             row["gender"] = GENDER_LABELS[ad_set.gender]
         if ad_set.languages:
             names = self.resolver.locale_names
-            row["languages_picked"] = [names.get(x, x) for x in [plan.language, *ad_set.languages] if x]
+            row["languages_picked"] = [names.get(x, x) for x in [ad_set.language or plan.language, *ad_set.languages] if x]
         if ad_set.device:
             row["devices"] = f"{ad_set.device} only"
         if ad_set.os_min:
@@ -2390,7 +2477,7 @@ class CampaignCreator:
             sets.append({
                 "name": ad_set.name, "status": CHILD_STATUS,
                 "countries": list((t.get("geo_locations") or {}).get("countries") or []),
-                "language": plan.language, "locales": list(t.get("locales") or []),
+                "language": ad_set.language or plan.language, "locales": list(t.get("locales") or []),
                 "age": f"{ad_set.age_min}-{ad_set.age_max}",
                 "interests": interests,
                 "os": ad_set.os or "All",
@@ -2407,6 +2494,8 @@ class CampaignCreator:
                 # Multi-advertiser ads всегда выключены (ACL-1767).
                 "multi_advertiser": "off",
             })
+            if len(plan.ad_sets) > 1:
+                sets[-1]["index"] = ad_set.index        # ACL-1768: у одного набора ключа нет, как раньше
             self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.dynamic:
                 sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
@@ -2539,7 +2628,10 @@ class CampaignCreator:
                         media["vertical"] = {"image_hash": self._image_hash(
                             out, plan, ad, vdata, path=ad.vertical_path, role=" Stories / Reels file")}
                         rec["vertical_image_hash"] = media["vertical"]["image_hash"]
-                # Номер объявления в имени креатива: два объявления не делят креатив (M2).
+                # Номер объявления в имени креатива: два объявления не делят креатив (M2). Номер сквозной по
+                # кампании (ACL-1768): добавленное в первый набор объявление сдвигает номера следующих наборов,
+                # и креатив, оставшийся от неполного запуска под старым номером, будет создан заново.
+                # Объявления при этом находятся по имени внутри набора, так что дублей не возникает.
                 creative_name = f"{ad.name} #{ad.index} [{plan.label}]"
                 if ad.uses_feed:
                     payload = self.creative_params(plan, ad, ad_set, media, "")

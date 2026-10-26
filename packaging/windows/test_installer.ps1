@@ -75,9 +75,12 @@ if (-not ((Get-Content $Sentinel -Raw).Contains("preserve-me"))) {
 $StartMenuShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/Adopy Campaign Launcher/Open Campaign Launcher.lnk"
 $SetupShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/Adopy Campaign Launcher/Setup Campaign Launcher.lnk"
 $DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Adopy Campaign Launcher.lnk"
+$GuideShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs/Adopy Campaign Launcher/Setup guide.lnk"
 Assert-Exists $StartMenuShortcut "Start Menu shortcut"
 Assert-Exists $SetupShortcut "Setup Wizard shortcut"
 Assert-Exists $DesktopShortcut "Desktop shortcut"
+Assert-Exists $GuideShortcut "Setup guide shortcut"
+Assert-Exists (Join-Path $InstallDirectory "_internal/setup-guide.html") "Setup guide page"
 
 Assert-ConfigurationPreserved
 Write-Host "Proving the installed bundle does not need Python or Git on PATH..."
@@ -138,6 +141,7 @@ Assert-Exists $Sentinel "Preserved machine configuration"
 if (Test-Path $StartMenuShortcut) { throw "Start Menu shortcut remains after uninstall." }
 if (Test-Path $SetupShortcut) { throw "Setup Wizard shortcut remains after uninstall." }
 if (Test-Path $DesktopShortcut) { throw "Desktop shortcut remains after uninstall." }
+if (Test-Path $GuideShortcut) { throw "Setup guide shortcut remains after uninstall." }
 
 Assert-ConfigurationPreserved
 Write-Host "ACL installer install/launch/repair/uninstall test OK."

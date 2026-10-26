@@ -395,12 +395,13 @@ assert.equal(head.hidden, false);
 for (const lv of ['campaign', 'adset', 'ad']) assert.ok(head.innerHTML.includes('data-level="' + lv + '"'), 'нет уровня ' + lv);
 assert.ok(/data-level="campaign"[^>]*aria-selected="true"/.test(head.innerHTML));
 
-// Ad set: сегодня он один, а «+ Ad set» и «Copy ad set» выключены с названием задачи.
+// Ad set (ACL-1768): выбор набора, «+ Ad set», «Copy ad set» - рабочие кнопки, не заглушки.
 clickAct(t, 'level', { level: 'adset' });
 assert.equal(hostEl.dataset.level, 'adset');
 assert.equal(t.stored['acl.builder.level'], 'adset', 'уровень не запомнен');
-assert.ok(/data-future="adsets"[^>]*title="Multiple ad sets — coming in ACL-1768"/.test(head.innerHTML), '«+ Ad set» не выключен с задачей');
-assert.ok(/data-future="copyAdset"/.test(head.innerHTML) && (head.innerHTML.match(/ disabled /g) || []).length >= 2);
+assert.ok(/data-act="add-adset"/.test(head.innerHTML) && /data-act="copy-adset"/.test(head.innerHTML), 'нет кнопок набора');
+assert.ok(!/data-future="adsets"/.test(head.innerHTML), 'набор всё ещё заглушка');
+assert.ok(/data-act="remove-adset"[^>]* disabled/.test(head.innerHTML), 'единственный набор нельзя убрать');
 
 // Ad: выбора объявления нет, все карточки набора идут одним списком (владелец, 13.10).
 clickAct(t, 'level', { level: 'ad' });
