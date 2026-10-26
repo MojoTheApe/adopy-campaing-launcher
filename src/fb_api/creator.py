@@ -2814,7 +2814,7 @@ class CampaignCreator:
         actual_title = (self.client.get(f"/{actual_id}", {"fields": "title"}).get("title")
                         if data and actual_id else "")
         verified = bool(expected_title and actual_title == expected_title)
-        if uploaded_id and not verified:
+        if uploaded_id and (str(uploaded_id) == actual_id or not verified):
             check(aobj, id_field, str(uploaded_id), actual_id)
         if data:
             check(aobj, content_field, expected_title, actual_title)
