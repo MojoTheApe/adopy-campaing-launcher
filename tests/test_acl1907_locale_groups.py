@@ -116,3 +116,19 @@ def test_unknown_members_keep_strict_compare_and_say_so(tmp_path):
     text = " ".join(out.warnings)
     assert "languages (builder: 1002, Meta: 7, 23)" in text
     assert "compared strictly" in text and "did not list the locales" in text
+
+
+def test_several_groups_in_one_ad_set_are_each_matched_to_their_full_expansion():
+    # ACL-1767 + ACL-1907: two groups at once; each must be present as a complete set.
+    from src.fb_api import creator as cr
+    c = cr.CampaignCreator.__new__(cr.CampaignCreator)
+    c.resolver = type("R", (), {"locale_groups": {1002: {7: "a", 23: "b"}, 6: {61: "c", 62: "d"}}})()
+    ok: list = []
+    c._language_check(ok, "adset", [1002, 6], [7, 23, 61, 62])
+    assert ok[0]["ok"] is True
+    partial: list = []
+    c._language_check(partial, "adset", [1002, 6], [7, 23, 61])
+    assert partial[0]["ok"] is False
+    mixed: list = []
+    c._language_check(mixed, "adset", [1002, 6], [1002, 61, 62])  # group kept as is + the other expanded
+    assert mixed[0]["ok"] is True
