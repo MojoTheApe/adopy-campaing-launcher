@@ -53,6 +53,9 @@ PAUSED = "PAUSED"
 #: не включит кампанию. Только после чтения, подтвердившего PAUSED у кампании (`_confirm_campaign_paused`).
 ACTIVE = "ACTIVE"
 CHILD_STATUS = ACTIVE
+#: Паузы (с) между повторными чтениями метки объекта, которого Meta ещё «не показывает» (только чтения).
+#: Каждое чтение идёт через клиента и считается в потолке вызовов (CallBudget останавливает громко).
+LABEL_RECHECK_WAITS = (2.0, 4.0, 6.0)
 #: Что человек читает в плане, в «Check plan» и в итоге (ACL-2114).
 STATUS_NOTE = "Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on"
 OBJECTIVE = "OUTCOME_LEADS"
@@ -1536,6 +1539,13 @@ class CampaignCreator:
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
         """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
         row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
+        # ACL-2206 (Doc120 26.10, Doc122 22.10, Doc120 18.10): Meta иногда отдаёт метку не сразу после создания.
+        # Перечитываем несколько раз (только GET), и лишь потом останавливаемся; запись не повторяется никогда.
+        for wait in LABEL_RECHECK_WAITS:
+            if label in _labels(row):
+                break
+            self.sleep(wait)
+            row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
         if label not in _labels(row):
             raise CreationStopped(
                 f"{what} was created but Meta did not keep the ACL tag ({label}) on it. "
