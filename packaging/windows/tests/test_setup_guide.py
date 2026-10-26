@@ -123,6 +123,12 @@ class SetupGuideMatchesTheProductTests(unittest.TestCase):
             self.assertIn(phrase, page, phrase)
             self.assertIn(phrase, GUIDE, phrase)
 
+    def test_multilogin_token_expiry_banner_is_explained(self):
+        page = (REPO_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+        for phrase in ("Profiles cannot start until you sign in again.", "Sign in again to renew it."):
+            self.assertIn(phrase, page, phrase)
+            self.assertIn(phrase, GUIDE, phrase)
+
     def test_update_flow_names_what_the_button_shows(self):
         page = (REPO_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
         self.assertIn("title: 'Update ACM to ' + name + '?'", page)
