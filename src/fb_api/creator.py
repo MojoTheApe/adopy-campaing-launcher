@@ -161,8 +161,30 @@ CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одн�
 CALLS_INSTANT_FORM = 10
 
 
+def estimate_targeting_reads(plan: "CampaignPlan") -> int:
+    """Запас на чтения таргетинга (ACL-1771) по ВСЕМ наборам: они идут из того же бюджета, что и записи.
+
+    Как потолок задания у резолвера: база + шаг на каждую различную строку (целую и каждую её часть),
+    но не выше `JOB_READ_ABS_CAP`. Без интересов - 0.
+    """
+    seen: set[str] = set()
+    for ad_set in plan.ad_sets:
+        for group in ad_set.interest_groups:
+            for term in group:
+                seen.add(_tr.norm(term))
+                seen.update(_tr.norm(p) for p in _tr.split_term(term))
+    seen.discard("")
+    if not seen:
+        return 0
+    return min(_tr.JOB_READ_ABS_CAP, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
+
+
 def estimate_create_calls(plan: "CampaignPlan") -> int:
-    """Сколько вызовов Graph нужно на кампанию целиком (первый запуск, с запасом)."""
+    """Сколько вызовов Graph нужно на ЗАПИСИ кампании целиком (первый запуск, с запасом).
+
+    Чтения таргетинга не входят: их запас - `estimate_targeting_reads`, а `_prepare` сверяет остаток
+    бюджета именно с этим числом уже после чтений.
+    """
     total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
     for ad_set in plan.ad_sets:
         total += CALLS_PER_AD * len(ad_set.ads)
@@ -791,7 +813,7 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         return
     for s in plan.ad_sets:
         # ACL-1768: пиксель набора, если задан, тоже должен быть на кабинете.
-        if s.pixel_id and not s.instant and facts.pixels and s.pixel_id not in facts.pixels:
+        if s.pixel_id and not s.instant and s.pixel_id not in facts.pixels:
             raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.")
     if plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
@@ -2011,11 +2033,25 @@ class CampaignCreator:
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
                             "to the ad account in Business Manager. Nothing was created.")
 
-    def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
-        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
+    def _prepare(self, plan: CampaignPlan, out: Outcome, *,
+                 writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
+        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы.
+
+        `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
+        """
         out.warnings += resolve_page_pixel(plan, self.facts)
         self.check_profile_page(plan)
-        targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+        # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
+        # ждущие подтверждения, за один раз, а не по набору за круг.
+        targetings = []
+        unresolved: list[dict] = []
+        for s in plan.ad_sets:
+            try:
+                targetings.append(targeting_for(plan, s, self.resolver))
+            except TargetingUnresolved as exc:
+                unresolved += [i for i in exc.items if i not in unresolved]
+        if unresolved:
+            raise TargetingUnresolved(unresolved)
         self._step(out, "preflight: targeting resolved")
         self._require_instagram(plan, targetings, out)
         self._page_forms = None
@@ -2057,10 +2093,16 @@ class CampaignCreator:
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
         chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
-        if isinstance(budget, int) and chunk_calls and chunk_calls + CALLS_RESERVE_OTHER > budget:
-            raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks, more than "
-                            f"one run allows ({budget}). Use a smaller video or split the campaign. "
-                            "Nothing was created.")
+        # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
+        # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
+        # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
+        if isinstance(budget, int) and chunk_calls:
+            rest = estimate_create_calls(plan) if writing else CALLS_RESERVE_OTHER
+            if chunk_calls + rest > budget:
+                raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
+                                f"and the rest of the campaign about {rest}, more than "
+                                f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                                "Nothing was created.")
         self._check_planned(plan, targetings)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
@@ -2294,7 +2336,7 @@ class CampaignCreator:
         renamed = name_error = ""
         requested, skipped = plan.name, []
         try:
-            targetings, files = self._prepare(plan, out)
+            targetings, files = self._prepare(plan, out, writing=False)
             choice = self._resolve_name(plan, targetings)
             plan, existing, skipped = choice.plan, choice.existing, choice.skipped
             out.published_as = plan.name
@@ -2567,7 +2609,10 @@ class CampaignCreator:
                         media["vertical"] = {"image_hash": self._image_hash(
                             out, plan, ad, vdata, path=ad.vertical_path, role=" Stories / Reels file")}
                         rec["vertical_image_hash"] = media["vertical"]["image_hash"]
-                # Номер объявления в имени креатива: два объявления не делят креатив (M2).
+                # Номер объявления в имени креатива: два объявления не делят креатив (M2). Номер сквозной по
+                # кампании (ACL-1768): добавленное в первый набор объявление сдвигает номера следующих наборов,
+                # и креатив, оставшийся от неполного запуска под старым номером, будет создан заново.
+                # Объявления при этом находятся по имени внутри набора, так что дублей не возникает.
                 creative_name = f"{ad.name} #{ad.index} [{plan.label}]"
                 if ad.uses_feed:
                     payload = self.creative_params(plan, ad, ad_set, media, "")

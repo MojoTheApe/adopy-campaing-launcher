@@ -86,17 +86,21 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
     остановка на полпути.
     """
-    from src.fb_api.creator import estimate_create_calls
+    from src.fb_api.creator import estimate_create_calls, estimate_targeting_reads
 
-    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, CREATE_CALLS_FLOOR,
-                              DEFAULT_CREATE_MAX_CALLS))
+    # Записи кампании - не больше DEFAULT_CREATE_MAX_CALLS; сверх них бюджет несёт запас на чтения
+    # таргетинга (ACL-1771), которые идут из того же счётчика вызовов.
+    hard_max = DEFAULT_CREATE_MAX_CALLS + _tr_cap.JOB_READ_ABS_CAP
+    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, hard_max, CREATE_CALLS_FLOOR, hard_max))
     need = estimate_create_calls(plan)
     if need > DEFAULT_CREATE_MAX_CALLS:
         return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
                          "— split it. Nothing was created.")
     # Не ниже прежних 150: малые планы не теряют запас на медленное видео. Нижний потолок в окружении -
     # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
-    return min(max(need, CREATE_BUDGET_FLOOR), ceiling), ""
+    # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
+    # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
+    return min(max(need + estimate_targeting_reads(plan), CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:

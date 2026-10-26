@@ -565,7 +565,7 @@ def test_ten_ad_sets_of_three_image_ads_fit_in_one_run_and_the_budget_scales(tmp
     draft = _draft(tmp_path, sets=10, ads=3)
     plan = cr.plan_from_draft(draft)
     budget, refusal = publish_api.create_call_budget(plan)
-    assert refusal == "" and 184 < budget <= publish_api.DEFAULT_CREATE_MAX_CALLS
+    assert refusal == "" and 184 < budget <= publish_api.DEFAULT_CREATE_MAX_CALLS + 90
     small, _ = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=2, ads=3)))
     assert small < budget                                    # растёт с планом, а не одно число
     meta = FakeMeta()
@@ -708,3 +708,84 @@ def test_an_upper_limit_video_plan_is_refused_up_front_not_stopped_midway(tmp_pa
     meta = FakeMeta()
     res = _publisher_for(meta).publish_draft(draft)
     assert res["success"] is False and "split it" in res["error"] and meta.posts == []
+
+
+# ───────────────────── ревью 833, раунд 3: чтения таргетинга в бюджете кампании ─────────────────────
+
+def test_the_targeting_reserve_counts_terms_and_parts_across_all_sets(tmp_path):
+    from src.fb_api import targeting_resolver as tr
+
+    draft = _draft(tmp_path, sets=2, ads=1)
+    plan = cr.plan_from_draft(draft)
+    for s in plan.ad_sets:
+        s.interest_groups = []
+    assert cr.estimate_targeting_reads(plan) == 0
+    plan.ad_sets[0].interest_groups = [["Topic A"]]
+    one = cr.estimate_targeting_reads(plan)
+    assert one == tr.JOB_READ_BASE + tr.JOB_READ_PER_TERM
+    plan.ad_sets[1].interest_groups = [["Topic B or Topic C"]]       # строка и две её части
+    assert cr.estimate_targeting_reads(plan) == tr.JOB_READ_BASE + tr.JOB_READ_PER_TERM * 4
+    plan.ad_sets[1].interest_groups = [["Topic A"]]                  # тот же термин не считается дважды
+    assert cr.estimate_targeting_reads(plan) == one
+
+
+def test_inexact_targeting_of_many_sets_fits_the_budget_and_nothing_stops_after_writes(tmp_path, monkeypatch):
+    """Ревью 833: 10 наборов x 3 объявления, 3 термина на набор, ни один не точный - чтения таргетинга
+    идут из бюджета кампании. Запас заложен в бюджет, остановки после записей нет."""
+    from src.fb_api import targeting_resolver as tr
+    from src.web import publish_api
+
+    class SlowMeta(FakeMeta):
+        def _get(self, path, params):
+            if path == "/search" and params.get("type") in ("adinterestvalid", "adinterest"):
+                return {"data": []}
+            if path == "/search" and params.get("type") == "adworkposition":
+                q = params["q"]
+                return {"data": [{"id": str(9_000_000 + sum(map(ord, q))), "name": q}]}
+            return super()._get(path, params)
+
+    monkeypatch.setattr(tr.ConfirmedStore, "path", property(lambda self: tmp_path / "confirmed.json"))
+    draft = _draft(tmp_path, sets=10, ads=3)
+    for i, s in enumerate(draft.ad_sets):
+        s.targeting_label = ", ".join(f"Topic{i}x{j}" for j in range(3))
+    plan = cr.plan_from_draft(draft)
+    budget, refusal = publish_api.create_call_budget(plan)
+    assert refusal == "" and budget >= cr.estimate_create_calls(plan) + cr.estimate_targeting_reads(plan) - 1
+    meta = SlowMeta()
+    pub = _publisher_for(meta)
+    res = pub.publish_draft(draft)
+    # Либо всё создано в рамках бюджета, либо отказ ДО записей (термины ждут подтверждения) - но не
+    # остановка по бюджету после записей.
+    assert "call budget" not in (res["error"] or ""), res["error"]
+    if not res["success"]:
+        assert meta.posts == [], res["error"]
+    else:
+        assert pub._client.calls <= budget
+
+
+def test_every_ad_sets_unresolved_targeting_is_reported_in_one_go(tmp_path, monkeypatch):
+    """Ревью 833, п. 4: термины ждущих подтверждения наборов не открываются по набору за круг."""
+    from src.fb_api import targeting_resolver as tr
+
+    class NoMatch(FakeMeta):
+        def _get(self, path, params):
+            if path == "/search" and params.get("type") in ("adinterestvalid", "adinterest", "adworkposition"):
+                return {"data": []}
+            return super()._get(path, params)
+
+    monkeypatch.setattr(tr.ConfirmedStore, "path", property(lambda self: tmp_path / "confirmed.json"))
+    d = _draft(tmp_path, sets=2, ads=1)
+    d.ad_sets[0].targeting_label = "Zzzz One"
+    d.ad_sets[1].targeting_label = "Qqqq Two"
+    out = _publisher_for(NoMatch(), dry_run=True).publish_draft(d)
+    assert "Zzzz One" in out["error"] and "Qqqq Two" in out["error"], out["error"]
+
+
+def test_a_pixel_of_an_ad_set_is_checked_even_when_the_account_lists_no_pixels(tmp_path):
+    plan = cr.plan_from_draft(_draft(tmp_path, sets=2, ads=1))
+    plan.pixel_id = ""
+    plan.ad_sets[1].pixel_id = "555"
+    import types
+    facts = types.SimpleNamespace(pixels=[])
+    with pytest.raises(cr.PlanError, match="pixel of ad set"):
+        cr.resolve_pixel(plan, facts)
