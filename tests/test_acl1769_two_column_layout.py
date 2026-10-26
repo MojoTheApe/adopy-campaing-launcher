@@ -36,9 +36,9 @@ def _page() -> str:
 
 
 def _slot_code() -> str:
-    """Тело buildBlankSlotHTML без комментариев (в комментариях ABO упомянут словами)."""
+    """Раздел набора и тело buildBlankSlotHTML без комментариев (в комментариях ABO упомянут словами)."""
     page = _page()
-    slot = page[page.index("function buildBlankSlotHTML"):]
+    slot = page[page.index("function buildAdsetSectionHTML"):]
     slot = slot[: slot.index("// ── Tracking link save")]
     return re.sub(r"/\*.*?\*/", "", slot, flags=re.S)
 
@@ -109,7 +109,8 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"adsets", "copyAdset", "placements", "copyTo"}
+    assert set(out) >= {"placements", "copyTo"}
+    assert not {"adsets", "copyAdset"} & set(out), "ACL-1768: наборы - настоящие, а не заглушки"
     assert not {"texts", "media"} & set(out), "ACL-1774: тексты 3-5 и файл Stories / Reels - настоящие поля"
     assert not {"gender", "languages", "cta"} & set(out), "ACL-1767: это уже настоящие поля, а не заглушки"
     assert "forms" not in out, "ACL-1775: Instant Forms - настоящий выбор, а не заглушка"
@@ -121,7 +122,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"adsets", "copyAdset", "placements", "copyTo"}
+    assert used >= {"placements", "copyTo"}
 
 
 def test_old_drafts_load_without_the_new_field():
@@ -131,7 +132,8 @@ def test_old_drafts_load_without_the_new_field():
     page = _page()
     keep = page[page.index("window.cbKeep = (function () {"):]
     keep = keep[: keep.index("\n})();")]
-    assert "var VERSION = 3;" in keep and "function migrate(" in keep, "ACL-1767: v2 -> v3, миграция и её тест в builder_keep_harness.cjs"
+    assert "var VERSION = 4;" in keep and "function migrate(" in keep, "ACL-1768: v3 -> v4, миграция и её тест в builder_keep_harness.cjs"
+    assert "parsed.v === 2" in keep and "parsed.v === 3" in keep, "цепочка миграций v2 -> v3 -> v4"
     assert "if (!f || !(f in data.fields)) return;" in keep, "поле, которого нет в черновике, обнулится"
 
 
