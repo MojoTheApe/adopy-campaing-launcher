@@ -14284,14 +14284,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
      выбранному значению (в том числе пустой), снимает выбор. Вызывается только из oninput —
      значение, положенное без ввода (Send-to-Builder, дубль объявления), не трогается. */
   window.cbSameCreativeFile = function(a, b) {
-    a = String(a || '').trim(); b = String(b || '').trim();
+    function norm(value) { return String(value || '').trim().replace(/\\/g, '/').toLowerCase(); }
+    a = norm(a); b = norm(b);
     if (!a || !b) return false;
-    if (a === b) return true;
+    /* Как creative_finder: регистр и разделитель не меняют файл; путь ищется
+       по суффиксу, имя — только среди уникальных совпадений. */
     function key(value) {
-      var paths = CREATIVES.filter(function(f) { return f.rel_path === value; });
-      if (paths.length === 1) return paths[0].rel_path;
-      var names = CREATIVES.filter(function(f) { return f.filename === value; });
-      return names.length === 1 ? (names[0].rel_path || names[0].filename) : '';
+      var hasPath = value.indexOf('/') !== -1;
+      var matches = CREATIVES.filter(function(f) {
+        return hasPath ? norm(f.rel_path || f.filename).endsWith(value) : norm(f.filename) === value;
+      });
+      return matches.length === 1 ? norm(matches[0].rel_path || matches[0].filename) : '';
     }
     var left = key(a), right = key(b);
     return !!left && left === right;
