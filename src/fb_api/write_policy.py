@@ -236,6 +236,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
         "form_create": policy_for_form_create(page),
+        "instagram_prepare": {"page": page} if page else None,
     }
 
 
@@ -891,3 +892,13 @@ def check_object_update(method: str, path: str, params: dict | None,
     elif not amount_ok(value):
         raise WriteRefused(f"write refused: {key} must be a positive whole number in minor units")
     return key
+
+
+def check_instagram_prepare(page: str, method: str, path: str, params: dict | None,
+                            files: dict | None, pinned_page: str) -> None:
+    """One empty POST on the verified campaign Page; no other Page mutation."""
+    if (method != "POST" or not isinstance(page, str) or not re.fullmatch(r"[0-9]{1,25}", page)
+            or page != pinned_page or path != f"/{page}/page_backed_instagram_accounts"
+            or (params is not None and not isinstance(params, dict)) or params or files):
+        raise WriteRefused("write refused: Facebook Page identity preparation needs the pinned Page, "
+                           "the exact Page-backed edge, empty parameters and no files")

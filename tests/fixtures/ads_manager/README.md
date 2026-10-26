@@ -357,3 +357,5 @@ This is a transport trace, so the HTML-only `capture_to_fixture.py` does not app
 `tests/test_acl1836_session_recovery.py` executes the real PageTab/InPageGraph/client
 against that trace. The original reason for detachment and the fate of the live
 upload are not established by this offline fixture.
+
+- `fb_api_page_backed_2026_10_26.json` — ACL-2221: anonymized live Check refusal plus explicitly synthetic Page-backed preparation/readback. Tests: `test_acl2221_page_backed.py`; no real account/Page ids or tokens. Live preparation remains to be checked.

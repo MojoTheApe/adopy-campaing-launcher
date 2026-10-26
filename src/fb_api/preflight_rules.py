@@ -83,8 +83,7 @@ RULES: list[dict[str, Any]] = [
     _r("page_ok", "Facebook Page", ERROR, "server",
        "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
     _r("instagram_identity", "Instagram account of the Page", ERROR, "server",
-       "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, "
-       "or choose Manual Facebook-only placements"),
+       "use the linked Instagram account or prepare the selected Facebook Page identity on publish"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -574,6 +573,8 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         got = creator.instagram_identity(plan)
         if got.status == "found":
             put("instagram_identity", OK, f"Instagram account {got.ig_id} ({got.source})")
+        elif got.status == "prepare":
+            put("instagram_identity", WARNING, got.message)
         else:
             # «Нет аккаунта» и «Meta не подтвердила» одинаково блокируют: молча пропускать нельзя.
             put("instagram_identity", ERROR, got.message)

@@ -1333,10 +1333,38 @@ class CampaignCreator:
         if not plan.page_id or not plan_has_instagram(targetings):
             return
         got = self.instagram_identity(plan)
+        if got.status == _ig.PREPARE:
+            out.warnings.append(got.message)
+            self._step(out, "preflight: Facebook Page identity will be prepared on publish")
+            return
         if got.status != _ig.FOUND:
             raise PlanError(got.message)
         self._ig_id = got.ig_id
         self._step(out, f"preflight: Instagram account of the Page found ({got.source})")
+
+    def _prepare_instagram(self, plan: CampaignPlan, out: Outcome) -> None:
+        if not plan_has_instagram_placements(plan):
+            return
+        got = self._ig_cache.get(plan.page_id)
+        if got is None or got.status != _ig.PREPARE:
+            return
+        if self.client.max_calls - self.client.calls < estimate_create_calls(plan) + _ig.PREPARE_CALLS:
+            raise PlanError("Not enough Meta calls remain to prepare the Facebook Page identity safely")
+        self._check_cancel(out)
+        pinned = self.client.transport.pin_page(plan.page_id)
+        if not isinstance(pinned, dict) or not pinned.get("has_token") or pinned.get("kind") != "ads_manager":
+            raise PlanError("Ads Manager did not confirm the session after pinning the Facebook Page")
+        self._check_cancel(out)
+        try:
+            got = _ig.prepare_identity(self.client, plan.page_id, before_write=lambda: self._check_cancel(out))
+        except OSError as exc:
+            raise PlanError("The Facebook Page identity preparation record could not be saved; "
+                            "check local storage before publishing again") from exc
+        if got.status != _ig.FOUND:
+            raise PlanError(got.message)
+        self._ig_cache[plan.page_id] = got
+        self._ig_id = got.ig_id
+        self._step(out, "Facebook Page Instagram identity: prepared and verified")
 
     def with_instagram(self, story: dict) -> dict:
         """Креативу добавляется Instagram-идентичность, если она подтверждена (иначе ключа нет)."""
@@ -2665,6 +2693,8 @@ class CampaignCreator:
         # 1. Всё, что можно проверить до записи.
         targetings, files = self._prepare(plan, out)
 
+        # Page-backed preparation is deferred until all deterministic checks and
+        # name/reuse compatibility checks pass, before the first campaign write.
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
         choice = self._resolve_name(plan, targetings)
@@ -2675,6 +2705,7 @@ class CampaignCreator:
             out.warnings.append(_rename_message(requested, plan.name, choice.skipped, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
         existing, found_sets = choice.existing, choice.found_sets
+        self._prepare_instagram(plan, out)
         if existing:
             out.campaign_id = str(existing["id"])
             out.reused["campaign"] = out.campaign_id

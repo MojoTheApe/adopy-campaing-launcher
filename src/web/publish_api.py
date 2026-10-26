@@ -100,7 +100,11 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
     # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
     # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
-    return min(max(need + estimate_targeting_reads(plan), CREATE_BUDGET_FLOOR), ceiling), ""
+    from src.fb_api import instagram as _ig
+    from src.fb_api.creator import plan_has_instagram_placements
+
+    preparation = _ig.PREPARE_CALLS if plan_has_instagram_placements(plan) else 0
+    return min(max(need + estimate_targeting_reads(plan) + preparation, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:

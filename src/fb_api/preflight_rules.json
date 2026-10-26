@@ -113,7 +113,7 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or choose Manual Facebook-only placements",
+      "hint": "use the linked Instagram account or prepare the selected Facebook Page identity on publish",
       "id": "instagram_identity",
       "label": "Instagram account of the Page",
       "severity": "error",
