@@ -841,8 +841,9 @@ class TargetingResolver:
         else:
             queries = [(key, 10, 1)]
         for q, limit, pages in queries:
-            rows = self.client.get_all("/search", {"type": "adgeolocation", "location_types": ["country"],
-                                                   "q": q, "limit": limit}, max_pages=pages)
+            rows = _tr.named_search("adgeolocation", lambda: self.client.get_all(
+                "/search", {"type": "adgeolocation", "location_types": ["country"], "q": q, "limit": limit},
+                max_pages=pages))
             for r in rows:
                 cc = str(r.get("country_code") or r.get("key") or "").upper()
                 if cc == up or str(r.get("name") or "").casefold() == key.casefold():
@@ -861,7 +862,8 @@ class TargetingResolver:
             return None
         if lang in self._locale:
             return self._locale[lang]
-        rows = self.client.get_all("/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1)
+        rows = _tr.named_search("adlocale", lambda: self.client.get_all(
+            "/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1))
         pick = None
         for want in (f"{lang} (All)", lang):
             pick = next((r for r in rows if str(r.get("name") or "").casefold() == want.casefold()), None)
@@ -904,6 +906,10 @@ class TargetingResolver:
     def targeting_report(self) -> list[dict]:
         """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
         return self.terms.report()
+
+    def targeting_warnings(self) -> list[str]:
+        """ACL-1920: необязательные поиски, в которых Meta отказала (имя поиска в тексте)."""
+        return self.terms.warnings()
 
 
 def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingResolver) -> dict:
@@ -1929,7 +1935,7 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
@@ -1970,7 +1976,10 @@ class CampaignCreator:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
         self.check_profile_page(plan)
-        targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+        try:
+            targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+        finally:
+            self._note_targeting_warnings(out)
         self._step(out, "preflight: targeting resolved")
         self._require_instagram(plan, targetings, out)
         self._page_forms = None
@@ -2297,12 +2306,22 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
         return out
+
+    def _note_targeting_warnings(self, out: Outcome) -> None:
+        """ACL-1920: отказ Meta в необязательном поиске - предупреждение, а не ошибка (без дублей)."""
+        fn = getattr(self.resolver, "targeting_warnings", None)
+        try:
+            for w in (fn() if fn else []):
+                if w not in out.warnings:
+                    out.warnings.append(w)
+        except Exception:  # noqa: BLE001 — предупреждения вспомогательные
+            pass
 
     def _targeting_report(self) -> list:
         fn = getattr(self.resolver, "targeting_report", None)
@@ -2820,6 +2839,12 @@ def _utc(value: Any) -> str:
     except ValueError:
         return str(value or "")
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _lookup_note(exc: BaseException) -> str:
+    """ACL-1920: каталог ошибок прячет сырой текст, а какой поиск отказан - нужно человеку."""
+    m = re.search(r"(?:search_type|lookup)=(\w+)", str(exc))
+    return f" (search: {m.group(1)})" if m else ""
 
 
 def graph_problem(exc: BaseException) -> dict:

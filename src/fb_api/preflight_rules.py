@@ -547,8 +547,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         for s in plan.ad_sets:
             if s.interest_groups:
                 resolver.interests(s.interest_groups)
-        put("interests_resolve", OK)
+        put_resolved()
         put("interests_confirmed", OK)
+
+    def put_resolved() -> None:
+        # ACL-1920: необязательный поиск, в котором Meta отказала, - предупреждение с названием поиска.
+        fn = getattr(resolver, "targeting_warnings", None)
+        warns = list(fn()) if fn else []
+        put("interests_resolve", WARNING if warns else OK, " ".join(warns))
 
     def interests_guard() -> None:
         # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.
@@ -568,7 +574,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
                 put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
             else:
-                put("interests_resolve", OK)
+                put_resolved()
             if asks:
                 put("interests_confirmed", ERROR,
                     "; ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
