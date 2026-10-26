@@ -791,7 +791,7 @@ def test_publisher_uses_the_warm_tab_and_leaves_it_open(monkeypatch, tmp_path):
     monkeypatch.setattr(publish_api, "_open_tab", lambda url: pytest.fail("no own tab for a warm profile"))
     monkeypatch.setattr(publish_api, "_make_graph", lambda tab, act, *, writes=True: rig.make(tab))
     monkeypatch.setattr(publish_api, "preflight_account", lambda client, act: SimpleNamespace())
-    monkeypatch.setattr(publish_api, "TargetingResolver", lambda client: object())
+    monkeypatch.setattr(publish_api, "TargetingResolver", lambda client, **k: object())
     monkeypatch.setattr(publish_api, "GraphClient", lambda graph, **kw: SimpleNamespace(graph=graph, **kw))
     monkeypatch.setattr(publish_api, "_cooldown", lambda label: (0.0, ""))
     for _ in range(2):

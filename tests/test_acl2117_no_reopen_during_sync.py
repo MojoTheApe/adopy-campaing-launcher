@@ -210,7 +210,7 @@ def _plan(monkeypatch, drafts, stopped=None):
     monkeypatch.setattr(_api, "_session", session)
     monkeypatch.setattr(publish_api, "ApiPublisher", _Pub)
     monkeypatch.setattr(publish_api, "preflight_account", lambda c, a: {})
-    monkeypatch.setattr(publish_api, "TargetingResolver", lambda c: object())
+    monkeypatch.setattr(publish_api, "TargetingResolver", lambda c, **k: object())
     publish_api._plan_in_read_session("Acc", drafts)
     return sess
 
