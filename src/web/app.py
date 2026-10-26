@@ -53,11 +53,15 @@ from src.web.cache import (
     background_progress_callback,
     cache_built_at,
     cache_clear,
+    entry_source_key,
     forget_background_error,
     get_cached_report,
     peek_cached_report,
     start_background_build,
+    verified_source_key,
 )
+from src.analysis_agent import bi_stats
+from src.web import report_store
 from src.web.request_limits import (
     BUILDER_FORM,
     DEFAULT_MAX_BODY,
@@ -2653,22 +2657,153 @@ def _start_warm(date_from: str, date_to: str, span: str) -> None:
     )
 
 
+# ── ACL-2207: the last finished page on disk ───────────────────────────
+#
+# The report cache lives in memory, so every restart used to cost minutes of
+# "getting your dashboard ready". The page that was last rendered is kept in
+# the machine config folder (src/web/report_store.py) and shown at once after
+# a restart - marked "from cache" when nothing changed, OUTDATED when the code,
+# the data or the number-changing settings are not the ones it was built with.
+# The live report is still rebuilt in the background; once it is ready the
+# in-memory path below serves it, so template edits keep their no-restart
+# behaviour.
+_STORE_SETTING_ENV = (
+    "BI_CURRENCY", "STATS_CURRENCY", "BI_TIMEZONE", "STATS_TIMEZONE",
+    "BI_DAY_BOUNDARY", "STATS_DAY_BOUNDARY",
+)
+
+
+def _file_stamp(path) -> list:
+    try:
+        st = os.stat(path)
+        return [st.st_mtime_ns, st.st_size]
+    except OSError:
+        return []
+
+
+def _store_code_key() -> dict:
+    import hashlib
+
+    release = _installed_release()
+    digest = hashlib.sha256()
+    try:
+        for item in sorted(_TEMPLATES_DIR.rglob("*")):
+            if item.is_file() and item.suffix in (".html", ".css", ".js"):
+                digest.update(
+                    f"{item.relative_to(_TEMPLATES_DIR).as_posix()}|{_file_stamp(item)}".encode()
+                )
+    except OSError:
+        pass
+    return {
+        "version": release.get("sha") or release.get("tag") or "unknown",
+        "templates": digest.hexdigest()[:16],
+    }
+
+
+def _store_settings_key() -> dict:
+    import hashlib
+
+    from config.paths import get_ad_account_map_path
+
+    hidden: list[str] = []
+    try:
+        from src.web import account_links, hidden_accounts
+
+        hidden = sorted(hidden_accounts.load()) + sorted(account_links.hidden_keys())
+    except Exception:  # noqa: BLE001 - unreadable list: the digest below still changes
+        hidden = ["unreadable"]
+    try:
+        account_map = _file_stamp(get_ad_account_map_path())
+    except Exception:  # noqa: BLE001
+        account_map = []
+    return {
+        "env": {name: (os.environ.get(name) or "").strip() for name in _STORE_SETTING_ENV},
+        "hidden": hashlib.sha256(chr(10).join(hidden).encode("utf-8")).hexdigest()[:16],
+        "account_map": account_map,
+    }
+
+
+def _store_key(source) -> dict:
+    return {"code": _store_code_key(), "source": source, "settings": _store_settings_key()}
+
+
+def _store_inputs(date_from: str, date_to: str, span: str, compare: str,
+                  cmp_from: str, cmp_to: str) -> dict:
+    from src.web.buyer import get_selected_cm
+
+    return {
+        "cm": get_selected_cm() or "", "date_from": date_from.strip(), "date_to": date_to.strip(),
+        "span": span.strip(), "compare": compare.strip(),
+        "cmp_from": cmp_from.strip(), "cmp_to": cmp_to.strip(),
+    }
+
+
+def _stored_page(inputs: dict):
+    """The saved page for this view with what changed since, or None. Pool thread only."""
+    try:
+        if not report_store.enabled():
+            return None
+        return report_store.load(inputs, _store_key(verified_source_key()))
+    except Exception:  # noqa: BLE001 - a damaged store must never block the page
+        return None
+
+
+def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLResponse:
+    """Render the live page and keep it on disk if it was built from one state."""
+    try:
+        before = _store_key(entry_source_key())
+    except Exception:  # noqa: BLE001
+        before = None
+    from src.web.buyer import rendering_cm
+
+    with rendering_cm(inputs["cm"]):
+        response = _render_report(request, **kwargs)
+    try:
+        template = getattr(response, "template", None)
+        if (
+            before is not None and response.status_code == 200
+            and getattr(template, "name", "") == "report.html"
+            and _store_key(entry_source_key()) == before  # the data did not move meanwhile
+        ):
+            body = bytes(response.body).decode("utf-8")
+            threading.Thread(
+                target=report_store.save, args=(inputs, before, body),
+                name="acl-report-store", daemon=True,
+            ).start()
+    except Exception:  # noqa: BLE001 - the page is already rendered
+        pass
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = "",
     compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
+    inputs = _store_inputs(date_from, date_to, span, compare, cmp_from, cmp_to)
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
-    # а сразу ответить «цифры загружаются» и собрать его в фоне.
+    # а сразу ответить и собрать его в фоне. ACL-2207: отвечаем последней
+    # сохранённой страницей, если она есть, а не экраном ожидания.
     if not _page_ready(date_from, date_to, span):
-        if forget_background_error() is None:
+        failure = forget_background_error()
+        # Only a stat on the loop; the key work (git, BI) happens in the pool
+        # and only when there is something to show.
+        stored = await _in_report_pool(_stored_page, inputs) if report_store.exists(inputs) else None
+        if failure is None:
             _start_warm(date_from, date_to, span)
+            if stored is not None:
+                return HTMLResponse(report_store.decorate(stored))
             return templates.TemplateResponse(request, "loading.html", {"request": request})
+        if stored is not None:
+            # The rebuild failed: keep the last report and say why. The next
+            # load starts a new rebuild.
+            return HTMLResponse(report_store.decorate(
+                stored, error=bi_stats.redact(failure) or "the report could not be rebuilt."))
         # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
         # ту же ошибку по-человечески (нет файла, не тот формат).
     return await _in_report_pool(
-        _render_report, request, date_from=date_from, date_to=date_to, span=span,
-        compare=compare, cmp_from=cmp_from, cmp_to=cmp_to,
+        _render_and_remember, request, inputs, date_from=date_from, date_to=date_to,
+        span=span, compare=compare, cmp_from=cmp_from, cmp_to=cmp_to,
     )
 
 

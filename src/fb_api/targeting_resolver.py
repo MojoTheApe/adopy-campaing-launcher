@@ -33,6 +33,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.fb_api.graph import GraphError
+
 #: Куда кладётся тип попадания в `flexible_spec`.
 BUCKETS = ("interests", "behaviors", "work_positions", "work_employers",
            "education_schools", "education_majors")
@@ -63,6 +65,43 @@ STRONG_SCORE = 0.78
 WEAK_SCORE = 0.5
 MAX_CANDIDATES = 8
 UNKNOWN_MESSAGE = "Couldn't check all interests — press Check plan again"
+
+#: ACL-1920. Какие поиски резолвера НЕОБЯЗАТЕЛЬНЫ: отказ Meta (код 10 «Permission Denied», 200-299)
+#: пропускает этот поиск на всё задание и становится предупреждением с названием поиска. Остальные
+#: (`adinterest`, `adgeolocation`, `adlocale`) обязательны: без них таргетинг не разрешить безопасно,
+#: отказ остаётся ошибкой. Значение: (название для человека, что тогда не сопоставляется).
+OPTIONAL_LOOKUPS = {
+    "adinterestvalid": ("exact-name interest check", "interests were matched through the interest search instead"),
+    "adTargetingCategory": ("behaviors lookup", "behaviors were not matched"),
+    "adworkposition": ("work positions lookup", "work positions were not matched"),
+    "adworkemployer": ("work employers lookup", "work employers were not matched"),
+    "adeducationschool": ("education schools lookup", "education schools were not matched"),
+    "adeducationmajor": ("education majors lookup", "education majors were not matched"),
+}
+REQUIRED_LOOKUPS = ("adinterest", "adgeolocation", "adlocale")
+
+
+def is_permission_refusal(exc: BaseException) -> bool:
+    """Meta отказала по правам: код 10 или семейство 200-299 (в т.ч. 294)."""
+    code = getattr(exc, "code", None)
+    return isinstance(exc, GraphError) and isinstance(code, int) and (code == 10 or 200 <= code <= 299)
+
+
+def name_lookup(exc: GraphError, search_type: str) -> GraphError:
+    """Та же ошибка, но с типом поиска в тексте (если Graph его ещё не назвал)."""
+    if f"search_type={search_type}" in str(exc) or f"lookup={search_type}" in str(exc):
+        return exc
+    return GraphError(f"{exc} [lookup={search_type}]", code=exc.code, subcode=exc.subcode,
+                      status=exc.status, details=exc.details)
+
+
+def named_search(search_type: str, fn):
+    """Вызвать поиск; любая ошибка Graph поднимается с названием этого поиска."""
+    try:
+        return fn()
+    except GraphError as exc:
+        raise name_lookup(exc, search_type) from exc
+
 
 _SPLIT_RE = re.compile(r"\s+or\s+|\s*/\s*|\s*;\s*|\s*,\s*", re.IGNORECASE)
 _SEP_RE = re.compile(r"[\s\-_]+")
@@ -314,6 +353,46 @@ class TermResolver:
         self._ids_checked = False
         self._behaviors: list[dict] | None = None
         self._query_cache: dict[tuple, list[dict]] = {}
+        #: ACL-1920: необязательные поиски, в которых Meta отказала (тип -> текст), без повторов.
+        self.refused: dict[str, str] = {}
+        self._ids_unverified = False
+
+    # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
+    def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
+        if search_type in self.refused:
+            return []                      # уже отказано в этом задании: повторов нет
+        optional = search_type in OPTIONAL_LOOKUPS
+        before = getattr(self.client, "calls", None)
+        try:
+            return self._get_all(params, pages, count_term=count_term)
+        except GraphError as exc:
+            if not (optional and is_permission_refusal(exc)):
+                raise name_lookup(exc, search_type) from exc
+        # Отказанный запрос тоже был чтением: он остаётся в бюджете.
+        after = getattr(self.client, "calls", None)
+        spent = max(1, after - before) if isinstance(before, int) and isinstance(after, int) else 1
+        self.reads += spent
+        if count_term:
+            self._term_reads += spent
+        label, effect = OPTIONAL_LOOKUPS[search_type]
+        self.refused[search_type] = f"Meta refused the {label} ({search_type}) on this account; {effect}."
+        return []
+
+    def warnings(self) -> list[str]:
+        """Предупреждения Check plan: какой именно поиск Meta отказала (английский текст)."""
+        out = list(self.refused.values())
+        if self._ids_unverified:
+            out.append("Confirmed interest picks were not re-checked against Meta "
+                       "(the exact-name interest check was refused).")
+        return out
+
+    def _blind_spots(self) -> str:
+        """Отказанные поиски, где термин мог бы найтись (adinterestvalid не в счёт: его дублирует adinterest)."""
+        gone = [OPTIONAL_LOOKUPS[t][0] for t in self.refused if t != "adinterestvalid"]
+        if not gone:
+            return ""
+        return ("Meta refused the " + " and the ".join(gone) + " on this account, so the term could not be "
+                "checked there; fix the term or confirm a candidate")
 
     # -- бюджет чтений
     def _get_all(self, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
@@ -350,6 +429,9 @@ class TermResolver:
     def _ask_valid(self, names: list[str], ids: list[str] | None = None) -> None:
         todo = [n for n in dict.fromkeys(names) if norm(n) not in self._valid_asked]
         ids = [i for i in dict.fromkeys(ids or []) if i not in self._valid_ids]
+        if "adinterestvalid" in self.refused:
+            self._ids_unverified = self._ids_unverified or bool(ids)
+            return
         if not todo and not ids:
             return
         params: dict[str, Any] = {"type": "adinterestvalid"}
@@ -357,7 +439,10 @@ class TermResolver:
             params["interest_list"] = todo
         if ids:
             params["interest_fbid_list"] = ids
-        rows = self._get_all(params, 1)
+        rows = self._lookup("adinterestvalid", params, 1)
+        if "adinterestvalid" in self.refused:
+            self._ids_unverified = bool(ids)    # поиск adinterest ниже найдёт точные имена сам
+            return
         for n in todo:
             self._valid_asked.add(norm(n))
         if ids:
@@ -397,17 +482,17 @@ class TermResolver:
 
     def _stages(self, term: str):
         """Ленивый перебор групп строк (bucket, rows) в порядке резолва."""
-        yield "interests", self._get_all({"type": "adinterest", "q": term, "limit": SEARCH_LIMIT}, SEARCH_PAGES)
+        # adinterest обязателен: отказ Meta здесь остаётся ошибкой (с названием поиска).
+        yield "interests", self._lookup("adinterest", {"type": "adinterest", "q": term, "limit": SEARCH_LIMIT},
+                                        SEARCH_PAGES)
         if self._behaviors is None:
             # Общий список поведений: на задание один раз, в потолок термина не входит.
-            self._behaviors = self._get_all(
-                {"type": "adTargetingCategory", "class": "behaviors", "limit": BEHAVIOR_LIMIT},
+            self._behaviors = self._lookup(
+                "adTargetingCategory", {"type": "adTargetingCategory", "class": "behaviors", "limit": BEHAVIOR_LIMIT},
                 BEHAVIOR_PAGES, count_term=False)
         yield "behaviors", self._behaviors
-        for bucket, typ in WORK_SEARCHES:
-            yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
-        for bucket, typ in EDU_SEARCHES:
-            yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
+        for bucket, typ in WORK_SEARCHES + EDU_SEARCHES:
+            yield bucket, self._lookup(typ, {"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
 
     def _find(self, term: str) -> dict:
         """Одна строка целиком: подтверждённый -> точный -> кандидаты."""
@@ -442,7 +527,8 @@ class TermResolver:
             return {"term": term, "state": "unknown", "picks": [], "candidates": [],
                     "reason": UNKNOWN_MESSAGE}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
-        return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": stale}
+        reason = "; ".join(x for x in (stale, self._blind_spots()) if x)
+        return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason}
 
     def _stale(self, entry: dict) -> bool:
         """Интерес из кэша, которого Meta больше не отдаёт (проверено пакетом). Иные типы - доверяем."""
