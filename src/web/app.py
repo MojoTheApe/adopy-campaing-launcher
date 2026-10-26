@@ -6056,7 +6056,9 @@ def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
     names: list[str] = []
     for slot in slots:
         for key, title in API_ONLY_SLOT_KEYS.items():
-            if slot.get(key) and title not in names:
+            # ACL-1772: {} / [] / false — явный выбор, а не отсутствие поля; RPA не вправе его потерять.
+            present = key in slot if key == "placements" else bool(slot.get(key))
+            if present and title not in names:
                 names.append(title)
         if str(slot.get("os") or "").strip().lower() == "android" and "Android only" not in names:
             names.append("Android only")

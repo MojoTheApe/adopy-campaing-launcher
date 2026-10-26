@@ -1955,11 +1955,16 @@ class CampaignCreator:
         check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
-        # ACL-2050: новый макет Advantage+ - Meta может молча включить автоплощадки. Поле не вернули
-        # (старый API / нет прав) - не блокируем, а отмечаем в диагностике; ENABLED - блокирует.
+        # ACL-1772: агрегат ENABLED только когда ВСЕ наборы без ограничений площадок.
+        # Любой ручной набор (включая прежнее умолчание и mixed) означает DISABLED.
+        # Первичный источник: https://developers.facebook.com/docs/marketing-api/advantage-campaigns/
+        # раздел Advantage+ placement state automation criteria. Сверка каждого набора остаётся ниже.
+        # Нет поля — прежняя явная диагностика unverified; незнакомый/пустой ответ — расхождение.
         state = _advantage_info(camp).get("advantage_placement_state")
         if state is not None:
-            check("advantage_placement_state", "DISABLED", state)
+            automatic = bool(plan.ad_sets) and all(
+                s.placements is not None and s.placements.get("mode") == "advantage_plus" for s in plan.ad_sets)
+            check("advantage_placement_state", "ENABLED" if automatic else "DISABLED", state)
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,

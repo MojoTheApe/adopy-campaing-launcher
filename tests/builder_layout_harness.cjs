@@ -95,13 +95,13 @@ assert.equal(L.adsetLabel('Camp', 0, '', 1), 'Ad set 1 · Camp · 1 ad');
 assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не заглушка');
 assert.equal(L.futureTip('texts'), '', 'ACL-1774: тексты 3-5 больше не заглушка');
 assert.equal(L.futureTip('media'), '', 'ACL-1774: файл Stories / Reels больше не заглушка');
-assert.equal(L.futureTip('placements'), 'Placement editor — coming in ACL-1772');
+assert.equal(L.futureTip('placements'), '', 'ACL-1772: placement editor is implemented');
 assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');
 assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не заглушка');
 ['gender', 'languages'].forEach((k) => assert.equal(L.futureTip(k), '', k + ': ACL-1767 больше не заглушка'));
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
-assert.ok(!/<script/.test(L.futureHtml('placements', 'select', '<script>x</script>')));
+assert.ok(!/<script/.test(L.futureHtml('copyTo', 'select', '<script>x</script>')));
 
 // ── сообщения сервера → поля ──────────────────────────────────────────
 const sels = (m) => L.routes(m).map((r) => r.sel);

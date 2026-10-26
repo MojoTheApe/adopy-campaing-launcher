@@ -173,3 +173,121 @@ def test_facebook_only_creates_and_audits_without_any_instagram_account(tmp_path
     audit = _by(_audit(AuditMeta(instagram='none'), d))
     assert audit['instagram_identity']['status'] == 'ok'
     assert audit['media_vertical']['status'] == 'ok'
+
+
+@pytest.mark.parametrize('raw', ['{}', 'false', '[]', '0', 'null', 'broken'])
+def test_rpa_refuses_every_explicit_placement_value_through_parser(monkeypatch, raw):
+    from src.web import app as web, publish_api
+    from tests.test_acl1768_ad_sets import _fields
+    monkeypatch.setattr(publish_api, 'api_enabled', lambda: False)
+    slots = web._parse_build_upload_form(_fields(camp_0_placements=raw))[2]
+    response = web._api_only_fields_refusal(slots)
+    assert response is not None and response.status_code == 409
+    assert b'Placements' in response.body
+
+
+@pytest.mark.parametrize('value', [None, ''])
+def test_rpa_legacy_missing_or_blank_placement_control_keeps_defaults(monkeypatch, value):
+    from src.web import app as web, publish_api
+    from tests.test_acl1768_ad_sets import _fields
+    monkeypatch.setattr(publish_api, 'api_enabled', lambda: False)
+    fields = _fields()
+    if value is not None:
+        fields['camp_0_placements'] = value
+    slots = web._parse_build_upload_form(fields)[2]
+    assert all('placements' not in slot for slot in slots)
+    assert web._api_only_fields_refusal(slots) is None
+
+
+@pytest.mark.parametrize('automatic,state,ok', [
+    (True, 'ENABLED', True), (True, 'DISABLED', False),
+    (False, 'DISABLED', True), (False, 'ENABLED', False),
+    (True, 'UNKNOWN', False), (False, 'UNKNOWN', False),
+    (True, '', False), (False, '', False),
+    (True, {'malformed': True}, False),
+])
+def test_campaign_state_matches_explicit_mode_and_actual_adset_readback(tmp_path, automatic, state, ok):
+    from src.web import publish_api
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = {'mode': 'advantage_plus'} if automatic else manual(facebook=['feed'])
+    meta = FakeMeta()
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {
+        'advantage_state': 'DISABLED', 'advantage_placement_state': state, 'advantage_audience_state': 'DISABLED'}
+    out, _ = _run(meta, draft)
+    assert out.readback['ok'] is ok, out.mismatches
+    assert publish_api.result_dict(out)['publishable'] is ok
+    if not ok:
+        assert any(x['field'] == 'advantage_placement_state' for x in out.mismatches)
+    else:
+        assert all(x['ok'] for x in out.readback['checks'] if x['field'] in {'publisher_platforms', 'facebook_positions', 'instagram_positions'})
+
+
+@pytest.mark.parametrize('mixed', [False, True])
+def test_correct_campaign_flag_does_not_hide_wrong_adset_targeting(tmp_path, mixed):
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = {'mode': 'advantage_plus'}
+    meta = FakeMeta()
+    if mixed:
+        draft.ad_sets[0].placements = manual(facebook=['feed'])
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {'advantage_placement_state': 'DISABLED' if mixed else 'ENABLED'}
+    meta.mutate_on_read[('adset', 'targeting.facebook_positions')] = ['feed']
+    out, _ = _run(meta, draft)
+    assert not out.readback['ok']
+    assert any(x['field'] == 'facebook_positions' for x in out.mismatches)
+
+
+@pytest.mark.parametrize('state,ok', [('DISABLED', True), ('ENABLED', False), ('UNKNOWN', False)])
+def test_mixed_modes_use_disabled_campaign_aggregate_and_exact_adsets(tmp_path, state, ok):
+    draft = _draft(tmp_path, ads=1)
+    draft.ad_sets[0].placements = manual(facebook=['feed'])
+    draft.ad_sets[1].placements = {'mode': 'advantage_plus'}
+    meta = FakeMeta()
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {'advantage_placement_state': state}
+    out, _ = _run(meta, draft)
+    assert out.readback['ok'] is ok, out.mismatches
+    assert draft.ad_sets[0].placements == manual(facebook=['feed'])
+    assert draft.ad_sets[1].placements == {'mode': 'advantage_plus'}
+
+
+
+def test_auto_state_missing_remains_unverified_warning(tmp_path):
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = {'mode': 'advantage_plus'}
+    out, _ = _run(FakeMeta(), draft)
+    assert not out.readback['diagnostics']['placement_state_verified']
+    assert any('not verified' in w and 'advantage_placement_state' in w for w in out.warnings)
+
+
+def test_auto_reused_campaign_is_checked_without_duplicate_writes(tmp_path):
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = {'mode': 'advantage_plus'}
+    meta = FakeMeta()
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {'advantage_placement_state': 'ENABLED'}
+    first, _ = _run(meta, draft)
+    before = len(meta.posts)
+    second, _ = _run(meta, draft)
+    assert first.readback['ok'] and second.readback['ok'], (first.mismatches, second.error)
+    assert len(meta.posts) == before
+
+
+def test_existing_auto_campaign_with_wrong_state_is_not_reused_or_verified(tmp_path):
+    draft = _draft(tmp_path, ads=1)
+    for adset in draft.ad_sets:
+        adset.placements = {'mode': 'advantage_plus'}
+    meta = FakeMeta()
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {'advantage_placement_state': 'ENABLED'}
+    first, _ = _run(meta, draft)
+    assert first.readback['ok']
+    before = len(meta.posts)
+    meta.mutate_on_read[('campaign', 'advantage_state_info')] = {'advantage_placement_state': 'DISABLED'}
+    second, _ = _run(meta, draft)
+    # ACL-1902 сохраняет существующую кампанию и создаёт новое имя при несовпадении;
+    # здесь проверяем отказ reuse и итоговой верификации, не меняя эту политику.
+    assert second.campaign_id != first.campaign_id
+    assert len(meta.posts) > before
+    assert not second.readback['ok']
+    assert any(x['field'] == 'advantage_placement_state' for x in second.mismatches)
