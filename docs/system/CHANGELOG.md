@@ -1,5 +1,16 @@
 # System history
 
+## ACL-2211 — Consistent creative media selection — 2026-10-26
+
+Restored creative fields show the actual saved file, including legacy drafts with blank or stale display text. Clearing a selection remains effective after reload. Selecting the same file for Main and Stories / Reels uses the existing single-asset path with a visible warning; distinct media pairs retain their validation and placement rules.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1211).
+
+## ACL-2206 — Creator: re-read the ACL tag before stopping with label_missing — 2026-10-26
+
+Meta sometimes shows the ACL tag on a freshly created object late (Doc120 creative 26.10, Doc122 22.10, Doc120 18.10), so the run stopped with "did not keep the ACL tag" although the tag was there. `CampaignCreator._verify_label` now re-reads the object up to 3 times (pauses 2 s, 4 s, 6 s through `self.sleep`; GET only, no write is repeated) and stops with the same refusal only if the tag never shows up. The re-reads go through the Graph client and count against the call budget (a late tag costs up to 3 extra calls on that object; the 150-call ceiling still stops loudly).
+Known follow-up: a creative left without a visible tag stays "not ours" (`_find_creative` needs name + tag), so a retry creates a new one. Durable recovery and the resulting duplicate-creative risk remain a separate follow-up; `_find_creative` is not changed here.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1206).
+
 ## ACL-2207 — Dashboard keeps the last finished report on disk — 2026-10-26
 
 After a restart the dashboard used to show an empty "getting ready" screen for minutes. It now shows the last finished page at once, marked "From cache, refreshing…", and swaps in the live report when the rebuild is done. If the code, the data (BI revision / stats workbook) or the settings that change numbers (currencies, timezones, hidden accounts, account map) differ from when the page was saved, it is shown with a red OUTDATED marker that says why. A failed rebuild keeps the saved page and shows the error. The page is stored as checksummed gzip JSON in `%LOCALAPPDATA%\ACL\report_cache` (14 days, 12 views, 150 MB; `ACL_REPORT_DISK_CACHE=0` turns it off).
