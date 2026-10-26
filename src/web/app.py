@@ -2450,7 +2450,17 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         device_val = (form.get(pfx + "device") or "").strip().lower()
         if device_val == "all":
             device_val = ""
+        placements = None
+        raw_placements = form.get(pfx + "placements")
+        if raw_placements:
+            try:
+                placements = json.loads(raw_placements)
+                if placements is None:
+                    placements = {"mode": "invalid"}
+            except (TypeError, ValueError):
+                placements = {"mode": "invalid"}  # незнакомое значение не становится умолчанием
         return {
+            "placements": placements,
             "targeting": (form.get(pfx + "targeting") or "").strip(),
             "os": (form.get(pfx + "os") or "All").strip(),
             "age": (form.get(pfx + "age") or "35").strip(),
@@ -2598,8 +2608,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     # Незнакомое назначение не превращается в сайт молча: уходит как есть,
                     # и план откажет вслух ("Unknown conversion location").
                     slot["destination"] = destination
-                for key in ("gender", "languages", "device", "os_min", "start_time"):
-                    if sf[key]:
+                for key in ("gender", "languages", "device", "os_min", "start_time", "placements"):
+                    if sf[key] or (key == "placements" and sf[key] is not None):
                         slot[key] = sf[key]
                 slots.append(slot)
         camp_spans.append((name, first_slot, len(slots), form_errors))
@@ -6030,7 +6040,7 @@ def _multi_adset_refusal(slots: list[dict]) -> JSONResponse | None:
 
 
 #: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
-API_ONLY_SLOT_KEYS = {"adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
+API_ONLY_SLOT_KEYS = {"placements": "Placements", "adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
                       "gender": "Gender", "languages": "Several languages", "device": "Devices",
                       "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more",
                       "copy_more": "Primary text 3-5 (with their headlines and descriptions)",
@@ -6046,7 +6056,9 @@ def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
     names: list[str] = []
     for slot in slots:
         for key, title in API_ONLY_SLOT_KEYS.items():
-            if slot.get(key) and title not in names:
+            # ACL-1772: {} / [] / false — явный выбор, а не отсутствие поля; RPA не вправе его потерять.
+            present = key in slot if key == "placements" else bool(slot.get(key))
+            if present and title not in names:
                 names.append(title)
         if str(slot.get("os") or "").strip().lower() == "android" and "Android only" not in names:
             names.append("Android only")

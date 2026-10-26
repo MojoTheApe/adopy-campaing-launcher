@@ -139,6 +139,9 @@ class AdSetDraft:
     language: str = ""          # язык набора; пусто = язык кампании (CampaignDraft.language)
     pixel_id: str = ""          # пиксель набора; пусто = пиксель кампании/кабинета
 
+    #: ACL-1772: None сохраняет прежние семь ручных площадок.
+    placements: dict | None = None
+
     def to_preview_dict(self) -> dict[str, Any]:
         out = {
             "name": self.name,
@@ -150,7 +153,7 @@ class AdSetDraft:
         }
         if self.destination != "website":
             out["destination"] = self.destination
-        for key in ("gender", "languages", "device", "os_min", "start_time", "language", "pixel_id"):
+        for key in ("gender", "languages", "device", "os_min", "start_time", "language", "pixel_id", "placements"):
             if getattr(self, key):
                 out[key] = getattr(self, key)
         return out
