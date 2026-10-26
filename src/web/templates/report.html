@@ -2056,7 +2056,7 @@
        в файле два дня, — значит приглашать выбрать день и решить, что аккаунты
        умерли: данных там не было никогда, и сказать это надо до клика. */
     .amap-cal {
-      position: absolute; z-index: 40; padding: 0.7rem;
+      position: absolute; z-index: 890; padding: 0.7rem;
       background: var(--bg-elev); border: 1px solid var(--border);
       border-radius: var(--radius-md); box-shadow: var(--adopy-shadow-popover);
       font-size: var(--adopy-text-table);
@@ -2862,7 +2862,8 @@
        Ширина фиксированная; открытое состояние помнится между
        перезагрузками. */
     .cbd-root {
-      position: fixed; top: 0; right: calc(-1 * var(--cbd-w)); height: 100vh;
+      position: fixed; top: var(--cbd-top, 0px); right: calc(-1 * var(--cbd-w));
+      height: calc(100vh - var(--cbd-top, 0px));
       z-index: 880; display: flex; align-items: stretch;
       pointer-events: none;
       transition: right 220ms var(--ease-out);
@@ -6030,6 +6031,17 @@ window.cbDrawer = (function () {
   }
   function isExpanded() { return width() >= WIDE_AT; }
 
+  /* ACL-2124: немодальный ящик начинается под реальной шапкой, в том числе
+     когда она переносится на несколько строк. При прокрутке за пределы экрана
+     шапка освобождает место; высоту не угадываем по ширине окна. */
+  function syncHeaderTop() {
+    var header = document.querySelector('header.page-header');
+    var top = header ? Math.ceil(header.getBoundingClientRect().bottom) : 0;
+    top = Math.max(0, Math.min(window.innerHeight, top));
+    var value = top + 'px';
+    if (root.style.getPropertyValue('--cbd-top') !== value) root.style.setProperty('--cbd-top', value);
+  }
+
   function pressed(btn, on) { if (btn) btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   function applySize() {
     var w = width(), wide = w >= WIDE_AT;
@@ -6037,6 +6049,7 @@ window.cbDrawer = (function () {
     root.setAttribute('data-expanded', wide ? '1' : '0');
     document.body.classList.toggle('cbd-expanded', wide);
     document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < 600);
+    syncHeaderTop();
     var open = isOpen();
     pressed(presetClosed, !open);
     pressed(presetNormal, open && mode === 'normal');
@@ -6145,6 +6158,12 @@ window.cbDrawer = (function () {
   if (presetWide) presetWide.addEventListener('click', function () { setPreset('wide'); });
   /* Окно сузилось — сохранённая ширина не должна его переросить. */
   if (window.addEventListener) window.addEventListener('resize', applySize);
+  window.addEventListener('scroll', syncHeaderTop, { passive: true });
+  if (window.ResizeObserver) {
+    var header = document.querySelector('header.page-header');
+    if (header) new ResizeObserver(syncHeaderTop).observe(header);
+  }
+
 
   readSize();
   lastExpanded = isExpanded();
