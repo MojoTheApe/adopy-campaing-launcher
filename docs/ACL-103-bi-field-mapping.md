@@ -57,6 +57,12 @@ metadata remains unknown. This is supported behavior, not evidence those columns
 
 - Currency is a canonical three-letter code, independent of its displayed sign. Unknown or
   ambiguous signs are never silently interpreted as USD.
+  **Owner decision 2026-10-26 (ACL-2204):** for the BI source and the stats workbook only, rows that
+  declare no currency (`BI_CURRENCY` / `STATS_CURRENCY` / the row metadata are empty) are USD: their
+  money figures show `$` and the source notice reads `currency: USD (default)`. An explicit declaration
+  still wins and is shown with its own code; rows that declare different currencies stay `unknown` and
+  are never merged. Per-account Meta reads whose currency Meta does not report are NOT relabelled
+  (`currency unknown`, no difference calculated). Time zone and day boundary stay unknown when undeclared.
 - Dates remain the delivered BI DATE/calendar labels. Daily aggregates cannot be shifted into
   another timezone without their underlying intraday data; no such shift occurs.
 - Explicit machine source-contract declarations can supply `BI_CURRENCY`, `BI_TIMEZONE` and
