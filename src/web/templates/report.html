@@ -6313,6 +6313,14 @@ window.cbKeep = (function () {
       if (wrap.classList.contains('cb-text2-sel-wrap'))
         text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
+    /* ACL-2197: источник формы хранится в черновике (`ad_N_form_source`). Старый черновик его не знает:
+       шаблон без form_id в нём = режим шаблона. */
+    slot.querySelectorAll('.cb-form-source').forEach(function (sel) {
+      var f = field(sel), row = sel.closest('.cb-ad-row');
+      if (!row || (f && f in data.fields)) return;
+      var t = row.querySelector('input[name$="_form_template"]'), i = row.querySelector('input[name$="_form_id"]');
+      if (t && t.value && !(i && i.value)) sel.value = 'template';
+    });
     var ov = slot.querySelector('.cb-name-override');
     if (ov && typeof data.fields.name_override === 'string') ov.value = data.fields.name_override;
     var hint = slot.querySelector('.cb-targeting-hint');
@@ -15187,7 +15195,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
       /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
-      '<select class="cb-input cb-select cb-form-source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
+      '<select class="cb-input cb-select cb-form-source" name="' + pfx + 'form_source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
       '<option value="existing">Use existing form</option><option value="template">Create from template</option></select>' +
       '<div class="cb-form-templatebox" hidden>' +
       '<div class="cb-form-line">' +
@@ -16846,6 +16854,44 @@ function cbPlanMoney(s) {
   return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
 }
 
+/* ACL-1771: термины таргетинга. Точное имя берётся само; всё остальное - «picked X for Y?»
+ * с кандидатами и кнопкой Confirm (запоминается на этой машине), подтверждённое - с Clear. */
+function cbTargetingHtml(items) {
+  var rows = '';
+  function cand(term, c) {
+    return '<li>' + aclEscHtml(c.name) + ' <span style="color:var(--muted)">[' + aclEscHtml(c.type) + ']</span> '
+      + '<button type="button" class="cbd-add" data-act="confirm-target" data-term="' + aclEscHtml(term)
+      + '" data-id="' + aclEscHtml(c.id) + '" data-type="' + aclEscHtml(c.type)
+      + '" data-name="' + aclEscHtml(c.name) + '">Confirm</button></li>';
+  }
+  function ask(i) {
+    var cs = i.candidates || [];
+    var head = i.suggested
+      ? 'Picked <strong>' + aclEscHtml(i.suggested.name) + '</strong> [' + aclEscHtml(i.suggested.type)
+        + '] for <strong>' + aclEscHtml(i.term) + '</strong>? Publish is blocked until you confirm or pick another.'
+      : '<strong>' + aclEscHtml(i.term) + '</strong> was not found in Meta'
+        + (cs.length ? '. Pick a candidate:' : ' and there are no candidates.');
+    return '<div class="cbd-plan-warn" style="color:var(--bad);margin:0.15rem 0">&#10005; ' + head
+      + (i.reason ? ' (' + aclEscHtml(i.reason) + ')' : '')
+      + (cs.length ? '<ul style="margin:0.1rem 0 0 1.1rem">' + cs.map(function (c) { return cand(i.term, c); }).join('') + '</ul>' : '')
+      + '</div>';
+  }
+  (items || []).forEach(function (i) {
+    if (i.state === 'unknown') {
+      rows += '<div class="cbd-plan-warn" style="color:#b45309;margin:0.15rem 0">&#9888; ' + aclEscHtml(i.term)
+        + ': ' + aclEscHtml(i.reason || "Couldn't check all interests — press Check plan again") + '</div>';
+    } else if (i.state === 'pending' || i.state === 'unresolved') {
+      (i.bad_parts && i.bad_parts.length ? i.bad_parts : [i]).forEach(function (p) { rows += ask(p); });
+    } else if (i.state === 'confirmed' && (i.picks || [])[0]) {
+      rows += '<div style="font-size:0.72rem">' + aclEscHtml(i.term) + ' &rarr; '
+        + i.picks.map(function (p) { return aclEscHtml(p.name) + ' [' + aclEscHtml(p.type) + ']'; }).join(' + ')
+        + ' (confirmed earlier) <button type="button" class="cbd-add" '
+        + 'data-act="clear-target" data-term="' + aclEscHtml(i.term) + '">Clear</button></div>';
+    }
+  });
+  return rows ? '<div class="cbd-plan-targeting" style="margin:0.2rem 0">' + rows + '</div>' : '';
+}
+
 /* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
 function cbPlanHtml(data) {
   var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
@@ -16867,6 +16913,7 @@ function cbPlanHtml(data) {
       if (w === 'Dry run: nothing was created') return;
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
+    h += cbTargetingHtml(r.targeting || []);
     if (s) {
       if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
         + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
@@ -16929,6 +16976,20 @@ function cbPlanBindFrame(out) {
     var b = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
     if (!b) return;
     var act = b.getAttribute('data-act');
+    if (act === 'confirm-target' || act === 'clear-target') {
+      ev.stopPropagation();
+      var confirm = act === 'confirm-target';
+      b.disabled = true;
+      fetch(confirm ? '/targeting-resolver/confirm' : '/targeting-resolver/clear', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(confirm
+          ? { term: b.dataset.term, id: b.dataset.id, type: b.dataset.type, name: b.dataset.name }
+          : { term: b.dataset.term })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        b.outerHTML = '<em>' + (d && d.error ? aclEscHtml(d.error) : (confirm ? 'Saved' : 'Cleared') + ' - run Check plan again') + '</em>';
+      }).catch(function () { b.disabled = false; });
+      return;
+    }
     if (act === 'close-plan') {
       ev.stopPropagation();
       out.hidden = true;

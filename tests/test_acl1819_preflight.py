@@ -355,7 +355,7 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     assert out.error == "" and not pf.blocks(out.audit)
     assert {v["rule"]: v["status"] for v in out.audit} == {
         "account_active": "ok", "page_ok": "ok", "instagram_identity": "ok", "pixel_ok": "ok", "country_resolves": "ok",
-        "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
+        "language_resolves": "ok", "interests_resolve": "ok", "interests_confirmed": "ok", "media_readable": "ok", "media_limits": "ok",
         "media_vertical": "ok", "vertical_ratio": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
 

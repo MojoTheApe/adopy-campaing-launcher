@@ -1,5 +1,44 @@
 # System history
 
+## ACL-2197 — Builder keeps the Instant Form source (existing form or template) after a page reload — 2026-10-26
+
+After a reload an ad whose Instant Form comes from a template fell back to "Use existing form", the template
+field was switched off, and the pre-flight audit reported "Instant Form chosen: error". The source is now stored
+per ad in the builder draft and restored with it. An ad the person switched to "Use existing form" stays that
+way. Drafts saved before this change are read by their content: a template without a chosen form means template mode.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1197).
+
+## ACL-2194 — Form template publish: pinning the Page installs the helper in a new world — 2026-10-26
+
+Publishing an Instant Form from a template created the campaign, ad set and image, then refused the form
+("the page refused the write (write_refused: form_no_page)"). Pinning the Page re-installed the page helper
+in the same isolated world, so the old helper without a Page stayed in place. The helper is now installed
+in a fresh world with the pinned Page in its policy. No other write path changes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1194).
+
+## ACL-2192 — Form template publish: resolve the automatic Page before pinning it — 2026-10-26
+
+Publishing an Instant Form created from a template failed before any write ("the Page to pin must be a
+numeric Page id") when the draft had no Page chosen (Automatic): the Page was pinned before the creator
+picked the account's Page. The Page is now resolved first; if none is available the run is refused with
+"… Nothing was created." Follow-ups: the "Automatic Facebook Page" note chosen by that early step is
+carried into the result warnings; a Graph stop raised while choosing the Page is returned as a refusal
+and sets the publisher stop and cooldown like the creator path (preflight already reads the profile's
+Pages, so this is a rare path). Check plan is unchanged; explicit Page ids behave as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1192).
+
+## ACL-1771 — Resolve library targeting with explicit candidate confirmation — 2026-10-25
+
+The API Builder now resolves case-normalized interests, paged behaviors, work
+positions, employers, schools and majors within each job's read budget. Check plan
+shows unresolved terms and candidate names; near matches and split targets require
+explicit confirmation before creation. Confirmed choices are saved locally and
+can be cleared. A fresh check invalidates obsolete candidates, and education names
+are searched even when no similar interest was found. The read budget grows with the number of terms (up to a fixed ceiling) and search results are kept for ten minutes, so pressing Check plan again goes further. A term written A/B no longer matches an interest named A B automatically. Language and device audience fields from ACL-1767 keep working beside it.
+Existing guarded read sessions and current campaign creation rules remain in force.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/771).
+
 ## ACL-2192 — Form template publish resolves the automatic Page before pinning it — 2026-10-25
 
 Publishing an Instant Form created from a template failed before any write ("the Page to pin must be a
