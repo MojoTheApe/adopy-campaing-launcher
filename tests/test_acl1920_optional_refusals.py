@@ -277,3 +277,47 @@ def test_refused_client_without_call_counter_still_charges_one_read(tmp_path, co
     assert resolver._term_reads == (1 if count_term else 0)
     with pytest.raises(tr._Spent):
         resolver._lookup("adworkemployer", {"type": "adworkemployer"}, 1)
+
+
+@pytest.mark.parametrize("refused", [
+    ("adworkposition", "adworkemployer", "adeducationschool", "adeducationmajor"),
+    OPTIONAL,
+])
+def test_compound_interests_still_offer_components_when_optional_searches_are_refused(tmp_path, refused):
+    interests = {"Alpari Group": {"id": "31", "name": "Alpari Group"},
+                 "Plus500": {"id": "32", "name": "Plus500"}}
+
+    class Transport:
+        def request(self, method, path, params):
+            kind = params["type"]
+            if kind in refused:
+                body = {"error": {"code": 10, "message": "Permission Denied"}}
+            else:
+                hit = interests.get(params.get("q")) if kind == "adinterest" else None
+                body = {"data": [hit] if hit else []}
+            return {"status": 200, "body": body}
+
+    client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
+                           sleep=lambda _: None, max_calls=200)
+    resolver = tr.TermResolver(client, _store(tmp_path))
+    term = "Alpari Group or Plus500"
+    resolver.prefetch([term])
+    result = resolver.resolve(term)
+    assert result["state"] == "pending" and result["split"]
+    assert result["picks"] == []
+    assert {p["id"] for p in result["suggested"]["picks"]} == {"31", "32"}
+    assert set(refused) <= resolver.refused.keys()
+    assert client.writes == 0
+
+
+def test_a_budget_unknown_compound_is_not_silently_split(tmp_path):
+    class Transport:
+        def request(self, method, path, params):
+            return {"status": 200, "body": {"data": []}}
+
+    client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
+                           sleep=lambda _: None, max_calls=200)
+    resolver = tr.TermResolver(client, _store(tmp_path), term_cap=1, job_cap=1)
+    result = resolver.resolve("Alpari Group or Plus500")
+    assert result["state"] == "unknown" and not result.get("split")
+    assert result["picks"] == [] and client.calls <= 1 and client.writes == 0
