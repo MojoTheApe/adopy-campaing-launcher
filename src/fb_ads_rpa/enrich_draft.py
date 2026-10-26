@@ -178,7 +178,7 @@ def enrich_campaign_drafts(
         if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
             library_states.append(("Targeting", _pull_unless_just_pulled(
                 "targets", targeting_registry.pull, info)))
-        if any(ad.copy_name or ad.copy2_name for d in drafts for a in d.ad_sets for ad in a.ads):
+        if any(ad.copy_name or ad.copy2_name or ad.more_copy_names for d in drafts for a in d.ad_sets for ad in a.ads):
             library_states.append(("Ad texts", _pull_unless_just_pulled(
                 "ad_texts", ad_text_registry.pull, info)))
 
@@ -324,6 +324,44 @@ def enrich_campaign_drafts(
                             f"Primary text 2 {ad.copy2_name!r} repeats the first primary text — ignored"
                         )
                         ad.ad_body2 = ""
+
+                # ACL-1774 (API-бэкенд): варианты текстов 2-5 — запись библиотеки целиком
+                # (основной текст, заголовок, описание). Пустое тело и повтор — предупреждение,
+                # такой вариант не берётся; нет записи — ошибка до записи в Meta.
+                ad.text_variants = []
+                def text_key(body, headline, description):
+                    return tuple("".join(str(x or "").split()) for x in (body, headline, description))
+                seen_texts = {text_key(ad.ad_body, ad.ad_title, ad.ad_link_description)}
+                wanted = ([(2, ad.copy2_name)] if ad.copy2_name and ad.ad_body else []) + [
+                    (3 + i, n) for i, n in enumerate(ad.more_copy_names) if str(n).strip()]
+                for slot_no, vname in wanted:
+                    from src.analysis_agent.ad_text_registry import AdTextError
+                    try:
+                        rec = lookup_ad_copy_by_title(vname)
+                    except AdTextError as exc:
+                        draft.errors.append(f"Primary text {slot_no} {vname!r}: {exc}")
+                        continue
+                    body = (rec.get("body") or "").strip()
+                    headline = (rec.get("headline") or "").strip()
+                    description = (rec.get("description") or "").strip()
+                    key = text_key(body, headline, description)
+                    if not body:
+                        draft.warnings.append(f"Primary text {slot_no} {vname!r} has no body — ignored")
+                    elif key in seen_texts:
+                        draft.warnings.append(f"Primary text {slot_no} {vname!r} repeats an earlier text, headline and description — ignored")
+                    else:
+                        seen_texts.add(key)
+                        ad.text_variants.append({"name": vname, "body": body,
+                                                 "headline": headline, "description": description})
+
+                # ACL-1774: вертикальный файл ищется так же, как основной.
+                if ad.vertical_filename and not preview_mode:
+                    try:
+                        ad.vertical_path = str(find_creative_file(root, ad.vertical_filename, fresh=True))
+                    except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
+                        draft.errors.append(f"Stories / Reels file: {exc}")
+                elif ad.vertical_filename:
+                    ad.vertical_path = str(Path(root) / ad.vertical_filename)
 
                 if ad.creative_filename and not preview_mode:
                     try:

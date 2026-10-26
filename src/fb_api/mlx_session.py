@@ -30,6 +30,7 @@ import os
 import threading
 import time
 from collections import OrderedDict
+from datetime import datetime, timezone
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -45,8 +46,7 @@ SESSION_LOST_MESSAGE = (
     "Sign in again in the Multilogin app here, then press Retry."
 )
 PROXY_AUTH_MESSAGE = "The proxy login for this profile is wrong or expired — update it in Multilogin"
-TOKEN_EXPIRED_MESSAGE = ("The Multilogin token for this slot has expired. "
-                         "Connect Multilogin again in the dashboard, then press Retry.")
+TOKEN_EXPIRED_MESSAGE = "Multilogin token expired — sign in again"
 TOKEN_WORKSPACE_MESSAGE = ("The Multilogin token for this slot belongs to another workspace. "
                            "Connect Multilogin again and choose the right workspace, then press Retry.")
 
@@ -82,6 +82,11 @@ def classify(err: Any, instance: str = "") -> str:
     low = text.lower()
     if "err_invalid_auth_credentials" in low:
         return PROXY_AUTH
+    # ACL-2185: 401 на старте профиля — токен автоматизации слота погашен или
+    # истёк (на любом слоте). Сообщение про токен, а не общий сбой профиля.
+    status401 = getattr(err, "status", None) or getattr(err, "status_code", None)
+    if status401 == 401 or "start profile failed http 401" in low:
+        return TOKEN_EXPIRED
     if (instance or "").strip().upper() != "B":
         return ""
     status = getattr(err, "status", None) or getattr(err, "status_code", None)
@@ -279,6 +284,37 @@ def token_preflight(instance: str = "B", *, env: dict | None = None, now: float 
     if want and have and want != have:
         return {"ok": False, "code": TOKEN_WORKSPACE, "message": TOKEN_WORKSPACE_MESSAGE}
     return {"ok": True, "code": "", "message": ""}
+
+
+#: За сколько до `exp` дешборд начинает предупреждать (ACL-2185).
+EXPIRY_WARN_S = 3600.0
+
+
+def token_expiry(instance: str = "A", *, env: dict | None = None, now: float | None = None) -> dict:
+    """Офлайн: когда истекает токен слота. Сам токен наружу не уходит.
+
+    `state`: `none` (токена нет), `unknown` (не JWT или без `exp`), `ok`,
+    `warning` (осталось не больше часа), `expired`. Сеть не нужна.
+    """
+    env = os.environ if env is None else env
+    key = (instance or "A").strip().upper()
+    out = {"instance": key, "has_token": False, "state": "none",
+           "expires_at": None, "expires_epoch": None, "seconds_left": None}
+    token = (env.get(f"MULTILOGIN_AUTOMATION_TOKEN_{key}") or "").strip()
+    if not token:
+        return out
+    out["has_token"] = True
+    out["state"] = "unknown"
+    exp = (_claims(token) or {}).get("exp")
+    if not isinstance(exp, (int, float)) or isinstance(exp, bool):
+        return out
+    moment = time.time() if now is None else now
+    left = float(exp) - moment
+    out["expires_epoch"] = float(exp)
+    out["expires_at"] = datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
+    out["seconds_left"] = int(left)
+    out["state"] = "expired" if left <= 0 else "warning" if left <= EXPIRY_WARN_S else "ok"
+    return out
 
 
 # ───────────────────────── для мест, где ловят исключения ─────────────────────────

@@ -43,3 +43,15 @@ def test_story_labels_follow_the_owner_table(tmp_path, monkeypatch):
 def test_the_preview_card_prints_the_label():
     text = TPL.read_text(encoding="utf-8")
     assert "cr.story_label" in text and "data-cbp-story" in text
+
+
+def test_a_square_file_carries_its_story_partner_for_the_api_prefill(tmp_path, monkeypatch):
+    """ACL-1774: «Reuse creative_pairing» - квадратный файл несёт вертикальную пару (с папкой)."""
+    (tmp_path / "es").mkdir()
+    for name in ("es/4_es_2403_post.mp4", "es/4_es_2403_story.mp4", "es/2_es_2221_post.mp4",
+                 "2_ar_2403_story.mp4", "1962.jpg"):
+        (tmp_path / name).write_bytes(b"x")
+    files = _files(tmp_path, monkeypatch)
+    assert files["es/4_es_2403_post.mp4"]["vertical_partner"] == "es/4_es_2403_story.mp4"
+    for name in ("es/4_es_2403_story.mp4", "es/2_es_2221_post.mp4", "2_ar_2403_story.mp4", "1962.jpg"):
+        assert "vertical_partner" not in files[name], name
