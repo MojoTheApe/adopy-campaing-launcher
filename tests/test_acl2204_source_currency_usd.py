@@ -57,3 +57,26 @@ def test_per_account_meta_read_with_empty_currency_keeps_its_wording():
     assert row["gap"] is None
     eur = {"FacebookDoc101": dict(reading["FacebookDoc101"], currency="EUR")}
     assert bi_compare.compare_spend(source, eur, source_currency="")[0]["comparison_state"] == "currency_mismatch"
+
+
+def _mixed(bi, workbook):
+    """Архив владельца: у строк BI валюта проставлена при импорте, у книги — пусто."""
+    bi_rows = _frame(*bi, source="bi")
+    book_rows = _frame(*workbook, source="workbook")
+    return pd.concat([bi_rows, book_rows], ignore_index=True)
+
+
+def test_bi_usd_plus_workbook_without_currency_is_usd():
+    for empty in ("", None, float("nan")):
+        info = bi_compare.provenance(frame=_mixed(["USD", "USD"], [empty, empty]))
+        assert info["currency_code"] == "USD", empty
+        assert info["currency_defaulted"] is False  # BI объявила USD явно
+        assert "currency: USD;" in info["note"] and "(default)" not in info["note"]
+        assert source_display.money(585, info) == "$585"
+
+
+def test_usd_plus_eur_is_unknown_and_never_summed():
+    for bi, book in ((["USD"], ["EUR"]), (["EUR"], [""]), (["EUR"], [None]), (["EUR"], [float("nan")])):
+        info = bi_compare.provenance(frame=_mixed(bi, book))
+        assert info["currency_code"] == "" and info["currency"] == "unknown", (bi, book)
+        assert source_display.money(585, info) == "currency unknown 585"
