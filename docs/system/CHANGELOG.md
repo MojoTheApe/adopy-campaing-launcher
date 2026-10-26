@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2224 — Verify creative video content when returned IDs differ — 2026-10-26
+
+Video readback accepts a different returned video ID only when that video's deterministic title matches the requested file fingerprint. Both single-video and main/Stories/Reels asset-feed paths use the same check. Missing/unreadable or wrong content, missing slot binding, incorrect placement, object tags and creative/ad IDs remain guarded; image hashes are unchanged. Uploaded and returned video IDs plus verification evidence stay in readback diagnostics. No extra API reads or writes. The original Doc123 capture had matching file titles and placements but different video IDs; a reuse-only success did not exercise that creation check. This is title-based application identity evidence, not a downloaded byte comparison. Existing live campaigns were not recreated for this fix.
+
+
 ## ACL-2217 — Preserve the profile context for owned Graph tabs — 2026-10-26
 
 - Owned Graph tabs inherit a uniquely identified profile browser context; ambiguous or failed discovery stops before opening a tab. Context telemetry contains only a mode and page count. The reported live SSL differential still requires verification on the affected profiles.
