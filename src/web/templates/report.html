@@ -14015,9 +14015,22 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
      а публикация загружала файл. Теперь любая правка текста, после которой он уже не равен
      выбранному значению (в том числе пустой), снимает выбор. Вызывается только из oninput —
      значение, положенное без ввода (Send-to-Builder, дубль объявления), не трогается. */
-  window.cbCreativeTyped = function(input) {
+  window.cbCreativeTyped = function(input, ev) {
     var wrap = input.closest('.cb-creative-sel-wrap');
     var hidden = wrap && wrap.querySelector('input[type="hidden"]');
+    /* Ctrl+Z / Ctrl+Y возвращают в окно прежний текст без выбора: окно полное, в плане пусто.
+       Если возвращённый текст — ровно имя одного файла из папки, выбор возвращается вместе с ним. */
+    if (hidden && !hidden.value && ev && /^history/.test(ev.inputType || '')) {
+      var t = input.value.trim();
+      var hits = t ? CREATIVES.filter(function(f) { return f.filename === t || f.rel_path === t; }) : [];
+      var okType = hits.length === 1 && hits[0].type === (wrap.dataset.ctype || 'Image');
+      if (okType && (hits[0].rel_path === t || CREATIVES.filter(function(f) { return f.filename === t; }).length === 1)) {
+        hidden.value = t;
+        var slot0 = wrap.closest('.cb-slot');
+        if (slot0 && window.cbUpdateName) cbUpdateName(slot0);
+        return;
+      }
+    }
     if (hidden && hidden.value && input.value.trim() !== hidden.value) {
       hidden.value = '';
       var slot = wrap.closest('.cb-slot');
@@ -15158,7 +15171,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</div>' +
       '<span class="cb-label">File</span>' +
       '<div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="Image">' +
-      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeTyped(this)">' +
+      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
       '</div>' +
@@ -15224,7 +15237,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
          (1:1 или 4:5). Соотношение и размер проверяет сервер до любой загрузки. Только API. */
       '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16, optional)</span></span>' +
       '<div class="cb-sel-wrap cb-creative-sel-wrap cb-vertical-sel-wrap" data-ctype="Image">' +
-      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeTyped(this)">' +
+      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
       '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +

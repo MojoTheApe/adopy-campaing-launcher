@@ -181,3 +181,23 @@ def test_text_put_by_code_that_matches_nothing_does_not_keep_the_old_file(page):
                            cbCreativeTyped(b); }""")
     assert _hidden(row, "_creative_file").input_value() == ""
     assert _form_pairs(page, row)["creative_file"] == ""
+
+
+@pytest.mark.parametrize("sel,suffix,name", [
+    (".cb-vertical-search", "_creative_file_vertical", "story_9x16.png"),
+    (".cb-creative-search", "_creative_file", "main_1x1.png"),
+])
+def test_undo_after_clearing_restores_the_pick_with_the_text(page, sel, suffix, name):
+    """Ctrl+Z возвращает имя в окно; выбор возвращается вместе с ним, окно не врёт."""
+    _open_first(page, "ad")
+    _backend(page, "api")
+    row = _row(page)
+    box = row.locator(sel)
+    _pick(page, box, name)
+    box.focus()
+    box.press("Control+a")
+    box.press("Delete")
+    assert _hidden(row, suffix).input_value() == ""
+    box.press("Control+z")
+    assert box.input_value() == name
+    assert _hidden(row, suffix).input_value() == name
