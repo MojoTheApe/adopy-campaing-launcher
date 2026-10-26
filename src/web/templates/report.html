@@ -6360,6 +6360,7 @@ window.cbKeep = (function () {
       if (!hidden || !text) return;
       var f = field(hidden);
       if (f && f in data.shown) text.value = data.shown[f];
+      if (wrap.classList.contains('cb-creative-sel-wrap') && hidden.value) text.value = hidden.value;
       /* ACL-1344 (ревью PR #346): недонабранный «Primary text 2» — в поле
          текст, а выбора нет. После перезагрузки красная обводка должна
          вернуться, иначе видно одно, а на сервер уходит пусто. */
@@ -7968,6 +7969,8 @@ window.cbTree = (function () {
       rows.forEach(function (row) {
         if ((window.cbRowSet ? window.cbRowSet(row) : 0) !== k) return;
         var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
+        var vertical = val(row, 'input[type="hidden"][name$="_creative_file_vertical"]').trim();
+        if (window.cbSameCreativeFile && cbSameCreativeFile(file, vertical)) vertical = '';
         var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
         var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
         /* ACL-1774: все тексты объявления - записи библиотеки 1-5 по порядку. */
@@ -7981,7 +7984,7 @@ window.cbTree = (function () {
           bodies: entries.map(function (e) { return String(e.body || ''); }),
           headlines: entries.map(function (e) { return String(e.headline || e.ad_title || ''); }),
           descriptions: entries.map(function (e) { return String(e.description || ''); }),
-          vertical_file: val(row, 'input[type="hidden"][name$="_creative_file_vertical"]').trim(),
+          vertical_file: vertical,
           /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
           name: window.cbPreflight.adName(file, copy),
           file: file, body: entry ? String(entry.body || '') : '',
@@ -14280,6 +14283,20 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
      а публикация загружала файл. Теперь любая правка текста, после которой он уже не равен
      выбранному значению (в том числе пустой), снимает выбор. Вызывается только из oninput —
      значение, положенное без ввода (Send-to-Builder, дубль объявления), не трогается. */
+  window.cbSameCreativeFile = function(a, b) {
+    a = String(a || '').trim(); b = String(b || '').trim();
+    if (!a || !b) return false;
+    if (a === b) return true;
+    function key(value) {
+      var paths = CREATIVES.filter(function(f) { return f.rel_path === value; });
+      if (paths.length === 1) return paths[0].rel_path;
+      var names = CREATIVES.filter(function(f) { return f.filename === value; });
+      return names.length === 1 ? (names[0].rel_path || names[0].filename) : '';
+    }
+    var left = key(a), right = key(b);
+    return !!left && left === right;
+  };
+
   window.cbCreativeTyped = function(input, ev) {
     var wrap = input.closest('.cb-creative-sel-wrap');
     var hidden = wrap && wrap.querySelector('input[type="hidden"]');
@@ -15978,7 +15995,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       if (btn.title !== tip) btn.title = tip;
     }
     var vnote = row.querySelector('[data-vertical-note]');
-    if (vnote && vnote.hidden === api) vnote.hidden = !api;
+    if (vnote) {
+      var main = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+      var vert = row.querySelector('input[type="hidden"][name$="_creative_file_vertical"]');
+      var same = window.cbSameCreativeFile && cbSameCreativeFile(main && main.value, vert && vert.value);
+      var noteText = same
+        ? 'The same file is selected twice. It will be used once as the main file.'
+        : 'Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.';
+      if (vnote.textContent !== noteText) vnote.textContent = noteText;
+      if (vnote.hidden === api) vnote.hidden = !api;
+    }
   };
 
   window.cbAddTextRow = function (btn) {

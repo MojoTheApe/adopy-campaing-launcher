@@ -457,7 +457,17 @@ def _unique(items: list[str]) -> list[str]:
     return out
 
 
-def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, problems: list[str]) -> None:
+def _same_media_file(main: str, vertical: str) -> bool:
+    if not main or not vertical:
+        return False
+    try:
+        return Path(main).resolve() == Path(vertical).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, problems: list[str],
+                             warnings: list[str] | None = None) -> None:
     """Тексты 1-5 и вертикальный файл объявления (ACL-1774). Только правила плана, без чтения файлов."""
     i = plan_ad.index
     variants = [dict(v) for v in (getattr(src, "text_variants", None) or []) if isinstance(v, dict)]
@@ -478,14 +488,20 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         for n, text in enumerate(items, 1):
             if len(text) > limit:
                 problems.append(f"Ad {i}: {label} {n} is {len(text)} characters long, the limit is {limit}")
-    if plan_ad.multi_text and str(getattr(src, "vertical_path", "") or "").strip():
+    vertical = str(getattr(src, "vertical_path", "") or "").strip()
+    same_file = _same_media_file(plan_ad.path, vertical)
+    if same_file:
+        vertical = ""
+        if warnings is not None:
+            warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
+                            "it will be used once as the main file.")
+    if plan_ad.multi_text and vertical:
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
         # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
         problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
     if plan_ad.bodies and not plan_ad.body:
         problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
-    vertical = str(getattr(src, "vertical_path", "") or "").strip()
-    if not vertical and str(getattr(src, "vertical_filename", "") or "").strip():
+    if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
         problems.append(f"Ad {i}: the Stories / Reels file was not found")
     if vertical:
         plan_ad.vertical_path = vertical
@@ -569,6 +585,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     """
     load_template = template_loader or _ft.get
     problems: list[str] = list(getattr(draft, "errors", None) or [])
+    warnings = [str(w) for w in (getattr(draft, "warnings", None) or [])]
     raw_act = str(getattr(draft, "ad_account_id", "") or "").strip()
     try:
         act = normalize_act(raw_act)
@@ -625,7 +642,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 description=str(ad.ad_link_description or "").strip(),
                 form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else ""),
                 cta=_plan_cta(ad, plan_set, i, problems)))
-            _plan_texts_and_vertical(plan_set.ads[-1], ad, plan_set, problems)
+            _plan_texts_and_vertical(plan_set.ads[-1], ad, plan_set, problems, warnings)
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -675,7 +692,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
         daily_budget=float(budget), ad_sets=ad_sets,
         page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
-        warnings=[str(w) for w in (getattr(draft, "warnings", None) or [])])
+        warnings=warnings)
 
 
 def budget_minor(amount: float, currency: str) -> int:
