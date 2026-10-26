@@ -210,7 +210,8 @@ _HELPER_JS = r"""
         const low = String(k).toLowerCase();
         if (WRITE.forbidden.indexOf(low) >= 0) return false;
         // Ревью R6: degrees_of_freedom_spec — только на верхнем уровне креатива.
-        if ((low === 'degrees_of_freedom_spec' || low === WRITE.multi_ads_key) && depth > 0) return false;
+        if ((low === 'degrees_of_freedom_spec' || low === WRITE.multi_ads_key
+             || low === WRITE.asset_feed.key) && depth > 0) return false;
         if (WRITE.opt_out_keys.indexOf(low) >= 0) { if (value[k] !== 'OPT_OUT') return false; }
         else if (low.indexOf('status') >= 0 && value[k] !== 'PAUSED') return false;
         if (!statusOk(value[k], depth + 1)) return false;
@@ -295,6 +296,96 @@ _HELPER_JS = r"""
       return copy;
     }
     return checked;
+  }
+
+  // ACL-1774: зеркало write_policy._check_asset_feed (закрытая схема ленты ассетов).
+  function sameSet(a, b) {
+    if (a.length !== b.length) return false;
+    const x = a.slice().sort(), y = b.slice().sort();
+    return x.every((v, i) => v === y[i]);
+  }
+  function textListOk(items, kind, required, cap) {
+    const AF = WRITE.asset_feed;
+    if (typeof cap !== 'number' || !Array.isArray(items) || items.length > cap || (required && !items.length)) return false;
+    return items.every((x) => isObj(x) && Object.keys(x).length === 1 && typeof x.text === 'string'
+      && x.text.trim() !== '' && x.text.length <= AF.text_max[kind]);
+  }
+  function labelsOf(item) {
+    const AF = WRITE.asset_feed;
+    if (!('adlabels' in item)) return [];
+    const raw = item.adlabels;
+    if (!(Array.isArray(raw) && raw.length === 1 && isObj(raw[0]) && Object.keys(raw[0]).length === 1
+      && typeof raw[0].name === 'string' && new RegExp(AF.label_re).test(raw[0].name))) return null;
+    return [raw[0].name];
+  }
+  function assetFeedOk(spec, creative) {
+    const AF = WRITE.asset_feed;
+    if (!isObj(spec)) return false;
+    const allowed = ['bodies', 'titles', 'descriptions', 'images', 'videos', 'link_urls',
+                     'call_to_action_types', 'ad_formats', 'asset_customization_rules'];
+    for (const k of Object.keys(spec)) if (allowed.indexOf(k) < 0) return false;
+    const story = creative.object_story_spec;
+    if (!(isObj(story) && Object.keys(story).every(k => ['page_id', IGK()].includes(k))
+      && typeof story.page_id === 'string')) return false;
+    const hasImages = Array.isArray(spec.images) && spec.images.length > 0;
+    const hasVideos = Array.isArray(spec.videos) && spec.videos.length > 0;
+    if (hasImages === hasVideos || ('images' in spec && 'videos' in spec)) return false;
+    const kind = hasImages ? 'images' : 'videos';
+    const media = spec[kind];
+    if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
+    const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
+    if (!textListOk(spec.bodies, 'bodies', true, cap) || !textListOk(spec.titles, 'titles', true, cap)) return false;
+    if ('descriptions' in spec && !textListOk(spec.descriptions, 'descriptions', true, cap)) return false;
+    let names = [];
+    for (const item of media) {
+      if (!isObj(item)) return false;
+      let ok;
+      if (kind === 'images') {
+        ok = Object.keys(item).every((k) => k === 'hash' || k === 'adlabels')
+          && typeof item.hash === 'string' && new RegExp(AF.hash_re).test(item.hash);
+      } else {
+        ok = Object.keys(item).every((k) => k === 'video_id' || k === 'thumbnail_url' || k === 'adlabels')
+          && typeof item.video_id === 'string' && new RegExp(AF.video_id_re).test(item.video_id)
+          && typeof item.thumbnail_url === 'string' && item.thumbnail_url.indexOf('https://') === 0;
+      }
+      const labels = ok ? labelsOf(item) : null;
+      if (!ok || labels === null) return false;
+      names = names.concat(labels);
+    }
+    if (new Set(names).size !== names.length) return false;
+    if ('link_urls' in spec) {
+      const l = spec.link_urls;
+      if (!(Array.isArray(l) && l.length === 1 && isObj(l[0]) && Object.keys(l[0]).length === 1
+        && typeof l[0].website_url === 'string' && l[0].website_url.indexOf('https://') === 0)) return false;
+    }
+    const ctas = spec.call_to_action_types;
+    if (!(Array.isArray(ctas) && ctas.length === 1 && WRITE.cta_website.indexOf(ctas[0]) >= 0)) return false;
+    const want = kind === 'images' ? 'SINGLE_IMAGE' : 'SINGLE_VIDEO';
+    if (!(Array.isArray(spec.ad_formats) && spec.ad_formats.length === 1 && spec.ad_formats[0] === want)) return false;
+    const rules = spec.asset_customization_rules;
+    if (media.length === 1) return rules === undefined && names.length === 0;
+    if (names.length !== 2) return false;
+    if (!(Array.isArray(rules) && rules.length === 2)) return false;
+    const labelKey = kind === 'images' ? 'image_label' : 'video_label';
+    const used = [];
+    for (const rule of rules) {
+      if (!isObj(rule)) return false;
+      const rk = Object.keys(rule);
+      if (rk.length !== 2 || rk.indexOf('customization_spec') < 0 || rk.indexOf(labelKey) < 0) return false;
+      const lab = rule[labelKey];
+      if (!(isObj(lab) && Object.keys(lab).length === 1 && names.indexOf(lab.name) >= 0)) return false;
+      used.push(lab.name);
+      const cs = rule.customization_spec;
+      if (!isObj(cs) || !Object.keys(cs).length) return false;
+      const sets = { publisher_platforms: AF.platforms, facebook_positions: AF.facebook_positions,
+                     instagram_positions: AF.instagram_positions };
+      for (const k of Object.keys(cs)) if (!(k in sets)) return false;
+      for (const k of Object.keys(sets)) {
+        if (k in cs && !(Array.isArray(cs[k]) && cs[k].length > 0
+          && cs[k].every((x) => typeof x === 'string' && sets[k].indexOf(x) >= 0))) return false;
+      }
+    }
+    return sameSet(used, names);
   }
 
   // ACL-1767: зеркало write_policy._check_multi_ads / _check_cta / _check_targeting.
@@ -485,8 +576,10 @@ _HELPER_JS = r"""
       }
     }
     if ('contextual_multi_ads' in checked && !multiAdsOk(checked.contextual_multi_ads)) return refused('multi_ads');
+    if (WRITE.asset_feed.key in checked && !assetFeedOk(checked[WRITE.asset_feed.key], checked)) return refused('asset_feed');
     if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
     if (edge === 'adsets' && 'targeting' in checked && !targetingOk(checked.targeting)) return refused('targeting');
+    if (WRITE.asset_feed.dynamic_key in checked && checked[WRITE.asset_feed.dynamic_key] !== true) return refused('dynamic');
     // Объявление — только ссылка на готовый креатив.
     if (edge === 'ads' && 'creative' in checked) {
       const c = checked.creative;

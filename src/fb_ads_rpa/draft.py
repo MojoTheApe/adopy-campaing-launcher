@@ -48,6 +48,13 @@ class AdDraft:
     lead_form_id: str = ""
     # ACL-1767: тип кнопки (call_to_action.type); пусто = LEARN_MORE как всегда (только API-бэкенд).
     cta: str = ""
+    # ACL-1774 (только API-бэкенд): тексты 3-5 — названия записей библиотеки (как `copy2_name`)
+    # и разобранные записи для слотов 2-5: [{"name", "body", "headline", "description"}].
+    more_copy_names: list[str] = field(default_factory=list)
+    text_variants: list[dict[str, str]] = field(default_factory=list)
+    # ACL-1774: необязательный вертикальный (9:16) файл Stories/Reels рядом с основным.
+    vertical_filename: str = ""
+    vertical_path: str | None = None
     # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
     lead_form_template: str = ""
 
@@ -96,6 +103,10 @@ class AdDraft:
             out["lead_form_id"] = self.lead_form_id
         if self.cta:
             out["cta"] = self.cta
+        if self.more_copy_names:
+            out["more_copy_names"] = list(self.more_copy_names)
+        if self.vertical_filename:
+            out["vertical_file"] = self.vertical_filename
         if self.lead_form_template:
             out["lead_form_template"] = self.lead_form_template
         return out

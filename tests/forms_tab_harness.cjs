@@ -123,6 +123,17 @@ const lastPost = () => requests.filter(r => r.body).pop();
     return;
   }
 
+  if (scenario === 'legacy-name') {
+    // ACL-2177: an old template with the removed "Full name" field opens as First name + Last name.
+    click('', {'data-fm-edit': VALID.id});
+    assert(get('fm-c-first_name').checked && get('fm-c-last_name').checked && get('fm-c-email').checked, 'legacy name was not converted');
+    assert(!get('fm-c-phone').checked, 'phone appeared from nowhere');
+    click('fm-save-btn'); await flush();
+    assert(lastPost(), 'legacy template was blocked: ' + get('fm-editor-msg').textContent);
+    assert.deepEqual(lastPost().body.contact_fields, ['email', 'first_name', 'last_name']);
+    return;
+  }
+
   if (scenario === 'auto-locale') {
     // ACL-2180: the locale is a dropdown with readable names; a new template defaults to Auto.
     click('fm-new-btn');

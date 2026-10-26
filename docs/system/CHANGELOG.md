@@ -1,5 +1,48 @@
 # System history
 
+## ACL-2192 — Form template publish resolves the automatic Page before pinning it — 2026-10-25
+
+Publishing an Instant Form created from a template failed before any write ("the Page to pin must be a
+numeric Page id") when the draft had no Page chosen (Automatic): the Page was pinned before the creator
+picked the account's Page. The Page is now resolved first; if none is available the run is refused with
+"… Nothing was created." Check plan is unchanged. Explicit Page ids behave as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1192).
+
+## ACL-2189 — Builder: existing-form select shown in Use existing form mode — 2026-10-25
+
+In the builder ad row the existing-form select and "Refresh forms" were hidden in "Use existing form" mode and shown in "Create from template" mode (inverted toggle in `cbSyncDestination`, since ACL-1776). Now they are visible for "Use existing form" and hidden for "Create from template". The forms harness covers both modes. Test-only addition: the Forms tab harness now covers the ACL-2177 legacy conversion (an old template with contact fields name + email opens as First name, Last name, Email and saves as email, first_name, last_name).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1189).
+
+## ACL-2185 — Multilogin token: warning an hour before expiry and a "Sign in again" button — 2026-10-25
+
+The Multilogin automation token expires silently after a month, and every profile start then fails with
+401. The dashboard now reads the expiry from the saved token (offline, no Multilogin call, the token is
+never shown or logged) and, from one hour before it, shows a banner with the exact expiry time; after
+expiry the banner turns into an error. "Sign in again" opens the existing Multilogin connect form on the
+Accounts page (also while the token is still alive) and the banner clears once the new token is saved.
+A 401 on profile start is now reported as "Multilogin token expired — sign in again" on both slots
+instead of a generic profile failure.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1185).
+
+## ACL-1774 — Complete text variants and Stories/Reels source behavior — 2026-10-23
+
+- The API builder supports up to five primary texts through Dynamic Creative, or a separate
+  Stories/Reels file with one text, following the recorded 20 October decision. Unsupported
+  combinations are refused before writes. Old drafts keep their defaults; the RPA backend is out of scope.
+  Picking a square post file with a story partner prefills the empty Stories/Reels field.
+- Campaign copies retain ad counts; Website CTA and vertical-media fields remain visible outside
+  the Instant Form section. Distinct headlines/descriptions survive repeated bodies and sparse
+  text slots keep their original field numbers.
+- Feed creatives preserve Instagram identity, strict media-label/ID readback and safe reuse after
+  a partial run. Both videos in a pair retain the current bounded/chunked upload path.
+- A text over the length limit is refused before writes with a message naming the length, and the
+  vertical file upload has its own progress label.
+- The current confirmed-PAUSED campaign guard remains unchanged. ACL-1767 is merged. The live
+  Ads Manager checks and Instant Form asset feeds remain recorded conditions; offline checks do
+  not establish live or package delivery.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/774).
+
 ## ACL-2183 — Reads keep a problem profile open (step 1) — 2026-10-25
 
 A read (Read spend, Read all, the country read, the API read inside the profile)
