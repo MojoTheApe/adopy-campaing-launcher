@@ -125,6 +125,15 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   stop the account with `profile_no_proxy` when none is configured. A failed check
   does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
   browser's `--proxy-server` flag is only logged as evidence.
+- `src/fb_api/targeting_resolver.py`: the API Builder resolves library names through
+  exact normalized interests, paged interest/behavior search and work/education
+  searches. Each job caches its reads and results within bounded Graph budgets.
+  A near match or a split into several targets remains a candidate in Check plan;
+  creation refuses it until the user explicitly confirms a displayed choice.
+  Confirmed choices live in machine-local `targeting_confirmed.json` and can be
+  cleared. A new result for the same term invalidates its previous candidates,
+  including when no candidates remain. These searches only read through the
+  existing guarded session; the RPA backend cannot use confirmation endpoints.
 - `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
@@ -307,6 +316,38 @@ existing release publisher, verifies actual published packages on isolated Windo
 and records exact task delivery only from the successful native acceptance job.
 Source preparation, policy activation and actual delivery remain distinct facts;
 see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
+
+## Several primary texts and Stories / Reels media (ACL-1774)
+
+API backend only. One text and one file keep the old `object_story_spec`. Findings from the
+Meta capability spike (Doc120, 2026-10-14): `asset_feed_spec` with 3 bodies plus two placement
+customization rules was refused (error 100, subcode 1885878); a rule applies one asset per type.
+Owner decision 2026-10-20 (the recorded PAUSED capability spike accepted Dynamic Creative;
+the visual Ads Manager presentation check remains pending):
+
+- 2-5 texts (or several headlines/descriptions) go as Dynamic Creative: `is_dynamic_creative: true`
+  on the ad set (the only new ad-set key in the write allowlist, `true` only), one file, no rules,
+  text optimizations stay OFF. The ad must be alone in its ad set; Instant Form refuses it.
+- A Stories / Reels 9:16 file (two labelled files, two placement rules) works with one text per kind.
+- Both write-policy layers (`write_policy.py`, the in-page mirror in `token_capture.py`) and the
+  pre-flight rules (Python table + `cbPreflight` in `report.html`) carry the same limits.
+- Library entries with the same body retain their distinct headlines/descriptions. Empty text
+  slots preserve their field numbers. A partially created feed creative is reused only for the
+  same payload; a retry with changed texts uses a new creative without uploading the media twice.
+- Readback checks media labels and IDs even when ads are reused. Feed creatives retain the current
+  Instagram identity; vertical videos use the same bounded/chunked loader as the main video.
+  Website media/CTA controls stay outside the hidden Instant Form section, and campaign copies
+  preserve their ad counts. Choosing a square `..._post` file that has a `..._story` partner in
+  the same folder fills the empty Stories / Reels field from `creative_pairing` (the person can
+  change or clear it; an ad with several texts is not prefilled).
+- Over-length texts (1024 body, 255 headline/description) are refused before any write with a message
+  naming the length. The vertical file upload is labelled "Stories / Reels file image/video" in progress.
+- Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
+  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 is merged.
+  The RPA backend is out of scope (owner decision 2026-10-25). Open conditions: the live checks on
+  TEST9095 (2-5 texts as Dynamic Creative; one text with a square + 9:16 pair and placement rules)
+  and Instant Form asset feeds, which stay refused.
+
 
 ## ACL-1891 — Videos over 200 MB upload in chunks ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891), 2026-10-14)
 

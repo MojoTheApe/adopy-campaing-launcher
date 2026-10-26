@@ -2553,10 +2553,20 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                         "creative_file": creative_file,
                         "copy": copy,
                     })
+                    # ACL-1774 (только API-бэкенд): тексты 3-5 и вертикальный файл Stories/Reels.
+                    copy_more = [(form.get(f"camp_{idx}_ad_{a_idx}_copy{n}") or "").strip()
+                                 for n in (3, 4, 5)]
+                    while copy_more and not copy_more[-1]:
+                        copy_more.pop()
+                    file_vertical = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file_vertical") or "").strip()
                     # Ключ — только у объявлений со вторым текстом: остальные слоты
                     # (и записанные из них задания) остаются прежними.
                     if copy2:
                         slot["copy2"] = copy2
+                    if copy_more:
+                        slot["copy_more"] = copy_more
+                    if file_vertical:
+                        slot["creative_file_vertical"] = file_vertical
                     cta_val = (form.get(f"camp_{idx}_ad_{a_idx}_cta") or "").strip().upper()
                     if cta_val and cta_val != "LEARN_MORE":
                         slot["cta"] = cta_val
@@ -3091,6 +3101,11 @@ def _add_story_labels(files: list[dict]) -> None:
             f["story_label"] = plan.builder_label()
             if plan.square_file != f["filename"]:
                 f["square_file"] = plan.square_file
+            elif plan.replace_vertical and plan.vertical_file != f["filename"]:
+                # ACL-1774: на пути API это готовая вертикальная пара к квадратному файлу -
+                # конструктор подставляет её в пустое поле Stories / Reels.
+                folder = f.get("folder") or ""
+                f["vertical_partner"] = (folder + "/" if folder else "") + plan.vertical_file
         except Exception:
             f["story_label"] = ""
 
@@ -5882,7 +5897,9 @@ def _multi_adset_refusal(slots: list[dict]) -> JSONResponse | None:
 #: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
 API_ONLY_SLOT_KEYS = {"adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
                       "gender": "Gender", "languages": "Several languages", "device": "Devices",
-                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more"}
+                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more",
+                      "copy_more": "Primary text 3-5 (with their headlines and descriptions)",
+                      "creative_file_vertical": "Stories / Reels file"}
 
 
 def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
@@ -6170,6 +6187,18 @@ async def publish_plan(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
+# Только файл на этой машине: в Meta ничего не уходит. Тот же вход, что у /publish-plan:
+# локальный адрес (общий middleware) и бэкенд API; подтвердить можно только кандидата,
+# показанного в последнем Check plan для этого термина.
+async def _targeting_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
 @app.get("/publish-plan/waiting")
 async def publish_plan_waiting(request: Request) -> JSONResponse:
     """Пока Check plan идёт: какие аккаунты ждут свободного места профиля.
@@ -6183,18 +6212,6 @@ async def publish_plan_waiting(request: Request) -> JSONResponse:
     labels = [a.strip() for a in request.query_params.getlist("account") if a.strip()][:50]
     notes = {label: account_spend.hand_wait_note(label) for label in labels}
     return JSONResponse({"waiting": {k: v for k, v in notes.items() if v}})
-
-
-# ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
-# Только файл на этой машине: в Meta ничего не уходит. Тот же вход, что у /publish-plan:
-# локальный адрес (общий middleware) и бэкенд API; подтвердить можно только кандидата,
-# показанного в последнем Check plan для этого термина.
-async def _targeting_body(request: Request) -> dict:
-    try:
-        body = await request.json()
-    except Exception:  # noqa: BLE001
-        body = {}
-    return body if isinstance(body, dict) else {}
 
 
 # ACL-1800: команды над существующими кампаниями (статус/бюджет/ставка) — только
@@ -6626,6 +6643,22 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
                          "expires_at": expires_at, "email": email,
                          # ACL-1441: в каком пространстве выдан токен слота.
                          "workspace": (os.environ.get(f"MULTILOGIN_WORKSPACE_{instance}") or "").strip()})
+
+
+@app.get("/multilogin-token-expiry")
+async def multilogin_token_expiry() -> JSONResponse:
+    """ACL-2185: когда истекают сохранённые токены Multilogin (оба слота).
+
+    Только офлайн-разбор `exp` у сохранённого токена — ни одного вызова
+    Multilogin. Токен в ответ не попадает: слот, состояние, время истечения.
+    Страница рисует по этому плашку за час до срока и после него.
+    """
+    from src.fb_api import mlx_session
+
+    slots = [mlx_session.token_expiry(inst) for inst in ("A", "B")]
+    return JSONResponse({"ok": True, "warn_seconds": int(mlx_session.EXPIRY_WARN_S),
+                         "slots": [s for s in slots if s["has_token"]]},
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.post("/multilogin-search")

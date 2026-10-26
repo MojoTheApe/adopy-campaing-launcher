@@ -395,3 +395,14 @@ def _static_scripts_come_from_disk(monkeypatch):
         patched.static_wrap = wrap       # для test_static_scripts_from_disk
         monkeypatch.setattr(cls, "route", patched)
     yield
+
+
+# ACL-1771: результаты поиска таргетинга живут между Check plan на уровне модуля — между тестами их не носим.
+@pytest.fixture(autouse=True)
+def _clear_plan_search_cache():
+    try:
+        from src.web import publish_api
+        publish_api.PLAN_SEARCH_CACHE.clear()
+    except Exception:
+        pass
+    yield
