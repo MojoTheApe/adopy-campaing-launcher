@@ -948,6 +948,12 @@
     }
 
     /* Multilogin connect panel */
+    .mlx-expiry { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 1rem 0;
+      padding: 0.5rem 0.85rem; border: 1px solid var(--warn, #b26a00); border-radius: 6px;
+      background: var(--bg-hover); color: var(--text); font-size: var(--adopy-text-table); }
+    .mlx-expiry[hidden] { display: none; }
+    .mlx-expiry.mlx-expired { border-color: var(--danger, #b00020); color: var(--danger, #b00020); font-weight: 600; }
+    .mlx-expiry button { margin-left: auto; }
     .ml-connect-panel {
       border: 1px solid var(--border); border-radius: 6px;
       margin-bottom: 1rem; overflow: hidden;
@@ -4122,6 +4128,17 @@
     </dl>
   </div>
 </header>
+
+{#- ACL-2185: токен автоматизации Multilogin живёт месяц и гаснет молча — после
+    этого каждый старт профиля отвечает 401. Плашка появляется за час до срока
+    (с точным временем) и становится ошибкой после него. Данные — из
+    /multilogin-token-expiry: срок читается из самого токена без сети, сам
+    токен на страницу не попадает. «Sign in again» открывает обычное подключение
+    Multilogin на странице Accounts. -#}
+<div id="mlx-expiry-banner" class="mlx-expiry" role="status" aria-live="polite" hidden>
+  <span id="mlx-expiry-text"></span>
+  <button type="button" class="head-btn" id="mlx-expiry-signin" onclick="aclMlxSignInAgain()">Sign in again</button>
+</div>
 
 {#- ACL-1827: «Robot health» открывается панелью под шапкой. Ссылка остаётся
     настоящей (/robot-health) — без скрипта и по прямой ссылке открывается
@@ -12600,7 +12617,7 @@ function amapMlPaint(block) {
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
-  if (alive && signin) signin.remove();
+  if (alive && signin && !block.dataset.mlRenew) signin.remove();
 }
 function amapMlPaintAll() { document.querySelectorAll('.amap-add').forEach(amapMlPaint); }
 function amapMlRefresh(inst, force) {
@@ -12620,9 +12637,10 @@ function amapMlRefresh(inst, force) {
   AMAP_ML_PENDING[inst] = pending;
   return pending;
 }
-function amapMlOpen(btn) {
+function amapMlOpen(btn, force) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
-  if (AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  if (!force && AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  if (force && block.querySelector('.amap-ml-signin')) { block.querySelector('.amap-ml-email').focus(); return; }
   // A pending sign-in owns its form until its response; never detach its inputs.
   if (document.querySelector('.amap-ml-signin[data-busy]')) return;
   document.querySelectorAll('.amap-ml-signin').forEach(function (el) { el.remove(); });
@@ -12698,7 +12716,11 @@ async function amapMlSubmit(btn, paste) {
     });
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
+    /* ACL-2185: токен обновлён — форма, открытая кнопкой «Sign in again»,
+       больше не нужна (её уберёт перерисовка), плашка о сроке перечитывается. */
+    delete block.dataset.mlRenew;
     var state = await amapMlRefresh(inst, true);
+    aclMlxExpiryRefresh();
     amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
@@ -12738,6 +12760,78 @@ function amapMlWorkspacePicker(form, workspaces, chosen) {
   select.value = pick;
 }
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
+/* ACL-2185: плашка срока токена Multilogin. Срок приходит из
+   /multilogin-token-expiry (офлайн-разбор exp, токена в ответе нет). Между
+   запросами состояние пересчитывается по часам браузера, чтобы плашка
+   включилась ровно за час до срока без лишних обращений к серверу. */
+var ACL_MLX_EXPIRY = {slots: [], warn: 3600, timer: 0};
+function aclMlxPad(n) { return ('0' + n).slice(-2); }
+function aclMlxWhen(epoch) {
+  var d = new Date(epoch * 1000);
+  return d.getFullYear() + '-' + aclMlxPad(d.getMonth() + 1) + '-' + aclMlxPad(d.getDate())
+    + ' ' + aclMlxPad(d.getHours()) + ':' + aclMlxPad(d.getMinutes());
+}
+function aclMlxExpiryModel(slots, warn, nowEpoch) {
+  /* Самый срочный слот: истёкший важнее скоро истекающего. */
+  var worst = null;
+  (slots || []).forEach(function (s) {
+    if (typeof s.expires_epoch !== 'number') return;
+    var left = s.expires_epoch - nowEpoch;
+    var state = left <= 0 ? 'expired' : left <= warn ? 'warning' : 'ok';
+    if (state === 'ok') return;
+    var rank = state === 'expired' ? 0 : 1;
+    if (!worst || rank < worst.rank || (rank === worst.rank && s.expires_epoch < worst.epoch)) {
+      worst = {rank: rank, state: state, epoch: s.expires_epoch, instance: s.instance, left: left};
+    }
+  });
+  return worst;
+}
+function aclMlxExpiryPaint() {
+  var box = document.getElementById('mlx-expiry-banner'), text = document.getElementById('mlx-expiry-text');
+  if (!box || !text) return;
+  var m = aclMlxExpiryModel(ACL_MLX_EXPIRY.slots, ACL_MLX_EXPIRY.warn, Date.now() / 1000);
+  if (!m) { box.hidden = true; box.classList.remove('mlx-expired'); return; }
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[m.instance]) || m.instance;
+  var when = aclMlxWhen(m.epoch);
+  box.classList.toggle('mlx-expired', m.state === 'expired');
+  text.textContent = m.state === 'expired'
+    ? 'Multilogin token expired at ' + when + ' (' + label + '). Profiles cannot start until you sign in again.'
+    : 'Multilogin token (' + label + ') expires at ' + when + ' — in ' + Math.max(1, Math.ceil(m.left / 60)) + ' min. Sign in again to renew it.';
+  box.hidden = false;
+}
+function aclMlxExpiryRefresh() {
+  return fetch('/multilogin-token-expiry', {credentials: 'same-origin'})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (j && j.ok) { ACL_MLX_EXPIRY.slots = j.slots || []; ACL_MLX_EXPIRY.warn = j.warn_seconds || 3600; }
+      aclMlxExpiryPaint();
+    })
+    .catch(function () { aclMlxExpiryPaint(); });
+}
+function aclMlxExpiryBoot() {
+  aclMlxExpiryRefresh();
+  if (!ACL_MLX_EXPIRY.timer) ACL_MLX_EXPIRY.timer = setInterval(aclMlxExpiryRefresh, 60000);
+}
+/* «Sign in again» — то же подключение, что и «Connect Multilogin» на странице
+   Accounts, только форма открывается и при ещё живом токене. */
+function aclMlxSignInAgain() {
+  var worst = aclMlxExpiryModel(ACL_MLX_EXPIRY.slots, ACL_MLX_EXPIRY.warn, Date.now() / 1000);
+  var link = document.querySelector('.sidebar-link[data-view="accounts"]');
+  if (link) link.click();
+  var block = document.querySelector('#view-accounts .amap-add');
+  if (!block) return;
+  var sel = block.querySelector('.amap-inst');
+  if (sel && worst && sel.value !== worst.instance) {
+    sel.value = worst.instance;
+    amapMlRefresh(worst.instance, false);
+  }
+  block.dataset.mlRenew = '1';
+  amapMlPaint(block);
+  amapMlOpen(block.querySelector('.amap-ml-open') || block, true);
+  block.scrollIntoView({block: 'center'});
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aclMlxExpiryBoot);
+else aclMlxExpiryBoot();
 function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });

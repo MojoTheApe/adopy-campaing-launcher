@@ -6440,6 +6440,22 @@ async def multilogin_token_status(instance: str = "A") -> JSONResponse:
                          "workspace": (os.environ.get(f"MULTILOGIN_WORKSPACE_{instance}") or "").strip()})
 
 
+@app.get("/multilogin-token-expiry")
+async def multilogin_token_expiry() -> JSONResponse:
+    """ACL-2185: когда истекают сохранённые токены Multilogin (оба слота).
+
+    Только офлайн-разбор `exp` у сохранённого токена — ни одного вызова
+    Multilogin. Токен в ответ не попадает: слот, состояние, время истечения.
+    Страница рисует по этому плашку за час до срока и после него.
+    """
+    from src.fb_api import mlx_session
+
+    slots = [mlx_session.token_expiry(inst) for inst in ("A", "B")]
+    return JSONResponse({"ok": True, "warn_seconds": int(mlx_session.EXPIRY_WARN_S),
+                         "slots": [s for s in slots if s["has_token"]]},
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.post("/multilogin-search")
 async def multilogin_search(request: Request) -> JSONResponse:
     """Search ML profiles using saved automation token (no re-login needed).
