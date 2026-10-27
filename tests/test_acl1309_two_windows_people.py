@@ -168,9 +168,8 @@ if ($p.operation -eq 'create') {
     Phase 'instance.guid.begin'
     $output.instance = [string]$instance.InstanceGuid
     Phase 'instance.guid.end'
-    Phase 'instance.state.begin'
-    $output.instance_state = [int]$instance.State
-    Phase 'instance.state.end'
+    # ACL-2233: State is not child readiness and can block after Run returned.
+    # Keep the real instance receipt; prepared-child/PID proofs follow in Python.
 } elseif ($p.operation -eq 'status') {
     Phase 'status.task.begin'
     $task = $service.GetFolder('\' + $p.folder).GetTask($p.name)
