@@ -413,3 +413,17 @@ the earlier requirement that every empty Page list blocks all preparation.
 ## ACL-1907 — Language groups equal their expansion ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/907), 2026-10-14)
 
 Live finding on Doc120: readback reported ad set `languages` expected `[1002]` ("Spanish (All)") vs Meta `[7, 23]`, and a re-run stopped with "Existing ad set ... differs from the builder: languages (builder: 1002, Meta: 7, 23)". `TargetingResolver.locale()` now records, for a pick named "X (All)", the members seen in the same `adlocale` result (`locale_groups`: names equal to X or starting "X (", never hard-coded). `CampaignCreator._language_check` (used by both readback and `_existing_differences` through `_adset_checks`) treats a group id absent from Meta's list as equal to its complete known member set; a missing known member or any locale outside the group stays a mismatch. When the search listed no members, the compare is strict and the difference text adds "compared strictly: Meta's search did not list the locales it expands into". Read-only change. Preserved real test-dashboard creation and rerun results show the exact Spanish (All) contract: expected `[1002]`, complete Meta locales `[7, 23]`, and passing language readback on both campaigns. The rerun retained the same campaigns and ad sets with no new creations. The locale resolver, comparison helpers and locale-specific readback/reuse caller nodes match the tested compositions by normalized AST after the current-main refresh. Private record hashes and installation/source provenance are retained in the author handoff for independent assessment. This scoped evidence does not resolve separate video-ID findings or establish package delivery; fresh source review, applicable CI and actual delivery remain separate.
+
+
+## ACL-2231 — creative recovery ownership
+
+Creative recovery persists a machine-local pending receipt before dispatch and
+known IDs immediately after confirmation. Reconciliation requires the exact
+account, Page, form and full requested material; unknown writes never expire
+into permission to send again. Complete bounded discovery is required before a
+first creative dispatch. An explicit ACL label belonging to another campaign
+excludes that creative from orphan recovery, preserving suffixed campaign
+ownership. A legacy name tag alone is not ownership: missing-metadata creatives
+can still be recovered by verified identity and complete content. Ambiguity,
+incomplete discovery or unreadable receipts stop safely. Partial IDs survive
+failure, and operator guidance requires reconciliation before retrying.

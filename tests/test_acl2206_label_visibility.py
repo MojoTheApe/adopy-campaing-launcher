@@ -44,12 +44,12 @@ def test_delayed_creative_label_reaches_the_ad_and_readback_without_duplicate_wr
     assert len(out.ad_ids) == 1
 
 
-def test_missing_creative_label_stops_before_ad_and_retains_created_id(tmp_path):
+def test_missing_label_endpoint_uses_confirmed_content_without_repeating_creative(tmp_path):
     meta = LateCreativeLabelMeta(None)
     out, client, waited = run(meta, _draft(tmp_path, ads=1))
-    assert out.error and 'did not keep the ACL tag' in out.error
+    assert not out.error and out.readback['ok']
     assert meta.label_reads == 4 and waited == list(cr.LABEL_RECHECK_WAITS)
     assert [path.rsplit('/', 1)[-1] for path, _ in meta.posts] == [
-        'campaigns', 'adsets', 'adimages', 'adcreatives']
-    assert not out.ad_ids and out.created.get('creatives')
+        'campaigns', 'adsets', 'adimages', 'adcreatives', 'ads']
+    assert len(out.ad_ids) == 1 and out.created.get('creatives')
     assert client.calls == len(meta.gets) + len(meta.posts)

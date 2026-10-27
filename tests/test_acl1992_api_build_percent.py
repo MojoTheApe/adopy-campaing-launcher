@@ -227,14 +227,19 @@ def test_a_broken_counter_never_breaks_publishing(monkeypatch):
     assert publish_api.ApiPublisher._counter(_plan([_ad(1)])) is None
 
 
-def test_every_counted_line_still_exists_in_the_creator():
-    """Строки, по которым идёт счёт, — дословно из creator.py: переименование там
-    иначе молча держало бы процент на 99 при зелёных тестах."""
-    src = (Path(__file__).resolve().parents[1] / 'src' / 'fb_api' / 'creator.py').read_text(encoding='utf-8')
-    for piece in ['"preflight: creatives read"', '"campaign: created PAUSED, tag kept"',
-                  '"campaign: found from a previous run"', ": created ACTIVE (campaign PAUSED), tag kept\"",
-                  ": found from a previous run\"", ": image uploaded\"", ": image already in the ad account\"",
-                  ": video uploaded\"", ": video already in the ad account\"", ": video processed\"",
-                  ": creative created\"", ": creative found from a previous run\"", ": created ACTIVE (campaign PAUSED)\"",
-                  '"readback: ']:
-        assert piece in src, piece
+def test_actual_creator_create_and_resume_steps_reach_completion(tmp_path):
+    from src.fb_api.creator import plan_from_draft
+    from tests.test_acl1761_api_create import FakeMeta, _draft, _run
+
+    meta = FakeMeta()
+    draft = _draft(tmp_path, ads=1)
+    for _ in range(2):
+        counter = BuildCounter(plan_from_draft(draft))
+        lines = []
+        def progress(line):
+            lines.append(line)
+            counter.feed(line)
+        outcome, _client = _run(meta, draft, progress=progress)
+        assert not outcome.error and outcome.readback["ok"]
+        assert counter.done == counter.total
+        assert any(": creative " in line for line in lines) or outcome.reused.get("ads")
