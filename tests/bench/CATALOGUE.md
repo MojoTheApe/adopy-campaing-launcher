@@ -371,3 +371,10 @@ Every robot fix adds the live capture that motivated it (review checklist, `.git
 1. `python scripts/capture_to_fixture.py output/rpa_pages/<run>/NN_<step> --name <layout> --fragment "<name>=<css>" --review --stub tests/test_bench_<layout>.py` (read the review list, add `--replace` pairs, rerun).
 2. Turn the stub into a test that runs the robot's real step function or reader on the fragment and asserts the outcome; a current robot bug is a strict `xfail` with its reason.
 3. Add the layout to `tests/bench/catalogue.json`, run `python scripts/bench_catalogue.py --write`, describe the fixture in the fixtures README, `git add` it and run `python scripts/acl_scan_secrets.py`.
+
+
+## Creative recovery after retained ACL metadata (ACL-2231)
+
+| Capture | Fixture | Test | Expected |
+| --- | --- | --- | --- |
+| Manually minimized Graph response shape, 2026-10-27; all account/object/media/text values replaced. JSON response, so HTML capture cutter is inapplicable. | `tests/fixtures/meta/acl2231_retained_creative_label.json` | `tests/test_acl2231_creative_recovery.py` | Metadata alone cannot identify a creative; verified account + full material permits reuse. Missing content, changed Page/form/text, incomplete lookup and ambiguous matches stop before another creative POST. |
