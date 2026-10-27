@@ -23,6 +23,7 @@ from src.web import publish_jobs as pj  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _clean():
+    job_cancel.unbind()  # a job bound by an earlier test in this worker must not leak in
     pacing.release_takeover()
     for key in list(pacing._TEACH_WAITING_JOBS):
         pacing.end_teach_wait(job_id=key)
