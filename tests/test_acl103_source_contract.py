@@ -133,7 +133,9 @@ def test_legacy_archive_additive_migration_preserves_history_and_unknown_units(m
     historic = rows[rows.Date == pd.Timestamp("2026-01-05")]
     assert historic["$ Spend"].sum() == 7 and len(historic) == 1
     info = bi_compare.provenance(frame=historic)
-    assert info["source"] == "Stats workbook" and info["currency_code"] == ""
+    # ACL-2204: старая строка без валюты — доллары по умолчанию; время/границы дня остаются неизвестными.
+    assert info["source"] == "Stats workbook" and info["currency_code"] == "USD" and info["currency_defaulted"]
+    assert info["assumed"] and "currency: USD (default)" in info["note"] and "currency: unknown" not in info["note"]
     with sqlite3.connect(path) as conn:
         assert conn.execute('SELECT "Date", "$ Spend", source FROM stats_rows WHERE "Date"=?',
                             ("2026-01-05",)).fetchone() == ("2026-01-05", 7, "workbook")
@@ -211,7 +213,8 @@ def test_warehouse_optional_metadata_is_select_only_and_never_guessed(monkeypatc
     if metadata_allowed:
         assert (info["currency_code"], info["timezone"], info["day_boundary"]) == ("EUR", "Europe/Berlin", "calendar_day")
     else:
-        assert info["currency_code"] == "" and info["timezone"] == "" and info["assumed"]
+        assert info["currency_code"] == "USD" and info["currency_defaulted"]
+        assert info["timezone"] == "" and info["assumed"] and "currency: unknown" not in info["note"]
 
 
 def test_old_api_display_sign_does_not_fabricate_an_iso_code(monkeypatch, tmp_path):
@@ -248,8 +251,8 @@ def test_source_metric_template_does_not_invent_usd(currency, label):
     assert "$" not in rendered
 
 
-@pytest.mark.parametrize("currency,label", [("EUR", "EUR 13"), ("", "currency unknown 13")])
-def test_actual_tree_source_money_keeps_known_and_unknown_units(monkeypatch, currency, label):
+@pytest.mark.parametrize("currency,label", [("EUR", "EUR 13"), ("", "$13")])
+def test_actual_tree_source_money_keeps_known_units_and_defaults_to_usd(monkeypatch, currency, label):
     from src.analysis_agent import bi_compare
     from tests.test_tree_attribution import _book
     frame = bi_compare.annotate_source(_book(), "bi")
@@ -257,9 +260,10 @@ def test_actual_tree_source_money_keeps_known_and_unknown_units(monkeypatch, cur
     monkeypatch.setattr(web, "get_cached_report", lambda: ({}, frame, []))
     monkeypatch.setattr(web, "workbook_alias_for", lambda *args: "FacebookX")
     body = json.loads(web.account_attribution("FacebookX", "Kuwait", "2026-09-02", "2026-09-04").body)
-    assert body["source"]["currency_code"] == currency
+    assert body["source"]["currency_code"] == (currency or "USD")
     assert body["campaigns"]["KW_camp_A"]["spend"] == label.replace("13", "190")
-    assert "$" not in json.dumps(body["campaigns"])
+    assert "currency unknown" not in json.dumps(body["campaigns"])
+    assert ("$" in json.dumps(body["campaigns"])) == (not currency)
 
 
 def test_template_units_are_request_local_and_account_display_is_separate():
@@ -298,7 +302,7 @@ def test_prebuilt_period_money_uses_earlier_unit_and_only_comparable_change(curr
     assert ">10</span>" in count and ">+100%</span>" in count
 
 
-@pytest.mark.parametrize("currency,expected", [("EUR", "EUR 13"), ("", "currency unknown 13")])
+@pytest.mark.parametrize("currency,expected", [("EUR", "EUR 13"), ("", "$13")])
 def test_available_account_uses_its_own_activity_window_units(monkeypatch, tmp_path, currency, expected):
     from src.web import account_links
     monkeypatch.setenv("BI_CURRENCY", currency)
@@ -315,4 +319,5 @@ def test_available_account_uses_its_own_activity_window_units(monkeypatch, tmp_p
     assert view["available"][0]["spend"] == 12.5
     shown = web.templates.env.get_template("_account_map_available.html").render(amap=view)
     assert f'{expected} in {view["activity_window"]["days"]}d' in shown
-    assert "$13" not in shown
+    assert "currency unknown" not in shown
+    assert ("$13" in shown) == (not currency)

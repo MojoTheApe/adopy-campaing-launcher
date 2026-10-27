@@ -272,6 +272,37 @@ def forget_background_error() -> Optional[str]:
         return error
 
 
+def entry_source_key():
+    """Source key of the report now in memory (what the last build was made from)."""
+    entry = _CACHE["entry"]
+    return entry[0] if entry is not None else None
+
+
+def verified_source_key(timeout: float = 4.0):
+    """Current source key, asking BI for its revision if it is not known yet.
+
+    ACL-2207: after a restart the revision is unknown, and a stored page can
+    only be called current once it has been compared with it. The question goes
+    to BI in a helper thread so an unreachable server costs `timeout` seconds,
+    not the connect timeout; if it stays unknown the key is None, which the
+    caller must treat as "not verified". Never call on the event loop.
+    """
+    try:
+        if bi_stats.bi_enabled() and bi_stats.known_revision() is None:
+            worker = threading.Thread(
+                target=bi_stats.refresh_revision, name="acl-bi-revision-once", daemon=True
+            )
+            worker.start()
+            worker.join(timeout)
+        key = _current_key(_resolve_excel_path(None))
+    except Exception:  # noqa: BLE001 — no workbook path / BI settings: not verified
+        return None
+    # BI answered "unavailable": the revision is a placeholder, not a version.
+    if bi_stats.bi_enabled() and bi_stats.known_revision() in (None, "unavailable"):
+        return None
+    return key
+
+
 def cache_built_at() -> Optional[str]:
     return _CACHE["built_at"]
 

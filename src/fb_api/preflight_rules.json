@@ -113,7 +113,7 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or wait for manual placements (ACL-1772) to publish Facebook-only",
+      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or choose Manual Facebook-only placements",
       "id": "instagram_identity",
       "label": "Instagram account of the Page",
       "severity": "error",
@@ -548,6 +548,32 @@
       "severity": "error",
       "side": "client",
       "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": ".cb-adset-name"
+      },
+      "hint": "give every ad set of the campaign its own name",
+      "id": "adset_names_unique",
+      "label": "Ad set names are unique",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ""
+      },
+      "hint": "add an ad to the ad set or remove the ad set",
+      "id": "adset_has_ads",
+      "label": "Every ad set has an ad",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
     },
     {
       "applies": "always",

@@ -471,11 +471,11 @@ def test_bi_figures_keep_unknown_metadata_until_it_is_actually_supplied(monkeypa
     monkeypatch.delenv("BI_ASSUMPTIONS_CONFIRMED", raising=False)
     monkeypatch.delenv("BI_CURRENCY", raising=False)
     info = bi_compare.provenance("bi")
-    assert info["currency"] == "unknown" and info["assumed"] is True
+    assert info["currency"] == "USD" and info["assumed"] is True  # ACL-2204: USD по умолчанию
     assert info["timezone"] == "" and info["day_boundary"] == ""
-    assert "unknown" in info["note"] and "day boundary" in info["note"]
+    assert "currency: unknown" not in info["note"] and "time zone: unknown" in info["note"] and "day boundary" in info["note"]
     monkeypatch.setenv("BI_ASSUMPTIONS_CONFIRMED", "1")
-    assert bi_compare.provenance("bi")["currency"] == "unknown", "a flag cannot invent source facts"
+    assert bi_compare.provenance("bi")["currency_defaulted"], "a flag cannot invent source facts"
     monkeypatch.setenv("BI_CURRENCY", "eur")
     monkeypatch.setenv("BI_TIMEZONE", "Europe/Berlin")
     monkeypatch.setenv("BI_DAY_BOUNDARY", "calendar_day")

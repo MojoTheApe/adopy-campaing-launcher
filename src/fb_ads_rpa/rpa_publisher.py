@@ -159,6 +159,11 @@ class RpaPublisher:
                 account_label=account_label,
                 preview_mode=preview_mode,
             )
+            # ACL-1768: робот ведёт один набор (`ad_sets[0]`); остальные не отбрасываем молча.
+            for d in drafts:
+                if len(getattr(d, "ad_sets", None) or []) > 1:
+                    d.errors.append("Several ad sets need the API backend: the RPA backend builds "
+                                    "one ad set per campaign")
         self._built_at = time.monotonic()
         if not preview_mode and any(getattr(d, 'page_provided', False) and not d.errors for d in drafts):
             from src.web.account_pages import read_pages, resolve_selection, validate_profile_page

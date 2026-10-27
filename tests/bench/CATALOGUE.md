@@ -6,12 +6,14 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**25 robot steps × 123 layouts, 68 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**27 robot steps × 125 layouts, 70 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
 | Step | Layouts | pass | xfail | reference |
 | --- | --- | --- | --- | --- |
+| Graph creative video identity readback | 1 | 1 | 0 | 0 |
+| Graph owned-tab browser context | 1 | 1 | 0 | 0 |
 | Graph reconciliation after CDP session detachment | 1 | 1 | 0 | 0 |
 | objective | 5 | 5 | 0 | 0 |
 | simple_create_layout | 2 | 2 | 0 | 0 |
@@ -37,6 +39,22 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 | ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 | Graph read permission diagnostics (ACL-1886) | 1 | 1 | 0 | 0 |
+
+## Graph creative video identity readback
+
+Robot: CampaignCreator readback (ACL-2224)
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Creative returns per-ad video copies with different IDs and matching deterministic file titles | anonymized owner creation readback 2026-10-26 | `fb_api_video_identity_2026_10_26.json` | `tests/test_acl2224_video_identity.py` | Verified content and correct placements pass despite different IDs; wrong/missing content, missing binding and swapped placement remain blocked; IDs retained as diagnostics | pass |
+
+## Graph owned-tab browser context
+
+Robot: PageTab.open and owned navigation (ACL-2217)
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Existing Ads Manager tab loads while new automatic tab reports SSL navigation failure | anonymized owner differential 2026-10-26 | `fb_api_owned_context_2026_10_26.json` | `tests/test_acl2217_owned_context.py` | real owned-tab call site preserves synthetic unique context; ambiguous discovery stops before target creation; live cause remains pending | pass |
 
 ## Graph reconciliation after CDP session detachment
 

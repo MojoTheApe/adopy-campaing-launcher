@@ -1,5 +1,122 @@
 # System history
 
+## ACL-2228 — Expose bounded native Windows acceptance task phases — 2026-10-27
+
+The ACL-1309 native task controller now flushes fixed phases around COM boundaries,
+including separate instance GUID/state reads, using the existing redacted 30-second
+controller. A primary failure retains its own phase when owned cleanup also fails;
+all existing cleanup remains attempted. Portable contracts verify observability,
+redaction and preserved completion/instance assertions. This diagnoses an unknown
+native hang; it does not establish a COM repair or waive Windows acceptance.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1228).
+
+## ACL-2224 — Verify creative video content when returned IDs differ — 2026-10-26
+
+Video readback accepts a different returned video ID only when that video's deterministic title matches the requested file fingerprint. Both single-video and main/Stories/Reels asset-feed paths use the same check. Missing/unreadable or wrong content, missing slot binding, incorrect placement, object tags and creative/ad IDs remain guarded; image hashes are unchanged. Uploaded and returned video IDs plus verification evidence stay in readback diagnostics. No extra API reads or writes. The original Doc123 capture had matching file titles and placements but different video IDs; a reuse-only success did not exercise that creation check. This is title-based application identity evidence, not a downloaded byte comparison. Existing live campaigns were not recreated for this fix.
+
+
+## ACL-2217 — Preserve the profile context for owned Graph tabs — 2026-10-26
+
+- Owned Graph tabs inherit a uniquely identified profile browser context; ambiguous or failed discovery stops before opening a tab. Context telemetry contains only a mode and page count. The reported live SSL differential still requires verification on the affected profiles.
+
+## ACL-2124 — Keep header controls accessible with Builder open — 2026-10-26
+
+Builder starts below the actual header and follows wrapping, window resizing and page scrolling. Date range, buyer, theme and Refresh remain reachable with the drawer open; the calendar appears above the drawer. Existing drawer state and width controls stay intact.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1124).
+
+## ACL-1772 — Per-ad-set placement editor — 2026-10-26
+
+Builder now saves Advantage+ or Manual Facebook/Instagram positions independently for every ad set, including copies, reloads and returning from Advantage+ to the saved manual choice. Existing drafts retain the previous seven manual positions. Selected positions reach API targeting and per-ad-set readback; Facebook-only no longer requires an Instagram identity. Manual Facebook Feed supports Desktop, subject to the existing OS rules. Stories/Reels without a separate vertical file warn instead of blocking; Feed-only avoids the vertical warning. RPA refuses saved custom placement fields and disables the editor.
+
+Two-file mapping keeps only the selected supported positions. The current app mapping explicitly refuses pairs with Advantage+ or only one placement family before writes; the draft files remain intact. Unknown placements refuse before writes. Campaign PAUSED / child ACTIVE guard is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/772).
+
+Campaign placement readback expects ENABLED only when every ad set has automatic positions and unrestricted device platforms. Manual positions or a mobile/device OS restriction keep DISABLED as the expected aggregate, including mixed sets; the same device-platform helper constructs targeting and determines that expectation. Exact per-ad-set targeting checks remain mandatory. Missing state stays visibly unverified; contradictory, unknown or empty values remain mismatches. This follows Meta's [automation criteria](https://developers.facebook.com/docs/marketing-api/advantage-campaigns/) and [placement/device targeting reference](https://developers.facebook.com/docs/marketing-api/audiences/reference/placement-targeting/).
+
+Facebook Stories requires Facebook Feed or Instagram Stories. Invalid combinations refuse before writes and show an inline reason without changing saved choices. A valid Stories combination without a vertical file still only warns. RPA refuses explicitly provided placement payloads even when parsed as falsey values, while omitted/blank legacy fields remain compatible.
+
+## ACL-2211 — Consistent creative media selection — 2026-10-26
+
+Restored creative fields show the actual saved file, including legacy drafts with blank or stale display text. Clearing a selection remains effective after reload. Selecting the same file for Main and Stories / Reels uses the existing single-asset path with a visible warning; distinct media pairs retain their validation and placement rules.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1211).
+
+## ACL-2206 — Creator: re-read the ACL tag before stopping with label_missing — 2026-10-26
+
+Meta sometimes shows the ACL tag on a freshly created object late (Doc120 creative 26.10, Doc122 22.10, Doc120 18.10), so the run stopped with "did not keep the ACL tag" although the tag was there. `CampaignCreator._verify_label` now re-reads the object up to 3 times (pauses 2 s, 4 s, 6 s through `self.sleep`; GET only, no write is repeated) and stops with the same refusal only if the tag never shows up. The re-reads go through the Graph client and count against the call budget (a late tag costs up to 3 extra calls on that object; the 150-call ceiling still stops loudly).
+Known follow-up: a creative left without a visible tag stays "not ours" (`_find_creative` needs name + tag), so a retry creates a new one. Durable recovery and the resulting duplicate-creative risk remain a separate follow-up; `_find_creative` is not changed here.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1206).
+
+## ACL-2207 — Dashboard keeps the last finished report on disk — 2026-10-26
+
+After a restart the dashboard used to show an empty "getting ready" screen for minutes. It now shows the last finished page at once, marked "From cache, refreshing…", and swaps in the live report when the rebuild is done. If the code, the data (BI revision / stats workbook) or the settings that change numbers (currencies, timezones, hidden accounts, account map) differ from when the page was saved, it is shown with a red OUTDATED marker that says why. A failed rebuild keeps the saved page and shows the error. The page is stored as checksummed gzip JSON in `%LOCALAPPDATA%\ACL\report_cache` (14 days, 12 views, 150 MB; `ACL_REPORT_DISK_CACHE=0` turns it off).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1207).
+Rendering is pinned to the manager selected when the view was requested. Switching managers while the report waits for a worker or is being rendered cannot save another manager's numbers under the original view key; ordinary requests still see the saved machine selection.
+
+## ACL-1920 — Check plan skips optional targeting lookups that Meta refuses and names them — 2026-10-26
+
+On the API backend, "Check plan" no longer fails for the whole campaign when Meta answers
+"Permission Denied" (Graph code 10, also 200-299 such as 294) to ONE optional targeting lookup.
+Built on top of the ACL-1771 resolver: exact-or-explicit-candidate matching, the confirmed-pick
+store, the read budget and the SearchCache are unchanged.
+
+Rule (optional vs required):
+
+- **Optional** (a refusal is skipped for the rest of the job, with no retry, and shown as an English
+  warning naming the lookup): the exact-name interest check (`adinterestvalid`; interests then match
+  through the `adinterest` search), behaviors (`adTargetingCategory`), work positions and employers
+  (`adworkposition`, `adworkemployer`), education schools and majors (`adeducationschool`,
+  `adeducationmajor`). Every page consumed before a permission refusal, including the refused page, still counts against the read budget.
+- **Required** (a refusal still fails Check plan, and the message names the search, e.g.
+  "(search: adinterest)"): `adinterest`, `adgeolocation`, `adlocale`. Other Graph errors, rate limits
+  and stops are never treated as a skippable refusal.
+- A term the user typed is never silently dropped: if it is not found in a working lookup and a lookup
+  that could have matched it was refused, it stays unresolved with the reason "Meta refused the … lookup
+  … so the term could not be checked there", and Publish stays blocked. A close candidate is still only
+  a "picked X for Y?" question. Confirmed interest picks that cannot be re-checked because
+  `adinterestvalid` was refused are kept and flagged with a warning.
+
+Check plan stays read-only. The warning is shown in the plan warnings and on the
+"Detailed targeting found in Meta" audit row (status warning, not blocking).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/920).
+
+## ACL-2204 — BI and stats workbook money figures show $ by default — 2026-10-26
+
+Owner decision: BI and stats-workbook money figures are USD when the source declares no currency. Home "You vs Others", country and account rows now show `$` instead of "currency unknown", and the yellow source notice reads "currency: USD (default)" (time zone and day boundary stay unknown when undeclared). An explicit `BI_CURRENCY` / `STATS_CURRENCY` still wins; rows declaring different currencies stay unknown and are never merged; per-account Meta reads with an empty currency keep their wording. Docs: ACL-103 "Currency and day boundary (103e)".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1204).
+
+## ACL-1903 — Builder: clearing a file box removes the file from the plan — 2026-10-26
+
+- The "File" and "Stories / Reels file" boxes of an ad are search inputs; the chosen file lives in a hidden
+  field that the plan, the pre-flight audit and the server read. Erasing the text used to leave the old file
+  there: the box looked empty but publish still uploaded it (live on TEST9095, 2026-10-14).
+- Now any edit that makes the text differ from the chosen file (including an empty box) clears the choice,
+  for the main file and for the Stories / Reels file. Picking again works as before.
+- Text put by code (filling a creative from another screen) also drops a previous choice that does not match.
+  Values placed as a whole pair (Send-to-Builder, Duplicate ad) are copied as they are; the Stories / Reels
+  prefill from the `_story` partner (ACL-1774) happens only when a main file is picked, so a cleared box stays cleared.
+- Ctrl+Z after clearing puts the file name back in the box; the choice comes back with it, so the box never looks filled while the plan has no file.
+- Regression browser test: `tests/test_acl1903_builder_file_clear_browser.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/903).
+
+## ACL-1768 — Builder: several ad sets in one campaign — 2026-10-25
+
+A campaign now holds several ad sets (up to 10) with explicit ad set indexes in the builder slots and `CampaignDraft.ad_sets[n]`; slots are no longer merged by name into one ad set. Audience, devices, languages, start time and pixel are per ad set; budget stays on the campaign (CBO). The API plan checks unique ad set names and that every ad set has ads, and sizes the call budget from the plan. Old local drafts load as one ad set. The ad set buttons sit in the picker row as compact chips (ACL-2020). RPA-backend behaviour is out of scope (owner decision 2026-10-25).
+The call budget of a campaign now includes a reserve for the targeting reads of all ad sets, and large-video chunks plus the writes of every ad set are checked against it before the first write. Check plan reports the unconfirmed targeting terms of all ad sets at once. An ad set's own pixel is checked even if the account lists no pixels. Note: an older page (draft version 3) does not open version 4 drafts, so a draft saved with several ad sets disappears if an older build is opened against the same draft store.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/768).
+
+## ACL-1175 — Setup guide for a new manager, shipped with the installer — 2026-10-25
+
+New `docs/SETUP-NEW-PC.md`, rendered to `setup-guide.html` at build time and shipped
+inside the installer (Start-menu shortcut, last installer page, wizard button). It
+covers install, first-run setup, Connect Multilogin, Update, and a table of every
+message the wizard, Connect and the Update button can show. Brought up to date with
+current main: port fallback (9090-9109), prefilled Stats workbook, "Did you mean" name
+hint, and rows for each Update-button failure (checked by `test_setup_guide.py`).
+Per the owner decision of 2026-10-25, the guide inside the installer meets the reach
+criterion; publishing it as a Release asset is ACL-2035. The live pass by a new
+manager happens after release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/175).
+
 ## ACL-2197 — Builder keeps the Instant Form source (existing form or template) after a page reload — 2026-10-26
 
 After a reload an ad whose Instant Form comes from a template fell back to "Use existing form", the template
