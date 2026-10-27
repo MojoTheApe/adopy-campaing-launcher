@@ -6,13 +6,12 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**28 robot steps × 126 layouts, 71 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**27 robot steps × 125 layouts, 70 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
 | Step | Layouts | pass | xfail | reference |
 | --- | --- | --- | --- | --- |
-| Shared profile connection lifecycle | 1 | 1 | 0 | 0 |
 | Graph creative video identity readback | 1 | 1 | 0 | 0 |
 | Graph owned-tab browser context | 1 | 1 | 0 | 0 |
 | Graph reconciliation after CDP session detachment | 1 | 1 | 0 | 0 |
@@ -40,14 +39,6 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 | ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 | Graph read permission diagnostics (ACL-1886) | 1 | 1 | 0 | 0 |
-
-## Shared profile connection lifecycle
-
-Robot: Read/Check/Publish preparation and WarmRegistry (ACL-2092)
-
-| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
-| --- | --- | --- | --- | --- | --- |
-| Repeated checks reuse one healthy owned tab; unresponsive preparation and transient GET have bounded recovery | anonymized owner report 2026-10-27; synthetic minimized state fixture | `fb_api_connection_lifecycle_2026_10_27.json` | `tests/test_acl2092_connection_lifecycle.py` | One owned target for repeated reads; explicit leased manual restart; one tab replacement/read retry; no sent Meta write replay | pass |
 
 ## Graph creative video identity readback
 

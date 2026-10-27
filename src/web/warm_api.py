@@ -112,7 +112,7 @@ def _job_view(job: dict) -> dict:
     return {k: v for k, v in job.items() if not k.startswith("_")}
 
 
-def start_open(labels: Any, confirm_reopen: bool = False) -> tuple[dict, int]:
+def start_open(labels: Any) -> tuple[dict, int]:
     """Запустить профили выбранных аккаунтов «на сегодня» фоновым заданием."""
     refused = _guard()
     if refused:
@@ -134,11 +134,11 @@ def start_open(labels: Any, confirm_reopen: bool = False) -> tuple[dict, int]:
         _ACTIVE_JOB = job_id
         for old in sorted(_JOBS, key=lambda j: _JOBS[j]["started"])[:-10]:
             _JOBS.pop(old, None)
-    threading.Thread(target=_run_open, args=(job_id, labels, confirm_reopen), daemon=True, name="acl-warm-open").start()
+    threading.Thread(target=_run_open, args=(job_id, labels), daemon=True, name="acl-warm-open").start()
     return _job_view(job), 202
 
 
-def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> None:
+def _run_open(job_id: str, labels: list[str]) -> None:
     global _ACTIVE_JOB
     reg = _registry()
     items: list[tuple[str, Any]] = []
@@ -153,9 +153,7 @@ def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> N
         else:
             items.append((label, entry))
     try:
-        from src.fb_api.connection import confirmed_reopen
-        with confirmed_reopen(confirm_reopen):
-            reg.open_many(items, job_id=job_id, on_result=lambda l, r: _set_result(job_id, l, r))
+        reg.open_many(items, job_id=job_id, on_result=lambda l, r: _set_result(job_id, l, r))
     except Exception:  # noqa: BLE001 — задание не должно умереть молча
         log.exception("Opening profiles failed")
     finally:
@@ -212,29 +210,3 @@ def close_profiles(labels: Any, confirm: bool) -> tuple[dict, int]:
             log.exception("Closing the profile of %s failed", label)
             results[label] = {"ok": False, "code": "error", "message": f"{type(exc).__name__}"}
     return {"results": results}, 200
-
-
-def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,int]:
-    """Prepare only the physical profile; the original read/write action has not started."""
-    refused = _guard()
-    if refused:
-        return refused
-    from src.fb_api.connection import prepare_existing,confirmed_reopen,may_reopen_manual
-    from src.fb_ads_rpa.operations import profile_lock
-    entry = _entry(label)
-    if entry is None:
-        return {"ok":False,"account":label,"code":"not_in_map","error":"Unknown account"},400
-    try:
-        with profile_lock(entry.profile_id).holding(timeout=0), confirmed_reopen(confirm_reopen):
-            reg = _registry()
-            kind,_ = reg._scan([entry.profile_id]).get(entry.profile_id,("unknown",None))
-            if kind == "no_port":
-                if not may_reopen_manual():
-                    return {"ok":False,"account":label,"code":"open_by_hand"},409
-                result = reg.open_one(label,entry)
-                return {"account":label,**result},200 if result.get("ok") else 409
-            prepare_existing(reg,entry,label)
-        return {"ok":True,"account":label},200
-    except Exception as exc:
-        from src.fb_api.telemetry import scrub
-        return {"ok":False,"account":label,"error":scrub(str(exc)),"code":getattr(exc,"code","") or "connection"},409

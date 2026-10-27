@@ -41,7 +41,6 @@ const calls = [];
 const fakeFetch = async (url, init) => {
   calls.push({ url: String(url), init: init || {} });
   if (NET === 'fail') throw new TypeError('Failed to fetch');
-  if (NET === 'hang') return new Promise(() => {});
   const body = JSON.stringify({ data: [{ id: 'act_1', leak: TOKENV }],
     paging: { next: 'https://graph.facebook.com/v22.0/act_1/campaigns?access_token=' + TOKENV } });
   return { status: 200, text: async () => body,
@@ -232,12 +231,3 @@ def test_helper_takes_token_from_the_graph_hosts(url, expected):
     host, version = expected
     assert out["before"]["has_token"] is True, url
     assert out["before"]["graph_host"] == host and out["before"]["version"] == version
-
-
-def test_read_deadline_aborts_a_hanging_network_request(monkeypatch):
-    # Execute the actual page helper, not a Python stand-in for browser fetch.
-    monkeypatch.setattr(sys.modules[__name__], "_HARNESS", _HARNESS.replace(
-        "method: 'GET',", "timeout_ms: 25, method: 'GET',"))
-    out = _run(resources=[GRAPH_WITH_TOKEN], net="hang")
-    assert out["got"]["error"] == "network_timeout"
-    assert out["fetch_count"] == 1

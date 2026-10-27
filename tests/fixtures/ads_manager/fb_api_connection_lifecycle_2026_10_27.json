@@ -1,8 +1,0 @@
-{
-  "source": "Minimized synthetic representation of owner-observed repeated Check and unresponsive owned Ads Manager tab, 2026-10-27; no live identifiers or content",
-  "repeated_reads": 3,
-  "healthy_owned_targets": 1,
-  "network_error": "network_timeout",
-  "maximum_read_attempts": 2,
-  "meta_writes": 0
-}

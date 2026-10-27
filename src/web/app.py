@@ -6329,10 +6329,8 @@ async def publish_plan(request: Request) -> JSONResponse:
     country, account_label, slots = _parse_build_upload_form(form)
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
-    from src.fb_api.connection import confirmed_reopen
-    with confirmed_reopen((form.get("confirm_reopen") or "").strip() == "1"):
-        result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
-                                         country=country)
+    result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
+                                     country=country)
     return JSONResponse(result)
 
 
@@ -6496,41 +6494,8 @@ async def warm_open(request: Request) -> JSONResponse:
     from src.web import warm_api
 
     body = await _campaign_commands_body(request)
-    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"), body.get("confirm_reopen") is True)
+    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"))
     return JSONResponse(data, status_code=code)
-
-
-@app.post("/connection/prepare")
-async def connection_prepare(request: Request) -> JSONResponse:
-    from src.web import warm_api
-    body = await _campaign_commands_body(request)
-    data,code = await asyncio.to_thread(warm_api.prepare_connection,str(body.get("account") or ""),body.get("confirm_reopen") is True)
-    return JSONResponse(data,status_code=code)
-
-
-@app.get("/warm/settings")
-async def connection_settings_read() -> JSONResponse:
-    from src.web import warm_api
-    from src.fb_api.connection import settings
-    refused = warm_api._guard()
-    if refused:
-        return JSONResponse(refused[0],status_code=refused[1])
-    return JSONResponse(settings())
-
-
-@app.post("/warm/settings")
-async def connection_settings_write(request: Request) -> JSONResponse:
-    from src.web import warm_api
-    from src.fb_api.connection import save_settings
-    refused = warm_api._guard()
-    if refused:
-        return JSONResponse(refused[0],status_code=refused[1])
-    body = await _campaign_commands_body(request)
-    try:
-        data = await asyncio.to_thread(save_settings,body)
-    except ValueError as exc:
-        return JSONResponse({"error":str(exc)},status_code=400)
-    return JSONResponse(data)
 
 
 @app.get("/warm/job/{job_id}")

@@ -38,7 +38,6 @@
 from __future__ import annotations
 
 import json
-from contextvars import ContextVar
 import logging
 import os
 import random
@@ -54,8 +53,6 @@ from src.fb_api import profile as _fb_profile
 from src.fb_api import stop_log as _stop_log
 from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageFailed, PageUnresponsive
 from src.fb_api.telemetry import scrub
-
-_PREPARE_DEADLINE = ContextVar("acl_warm_prepare_deadline",default=None)
 
 log = logging.getLogger(__name__)
 
@@ -597,9 +594,6 @@ class WarmRegistry:
         if kind == "port" and port:
             return self._adopt(label, pid, int(port))
         if kind == "no_port":
-            from src.fb_api.connection import may_reopen_manual
-            if may_reopen_manual():
-                return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
         if kind == "closing":
             return _result(False, "The profile is closing; try again in a minute. Nothing was started.",
@@ -649,45 +643,6 @@ class WarmRegistry:
                        else "Already open with automation; kept warm.",
                        "started" if started else "already_open", started=started)
 
-    def _reopen_manual(self, label: str, entry: Any, *, job_id: str, cancelled) -> dict:
-        """Explicitly authorized, graceful restart under the physical profile lease."""
-        from src.fb_ads_rpa.operations import profile_lock
-        from src.fb_ads_rpa.profile_lease import ProfileLeaseError
-        pid = entry.profile_id.strip()
-        try:
-            with profile_lock(pid):
-                if pid in self._foreign:
-                    return _result(False, "Another dashboard owns this profile; nothing was changed.", "other_dashboard")
-                sess = self.session(pid)
-                queue = self._slot_queue()
-                from src.fb_ads_rpa.run_telemetry import current_job_id
-                if (sess is not None and sess.owner) or pid in self.gate.active() or (queue is not None and queue.others_on(pid,current_job_id())):
-                    return _result(False, "An action is using this profile; nothing was changed.", "busy")
-                kind, port = self._scan([pid]).get(pid,("unknown",None))
-                if kind == "port" and port:
-                    return self._adopt(label,pid,int(port))
-                if kind != "no_port" or cancelled():
-                    return _result(False, "The profile state changed; nothing was stopped.", "profile_changed")
-                if self._close_window is None:
-                    return _result(False, "Graceful profile closing is unavailable.", "no_closer")
-                try:
-                    closed = self._close_window(entry,label)
-                except Exception as exc:
-                    self._stops.record(pid)
-                    return _result(False, f"Multilogin could not close the profile: {scrub(str(exc))}", "stop_failed")
-                if closed == "still_running" or self._scan([pid]).get(pid,("unknown",None))[0] != "none":
-                    self._stops.record(pid)
-                    return _result(False, "Multilogin has not finished closing the profile; no start was sent.", "stop_failed")
-                self._forget(pid,stopped=True)
-                why = _stop_log.wait_or_refusal(pid,self._stops,cancelled=cancelled,sleep=self._sleep)
-                if why:
-                    return _result(False,why,"restart_cooldown")
-                if cancelled():
-                    return _result(False,"Stopped before reopening the profile.","cancelled")
-                return self.open_one(label,entry,job_id=job_id,cancelled=cancelled)
-        except ProfileLeaseError as exc:
-            return _result(False,f"{exc} Nothing was changed.","profile_lease")
-
     def _adopt(self, label: str, pid: str, port: int) -> dict:
         """Профиль уже открыт с портом: берём в реестр, но не из-под чужого задания (S1, S2)."""
         with self._lock:
@@ -718,13 +673,9 @@ class WarmRegistry:
             except Exception:
                 log.exception("Could not cancel the pending close of %s", label)
             slot = getattr(prev, "slot_id", "") if prev is not None else ""
-            from src.fb_ads_rpa.run_telemetry import current_job_id
-            own_job = current_job_id()
-            excluded = tuple(x for x in (slot,own_job) if x)
-            excluded = excluded if len(excluded)>1 else (excluded[0] if excluded else "")
             try:
                 # Свой слот чтения исключаем: он держится до закрытия, и без этого окно льготы не усыновить.
-                if queue is not None and queue.others_on(pid, excluded):
+                if queue is not None and queue.others_on(pid, slot):
                     if prev is not None:
                         self._pending_restore(pid, prev)
                     return _result(False, "A job is using this profile right now. Try again after it finishes. "
@@ -944,13 +895,6 @@ class WarmRegistry:
                             "again (about 3 minutes after it closed).", "profile_closed")
         raise WarmError(f"The {sess.account} profile could not be checked on this machine.", "profile_unknown")
 
-    def _remaining(self, cap: float | None = None) -> float:
-        deadline = _PREPARE_DEADLINE.get()
-        left = 45.0 if deadline is None else deadline-self._mono()
-        if left <= 0:
-            raise PageFailed("Connection preparation timed out before the action was sent")
-        return min(left,cap) if cap is not None else left
-
     def _new_tab(self, sess: WarmSession) -> Any:
         if not sess.verified:
             self._verify_process(sess)
@@ -976,14 +920,12 @@ class WarmRegistry:
 
     def _fresh(self, sess: WarmSession, act: str, mode: str, make_graph: Callable[[Any], Any],
                timeout: float) -> tuple[Any, dict]:
-        self._remaining()
         tab = self._new_tab(sess)
-        self._remaining()
         graph = make_graph(tab)
         try:
             graph.install()
-            graph.navigate(act, timeout=self._remaining(30.0))
-            state = graph.wait_ready(timeout=self._remaining())
+            graph.navigate(act, timeout=60.0)
+            state = graph.wait_ready(timeout=timeout)
         except GraphStop as exc:
             if isinstance(exc, (LoggedOut, Checkpoint)):
                 self._note_login_stop(sess)
@@ -992,7 +934,6 @@ class WarmRegistry:
             self._drop_tab(sess)
             raise
         self._raise_for_state(sess, state)
-        self._remaining()
         sess.graphs = {mode: graph}
         sess.logged_out = False
         return graph, state
@@ -1043,19 +984,18 @@ class WarmRegistry:
             # Другой кабинет в том же профиле: одна загрузка Ads Manager нужного.
             try:
                 graph.install()
-                graph.navigate(act, timeout=self._remaining(30.0))
-                state = graph.wait_ready(timeout=self._remaining())
+                graph.navigate(act, timeout=60.0)
+                state = graph.wait_ready(timeout=timeout)
             except (LoggedOut, Checkpoint) as exc:
                 self._note_login_stop(sess)
                 raise exc
             except Exception:
                 return None
             self._raise_for_state(sess, state)
-            self._remaining()
             sess.graphs = {mode: graph}
             return graph, state
         try:
-            state = graph.live_state(timeout=self._remaining(5.0))
+            state = graph.live_state()
         except (LoggedOut, Checkpoint):
             self._note_login_stop(sess)
             raise
@@ -1065,45 +1005,21 @@ class WarmRegistry:
             self._raise_for_state(sess, state)
         if state.get("kind") != "ads_manager" or not state.get("has_token"):
             return None
-        self._remaining()
         sess.graphs[mode] = graph
         sess.logged_out = False
         return graph, state
 
     def _prepare(self, sess: WarmSession, act: str, mode: str,
                  make_graph: Callable[[Any], Any], timeout: float) -> tuple[Any, dict]:
-        """An absolute shared deadline covers CDP creation, reuse and one replacement."""
-        from src.fb_api.cdp import command_budget
-        budget = min(float(timeout),45.0)
-        token = _PREPARE_DEADLINE.set(self._mono()+budget)
-        try:
-            with command_budget(budget):
-                return self._prepare_owned(sess,act,mode,make_graph)
-        except GraphStop:
-            self._drop_tab(sess)
-            raise
-        finally:
-            _PREPARE_DEADLINE.reset(token)
-
-    def _prepare_owned(self,sess,act,mode,make_graph):
-        self._remaining()
-        had_tab = sess.tab is not None and not getattr(sess.tab,"closed",False)
-        if had_tab:
-            got = self._reuse(sess,act,mode,make_graph,self._remaining())
+        if sess.tab is not None and not getattr(sess.tab, "closed", False):
+            got = self._reuse(sess, act, mode, make_graph, timeout)
             if got is not None:
-                self._remaining()
                 return got
+            # Мёртвая или зависшая: заменяем РОВНО один раз.
+            log.info("warm: robot tab of %s is not usable; replacing it once", sess.account)
             self._drop_tab(sess)
             sess.verified = False
-        try:
-            return self._fresh(sess,act,mode,make_graph,self._remaining())
-        except PageUnresponsive:
-            self._drop_tab(sess)
-            if had_tab:
-                raise
-            self._remaining()
-            sess.verified = False
-            return self._fresh(sess,act,mode,make_graph,self._remaining())
+        return self._fresh(sess, act, mode, make_graph, timeout)
 
 
 # ───────────────────────── подставляемые части ─────────────────────────
