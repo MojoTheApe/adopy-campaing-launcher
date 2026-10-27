@@ -58,7 +58,11 @@ def test_header_controls_and_calendar_remain_clickable_across_drawer_layouts(bro
                     if opened:
                         bounds = p.locator('.cbd-root').bounding_box()
                         bottom = p.locator('header.page-header').evaluate('el => el.getBoundingClientRect().bottom')
-                        assert abs(bounds['y'] - bottom) <= 1, (label, bounds, bottom)
+                        # A wide docked layout reserves a separate lane; only
+                        # overlapping drawers need the header's vertical offset.
+                        header_right = p.locator('header.page-header').evaluate('el => el.getBoundingClientRect().right')
+                        expected_top = bottom if header_right > bounds['x'] + 1 else 0
+                        assert abs(bounds['y'] - expected_top) <= 1, (label, bounds, bottom)
                         assert abs(bounds['y'] + bounds['height'] - 900) <= 1, (label, bounds)
                         assert _hit(p.locator('#cbd-close'))['ok'], (label, 'close button blocked')
                     for selector in ('#period-btn', '#buyer-select', '#theme-toggle', '#dash-refresh-btn'):
@@ -76,7 +80,8 @@ def test_header_controls_and_calendar_remain_clickable_across_drawer_layouts(bro
                     assert results and all(results), (label, 'calendar blocked')
                     p.keyboard.press('Escape')
                     expect(p.locator('.amap-cal')).to_have_count(0)
-        # Длинный отчёт: уехавшая за экран шапка освобождает место ящику.
+        # Overlay layout: scrolling away and back restores the real header offset.
+        p.set_viewport_size({'width': 390, 'height': 900})
         p.evaluate("document.body.style.minHeight = '1800px'; scrollTo(0, 500)")
         p.wait_for_function("document.querySelector('.cbd-root').getBoundingClientRect().top === 0")
         p.evaluate('scrollTo(0, 0)')
