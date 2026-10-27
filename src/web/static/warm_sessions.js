@@ -93,6 +93,27 @@
     msg.className = 'warm-msg';
     bar.appendChild(open);
     bar.appendChild(close);
+    var policy = document.createElement('label');
+    var automatic = document.createElement('input');
+    automatic.type = 'checkbox';
+    automatic.className = 'warm-auto-reopen';
+    policy.appendChild(automatic);
+    policy.appendChild(document.createTextNode(' Reopen hand-opened profiles automatically on this computer'));
+    bar.appendChild(policy);
+    fetch('/warm/settings', {credentials: 'same-origin'}).then(function (r) { return r.json(); })
+      .then(function (v) { automatic.checked = v.auto_reopen_manual === true; }).catch(function () {});
+    automatic.addEventListener('change', function () {
+      var wanted = automatic.checked;
+      var confirmed = wanted ? window.aclConfirm('Allow this dashboard to close a hand-opened profile and reopen it for automation before an action?',
+        {title: 'Automatic profile recovery', okLabel: 'Allow on this computer'}) : Promise.resolve(true);
+      confirmed.then(function (yes) {
+        if (!yes) { automatic.checked = false; return; }
+        return post('/warm/settings', {auto_reopen_manual: wanted}).then(function (r) {
+          if (r.status >= 400) { automatic.checked = !wanted; say(grid, r.body.error || 'Could not save connection settings.', true); }
+          else document.querySelectorAll('.warm-auto-reopen').forEach(function (box) { box.checked = wanted; });
+        }).catch(function () { automatic.checked = !wanted; say(grid, 'Could not save connection settings.', true); });
+      });
+    });
     bar.appendChild(msg);
     grid.parentNode.insertBefore(bar, grid);
     return bar;
@@ -213,12 +234,12 @@
     m.classList.add('warm-bad');
   }
 
-  function runOpen(grid, labels) {
+  function runOpen(grid, labels, confirmedReopen) {
     if (!labels.length) { say(grid, 'Nothing to open.', true); return; }
     if (busy) return;   // второе «да» из очереди окон, пока идёт первое открытие
     setBusy(true);
     say(grid, 'Opening ' + labels.length + ' profile(s) one after another…', false);
-    post('/warm/open', { accounts: labels }).then(function (res) {
+    post('/warm/open', { accounts: labels, confirm_reopen: confirmedReopen === true }).then(function (res) {
       if (res.status >= 400 || !res.body.job_id) {
         say(grid, res.body.error || 'Could not start opening profiles.', true);
         setBusy(false);
@@ -242,6 +263,17 @@
         say(grid, s.ok + ' of ' + total + ' ready.' + (s.bad.length ? ' ' + s.bad.join(' · ') : ''),
             s.bad.length > 0 || s.stopped.length > 0);
         sayStopped(grid, s);
+        var hand = Object.keys(job.results || {}).filter(function (a) { return job.results[a].code === 'open_by_hand'; });
+        if (hand.length) {
+          var reopen = document.createElement('button');
+          reopen.type = 'button'; reopen.textContent = 'Reopen for automation';
+          reopen.addEventListener('click', function () {
+            window.aclConfirm('Close and reopen these profiles for automation: ' + hand.join(', '),
+              {title: 'Reopen for automation', okLabel: 'Reopen'})
+              .then(function (yes) { if (yes) runOpen(grid, hand, true); });
+          });
+          barOf(grid).querySelector('.warm-msg').appendChild(reopen);
+        }
         refresh();
       })
       .catch(function () { setBusy(false); say(grid, 'Lost the opening job; check the account rows.', true); });
