@@ -2451,6 +2451,9 @@ class CampaignCreator:
                     "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
                     "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
                     "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
+                    "link": (plan.link if ad.uses_feed else
+                             data.get("link") or (cta.get("value") or {}).get("link")),
+                    "placements": aset["targeting"],
                     "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
         return jobs
 

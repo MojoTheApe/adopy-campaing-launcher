@@ -7,6 +7,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 ## Components and current behavior
 
+- `campaign_bridge/meta_rules.py` carries the sourced ACL-2125 URL, Instant Form
+  CTA and conditional placement checks through the existing API pre-upload
+  adapter. [Coverage and limitations](META_RULE_COVERAGE.md) distinguish hard
+  bounds from recommendations and unknown eligibility. No live calls are added.
+
 - `scripts/acl_ci_minutes.py`: on-demand native Actions execution accounting with
   private GET snapshot replay, using one exact released standalone canonical
   accounting artifact with ACL defaults/privacy and no workflow-engine adoption.
