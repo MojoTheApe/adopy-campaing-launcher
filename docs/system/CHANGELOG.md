@@ -1,5 +1,19 @@
 # System history
 
+## ACL-2237 — Use the docked Builder lane height — 2026-10-27
+
+The docked Builder starts below the saved-report banner instead of leaving an
+unused header-sized region in its separate right lane. Overlapping layouts still
+start below the header so its controls and calendar remain accessible. Country
+headings and the account button wrap inside narrow campaign trees, including
+native scrollbar gutters. Stored drawer width and drafts are preserved.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1237).
+
+## ACL-2039 — Keep ad-set controls within the Builder editor — 2026-10-27
+
+The ad-set selector, action buttons and ad links now share one wrapping row in the Builder editor. Long generated set names stay within normal and resized drawers; actions and ad links remain compact chips. The full row stays aligned when space allows and wraps within narrow editors. Existing Ad N labels and draft restoration remain unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1039).
+
 ## ACL-2233 — Keep native child readiness independent of optional Scheduler state — 2026-10-27
 
 The two-standard-user Windows acceptances retain their real registered task and nonzero instance receipt, then use the existing child preparation and PID/identity proofs for readiness. They no longer synchronously read an unused running-instance State property that blocked two hosted runs after task launch. All native scenario assertions, standard-user constraints, status diagnostics, cleanup and budgets remain. The underlying Scheduler service cause is unproved; fresh full native acceptance is required.

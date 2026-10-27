@@ -254,7 +254,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
         # ACL-1768: все наборы кампании (adset_id - первый, как всегда).
         "adset_ids": list(outcome.adset_ids),
-        "creative_id": None,
+        "creative_id": outcome.creative_ids[0] if outcome.creative_ids else None,
+        "creative_ids": list(outcome.creative_ids),
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
         "error": error or None,
