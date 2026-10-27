@@ -190,7 +190,7 @@ def test_same_ad_with_unreadable_content_does_not_prove_absence(tmp_path):
 
 
 def test_anonymized_live_shape_retains_old_metadata_but_requires_same_content():
-    fixture = json.loads((Path(__file__).parent / "fixtures/meta/acl2231_retained_creative_label.json").read_text())
+    fixture = json.loads((Path(__file__).parent / "fixtures/ads_manager/acl2231_retained_creative_label.json").read_text())
     act, expected, actual = fixture["act"], fixture["expected"], fixture["actual"]
     assert recovery.same_ad(actual["name"], "Sample #1")
     assert recovery.complete(expected, actual) and recovery.matches(act, expected, actual)
