@@ -1,5 +1,66 @@
 # System history
 
+## ACL-2242 — Remove the Pause RPA button from the builder — 2026-10-27
+
+The campaign builder no longer shows the "Pause RPA" button and its `rpaTakeover` handler: publishing runs through the Graph API inside the profile and never reads the takeover flag, so the button did nothing for a publish. The `/rpa-takeover` backend and `pacing.py` stay because Teach mode still uses the takeover flag. "Stop the run" is unchanged. A test asserts the builder has no Pause RPA button.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1242).
+
+## ACL-2125 — sourced checks before API upload — 2026-10-27
+
+The Meta registry now checks the documented 1000-character destination URL
+maximum, the six Instant Form buttons, and the explicit right-hand-column
+restriction for Instant Forms using LEAD_GENERATION. The existing pre-upload
+adapter supplies the actual creative URL and targeting; refusals name the field
+and corrective action. Unused form website links, recommended copy lengths,
+unknown placements and website conversion combinations are preserved.
+
+See `docs/system/META_RULE_COVERAGE.md` for coverage and official sources.
+Verification uses synthetic Meta transports only; no profiles, campaigns or
+publication actions are performed.
+
+## ACL-1358 — Tokens in Windows protected storage — 2026-10-25
+
+Multilogin automation tokens (machine `.env`, stored as `dpapi:v1:...`) and the
+Google token files (`token_accounts.json`, `token_telemetry.json`, `ACLDPAPI1` header)
+are encrypted with Windows DPAPI for the current user. Plain files are protected
+once: encrypted backup in `protected-backup/`, verification, then replacement under a
+lock; a failure leaves the file untouched. The dashboard (`serve.py`, so the installed
+`ACL.exe` too) protects them about 15 seconds after its own `/health` first answers as the updater accepts it (app ACL, ok, this version), not
+at start, so an update that fails before it is healthy and is rolled back by the updater
+leaves plain files for the old version. Other entry points (`ensure_machine_config`,
+`acl_migrate_config`, scripts calling `load_env`) protect immediately. `load_env` decrypts
+into the process environment only. A value that cannot be opened (another Windows user) is
+dropped and the app asks to reconnect.
+
+Way back: before going to a version older than this one, stop the dashboard
+(`ACL.exe --stop-server`) and run `ACL.exe --unprotect-tokens` (source checkout:
+`python scripts/acl_migrate_config.py --unprotect`). A file that cannot be opened is
+restored from the newest encrypted backup; `--from-backup` forces that and puts back only
+the token lines of `.env`. A current version protects the tokens again on its next start.
+Last resort: reconnect Multilogin and sign in to Google again. The default
+`%LOCALAPPDATA%\ACL` is shared by all instances on the machine, so an older instance on the
+same folder (for example 9090/main) reads ciphertext once a current version has protected
+the tokens; give a test instance its own `ACL_CONFIG_DIR`. See `docs/runtime/DELIVERY.md`.
+`protected-backup/` is skipped by the config folder merge.
+
+No token value reaches Sentry, telemetry or a page capture: the scrubbers hide the
+machine's own token values (environment and token files, also from protected storage)
+in Sentry events, telemetry records, sheet rows, upload errors, capture `context.json`
+and fixtures cut by `capture_to_fixture.py`; tests cover each export plus the support
+bundle. Not done here: the Google telemetry scope question is split into ACL-2175
+(owner decision 2026-10-25); the baked-in `ACL_UPDATE_TOKEN` is treated as public and
+reviewed there. Needs a check on an installed app on Windows.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/358).
+
+Known secret values are also removed when they cross the size boundary of a
+telemetry diagnostic, page capture or support-log tail. Matching uses only the
+retained region plus a bounded known-value overlap; existing capture/log limits
+and cached secret collection remain in place.
+
+CI preflight assertions retain their expectations and collect only a bounded,
+synthetic audit-name/revision-match snapshot if they fail; successful browser
+scenarios perform no added DOM read or wait.
+
 ## ACL-2237 — Use the docked Builder lane height — 2026-10-27
 
 The docked Builder starts below the saved-report banner instead of leaving an

@@ -792,5 +792,57 @@
     "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
     "checked_date": "2026-10-21",
     "note": "Live check 2026-10-20/21 on a new-layout test account (not stated on a docs page): the new layout applies to Advantage+ leads campaigns (advantage_state=ADVANTAGE_PLUS_LEADS); non-Advantage+ Leads campaigns created via API still accept classic publisher_platforms. Source URL is the related value-rules page."
+  },
+  {
+    "id": "acl2125.destination_url.max_length",
+    "kind": "text_limit",
+    "applies_to": {
+      "field": "link"
+    },
+    "max_len": 1000,
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-creative/",
+    "checked_date": "2026-10-27",
+    "note": "Ad Creative: Maximum length of a URL is 1000 characters. Recommended title/body lengths are not hard limits and are not enforced."
+  },
+  {
+    "id": "acl2125.cta.instant_form",
+    "kind": "cta_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_LEADS",
+      "destination_type": "ON_AD",
+      "optimization_goal": [
+        "LEAD_GENERATION",
+        "QUALITY_LEAD"
+      ]
+    },
+    "allowed": [
+      "APPLY_NOW",
+      "DOWNLOAD",
+      "GET_QUOTE",
+      "LEARN_MORE",
+      "SIGN_UP",
+      "SUBSCRIBE"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/guides/lead-ads/create",
+    "checked_date": "2026-10-27",
+    "note": "Lead Ads/create explicitly specifies OUTCOME_LEADS and these six link_data.call_to_action values. Applies to Instant Forms, not website conversion campaigns. Same values as write_policy.CTA_FORM."
+  },
+  {
+    "id": "acl2125.placements.instant_form.no_rhc",
+    "kind": "placements_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_LEADS",
+      "destination_type": "ON_AD",
+      "optimization_goal": "LEAD_GENERATION"
+    },
+    "disallowed": [
+      "facebook.right_hand_column"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-campaign-group#placement",
+    "checked_date": "2026-10-27",
+    "note": "Objective and Placements explicitly prohibits right_hand_column for LEAD_GENERATION Page post ads. Scoped to the equivalent explicitly documented OUTCOME_LEADS Instant Form goal/destination, not all Leads. This is a narrow prohibition, not a complete list: unlisted/new placements remain unknown. No automatic/manual or account-control rules duplicate ACL-2052."
   }
 ]
