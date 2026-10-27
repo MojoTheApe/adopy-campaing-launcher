@@ -1,5 +1,55 @@
 # System history
 
+## ACL-2237 — Use the docked Builder lane height — 2026-10-27
+
+The docked Builder starts below the saved-report banner instead of leaving an
+unused header-sized region in its separate right lane. Overlapping layouts still
+start below the header so its controls and calendar remain accessible. Country
+headings and the account button wrap inside narrow campaign trees, including
+native scrollbar gutters. Stored drawer width and drafts are preserved.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1237).
+
+## ACL-2039 — Keep ad-set controls within the Builder editor — 2026-10-27
+
+The ad-set selector, action buttons and ad links now share one wrapping row in the Builder editor. Long generated set names stay within normal and resized drawers; actions and ad links remain compact chips. The full row stays aligned when space allows and wraps within narrow editors. Existing Ad N labels and draft restoration remain unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1039).
+
+## ACL-2233 — Keep native child readiness independent of optional Scheduler state — 2026-10-27
+
+The two-standard-user Windows acceptances retain their real registered task and nonzero instance receipt, then use the existing child preparation and PID/identity proofs for readiness. They no longer synchronously read an unused running-instance State property that blocked two hosted runs after task launch. All native scenario assertions, standard-user constraints, status diagnostics, cleanup and budgets remain. The underlying Scheduler service cause is unproved; fresh full native acceptance is required.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1233).
+
+## ACL-1990 — Builder: pre-flight audit as topics, Check with Meta, "could not check" — 2026-10-23
+
+- The audit card shows seven topics instead of ~25 rows: Account & access, Audience & targeting,
+  Budget, Link & Instant Form, Creatives & texts, Names & duplicates, Meta plan check. Each rule
+  carries its `topic` in `preflight_rules.py`; the topic list is exported with the rules.
+- Topic status is the worst of its checks (error › warning › not checked › ok). A topic with an
+  error, a warning or a "Retry" opens by itself; a click opens or closes it and is remembered until
+  its status changes. A check inside still jumps to its field.
+- "Check with Meta" sits in a strip at the top of the card with what the last check found
+  ("Checked with Meta at …", "Edited since the check", "Could not check: …"). While it runs it says
+  that the Multilogin profile is being opened (30 s – 3 min) and counts the elapsed time; the
+  drawer-foot "Check plan (no writes)" became "Check N campaigns with Meta" and counts time too.
+- `/publish-plan` returns `error_kind`: `not_checked` when the read session fails before any campaign
+  is checked (profile busy, connection reset, proxy sign-in, CDP timeout, rate limit), `account` for
+  an unavailable ad account, `plan` for a draft that cannot be built. `not_checked` shows as
+  "Could not check" with Retry in Meta plan check and no longer switches Publish off; the publish
+  job meets the same cause and reports it. `account` and `plan` still block.
+- A later campaign/session teardown failure preserves all completed campaign results and audit
+  verdicts. Campaigns left unfinished after a partial check remain blocking; a known invalid
+  local draft also stays blocking when the read session never starts. No check writes to Meta.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/990).
+
+## ACL-1907 — Language groups equal their Meta expansion — 2026-10-23
+
+Doc120 live finding: the API publish succeeded, but readback called the ad set languages a mismatch (expected 1002 "Spanish (All)", Meta returned 7 and 23), and a re-run stopped with "Existing ad set ... differs from the builder: languages". A locale group now equals the locales Meta expands it into, in readback and in the existing-object comparison. The members come from the same `adlocale` search result the resolver already reads (no hard-coded ids); a different language is still reported. If the search did not list the members, the comparison stays strict and the message says so. Read-only; no new writes.
+
+The 2026-10-24 follow-up requires the complete known expansion: a proper subset is a genuine mismatch in both readback and re-runs. It preserves unknown-member strict fallback and existing campaign-name collision handling, which leaves a differing earlier campaign and its ad sets unchanged. Two Doc120-number regressions cover the missing-member readback and re-run cases. No new Graph calls or writes are introduced.
+
+
+The 2026-10-27 continuation normally merged current main while retaining the existing TermResolver and locale-name behavior. All nine locale regressions and 613 affected API regressions pass; replacing the language helper with strict list comparison makes both original positive Doc120-number cases fail. Saved real test-dashboard records also show the exact Spanish group/full expansion and a same-plan rerun reusing the same campaigns and ad sets without new creations. Relevant locale functions and caller nodes match those tested compositions by normalized AST; private provenance remains in the handoff. No live calls or writes were repeated. Independent source review, new applicable CI and actual package delivery remain required; unrelated video-ID findings are not claimed fixed.
+
 ## ACL-2228 — Expose bounded native Windows acceptance task phases — 2026-10-27
 
 The ACL-1309 native task controller now flushes fixed phases around COM boundaries,
