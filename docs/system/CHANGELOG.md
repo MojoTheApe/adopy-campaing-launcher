@@ -1,5 +1,50 @@
 # System history
 
+## ACL-2249 — Accept the identical creative Meta returns on a repeated write — 2026-10-27
+
+When a creative is written again with the same content, Meta answers with the id of the existing identical creative, which still carries the tag of an earlier run; the run used to stop with "Meta did not keep the ACL tag". Now a creative just written whose row has an `acl-` tag of another run is accepted when `creative_recovery.matches` confirms account, Page, form and full requested content, with the warning "Meta returned an existing identical creative (tag of an earlier run)". Mismatching content or another account still stops, a creative found only by name or tag is never adopted, and the current tag is never written onto the shared creative.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1249).
+
+A resumed run of the same plan (for example after a failure on the ad write) accepts the same shared creative again: the local receipt is marked at acceptance and `matches` is re-checked on resume; a foreign-tag id from a receipt without that mark is still refused. The shared creative is reported as reused, not created.
+
+## ACL-2248 — BI and Stats workbook count days in Israel time by default — 2026-10-27
+
+Owner decision: BI and the Stats workbook use the time zone `Asia/Jerusalem` (IANA name, so summer time is handled) and the `calendar_day` boundary when the source declares neither. The yellow source notice now reads "time zone: Asia/Jerusalem (default); day boundary: calendar day (default)" and no longer says "Missing source metadata" for these two fields, so buyers need no machine `.env` keys. An explicit `BI_TIMEZONE` / `STATS_TIMEZONE` / `BI_DAY_BOUNDARY` / `STATS_DAY_BOUNDARY` or a `DATE_TIMEZONE` / `DAY_BOUNDARY` row value still wins; rows that declare different values stay unknown. The account's own time zone is still compared with the source's. Docs: ACL-103 "Currency and day boundary (103e)".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1248).
+
+## ACL-2092 — Shared connection preparation — 2026-10-27
+
+Read, Check and Publish reuse healthy managed tabs, apply bounded readiness and
+GET recovery, and support explicitly authorized graceful reopening of hand-opened
+profiles. Lost dashboard replies retain the original publication request ID. Publishing prepares the connection only on the API backend; RPA publishing goes
+straight to the job as before (an RPA `rpa_backend` answer never stops an action).
+A refused or unanswered preparation settles only that account as "Not submitted: <step>" without halting the batch; a profile busy with
+another operation (or a dashboard not bound to loopback) no longer fails Publish or reads before dispatch.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1092).
+
+## ACL-1816 — Local rules evaluation and event triggers — 2026-10-23
+
+Pure evaluation covers S1–S4 from supplied evidence, distinguishes matched,
+not-matched and blocked results, and refuses S5 or unsupported actions. Missing
+mapping, immature or insufficient outcomes, undefined ratios, target, manual hold,
+parent pause and cooldown retain their explicit reasons. Priority arbitration is
+deterministic: pause and scale-block decisions suppress related scaling, with one
+mutation suggestion per object and no duplicate proposals for unchanged evidence.
+
+A single queued worker runs after a new BI workbook, Evaluate now, or a completed
+human Read campaigns. It reads local workbook/inventory/goal data and writes local
+evaluation/suggestion journals; it never opens a profile, polls Meta or performs an
+advertising mutation. Observe records only, and Suggest creates proposals for a
+separate human command flow. Existing API/backend/loopback guards are preserved.
+
+The refreshed source preserves current main's visibility checks and the original
+asset-goal preservation fix. A confirmed human Undo now counts as an executed
+action for cooldown. Re-evaluation cannot immediately propose another pause after
+Undo, and an existing manual hold stays in force. Regression cases exercise the
+complete gather/evaluate/worker path with and without that hold.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/816).
+
 ## ACL-2242 — Remove the Pause RPA button from the builder — 2026-10-27
 
 The campaign builder no longer shows the "Pause RPA" button and its `rpaTakeover` handler: publishing runs through the Graph API inside the profile and never reads the takeover flag, so the button did nothing for a publish. The `/rpa-takeover` backend and `pacing.py` stay because Teach mode still uses the takeover flag. "Stop the run" is unchanged. A test asserts the builder has no Pause RPA button.
