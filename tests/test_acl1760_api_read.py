@@ -130,6 +130,10 @@ class FakeQueue:
 class World:
     def __init__(self, monkeypatch, tmp_path):
         self.mp = monkeypatch
+        # This legacy cold-path rig supplies its own profile opener. Managed reuse
+        # is exercised with a real WarmRegistry by ACL-2092, never a live MLX here.
+        from src.fb_api import connection
+        monkeypatch.setattr(connection, "prepare_existing", lambda *a: False)
         self.page = RoutedPage(routes())
         self.cdp = FakeCdp(self.page)
         self.queue = FakeQueue()

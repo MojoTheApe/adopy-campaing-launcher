@@ -10311,7 +10311,7 @@ function amapReadSpend(btn) {
   body.append('date_from', per.from);
   body.append('date_to', per.to);
   body.append('span', per.span);
-  fetch('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' })
+  (window.aclConnectionFetch || fetch)('/account-spend/read', { method: 'POST', body: body, credentials: 'same-origin' }, account)
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
@@ -10387,7 +10387,7 @@ function amapRunSplit(account, btn, per, batch) {
   body.append('span', per.span || '');
   /* ACL-1826: отдельная кнопка тоже шлёт id пачки (свою, если не из Read all). */
   body.append('batch', batch || 'rs-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
-  return fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
+  return (window.aclConnectionFetch || fetch)('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' }, account)
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.ok) throw new Error(j.error || 'refused');
@@ -17529,6 +17529,52 @@ function cbPfStore(form, data, revs) {
   });
 }
 
+/* Shared preparation runs before starting an original account action, never as a replay. */
+window.aclPrepareConnection = function (account) {
+  function prepare(confirmed) {
+    return fetch('/connection/prepare', {method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type':'application/json'}, body: JSON.stringify({account: account, confirm_reopen: confirmed})})
+      .then(function (r) { return r.json(); })
+      .catch(function () { throw new Error('the dashboard did not answer the connection check'); });
+  }
+  return prepare(false).then(function (data) {
+    if (data.code !== 'open_by_hand') return data;
+    return window.aclConfirm('Close the hand-opened Multilogin profile for ' + String(account)
+      + ' and reopen it for automation? The requested action will then continue.',
+      {title: 'Reopen for automation', okLabel: 'Reopen and continue'})
+      .then(function (yes) { return yes ? prepare(true) : {ok:false,error:'Profile reopening cancelled; the action was not started.'}; });
+  }).then(function (data) {
+    // RPA backend: nothing to prepare, never a reason to stop the original action.
+    if (data && data.code === 'rpa_backend') return {ok: true, skipped: 'rpa_backend'};
+    // Not an API-bound dashboard, or the profile is busy with another operation: the action
+    // itself (queue / duplicate answer / its own wait) deals with it as it did before preparation.
+    if (data && (data.code === 'not_loopback' || data.code === 'busy')) return {ok: true, skipped: data.code};
+    if (!data.ok) throw new Error(data.error || data.message || 'Connection preparation failed');
+    return data;
+  });
+};
+window.aclConnectionFetch = function (url, options, account) {
+  return window.aclPrepareConnection(account).then(function () { return fetch(url,options); });
+};
+
+/* ACL-2092: explicit per-action manual-profile recovery, then resume this Check once. */
+window.cbConnectionPlanFetch = function (fd) {
+  function send() {
+    return fetch('/publish-plan', {method: 'POST', body: fd}).then(function (r) { return r.json(); });
+  }
+  return send().then(function (data) {
+    if (!data || data.connection_code !== 'open_by_hand') return data;
+    return window.aclConfirm('Close the manually opened Multilogin profile for ' + String(data.account || '')
+      + ' and reopen it for automation? This Check will then continue. An active publication is never interrupted.',
+      {title: 'Reopen for automation', okLabel: 'Reopen and continue'})
+      .then(function (yes) {
+        if (!yes) return data;
+        fd.set('confirm_reopen', '1');
+        return send();
+      });
+  });
+};
+
 window.cbPreflightRun = function (form, slots) {
   var list = slots && slots.length ? slots : Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
   var revs = Object.create(null);
@@ -17539,8 +17585,7 @@ window.cbPreflightRun = function (form, slots) {
   cbPfRefresh();
   cbPfTick();
   var silent = { error: 'The dashboard did not answer', error_kind: 'not_checked' };
-  return fetch('/publish-plan', { method: 'POST', body: fd })
-    .then(function (r) { return r.json().catch(function () { return silent; }); })
+  return window.cbConnectionPlanFetch(fd)
     .catch(function () { return silent; })
     .then(function (data) {
       cbPfStore(form, data || {}, revs);
@@ -17867,7 +17912,7 @@ window.cbCheckPlan = function (picked, out, btn) {
   forms.forEach(function (x, i) {
     // ACL-1819: тот же запрос кладёт вердикты в карточку pre-flight audit (cbPreflightRun).
     (window.cbPreflightRun ? window.cbPreflightRun(x.form, x.only)
-      : fetch('/publish-plan', { method: 'POST', body: cbPlanFormData(x.form, x.only) }).then(function (r) { return r.json(); }))
+      : window.cbConnectionPlanFetch(cbPlanFormData(x.form, x.only)))
       .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
       .then(function (data) {
         if (!data.account) data.account = cbFormTitle(x.form);
@@ -18005,6 +18050,23 @@ function cbBusyError(why) {
   return err;
 }
 function cbPostPublish(fd) {
+  // Re-sending the same request must reach the server's idempotency lookup
+  // even while its original job holds the profile lease.
+  var key = typeof fd.get === 'function' ? fd.get('request_id') : '';
+  var prepared = window.CB_CONNECTION_PREPARED || (window.CB_CONNECTION_PREPARED = Object.create(null));
+  // Managed preparation exists only on the API backend; the RPA backend answers
+  // /connection/prepare with 409 rpa_backend, so an RPA submission goes straight on.
+  var apiPath = window.ACL_FB_BACKEND === 'api';
+  var prepare = !apiPath || (key && prepared[key]) ? Promise.resolve() :
+    (window.aclPrepareConnection ? window.aclPrepareConnection(fd.get('account_label')) : Promise.resolve());
+  // A refused or unanswered preparation means nothing was sent: say so for this account only.
+  prepare = prepare.catch(function (err) {
+    var stop = new Error('Not submitted: ' + String((err && err.message) || 'the connection could not be prepared'));
+    stop.cbNotSubmitted = true;
+    throw stop;
+  });
+  return prepare.then(function () {
+  if (key) prepared[key] = true;
   var ctl = (typeof AbortController === 'function' && typeof setTimeout === 'function')
     ? new AbortController() : null;
   var timer = ctl ? setTimeout(function () { ctl.abort(); }, CB_PUBLISH_TIMEOUT_MS) : null;
@@ -18019,6 +18081,7 @@ function cbPostPublish(fd) {
       done();
       throw cbBusyError(err && err.name === 'AbortError' ? 'No answer from the server' : 'The server did not answer');
     });
+  });
 }
 
 function cbNewRun(notify) {
@@ -18165,6 +18228,12 @@ function cbNewRun(notify) {
       .catch(function (err) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
         if (err && err.cbBusy) { offerRetry(e, fd, skipped, sentNames); return; }
+        if (err && err.cbNotSubmitted) {
+          // Preparation refused before any request left: only this account stops, the batch goes on.
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(err.message) + '</span>';
+          settle(e, { account: e.label, state: 'bad', why: err.message, skipped: skipped, key: e.key });
+          return;
+        }
         if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(err.message) + '</span>';
         halt(e, { account: e.label, state: 'bad', why: 'Submission outcome unknown: ' + err.message });
       });

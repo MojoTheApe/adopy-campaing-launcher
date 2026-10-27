@@ -15,6 +15,7 @@ Stop останавливает только своё задание; F5 воз�
 потери статуса остаётся прежняя подсказка «перезагрузите страницу»; сервер,
 не ответивший на отправку, даёт Retry с тем же ключом (ACL-1399).
 """
+import json
 import os
 import sys
 from pathlib import Path
@@ -76,6 +77,12 @@ def _route_for(html, state):
             f = fields(r.request)
             data = {'plan': [{'Campaign Name': f[f'camp_{i}_name'], 'errors': [], 'warnings': [], '_ads_raw': []}
                              for i in range(int(f['camp_count']))]}
+        elif path == '/connection/prepare' and r.request.method == 'POST':
+            body = json.loads(r.request.post_data or '{}')
+            state.setdefault('prepares', []).append(body['account'])
+            status, reply = state.get('prepare', {}).get(body['account'], (200, {'ok': True, 'account': body['account']}))
+            r.fulfill(status=status, json=reply)
+            return
         elif path == '/publish-jobs' and r.request.method == 'POST':
             f = fields(r.request)
             state['posts'].append(f)
@@ -575,3 +582,53 @@ def test_a_job_saved_with_its_country_keeps_only_that_country_busy(browser, two_
         assert not errors, errors
     finally:
         context.close()
+
+
+def _api_backend(page):
+    page.evaluate("window.ACL_FB_BACKEND = 'api'")
+
+
+def test_refused_preparation_stops_only_its_account_and_says_nothing_was_submitted(ui):
+    """API backend: a refused /connection/prepare means nothing was sent; other accounts go on."""
+    p, state = ui
+    _api_backend(p)
+    state['prepare'] = {'Demo': (409, {'ok': False, 'code': 'stop_failed', 'error': 'The profile could not be stopped'})}
+    add(p, 0)
+    add(p, 1)
+    ready(p)
+    press_publish(p, 0)
+    p.locator('#sfc-ok').click()
+    expect(panel(p, 0)).to_contain_text('Not submitted: The profile could not be stopped', timeout=6000)
+    assert state['posts'] == [], 'nothing may be sent after a refused preparation'
+    publish_one(p, state, 1)
+    assert [f['account_label'] for f in state['posts']] == ['Other']
+    assert state['prepares'] == ['Demo', 'Other']
+    assert 'outcome unknown' not in p.locator('body').inner_text()
+    assert 'status of another run' not in p.locator('body').inner_text()
+
+
+def test_lost_preparation_answer_is_not_submitted_and_not_unknown(ui):
+    p, state = ui
+    _api_backend(p)
+    add(p, 0)
+    ready(p)
+    p.route('**/connection/prepare', lambda r: r.abort())
+    press_publish(p, 0)
+    p.locator('#sfc-ok').click()
+    expect(panel(p, 0)).to_contain_text('Not submitted:', timeout=6000)
+    assert state['posts'] == []
+    assert 'outcome unknown' not in p.locator('body').inner_text()
+
+
+def test_busy_profile_does_not_block_publish_the_job_queues_itself(ui):
+    """ACL-1603: a profile held by a read must not fail Publish in pre-dispatch preparation."""
+    p, state = ui
+    _api_backend(p)
+    state['prepare'] = {'Demo': (200, {'ok': True, 'account': 'Demo', 'code': 'busy', 'skipped': True}),
+                        'Other': (409, {'ok': False, 'code': 'busy', 'error': 'This profile is in use; it was not restarted.'})}
+    add(p, 0)
+    add(p, 1)
+    ready(p)
+    publish_one(p, state, 0)
+    publish_one(p, state, 1)
+    assert [f['account_label'] for f in state['posts']] == ['Demo', 'Other']
