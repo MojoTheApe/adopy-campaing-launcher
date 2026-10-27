@@ -5,8 +5,9 @@ import json
 import os
 import platform
 import shutil
-import socket
+import sys
 import tempfile
+import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -185,7 +186,7 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
     )
 
 
-def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[ReadinessCheck]:
+def system_readiness(config_directory: str | Path) -> list[ReadinessCheck]:
     config_dir = Path(config_directory)
     checks: list[ReadinessCheck] = []
     windows_x64 = platform.system() == "Windows" and platform.machine().casefold() in {
@@ -214,14 +215,21 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
             f"{free_bytes // (1024 * 1024)} MB available",
         )
     )
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.5)
-        port_free = sock.connect_ex(("127.0.0.1", port)) != 0
+    # Занятый 9090 — не повод останавливать установку: там может работать
+    # дешборд соседа по машине или посторонняя программа, и лаунчер встанет
+    # рядом. Раньше здесь горел красный крестик, и второй человек на общей
+    # машине упирался в него на втором шаге (ACL-1309).
+    import local_dashboard
+
+    # Тот же порт, что займёт лаунчер, — но ничего не закрепляем: это проверка.
+    port = local_dashboard.choose_port(config_dir, remember=False)
+    first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
     checks.append(
         ReadinessCheck(
             "Local dashboard port",
-            port_free,
-            f"port {port} is {'available' if port_free else 'already in use'}",
+            port is not None,
+            f"port {port} is available" if port is not None
+            else f"ports {first}-{last} are all used by other applications",
         )
     )
     return checks
@@ -275,6 +283,27 @@ def enable_clipboard_shortcuts(widget, tk_module) -> None:
             menu.grab_release()
 
     widget.bind_all("<Button-3>", on_right_click, add="+")
+
+
+def setup_guide_path() -> Path:
+    """Страница установки (ACL-1175): в пакете — готовый HTML, из исходников — сам Markdown."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "setup-guide.html"
+    return Path(__file__).resolve().parents[2] / "docs" / "SETUP-NEW-PC.md"
+
+
+def open_setup_guide(opener: Callable[[str], bool] = webbrowser.open) -> str:
+    """Open the setup guide; return a message for the status line when it cannot be opened."""
+    path = setup_guide_path()
+    if not path.is_file():
+        return "The setup guide is missing from this installation. Ask Evgeni for the guide link."
+    try:
+        if opener(path.as_uri()):
+            return ""
+    except Exception:
+        pass
+    return f"Could not open the setup guide. Open this file yourself: {path}"
 
 
 def write_ready_state(config_directory: str | Path, version: str) -> None:
@@ -374,6 +403,9 @@ class SetupWizard:
             wraplength=500,
             justify="left",
         )
+        # ACL-1175: страница установки всегда в одном клике от любого шага —
+        # человек сверяет экран с текстом, не выходя из мастера.
+        tk.Button(self.footer, text="Setup guide", command=self._open_guide).pack(side="left", padx=(0, 12))
         self.status_label.pack(side="left", fill="x", expand=True)
         self.back_button = tk.Button(self.footer, text="Back", width=10, command=self._back)
         self.back_button.pack(side="right", padx=(8, 0))
@@ -429,6 +461,8 @@ class SetupWizard:
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
         )
         self._text("New versions are offered in the dashboard and installed only when you click Update.")
+        self._text("Step-by-step instructions, with what you should see at each step: click Setup guide below. "
+                   "It is also in Start → Adopy Campaign Launcher → Setup guide.")
 
     def _system(self) -> None:
         self.system_checks = system_readiness(self.config_directory)
@@ -505,6 +539,11 @@ class SetupWizard:
             text="Copy sanitized setup summary",
             command=self._copy_summary,
         ).pack(anchor="w", pady=10)
+
+    def _open_guide(self) -> None:
+        problem = open_setup_guide()
+        if problem:
+            self.status.set(problem)
 
     def _copy_summary(self) -> None:
         if not self.configuration:

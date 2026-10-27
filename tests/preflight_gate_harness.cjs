@@ -26,6 +26,8 @@ const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'fb_a
 function world(backend, fetchReply) {
   const log = { fetched: [], opened: [], proceeded: 0, alerts: [] };
   const w = { CB_PREFLIGHT_RULES: rules, ACL_FB_BACKEND: backend, alert: (m) => log.alerts.push(m) };
+  // ACL-141: страница говорит своим окном — та же запись.
+  w.aclAlert = (m) => { log.alerts.push(m); return Promise.resolve(); };
   const sandbox = {
     window: w, Object, Array, JSON, RegExp, Number, String, parseInt, isFinite, Promise, Date,
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
@@ -38,6 +40,7 @@ function world(backend, fetchReply) {
     },
     document: { querySelector: () => ({ disabled: false, title: '' }) },
     setTimeout,
+    aclAlert: (m) => w.aclAlert(m),
   };
   w.window = w;
   vm.createContext(sandbox);
@@ -51,7 +54,8 @@ function world(backend, fetchReply) {
       const a = slot._form._pfAudit, name = slot._name, hit = a && a.byName[name];
       const opts = { backend, server: null, stale: false };
       if (backend === 'api' && hit) {
-        opts.server = hit.audit || []; opts.planError = hit.error || ''; opts.accountAudit = hit.accountAudit || null;
+        opts.server = hit.audit || []; opts.planError = hit.error || ''; opts.planErrorKind = hit.errorKind || '';
+        opts.accountAudit = hit.accountAudit || null;
         opts.stale = hit.rev !== slot._rev;
       }
       return w.cbPreflight.lines(slot._input, opts);
@@ -79,6 +83,17 @@ function slotOf(form, name, input, id) {
 function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
 
 (async () => {
+  // ACL-1990: настоящий ответ сервера проходит через Store и ворота Publish.
+  if (process.argv[3] === '--reply') {
+    const input = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
+    const { w, log } = world('api', input.reply);
+    const form = {}, slots = input.names.map((name, i) => slotOf(form, name, okInput(), 's' + i));
+    w.cbPreflightGate(itemsFor(slots, form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 80));
+    process.stdout.write(JSON.stringify({proceeded: log.proceeded,
+      lines: slots.map((slot) => w.cbTree.auditLines(slot))}));
+    return;
+  }
   // 1. Клиентская ошибка: не пускает, запросов нет, нужная кампания открыта.
   {
     const { w, log } = world('api', { results: [] });
@@ -156,6 +171,28 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
     await new Promise((r) => setTimeout(r, 60));
     assert.equal(log.proceeded, 0, 'не проверенная кампания ушла в Publish');
+  }
+  // 6b. ACL-1990: проверка не дошла до кампании (профиль занят, сеть, таймаут) — это
+  //     «Could not check», а не ошибка кампании: Publish идёт, настоящая публикация
+  //     сама упрётся в ту же причину и скажет о ней.
+  {
+    const { w, log } = world('api', { error: 'The profile is busy with another job', error_kind: 'not_checked', results: [] });
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(log.proceeded, 1, 'временный сбой проверки выключил Publish');
+    const pl = w.cbTree.auditLines(s).find((x) => x.rule === 'plan_check');
+    assert.equal(pl.status, 'unknown');
+    assert.equal(pl.retry, true);
+  }
+  // 6c. Отказ кабинета (account_audit) по-прежнему блокирует.
+  {
+    const { w, log } = world('api', { error: 'Test: the ad account is not active', error_kind: 'account', results: [],
+      account_audit: { rule: 'account_active', status: 'error', detail: 'not active', ads: [] } });
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(log.proceeded, 0, 'неактивный кабинет пропустил Publish');
   }
   // 7. Одна из двух кампаний с ошибкой — не пускает обе (Publish all).
   {

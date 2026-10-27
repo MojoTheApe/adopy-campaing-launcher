@@ -29,6 +29,7 @@ from src.analysis_agent import ad_text_registry as ar
 from src.fb_ads_rpa import enrich_draft as en
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map
 from tests.test_web_build_upload import _minimal_report
+from acl_dialog_capture import capture_dialogs
 
 def request(data):
     return NS(json=AsyncMock(return_value=data))
@@ -114,6 +115,8 @@ with tempfile.TemporaryDirectory(dir=OUT) as config:
         page.set_default_timeout(10000)
         page.on('pageerror',lambda e: errors.append(str(e)))
         page.on('dialog',lambda d: d.accept('New Demo' if d.message.startswith('Ad account name') else ''))
+        # ACL-141: имя спрашивает окно страницы «Connect …», номер — следующее.
+        capture_dialogs(page, [], answer_js="(t) => t.startsWith('Connect ') ? 'New Demo' : ''")
         page.goto('http://acl-review.test/#country-saudi-arabia-manage')
         page.wait_for_function("document.querySelector('.view-panel.active')?.id === 'view-country-saudi-arabia-manage'")
         page.evaluate("aclOpenCountryBuilder('saudi-arabia')")

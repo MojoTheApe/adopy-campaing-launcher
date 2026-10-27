@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pytest
 from playwright.sync_api import expect, sync_playwright
 from test_builder_per_account import _render
-from test_drawer_review_browser import fields
+from test_drawer_review_browser import OFFLINE_FILES, fields
 
 JOB = 'offline-job-1'
 
@@ -43,7 +43,7 @@ def _route_for(html, state):
         if r.request.resource_type == 'document':
             r.fulfill(content_type='text/html', body=html)
             return
-        data = {'files': [], 'texts': [], 'profiles': [], 'waiting': False}
+        data = {'files': OFFLINE_FILES, 'texts': [], 'profiles': [], 'waiting': False}
         if path == '/preview-publish':
             f = fields(r.request)
             data = {'plan': [{'Campaign Name': f[f'camp_{i}_name'], 'errors': [], 'warnings': [], '_ads_raw': []}
@@ -330,7 +330,33 @@ def test_a_job_held_by_low_memory_says_how_much_is_free_and_what_a_profile_uses(
                          reserve_mb=3 * 1024, need_mb=int(6.5 * 1024))
     show(p, state, held)
     expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-wait')
-    expect(dot(p, a)).to_have_attribute('title', 'Waiting for memory: 5.4 GB free, needs 6.5 GB (profile ~3.5 GB + 3 GB reserve)')
+    expect(dot(p, a)).to_have_attribute('title', 'Waiting for memory: 5.4 GB free, a new profile needs 6.5 GB (profile ~3.5 GB + 3 GB reserve). Close a Multilogin profile you don\'t need.')
+
+
+def test_memory_bypass_preserves_idle_waits_and_current_build_progress(ui):
+    """ACL-1642 + ACL-2113: new queue explanations preserve current window/progress states."""
+    p, state = ui
+    a, b = publish_demo(p)
+    held = queued([camp(a), camp(b)], ahead=1)
+    held['queue'].update(state='waiting_memory', hold='order', behind_memory=True)
+    show(p, state, held)
+    expect(dot(p, a)).to_have_attribute('title', 'Waiting behind a job that waits for memory (1 ahead)')
+    expect(p.locator('.cbd-queue')).to_contain_text('queued — Waiting behind a job that waits for memory (1 ahead)')
+
+    held['queue'].update(state='waiting_idle', hold='idle_windows', behind_memory=False,
+                         convenience_accounts=['Other'], close_after_s=120)
+    show(p, state, held)
+    expect(dot(p, a)).to_have_attribute('title', re.compile('waiting:.*Other.*closes by itself'))
+    expect(p.locator('.cbd-queue')).to_contain_text('closes by itself')
+
+    ahead = progress('running', [camp(a), camp(b)], current=a)
+    ahead['started_ahead'] = True
+    show(p, state, ahead)
+    expect(dot(p, a)).to_have_attribute('title', 'Started ahead: its profile was already open')
+    ahead = progress('running', [camp(a, step='ad_copy', idle_s=2), camp(b)], current=a, idle_s=2)
+    ahead['started_ahead'] = True
+    show(p, state, ahead)
+    expect(dot(p, a)).to_have_attribute('title', 'Building: ad copy')
 
 
 def test_the_publish_all_list_says_queued_and_then_building(ui):

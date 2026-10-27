@@ -13,7 +13,8 @@ httpx==0.28.1          # real ASGI/HTTP endpoint tests (not mocked Request.form)
 
 # Used only by one-off scripts and tests, not by the dashboard or RPA:
 #   fpdf2    -> scripts/_make_docs_pdf.py, scripts/_debug_pdf.py
-Pillow==12.2.0
+# (Pillow, also used by scripts/convert_favicon_to_ico.py, is in requirements.txt
+# since ACL-1529.)
 fpdf2==2.8.7
 
 # src/creative_agent/vision_analyzer.py imports cv2, but opencv-python is not

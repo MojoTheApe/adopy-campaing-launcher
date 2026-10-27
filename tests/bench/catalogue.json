@@ -3,6 +3,57 @@
   "harvested": "Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).",
   "steps": [
     {
+      "step": "Graph creative recovery with retained metadata",
+      "robot": "CampaignCreator creative receipts (ACL-2231)",
+      "layouts": [
+        {
+          "layout": "Created creative retains old ACL metadata and a Meta date/hash suffix",
+          "seen": [
+            "manually anonymized Graph response shape 2026-10-27; IDs/copy/media replaced"
+          ],
+          "fixture": "acl2231_retained_creative_label.json",
+          "fragment": null,
+          "test": "tests/test_acl2231_creative_recovery.py",
+          "expected": "Reuse requires verified account and full material; changed content, unknown dispatch, incomplete reads and ambiguous candidates never authorize another creative POST",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "step": "Graph creative video identity readback",
+      "robot": "CampaignCreator readback (ACL-2224)",
+      "layouts": [
+        {
+          "layout": "Creative returns per-ad video copies with different IDs and matching deterministic file titles",
+          "seen": [
+            "anonymized owner creation readback 2026-10-26"
+          ],
+          "fixture": "fb_api_video_identity_2026_10_26.json",
+          "fragment": null,
+          "test": "tests/test_acl2224_video_identity.py",
+          "expected": "Verified content and correct placements pass despite different IDs; wrong/missing content, missing binding and swapped placement remain blocked; IDs retained as diagnostics",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "step": "Graph owned-tab browser context",
+      "robot": "PageTab.open and owned navigation (ACL-2217)",
+      "layouts": [
+        {
+          "layout": "Existing Ads Manager tab loads while new automatic tab reports SSL navigation failure",
+          "seen": [
+            "anonymized owner differential 2026-10-26"
+          ],
+          "fixture": "fb_api_owned_context_2026_10_26.json",
+          "fragment": null,
+          "test": "tests/test_acl2217_owned_context.py",
+          "expected": "real owned-tab call site preserves synthetic unique context; ambiguous discovery stops before target creation; live cause remains pending",
+          "status": "pass"
+        }
+      ]
+    },
+    {
       "step": "Graph reconciliation after CDP session detachment",
       "robot": "PageTab / InPageGraph local helper recovery before the next Graph read (ACL-1836)",
       "layouts": [

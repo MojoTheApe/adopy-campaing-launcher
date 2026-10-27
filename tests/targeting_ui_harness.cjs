@@ -9,7 +9,7 @@ let release, confirmed = true, saveOk = true;
 let library = {connected:true, ok:true, error:'', synced_at:'2026-09-18 10:05:00 UTC'};
 const context = {
  document:{getElementById:get, querySelectorAll(){return Object.values(elements);}, addEventListener(t,fn){listeners[t]=fn;}},
- location:{hash:''}, confirm(){return confirmed;},
+ location:{hash:''}, confirm(){return confirmed;}, aclConfirm(){return Promise.resolve(confirmed);},
  fetch:async (url, opts) => {
    if (opts) {
      requests.push(JSON.parse(opts.body));

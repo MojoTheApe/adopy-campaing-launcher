@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures as cf
+from datetime import datetime, timezone
 import json
 import sys
 from pathlib import Path
@@ -31,6 +32,9 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 from src.analysis_agent import account_spend_api as api  # noqa: E402
 from src.analysis_agent import campaign_inventory as ci  # noqa: E402
+from src.analysis_agent import account_refresh as refresh  # noqa: E402
+from src.analysis_agent.account_refresh_state import RefreshStore  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from tests._retry_once import goto, launch_chromium  # noqa: E402
 from tests.test_acl1798_campaign_inventory import ad, adset, camp, snapshot  # noqa: E402
 
@@ -44,9 +48,10 @@ AMAP_CSS = REPORT[REPORT.index("    .amap table { width: 100%"): REPORT.index(" 
 
 
 def account_row(account):
-    """Строка списка аккаунтов страны (ячейка с аккаунтом, спенд, кнопка чтения)."""
+    """Current production cell shape: the list text has its own child span."""
     return (f'<tr><td class="amap-acc"><span class="amap-caret-off">·</span>{account}</td>'
-            f'<td class="num amap-live" data-account="{account}">$0.00</td><td class="amap-actions"><button class="amap-btn amap-read">Read spend</button></td></tr>')
+            f'<td class="amap-list" data-account="{account}"><span class="nodata">list not read</span></td>'
+            '<td class="amap-actions"><button type="button" class="amap-x">Remove mapping</button></td></tr>')
 
 
 class Site:
@@ -55,6 +60,23 @@ class Site:
     def __init__(self, web, monkeypatch):
         self.web, self.requests, self.fail_children, self.reads = web, [], 0, []
         self.warm, self.warm_posts = None, []
+        self.admissions = []
+        monkeypatch.setenv('ACL_AUTO_REFRESH', '0')
+        monkeypatch.setattr(refresh, 'dashboard_accounts', lambda: list(ACCOUNTS))
+        monkeypatch.setattr(web, '_mlx_batch_refusal', lambda *args: None)
+
+        def unexpected_read(account, trigger):
+            self.reads.append((account, trigger))
+            raise AssertionError('Cached component tests must not open a profile')
+
+        self.q = refresh.RefreshQueue(unexpected_read,
+            store=RefreshStore(Path(ci._store_path()).parent / 'refresh'),
+            accounts=refresh.dashboard_accounts)
+        # Explicit boundary: exercise real local admission/state routes without
+        # starting an external worker. The scheduled-worker scenarios live in2063.
+        monkeypatch.setattr(self.q, 'start', lambda: None)
+        monkeypatch.setattr(refresh, '_QUEUE', self.q)
+        self.client = TestClient(web.app, base_url='http://127.0.0.1:9095')
         monkeypatch.setattr(web, "_inventory_bi", lambda a, c, f, t, s: ({"campaigns": {}, "ads": {}}, ""))
         # цель и бенчмарк — из настроек машины; в тесте их нет, и таблица должна сказать об этом тире с причиной
         monkeypatch.setattr(web, "_inventory_goal_context", lambda c: {
@@ -72,11 +94,9 @@ class Site:
                 + AMAP_CSS +
                 "</style></head><body style='margin:24px'>" + comp +
                 '<div class="amap"><details class="amap-country" data-country="Kuwait" open>'
-                '<div class="amap-toolbar"><button type="button" class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)">'
-                'Read campaigns in Kuwait</button></div>'
                 '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait"><nav class="hc-tabs" data-hc-tabs></nav>'
                 '<div class="hc-mount" data-hc-mount></div></section>'
-                f'<table class="amap-grid"><thead><tr><th>Account</th><th class="num">Spend</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
+                f'<table class="amap-grid"><thead><tr><th>Account</th><th>Campaign list</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
                 '<section class="hc hc-after" data-hc-after></section>'
                 "</details></div>"
                 "<script>window.AMAP_CAMPAIGN_TABLE = true; function amapPeriod() { return {from: '" + D + "', to: '" + D + "', span: ''}; }\n" + MOUNT_JS + "</script>"
@@ -88,6 +108,18 @@ class Site:
         self.requests.append((req.method, u.path))
         if u.path == "/":
             return route.fulfill(status=200, content_type="text/html", body=self.html())
+        if u.path.startswith('/static/'):
+            asset = (ROOT / 'src/web' / u.path.lstrip('/')).resolve()
+            if asset.is_relative_to(ROOT / 'src/web/static') and asset.is_file():
+                return route.fulfill(content_type='application/javascript', body=asset.read_bytes())
+        if u.path in {'/account-refresh/page-open', '/account-refresh/request', '/account-refresh/state'}:
+            assert req.method == ('GET' if u.path.endswith('/state') else 'POST')
+            response = self.client.request(req.method, u.path,
+                content=req.post_data_buffer,
+                headers={'Content-Type': req.headers.get('content-type', '')})
+            self.admissions.append((req.method, u.path, response.status_code))
+            return route.fulfill(status=response.status_code,
+                content_type='application/json', body=response.content)
         if u.path.startswith("/warm/") and getattr(self, "warm", None):
             W = self.warm
             if u.path == "/warm/state":
@@ -226,7 +258,7 @@ def test_unknown_values_are_dashes_not_zeros(page):
     assert cells and all(c.strip() == "—" for c in cells), cells
     assert "$0" not in row.inner_text()
     # у кампании 1 есть Insights: числа настоящие, а Frequency/Reach не суммируются из детей
-    assert "5,000" in page.locator('tr[data-key="campaign:1"]').inner_text()
+    assert "5,000" not in page.locator('tr[data-key="campaign:1"]').inner_text()  # Meta metrics are no longer displayed
 
 
 def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
@@ -243,11 +275,12 @@ def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
         assert b["title"] in ("ACL-1773",) or b["title"].startswith("Commands unavailable"), b["title"]
         assert b["id"] and b["level"] and b["account"] and b["action"]
     assert {b["title"] for b in info if b["action"] == "copy"} == {"ACL-1773"}
-    posts_before = len([r for r in site.requests if r[0] != "GET"])
+    posts_before = [r for r in site.requests if r[0] != 'GET' and r[1].startswith('/campaign-commands/')]
     page.locator(".hc-cmd").first.click(force=True)
     page.locator(".hc-switch").first.click(force=True)
     page.wait_for_timeout(200)
-    assert len([r for r in site.requests if r[0] != "GET"]) == posts_before == 0
+    assert [r for r in site.requests if r[0] != 'GET' and r[1].startswith('/campaign-commands/')] == posts_before == []
+    assert not site.reads and not site.warm_posts
 
 
 def test_column_preset_and_visibility_persist(page):
@@ -268,13 +301,27 @@ def test_column_preset_and_visibility_persist(page):
     assert page.input_value("[data-hc=preset]") == "custom"
 
 
-def test_unread_account_says_so_and_has_its_own_read_button_on_its_row(page):
+def test_unread_account_queues_attention_once_without_a_manual_read_button(page, site):
+    # Before attention there is genuinely no cached list. Expanding admits a
+    # local queue request; the explicit fixture boundary leaves its worker off.
+    assert ci.get_snapshot('Fresh') is None
+    assert 'list not read' in page.inner_text(f'{row_of("Fresh")} .hc-snap')
+    assert not [q for q in site.q.state()['queued'] if q['account'] == 'Fresh']
     open_acc(page, "Fresh")
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.running.Fresh === true")
     text = page.inner_text(f'{row_of("Fresh")} + tr.hc-acct-child')
-    assert "Not read yet" in text and "press Read campaigns" in text             # снимка нет, прежний список не рисуется
+    assert 'Reading campaigns for Fresh' in text and 'one profile at a time' in text
     assert "IN THE ACCOUNT" not in text.upper()
-    assert page.locator(f'{row_of("Fresh")} button.hc-rc').count() == 1 and page.locator(f'{row_of("Acc")} button.hc-rc').count() == 1
-    assert "Campaigns: not read yet" in page.inner_text(f'{row_of("Fresh")} .hc-snap')
+    assert page.inner_text(f'{row_of("Fresh")} .hc-snap') == 'updating'
+    assert page.locator(f'{row_of("Fresh")} button.hc-rc').is_hidden()
+    assert page.locator(f'{row_of("Acc")} button.hc-rc').is_hidden()
+    page.click(f'{row_of("Fresh")} td.amap-acc', position={'x': 8, 'y': 8})
+    open_acc(page, 'Fresh')
+    page.evaluate("() => window.aclAccountRefresh.request('Fresh', 'attention')")
+    assert [q for q in site.q.state()['queued'] if q['account'] == 'Fresh'] == [
+        {'account': 'Fresh', 'trigger': 'attention'}]
+    assert ci.get_snapshot('Fresh') is None and site.reads == [] and site.warm_posts == []
+    assert not [r for r in site.requests if r[1] == '/campaign-inventory/read']
     assert page.locator("[data-read-country]").count() == 0
 
 
@@ -285,7 +332,7 @@ def test_one_tree_the_account_row_is_the_parent_and_there_is_no_separate_table(p
     assert page.locator(".hc-table tr.hc-band").count() == 0                      # полос аккаунтов внутри таблицы нет
     accounts = page.evaluate("[...new Set([...document.querySelectorAll('.hc-table tbody tr[data-account]')].map(r => r.dataset.account))]")
     assert accounts == ["Acc"]
-    assert page.evaluate("document.querySelector('tr.hc-acct-child').previousElementSibling.querySelector('td.amap-live').dataset.account") == "Acc"
+    assert page.evaluate("document.querySelector('tr.hc-acct-child').previousElementSibling.querySelector('td.amap-list').dataset.account") == "Acc"
     assert page.get_attribute(f'{row_of("Acc")}', "aria-expanded") == "true" and page.get_attribute(f'{row_of("Fresh")}', "aria-expanded") == "false"
     tabs = page.locator(".hc-tabs .hc-tab").all_inner_texts()
     assert tabs == ["Campaigns", "Winning setups", "Landings", "Targets", "Creatives", "Buyers"]
@@ -299,37 +346,33 @@ def test_clicking_the_row_toggles_but_buttons_and_keys_behave(page, site):
     assert acc.get_attribute("aria-expanded") == "false"
     page.click(f'{row_of("Acc")} .amap-caret')                                   # стрелка раскрывает
     assert acc.get_attribute("aria-expanded") == "true"
-    page.click(f'{row_of("Acc")} button.amap-read', force=True)                  # свои кнопки строки не раскрывают и не сворачивают
+    page.click(f'{row_of("Acc")} button.amap-x', force=True)                     # свои кнопки строки не раскрывают и не сворачивают
     assert acc.get_attribute("aria-expanded") == "true"
     acc.focus()
     page.keyboard.press("Enter")
     assert acc.get_attribute("aria-expanded") == "false"
     page.keyboard.press("Space")
     assert acc.get_attribute("aria-expanded") == "true"
-    assert not [r for r in site.requests[before:] if r[0] != "GET"]               # раскрытие ничего не читает
+    assert all(method == 'GET' or (method == 'POST' and path == '/account-refresh/request')
+               for method, path in site.requests[before:])
+    assert not site.reads and not site.warm_posts
 
 
 def test_showing_the_block_never_reads_meta(page, site):
     page.wait_for_timeout(300)
-    assert [r for r in site.requests if r[0] != "GET"] == []
+    assert all(method == 'GET' or (method == 'POST' and path in
+               {'/account-refresh/page-open', '/account-refresh/request'})
+               for method, path in site.requests)
+    assert not site.reads and not site.warm_posts
     assert not [r for r in site.requests if r[1] == "/campaign-inventory/read"]
 
 
-def test_country_header_button_reads_every_account_one_by_one(page, site):
-    page.route("http://acl.test/campaign-inventory/read", lambda route: (
-        site.requests.append(("POST", "/campaign-inventory/read")),
-        site.reads.append(route.request.post_data or ""),
-        route.fulfill(status=200, content_type="application/json", body='{"ok": true}')))
-    btn = page.locator(".amap-read-campaigns")
-    assert btn.inner_text() == "Read campaigns in Kuwait"
-    btn.click()
-    for _ in range(40):                                                   # очередь: по одному, опрос статуса у своего сервера
-        if len(site.reads) == 2 and not btn.is_disabled():
-            break
-        page.wait_for_timeout(500)
-    assert len(site.reads) == 2
-    assert "Acc" in site.reads[0] and "Fresh" in site.reads[1]            # по очереди, в порядке строк страны
-    assert btn.inner_text() == "Read campaigns in Kuwait" and not btn.is_disabled()
+def test_country_has_no_manual_bulk_read_control(page, site):
+    from src.web.app import templates
+    rendered = templates.env.get_template('_account_map_country.html').render(
+        mc={'country':'Kuwait','key':'Kuwait','rows':[]},amap={'span':'all','countries':[]},mlx={})
+    assert 'amapReadCampaigns(this)' not in rendered and 'amapReadAll(this)' not in rendered
+    assert not [r for r in site.requests if r[1] == '/campaign-inventory/read']
 
 
 def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
@@ -339,11 +382,15 @@ def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
         pg = browser.new_page(viewport={"width": 1280, "height": 600})
         pg.route("http://acl.test/**", site.handle)
         goto(pg, "http://acl.test/")
-        pg.wait_for_selector("[data-hc=needs]:not([hidden])")
-        assert "Campaign inventory needs the API backend" in pg.inner_text("[data-hc=needs]")
-        assert not pg.is_visible("[data-hc=body]")
-        pg.wait_for_timeout(300)
-        assert [r for r in site.requests if r[1].startswith("/campaign-inventory")] == [("GET", "/campaign-inventory/status")]
+        pg.wait_for_selector("[data-hc=body]:not([hidden])")
+        open_acc(pg, "Acc")
+        pg.wait_for_selector('.hc-table tbody tr')
+        assert pg.locator('[data-hc=needs]').is_hidden()
+        assert all(method == 'GET' or (method == 'POST' and path in
+                   {'/account-refresh/page-open', '/account-refresh/request'})
+                   for method, path in site.requests)
+        assert site.admissions and all(status == 409 for method, _, status in site.admissions if method == 'POST')
+        assert site.q.state()['queued'] == [] and site.reads == []
         browser.close()
 
 
@@ -424,12 +471,11 @@ def _inject_error(page):
       const inst = document.querySelector('.amap-campaigns')._hc;
       inst.state.notes['campaign:1'] = window.acmCommands
         ? window.acmCommands.explain(raw, 'bad', '') : {text: raw, raw: null, tone: 'bad'};
-      inst.state.summaries.Fresh = Object.assign({}, inst.state.summaries.Fresh, {attempt: {state: 'failed', at: '2026-10-12 08:54:22', error: raw.replace('Not sent: ', ''), code: ''}});
       inst.render();
     }""", RAW_ERROR)
 
 
-def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page):
+def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page, site):
     import os
     from pathlib import Path
 
@@ -437,7 +483,17 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     page.evaluate("document.querySelector('[data-hc=preset]').value = 'all'")
     page.add_script_tag(url="http://acl.test/static/acm_commands.js")
     page.wait_for_function("!!window.acmCommands")
+    # Persist a real terminal attempt before attention. A recent failure must
+    # stay failed until Retry; it cannot coexist with queued work for Fresh.
+    stamp = datetime.now(timezone.utc)
+    failed_at = stamp.astimezone().strftime('%Y-%m-%d %H:%M:%S')
+    ci.put_result(ci.Snapshot(account='Fresh', state='failed', finished_at=failed_at,
+        finished_at_utc=stamp.isoformat(), error=RAW_ERROR.replace('Not sent: ', '')))
+    page.evaluate('() => window.aclAccountRefresh.load()')
     open_acc(page, "Fresh")
+    page.wait_for_selector('tr[data-msg="acct:Fresh:read"]')
+    assert not [q for q in site.q.state()['queued'] if q['account'] == 'Fresh']
+    assert site.q.state()['running'] != 'Fresh'
     _inject_error(page)
     row = page.locator('tr[data-key="campaign:1"]')
     sub = page.locator('tr[data-msg="row:campaign:1"]')
@@ -472,10 +528,15 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     assert page.locator(".hc-rm-raw").count() == 0
     # сбой чтения аккаунта: одна строка в полосе и Details
     band = page.locator('tr[data-msg="acct:Fresh:read"]')
-    assert "The last read failed (2026-10-12 08:54:22)" in band.inner_text() and band.bounding_box()["height"] <= 40
+    assert f'The last read failed ({failed_at})' in band.inner_text() and band.bounding_box()["height"] <= 40
     assert "WinError" not in band.inner_text()
     band.locator(".hc-rm-btn").click()
     assert "WinError 10061" in page.locator('tr[data-msg="acct:Fresh:read"] .hc-rm-raw').inner_text()
+    retry = page.locator(f'{row_of("Fresh")} button.hc-rc')
+    assert retry.is_visible() and retry.is_enabled() and retry.inner_text() == 'Retry'
+    assert page.locator(f'{row_of("Fresh")} button.hc-rc:visible').count() == 1
+    assert ci.get_attempt('Fresh')['error'] == RAW_ERROR.replace('Not sent: ', '')
+    assert site.reads == [] and site.warm_posts == []
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
     assert page.errors == []
 

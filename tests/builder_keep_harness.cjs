@@ -48,9 +48,18 @@ function slot(idx, values = {}) {
     input('camp_' + idx + '_ad_0_creative_type', 'Image', { type: 'radio', checked: true }),
     input('camp_' + idx + '_ad_0_creative_type', 'Video', { type: 'radio' }),
     input('camp_' + idx + '_ad_0_copy', values.copy || ''),
+    // ACL-1767: поля набора и кнопка объявления (необязательные, как name_override)
+    input('camp_' + idx + '_gender', values.gender || ''),
+    input('camp_' + idx + '_languages', values.languages || ''),
+    input('camp_' + idx + '_device', values.device || ''),
+    input('camp_' + idx + '_os_min', values.os_min || ''),
+    input('camp_' + idx + '_start_time', values.start_time || ''),
+    input('camp_' + idx + '_ad_0_cta', values.cta || 'LEARN_MORE'),
     input('camp_' + idx + '_ad_count', String(values.ads || 1)),
     el('div', { classes: ['cb-targeting-hint'], textContent: values.hint || '' }),
     el('button', { classes: ['cb-add-btn-sm'] }),
+    input('camp_' + idx + '_adset_count', '1'),
+    el('section', { classes: ['cb-adset-sec'] }),     // ACL-1768: у карточки уже есть набор 0
   ];
   for (let i = 0; i < (values.ads || 1); i += 1) kids.push(el('div', { classes: ['cb-ad-row'] }));
   return el('div', { classes: ['cb-slot'], dataset: { idx: String(idx) }, children: kids });
@@ -90,6 +99,8 @@ function boot(opts = {}) {
         s.appendChild(el('div', { classes: ['cb-ad-row'] }));
       },
       cbUpdateName: (s) => { s._named = (s._named || 0) + 1; },
+      // ACL-1768: раздел набора (в этой поддельной странице только считаем вызовы)
+      cbAddAdset: (s, o) => { s._addedSets = (s._addedSets || 0) + 1; s._lastOpts = o; },
     },
     Array, Object, JSON, String, parseInt,
   };
@@ -223,4 +234,77 @@ assert.equal(restored[0].querySelector('[name="camp_0_budget"]').value, '40');
 assert.equal(restored[0].querySelector('.cb-name-override').value, '', 'у старого черновика появилось чужое имя');
 assert.ok(restored[0]._named, 'имя старого черновика не пересобрано');
 
+// ── ACL-1767: хранилище v2 -> v3 ───────────────────────────────────────
+// Черновик v2 поднимается как был; новые поля пусты (умолчание = прежнее поведение);
+// после сохранения лежит v3, а старые значения целы.
+store = memoryStore({ 'acl.builder.v2': JSON.stringify(oldDraft) });
+back = boot({ store, slots: [] });
+back.api.save();
+const v3 = saved(store);
+assert.equal(v3.v, 4, 'после миграции хранилище не v4 (v2 -> v3 -> v4)');
+const mig = v3.forms['saudi-arabia|DQ438'].campaigns[0].fields;
+assert.equal(mig.asset, 'Old'); assert.equal(mig.budget, '40'); assert.equal(mig.name, 'SA_Old_name');
+['gender', 'languages', 'device', 'os_min', 'start_time'].forEach((f) => assert.equal(mig[f], '', f + ': не пуст после миграции'));
+
+// migrate напрямую: v2 -> v3 не теряет полей; чужие версии не трогает.
+const direct = back.api.migrate(JSON.parse(JSON.stringify(oldDraft)));
+assert.equal(direct.v, 4);
+assert.equal(direct.forms['saudi-arabia|DQ438'].campaigns[0].fields.asset, 'Old');
+assert.equal(back.api.migrate({ v: 1, forms: {} }).v, 1, 'v1 не должен превращаться в v4');
+assert.equal(back.api.migrate(null), null);
+
+// Неизвестные версии не поднимаются (v1, v5): работа не подменяется чужой формой.
+['1', '5'].forEach((v) => {
+  const bad = Object.assign({}, oldDraft, { v: Number(v) });
+  const t2 = boot({ store: memoryStore({ 'acl.builder.v2': JSON.stringify(bad) }), slots: [] });
+  assert.equal(t2.form.querySelectorAll('.cb-slot').length, 0, 'версия ' + v + ' поднялась');
+});
+
+// v3: новые поля переживают перезагрузку.
+store = memoryStore();
+t = boot({ store, slots: [{ asset: 'New', name: 'SA_New', gender: 'women', languages: 'Portuguese, English', device: 'mobile', os_min: '14', start_time: '2026-10-20T10:00', cta: 'SIGN_UP' }] });
+t.api.save();
+back = boot({ store, slots: [] });
+const nf = back.form.querySelectorAll('.cb-slot')[0];
+assert.equal(nf.querySelector('[name="camp_0_gender"]').value, 'women');
+assert.equal(nf.querySelector('[name="camp_0_languages"]').value, 'Portuguese, English');
+assert.equal(nf.querySelector('[name="camp_0_device"]').value, 'mobile');
+assert.equal(nf.querySelector('[name="camp_0_os_min"]').value, '14');
+assert.equal(nf.querySelector('[name="camp_0_start_time"]').value, '2026-10-20T10:00');
+assert.equal(nf.querySelector('[name="camp_0_ad_0_cta"]').value, 'SIGN_UP', 'кнопка объявления не вернулась');
+
 console.log('ok');
+
+// ── ACL-1768: хранилище v3 -> v4 (наборы) ──────────────────────────────
+// Черновик v3 - это один набор, и все его объявления в нём; ничего другого не теряется.
+const v3Draft = { v: 3, forms: { 'saudi-arabia|DQ438': { touched: 1_700_000_000_000, tracking: '', campaigns: [
+  { fields: { asset: 'Old3', age: '41', budget: '40', name: 'SA_Old3', gender: 'women', ad_0_creative_type: 'Image', ad_count: '3' }, shown: {}, hint: '', ads: 3 },
+] } } };
+const m4 = (() => {
+  const t4 = boot({ store: memoryStore(), slots: [] });
+  return t4.api.migrate(JSON.parse(JSON.stringify(v3Draft)));
+})();
+assert.equal(m4.v, 4);
+const f4 = m4.forms['saudi-arabia|DQ438'].campaigns[0].fields;
+assert.equal(f4.adset_count, '1', 'старый черновик должен стать одним набором');
+['ad_0_adset', 'ad_1_adset', 'ad_2_adset'].forEach((k) => assert.equal(f4[k], '0', k + ': объявление должно лежать в наборе 0'));
+assert.equal(f4.asset, 'Old3'); assert.equal(f4.age, '41'); assert.equal(f4.gender, 'women');
+
+store = memoryStore({ 'acl.builder.v2': JSON.stringify(v3Draft) });
+back = boot({ store, slots: [] });
+const r4 = back.form.querySelectorAll('.cb-slot');
+assert.equal(r4.length, 1, 'черновик v3 не поднялся');
+assert.equal(r4[0].querySelector('[name="camp_0_age"]').value, '41');
+assert.ok(!r4[0]._addedSets, 'у старого черновика не должно появиться лишних наборов');
+back.api.save();
+assert.equal(saved(store).v, 4);
+assert.equal(saved(store).forms['saudi-arabia|DQ438'].campaigns[0].fields.adset_count, '1');
+
+// v4 с двумя наборами: разделы создаются до раскладки полей (без объявления - его кладёт сама раскладка).
+const v4Draft = { v: 4, forms: { 'saudi-arabia|DQ438': { touched: 1_700_000_000_000, tracking: '', campaigns: [
+  { fields: { asset: 'Two', adset_count: '2', ad_0_adset: '0', ad_1_adset: '1' }, shown: {}, hint: '', hints: ['a', 'b'], ads: 2 },
+] } } };
+back = boot({ store: memoryStore({ 'acl.builder.v2': JSON.stringify(v4Draft) }), slots: [] });
+const r5 = back.form.querySelectorAll('.cb-slot')[0];
+assert.equal(r5._addedSets, 1, 'второй набор не создан при раскладке');
+assert.deepEqual(JSON.parse(JSON.stringify(r5._lastOpts)), { noAd: true });

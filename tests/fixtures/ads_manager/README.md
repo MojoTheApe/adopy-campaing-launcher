@@ -357,3 +357,12 @@ This is a transport trace, so the HTML-only `capture_to_fixture.py` does not app
 `tests/test_acl1836_session_recovery.py` executes the real PageTab/InPageGraph/client
 against that trace. The original reason for detachment and the fate of the live
 upload are not established by this offline fixture.
+
+### Owned-tab context differential, 2026-10-26 (ACL-2217)
+
+`fb_api_owned_context_2026_10_26.json` reconstructs only the owner-observed error and same-URL native success. Target/context values are synthetic protocol inputs, not a private browser capture or proof of the live TLS cause. The bench drives the actual PageTab.open/navigation path; it tests context isolation without live requests.
+
+- `fb_api_video_identity_2026_10_26.json` — ACL-2224 sanitized live video ID/title discrepancy; synthetic IDs and bytes only. Full creation/reuse and strict negative readback tests in `tests/test_acl2224_video_identity.py`. Title fingerprints are existing application evidence, not downloaded media hashes.
+
+
+ACL-2231: `acl2231_retained_creative_label.json` is a manually minimized Graph response shape from the 2026-10-27 incident. All identifiers, copy, labels and media have synthetic replacements. JSON Graph responses cannot use the HTML fragment cutter. The regression calls the actual recovery matcher and verifies changed form content is rejected.

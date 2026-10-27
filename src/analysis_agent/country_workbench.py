@@ -196,25 +196,89 @@ def _rank(rows: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
     return rows[:limit]
 
 
+def _aggregate(part: pd.DataFrame, keys: List[str], me: str) -> List[tuple]:
+    """Строки `_row` для каждой группы `keys` одной группировкой.
+
+    Год статистики — это десятки тысяч групп на страну; `_row` на каждую
+    группу (фильтры pandas на кусок) занимал 700 с из 820 холодной сборки.
+    Здесь те же суммы считаются за один проход. Порядок групп — порядок
+    первого появления, как у ``groupby(sort=False)``. Возвращает пары
+    (значения ключей, строка без полей ключей).
+    """
+    if part.empty:
+        return []
+    if "_mine" in part.columns:
+        cm, mine = part["_cm"], part["_mine"]
+    else:
+        cm, mine = _cm_columns(part, me)
+    work = part[keys].copy()
+    work["_s"] = part["Spend"]
+    work["_l"] = part["Leads"]
+    work["_f"] = part["FTDs"]
+    work["_ys"] = part["Spend"].where(mine, 0.0)
+    work["_yl"] = part["Leads"].where(mine, 0.0)
+    work["_yf"] = part["FTDs"].where(mine, 0.0)
+    work["_cm"] = cm.where(cm != "")
+    grouped = work.groupby(keys, dropna=False, sort=False)
+    agg = grouped[["_s", "_l", "_f", "_ys", "_yl", "_yf"]].sum()
+    buyers = grouped["_cm"].nunique()
+    out = []
+    for vals, s, l, f, ys, yl, yf, b in zip(
+        agg.index, agg["_s"], agg["_l"], agg["_f"], agg["_ys"], agg["_yl"], agg["_yf"], buyers,
+    ):
+        k = weighted_kpis(s, l, f)
+        k["you"] = {"spend": float(ys), "leads": int(yl), "ftds": int(yf)}
+        k["buyers"] = int(b)
+        out.append((vals if isinstance(vals, tuple) else (vals,), k))
+    return out
+
+
+def _cm_columns(part: pd.DataFrame, me: str) -> tuple:
+    """(байер без пробелов, «строка моя») — как в `_row`."""
+    cm = part["CM"].str.strip()
+    mine = (cm.str.casefold() == me) if me else pd.Series(False, index=part.index)
+    return cm, mine
+
+
 def _group(part: pd.DataFrame, keys: List[str], make, me: str, limit: int) -> List[Dict[str, Any]]:
-    rows = [_row(make(vals if isinstance(vals, tuple) else (vals,)), sub, me)
-            for vals, sub in part.groupby(keys, dropna=False, sort=False)]
-    return _rank(rows, limit)
+    pairs = _aggregate(part, keys, me)
+    # Сортировка устойчивая и не зависит от полей ключей, поэтому `make`
+    # нужен только строкам, которые попадут на страницу.
+    order = sorted(range(len(pairs)), key=lambda i: (-pairs[i][1]["ftds"], -pairs[i][1]["spend"]))
+    rows = []
+    for i in order[:limit]:
+        vals, k = pairs[i]
+        k.update(make(vals))
+        rows.append(k)
+    return rows
 
 
 def _creative_rows(part: pd.DataFrame, me: str, limit: int) -> List[Dict[str, Any]]:
     """Пакеты с точными версиями внутри; сумма версий равна строке пакета."""
     known = part[part["Pack"] != ""]
     packs: List[Dict[str, Any]] = []
-    for pack, sub in known.groupby("Pack", sort=False):
-        versions = _group(
-            sub, ["CKey"],
-            lambda v, s=sub: _creative_keys(s[s["CKey"] == v[0]].iloc[0]),
-            me, 50)
-        row = _row({"pack": pack}, sub, me)
-        row["versions"] = versions
+    for (pack,), row in _aggregate(known, ["Pack"], me):
+        row["pack"] = pack
         packs.append(row)
     packs = _rank(packs, limit)
+    if packs:
+        # Версии и первая строка версии внутри пакета — тоже одним проходом.
+        by_pack: Dict[Any, List[tuple]] = {}
+        for (pack, ckey), k in _aggregate(known, ["Pack", "CKey"], me):
+            by_pack.setdefault(pack, []).append((ckey, k))
+        first = known.drop_duplicates(["Pack", "CKey"]).set_index(["Pack", "CKey"])
+        for row in packs:
+            pack = row["pack"]
+            items = by_pack.get(pack, [])
+            order = sorted(range(len(items)),
+                           key=lambda i: (-items[i][1]["ftds"], -items[i][1]["spend"]))
+            versions = []
+            for i in order[:50]:
+                ckey, k = items[i]
+                first_row = first.loc[(pack, ckey)]
+                k.update(_creative_keys(first_row))
+                versions.append(k)
+            row["versions"] = versions
     unresolved = part[part["Pack"] == ""]
     if not unresolved.empty and unresolved["Spend"].sum() > 0:
         row = _row({"pack": "", "unresolved": True}, unresolved, me)
@@ -291,6 +355,8 @@ def build_country_workbench(df: pd.DataFrame, country: str, my_cm: str) -> Dict[
     if cube.empty:
         return {}
     me = (my_cm or "").strip().casefold()
+    # Срезы — подмножества куба: байер считается один раз, а не в каждой группировке.
+    cube["_cm"], cube["_mine"] = _cm_columns(cube, me)
     by_asset = cube.groupby("Asset", sort=False).agg(
         Spend=("Spend", "sum"), FTDs=("FTDs", "sum")).reset_index()
     mine = cube[cube["CM"].str.strip().str.casefold() == me] if me else cube.iloc[0:0]
@@ -380,7 +446,7 @@ def _pct(v: Optional[float]) -> str:
     return "—" if v is None else f"{v:.1f}%"
 
 
-def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
+def home_kpi_tiles(cmp_: Dict[str, Any], *, money=None) -> List[Dict[str, Any]]:
     """Шесть плиток Home: FTDs, CPA, Leads, CPL, Spend, Lead→FTD.
 
     Каждая плитка — готовые строки для шаблона: «вы», «другие», пояснение и
@@ -389,6 +455,7 @@ def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
     у Workbench). Объёмные плитки (FTDs, Leads, Spend) не сравниваются: у
     байеров разный размер, «лучше/хуже» по ним ничего не значит.
     """
+    source_money = money or _money
     th = cmp_["thresholds"]
     you, oth, st = cmp_["you"], cmp_["others"], cmp_["status"]
     metrics = cmp_["metrics"]
@@ -402,7 +469,7 @@ def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
         state = m[f"{side}_state"]
         if state == "unavailable":
             return "— · 0 FTDs" if (name == "cpa" and k["spend"] > 0 and not k["ftds"]) else "—"
-        return _pct(m[side]) if name == "cr" else _money(m[side])
+        return _pct(m[side]) if name == "cr" else source_money(m[side])
 
     def ratio(name: str, label: str, caption: str) -> Dict[str, Any]:
         m = metrics[name]
@@ -441,6 +508,6 @@ def home_kpi_tiles(cmp_: Dict[str, Any]) -> List[Dict[str, Any]]:
         ratio("cpa", "CPA", ""),
         volume("leads", "Leads", n),
         ratio("cpl", "CPL", ""),
-        volume("spend", "Spend", _money),
+        volume("spend", "Spend", source_money),
         ratio("cr", "Lead → FTD", ""),
     ]

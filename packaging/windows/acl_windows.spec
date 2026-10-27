@@ -16,6 +16,11 @@ MANIFEST_PATH = Path(
 
 if not MANIFEST_PATH.is_file():
     raise SystemExit(f"Build manifest not found: {MANIFEST_PATH}")
+# ACL-1175: страница установки едет в бандле; build.ps1 рендерит её рядом
+# с манифестом из docs/SETUP-NEW-PC.md.
+SETUP_GUIDE_PATH = MANIFEST_PATH.with_name("setup-guide.html")
+if not SETUP_GUIDE_PATH.is_file():
+    raise SystemExit(f"Setup guide not found: {SETUP_GUIDE_PATH}")
 
 
 playwright_datas, playwright_binaries, playwright_hiddenimports = collect_all("playwright")
@@ -27,6 +32,7 @@ datas = [
     (str(PROJECT_ROOT / "config" / "ads_manager_selectors.yaml"), "config"),
     (str(PROJECT_ROOT / "config" / "analysis_reading_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "benchmarks.json"), "config"),
+    (str(PROJECT_ROOT / "config" / "bi_cm_map.json"), "config"),
     (str(PROJECT_ROOT / "config" / "content_plan_week.example.json"), "config"),
     (str(PROJECT_ROOT / "config" / "knowledge_base.json"), "config"),
     (str(PROJECT_ROOT / "config" / "rpa_forbidden_zones.yaml"), "config"),
@@ -39,12 +45,14 @@ datas = [
     (str(PROJECT_ROOT / "src" / "web" / "templates"), "src/web/templates"),
     (str(MANIFEST_PATH), "."),
     (str(MANIFEST_PATH.with_name("acl-update-channel.json")), "."),
+    (str(SETUP_GUIDE_PATH), "."),
 ] + playwright_datas
 
 # Uvicorn chooses its event loop, HTTP implementation and lifespan handler at
 # runtime. PyInstaller cannot infer those string-based imports statically.
 hiddenimports = collect_submodules("uvicorn") + playwright_hiddenimports + [
     "diagnostics",
+    "local_dashboard",
     "machine_config",
     "setup_wizard",
     "updater",

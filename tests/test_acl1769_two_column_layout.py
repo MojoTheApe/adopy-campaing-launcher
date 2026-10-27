@@ -36,9 +36,9 @@ def _page() -> str:
 
 
 def _slot_code() -> str:
-    """Тело buildBlankSlotHTML без комментариев (в комментариях ABO упомянут словами)."""
+    """Раздел набора и тело buildBlankSlotHTML без комментариев (в комментариях ABO упомянут словами)."""
     page = _page()
-    slot = page[page.index("function buildBlankSlotHTML"):]
+    slot = page[page.index("function buildAdsetSectionHTML"):]
     slot = slot[: slot.index("// ── Tracking link save")]
     return re.sub(r"/\*.*?\*/", "", slot, flags=re.S)
 
@@ -81,7 +81,7 @@ def test_publish_all_check_plan_and_the_mode_texts_are_kept_verbatim():
         page[page.index("function cbPublishMode"):]
     ), "текст режима RPA пропал"
     assert "'Publish selected → ' + what" in page and "'Publish all → ' + what" in page
-    assert "Check plan (no writes)" in page and "Close plan ×" in page
+    assert "' with Meta'" in page and "Close plan ×" in page   # ACL-1990: «Check N campaigns with Meta»
     assert 'data-act="close-plan"' in page and "cbPlanBindFrame" in page
     assert "PAUSED campaigns" in page
 
@@ -109,7 +109,11 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"adsets", "copyAdset", "texts", "placements", "gender", "languages", "cta", "copyTo"}
+    assert set(out) >= {"copyTo"}
+    assert "placements" not in out, "ACL-1772: placement editor has a backend and named saved fields"
+    assert not {"adsets", "copyAdset"} & set(out), "ACL-1768: наборы - настоящие, а не заглушки"
+    assert not {"texts", "media"} & set(out), "ACL-1774: тексты 3-5 и файл Stories / Reels - настоящие поля"
+    assert not {"gender", "languages", "cta"} & set(out), "ACL-1767: это уже настоящие поля, а не заглушки"
     assert "forms" not in out, "ACL-1775: Instant Forms - настоящий выбор, а не заглушка"
     for key, v in out.items():
         for kind in ("button", "select"):
@@ -119,7 +123,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"adsets", "copyAdset", "texts", "placements", "media", "gender", "languages", "cta", "copyTo"}
+    assert used >= {"copyTo"}
 
 
 def test_old_drafts_load_without_the_new_field():
@@ -129,7 +133,8 @@ def test_old_drafts_load_without_the_new_field():
     page = _page()
     keep = page[page.index("window.cbKeep = (function () {"):]
     keep = keep[: keep.index("\n})();")]
-    assert "var VERSION = 2;" in keep, "версия хранилища сменилась — нужна миграция и её тест"
+    assert "var VERSION = 4;" in keep and "function migrate(" in keep, "ACL-1768: v3 -> v4, миграция и её тест в builder_keep_harness.cjs"
+    assert "parsed.v === 2" in keep and "parsed.v === 3" in keep, "цепочка миграций v2 -> v3 -> v4"
     assert "if (!f || !(f in data.fields)) return;" in keep, "поле, которого нет в черновике, обнулится"
 
 
@@ -140,6 +145,9 @@ def _problems(tmp_path, **changes) -> str:
     from tests.test_acl1761_api_create import _draft
 
     d = _draft(tmp_path, ads=1, **{k: v for k, v in changes.items() if k == "body2"})
+    if "texts" in changes:
+        d.ad_sets[0].ads[0].text_variants = [
+            {"body": f"B{i}", "headline": f"H{i}", "description": f"D{i}"} for i in range(changes["texts"])]
     if "budget" in changes:
         d.ad_sets[0].daily_budget = changes["budget"]
     if "link" in changes:
@@ -154,7 +162,7 @@ def _problems(tmp_path, **changes) -> str:
 def test_creator_errors_land_on_the_fields_that_cause_them(tmp_path, tmp_path_factory):
     cases = {
         "Daily budget missing": _problems(tmp_path, budget=0),
-        "Primary text 2 is not supported": _problems(tmp_path_factory.mktemp("t2"), body2="Second text"),
+        "up to 5 primary texts": _problems(tmp_path_factory.mktemp("t2"), texts=5),
         "no creative file": _problems(tmp_path_factory.mktemp("cf"), path=""),
         "Tracking link is empty": _problems(tmp_path_factory.mktemp("lk"), link=""),
     }
@@ -170,22 +178,30 @@ def test_creator_errors_land_on_the_fields_that_cause_them(tmp_path, tmp_path_fa
     by_needle = dict(zip(cases, got))
     sels = {n: [r["sel"] for r in routes] for n, routes in by_needle.items()}
     assert sels["Daily budget missing"] == ['[name$="_budget"]']
-    # Ошибка второго текста подсвечивает его поле и только его (ACL-1344).
-    assert sels["Primary text 2 is not supported"] == [".cb-text2-search"]
+    # ACL-1774: лишний текст подсвечивает основной выбор текста, а не поле текста 2.
+    assert sels["up to 5 primary texts"] == [".cb-adtitle-search"]
     assert sels["no creative file"] == [".cb-creative-search"]
     assert 'input[name="tracking_link"]' in sels["Tracking link is empty"]
 
 
-def test_the_api_backend_second_text_note_matches_the_creator_rule(tmp_path):
-    """Создатель отказывает на втором основном тексте — страница гасит поле с причиной."""
-    message = _problems(tmp_path, body2="Second text")
-    assert "Primary text 2 is not supported by the API backend" in message
+def test_the_api_backend_second_text_is_supported_and_the_rpa_gates_texts_3_to_5():
+    """ACL-1774: создатель принимает до 5 текстов; страница гасит пустые ряды 3-5 только при RPA."""
+    from src.fb_api import creator as cr
+    from tests.test_acl1761_api_create import _draft
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        d = _draft(Path(tmp), ads=1, body2="Second text")
+        plan = cr.plan_from_draft(d)
+        assert plan.ad_sets[0].dynamic
+        assert plan.ad_sets[0].ads[0].uses_feed
+        assert plan.ad_sets[0].ads[0].bodies == ["Body 0", "Second text"]
     page = _page()
-    assert "Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty." in page
+    assert "Primary text 2 is not supported by the API backend" not in page
+    assert "t2.disabled = api && !t2.value" not in page, "текст 2 больше не API-ограничен"
     sync = page[page.index("function syncHost(found)"):]
     sync = sync[: sync.index("function paintEditor")]
-    assert "window.ACL_FB_BACKEND === 'api'" in sync
-    assert "t2.disabled = api && !t2.value" in sync, "непустое поле гаснуть не должно: набранное не теряем"
+    assert "window.cbSyncTextRows(rows[i], api)" in sync
 
 
 def test_the_ui_shows_only_what_the_creator_sends():
@@ -193,7 +209,8 @@ def test_the_ui_shows_only_what_the_creator_sends():
     from src.fb_api import creator as cr
 
     page = _page()
-    assert cr.CTA_TYPE == "LEARN_MORE" and "'cta', 'select', 'Learn more'" in page
+    # ACL-1767: кнопка - настоящий выбор; умолчание то же, что у создателя
+    assert cr.CTA_TYPE == "LEARN_MORE" and 'data-default="LEARN_MORE"' in page
     # ACL-1775: выбор Website / Instant Form - настоящий, значения те, что шлёт создатель
     assert cr.DESTINATION == "WEBSITE" and cr.DEST_WEBSITE == "website" and cr.DEST_FORM == "instant_form"
     assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant Form<' in page
@@ -203,7 +220,7 @@ def test_the_ui_shows_only_what_the_creator_sends():
     # Список ОС в карточке — тот, который создатель умеет превратить в таргетинг.
     slot = _slot_code()
     os_opts = set(re.search(r"mkSel\(idx, 'os', \[([^\]]*)\]", slot).group(1).replace("'", "").replace(" ", "").split(","))
-    assert os_opts == {"All", "iOS"}
+    assert os_opts == {"All", "iOS", "Android"}   # ACL-1767: Android - только API (в RPA пункт выключен)
     from src.fb_api.creator import targeting_for  # noqa: F401  (ветка user_os есть в создателе)
     src = (ROOT / "src" / "fb_api" / "creator.py").read_text(encoding="utf-8")
     assert 'user_os' in src and '"ios"' in src.lower()

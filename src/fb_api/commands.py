@@ -30,6 +30,7 @@ import secrets
 import threading
 import time
 from contextlib import AbstractContextManager
+import logging
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
@@ -38,6 +39,8 @@ from src.fb_api import write_policy as _wp
 from src.fb_api.creator import ZERO_DECIMAL, budget_minor
 from src.fb_api.graph import GraphError, GraphStop, WriteUnknown, WritesBlocked
 from src.fb_api.telemetry import scrub
+
+log = logging.getLogger(__name__)
 
 # ───────────────────────── константы ─────────────────────────
 
@@ -138,6 +141,11 @@ class OperationStore:
             if isinstance(op, dict) and op.get("op_id"):
                 self._ops[str(op["op_id"])] = op
         for op in list(self._ops.values()):
+            if op.get("refresh_pending"):
+                # The old process/session is gone. Preserve the command result;
+                # never replay its write or claim its refresh is still running.
+                op["refresh_pending"] = False
+                self.try_save(op)
             if op.get("state") in (RUNNING, VERIFYING):
                 items = op.get("affected", [])
                 # «saved»/«mismatch» — сверка уже показала, что запись дошла (ACL-1855:
@@ -473,7 +481,7 @@ def max_targets_for_ceiling() -> int:
 
 
 def preview(store: OperationStore, open_session: OpenSession, *, account: str, actor: str,
-            command: str, value: Any, targets: Any) -> dict:
+            command: str, value: Any, targets: Any, baseline: dict | None = None) -> dict:
     if command not in COMMANDS:
         raise CommandRefused("Unknown command. Use set_status, set_budget or set_bid.")
     account = str(account or "").strip()
@@ -510,6 +518,14 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
                                 "reason": f"Could not read this {LEVEL_WORD[t['level']].lower()} "
                                           f"(Graph error {exc.code})"})
                 continue
+            saved = (baseline or {}).get(t["level"] + ":" + t["id"], {})
+            for field in ("status", "daily_budget", "bid_amount", "bid_strategy"):
+                known = saved.get(field)
+                if known not in (None, "") and snap.get(field) != known:
+                    raise CommandRefused(
+                        f"{LEVEL_WORD[t['level']]} changed since the saved list. "
+                        "Nothing was written; the account list is refreshing. Preview it again.",
+                        status=409, code="stale")
             entry, why = plan_one(command, snap, new, currency)
             if entry is None:
                 skipped.append({"level": t["level"], "id": t["id"], "name": snap["name"], "reason": why})
@@ -545,7 +561,9 @@ def _spawn_thread(fn: Callable[[], None]) -> None:
 
 def execute(store: OperationStore, open_session: OpenSession, *, revision_id: str,
             idempotency_key: str, spawn: Callable[[Callable[[], None]], None] | None = None,
-            sleep: Callable[[float], None] = time.sleep) -> dict:
+            sleep: Callable[[float], None] = time.sleep,
+            after_write: Callable[[dict, Any], None] | None = None,
+            on_stale: Callable[[dict], None] | None = None) -> dict:
     """Принять подтверждение человека и запустить операцию. Возвращает её состояние.
 
     Тот же ключ — тот же ответ, записей больше нет. Превью исполняется один раз.
@@ -575,6 +593,8 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
         op["idempotency_key"] = key
         op["state"] = RUNNING
         op["message"] = "Re-reading current values"
+        if after_write is not None or on_stale is not None:
+            op["refresh_pending"] = True
         for item in op["affected"]:
             item["result"] = "pending"
         try:
@@ -584,6 +604,7 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
             for item in op["affected"]:
                 item["result"] = "not_sent"
             op["state"] = FAILED
+            op["refresh_pending"] = False
             op["message"] = HISTORY_FAILED + " Nothing was sent. Free up disk space and try again."
             store.try_save(op)
             raise CommandRefused(op["message"], status=503, code="storage") from None
@@ -591,7 +612,12 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
 
     def work() -> None:
         try:
-            run_op(store, op_id, open_session, sleep=sleep)
+            callbacks = {}
+            if after_write is not None:
+                callbacks["after_write"] = after_write
+            if on_stale is not None:
+                callbacks["on_stale"] = on_stale
+            run_op(store, op_id, open_session, sleep=sleep, **callbacks)
         except BaseException as exc:  # noqa: BLE001 — операция не должна остаться в Running
             _finish_after_crash(store, op_id, exc)
 
@@ -623,12 +649,19 @@ def _fail_all(op: dict, message: str, *, stale: bool = False) -> None:
 
 
 def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
-           sleep: Callable[[float], None] = time.sleep) -> None:
+           sleep: Callable[[float], None] = time.sleep,
+           after_write: Callable[[dict, Any], None] | None = None,
+           on_stale: Callable[[dict], None] | None = None) -> None:
     op = store.get(op_id)
     assert op is not None
     try:
         with open_session(op["account"], True) as sess:
             _run(store, op, sess, sleep)
+            if op["state"] == SUCCEEDED and after_write is not None:
+                try:
+                    after_write(op, sess)
+                except Exception:  # noqa: BLE001 — запись уже подтверждена и сохранена
+                    log.warning("The campaign list could not refresh after a confirmed command; its result is unchanged.")
     except CommandRefused as exc:
         # Отказ до первой записи (чужой кабинет, смена валюты, устаревшее превью).
         _fail_all(op, f"{exc} Nothing was written.", stale=exc.code == "stale")
@@ -643,6 +676,15 @@ def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
             return
         _stopped(op, scrub(str(exc)) or type(exc).__name__)
         store.try_save(op)
+    finally:
+        if op.get("stale") and on_stale is not None:
+            try:
+                on_stale(op)
+            except Exception:  # noqa: BLE001 — отказ записи остаётся отказом
+                log.warning("The stale campaign list could not be queued for refresh. Nothing was retried.")
+        if op.get("refresh_pending"):
+            op["refresh_pending"] = False
+            store.try_save(op)
 
 
 def _stopped(op: dict, message: str) -> None:

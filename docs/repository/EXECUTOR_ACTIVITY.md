@@ -10,6 +10,43 @@ a source, releases a review lane or changes a task's native workflow status.
 A recorded stop is retained while that same owner remains assigned; another
 executor's heartbeat or retention cleanup cannot turn that known stop into a run.
 
+## Current-stage time is separate
+
+Tracker3.12.0 labels current-stage residence `In stage` in task rows/cards and
+details. It includes waiting, independently of Working/Waiting/Connection lost/
+Activity unconfirmed or known stop. Confirmed Work/Review/Merge totals remain in
+details. A genuine new stage starts its own clock, including a return after
+corrections. Backlog, completed and archived tasks have no live stage clock.
+Explicit phase-preserving pause freezes residence; supported resume continues
+it with the union of actual paused intervals excluded, including repeated frozen
+batch pauses with a stable batch ID and genuinely new sessions.
+
+`stage_timing.py` projects entry facts from native status events, exact owned
+operations/approvals and qualified pending-publication/job records. Issue edits,
+snapshot time, source commit age and another executor are not entry facts.
+Unknown old starts remain `Time unknown`. A known start may outlive the visible
+500-event history only when complete incremental reads prove no intervening
+transition; a missing collection window cannot establish continuity. A stale
+snapshot freezes residence at its saved observation, without claiming current
+activity. Public fields contain only stage keys, UTC entry/as-of and safe totals.
+
+After an actual successful owned CLI launch/resume, the compatible engine seeds
+that same caller's first running observation. Optional reporting failure leaves
+the real claim intact and returns `executor_activity: unconfirmed`, never replays
+the committed ownership operation. This is not a persistent producer. The actual
+executor must still report once a minute or run its actual foreground agent in
+the wrapper below. Read-only polls, queued work and foreign/old runs do not seed.
+
+New legacy `work/start` with an actual Worker actor/session binds its identity
+only when the existing outer8 compatible-writer fence is already active. It
+returns the actual claim for later owned operations. Old unfenced/unbound runs
+stay unknown; do not activate a policy, invent authority or edit private state
+to hide that limitation. Current pins/runs do not gain a producer merely because
+the central UI or instructions changed. Master companion:
+[MR-79](https://github.com/MojoTheApe/master-repo/issues/79).
+
+## Reporting an actual run
+
 Use the same actual role, session and claim returned by the ownership command:
 
 ```sh
@@ -78,8 +115,11 @@ history preserves the actual label changes. Approval waiting age is separate fro
 confirmed Work/Review/Merge time, and missing history stays unknown.
 History does not claim that every label edit changes a category count. Initial
 and reconciliation reads cover at most ten pages, with overlap on incremental
-reads; retain at most 500 relevant events and show 25 per page. Missing/truncated
-coverage and refresh failures are explicit, with original GitHub histories retained.
+reads; retain at most 500 relevant native events and show 10 readable changes per
+page, grouped by local day with task search and expandable original event details.
+Only unambiguous opposite status-label events for one task/account within five
+seconds form a transition; Archive and ambiguous records remain separate events.
+Missing/truncated coverage and refresh failures are explicit, with original GitHub histories retained.
 Raw webhook bodies, unrelated labels, Issue prose and credentials are not published.
 
 Master companion: [MR-65](https://github.com/MojoTheApe/master-repo/issues/65).

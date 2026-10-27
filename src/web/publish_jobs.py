@@ -33,6 +33,7 @@ from src.fb_ads_rpa.profile_lease import ProfileLeaseError
 from src.web.keep_awake import keep_display_awake
 from src.web.profile_slots import KEPT_CONVENIENCE, KEPT_REVIEW, ProfileSlots
 from src.web import draft_status
+from src.analysis_agent.account_refresh_state import target_activity
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -489,6 +490,21 @@ def _is_cancelled(job_id: str) -> bool:
         return bool(job and job.get("cancel_requested"))
 
 
+def _teach_of(job_id: str, account_label: Any) -> dict[str, Any]:
+    """Teach state of one job for the poll answer (ACL-1142)."""
+    try:
+        from src.fb_ads_rpa import pacing
+
+        state = pacing.get_teach_state(job_id)
+    except Exception:
+        state = {"waiting": False, "step": ""}
+    return {
+        "waiting": bool(state.get("waiting")),
+        "step": str(state.get("step") or ""),
+        "account_label": str(account_label or ""),
+    }
+
+
 def get_job(job_id: str) -> dict[str, Any] | None:
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -502,6 +518,8 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap["campaign_names"] = list(job.get("campaign_names", []))
         if isinstance(job.get("queue"), dict):
             snap["queue"] = dict(job["queue"])
+        # ACL-1142: ждёт ли ЭТО задание клика человека (teach) и чей аккаунт.
+        snap["teach"] = _teach_of(job_id, snap.get("account_label"))
         expected = int(snap.get("total") or 0)
         snap["publishable"] = (
             snap.get("status") == "done"
@@ -714,6 +732,9 @@ def _run_job_inner(
         with _jobs_lock:
             _jobs[job_id].pop("queue", None)
             _jobs[job_id]["slot_wait_s"] = grant["waited_s"]
+            # ACL-1642: пропущено вперёд головы очереди, ждавшей память.
+            # Ставим каждый раз: повторная выдача места (ACL-1614) может быть уже не «вперёд».
+            _jobs[job_id]["started_ahead"] = bool(grant["decision"].get("started_ahead"))
             # ACL-2113: задание взяло уже открытое окно (без перезапуска); окно «на
             # проверку» остаётся таким и после этого задания.
             if grant.get("reused_kept"):
@@ -726,12 +747,16 @@ def _run_job_inner(
                 _rt.record("job_phase", True, campaign=first_campaign, note="slot_queue",
                            duration_s=float(grant["waited_s"]),
                            diag={"account": account_label,
+                                 # ACL-1642: был ли профиль уже открыт и пошло ли вперёд очереди.
+                                 "profile_open": bool(grant["decision"].get("profile_open")),
+                                 "started_ahead": bool(grant["decision"].get("started_ahead")),
                                  "decision": _decision_for_telemetry(grant["decision"]),
                                  "first_hold": (_decision_for_telemetry(grant["first_hold"])
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)):
+        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), target_activity(
+                profile, cancelled=lambda: _is_cancelled(job_id)):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)
                 return
@@ -801,7 +826,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
-                  else "waiting_memory" if hold in ("memory_low", "below_reserve")
+                  else "waiting_memory" if (hold in ("memory_low", "below_reserve")
+                                            or verdict.get("behind_memory"))
                   else "waiting_review" if hold == "review_windows"
                   else "waiting_idle" if hold == "idle_windows"
                   else "waiting_slot"),
@@ -822,6 +848,9 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),
+        "profile_open": bool(verdict.get("profile_open")),
+        # ACL-1642: стоит за головой, которая ждёт память.
+        "behind_memory": bool(verdict.get("behind_memory")),
     }
 
 
@@ -1009,7 +1038,7 @@ def _run_rpa(
     with _jobs_lock:
         _active_publishers[job_id] = publisher
     # ACL-1614: Stop слышен потоку задания в каждом ожидании (job_cancel.check).
-    job_cancel.bind(getattr(publisher, "cancel_event", None))
+    job_cancel.bind(getattr(publisher, "cancel_event", None), job_id)
     # Stop мог прийти до регистрации публикатора: `cancel_job` его не нашёл.
     if _is_cancelled(job_id):
         publisher.cancel()
@@ -1251,6 +1280,15 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             wrote = True
         settled = clean or not wrote
         other = settled and _profile_has_other_job(job_id, account_label)
+        if clean and wrote and not dry_run:
+            refresh = getattr(publisher, "refresh_structure", None)
+            if refresh is not None:
+                try:
+                    refresh()
+                except Exception:
+                    # Publishing is already confirmed. Never turn a failed
+                    # local refresh into a retry of a successful write.
+                    logging.getLogger(__name__).warning("Post-publish account list refresh failed")
         try:
             outcome = publisher.finish_job(account_label, clean=settled, other_job_waits=other)
         except Exception:

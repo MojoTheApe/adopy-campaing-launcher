@@ -24,11 +24,37 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  ACL-141 uses queued, labelled page dialogs in place of browser alert/confirm/prompt;
+  Escape/Cancel refuse, destructive actions initially focus Cancel, and focus returns
+  to the initiating control. Recoverable control errors stay inline. Forms deletion
+  also rechecks the row/list after confirmation; existing Page forms remain untouched.
+  Manual profile-ID saves and automatic profile links keep refusals beside their
+  visible form/list; saved/linked messages follow the real successful response.
+  Missing-creative Publish refusals stay inline beside the visible form/footer
+  action, preserving the named rows and refusal before submission.
+  ACL-142: the account map's Connect step asks for the ad account in an in-page
+  dialog instead of a browser prompt. It reads the open profile on opening and
+  again on "Read from the open account"; the result (name and `act_` number) is
+  shown in an editable field and, because Ads Manager opens the profile's
+  default ad account, an unedited read must be ticked as the intended account
+  before Connect is enabled. A typed number needs no tick; an empty one connects
+  without a number as before. In a country row, `x` takes the account out of
+  that country only (confirmed; it stays in ACL and moves to Available
+  accounts), and "Remove from ACL" is a separate confirmed action that deletes
+  this computer's account-map row and the account's country/asset placements
+  (`POST /account-map-remove` with `also_unlink`). The shared sheet, history,
+  Meta campaigns and the Multilogin profile are never touched.
+  Full removal uses the same case-insensitive account identity as local placements;
+  reconnect does not restore old country/asset links. Its confirmations use the
+  shared page dialogs and recoverable errors stay beside the originating action.
   ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
   throttle) and once per missed search streak. A miss during the two-second request
   gap waits in the background for its refresh; typing remains available and the
   visible latest query is searched again without switching Image/Video. Selected
   creatives and campaign fields remain unchanged until the user chooses a file.
+  ACL-1668 marks selected files missing from a refreshed catalog while retaining
+  their names. Publish and Publish all name the affected rows and refuse them;
+  publish-time enrichment also checks the file again and reports deletion/rename.
   ACL-1381 keeps ACL-1769's numbered primary-text fields and separately displayed
   headline. Builder search/help and empty/error messages call the shared library
   entries ad texts; internal copy/copy2 fields and submission behavior are unchanged.
@@ -56,7 +82,38 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
   anyone (the file may need updating) versus rows for other managers but none for the
   selected manager (nothing to review); the account map stays available in both.
+- `src/web/period_compare.py`: the dashboard can compare the selected workbook
+  period with the previous range of equal length or a custom range (ACL-110).
+  Both use the existing report and metric formulas. Earlier zero is retained;
+  zero or missing denominators give a dash for the change. Country/account/manager,
+  recommendation and breakdown rows present in only one report are marked new/gone.
+  Historical-only evidence is read only and does not restore account assignments
+  or become a Builder/Workbench action. Current Workbench row indices and cached
+  reports are preserved. Home and Workbench metrics retain their existing cohort
+  and weighting semantics; a map-summary refresh keeps the same comparison dates.
+  Measured spend and FTD summaries also compare in volume cards, row You tags,
+  asset chips and sidebar counters; structural counts, goals and draft inputs keep
+  their existing meaning. Historical-only exact versions and CM Net/ROI remain visible.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
+- `src/fb_ads_rpa/pacing.py` and job progress:
+  ACL-1142 keeps Website teach waits and Continue answers per publish job. The
+  banner names its account, and status/progress both expose that job's wait for
+  the orange attention dot. Cancellation, timeout or an exception clears only
+  that job's wait; the manual Pause button, profile cap and leases remain shared
+  safety controls. Ordinary builds still pulse grey, finished failures stay
+  orange, clean results green, and reduced motion disables only the animation.
+- `src/web/profile_slots.py` (ACL-1642): a publish job whose Multilogin profile is already
+  open does not reserve memory for a new profile. The configured concurrency ceiling,
+  per-profile ownership and kept-window rules still apply. A read-only background probe
+  uses the same long/short-folder and profile-ID process check as the robot; only a fresh
+  answer (five seconds) bypasses memory checks. Missing, failed or stale answers retain
+  the normal memory guard. A hung probe's late reply cannot replace a newer result.
+  Before closing an owned idle window for memory alone, the queue gives a pending
+  background check up to five seconds to answer. An open answer avoids that close;
+  closed/failed answers and an expired wait retain the existing conservative policy.
+  Capacity/ownership checks still apply immediately, and the wait holds no queue lock.
+  The first eligible open-profile job may pass a head waiting for memory; the dashboard
+  explains this and shows the real free/needed memory with a close-window hint.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
   profile identity, draft preparation, queues and browser lifecycle. See
   [same-user process ownership and its boundaries](PROFILE_OWNERSHIP.md). ACL-1250/#247
@@ -68,6 +125,15 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   stop the account with `profile_no_proxy` when none is configured. A failed check
   does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
   browser's `--proxy-server` flag is only logged as evidence.
+- `src/fb_api/targeting_resolver.py`: the API Builder resolves library names through
+  exact normalized interests, paged interest/behavior search and work/education
+  searches. Each job caches its reads and results within bounded Graph budgets.
+  A near match or a split into several targets remains a candidate in Check plan;
+  creation refuses it until the user explicitly confirms a displayed choice.
+  Confirmed choices live in machine-local `targeting_confirmed.json` and can be
+  cleared. A new result for the same term invalidates its previous candidates,
+  including when no candidates remain. These searches only read through the
+  existing guarded session; the RPA backend cannot use confirmation endpoints.
 - `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
@@ -219,6 +285,21 @@ extra asset reads or fallback writes. This is Page/account usability evidence,
 not a full media/content/ad-review guarantee. Tests use synthetic transports and
 the actual helper offline; no live Meta or profile pilot has been performed.
 
+## ACL-1990 — Pre-flight topics and bounded read failures
+
+The builder groups its audit into seven topics, uses each topic's worst status,
+opens errors/warnings and offers Check with Meta in the card header. The check
+explains profile opening and its usual 30 s–3 min duration, shows elapsed time,
+the last checked time, edited-since-check state and Retry. Drawer-foot wording
+names the campaigns being checked. Rendering and topic toggling make no requests.
+
+Only a transient session refusal before any campaign was checked is `not_checked`
+and nonblocking. A failure during a later campaign or session teardown preserves
+the completed result objects and their server audits; unfinished campaigns after
+a partial check stay blocking. A known local draft error stays blocking even if
+the profile never opens. Inactive/unavailable accounts remain account-rule errors.
+Check plan stays read-only; no additional Graph calls or UI are introduced.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling
@@ -251,6 +332,38 @@ and records exact task delivery only from the successful native acceptance job.
 Source preparation, policy activation and actual delivery remain distinct facts;
 see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
 
+## Several primary texts and Stories / Reels media (ACL-1774)
+
+API backend only. One text and one file keep the old `object_story_spec`. Findings from the
+Meta capability spike (Doc120, 2026-10-14): `asset_feed_spec` with 3 bodies plus two placement
+customization rules was refused (error 100, subcode 1885878); a rule applies one asset per type.
+Owner decision 2026-10-20 (the recorded PAUSED capability spike accepted Dynamic Creative;
+the visual Ads Manager presentation check remains pending):
+
+- 2-5 texts (or several headlines/descriptions) go as Dynamic Creative: `is_dynamic_creative: true`
+  on the ad set (the only new ad-set key in the write allowlist, `true` only), one file, no rules,
+  text optimizations stay OFF. The ad must be alone in its ad set; Instant Form refuses it.
+- A Stories / Reels 9:16 file (two labelled files, two placement rules) works with one text per kind.
+- Both write-policy layers (`write_policy.py`, the in-page mirror in `token_capture.py`) and the
+  pre-flight rules (Python table + `cbPreflight` in `report.html`) carry the same limits.
+- Library entries with the same body retain their distinct headlines/descriptions. Empty text
+  slots preserve their field numbers. A partially created feed creative is reused only for the
+  same payload; a retry with changed texts uses a new creative without uploading the media twice.
+- Readback checks media labels and IDs even when ads are reused. Feed creatives retain the current
+  Instagram identity; vertical videos use the same bounded/chunked loader as the main video.
+  Website media/CTA controls stay outside the hidden Instant Form section, and campaign copies
+  preserve their ad counts. Choosing a square `..._post` file that has a `..._story` partner in
+  the same folder fills the empty Stories / Reels field from `creative_pairing` (the person can
+  change or clear it; an ad with several texts is not prefilled).
+- Over-length texts (1024 body, 255 headline/description) are refused before any write with a message
+  naming the length. The vertical file upload is labelled "Stories / Reels file image/video" in progress.
+- Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
+  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 is merged.
+  The RPA backend is out of scope (owner decision 2026-10-25). Open conditions: the live checks on
+  TEST9095 (2-5 texts as Dynamic Creative; one text with a square + 9:16 pair and placement rules)
+  and Instant Form asset feeds, which stay refused.
+
+
 ## ACL-1891 — Videos over 200 MB upload in chunks ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891), 2026-10-14)
 
 Videos up to 200 MB still go up in one request. A video from 200 MB up to 1536 MB (`VIDEO_MAX_BYTES` = `write_policy.UPLOAD_FILE_MAX`) goes through Meta's resumable upload on `/act_X/advideos`: `upload_phase=start` (`file_size`), `transfer` (`upload_session_id`, `start_offset`, multipart `video_file_chunk`), `finish` (`upload_session_id`, `title`, `name`). Everything stays PAUSED; nothing is deleted or activated.
@@ -272,6 +385,16 @@ Loading failures and confirmed empty lists are distinct and support Refresh page
 
 RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
 
+ACL-1897 applies the later-created ACL-2105 ordering to campaign-local Automatic:
+the first merged usable Page wins, ad-account Pages before profile Pages, without
+an inherited map overriding it. The option names the resolved Page. RPA carries
+that Page through the existing recorded Identity check, and its result names the
+Page and origin. A profile Page first needs the same constrained account-and-Page
+validate-only proof used by the API; refusal or unknown proof stops before the
+RPA creation flow. Proof is scoped to the current build, never the picker cache.
+A confirmed-empty Automatic Website RPA list keeps its existing Identity behavior;
+API Website shells, Forms refusals and legacy non-builder map fallback remain.
+
 Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
 # ACL-1880: manual completion when the automatic Page list is empty
 
@@ -286,3 +409,21 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
+
+## ACL-1907 — Language groups equal their expansion ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/907), 2026-10-14)
+
+Live finding on Doc120: readback reported ad set `languages` expected `[1002]` ("Spanish (All)") vs Meta `[7, 23]`, and a re-run stopped with "Existing ad set ... differs from the builder: languages (builder: 1002, Meta: 7, 23)". `TargetingResolver.locale()` now records, for a pick named "X (All)", the members seen in the same `adlocale` result (`locale_groups`: names equal to X or starting "X (", never hard-coded). `CampaignCreator._language_check` (used by both readback and `_existing_differences` through `_adset_checks`) treats a group id absent from Meta's list as equal to its complete known member set; a missing known member or any locale outside the group stays a mismatch. When the search listed no members, the compare is strict and the difference text adds "compared strictly: Meta's search did not list the locales it expands into". Read-only change. Preserved real test-dashboard creation and rerun results show the exact Spanish (All) contract: expected `[1002]`, complete Meta locales `[7, 23]`, and passing language readback on both campaigns. The rerun retained the same campaigns and ad sets with no new creations. The locale resolver, comparison helpers and locale-specific readback/reuse caller nodes match the tested compositions by normalized AST after the current-main refresh. Private record hashes and installation/source provenance are retained in the author handoff for independent assessment. This scoped evidence does not resolve separate video-ID findings or establish package delivery; fresh source review, applicable CI and actual delivery remain separate.
+
+
+## ACL-2231 — creative recovery ownership
+
+Creative recovery persists a machine-local pending receipt before dispatch and
+known IDs immediately after confirmation. Reconciliation requires the exact
+account, Page, form and full requested material; unknown writes never expire
+into permission to send again. Complete bounded discovery is required before a
+first creative dispatch. An explicit ACL label belonging to another campaign
+excludes that creative from orphan recovery, preserving suffixed campaign
+ownership. A legacy name tag alone is not ownership: missing-metadata creatives
+can still be recovered by verified identity and complete content. Ambiguity,
+incomplete discovery or unreadable receipts stop safely. Partial IDs survive
+failure, and operator guidance requires reconciliation before retrying.
