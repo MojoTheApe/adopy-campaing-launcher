@@ -373,6 +373,9 @@ class FakeMeta:
     """Graph API в памяти: тот же интерфейс, что `InPageGraph` (request/write/stage_file)."""
 
     def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=(), instagram="one"):
+        # One synthetic account universe owns one matching durable config universe.
+        # Same-Meta retries keep it; a new FakeMeta must not inherit absent IDs.
+        self._machine_config = tempfile.TemporaryDirectory(prefix="acl-fake-")
         self.objects: dict[str, dict] = {}
         self.images: dict[str, str] = {}
         self.posts: list[tuple[str, dict]] = []
@@ -475,6 +478,8 @@ class FakeMeta:
         return {"status": 200, "body": body}
 
     def request(self, method, path, params=None):
+        from tests.fake_creative_receipts import select
+        select(self._machine_config.name)
         assert method == "GET", "no DELETE, no POST through request()"
         params = params or {}
         self.gets.append((path, params))

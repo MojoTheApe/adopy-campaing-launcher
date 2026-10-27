@@ -1668,7 +1668,11 @@ class CampaignCreator:
     def _creative_candidates(self, plan: CampaignPlan, stem: str, params: dict,
                              *, fresh: bool = False) -> list[dict]:
         rows = self._creative_listing(plan, fresh=fresh)
-        same = [r for r in rows if _cr.same_ad(r.get("name"), stem)]
+        # Explicit ownership by another ACL campaign is not our orphan. A name
+        # suffix alone is not ownership: untagged legacy creatives still reconcile.
+        same = [r for r in rows if _cr.same_ad(r.get("name"), stem)
+                and not any(label.startswith("acl-") and label != plan.label
+                            for label in _labels(r))]
         if any(str(r.get("account_id") or "") != plan.act.removeprefix("act_")
                or not _cr.complete(params, r) for r in same):
             raise CreationStopped("An existing creative could not be fully read. No new creative was sent.",
@@ -1724,6 +1728,8 @@ class CampaignCreator:
                         self._missing_creative_tag = True
                 row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
                 if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
+                        or any(label.startswith("acl-") and label != plan.label
+                               for label in _labels(row))
                         or not _cr.matches(plan.act, params, row)):
                     if label_failure:
                         raise label_failure

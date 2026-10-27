@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from config.paths import get_local_config_dir
 from src.fb_api import creator as cr
 from src.fb_api import creative_recovery as recovery
 from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _run
@@ -101,7 +100,7 @@ def test_corrupt_receipt_stops_instead_of_becoming_absent(tmp_path):
     draft = _draft(tmp_path, ads=1)
     meta.fail_next["ads"] = "unsent"
     _run(meta, draft, reconcile_wait_s=0)
-    for path in (Path(get_local_config_dir()) / "creative_receipts").glob("*.json"):
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
         path.write_text("{broken", encoding="utf-8")
     posts = list(meta.posts)
     out, _ = _run(meta, draft)
@@ -196,3 +195,33 @@ def test_anonymized_live_shape_retains_old_metadata_but_requires_same_content():
     assert recovery.complete(expected, actual) and recovery.matches(act, expected, actual)
     actual["object_story_spec"]["link_data"]["call_to_action"]["value"]["lead_gen_form_id"] = "999"
     assert not recovery.matches(act, expected, actual)
+
+
+def test_explicit_other_campaign_tag_is_not_recovered_as_our_orphan(tmp_path):
+    meta = FakeMeta()
+    draft = _draft(tmp_path, ads=1)
+    first, _ = _run(meta, draft)
+    assert not first.error
+    # A material-identical creative positively owned by a different campaign
+    # remains that campaign's object, even when the ad identity is identical.
+    old = creatives(meta)[0]
+    old["adlabels"] = [{"name": "acl-aaaaaaaaaaaa"}]
+    campaign = meta.objects[first.campaign_id]
+    campaign["daily_budget"] = "999"
+    second, _ = _run(meta, draft)
+    assert not second.error and second.readback["ok"]
+    assert len(creatives(meta)) == 2
+    assert old["id"] not in second.creative_ids
+
+
+def test_known_receipt_does_not_override_explicit_other_campaign_ownership(tmp_path):
+    meta = UntaggedMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    creatives(meta)[0]["adlabels"] = [{"name": "acl-aaaaaaaaaaaa"}]
+    posts = list(meta.posts)
+    second, _ = _run(meta, draft)
+    assert second.error and not second.ad_ids
+    assert meta.posts == posts

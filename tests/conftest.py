@@ -406,3 +406,23 @@ def _clear_plan_search_cache():
     except Exception:
         pass
     yield
+
+
+@pytest.fixture(autouse=True)
+def _fake_creative_receipt_universe(monkeypatch):
+    from src.fb_api import creative_recovery
+    from tests import fake_creative_receipts
+    from src.fb_api import graph
+    original = creative_recovery.get_local_config_dir
+    client_init = graph.GraphClient.__init__
+    def init(client, transport, *args, **kwargs):
+        machine = getattr(transport, "_machine_config", None)
+        if machine is not None:
+            fake_creative_receipts.select(machine.name)
+        client_init(client, transport, *args, **kwargs)
+    monkeypatch.setattr(graph.GraphClient, "__init__", init)
+    fake_creative_receipts.select(None)
+    monkeypatch.setattr(creative_recovery, "get_local_config_dir",
+                        lambda: fake_creative_receipts.root_for(original()))
+    yield
+    fake_creative_receipts.select(None)
