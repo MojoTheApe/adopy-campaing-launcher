@@ -30,79 +30,171 @@ import pytest
 
 from tests.acl1309_windows_person import write
 from tests.synthetic_json_ipc import read_json
+from tests.acl2063_task_control import run_task_control, preserve_primary_cleanup, private_payload
 
 pytestmark = pytest.mark.windows_only(
     reason="two real Windows local accounts, native logon/profile/mutex and ProgramData file permissions")
 
 
 def scheduled_tasks(payload):
-    """Use only the test's unique folder; credentials travel over stdin."""
+    """Use the owned folder and shared redacted marker protocol; secrets use stdin."""
+    payload = private_payload(payload)
     suffix = payload["folder"].removeprefix("acl1309-")
     assert payload["folder"].startswith("acl1309-")
     assert len(suffix) == 32 and all(c in "0123456789abcdef" for c in suffix)
     script = r"""
 $ErrorActionPreference = 'Stop'
 $p = [Console]::In.ReadToEnd() | ConvertFrom-Json
+function Phase($name) {
+    [Console]::Error.WriteLine('ACL2063_TASK_PHASE:' + $name)
+    [Console]::Error.Flush()
+}
+trap {
+    [Console]::Error.WriteLine('ACL2063_TASK_HRESULT:' + [string][int]$_.Exception.HResult)
+    [Console]::Error.Flush()
+    exit 1
+}
+Phase 'powershell.begin'
+Phase 'service.create.begin'
 $service = New-Object -ComObject 'Schedule.Service'
+Phase 'service.create.end'
+Phase 'service.connect.begin'
 $service.Connect()
+Phase 'service.connect.end'
+Phase 'root.open.begin'
 $root = $service.GetFolder('\')
+Phase 'root.open.end'
 $output = @{completed=$true}
 function RegisteredSnapshot($task) {
+    Phase 'snapshot.settings.begin'
     $settings = $task.Definition.Settings
-    return @{
-        path=[string]$task.Path; enabled=[bool]$task.Enabled
-        last_run=[string]$task.LastRunTime
-        demand_start=[bool]$settings.AllowDemandStart
-        run_only_if_idle=[bool]$settings.RunOnlyIfIdle
-        run_only_if_network=[bool]$settings.RunOnlyIfNetworkAvailable
-        disallow_battery=[bool]$settings.DisallowStartIfOnBatteries
-        logon_type=[int]$task.Definition.Principal.LogonType
-        run_level=[int]$task.Definition.Principal.RunLevel
-    }
+    Phase 'snapshot.settings.end'
+    $snapshot = @{}
+    Phase 'snapshot.path.begin'
+    $snapshot.path = [string]$task.Path
+    Phase 'snapshot.path.end'
+    Phase 'snapshot.enabled.begin'
+    $snapshot.enabled = [bool]$task.Enabled
+    Phase 'snapshot.enabled.end'
+    Phase 'snapshot.last_run.begin'
+    $snapshot.last_run = [string]$task.LastRunTime
+    Phase 'snapshot.last_run.end'
+    Phase 'snapshot.demand_start.begin'
+    $snapshot.demand_start = [bool]$settings.AllowDemandStart
+    Phase 'snapshot.demand_start.end'
+    Phase 'snapshot.run_only_if_idle.begin'
+    $snapshot.run_only_if_idle = [bool]$settings.RunOnlyIfIdle
+    Phase 'snapshot.run_only_if_idle.end'
+    Phase 'snapshot.run_only_if_network.begin'
+    $snapshot.run_only_if_network = [bool]$settings.RunOnlyIfNetworkAvailable
+    Phase 'snapshot.run_only_if_network.end'
+    Phase 'snapshot.disallow_battery.begin'
+    $snapshot.disallow_battery = [bool]$settings.DisallowStartIfOnBatteries
+    Phase 'snapshot.disallow_battery.end'
+    Phase 'snapshot.logon_type.begin'
+    $snapshot.logon_type = [int]$task.Definition.Principal.LogonType
+    Phase 'snapshot.logon_type.end'
+    Phase 'snapshot.run_level.begin'
+    $snapshot.run_level = [int]$task.Definition.Principal.RunLevel
+    Phase 'snapshot.run_level.end'
+    return $snapshot
 }
 if ($p.operation -eq 'create') {
+    Phase 'folder.create.begin'
     $null = $root.CreateFolder($p.folder, $null)
+    Phase 'folder.create.end'
 } elseif ($p.operation -eq 'start') {
+    Phase 'task.folder.begin'
     $folder = $service.GetFolder('\' + $p.folder)
+    Phase 'task.folder.end'
+    Phase 'task.definition.begin'
     $definition = $service.NewTask(0)
+    Phase 'task.definition.end'
+    Phase 'definition.principal_userid.begin'
     $definition.Principal.UserId = $p.user
+    Phase 'definition.principal_userid.end'
+    Phase 'definition.principal_logontype.begin'
     $definition.Principal.LogonType = 1  # TASK_LOGON_PASSWORD
+    Phase 'definition.principal_logontype.end'
+    Phase 'definition.principal_runlevel.begin'
     $definition.Principal.RunLevel = 0  # TASK_RUNLEVEL_LUA, never Highest
+    Phase 'definition.principal_runlevel.end'
+    Phase 'definition.settings_enabled.begin'
     $definition.Settings.Enabled = $true
+    Phase 'definition.settings_enabled.end'
+    Phase 'definition.settings_allowdemandstart.begin'
     $definition.Settings.AllowDemandStart = $true
+    Phase 'definition.settings_allowdemandstart.end'
+    Phase 'definition.settings_disallowstartifonbatteries.begin'
     $definition.Settings.DisallowStartIfOnBatteries = $false
+    Phase 'definition.settings_disallowstartifonbatteries.end'
+    Phase 'definition.settings_stopifgoingonbatteries.begin'
     $definition.Settings.StopIfGoingOnBatteries = $false
+    Phase 'definition.settings_stopifgoingonbatteries.end'
+    Phase 'definition.settings_executiontimelimit.begin'
     $definition.Settings.ExecutionTimeLimit = 'PT6M'
+    Phase 'definition.settings_executiontimelimit.end'
+    Phase 'definition.settings_multipleinstances.begin'
     $definition.Settings.MultipleInstances = 2  # ignore a duplicate demand
+    Phase 'definition.settings_multipleinstances.end'
+    Phase 'action.create.begin'
     $action = $definition.Actions.Create(0)
+    Phase 'action.create.end'
+    Phase 'action.path.begin'
     $action.Path = $p.executable
+    Phase 'action.path.end'
+    Phase 'action.arguments.begin'
     $action.Arguments = $p.arguments
+    Phase 'action.arguments.end'
+    Phase 'action.workingdirectory.begin'
     $action.WorkingDirectory = $p.directory
+    Phase 'action.workingdirectory.end'
     # TASK_CREATE only: never update a task that might belong to someone else.
+    Phase 'register.begin'
     $task = $folder.RegisterTaskDefinition($p.name, $definition, 2, $p.user, $p.password, 1, $null)
+    Phase 'register.end'
+    Phase 'snapshot.begin'
     $output.registered = RegisteredSnapshot ($folder.GetTask($p.name))
+    Phase 'snapshot.end'
     if (!$output.registered.enabled -or !$output.registered.demand_start -or
         $output.registered.logon_type -ne 1 -or $output.registered.run_level -ne 0) {
         throw ('Registered task differs from the controlled Password/Limited demand: ' +
                ($output.registered | ConvertTo-Json -Compress))
     }
+    Phase 'run.begin'
     $instance = $task.Run($null)
+    Phase 'run.end'
     if (!$instance) { throw 'No actual task instance was started' }
+    Phase 'instance.guid.begin'
     $output.instance = [string]$instance.InstanceGuid
+    Phase 'instance.guid.end'
+    Phase 'instance.state.begin'
     $output.instance_state = [int]$instance.State
+    Phase 'instance.state.end'
 } elseif ($p.operation -eq 'status') {
+    Phase 'status.task.begin'
     $task = $service.GetFolder('\' + $p.folder).GetTask($p.name)
+    Phase 'status.task.end'
+    Phase 'status.state.begin'
     $output.state = [int]$task.State
+    Phase 'status.state.end'
+    Phase 'status.result.begin'
     $output.last_result = [int64]$task.LastTaskResult
+    Phase 'status.result.end'
+    Phase 'status.snapshot.begin'
     $output.registered = RegisteredSnapshot $task
+    Phase 'status.snapshot.end'
+    Phase 'status.instances.begin'
     $output.instances = @($task.GetInstances(0) | ForEach-Object {
         @{guid=[string]$_.InstanceGuid; state=[int]$_.State;
           action=[string]$_.CurrentAction; engine_pid=[int]$_.EnginePID}
     })
+    Phase 'status.instances.end'
     # Read only this test's exact task events. Never enable/change the channel.
     $channel = 'Microsoft-Windows-TaskScheduler/Operational'
     $xpath = "*[EventData[Data[@Name='TaskName']='" + $task.Path + "']]"
     try {
+        Phase 'status.events.begin'
         $output.events = @(Get-WinEvent -LogName $channel -FilterXPath $xpath -MaxEvents 20 -ErrorAction Stop |
             ForEach-Object {
                 [xml]$xml = $_.ToXml()
@@ -111,11 +203,13 @@ if ($p.operation -eq 'create') {
                       @{name=[string]$_.Name; value=[string]$_.'#text'}
                   })}
             })
+        Phase 'status.events.end'
     } catch { $output.events_unavailable = [string]$_.Exception.Message }
     # If task history is disabled, preserve any native batch-logon refusal
     # for this uniquely created test account, without reading other accounts.
     $xpath = "*[System[EventID=4625] and EventData[Data[@Name='TargetUserName']='" + $p.name + "']]"
     try {
+        Phase 'status.security.begin'
         $output.logon_failures = @(Get-WinEvent -LogName Security -FilterXPath $xpath -MaxEvents 10 -ErrorAction Stop |
             ForEach-Object {
                 [xml]$xml = $_.ToXml()
@@ -126,25 +220,40 @@ if ($p.operation -eq 'create') {
                       @{name=[string]$_.Name; value=[string]$_.'#text'}
                   })}
             })
+        Phase 'status.security.end'
     } catch { $output.logon_failures_unavailable = [string]$_.Exception.Message }
 } elseif ($p.operation -eq 'cleanup') {
+    Phase 'cleanup.folder.begin'
     $folder = $service.GetFolder('\' + $p.folder)
-    foreach ($task in @($folder.GetTasks(1))) {
+    Phase 'cleanup.folder.end'
+    Phase 'cleanup.list.begin'
+    $tasks = @($folder.GetTasks(1))
+    Phase 'cleanup.list.end'
+    foreach ($task in $tasks) {
         if ($p.names -notcontains $task.Name) { throw 'Unexpected task in owned folder' }
-        if ($task.State -eq 4 -or $task.State -eq 2) {
-            try { $task.Stop(0) }
+        Phase 'cleanup.state.begin'
+        $needsStop = ($task.State -eq 4 -or $task.State -eq 2)
+        Phase 'cleanup.state.end'
+        if ($needsStop) {
+            try {
+                Phase 'cleanup.stop.begin'
+                $task.Stop(0)
+                Phase 'cleanup.stop.end'
+            }
             catch { if ($_.Exception.HResult -ne -2147216629) { throw } }
         }
+        Phase 'cleanup.delete.begin'
         $folder.DeleteTask($task.Name, 0)
+        Phase 'cleanup.delete.end'
     }
+    Phase 'cleanup.folder_delete.begin'
     $root.DeleteFolder($p.folder, 0)
+    Phase 'cleanup.folder_delete.end'
 } else { throw 'Unknown controlled task operation' }
+Phase 'complete'
 $output | ConvertTo-Json -Depth 8 -Compress
 """
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                            input=json.dumps(payload), capture_output=True, text=True, timeout=30)
-    assert result.returncode == 0, f"controlled task operation failed: {result.stderr}"
-    observed = json.loads(result.stdout)
+    observed = run_task_control(script, payload)
     assert observed["completed"] is True
     if payload["operation"] == "start":
         assert uuid.UUID(observed["instance"]).int != 0, observed
@@ -377,27 +486,28 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
             assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
             assert code.value == 0
     finally:
-        for user in users:
-            (ipc / f"{user}.server-stop").touch()
-        for process in processes:
-            if kernel.WaitForSingleObject(process.process, 25000) != 0:
-                kernel.TerminateProcess(process.process, 1)
-                kernel.WaitForSingleObject(process.process, 10000)
-            kernel.CloseHandle(process.process)
-        try:
-            if tasks_created:
-                scheduled_tasks({"operation": "cleanup", "folder": task_folder, "names": users})
-        finally:
+        with preserve_primary_cleanup(sys.exception()):
+            for user in users:
+                (ipc / f"{user}.server-stop").touch()
+            for process in processes:
+                if kernel.WaitForSingleObject(process.process, 25000) != 0:
+                    kernel.TerminateProcess(process.process, 1)
+                    kernel.WaitForSingleObject(process.process, 10000)
+                kernel.CloseHandle(process.process)
             try:
-                admission_cleanup.close()
+                if tasks_created:
+                    scheduled_tasks({"operation": "cleanup", "folder": task_folder, "names": users})
             finally:
-                foreign.shutdown()
-                foreign.server_close()
-                failures = [(user, net.NetUserDel(None, user)) for user in created]
-                shutil.rmtree(ipc)
-                if registry.parent.exists():
-                    shutil.rmtree(registry.parent)
-                assert all(code == 0 for _, code in failures), failures
+                try:
+                    admission_cleanup.close()
+                finally:
+                    foreign.shutdown()
+                    foreign.server_close()
+                    failures = [(user, net.NetUserDel(None, user)) for user in created]
+                    shutil.rmtree(ipc)
+                    if registry.parent.exists():
+                        shutil.rmtree(registry.parent)
+                    assert all(code == 0 for _, code in failures), failures
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
@@ -405,7 +515,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         # assertion and owned cleanup succeeds; never profiles, SIDs or users.
         with open(summary, "a", encoding="utf-8") as report:
             report.write(
-                "\n### ACL-1309: two real standard Windows accounts — passed\n\n"
+                "\n### ACL-1309: two real standard Windows accounts â€” passed\n\n"
                 "Distinct native users/profiles and own configuration identities; "
                 "side-by-side dashboards; repeated shortcut reattach; setup and "
                 "stable-port restart beside a live neighbor; actual child PID/port "

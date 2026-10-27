@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2228 — Expose bounded native Windows acceptance task phases — 2026-10-27
+
+The ACL-1309 native task controller now flushes fixed phases around COM boundaries,
+including separate instance GUID/state reads, using the existing redacted 30-second
+controller. A primary failure retains its own phase when owned cleanup also fails;
+all existing cleanup remains attempted. Portable contracts verify observability,
+redaction and preserved completion/instance assertions. This diagnoses an unknown
+native hang; it does not establish a COM repair or waive Windows acceptance.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1228).
+
 ## ACL-2224 — Verify creative video content when returned IDs differ — 2026-10-26
 
 Video readback accepts a different returned video ID only when that video's deterministic title matches the requested file fingerprint. Both single-video and main/Stories/Reels asset-feed paths use the same check. Missing/unreadable or wrong content, missing slot binding, incorrect placement, object tags and creative/ad IDs remain guarded; image hashes are unchanged. Uploaded and returned video IDs plus verification evidence stay in readback diagnostics. No extra API reads or writes. The original Doc123 capture had matching file titles and placements but different video IDs; a reuse-only success did not exercise that creation check. This is title-based application identity evidence, not a downloaded byte comparison. Existing live campaigns were not recreated for this fix.
