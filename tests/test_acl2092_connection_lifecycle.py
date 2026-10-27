@@ -171,7 +171,7 @@ def test_connection_budget_covers_all_preparation_stages(tmp_path,slow_stage):
     assert not rig.gate.active()
 
 
-@pytest.mark.parametrize("mode",["lost-publish","confirm-read","decline-read","rpa-publish","api-publish","rpa-409"])
+@pytest.mark.parametrize("mode",["lost-publish","confirm-read","decline-read","rpa-publish","api-publish","rpa-409","not-loopback"])
 def test_actual_frontend_confirmation_and_idempotent_submission(mode):
     import json,shutil,subprocess
     from pathlib import Path
@@ -181,3 +181,33 @@ def test_actual_frontend_confirmation_and_idempotent_submission(mode):
     result=subprocess.run([node,str(root/'tests/acl2092_connection_harness.cjs'),str(root/'src/web/templates/report.html'),mode],capture_output=True,text=True,encoding='utf-8',timeout=10)
     assert result.returncode==0,result.stderr
     assert json.loads(result.stdout)["ok"]
+
+
+def test_prepare_on_a_profile_held_by_another_operation_answers_busy_not_a_failure(monkeypatch):
+    """A read or the account's own job holding the lease must not fail Publish before dispatch."""
+    import threading
+    from src.fb_ads_rpa.operations import profile_lock
+    from src.web import warm_api
+    monkeypatch.setattr(warm_api,"_guard",lambda:None)
+    monkeypatch.setattr(warm_api,"_entry",lambda label:SimpleNamespace(profile_id=PID,folder_id="",multilogin_instance="A",ad_account_id=ACT))
+    held,release=threading.Event(),threading.Event()
+    def hold():
+        with profile_lock(PID):
+            held.set(); release.wait(10)
+    t=threading.Thread(target=hold); t.start()
+    try:
+        assert held.wait(5)
+        data,code=warm_api.prepare_connection("Acc")
+    finally:
+        release.set(); t.join()
+    assert code==200 and data["ok"] and data["code"]=="busy" and data["skipped"]
+
+
+def test_prepare_still_refuses_rpa_backend_and_foreign_bind_with_distinct_codes(monkeypatch):
+    from src.web import warm_api,campaign_commands
+    monkeypatch.setattr(campaign_commands,"api_enabled",lambda:False)
+    assert warm_api.prepare_connection("Acc")[0]["code"]=="rpa_backend"
+    monkeypatch.setattr(campaign_commands,"api_enabled",lambda:True)
+    monkeypatch.setattr(campaign_commands,"bound_to_loopback",lambda:False)
+    data,code=warm_api.prepare_connection("Acc")
+    assert code==403 and data["code"]=="not_loopback"

@@ -17534,7 +17534,8 @@ window.aclPrepareConnection = function (account) {
   function prepare(confirmed) {
     return fetch('/connection/prepare', {method: 'POST', credentials: 'same-origin',
       headers: {'Content-Type':'application/json'}, body: JSON.stringify({account: account, confirm_reopen: confirmed})})
-      .then(function (r) { return r.json(); });
+      .then(function (r) { return r.json(); })
+      .catch(function () { throw new Error('the dashboard did not answer the connection check'); });
   }
   return prepare(false).then(function (data) {
     if (data.code !== 'open_by_hand') return data;
@@ -17545,6 +17546,9 @@ window.aclPrepareConnection = function (account) {
   }).then(function (data) {
     // RPA backend: nothing to prepare, never a reason to stop the original action.
     if (data && data.code === 'rpa_backend') return {ok: true, skipped: 'rpa_backend'};
+    // Not an API-bound dashboard, or the profile is busy with another operation: the action
+    // itself (queue / duplicate answer / its own wait) deals with it as it did before preparation.
+    if (data && (data.code === 'not_loopback' || data.code === 'busy')) return {ok: true, skipped: data.code};
     if (!data.ok) throw new Error(data.error || data.message || 'Connection preparation failed');
     return data;
   });
@@ -18055,6 +18059,12 @@ function cbPostPublish(fd) {
   var apiPath = window.ACL_FB_BACKEND === 'api';
   var prepare = !apiPath || (key && prepared[key]) ? Promise.resolve() :
     (window.aclPrepareConnection ? window.aclPrepareConnection(fd.get('account_label')) : Promise.resolve());
+  // A refused or unanswered preparation means nothing was sent: say so for this account only.
+  prepare = prepare.catch(function (err) {
+    var stop = new Error('Not submitted: ' + String((err && err.message) || 'the connection could not be prepared'));
+    stop.cbNotSubmitted = true;
+    throw stop;
+  });
   return prepare.then(function () {
   if (key) prepared[key] = true;
   var ctl = (typeof AbortController === 'function' && typeof setTimeout === 'function')
@@ -18218,6 +18228,12 @@ function cbNewRun(notify) {
       .catch(function (err) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
         if (err && err.cbBusy) { offerRetry(e, fd, skipped, sentNames); return; }
+        if (err && err.cbNotSubmitted) {
+          // Preparation refused before any request left: only this account stops, the batch goes on.
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(err.message) + '</span>';
+          settle(e, { account: e.label, state: 'bad', why: err.message, skipped: skipped, key: e.key });
+          return;
+        }
         if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Request failed: ' + aclEscHtml(err.message) + '</span>';
         halt(e, { account: e.label, state: 'bad', why: 'Submission outcome unknown: ' + err.message });
       });

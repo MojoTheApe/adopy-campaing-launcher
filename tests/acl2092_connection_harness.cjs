@@ -30,6 +30,19 @@ if(mode==='rpa-publish') {
   assert.equal(result.job_id,'api-job');assert.equal(preparations,1);assert.equal(submissions,1);
   console.log(JSON.stringify({ok:true,preparations,submissions}));
  })().catch(e=>{console.error(e);process.exitCode=1;});
+} else if(mode==='not-loopback') {
+ // API backend bound to a non-loopback address: preparation is skipped, the read itself runs as before.
+ sandbox.fetch=async(url)=>{
+  if(url==='/connection/prepare') {preparations++;return {json:async()=>({error:'Loopback only',code:'not_loopback'})};}
+  submissions++;return {ok:true};
+ };
+ vm.createContext(sandbox);
+ vm.runInContext(block('window.aclPrepareConnection = function','\n};')+block('window.aclConnectionFetch = function','\n};'),sandbox);
+ (async()=>{
+  await sandbox.window.aclConnectionFetch('/account-spend/read',{method:'POST'},'Sample');
+  assert.equal(submissions,1);
+  console.log(JSON.stringify({ok:true,preparations,submissions}));
+ })().catch(e=>{console.error(e);process.exitCode=1;});
 } else if(mode==='rpa-409') {
  // The real helper treats the RPA backend's 409 rpa_backend as "nothing to prepare".
  sandbox.fetch=async(url)=>{

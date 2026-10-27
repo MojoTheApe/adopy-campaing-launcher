@@ -236,5 +236,9 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
             prepare_existing(reg,entry,label)
         return {"ok":True,"account":label},200
     except Exception as exc:
+        from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+        if isinstance(exc,ProfileLeaseError):
+            # Held by a read or by the account's own job: the action queues or dedupes itself.
+            return {"ok":True,"account":label,"code":"busy","skipped":True},200
         from src.fb_api.telemetry import scrub
         return {"ok":False,"account":label,"error":scrub(str(exc)),"code":getattr(exc,"code","") or "connection"},409
