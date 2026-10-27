@@ -271,3 +271,35 @@ def test_old_tag_creative_with_different_content_is_never_adopted_by_name_or_tag
     second, _ = _run(meta, draft)
     assert not second.error
     assert old["id"] not in second.creative_ids
+
+
+def test_accepted_identical_creative_is_reported_as_reused_not_created(tmp_path):
+    meta = ExistingIdenticalMeta()
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert not out.error
+    cid = creatives(meta)[0]["id"]
+    assert cid not in out.created.get("creatives", []) and cid in out.reused["creatives"]
+
+
+def test_resume_after_accepting_identical_creative_and_ad_failure_continues(tmp_path):
+    meta = ExistingIdenticalMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    assert any("existing identical creative" in w for w in first.warnings)
+    second, _ = _run(meta, draft)
+    assert not second.error and second.readback["ok"], second.error or second.mismatches
+    assert len(creatives(meta)) == 1 and len(second.ad_ids) == 1
+    assert any("existing identical creative" in w for w in second.warnings)
+
+
+def test_resume_of_accepted_identical_creative_stops_when_content_changed_since(tmp_path):
+    meta = ExistingIdenticalMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error
+    creatives(meta)[0]["object_story_spec"]["link_data"]["message"] = "changed"
+    second, _ = _run(meta, draft)
+    assert second.error and not second.ad_ids

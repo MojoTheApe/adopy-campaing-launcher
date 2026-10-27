@@ -1694,6 +1694,7 @@ class CampaignCreator:
             with _cr.transaction(plan.act, name, params) as receipt:
                 creative_id = receipt.object_id
                 created = False
+                resumed_accepted = bool(creative_id) and receipt.accepted_identical
                 if not creative_id:
                     creative_id = candidates()
                     if creative_id:
@@ -1733,11 +1734,21 @@ class CampaignCreator:
                 # creative is never re-tagged and a creative found only by name/tag is never adopted.
                 foreign_tag = isinstance(row, dict) and any(
                     label.startswith("acl-") and label != plan.label for label in _labels(row))
+                # On resume the receipt (written at acceptance) carries the mark; a bare receipt does not.
                 identical_existing = bool(
-                    created and foreign_tag and isinstance(row, dict)
+                    (created or resumed_accepted) and foreign_tag and isinstance(row, dict)
                     and str(row.get("id") or "") == creative_id and _cr.matches(plan.act, params, row))
                 if identical_existing:
                     out.warnings.append("Meta returned an existing identical creative (tag of an earlier run)")
+                    if created:
+                        # An existing object, not a new one: report it as reused and remember the acceptance.
+                        made = out.created.get("creatives", [])
+                        if creative_id in made:
+                            made.remove(creative_id)
+                        if not made:
+                            out.created.pop("creatives", None)
+                        out.reused.setdefault("creatives", []).append(creative_id)
+                        receipt.save(creative_id, accepted_identical=True)
                     return creative_id, True
                 if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
                         or foreign_tag
