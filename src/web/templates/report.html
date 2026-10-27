@@ -3549,6 +3549,8 @@
     .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
     .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+    /* Long generated ad-set names must fit the normal and resized drawer. */
+    .cbd-ed-pick > select { min-width: 0; max-width: 100%; flex: 0 1 12rem; }
     .cbd-ed-empty {
       color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-md);
@@ -3630,7 +3632,7 @@
     .cbd-set-sub { color: var(--muted); font-size: var(--adopy-text-sm); flex-shrink: 0; font-weight: 400; }
     #cbd-panel[data-names-only="1"] .cbd-sets { display: none; }
     .cbd-camp-sets::before { content: "·"; margin-right: var(--space-xs); }
-    .cbd-ed-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); }
+    .cbd-ed-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); min-width: 0; max-width: 100%; }
     /* Кнопки набора и список объявлений - компактные чипы, а не полосы на всю ширину. */
     .cbd-ed-actions .cbd-add, .cbd-ed-inset .cbd-add {
       display: inline-block; width: auto; margin-top: 0; padding: 0.15rem 0.55rem;
