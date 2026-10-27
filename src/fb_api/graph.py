@@ -328,7 +328,7 @@ class GraphClient:
         if wait > 0:
             self._sleep(wait)
 
-    def _check_page(self) -> None:
+    def _check_page(self) -> dict:
         try:
             state = self.transport.state() or {}
         except GraphStop as exc:
@@ -339,6 +339,7 @@ class GraphClient:
             raise self._stop(Checkpoint("the profile is on a Facebook checkpoint"))
         if kind == "login":
             raise self._stop(LoggedOut("the profile is logged out of Facebook"))
+        return state
 
     # -- один вызов
     def get(self, path: str, params: dict | None = None) -> dict:
@@ -360,8 +361,12 @@ class GraphClient:
             if err == "no_token":
                 self._check_page()
                 return self._token_dead(path, params, None, None)
-            if err == "network":
-                self._check_page()
+            if err in {"network", "network_timeout"}:
+                state = self._check_page()
+                if (state.get("kind") == "ads_manager" and state.get("has_token") is True
+                        and not getattr(self, "_connection_retry_used", False)):
+                    self._connection_retry_used = True
+                    return self.get(path, params)
             raise self._stop(PageFailed(f"the page could not call Graph API ({err})"))
 
         usage = usage_from_headers(reply.get("headers"))
