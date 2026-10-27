@@ -225,3 +225,49 @@ def test_known_receipt_does_not_override_explicit_other_campaign_ownership(tmp_p
     second, _ = _run(meta, draft)
     assert second.error and not second.ad_ids
     assert meta.posts == posts
+
+
+class ExistingIdenticalMeta(FakeMeta):
+    """ACL-2249: Meta answers the creative write with an existing creative that keeps an earlier run's tag."""
+
+    def _store(self, kind, params):
+        oid = super()._store(kind, params)
+        if kind == "creative":
+            self.objects[oid]["adlabels"] = [{"name": "acl-eb7048ed0b98"}]
+        return oid
+
+
+def test_rewrite_returning_identical_creative_with_earlier_tag_is_accepted_with_warning(tmp_path):
+    meta = ExistingIdenticalMeta()
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert not out.error and out.readback["ok"], out.error or out.mismatches
+    assert len(out.ad_ids) == 1 and out.creative_ids == [creatives(meta)[0]["id"]]
+    assert any("existing identical creative (tag of an earlier run)" in w for w in out.warnings)
+    # the shared creative keeps its own tag: the current one is never written onto it
+    assert creatives(meta)[0]["adlabels"] == [{"name": "acl-eb7048ed0b98"}]
+    assert not [p for p in meta.posts if "adlabels" in p[0]]
+
+
+@pytest.mark.parametrize("field,value", [("account_id", "999"), ("object_story_spec.page_id", "999"),
+                                       ("object_story_spec.link_data.message", "wrong")])
+def test_rewrite_returning_old_tag_creative_with_other_account_or_content_stops(tmp_path, field, value):
+    meta = ExistingIdenticalMeta()
+    meta.mutate_on_read[("creative", field)] = value
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.error and not out.ad_ids
+    assert not any("existing identical creative" in w for w in out.warnings)
+
+
+def test_old_tag_creative_with_different_content_is_never_adopted_by_name_or_tag(tmp_path):
+    meta = FakeMeta()
+    draft = _draft(tmp_path, ads=1)
+    first, _ = _run(meta, draft)
+    assert not first.error
+    old = creatives(meta)[0]
+    old["adlabels"] = [{"name": "acl-eb7048ed0b98"}]
+    old["object_story_spec"]["link_data"]["message"] = "other text"
+    campaign = meta.objects[first.campaign_id]
+    campaign["daily_budget"] = "999"
+    second, _ = _run(meta, draft)
+    assert not second.error
+    assert old["id"] not in second.creative_ids
