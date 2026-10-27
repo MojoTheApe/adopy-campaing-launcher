@@ -285,6 +285,21 @@ extra asset reads or fallback writes. This is Page/account usability evidence,
 not a full media/content/ad-review guarantee. Tests use synthetic transports and
 the actual helper offline; no live Meta or profile pilot has been performed.
 
+## ACL-1990 — Pre-flight topics and bounded read failures
+
+The builder groups its audit into seven topics, uses each topic's worst status,
+opens errors/warnings and offers Check with Meta in the card header. The check
+explains profile opening and its usual 30 s–3 min duration, shows elapsed time,
+the last checked time, edited-since-check state and Retry. Drawer-foot wording
+names the campaigns being checked. Rendering and topic toggling make no requests.
+
+Only a transient session refusal before any campaign was checked is `not_checked`
+and nonblocking. A failure during a later campaign or session teardown preserves
+the completed result objects and their server audits; unfinished campaigns after
+a partial check stay blocking. A known local draft error stays blocking even if
+the profile never opens. Inactive/unavailable accounts remain account-rule errors.
+Check plan stays read-only; no additional Graph calls or UI are introduced.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling
@@ -394,18 +409,3 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
-
-## ACL-1990 — Pre-flight topics and bounded read failures
-
-The builder groups its audit into seven topics, uses each topic's worst status,
-opens errors/warnings and offers Check with Meta in the card header. The check
-explains profile opening and its usual 30 s–3 min duration, shows elapsed time,
-the last checked time, edited-since-check state and Retry. Drawer-foot wording
-names the campaigns being checked. Rendering and topic toggling make no requests.
-
-Only a transient session refusal before any campaign was checked is `not_checked`
-and nonblocking. A failure during a later campaign or session teardown preserves
-the completed result objects and their server audits; unfinished campaigns after
-a partial check stay blocking. A known local draft error stays blocking even if
-the profile never opens. Inactive/unavailable accounts remain account-rule errors.
-Check plan stays read-only; no additional Graph calls or UI are introduced.
