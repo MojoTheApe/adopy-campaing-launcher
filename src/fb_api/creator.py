@@ -43,6 +43,7 @@ from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
 
+from src.fb_api import creative_recovery as _cr
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
@@ -1246,6 +1247,7 @@ class Outcome:
     campaign_id: str = ""
     adset_ids: list[str] = field(default_factory=list)
     ad_ids: list[str] = field(default_factory=list)
+    creative_ids: list[str] = field(default_factory=list)
     steps: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     readback: dict = field(default_factory=dict)
@@ -1316,7 +1318,6 @@ class CampaignCreator:
         self.video_max_polls = video_max_polls
         self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
         #: Имя → id наших креативов (список кабинета читается раз на кампанию).
-        self._creatives: dict[str, str] | None = None
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
         self._page_forms: _forms.FormsRead | None = None
         #: Instagram-идентичность Страницы (ACL-1896): читается раз на Страницу за прогон.
@@ -1447,8 +1448,7 @@ class CampaignCreator:
             except (GraphStop, GraphError) as rexc:
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
-                    "Nothing else was written; check Ads Manager, then publish again "
-                    "(a re-run does not duplicate).", created=out.created, kind="unknown") from rexc
+                    "Nothing else was written; reconcile the existing object in Ads Manager before retrying.", created=out.created, kind="unknown") from rexc
             if not found:
                 if stopped:
                     raise CreationStopped("Stopped by the user during the upload; nothing was found "
@@ -1457,7 +1457,7 @@ class CampaignCreator:
                                           created=out.created, kind="cancelled") from exc
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
-                    "Nothing else was written; publish again later (a re-run does not duplicate).",
+                    "Nothing else was written; reconcile the existing object before a re-run.",
                     created=out.created, kind="unknown") from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
@@ -1628,28 +1628,122 @@ class CampaignCreator:
         if label not in _labels(row):
             raise CreationStopped(
                 f"{what} was created but Meta did not keep the ACL tag ({label}) on it. "
-                "Stopped before any further write so a re-run cannot duplicate anything. "
+                "Stopped before any further write. Check the existing object before retrying. "
                 "Check it in Ads Manager.", created=out.created, kind="label_missing")
 
-    def _find_creative(self, plan: CampaignPlan, name: str, *, fresh: bool = False) -> str | None:
-        """Наш креатив без объявления: точное имя + метка, сверка на нашей стороне.
+    def _creative_listing(self, plan: CampaignPlan, *, fresh: bool = False) -> list[dict]:
+        """Only a complete, well-formed listing proves absence before dispatch."""
+        if not fresh and getattr(self, "_recovery_rows", None) is not None:
+            return self._recovery_rows
+        rows, cursors = [], set()
+        params = {"fields": _cr.FIELDS, "limit": 100}
+        for page in range(CREATIVE_LOOKUP_PAGES):
+            body = self.client.get(f"/{plan.act}/adcreatives", params)
+            valid = (isinstance(body, dict) and isinstance(body.get("data"), list)
+                     and all(isinstance(r, dict) and re.fullmatch(r"[0-9]{1,30}", str(r.get("id") or ""))
+                             and isinstance(r.get("name"), str) for r in body["data"]))
+            if not valid:
+                raise CreationStopped("The creative lookup is unreadable. No new creative was sent.",
+                                      kind="creative_unknown")
+            rows.extend(body["data"])
+            paging = body.get("paging", {})
+            if not isinstance(paging, dict):
+                raise CreationStopped("The creative pagination is unreadable. No new creative was sent.",
+                                      kind="creative_unknown")
+            if "next" in paging and paging["next"] is not None and not isinstance(paging["next"], str):
+                raise CreationStopped("The creative pagination is unreadable. No new creative was sent.",
+                                      kind="creative_unknown")
+            if not paging.get("next"):
+                self._recovery_rows = rows
+                return rows
+            cursor = (paging.get("cursors") or {}).get("after") if isinstance(paging.get("cursors", {}), dict) else None
+            if (not isinstance(paging["next"], str) or not isinstance(cursor, str)
+                    or not cursor or cursor in cursors or page + 1 == CREATIVE_LOOKUP_PAGES):
+                raise CreationStopped("The creative lookup is incomplete. No new creative was sent.",
+                                      kind="creative_unknown")
+            cursors.add(cursor)
+            params = dict(params, after=cursor)
+        raise AssertionError("unreachable creative pagination")
 
-        Живой запуск 5414 (job 2fb409d1): `/adcreatives` не принимает
-        `filtering` по `name` с `CONTAIN` (#100). Поэтому — постраничный список
-        свежих креативов кабинета (`CREATIVE_LOOKUP_PAGES` × 100, новые первыми)
-        один раз на кампанию; `fresh` — перечитать (сверка неизвестной записи).
-        Не нашли — значит, креатива нет среди свежих: лишний креатив без
-        объявления безвреден, дубля объявления не бывает (объявления ищутся в
-        нашей группе по имени).
-        """
-        if fresh or self._creatives is None:
-            rows = self.client.get_all(f"/{plan.act}/adcreatives", {
-                "fields": "id,name,adlabels{name}", "limit": 100}, max_pages=CREATIVE_LOOKUP_PAGES)
-            self._creatives = {}
-            for r in rows:
-                if plan.label in _labels(r) and r.get("id"):
-                    self._creatives.setdefault(str(r.get("name") or ""), str(r["id"]))
-        return self._creatives.get(name)
+    def _creative_candidates(self, plan: CampaignPlan, stem: str, params: dict,
+                             *, fresh: bool = False) -> list[dict]:
+        rows = self._creative_listing(plan, fresh=fresh)
+        # Explicit ownership by another ACL campaign is not our orphan. A name
+        # suffix alone is not ownership: untagged legacy creatives still reconcile.
+        same = [r for r in rows if _cr.same_ad(r.get("name"), stem)
+                and not any(label.startswith("acl-") and label != plan.label
+                            for label in _labels(r))]
+        if any(str(r.get("account_id") or "") != plan.act.removeprefix("act_")
+               or not _cr.complete(params, r) for r in same):
+            raise CreationStopped("An existing creative could not be fully read. No new creative was sent.",
+                                  kind="creative_unknown")
+        return [r for r in same if _cr.matches(plan.act, params, r)]
+
+    def _recoverable_creative(self, out: Outcome, plan: CampaignPlan, ad: AdPlan,
+                             ad_set: AdSetPlan, media: dict, name: str) -> tuple[str, bool]:
+        """Persist intent before dispatch; verify all recovered IDs against actual content."""
+        params = self.creative_params(plan, ad, ad_set, media, name)
+        stem = f"{ad.name} #{ad.index}"
+        def candidates(*, fresh=False):
+            rows = self._creative_candidates(plan, stem, params, fresh=fresh)
+            if len(rows) > 1:
+                raise CreationStopped("Several matching creatives exist. Review them in Ads Manager "
+                                      "before continuing.", kind="creative_ambiguous")
+            return str(rows[0]["id"]) if rows else None
+        try:
+            with _cr.transaction(plan.act, name, params) as receipt:
+                creative_id = receipt.object_id
+                created = False
+                if not creative_id:
+                    creative_id = candidates()
+                    if creative_id:
+                        receipt.save(creative_id)
+                    elif receipt.data:
+                        raise CreationStopped("An earlier creative write has an unknown result. "
+                                              "No new creative was sent. Reconcile the existing object first.",
+                                              kind="creative_unknown")
+                    else:
+                        self._check_cancel(out)
+                        receipt.save()
+                        creative_id = self._write(out, f"ad {ad.index}: creative",
+                                                  f"/{plan.act}/adcreatives", params,
+                                                  lambda: candidates(fresh=True), on_ad=ad_set.instant)
+                        out.created.setdefault("creatives", []).append(creative_id)
+                        out.creative_ids.append(creative_id)
+                        receipt.save(creative_id)
+                        created = True
+                if creative_id not in out.creative_ids:
+                    out.creative_ids.append(creative_id)
+                if not created:
+                    out.reused.setdefault("creatives", []).append(creative_id)
+                label_failure = None
+                if created and not self._missing_creative_tag:
+                    try:
+                        self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
+                        return creative_id, False
+                    except CreationStopped as exc:
+                        if exc.kind != "label_missing":
+                            raise
+                        label_failure = exc
+                        self._missing_creative_tag = True
+                row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
+                if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
+                        or any(label.startswith("acl-") and label != plan.label
+                               for label in _labels(row))
+                        or not _cr.matches(plan.act, params, row)):
+                    if label_failure:
+                        raise label_failure
+                    raise CreationStopped(f"Creative {creative_id} was found but its identity, account "
+                                          "or content was not confirmed. No ad was created; check it first.",
+                                          created=out.created, kind="creative_unverified")
+                if plan.label not in _labels(row):
+                    out.warnings.append("Meta did not return the creative ACL tag; the existing creative "
+                                        "was verified by its account, Page, form and full requested content.")
+                return creative_id, True
+        except (OSError, ValueError) as exc:
+            raise CreationStopped("Creative recovery could not be saved or read safely. "
+                                  "Do not retry until the local receipt is repaired.",
+                                  created=out.created, kind="creative_receipt") from exc
 
     # -- медиа
     def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
@@ -2136,7 +2230,8 @@ class CampaignCreator:
 
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
-        self._creatives = None
+        self._recovery_rows = None
+        self._missing_creative_tag = False
         self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
@@ -2487,7 +2582,8 @@ class CampaignCreator:
         Клиент пробного запуска создаётся без права записи вовсе; здесь же
         `post` не зовётся ни разу.
         """
-        self._creatives = None
+        self._recovery_rows = None
+        self._missing_creative_tag = False
         self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         differences: list | None = None
@@ -2728,7 +2824,7 @@ class CampaignCreator:
             self._step(out, "campaign: created PAUSED, tag kept")
 
         # 3. Группы и объявления (дети нашей кампании — по точному имени, B1a).
-        creative_label_checked = ad_label_checked = False
+        ad_label_checked = False
         for ad_set, targeting, found in zip(plan.ad_sets, targetings, found_sets):
             if found:
                 adset_id = str(found["id"])
@@ -2791,22 +2887,13 @@ class CampaignCreator:
                     fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True,
                                                            ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:12]
                     creative_name = f"{ad.name} #{ad.index} {fingerprint} [{plan.label}]"
-                creative_id = self._find_creative(plan, creative_name)
-                if creative_id:
-                    self._step(out, f"ad {ad.index}: creative found from a previous run")
-                else:
-                    # ACL-1776: форма из шаблона - ровно перед креативом, которому она нужна.
-                    self._ensure_form(out, plan, ad)
-                    creative_id = self._write(
-                        out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives",
-                        self.creative_params(plan, ad, ad_set, media, creative_name),
-                        lambda: self._find_creative(plan, creative_name, fresh=True),
-                        on_ad=ad_set.instant)
-                    out.created.setdefault("creatives", []).append(creative_id)
-                    if not creative_label_checked:
-                        self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
-                        creative_label_checked = True
-                    self._step(out, f"ad {ad.index}: creative created")
+                self._ensure_form(out, plan, ad)
+                creative_id, recovered = self._recoverable_creative(
+                    out, plan, ad, ad_set, media, creative_name)
+                step = "creative created" if creative_id in out.created.get("creatives", []) else "creative found from a previous run"
+                self._step(out, f"ad {ad.index}: {step}")
+                if recovered:
+                    rec["creative_content_verified"] = self.creative_params(plan, ad, ad_set, media, creative_name)
                 ad_id = self._write(
                     out, f"ad {ad.index}", f"/{plan.act}/ads",
                     {"name": ad.name, "adset_id": adset_id, "creative": {"creative_id": creative_id},
@@ -2984,7 +3071,7 @@ class CampaignCreator:
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
-                          "creative{id,adlabels{name},instagram_user_id,object_story_spec,degrees_of_freedom_spec,"
+                          "creative{id,account_id,adlabels{name},instagram_user_id,object_story_spec,degrees_of_freedom_spec,"
                           "contextual_multi_ads,asset_feed_spec}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
             by_name: dict[str, list[dict]] = {}
@@ -3011,7 +3098,24 @@ class CampaignCreator:
                 creative = got.get("creative") or {}
                 if rec.get("creative_id"):
                     check(aobj, "creative_id", rec["creative_id"], str(creative.get("id") or ""))
-                tag(aobj + " creative", creative)
+                if rec.get("creative_content_verified"):
+                    cid = str(creative.get("id") or "")
+                    row = creative if cid and cid == str(rec.get("creative_id")) else {}
+                    check(aobj + " creative", "verified_content", True,
+                          _cr.matches(plan.act, rec["creative_content_verified"], row))
+                elif rec.get("reused") and plan.label not in _labels(creative):
+                    # Existing ad is inside our verified campaign/ad set. Its exact
+                    # creative reference + account and the field checks below prove
+                    # identity even when creative metadata was not retained.
+                    cid = str(creative.get("id") or "")
+                    row = self.client.get(f"/{cid}", {"fields": "id,account_id"}) if cid else {}
+                    bound = bool(cid and str(row.get("id") or "") == cid
+                                 and str(row.get("account_id") or "") == plan.act.removeprefix("act_")
+                                 and plan.label in _labels(got)
+                                 and str(got.get("adset_id") or "") == adset_id)
+                    check(aobj + " creative", "bound_to_owned_ad", True, bound)
+                else:
+                    tag(aobj + " creative", creative)
                 feats = ((creative.get("degrees_of_freedom_spec") or {}).get("creative_features_spec") or {})
                 for feature in CREATIVE_FEATURES_OPT_OUT:
                     check(aobj, f"enhancement {feature}", OPT_OUT,

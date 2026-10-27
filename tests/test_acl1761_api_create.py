@@ -373,6 +373,9 @@ class FakeMeta:
     """Graph API в памяти: тот же интерфейс, что `InPageGraph` (request/write/stage_file)."""
 
     def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=(), instagram="one"):
+        # One synthetic account universe owns one matching durable config universe.
+        # Same-Meta retries keep it; a new FakeMeta must not inherit absent IDs.
+        self._machine_config = tempfile.TemporaryDirectory(prefix="acl-fake-")
         self.objects: dict[str, dict] = {}
         self.images: dict[str, str] = {}
         self.posts: list[tuple[str, dict]] = []
@@ -435,6 +438,8 @@ class FakeMeta:
         p = dict(params)
         if kind in self.drop_labels:
             p.pop("adlabels", None)
+        if kind == "creative":
+            p["account_id"] = ACT.removeprefix("act_")
         return self._new(kind, **p)
 
     def write(self, path, params, files=None, filename="", on_ad=False, children_active=False, **_k):
@@ -473,6 +478,8 @@ class FakeMeta:
         return {"status": 200, "body": body}
 
     def request(self, method, path, params=None):
+        from tests.fake_creative_receipts import select
+        select(self._machine_config.name)
         assert method == "GET", "no DELETE, no POST through request()"
         params = params or {}
         self.gets.append((path, params))
@@ -544,7 +551,7 @@ class FakeMeta:
                 for o in self._of("ad", "adset_id", oid):
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
-                    row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels",
+                    row["creative"] = {k: cre[k] for k in ("id", "account_id", "object_story_spec", "adlabels",
                                                           "degrees_of_freedom_spec", "contextual_multi_ads", "asset_feed_spec") if k in cre}
                     row = json.loads(json.dumps(row))
                     for key, value in self.mutate_ads.items():
@@ -805,7 +812,7 @@ def test_unknown_campaign_write_with_a_dropped_label_says_the_true_reason(tmp_pa
     assert len(meta.posts) == 1
 
 
-@pytest.mark.parametrize("kind", ["creative", "ad"])
+@pytest.mark.parametrize("kind", ["ad"])
 def test_label_dropped_on_the_first_creative_or_ad_stops(tmp_path, kind):
     meta = FakeMeta(drop_labels={kind})
     out, _ = _run(meta, _draft(tmp_path, ads=2))
@@ -1119,7 +1126,7 @@ def test_open_builds_a_read_only_client_and_page_for_a_dry_run(monkeypatch, dry_
 
 # ───────────────────────── дешборд ─────────────────────────
 
-def test_result_dict_shape_and_publishability(tmp_path):
+def test_result_dict_shape_and_publishability(tmp_path, monkeypatch):
     from src.web import publish_api
 
     meta = FakeMeta()
@@ -1129,6 +1136,7 @@ def test_result_dict_shape_and_publishability(tmp_path):
     assert res["success"] is True and res["publishable"] is True and res["problems"] == []
     assert res["created"] == {"campaign": 1, "adsets": 1, "images": 1, "creatives": 1, "ads": 1}
 
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path / "second-machine"))
     meta2 = FakeMeta()
     meta2.mutate_on_read[("adset", "targeting.age_max")] = 65
     bad, _ = _run(meta2, _draft(tmp_path, ads=1))

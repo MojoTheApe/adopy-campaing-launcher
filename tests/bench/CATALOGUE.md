@@ -6,12 +6,13 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**27 robot steps × 125 layouts, 70 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**28 robot steps × 126 layouts, 71 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
 | Step | Layouts | pass | xfail | reference |
 | --- | --- | --- | --- | --- |
+| Graph creative recovery with retained metadata | 1 | 1 | 0 | 0 |
 | Graph creative video identity readback | 1 | 1 | 0 | 0 |
 | Graph owned-tab browser context | 1 | 1 | 0 | 0 |
 | Graph reconciliation after CDP session detachment | 1 | 1 | 0 | 0 |
@@ -39,6 +40,14 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 | ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 | Graph read permission diagnostics (ACL-1886) | 1 | 1 | 0 | 0 |
+
+## Graph creative recovery with retained metadata
+
+Robot: CampaignCreator creative receipts (ACL-2231)
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Created creative retains old ACL metadata and a Meta date/hash suffix | manually anonymized Graph response shape 2026-10-27; IDs/copy/media replaced | `acl2231_retained_creative_label.json` | `tests/test_acl2231_creative_recovery.py` | Reuse requires verified account and full material; changed content, unknown dispatch, incomplete reads and ambiguous candidates never authorize another creative POST | pass |
 
 ## Graph creative video identity readback
 

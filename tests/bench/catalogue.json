@@ -3,6 +3,23 @@
   "harvested": "Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).",
   "steps": [
     {
+      "step": "Graph creative recovery with retained metadata",
+      "robot": "CampaignCreator creative receipts (ACL-2231)",
+      "layouts": [
+        {
+          "layout": "Created creative retains old ACL metadata and a Meta date/hash suffix",
+          "seen": [
+            "manually anonymized Graph response shape 2026-10-27; IDs/copy/media replaced"
+          ],
+          "fixture": "acl2231_retained_creative_label.json",
+          "fragment": null,
+          "test": "tests/test_acl2231_creative_recovery.py",
+          "expected": "Reuse requires verified account and full material; changed content, unknown dispatch, incomplete reads and ambiguous candidates never authorize another creative POST",
+          "status": "pass"
+        }
+      ]
+    },
+    {
       "step": "Graph creative video identity readback",
       "robot": "CampaignCreator readback (ACL-2224)",
       "layouts": [
