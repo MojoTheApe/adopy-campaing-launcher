@@ -2961,7 +2961,7 @@
        360 пикселей не оставляют имени кампании места, где жить, — а имя
        здесь длинное и в нём вся суть. */
     .cbd-country {
-      display: flex; align-items: baseline; gap: var(--space-sm);
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-sm);
       margin: var(--space-lg) 0 var(--space-xs);
       font-size: var(--adopy-text-xs); font-weight: 700; letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -3513,7 +3513,7 @@
     }
     .cbd-camp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
     .cbd-root .cbd-camp-ads { font-size: var(--adopy-text-sm); }
-    .cbd-camp-sub { color: var(--muted); font-size: var(--adopy-text-sm); display: flex; gap: var(--space-sm); }
+    .cbd-camp-sub { color: var(--muted); font-size: var(--adopy-text-sm); display: flex; flex-wrap: wrap; gap: 0 var(--space-sm); }
     /* «Names only», как в дизайне: редакторы свёрнуты — остаётся одно дерево
        из имён и значков на всю ширину. Выбор кампании выходит из режима. */
     #cbd-panel[data-names-only="1"] .cbd-camp-sub { display: none; }
@@ -6087,12 +6087,19 @@ window.cbDrawer = (function () {
   }
   function isExpanded() { return width() >= WIDE_AT; }
 
-  /* ACL-2124: немодальный ящик начинается под реальной шапкой, в том числе
-     когда она переносится на несколько строк. При прокрутке за пределы экрана
-     шапка освобождает место; высоту не угадываем по ширине окна. */
+  /* ACL-2124/2237: an overlapping drawer starts below the actual header,
+     including wrapped rows; a separate docked lane can use the full height.
+     Scrolling the header away releases its space. */
   function syncHeaderTop() {
     var header = document.querySelector('header.page-header');
-    var top = header ? Math.ceil(header.getBoundingClientRect().bottom) : 0;
+    var rect = header && header.getBoundingClientRect();
+    /* A docked drawer has its own lane beside the header. Only an overlay
+       needs to start below it; keep the stored-report status bar unobscured. */
+    var laneLeft = viewport() - width() - HANDLE_W;
+    var docked = isOpen() && rect && rect.right <= laneLeft + 1;
+    var bar = document.getElementById('acl-stored-bar');
+    var top = docked ? (bar ? Math.ceil(bar.getBoundingClientRect().bottom) : 0)
+                     : (rect ? Math.ceil(rect.bottom) : 0);
     top = Math.max(0, Math.min(window.innerHeight, top));
     var value = top + 'px';
     if (root.style.getPropertyValue('--cbd-top') !== value) root.style.setProperty('--cbd-top', value);
