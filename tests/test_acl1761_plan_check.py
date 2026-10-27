@@ -214,7 +214,7 @@ def _run_plan_node(data: dict) -> dict:
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    js = _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
+    js = _template_js("window.cbConnectionPlanFetch =", "window.cbPreflightRun =") + "\n" + _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
     escaper = _template_js("function aclEscHtml(value) {", "  </script>")
     script = (_PLAN_NODE.replace("DATA", "__DATA__").replace("ESCAPER\n", escaper + "\n", 1)
               .replace("JS\n", js + "\n", 1))
@@ -422,7 +422,7 @@ def _run_frame_node() -> dict:
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    js = _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
+    js = _template_js("window.cbConnectionPlanFetch =", "window.cbPreflightRun =") + "\n" + _template_js("function cbPlanFormData(form, only) {", "/* Имя карточки для подтверждения. */")
     escaper = _template_js("function aclEscHtml(value) {", "  </script>")
     script = _FRAME_NODE.replace("ESCAPER\n", escaper + "\n", 1).replace("JS\n", js + "\n", 1)
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
