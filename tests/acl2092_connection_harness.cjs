@@ -4,7 +4,47 @@ function block(start,end='\n}\n') {const a=html.indexOf(start);assert(a>=0,start
 const mode=process.argv[3];
 const sandbox={window:{},Promise,Object,String,Error,JSON,FormData,AbortController,setTimeout,clearTimeout};
 let preparations=0, submissions=0, confirmations=0;
-if(mode==='lost-publish') {
+if(mode==='rpa-publish') {
+ // RPA backend: publication must go straight to /publish-jobs, never through /connection/prepare.
+ sandbox.window.ACL_FB_BACKEND='rpa';
+ sandbox.window.aclPrepareConnection=async()=>{preparations++;throw new Error('prepare must not run on the RPA backend');};
+ sandbox.fetch=async(url)=>{assert.equal(url,'/publish-jobs');submissions++;return {json:async()=>({job_id:'rpa-job'})};};
+ vm.createContext(sandbox);
+ vm.runInContext('var CB_PUBLISH_TIMEOUT_MS=100;'+block('\nfunction cbBusyError(')+block('\nfunction cbPostPublish('),sandbox);
+ (async()=>{
+  const fd=new FormData();fd.set('account_label','Sample');fd.set('request_id','rpa-request');
+  const result=await sandbox.cbPostPublish(fd);
+  assert.equal(result.job_id,'rpa-job');assert.equal(preparations,0);assert.equal(submissions,1);
+  console.log(JSON.stringify({ok:true,preparations,submissions}));
+ })().catch(e=>{console.error(e);process.exitCode=1;});
+} else if(mode==='api-publish') {
+ // API backend: preparation runs once, then the original publication is submitted.
+ sandbox.window.ACL_FB_BACKEND='api';
+ sandbox.window.aclPrepareConnection=async()=>{preparations++;};
+ sandbox.fetch=async(url)=>{assert.equal(url,'/publish-jobs');submissions++;return {json:async()=>({job_id:'api-job'})};};
+ vm.createContext(sandbox);
+ vm.runInContext('var CB_PUBLISH_TIMEOUT_MS=100;'+block('\nfunction cbBusyError(')+block('\nfunction cbPostPublish('),sandbox);
+ (async()=>{
+  const fd=new FormData();fd.set('account_label','Sample');fd.set('request_id','api-request');
+  const result=await sandbox.cbPostPublish(fd);
+  assert.equal(result.job_id,'api-job');assert.equal(preparations,1);assert.equal(submissions,1);
+  console.log(JSON.stringify({ok:true,preparations,submissions}));
+ })().catch(e=>{console.error(e);process.exitCode=1;});
+} else if(mode==='rpa-409') {
+ // The real helper treats the RPA backend's 409 rpa_backend as "nothing to prepare".
+ sandbox.fetch=async(url)=>{
+  if(url==='/connection/prepare') {preparations++;return {json:async()=>({error:'Needs ACL_FB_BACKEND=api',code:'rpa_backend'})};}
+  submissions++;return {ok:true};
+ };
+ vm.createContext(sandbox);
+ vm.runInContext(block('window.aclPrepareConnection = function','\n};')+block('window.aclConnectionFetch = function','\n};'),sandbox);
+ (async()=>{
+  await sandbox.window.aclConnectionFetch('/account-spend/read',{method:'POST'},'Sample');
+  assert.equal(submissions,1);
+  console.log(JSON.stringify({ok:true,preparations,submissions}));
+ })().catch(e=>{console.error(e);process.exitCode=1;});
+} else if(mode==='lost-publish') {
+ sandbox.window.ACL_FB_BACKEND='api';
  sandbox.window.aclPrepareConnection=async()=>{if(++preparations>1)throw new Error('profile busy with first job');};
  sandbox.fetch=async()=>{submissions++;if(submissions===1)throw new Error('reply lost');return {json:async()=>({job_id:'existing-job'})};};
  vm.createContext(sandbox);

@@ -17548,6 +17548,8 @@ window.aclPrepareConnection = function (account) {
       {title: 'Reopen for automation', okLabel: 'Reopen and continue'})
       .then(function (yes) { return yes ? prepare(true) : {ok:false,error:'Profile reopening cancelled; the action was not started.'}; });
   }).then(function (data) {
+    // RPA backend: nothing to prepare, never a reason to stop the original action.
+    if (data && data.code === 'rpa_backend') return {ok: true, skipped: 'rpa_backend'};
     if (!data.ok) throw new Error(data.error || data.message || 'Connection preparation failed');
     return data;
   });
@@ -18053,7 +18055,10 @@ function cbPostPublish(fd) {
   // even while its original job holds the profile lease.
   var key = typeof fd.get === 'function' ? fd.get('request_id') : '';
   var prepared = window.CB_CONNECTION_PREPARED || (window.CB_CONNECTION_PREPARED = Object.create(null));
-  var prepare = key && prepared[key] ? Promise.resolve() :
+  // Managed preparation exists only on the API backend; the RPA backend answers
+  // /connection/prepare with 409 rpa_backend, so an RPA submission goes straight on.
+  var apiPath = window.ACL_FB_BACKEND === 'api';
+  var prepare = !apiPath || (key && prepared[key]) ? Promise.resolve() :
     (window.aclPrepareConnection ? window.aclPrepareConnection(fd.get('account_label')) : Promise.resolve());
   return prepare.then(function () {
   if (key) prepared[key] = true;

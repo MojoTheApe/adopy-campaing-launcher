@@ -171,7 +171,7 @@ def test_connection_budget_covers_all_preparation_stages(tmp_path,slow_stage):
     assert not rig.gate.active()
 
 
-@pytest.mark.parametrize("mode",["lost-publish","confirm-read","decline-read"])
+@pytest.mark.parametrize("mode",["lost-publish","confirm-read","decline-read","rpa-publish","api-publish","rpa-409"])
 def test_actual_frontend_confirmation_and_idempotent_submission(mode):
     import json,shutil,subprocess
     from pathlib import Path
