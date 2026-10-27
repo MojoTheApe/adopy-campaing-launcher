@@ -187,10 +187,15 @@ def scrub_html(html: str) -> tuple[str, bool]:
     будет отброшен, незачем. Второй проход после вычистки — потому что
     `<hidden>` и `<email>` бывают длиннее того, что заменили.
     """
-    text, truncated = _cut(html or "")
+    from config import token_vault
+
+    # A known token may straddle the byte cut. Exact matching alone sees a
+    # bounded character overlap before either cut; general regexes remain capped.
+    text, truncated = token_vault.hide_configured_secrets_prefix(html or "", MAX_HTML_BYTES)
+    text, byte_cut = _cut(text)
     text = _EMAIL.sub("<email>", scrub(text))
     text, again = _cut(text)
-    return text, truncated or again
+    return text, truncated or byte_cut or again
 
 
 def prune(keep: int = KEEP_RUNS) -> int:

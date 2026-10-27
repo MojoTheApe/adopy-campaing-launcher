@@ -49,12 +49,25 @@ PROHIBITED_AFTER_SANITIZE: tuple[re.Pattern[str], ...] = (
 )
 
 
-def _read_bounded(path: Path, limit: int = MAX_SOURCE_FILE_BYTES) -> str:
+def _read_bounded(path: Path, limit: int = MAX_SOURCE_FILE_BYTES, *, local_values: Iterable[str] = ()) -> str:
+    values = [value.encode("utf-8") for value in local_values if value]
+    overlap = max((len(value) - 1 for value in values), default=0)
     with path.open("rb") as stream:
         stream.seek(0, os.SEEK_END)
         size = stream.tell()
-        stream.seek(max(0, size - limit))
-        return stream.read(limit).decode("utf-8", errors="replace")
+        stream.seek(max(0, size - limit - overlap))
+        raw = stream.read(limit + overlap)
+    start = max(0, len(raw) - limit)
+    crossing = []
+    for value in values:
+        at = raw.find(value, max(0, start - len(value) + 1), start + len(value) - 1)
+        if 0 <= at < start < at + len(value):
+            crossing.append((at, at + len(value)))
+    # Keep byte offsets stable: shrinking a replacement could pull uninspected
+    # preceding fragments into the tail. Mask crossings, then retain the old cap.
+    for left, right in crossing:
+        raw = raw[:left] + b"*" * (right - left) + raw[right:]
+    return raw[start:].decode("utf-8", errors="replace")
 
 
 def _env_entries(path: Path) -> dict[str, str]:
@@ -240,7 +253,7 @@ def export_diagnostics(config_directory: str | Path, manifest_path: str | Path) 
                 reverse=True,
             )[:MAX_LOG_FILES]
             for index, path in enumerate(logs, start=1):
-                sanitized = sanitize_text(_read_bounded(path), local_values)
+                sanitized = sanitize_text(_read_bounded(path, local_values=local_values), local_values)
                 assert_sanitized(sanitized)
                 archive.writestr(f"logs/{index:02d}.txt", sanitized)
             archive.writestr(

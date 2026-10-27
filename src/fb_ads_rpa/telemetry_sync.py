@@ -230,6 +230,8 @@ def flow_version() -> str:
 
 
 def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> list[str]:
+    from config import token_vault
+
     diag = rec.get("diag")
     ok = rec.get("ok")
     # ACL-1358: last gate before the shared sheet - an older journal line may
@@ -244,7 +246,7 @@ def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> li
         str(rec.get("step", "")),
         "" if ok is None else ("1" if ok else "0"),
         "" if rec.get("duration_s") is None else str(rec.get("duration_s")),
-        json.dumps(diag, ensure_ascii=False)[:900] if diag else "",
+        token_vault.hide_configured_secrets_prefix(json.dumps(diag, ensure_ascii=False), 900)[0] if diag else "",
         str(rec.get("note", "")),
     ]]
 

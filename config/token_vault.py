@@ -509,3 +509,37 @@ def hide_configured_secrets(text: str, replacement: str = "<hidden>") -> str:
     except Exception:
         pass
     return text
+
+
+def hide_configured_secrets_prefix(text: str, limit: int) -> tuple[str, bool]:
+    """Redact a bounded prefix without exposing a known secret across its end.
+
+    Only exact matching sees the longest-known-value overlap; expensive general
+    scrubbers still receive at most ``limit`` characters. Collect one cached
+    snapshot, never per character/cell boundary or per candidate match.
+    """
+    values = _secrets_snapshot()[1]
+    overlap = max((len(value) - 1 for value in values), default=0)
+    window = text[:limit + overlap]
+    spans = []
+    for value in values:
+        at = window.find(value)
+        while 0 <= at < limit:
+            spans.append((at, at + len(value)))
+            at = window.find(value, at + 1)
+    # Original offsets define the retained range. A shorter replacement must
+    # never pull an unchecked fragment from the overlap into the exported prefix.
+    merged = []
+    for left, right in sorted(spans):
+        if merged and left <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(right, merged[-1][1]))
+        else:
+            merged.append((left, right))
+    parts = []
+    cursor = 0
+    for left, right in merged:
+        parts.extend((window[cursor:left], "<hidden>"))
+        cursor = right
+    parts.append(window[cursor:limit])
+    result = "".join(parts)
+    return result[:limit], len(text) > limit or len(result) > limit
