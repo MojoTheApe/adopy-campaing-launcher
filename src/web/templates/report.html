@@ -3549,6 +3549,8 @@
     .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
     .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+    /* Long generated ad-set names must fit the normal and resized drawer. */
+    .cbd-ed-pick > select { min-width: 0; max-width: 100%; flex: 0 1 12rem; }
     .cbd-ed-empty {
       color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-md);
@@ -3686,14 +3688,14 @@
     .cbd-set-sub { color: var(--muted); font-size: var(--adopy-text-sm); flex-shrink: 0; font-weight: 400; }
     #cbd-panel[data-names-only="1"] .cbd-sets { display: none; }
     .cbd-camp-sets::before { content: "·"; margin-right: var(--space-xs); }
-    .cbd-ed-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); }
+    .cbd-ed-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); min-width: 0; max-width: 100%; }
     /* Кнопки набора и список объявлений - компактные чипы, а не полосы на всю ширину. */
     .cbd-ed-actions .cbd-add, .cbd-ed-inset .cbd-add {
       display: inline-block; width: auto; margin-top: 0; padding: 0.15rem 0.55rem;
     }
     .cbd-ed-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
     .cbd-ed-note { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin-top: var(--space-xs); }
-    .cbd-ed-inset { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
+    .cbd-ed-inset { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; min-width: 0; max-width: 100%; }
     .cbd-ed-inset .cbd-ed-inset-label { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
@@ -7966,8 +7968,7 @@ window.cbTree = (function () {
         + '<button type="button" class="cbd-add" data-act="copy-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Copy this ad set with its ads"') + '>Copy ad set</button>'
         + '<button type="button" class="cbd-add" data-act="remove-adset"'
         + (setIdx === 0 ? ' disabled title="The first ad set stays; remove the campaign instead"' : ' title="Remove this ad set and its ads"')
-        + '>Remove ad set</button></span></div>'
-        + (atMax ? '<div class="cbd-ed-note" role="note">A campaign can have at most 10 ad sets.</div>' : '');
+        + '>Remove ad set</button></span>';
       /* Объявления выбранного набора: открыть любое одним нажатием. */
       var mine = [], all = slot.querySelectorAll('.cb-ad-row');
       Array.prototype.forEach.call(all, function (row, i) {
@@ -7975,8 +7976,9 @@ window.cbTree = (function () {
           mine.push('<button type="button" class="cbd-add" data-act="open-ad" data-ad="' + i + '">Ad ' + (i + 1) + '</button>');
         }
       });
-      pick += '<div class="cbd-ed-pick cbd-ed-inset"><span class="cbd-ed-inset-label">Ads in this ad set</span>'
-        + (mine.length ? mine.join('') : '<span class="cbd-ed-inset-label">none yet</span>') + '</div>';
+      pick += '<span class="cbd-ed-inset"><span class="cbd-ed-inset-label">Ads in this ad set</span>'
+        + (mine.length ? mine.join('') : '<span class="cbd-ed-inset-label">none yet</span>') + '</span></div>'
+        + (atMax ? '<div class="cbd-ed-note" role="note">A campaign can have at most 10 ad sets.</div>' : '');
     }
     return '<div class="cbd-ed-crumb" title="' + aclEscHtml(found.account.account + ' › ' + (c.name || 'Untitled campaign')) + '">'
       + '<strong>' + aclEscHtml(found.account.account) + '</strong> › ' + aclEscHtml(c.name || 'Untitled campaign') + '</div>'
