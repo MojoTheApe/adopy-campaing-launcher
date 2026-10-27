@@ -106,12 +106,22 @@ def test_the_email_pattern_stays_bounded():
     assert "{1,64}" in line
 
 
-def test_the_cut_happens_before_the_scrub():
+def test_the_cut_happens_before_the_scrub(monkeypatch):
     """Иначе платим разбором за кусок, который всё равно будет отброшен."""
-    source = (ROOT / "src" / "fb_ads_rpa" / "page_capture.py").read_text(encoding="utf-8")
-    body = source[source.index("def scrub_html"):]
-    body = body[: body.index("\ndef ", 10)]
-    assert body.index("_cut(html") < body.index("_EMAIL.sub"), "вычистка идёт до обрезки"
+    from config import token_vault
+
+    monkeypatch.setattr(pc, "MAX_HTML_BYTES", 100)
+    monkeypatch.setattr(token_vault, "_secrets_snapshot", lambda: (frozenset(), ()))
+    seen = []
+
+    def general_scrub(text):
+        seen.append(text)
+        assert len(text.encode("utf-8")) <= pc.MAX_HTML_BYTES
+        return text
+
+    monkeypatch.setattr(pc, "scrub", general_scrub)
+    text, truncated = pc.scrub_html("é" * 1000)
+    assert seen and truncated and len(text.encode("utf-8")) <= 100
 
 
 # ── что снимается ─────────────────────────────────────────────────────────
