@@ -81,7 +81,7 @@ def test_publish_all_check_plan_and_the_mode_texts_are_kept_verbatim():
         page[page.index("function cbPublishMode"):]
     ), "текст режима RPA пропал"
     assert "'Publish selected → ' + what" in page and "'Publish all → ' + what" in page
-    assert "Check plan (no writes)" in page and "Close plan ×" in page
+    assert "' with Meta'" in page and "Close plan ×" in page   # ACL-1990: «Check N campaigns with Meta»
     assert 'data-act="close-plan"' in page and "cbPlanBindFrame" in page
     assert "PAUSED campaigns" in page
 

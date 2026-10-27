@@ -3,8 +3,9 @@
 Страница рисуется с реальной таблицей правил; Meta и дешборд подменены маршрутами.
 Проверяется глазами пользователя: карточка и значок errors: N, клик по строке ставит
 фокус в поле, Publish all выключен с причиной, пока у выбранной кампании есть ошибка,
-кнопка Check берёт вердикты кабинета из /publish-plan (и только по нажатию), а под RPA
-серверных строк нет. Браузерный тест — при свободной памяти больше 6 ГБ (CI).
+кнопка Check with Meta берёт вердикты кабинета из /publish-plan (и только по нажатию), а под RPA
+серверных строк нет. ACL-1990: проверки сложены в разделы; раздел с ошибкой раскрыт сам,
+щелчок раскрывает и сворачивает; «не удалось проверить» (профиль занят) Publish не выключает. Браузерный тест — при свободной памяти больше 6 ГБ (CI).
 С переменной ACL1819_SHOTS=<папка> тот же сценарий снимает экраны в светлой и тёмной теме.
 """
 from __future__ import annotations
@@ -94,8 +95,31 @@ def _fill_valid(p):
     p.evaluate("() => cbTree.refreshEditor()")
 
 
+def _settled_name(p) -> str:
+    """Имя кампании дописывается асинхронно (оффер приезжает позже): ждём, пока оно
+    не меняется полсекунды, — вердикты /publish-plan лежат под этим именем."""
+    get = "() => document.querySelector('.cbd-host .cb-slot:not([hidden]) .cb-name-hidden').value"
+    name, same = p.evaluate(get), 0
+    for _ in range(40):
+        p.wait_for_timeout(100)
+        now = p.evaluate(get)
+        same = same + 1 if now == name else 0
+        name = now
+        if same >= 5:
+            break
+    return name
+
+
 def _badge(p) -> str:
     return p.locator(".cbd-pf .cbd-pf-badge").inner_text()
+
+
+def _topic(p, tid) -> dict:
+    """Раздел карточки: статус, раскрыт ли, строка-итог."""
+    return p.evaluate("""(tid) => { const li = document.querySelector('.cbd-pf-topic[data-topic="' + tid + '"]');
+      if (!li) return null;
+      return { status: li.dataset.status, open: !li.querySelector('.cbd-pf-list').hidden,
+               summary: li.querySelector('.cbd-pf-tsum').textContent }; }""", tid)
 
 
 def _shots(p, name):
@@ -106,6 +130,12 @@ def _shots(p, name):
         p.evaluate("() => { const c = document.querySelector('.cbd-pf'); if (c) c.scrollIntoView({block: 'center'}); }")
         p.wait_for_timeout(150)
         p.screenshot(path=str(Path(out) / f"{name}.png"))
+
+
+def _topic_rule_ids(p, topic):
+    """Точный состав строк раздела: число не скрывает потерянное или чужое правило."""
+    return p.locator(f'.cbd-pf-topic[data-topic="{topic}"] .cbd-pf-line').evaluate_all(
+        "rows => rows.map(row => row.dataset.rule)")
 
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
@@ -119,6 +149,14 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         assert p.locator(".cbd-pf-tree").first.inner_text().startswith("errors: "), "значка нет в дереве"
         assert "Account checks need the API backend" in p.locator(".cbd-pf").inner_text()
         assert p.locator(".cbd-pf [data-act='pf-check']").count() == 0
+        # Разделы, а не двадцать строк; под RPA проверки с Meta нет.
+        ids = p.evaluate("() => [...document.querySelectorAll('.cbd-pf-topic')].map(t => t.dataset.topic)")
+        assert ids == ["audience", "budget", "destination", "creative", "names"], ids
+        # Раздел с ошибкой раскрыт сам, чистый — свёрнут.
+        assert _topic(p, "creative")["status"] == "error" and _topic(p, "creative")["open"]
+        assert "Primary text" in _topic(p, "creative")["summary"]
+        assert _topic(p, "audience") == {"status": "ok", "open": False, "summary": "3 checks ok"}
+        assert _topic_rule_ids(p, "audience") == ["country_set", "age_range", "devices_consistent"]
         btn = p.locator(".cbd-publish-all")
         assert btn.is_disabled(), "Publish all включён при ошибках"
         assert "Publish is off" in p.locator(".cbd-gate-reason").inner_text()
@@ -133,12 +171,24 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         _fill_valid(p)
         assert _badge(p) == "no errors", p.locator(".cbd-pf").inner_text()
         assert btn.is_enabled() and p.locator(".cbd-gate-reason").count() == 0
+        # Исправлено — раздел свернулся сам; щелчок по нему раскрывает и сворачивает.
+        assert _topic(p, "creative") == {"status": "ok", "open": False, "summary": "10 checks ok"}
+        assert _topic_rule_ids(p, "creative") == [
+            "media_chosen", "vertical_needs_main", "texts_limit", "texts_vertical", "texts_dynamic",
+            "primary_text", "headline", "headline_len", "primary_len", "cta_allowed"]
+        p.locator(".cbd-pf-tbtn[data-topic='creative']").click()
+        assert _topic(p, "creative")["open"] and p.locator(".cbd-pf-line[data-rule='headline']").is_visible()
+        p.evaluate("() => cbTree.refreshEditor()")
+        assert _topic(p, "creative")["open"], "перерисовка свернула раскрытый человеком раздел"
+        p.locator(".cbd-pf-tbtn[data-topic='creative']").click()
+        assert not _topic(p, "creative")["open"]
         _shots(p, f"02-valid-rpa-{theme}")
         # Предупреждение (ссылка без меток) показано, но не блокирует.
         p.evaluate("""() => { const i = document.querySelector('.cbd-host input[name="tracking_link"]');
           i.value = 'https://track.example.com/c'; i.dispatchEvent(new Event('input', {bubbles: true})); }""")
         p.evaluate("() => cbTree.refreshEditor()")
         assert _badge(p).startswith("warnings: ") and btn.is_enabled()
+        assert _topic(p, "destination")["status"] == "warning" and _topic(p, "destination")["open"]
         assert state["plan_posts"] == 0, "под RPA ушёл запрос аккаунта"
         assert not state["errors"], state["errors"]
     finally:
@@ -164,14 +214,30 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         # Правки клавишами сеть не трогают.
         p.locator(".cbd-pf-line[data-rule='budget_set']")      # карточка есть
         assert state["plan_posts"] == 0
-        assert "press Check" in p.locator(".cbd-pf-line[data-rule='page_ok']").inner_text() or \
-            "not checked" in p.locator(".cbd-pf-line[data-rule='page_ok']").inner_text().lower()
+        acc = _topic(p, "account")
+        assert acc["status"] == "unknown" and not acc["open"] and "not checked yet" in acc["summary"], acc
+        assert _topic(p, "meta")["summary"] == "Not checked yet"
+        assert p.locator(".cbd-pf-check").inner_text() == "Check with Meta"
+        assert "30 s" in p.locator(".cbd-pf-meta").inner_text(), "не сказано, сколько идёт проверка"
         assert p.locator(".cbd-publish-all").is_enabled(), "не проверенный кабинет не блокирует"
+        assert p.locator(".cbd-plan").inner_text() == "Check 1 campaign with Meta"
         _shots(p, "03-api-before-check-light")
+        # Пока проверка идёт: «Checking… 0:42», серверные разделы «checking», кнопка выключена.
+        p.evaluate("""() => { const f = document.querySelector('.cbd-host form.open-account-form');
+          f._pfBusy = true; f._pfStarted = Date.now() - 42000; cbTree.refreshEditor(); }""")
+        assert p.locator(".cbd-pf-check").is_disabled() and "Checking… 0:42" in p.locator(".cbd-pf-check").inner_text()
+        assert _topic(p, "account")["status"] == "busy" and _topic(p, "budget")["status"] == "busy"
+        assert _topic(p, "destination")["status"] == "ok", "клиентский раздел не ждёт Meta"
+        _shots(p, "03b-api-checking-light")
+        p.evaluate("""() => { const f = document.querySelector('.cbd-host form.open-account-form');
+          f._pfBusy = false; cbTree.refreshEditor(); }""")
         p.locator(".cbd-pf [data-act='pf-check']").click()
         p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"page_ok\"]').classList.contains('cbd-pf-error')")
         assert state["plan_posts"] == 1
         assert _badge(p) == "errors: 1"
+        assert _topic(p, "account")["status"] == "error" and _topic(p, "account")["open"]
+        assert "Checked with Meta" in p.locator(".cbd-pf-meta").inner_text()
+        assert p.locator(".cbd-pf-check").inner_text() == "Check again"
         assert p.locator(".cbd-publish-all").is_disabled()
         assert "Facebook Page" in p.locator(".cbd-gate-reason").inner_text()
         _shots(p, "04-api-after-check-light")
@@ -179,7 +245,8 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         p.evaluate("""() => { const e = document.querySelector('.cbd-host [name$="_budget"]');
           e.value = '25'; e.dispatchEvent(new Event('input', {bubbles: true})); }""")
         p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"page_ok\"]').classList.contains('cbd-pf-unknown')")
-        assert "Edited since the last check" in p.locator(".cbd-pf").inner_text()
+        assert "Edited since the check" in p.locator(".cbd-pf-meta").inner_text()
+        assert p.locator(".cbd-pf-check").inner_text() == "Check again"
         assert p.locator(".cbd-publish-all").is_enabled()
         assert state["plan_posts"] == 1, "правка вызвала запрос"
         # Publish с устаревшими вердиктами сначала обновляет их — и ошибка кабинета не пускает.
@@ -187,6 +254,35 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"page_ok\"]').classList.contains('cbd-pf-error')")
         assert state["plan_posts"] == 2
         assert p.locator("#sfc-ok").count() == 0, "окно подтверждения открылось при серверной ошибке"
+        assert not state["errors"], state["errors"]
+    finally:
+        state["ctx"].close()
+
+
+def test_a_check_that_could_not_reach_the_account_offers_retry_and_keeps_publish_on(browser):
+    """ACL-1990: профиль занят / сброс соединения — «Could not check», а не ошибка кампании."""
+    replies = [{"account": "Demo", "results": [], "error": "The Demo profile is busy with another job.",
+                "error_kind": "not_checked", "account_audit": None}]
+
+    p, state = _open(browser, "api", lambda: replies[min(state["plan_posts"], len(replies)) - 1])
+    try:
+        _first(p)
+        _fill_valid(p)
+        _settled_name(p)
+        p.locator(".cbd-pf .cbd-pf-check").click()
+        p.wait_for_function("document.querySelector('.cbd-pf-meta').textContent.includes('Could not check')")
+        assert "busy with another job" in p.locator(".cbd-pf-meta").inner_text()
+        assert p.locator(".cbd-pf-check").inner_text() == "Retry"
+        assert _badge(p) == "no errors", p.locator(".cbd-pf").inner_text()
+        meta = _topic(p, "meta")
+        assert meta["status"] == "unknown" and meta["open"] and meta["summary"] == "Could not check", meta
+        assert p.locator(".cbd-pf-retry").is_visible()
+        assert p.locator(".cbd-publish-all").is_enabled() and p.locator(".cbd-gate-reason").count() == 0
+        _shots(p, "06-api-could-not-check-light")
+        # Retry из раздела — новая проверка.
+        p.locator(".cbd-pf-retry").click()
+        p.wait_for_function("document.querySelector('.cbd-pf-check') && !document.querySelector('.cbd-pf-check').disabled")
+        assert state["plan_posts"] == 2
         assert not state["errors"], state["errors"]
     finally:
         state["ctx"].close()
