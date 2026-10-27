@@ -39,6 +39,7 @@ Sheet layout (last/today's tab):
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -112,7 +113,11 @@ def _build_sheets_service_oauth(oauth_client_path: str, token_path: str):
     # Load saved token if it exists
     if token_file.is_file():
         try:
-            creds = Credentials.from_authorized_user_file(str(token_file), _SCOPES)
+            from config import token_vault
+
+            creds = Credentials.from_authorized_user_info(
+                json.loads(token_vault.read_secret_text(token_file)), _SCOPES
+            )
         except Exception:
             creds = None
 
@@ -140,7 +145,9 @@ def _build_sheets_service_oauth(oauth_client_path: str, token_path: str):
 
         # Save token for future runs
         token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(creds.to_json(), encoding="utf-8")
+        from config import token_vault
+
+        token_vault.write_secret_text(token_file, creds.to_json())
         print(f"[gsheet_accounts] Token saved: {token_file}", file=sys.stderr)
 
     return build("sheets", "v4", credentials=creds)
