@@ -663,6 +663,10 @@ PLAN_KEEP_OPEN_ENV = "ACL_PLAN_KEEP_OPEN_S"
 DEFAULT_PLAN_KEEP_OPEN_S = 600.0
 
 
+class _PlanReadContractError(AssertionError):
+    """Нарушение режима чтения: результаты этой сессии нельзя считать проверенными."""
+
+
 def plan_keep_open_s() -> float:
     try:
         value = float(str(os.environ.get(PLAN_KEEP_OPEN_ENV, "") or DEFAULT_PLAN_KEEP_OPEN_S).replace(",", "."))
@@ -671,14 +675,18 @@ def plan_keep_open_s() -> float:
     return max(0.0, min(3600.0, value))
 
 
-def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:
+def _plan_in_read_session(account_label: str, drafts: list[Any], *,
+                          results: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     from src.analysis_agent import account_spend_api as _api
 
-    results: list[dict[str, Any]] = []
+    # ACL-1990: готовые вердикты принадлежат вызывающему коду и переживают
+    # отказ следующей кампании, выхода из сессии и освобождения замка.
+    if results is None:
+        results = []
     with _api._session(account_label) as sess:
         client = sess.client
         if client.allow_writes:
-            raise AssertionError("the read session must not be able to write")
+            raise _PlanReadContractError("the read session must not be able to write")
         client.reset_budget(PLAN_PREFLIGHT_MAX_CALLS)
         pub = ApiPublisher(dry_run=True)
         pub.act, pub.account_label, pub._client = sess.act, account_label, client
@@ -695,7 +703,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
                 continue
             results.append(pub.publish_draft(draft))
         if client.writes:
-            raise AssertionError("Check plan must not write")
+            raise _PlanReadContractError("Check plan must not write")
         # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
         # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
         # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку
@@ -725,25 +733,38 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
         return {"account": account_label, "results": [], "dry_run": True, "error_kind": "plan",
                 "error": "No campaigns to check."}
     run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
+    results: list[dict[str, Any]] = []
     account_audit: dict[str, Any] | None = None
     error_kind = ""
     except_kind = ""
     try:
-        results = run(account_label, drafts)
+        results = run(account_label, drafts, results=results)
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
-        results = []
+        checked_count = len(results)
         error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
         except_kind = type(exc).__name__
-        if isinstance(exc, ApiPublishError) and exc.code == "account":
+        if isinstance(exc, _PlanReadContractError):
+            # Нарушенный запрет записи — не временный отказ чтения. Нельзя
+            # отдавать прежние «ok» из такой сессии или разрешать Publish.
+            results.clear()
+            checked_count = 0
+            error_kind = "plan"
+        elif isinstance(exc, ApiPublishError) and exc.code == "account":
             # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
             account_audit = {"rule": "account_active", "status": "error", "detail": error, "ads": []}
             error_kind = "account"
         else:
-            # ACL-1990: сессия чтения упала раньше, чем проверили хоть одну кампанию
-            # (профиль занят, сброс соединения, вход в прокси, CdpTimeout, лимит Meta).
-            # Это «не удалось проверить», а не ошибка кампании: Publish не выключаем.
-            error_kind = "not_checked"
+            # Только отказ ДО первой проверки не блокирует. После частичного
+            # ответа неизвестные кампании блокируются; готовые строки не стираются.
+            error_kind = "plan" if checked_count else "not_checked"
+        # Ошибки уже построенного локального черновика известны даже тогда,
+        # когда профиль не открылся. Они не становятся разрешением на Publish.
+        for draft in drafts[checked_count:]:
+            if draft.errors:
+                out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
+                out.error, out.stop_kind = "; ".join(draft.errors), "plan"
+                results.append(dry_run_result(out))
     _record("api_plan_check", not error,
             diag={"campaigns": len(drafts), "results": len(results),
                   **({"error_kind": error_kind, "raised": except_kind} if error_kind else {})},

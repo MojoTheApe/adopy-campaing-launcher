@@ -83,6 +83,17 @@ function slotOf(form, name, input, id) {
 function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
 
 (async () => {
+  // ACL-1990: настоящий ответ сервера проходит через Store и ворота Publish.
+  if (process.argv[3] === '--reply') {
+    const input = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
+    const { w, log } = world('api', input.reply);
+    const form = {}, slots = input.names.map((name, i) => slotOf(form, name, okInput(), 's' + i));
+    w.cbPreflightGate(itemsFor(slots, form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 80));
+    process.stdout.write(JSON.stringify({proceeded: log.proceeded,
+      lines: slots.map((slot) => w.cbTree.auditLines(slot))}));
+    return;
+  }
   // 1. Клиентская ошибка: не пускает, запросов нет, нужная кампания открыта.
   {
     const { w, log } = world('api', { results: [] });

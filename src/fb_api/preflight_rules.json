@@ -274,6 +274,7 @@
       "label": "Detailed targeting picks confirmed",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -371,6 +372,7 @@
       "label": "Main file next to the Stories / Reels file",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -384,6 +386,7 @@
       "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16",
       "severity": "error",
       "side": "server",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -397,6 +400,7 @@
       "label": "Up to 5 texts per field",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -410,6 +414,7 @@
       "label": "Several texts and a Stories / Reels file",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -423,6 +428,7 @@
       "label": "Several texts need their own ad set",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -548,6 +554,7 @@
       "label": "Devices and OS version fit together",
       "severity": "error",
       "side": "client",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -561,6 +568,7 @@
       "label": "Start time",
       "severity": "error",
       "side": "client",
+      "topic": "budget",
       "unit": "campaign"
     },
     {
@@ -588,6 +596,7 @@
       "label": "Ad set names are unique",
       "severity": "error",
       "side": "client",
+      "topic": "names",
       "unit": "campaign"
     },
     {
@@ -601,6 +610,7 @@
       "label": "Every ad set has an ad",
       "severity": "error",
       "side": "client",
+      "topic": "names",
       "unit": "campaign"
     },
     {

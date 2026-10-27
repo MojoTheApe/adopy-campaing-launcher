@@ -664,7 +664,11 @@ def test_topics_take_the_worst_status_of_their_checks():
     assert "meta" not in got, "под RPA нет проверки с Meta"
     assert got["creative"]["status"] == "error" and "primary_text" in got["creative"]["rules"]
     assert got["destination"]["status"] == "warning"
-    assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set"]
+    assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set", "start_time_valid"]
+    # Новое правило main участвует в максимуме своего раздела, а не теряется.
+    invalid_start = _with(start_time="bad")
+    timed = {t["id"]: t for t in _topics({"input": invalid_start, "opts": {"backend": "rpa"}})}
+    assert timed["budget"]["status"] == "error" and "start_time_valid" in timed["budget"]["rules"]
     api = {t["id"]: t for t in _topics({"input": _ok_input(), "opts": {"backend": "api", "server": None}})}
     # До проверки серверные строки «not checked»: раздел серый, не красный.
     assert api["account"]["status"] == "unknown" and api["meta"]["rules"] == ["plan_check"]
