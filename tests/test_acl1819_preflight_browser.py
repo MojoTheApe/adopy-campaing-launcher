@@ -114,6 +114,40 @@ def _badge(p) -> str:
     return p.locator(".cbd-pf .cbd-pf-badge").inner_text()
 
 
+def _audit_failure_state(p, observed: str) -> dict:
+    """Failure-only bounded synthetic state; never include fields or revisions."""
+    try:
+        state = p.evaluate("""() => {
+          const slot = document.querySelector('.cbd-host .cb-slot:not([hidden])');
+          const form = slot && slot.closest('form');
+          const audit = form && form._pfAudit;
+          const byName = audit && audit.byName;
+          const name = String((slot && slot.querySelector('.cb-name-hidden') || {}).value || '');
+          const hit = byName && byName[name];
+          const meta = document.querySelector('.cbd-pf-meta');
+          return {currentCampaignName: name.slice(0, 160),
+            cachedAuditNames: Object.keys(byName || {}).slice(0, 6).map(n => n.slice(0, 160)),
+            auditPresent: !!audit, currentNameHit: !!hit,
+            revisionMatches: hit && typeof window.cbPfRev === 'function'
+              ? hit.rev === window.cbPfRev(slot) : null,
+            metaText: String(meta && meta.textContent || '').slice(0, 240)};
+        }""")
+        def text(value, limit):
+            return value[:limit] if isinstance(value, str) else ""
+
+        def flag(key):
+            value = state.get(key)
+            return value if isinstance(value, bool) else None
+
+        return {"currentCampaignName": text(state.get("currentCampaignName"), 160),
+                "cachedAuditNames": [text(name, 160) for name in state.get("cachedAuditNames", [])[:6]],
+                "auditPresent": flag("auditPresent"), "currentNameHit": flag("currentNameHit"),
+                "revisionMatches": flag("revisionMatches"), "metaText": text(state.get("metaText"), 240),
+                "observedText": text(observed, 240)}
+    except Exception as error:
+        return {"diagnosticError": type(error).__name__}
+
+
 def _topic(p, tid) -> dict:
     """Раздел карточки: статус, раскрыт ли, строка-итог."""
     return p.evaluate("""(tid) => { const li = document.querySelector('.cbd-pf-topic[data-topic="' + tid + '"]');
@@ -237,7 +271,8 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         assert _badge(p) == "errors: 1"
         assert _topic(p, "account")["status"] == "error" and _topic(p, "account")["open"]
         assert "Checked with Meta" in p.locator(".cbd-pf-meta").inner_text()
-        assert p.locator(".cbd-pf-check").inner_text() == "Check again"
+        checked_label = p.locator(".cbd-pf-check").inner_text()
+        assert checked_label == "Check again", _audit_failure_state(p, checked_label)
         assert p.locator(".cbd-publish-all").is_disabled()
         assert "Facebook Page" in p.locator(".cbd-gate-reason").inner_text()
         _shots(p, "04-api-after-check-light")
@@ -245,7 +280,8 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         p.evaluate("""() => { const e = document.querySelector('.cbd-host [name$="_budget"]');
           e.value = '25'; e.dispatchEvent(new Event('input', {bubbles: true})); }""")
         p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"page_ok\"]').classList.contains('cbd-pf-unknown')")
-        assert "Edited since the check" in p.locator(".cbd-pf-meta").inner_text()
+        edited_meta = p.locator(".cbd-pf-meta").inner_text()
+        assert "Edited since the check" in edited_meta, _audit_failure_state(p, edited_meta)
         assert p.locator(".cbd-pf-check").inner_text() == "Check again"
         assert p.locator(".cbd-publish-all").is_enabled()
         assert state["plan_posts"] == 1, "правка вызвала запрос"
