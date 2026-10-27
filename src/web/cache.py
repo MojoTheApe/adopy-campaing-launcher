@@ -15,6 +15,7 @@ state. Single-user, sub-second renders, low blast radius.
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from itertools import count
@@ -192,7 +193,30 @@ def _build_locked(expected_key, cm_key: str, *, progress=None):
     _CACHE["key"] = expected_key
     # Читатели без замка видят только этот кортеж — он заменяется целиком.
     _CACHE["entry"] = (expected_key, reports, df, warnings)
+    if new_book:
+        _notify_new_workbook(expected_key)
     return report, df, warnings
+
+
+_log = logging.getLogger(__name__)
+
+# ACL-1816: слушатели «собрана новая книга BI» (ключ кэша сменился). Rules ставит
+# здесь только задание в очередь; пересборка отчёта другого менеджера по той же
+# книге слушателей не будит.
+_BUILD_LISTENERS: List[Callable[[Any], None]] = []
+
+
+def add_build_listener(fn: Callable[[Any], None]) -> None:
+    if fn not in _BUILD_LISTENERS:
+        _BUILD_LISTENERS.append(fn)
+
+
+def _notify_new_workbook(key: Any) -> None:
+    for fn in list(_BUILD_LISTENERS):
+        try:
+            fn(key)
+        except Exception:  # noqa: BLE001 - слушатель не должен ломать сборку отчёта
+            _log.exception("Workbook listener failed")
 
 
 # ── Фоновая сборка (ACL-1399) ──────────────────────────────────────────
