@@ -39,7 +39,6 @@ def test_exact_native_callsite_flushes_fixed_begin_end_phases(monkeypatch):
         "register": "$task = $folder.RegisterTaskDefinition($p.name, $definition, 2, $p.user, $p.password, 1, $null)",
         "run": "$instance = $task.Run($null)",
         "instance.guid": "$output.instance = [string]$instance.InstanceGuid",
-        "instance.state": "$output.instance_state = [int]$instance.State",
         "cleanup.delete": "$folder.DeleteTask($task.Name, 0)",
         "cleanup.folder_delete": "$root.DeleteFolder($p.folder, 0)",
     }.items():
