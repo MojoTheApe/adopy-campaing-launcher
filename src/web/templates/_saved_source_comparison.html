@@ -10,7 +10,7 @@
     <p>{% if amap.saved_source_check.all_dates %}All dates{% elif not amap.saved_source_check.date_from %}Through {{ amap.saved_source_check.date_to }}{% elif not amap.saved_source_check.date_to %}From {{ amap.saved_source_check.date_from }} onward{% else %}{{ amap.saved_source_check.date_from }}{% if amap.saved_source_check.date_to != amap.saved_source_check.date_from %} → {{ amap.saved_source_check.date_to }}{% endif %}{% endif %}</p>
     <dl>
       <dt>{{ row.source.source }}</dt>
-      <dd>{{ row.source_amount }} · time zone: {{ row.source.timezone or 'unknown' }} · day boundary: {{ day_labels.get(row.source.day_boundary, row.source.day_boundary or 'unknown') }}</dd>
+      <dd>{{ row.source_amount }} · time zone: {{ row.source.timezone or 'unknown' }}{% if row.source.timezone and row.source.timezone_defaulted %} (default){% endif %} · day boundary: {{ day_labels.get(row.source.day_boundary, row.source.day_boundary or 'unknown') }}{% if row.source.day_boundary and row.source.day_boundary_defaulted %} (default){% endif %}</dd>
       <dt>Saved account figure</dt>
       <dd>{{ row.account_amount }} · time zone: {{ row.account_timezone or 'unknown' }} · day boundary: {{ day_labels.get(row.account_day_boundary, row.account_day_boundary or 'unknown') }} · read: {{ row.account_at or 'unknown' }}</dd>
     </dl>

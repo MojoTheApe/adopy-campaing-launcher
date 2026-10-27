@@ -133,9 +133,10 @@ def test_legacy_archive_additive_migration_preserves_history_and_unknown_units(m
     historic = rows[rows.Date == pd.Timestamp("2026-01-05")]
     assert historic["$ Spend"].sum() == 7 and len(historic) == 1
     info = bi_compare.provenance(frame=historic)
-    # ACL-2204: старая строка без валюты — доллары по умолчанию; время/границы дня остаются неизвестными.
+    # ACL-2204/2248: старая строка без валюты, зоны и границы дня — значения по умолчанию.
     assert info["source"] == "Stats workbook" and info["currency_code"] == "USD" and info["currency_defaulted"]
-    assert info["assumed"] and "currency: USD (default)" in info["note"] and "currency: unknown" not in info["note"]
+    assert info["timezone"] == "Asia/Jerusalem" and info["timezone_defaulted"] and not info["assumed"]
+    assert "currency: USD (default)" in info["note"] and "currency: unknown" not in info["note"]
     with sqlite3.connect(path) as conn:
         assert conn.execute('SELECT "Date", "$ Spend", source FROM stats_rows WHERE "Date"=?',
                             ("2026-01-05",)).fetchone() == ("2026-01-05", 7, "workbook")
@@ -214,7 +215,7 @@ def test_warehouse_optional_metadata_is_select_only_and_never_guessed(monkeypatc
         assert (info["currency_code"], info["timezone"], info["day_boundary"]) == ("EUR", "Europe/Berlin", "calendar_day")
     else:
         assert info["currency_code"] == "USD" and info["currency_defaulted"]
-        assert info["timezone"] == "" and info["assumed"] and "currency: unknown" not in info["note"]
+        assert info["timezone"] == "Asia/Jerusalem" and info["timezone_defaulted"] and "currency: unknown" not in info["note"]
 
 
 def test_old_api_display_sign_does_not_fabricate_an_iso_code(monkeypatch, tmp_path):

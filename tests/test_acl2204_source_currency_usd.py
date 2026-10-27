@@ -21,7 +21,7 @@ def test_undeclared_currency_is_usd_and_notice_does_not_flag_it():
         assert info["currency_code"] == "USD" and info["currency"] == "USD"
         assert info["currency_defaulted"] is True
         assert "currency: unknown" not in info["note"] and "currency: USD (default)" in info["note"]
-        assert "time zone: unknown" in info["note"] and info["assumed"]  # зона/граница дня — как было
+        assert "time zone: Asia/Jerusalem (default)" in info["note"] and not info["assumed"]  # ACL-2248
         assert source_display.money(12266, info) == "$12,266"
 
 
@@ -71,7 +71,7 @@ def test_bi_usd_plus_workbook_without_currency_is_usd():
         info = bi_compare.provenance(frame=_mixed(["USD", "USD"], [empty, empty]))
         assert info["currency_code"] == "USD", empty
         assert info["currency_defaulted"] is False  # BI объявила USD явно
-        assert "currency: USD;" in info["note"] and "(default)" not in info["note"]
+        assert "currency: USD;" in info["note"] and "USD (default)" not in info["note"]
         assert source_display.money(585, info) == "$585"
 
 

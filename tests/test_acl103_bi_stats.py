@@ -471,9 +471,10 @@ def test_bi_figures_keep_unknown_metadata_until_it_is_actually_supplied(monkeypa
     monkeypatch.delenv("BI_ASSUMPTIONS_CONFIRMED", raising=False)
     monkeypatch.delenv("BI_CURRENCY", raising=False)
     info = bi_compare.provenance("bi")
-    assert info["currency"] == "USD" and info["assumed"] is True  # ACL-2204: USD по умолчанию
-    assert info["timezone"] == "" and info["day_boundary"] == ""
-    assert "currency: unknown" not in info["note"] and "time zone: unknown" in info["note"] and "day boundary" in info["note"]
+    assert info["currency"] == "USD" and info["assumed"] is False  # ACL-2204/2248: значения по умолчанию
+    assert info["timezone"] == "Asia/Jerusalem" and info["day_boundary"] == "calendar_day"
+    assert "unknown" not in info["note"] and "time zone: Asia/Jerusalem (default)" in info["note"]
+    assert "day boundary: calendar day (default)" in info["note"]
     monkeypatch.setenv("BI_ASSUMPTIONS_CONFIRMED", "1")
     assert bi_compare.provenance("bi")["currency_defaulted"], "a flag cannot invent source facts"
     monkeypatch.setenv("BI_CURRENCY", "eur")
@@ -491,8 +492,8 @@ def test_report_carries_source_info_and_warns_while_assumed(monkeypatch, tmp_pat
     monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
     report, _df, warnings = morning_service.load_morning_report(
         excel_path=str(tmp_path / "absent.xlsx"), skip_gsheet=True)
-    assert report["source_info"]["source"] == "BI" and report["source_info"]["assumed"] is True
-    assert any("unknown" in w for w in warnings)
+    assert report["source_info"]["source"] == "BI" and report["source_info"]["assumed"] is False
+    assert report["source_info"]["note"] not in warnings  # ACL-2248: значения по умолчанию не предупреждение
 
 
 def test_source_and_account_spend_are_shown_separately(monkeypatch):

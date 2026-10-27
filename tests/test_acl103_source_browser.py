@@ -157,8 +157,8 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         info = page.locator("#acl-source-info")
         assert info.is_visible()
         assert "BI + Stats workbook" in info.inner_text()
-        assert "incomplete metadata" in info.inner_text()
-        assert "time zone: unknown" in info.get_attribute("title")
+        assert "incomplete metadata" not in info.inner_text()  # ACL-2248: зона/граница дня по умолчанию
+        assert "time zone: Asia/Jerusalem (default)" in info.get_attribute("title")
         # ACL-2204: без объявленной валюты — USD; EUR из BI + книга без валюты (USD) — смесь, не сумма.
         if currency:
             assert "currency: unknown" in info.get_attribute("title")
@@ -197,7 +197,7 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         assert page.evaluate("AMAP_SHARED_TIP").startswith("The workbook")
         assert "numbers from the Stats workbook" in page.locator(".amap-head").inner_text()
         assert "2026-01-05" in page.locator(".amap-head").inner_text()
-        assert "USD" in info.inner_text() and "incomplete metadata" in info.inner_text()
+        assert "USD" in info.inner_text() and "incomplete metadata" not in info.inner_text()
         assert "unknown" not in info.inner_text()  # книга без валюты — USD, не unknown
         assert not errors, errors
     finally:
