@@ -5,6 +5,29 @@ For a plain-language owner overview, read [the owner guide](OWNER_GUIDE.md).
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
+## Executable workflow provider — ACL-2156
+
+The owner selected the standalone Task Tracker provider1 from its reviewed stable
+3.14.1 source, immutable commit `771d55f3317397e7d56471aa966f0a9de37d1a2e`.
+`delivery.json.workflow_provider`, the engine lock and immutable private-provider checkout name the
+same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed. Master1.8.0 stays the unchanged pinned documentation
+reference; this route needs no Master write or companion publication.
+
+Use the exact official Tracker source and its isolated
+`scripts/workflow_provider.py` entry point for future supported rendering. Read
+[the local provider adoption](STANDALONE_PROVIDER_ACL.md) and
+[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/771d55f3317397e7d56471aa966f0a9de37d1a2e/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+Preserve all local rules below, true pristine ancestry, independent review and
+full applicable checks. The native configuration, adopted execution3, capacities,
+target, required checks, IDs, existing owners and original task scope are unchanged.
+No optional policy is activated. ACL-2099 is a separate preparation-only selection;
+its own package must be verified through the retained actual preselection config
+before any separately authorized owned idle adoption.
+
+Standalone v1 grants no new process-completion waiver. This owner-selected
+migration and explicit publication requests retain normal source/combined review,
+frozen-batch admission, Main acceptance and actual verified package delivery.
+
 ## Adoption boundary
 
 The owner selected an installed Windows application with automatic updates, not
@@ -100,8 +123,8 @@ Use `check-pr N` for early linkage feedback; run `check-merge N` once immediatel
 It includes linkage, so do not repeat a separate immediate `check-pr` call. Keep
 the distinct required review, merge-recording and delivery actions.
 Final admission checks current review, CI and any configured stage evidence. These agent commands are
-not GitHub branch protection. Verify actual GitHub controls; the private repository
-currently reports a plan restriction for branch protection/rulesets. Never present
+not GitHub branch protection. Verify actual GitHub controls; repository visibility
+alone proves neither branch protection nor ruleset enforcement. Never present
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
@@ -221,7 +244,7 @@ CI (`.github/workflows/ci.yml`, ACL-1582) splits the suite by platform:
 | Job name (exact) | Runner | Python | Files |
 |---|---|---|---|
 | `linux tests (<py>, <k>)` | ubuntu-latest | 3.11 and 3.13 on pushes and manual runs, 3.13 on most PRs (below); shards k = 1..3 | every `tests/test_*.py` without the `windows_only` marker: `python scripts/acl_test_shard.py --platform linux <k> 3` |
-| `windows tests (<py>)` | windows-latest | 3.13 | the `windows_only` files plus the Windows smoke set (`scripts/acl_test_platform.py` `WINDOWS_SMOKE`), after the secret scan and `scripts/acl_smoke.py`: `--platform windows 1 1` |
+| `windows tests (<py>)` | windows-2022; actual Server 2022/build 20348 checked before tests | 3.13 | the complete `windows_only` + Windows smoke selection (`--platform windows 1 1`), after secret scan and startup smoke; checked each-once phases: general files in parallel, then ACL-1309, ACL-2063 and lock stress separately below |
 | `ACL verification` | ubuntu-latest | - | aggregates `scope`, both Linux and Windows test jobs |
 
 A test file that needs Windows says so at module level, with the reason:
@@ -264,6 +287,7 @@ a combined candidate. Release/manual rules stay in force.
 A new push to a PR branch cancels that PR's superseded CI and installer runs;
 stage/main/master pushes and manual runs retain their own run identities.
 The installer build/install job stops at 20 minutes.
+The Chromium install step (Linux and Windows) runs through `scripts/ci_retry.sh`: 3 attempts, each cut at 300 s (Linux) or 180 s (Windows), apt sources switched off the stalling Azure mirror, apt locks cleaned between attempts, the browser download cached by Playwright version, and a hard step limit (16 min Linux, 12 min Windows). The Linux test job stops at 32 minutes (shard 1 normally takes 20-22 min, the longest green run was 29.2), the Windows one at 30 (ACL-1710: an `apt-get update` hang used to burn 35 minutes per job).
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test
@@ -280,8 +304,18 @@ no test reaches the live team library even when the machine `.env` configures it
 Each test gets its own `tmp_path`, machine config folder (`ACL_CONFIG_DIR`) and
 telemetry journal from the conftest fixtures.
 
-Serial-only tests: none. A test that genuinely cannot run next to others must be
-listed here with the reason and run in its own step; none needed it so far.
+Windows serial phases (ACL-2164): `test_acl1309_two_windows_people.py` and
+`test_acl2063_two_windows_people.py` each use the machine's real Task Scheduler
+and scoped batch-logon admission. `test_shared_file_locks.py` intentionally
+saturates every CPU. Run these three files separately, in that order, after the
+general parallel Windows files, using `-n 0` for each phase. The existing selector
+still supplies every Windows-only/smoke file. Its runtime planner refuses missing,
+extra or duplicate plan members and verifies that the phases cover the exact
+selection once. Internal real users, simultaneous writers, all-core burners and
+all original deadlines/assertions remain unchanged; the whole job retains its
+30-minute limit. Host pinning alone did not prevent the retained COM recurrence
+on Server 2022; this isolates shared test resources without claiming the unknown
+system-service cause is repaired.
 Several real-Chromium tests check the robot's own time budgets (a tab that does
 not answer in 2-5 s counts as frozen); on a CPU-starved machine they can fail in
 any mode, serial included. If a budget/timing test fails locally, rerun that
@@ -294,7 +328,12 @@ closed classification.
 Combined batch, actual stage, promotion/main and manual contexts require complete
 applicable checks. A push or PR may reuse successful applicable jobs of the exact
 same Git tree (ACL-1565/1649, `scripts/acl_ci_reuse.py`); the run summary links
-that evidence. Manual runs and uncertainty run in full. Never treat separate
+that evidence. Combined batch PRs run their own full matrix without borrowing jobs.
+Release validation fetches the reused run IDs recorded by the successful main
+scope job (annotation, or its older classifier JSON log), revalidates their exact
+tree, merged-PR binding and jobs, and combines them with main's successful jobs.
+Complete proof returns without a run-list lookup; partial proof retains bounded
+discovery and fail-closed validation. Manual runs and uncertainty run in full. Never treat separate
 source checks as combined-content proof. The private pinned Master
 Action's access must be verified in a real consumer run. Draft descriptor success
 is structural feedback, not activation or live environment evidence.

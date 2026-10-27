@@ -24,6 +24,8 @@ requests==2.32.5
 # --- Dashboard (report + web UI) ---
 pandas==3.0.1
 openpyxl==3.1.5
+# BI (MySQL) — статистика вместо ручной книги (ACL-103).
+PyMySQL==1.2.3
 # FastAPI/Starlette — пара с закрытыми дырами (ACL-1356, аудит S04).
 # Прежний fastapi==0.110.0 тянул Starlette 0.36.3: /static пускал UNC-пути
 # (CVE-2026-48818 — Windows сам идёт авторизоваться на чужой SMB-сервер),
@@ -36,6 +38,8 @@ starlette==1.7.0
 uvicorn==0.44.0
 jinja2==3.1.6          # 3.1.4 had sandbox CVEs (CVE-2024-56201, -56326, CVE-2025-27516)
 python-multipart==0.0.32  # required by Starlette Request.form() in Campaign Builder POST routes
+Pillow==12.2.0         # crops the account status screenshot (ACL-1529); optional at
+                       # run time — without it the shot is kept uncropped.
 
 # --- Google Sheets (accounts, targeting, stats) ---
 google-api-python-client==2.193.0

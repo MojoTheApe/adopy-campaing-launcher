@@ -62,6 +62,7 @@ Source: "{#CurrentManifest}"; DestDir: "{localappdata}\Programs\ACL"; DestName: 
 [Icons]
 Name: "{autoprograms}\Adopy Campaign Launcher\Open Campaign Launcher"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"
 Name: "{autoprograms}\Adopy Campaign Launcher\Setup Campaign Launcher"; Filename: "{app}\ACL.exe"; Parameters: "--setup"
+Name: "{autoprograms}\Adopy Campaign Launcher\Setup guide"; Filename: "{app}\_internal\setup-guide.html"
 Name: "{autoprograms}\Adopy Campaign Launcher\Stop Campaign Launcher"; Filename: "{app}\ACL.exe"; Parameters: "--stop-server"
 Name: "{autoprograms}\Adopy Campaign Launcher\Settings"; Filename: "{app}\ACL.exe"; Parameters: "--settings"
 Name: "{autoprograms}\Adopy Campaign Launcher\Diagnostics"; Filename: "{app}\ACL.exe"; Parameters: "--diagnostics"
@@ -70,6 +71,7 @@ Name: "{autoprograms}\Adopy Campaign Launcher\Uninstall"; Filename: "{uninstalle
 Name: "{autodesktop}\Adopy Campaign Launcher"; Filename: "{app}\ACL.exe"; WorkingDir: "{localappdata}\ACL\workspace"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\_internal\setup-guide.html"; Description: "Open the setup guide"; Flags: shellexec nowait postinstall skipifsilent
 Filename: "{app}\ACL.exe"; Description: "Open Adopy Campaign Launcher"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]

@@ -165,6 +165,8 @@ def test_the_publisher_ends_the_accounts_job_with_the_message(monkeypatch):
     from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
     from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 
+    monkeypatch.setattr("src.fb_ads_rpa.rpa_publisher.load_ad_account_map", lambda _: {
+        "Facebook_6540": _entry()})
     pub = RpaPublisher.__new__(RpaPublisher)
     pub.hand_off = pub.dry_run = False
     pub.selectors_path = None
@@ -259,6 +261,8 @@ def test_an_attach_time_stop_reaches_sentry(monkeypatch):
     from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
     from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 
+    monkeypatch.setattr("src.fb_ads_rpa.rpa_publisher.load_ad_account_map", lambda _: {
+        "Facebook_6540": _entry()})
     sent: list = []
     monkeypatch.setattr(sentry_signal, "report_campaign_stop",
                         lambda step, **kw: sent.append((step, kw.get("campaign"))) or "")

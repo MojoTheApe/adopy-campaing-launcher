@@ -81,7 +81,10 @@ RULES: list[dict[str, Any]] = [
     _r("account_active", "Ad account is active", ERROR, "server",
        "the profile has no access to the ad account, or the account is not active: check the Accounts page"),
     _r("page_ok", "Facebook Page", ERROR, "server",
-       "choose a Page that belongs to this ad account on the Accounts page (page_id)"),
+       "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
+    _r("instagram_identity", "Instagram account of the Page", ERROR, "server",
+       "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, "
+       "or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -124,11 +127,26 @@ RULES: list[dict[str, Any]] = [
        "the file is missing, empty or unreadable: choose another file",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_limits", "Media within Meta limits", ERROR, "server",
-       "file type, size (image 30 MB, video 200 MB) or video length is over the limit",
+       "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 file: without one Facebook crops the picture itself",
        sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_needs_main", "Main file next to the Stories / Reels file", ERROR, "client",
+       "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
+       sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_ratio", "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16", ERROR, "server",
+       "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images "
+       "or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+       sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
+       "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
+       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
+       _wp.MSG_TEXTS_DYNAMIC_SET,
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline", "Headline", ERROR, "client", "the chosen text has no headline: pick another library entry",
@@ -177,7 +195,8 @@ def export_rules() -> dict[str, Any]:
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
                    "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
-                   "os_min_re": _OS_MIN_RE, "start_re": _START_RE},
+                   "os_min_re": _OS_MIN_RE, "os_versions": {k: list(v) for k, v in _wp.OS_VERSIONS.items()},
+                   "start_re": _START_RE, "max_texts": MAX_TEXTS},
     }
 
 
@@ -194,9 +213,16 @@ def load_json() -> dict[str, Any]:
 # Вход аудита (одна кампания; ACL-1768: наборы - `ad_sets`, плоский вход = один набор):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str,
+#             ACL-1774 (необязательные): "bodies": [str], "headlines": [str], "descriptions": [str],
+#             "vertical_file": str}],
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
+
+def _multi_text(a: dict) -> bool:
+    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
+    return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
+
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
@@ -208,6 +234,22 @@ def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None,
     if sets:
         # ACL-1768: у кампании с несколькими наборами - какие наборы (1-based); иначе ключа нет.
         out["sets"] = list(sets)
+    return out
+
+
+#: Сколько текстов каждого вида допускает одно объявление (ACL-1774; справочник Graph).
+MAX_TEXTS = _wp.ASSET_FEED_MAX_TEXTS
+
+
+def _distinct(items: Any) -> list[str]:
+    """Непустые тексты без повторов (пробелы не в счёт) — как на сервере (`creator._unique`)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in items if isinstance(items, list) else []:
+        key = "".join(_s(x).split())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
     return out
 
 
@@ -307,6 +349,16 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append(_v(rid, OK if re.search(_TRACK_RE, link) else WARNING))
         elif rid == "media_chosen":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("file"))))
+        elif rid == "vertical_needs_main":
+            out.append(_per_ad(rid, inp, lambda a, st: bool(_s(a.get("vertical_file"))) and not _s(a.get("file"))))
+        elif rid == "texts_limit":
+            out.append(_per_ad(rid, inp, lambda a, st: any(
+                len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
+        elif rid == "texts_vertical":
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+        elif rid == "texts_dynamic":
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))
+                                      and len(st.get("ads") or []) > 1))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
         elif rid == "headline":
@@ -346,7 +398,7 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                     return "mobile_os_desktop"
                 if ver and not mobile:
                     return "version_needs_os"
-                if ver and not re.fullmatch(_OS_MIN_RE, ver):
+                if ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
                     return "bad_version"
                 return ""
             out.append(_per_set(rid, inp, dev_bad))
@@ -509,7 +561,26 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
 
     facts = creator.facts
     put("account_active", OK)
-    guarded("page_ok", lambda: (cr.resolve_page(plan, facts), put("page_ok", OK)))
+    guarded("page_ok", lambda: (cr.resolve_page(plan, facts), creator.check_profile_page(plan),
+                                put("page_ok", WARNING if cr.needs_manual_page(plan) else OK,
+                                    cr.MANUAL_PAGE_NOTICE if cr.needs_manual_page(plan) else "")))
+
+    def instagram() -> None:
+        # ACL-1896: Instagram-площадки без аккаунта у Страницы Meta отвергает уже после создания кампании.
+        # Сервер - единственный судья: ему нужны данные Meta. Отказ чтения - не «можно».
+        if not plan.page_id or not cr.plan_has_instagram_placements(plan):
+            put("instagram_identity", OK, "not needed")
+            return
+        got = creator.instagram_identity(plan)
+        if got.status == "found":
+            put("instagram_identity", OK, f"Instagram account {got.ig_id} ({got.source})")
+        else:
+            # «Нет аккаунта» и «Meta не подтвердила» одинаково блокируют: молча пропускать нельзя.
+            put("instagram_identity", ERROR, got.message)
+    if out.get("page_ok", {}).get("status") == OK:
+        guarded("instagram_identity", instagram)
+    else:
+        put("instagram_identity", UNKNOWN, "Not checked: the Facebook Page is not settled")
     if any(not s.instant for s in plan.ad_sets):
         guarded("pixel_ok", lambda: (cr.resolve_pixel(plan, facts), put("pixel_ok", OK)))
 
@@ -558,8 +629,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         for s in plan.ad_sets:
             if s.interest_groups:
                 resolver.interests(s.interest_groups)
-        put("interests_resolve", OK)
+        put_resolved()
         put("interests_confirmed", OK)
+
+    def put_resolved() -> None:
+        # ACL-1920: необязательный поиск, в котором Meta отказала, - предупреждение с названием поиска.
+        fn = getattr(resolver, "targeting_warnings", None)
+        warns = list(fn()) if fn else []
+        put("interests_resolve", WARNING if warns else OK, " ".join(warns))
 
     def interests_guard() -> None:
         # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.
@@ -568,15 +645,18 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         except cr.TargetingUnresolved as exc:
             lost = [i for i in exc.items if i.get("state") not in ("pending", "unknown")]
             asks = [i for i in exc.items if i.get("state") == "pending"]
-            if any(i.get("state") == "unknown" for i in exc.items):
+            unknown = any(i.get("state") == "unknown" for i in exc.items)
+            if lost:
+                # Уже найденные «не найдено» показываем даже когда другой термин не успели проверить.
+                put("interests_resolve", ERROR,
+                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost)
+                    + (". " + cr._tr.UNKNOWN_MESSAGE if unknown else ""))
+                out["interests_resolve"]["items"] = lost
+            elif unknown:
                 # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
                 put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
-            elif lost:
-                put("interests_resolve", ERROR,
-                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost))
-                out["interests_resolve"]["items"] = lost
             else:
-                put("interests_resolve", OK)
+                put_resolved()
             if asks:
                 put("interests_confirmed", ERROR,
                     "; ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
@@ -606,6 +686,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     # Файлы: читаем с диска как создатель (или берём уже прочитанные).
     readable: list[int] = []
     problems: dict[str, list[tuple[int, str]]] = {"media_readable": [], "media_limits": []}
+    ratio_bad: list[tuple[int, str]] = []
     vertical_bad: list[int] = []
     vertical_unknown: list[int] = []
     long_video: list[int] = []
@@ -617,7 +698,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             try:
                 data = (files or {}).get(ad.path)
                 if data is None:
-                    data = creator.read_file(ad.path)
+                    data = creator.load_media(ad.path, ad.kind)
             except OSError as exc:
                 problems["media_readable"].append((ad.index, f"Ad {ad.index}: creative file cannot be read ({exc})"))
                 continue
@@ -629,6 +710,22 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
             size = None
+            if ad.vertical_path:
+                # ACL-1774: пара файлов — читаем вертикальный, сверяем соотношения и вид.
+                try:
+                    vdata = (files or {}).get(ad.vertical_path)
+                    if vdata is None:
+                        vdata = creator.load_media(ad.vertical_path, ad.vertical_kind)
+                except OSError as exc:
+                    problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
+                    vdata = b""
+                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                if vdata and len(vdata) > vlimit:
+                    problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
+                if vdata and ad.vertical_kind != ad.kind:
+                    ratio_bad.append((ad.index, f"Ad {ad.index}: the main file is {ad.kind} and the Stories / Reels file is {ad.vertical_kind}"))
+                elif vdata:
+                    ratio_bad += [(ad.index, m) for m in cr.pair_problems(ad.index, ad.kind, data, vdata)]
             if ad.kind == "video":
                 vi = video_info(data)
                 if vi and vi.get("seconds", 0) > VIDEO_MAX_SECONDS:
@@ -639,11 +736,19 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                     size = (int(vi["width"]), int(vi["height"]))
             else:
                 size = image_size(data)
-            if size and size[1]:
+            selected = cr.placement_targeting(s.placements)
+            uses_vertical = not selected or any(p in selected.get("facebook_positions", []) for p in cr.VERTICAL_FACEBOOK) or any(p in selected.get("instagram_positions", []) for p in cr.VERTICAL_INSTAGRAM)
+            if ad.vertical_path or not uses_vertical:
+                pass                      # вертикальный файл есть: «обрежет сама» не про это объявление
+            elif size and size[1]:
                 if size[0] / size[1] > VERTICAL_MAX_RATIO:
                     vertical_bad.append(ad.index)
             else:
                 vertical_unknown.append(ad.index)
+    if ratio_bad:
+        put("vertical_ratio", ERROR, "; ".join(m for _, m in ratio_bad), sorted({i for i, _ in ratio_bad}))
+    else:
+        put("vertical_ratio", OK)
     for rid in ("media_readable", "media_limits"):
         if problems[rid]:
             put(rid, ERROR, "; ".join(m for _, m in problems[rid]), [i for i, _ in problems[rid]])

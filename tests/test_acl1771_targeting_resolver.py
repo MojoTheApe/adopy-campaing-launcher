@@ -3,7 +3,7 @@
 Только фейки, ни одного живого вызова Meta. Проверяется:
 * точное имя без учёта регистра/разделителей, но НЕ слитые символы и диакритика (C++ != C);
 * запасной поиск adinterest, список поведений постранично, adworkposition/adworkemployer,
-  учебные типы только при близком кандидате;
+  учебные типы без обязательного близкого интереса;
 * «A or B» - кандидат с разовым подтверждением, а не автоматический выбор;
 * близкое совпадение никогда не берётся само;
 * подтверждение -> кэш (ключ: тип + термин) -> повторное использование; перепроверка id;
@@ -99,7 +99,7 @@ def test_norm_keeps_symbols_and_diacritics(a, b):
     assert tr.norm(a) != tr.norm(b)
 
 
-@pytest.mark.parametrize("a,b", [("Forex Trading", "forex  trading"), ("Hip-Hop", "hip hop"), ("a_b", "A/B"),
+@pytest.mark.parametrize("a,b", [("Forex Trading", "forex  trading"), ("Hip-Hop", "hip hop"), ("a_b", "A_B"),
                                  ("YOGA", "yoga"), ("Año", "año")])
 def test_norm_ignores_case_whitespace_and_dash_underscore_slash(a, b):
     assert tr.norm(a) == tr.norm(b)
@@ -150,14 +150,16 @@ def test_behaviors_paged_and_work_lookups_use_documented_search_types(tmp_path):
     assert "adTargetingCategory" not in [t for t, _, p in c.log if p.get("class") != "behaviors"]
 
 
-def test_education_searches_run_only_when_something_is_near(tmp_path):
-    c = FakeSearch(typed={("adeducationmajor", "Computer Science"): [{"id": "81", "name": "Computer Science"}]})
-    res = _one(_resolver(c, tmp_path), "Computer Science")
-    assert res["state"] != "exact" and "adeducationschool" not in c.types(), "нет близкого - учебные типы пропущены"
-    near = FakeSearch(interests={"Computer Science": [{"id": "1", "name": "Computer Sciences"}]},
-                      typed={("adeducationmajor", "Computer Science"): [{"id": "81", "name": "Computer Science"}]})
-    res = _one(_resolver(near, tmp_path), "Computer Science")
-    assert res["state"] == "exact" and res["picks"][0]["type"] == "education_majors"
+@pytest.mark.parametrize("bucket,search_type,term", [
+    ("education_schools", "adeducationschool", "Example University"),
+    ("education_majors", "adeducationmajor", "Computer Science"),
+])
+def test_education_target_resolves_without_an_unrelated_near_interest(tmp_path, bucket, search_type, term):
+    client = FakeSearch(typed={(search_type, term): [{"id": "81", "name": term}]})
+    result = _one(_resolver(client, tmp_path), term)
+    assert result["state"] == "exact"
+    assert result["picks"] == [{"id": "81", "type": bucket, "name": term}]
+    assert search_type in client.types()
 
 
 def test_interests_builds_flexible_spec_with_all_buckets(tmp_path):
@@ -520,3 +522,183 @@ def test_split_candidate_is_confirmable_and_clear_works(web):
     assert _call(web.targeting_resolver_clear, {})[0] == 400, "без термина и без all - отказ"
     assert _call(web.targeting_resolver_clear, {"term": "alpari group or plus500"})[1]["removed"] == 1
     assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+@pytest.mark.parametrize("state", ["exact", "confirmed", "unresolved", "unknown"])
+def test_a_new_check_plan_without_candidates_invalidates_the_old_pick(web, state):
+    tr.register_candidates([{"term": "T", "state": "pending",
+                             "candidates": [{"id": "1", "type": "interests", "name": "Old"}]}])
+    tr.register_candidates([{"term": "T", "state": state, "candidates": [], "picks": []}])
+    code, body = _call(web.targeting_resolver_confirm, {"term": "T", "id": "1", "type": "interests"})
+    assert code == 400
+    assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+def test_check_plan_renders_candidates_and_saved_choices_without_substitution():
+    from copy import deepcopy
+    from html import unescape
+    from tests.test_acl1761_plan_check import _PLAN_DATA, _run_plan_node
+
+    data = deepcopy(_PLAN_DATA)
+    data['results'][0]['targeting'] = [
+        {'term': '<term>&"', 'state': 'pending',
+         'suggested': {'id': '81', 'type': 'education_majors', 'name': '<Major>'},
+         'candidates': [{'id': '81', 'type': 'education_majors', 'name': '<Major>'}]},
+        {'term': 'Saved', 'state': 'confirmed',
+         'picks': [{'id': '82', 'type': 'work_positions', 'name': 'Role'}]},
+        {'term': 'Unknown', 'state': 'unknown', 'reason': tr.UNKNOWN_MESSAGE},
+    ]
+    out = _run_plan_node(data)
+    html = out['html']
+    assert 'Picked <strong>&lt;Major&gt;</strong>' in html
+    assert 'Publish is blocked until you confirm or pick another.' in html
+    assert 'data-act="confirm-target"' in html and 'data-id="81"' in html
+    assert 'data-term="&lt;term&gt;&amp;&quot;"' in html
+    assert '<Major>' not in html and '<term>' not in html
+    assert 'Role [work_positions]' in html and 'data-act="clear-target"' in html
+    assert tr.UNKNOWN_MESSAGE in unescape(html)
+    assert out['fetched'] == [{'url': '/publish-plan', 'dry_run': '1', 'activate': '0'}]
+
+
+def test_editing_the_term_text_drops_the_previous_pick(web):
+    """A candidate shown for "Forex Trading" cannot be confirmed for an edited term text."""
+    tr.register_candidates([{"term": "Forex Trading", "state": "pending",
+                             "candidates": [{"id": "6", "type": "interests", "name": "Forex Trading Tips"}],
+                             "suggested": {"id": "6", "type": "interests", "name": "Forex Trading Tips"}}])
+    code, _ = _call(web.targeting_resolver_confirm, {"term": "Forex Trading Pro", "id": "6", "type": "interests"})
+    assert code == 400, "the edited text has no shown candidate; nothing carries over"
+    assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+def test_ambiguous_term_lists_every_near_candidate_and_picks_none(tmp_path):
+    near = {"yoga": [{"id": "1", "name": "Yoga Classes"}, {"id": "2", "name": "Yoga Mats"},
+                     {"id": "3", "name": "Hot Yoga"}]}
+    res = _one(_resolver(FakeSearch(interests=near), tmp_path), "yoga")
+    assert res["state"] in ("pending", "unresolved") and res["picks"] == []
+    assert {c["name"] for c in res["candidates"]} == {"Yoga Classes", "Yoga Mats", "Hot Yoga"}
+    with pytest.raises(cr.TargetingUnresolved):
+        cr.TargetingResolver(FakeSearch(interests=near), _store(tmp_path)).interests([["yoga"]])
+
+
+def test_audience_languages_and_detailed_targeting_share_one_resolver(tmp_path):
+    """ACL-1767 locale names and ACL-1771 terms live side by side on TargetingResolver."""
+
+    class Both(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if params and params.get("type") == "adlocale":
+                return [{"key": 23, "name": "Spanish (All)"}]
+            return super().get_all(path, params, max_pages=max_pages)
+
+    resolver = cr.TargetingResolver(Both(valid={"Forex": ("Forex", "5")}), _store(tmp_path))
+    assert resolver.locale("Spanish") == 23 and resolver.locale_names == {"Spanish": "Spanish (All)"}
+    spec = resolver.interests([["forex"]])
+    assert spec == [{"interests": [{"id": "5", "name": "Forex"}]}]
+    assert resolver.targeting_report()[0]["state"] == "exact"
+
+
+# ───────────────────────────── round 2: read budget, retry, lost terms ─────────────────────────────
+
+def _client_with_budget(inner, max_calls):
+    """A FakeSearch that also carries the client's call ceiling like GraphClient."""
+    inner.max_calls = max_calls
+    return inner
+
+
+def test_three_missing_terms_and_a_near_composite_all_resolve_within_budget(tmp_path):
+    near = {"Alpari": [{"id": "1", "name": "Alpari Group"}], "Plus500": [{"id": "2", "name": "Plus 500"}]}
+    c = _client_with_budget(FakeSearch(interests=near), cr_budget())
+    r = _resolver(c, tmp_path)
+    terms = ["Zzzz1", "Zzzz2", "Zzzz3", "Alpari or Plus500"]
+    r.prefetch(terms)
+    states = {t: r.resolve(t)["state"] for t in terms}
+    assert "unknown" not in states.values(), states
+    assert states["Zzzz1"] == states["Zzzz2"] == states["Zzzz3"] == "unresolved"
+    assert states["Alpari or Plus500"] in ("pending", "unresolved")
+    assert r.reads <= tr.JOB_READ_ABS_CAP
+
+
+def cr_budget():
+    from src.web import publish_api
+    return publish_api.PLAN_PREFLIGHT_MAX_CALLS
+
+
+def test_job_cap_has_a_sane_absolute_ceiling(tmp_path):
+    c = _client_with_budget(FakeSearch(), cr_budget())
+    r = _resolver(c, tmp_path)
+    r.prefetch([f"Missing {i}" for i in range(40)])
+    assert r.job_cap == tr.JOB_READ_ABS_CAP
+    assert cr_budget() >= tr.JOB_READ_ABS_CAP + 20, "the client allowance sits above the resolver ceiling"
+
+
+def test_retry_after_unknown_makes_progress_through_the_shared_cache(tmp_path):
+    cache = tr.SearchCache()
+    terms = [f"Zzzz{i}" for i in range(4)]
+    first = FakeSearch()
+    r1 = tr.TermResolver(first, _store(tmp_path), job_cap=14, cache=cache, scope="act_1")
+    r1.prefetch(terms)
+    s1 = [r1.resolve(t)["state"] for t in terms]
+    assert "unknown" in s1
+    second = FakeSearch()
+    r2 = tr.TermResolver(second, _store(tmp_path), job_cap=14, cache=cache, scope="act_1")
+    r2.prefetch(terms)
+    s2 = [r2.resolve(t)["state"] for t in terms]
+    assert s2.count("unknown") < s1.count("unknown"), "the retry must go further than the first run"
+    assert second.calls < first.calls + 1 and r2.reads <= 14
+
+
+def test_search_cache_expires_and_is_scoped_per_account(tmp_path):
+    now = [0.0]
+    cache = tr.SearchCache(ttl=10, clock=lambda: now[0])
+    cache.put("a", ("k",), [{"id": "1"}])
+    assert cache.get("a", ("k",)) and cache.get("b", ("k",)) is None
+    now[0] = 11
+    assert cache.get("a", ("k",)) is None
+
+
+def test_slash_is_not_a_space_so_a_b_is_not_an_exact_hit(tmp_path):
+    assert tr.norm("A/B") != tr.norm("A B")
+    c = FakeSearch(interests={"A/B": [{"id": "1", "name": "A B"}]})
+    res = _one(_resolver(c, tmp_path), "A/B")
+    assert res["state"] != "exact" and res["picks"] == []
+
+
+def test_error_message_has_no_doubled_period():
+    exc = cr.TargetingUnresolved([
+        {"term": "x", "state": "pending", "candidates": [], "suggested": {"id": "1", "type": "interests", "name": "X1"}},
+        {"term": "y", "state": "unresolved", "candidates": []}])
+    assert ".." not in str(exc)
+
+
+def test_concurrent_confirms_do_not_lose_entries(tmp_path):
+    import threading
+
+    store = _store(tmp_path)
+    def put(i):
+        store.put(f"term {i}", id=str(i + 1), type="interests", name=f"N{i}")
+    ts = [threading.Thread(target=put, args=(i,)) for i in range(12)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert len(store.entries()) == 12
+
+
+def test_guard_reports_not_found_terms_even_when_another_term_is_unknown(tmp_path):
+    seen = set()
+    for mc in range(9, 40):
+        out, got = _audit(TargetMeta(), tmp_path, "Nothing close, Also gone", _store(tmp_path), max_calls=mc)
+        v = got["interests_resolve"]
+        if "press Check plan again" in v["detail"]:
+            seen.add(v["status"])
+            if v["status"] == "error":
+                assert "Nothing close" in v["detail"], "the term already known as not found stays visible"
+                return
+    pytest.fail(f"no budget stopped the job halfway with a not-found term reported; statuses {seen}")
+
+
+def test_search_cache_prunes_expired_entries_on_store():
+    now = [0.0]
+    cache = tr.SearchCache(ttl=10, clock=lambda: now[0])
+    for i in range(5):
+        cache.put("a", (i,), [])
+    now[0] = 11
+    cache.put("a", ("fresh",), [])
+    assert len(cache._rows) == 1

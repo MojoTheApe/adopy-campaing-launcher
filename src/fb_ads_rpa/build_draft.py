@@ -132,6 +132,9 @@ def slots_to_campaign_drafts(
                     copy2_name=(s.get("copy2") or "").strip(),
                     lead_form_id=(s.get("lead_form_id") or "").strip() if destination == "instant_form" else "",
                     cta=(s.get("cta") or "").strip(),
+                    # ACL-1774: ключи есть в слоте только когда поле заполнено.
+                    more_copy_names=[str(x).strip() for x in (s.get("copy_more") or [])],
+                    vertical_filename=(s.get("creative_file_vertical") or "").strip(),
                     lead_form_template=((s.get("lead_form_template") or "").strip()
                                         if destination == "instant_form" else ""),
                 )
@@ -155,6 +158,7 @@ def slots_to_campaign_drafts(
                 device=(first.get("device") or "").strip(),
                 os_min=(first.get("os_min") or "").strip(),
                 start_time=(first.get("start_time") or "").strip(),
+                placements=first.get("placements"),
                 adset_index=idx,
                 # Язык набора 0 - язык кампании; у остальных свой, пусто = как у кампании.
                 language=(first.get("language") or "").strip() if idx != order[0] else "",
@@ -173,6 +177,8 @@ def slots_to_campaign_drafts(
             language=language,
             link_provided=first_campaign.get("tracking_link_provided", "tracking_link" in first_campaign),
             language_provided=first_campaign.get("language_provided", "language" in first_campaign),
+            page_id=str(first_campaign.get("page_id") or "").strip() or None,
+            page_provided="page_id" in first_campaign,
             ad_sets=ad_sets,
             warnings=warnings,
         )
@@ -183,6 +189,8 @@ def slots_to_campaign_drafts(
             if not ad_set.ads:
                 draft.errors.append("No ads in campaign" if len(ad_sets) == 1
                                     else f"No ads in ad set {ad_set.name!r}")
+        if any(str(s.get("page_id") or "").strip() != str(first_campaign.get("page_id") or "").strip() for s in group):
+            draft.errors.append("Campaigns with the same name have different Facebook Page choices. Give each campaign a distinct name.")
         if budget is None:
             draft.errors.append("Daily budget missing")
         drafts.append(draft)

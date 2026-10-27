@@ -1,4 +1,4 @@
-"""Country headings keep selected-period account readings and their units."""
+"""Legacy reading models keep their units; current headings show workbook BI."""
 from unittest.mock import Mock
 
 import pytest
@@ -41,16 +41,11 @@ def test_sums_use_only_successful_finite_readings_and_do_not_mix_units(monkeypat
         {'currency':'$','spend':1044.82,'account':'J'},
     ]
     html=app.templates.env.get_template('_account_map.html').render(amap=view,mlx={'A':'A','B':'B'})
-    assert '6/10 spend read' in html
-    assert 'KWD 7.00' in html and 'USD 10.25' in html
-    # ACL-1258: в сводке страны без «currency unknown» и без имени кабинета;
-    # суммы без кода стоят отдельно, знак Meta ($) сохраняется.
-    summary = html.split('amap-live-summary-values', 1)[1].split('</span>', 1)[0]
-    assert '<b>2.00</b>' in summary and '<b>3.00</b>' in summary
-    assert '<b>$1,044.82</b>' in summary
-    assert 'currency unknown' not in summary
-    assert '(F)' not in summary and '(G)' not in summary and '(J)' not in summary
-    assert 'not country-attributed spend' in html
+    # ACL-2063 supersedes the Meta totals display, not the finite/unit model above.
+    assert 'Campaign list' in html and 'list not read' in html
+    assert 'amap-live-summary-values' not in html and 'spend read' not in html
+    assert 'KWD 7.00' not in html and 'USD 10.25' not in html
+    assert '$1,044.82' not in html
 
 
 def test_maximum_does_not_include_dated_readings(monkeypatch, setup_map):
@@ -61,7 +56,7 @@ def test_maximum_does_not_include_dated_readings(monkeypatch, setup_map):
     country=view['countries'][0]
     assert country['live_read']==0 and country['live_sums']==[]
     html=app.templates.env.get_template('_account_map.html').render(amap=view,mlx={'A':'A','B':'B'})
-    assert '0/1 spend read' in html
+    assert 'spend read' not in html and 'Campaign list' in html
     assert '<b>—</b>' in html
     read.assert_not_called()
 
@@ -90,23 +85,16 @@ def test_the_summary_twin_in_the_page_matches_the_server(tmp_path):
 
 
 def test_the_read_labels_say_spend_everywhere():
-    """ACL-1266 (решение владельца): кнопки читают спенд и называют это словом —
-    «Read spend», не «Connect». Счётчик на сервере и на странице — одними словами."""
+    """ACL-2063 replaces manual spend controls with the saved-list status."""
     from pathlib import Path
 
     tpl = Path(__file__).resolve().parents[1] / "src/web/templates"
     amap = (tpl / "_account_map.html").read_text(encoding="utf-8")
     country = (tpl / "_account_map_country.html").read_text(encoding="utf-8")
-    page = (tpl / "report.html").read_text(encoding="utf-8")
-    assert ">Read all spend</button>" in amap and "}} spend read</i>" in amap
-    assert ">Read all spend in {{ mc.country }}</button>" in country
-    assert ">Read spend</button>" in country
-    assert ">reading…</button>" in country, "сервер при перезагрузке во время чтения"
-    assert "by the Read spend button" in country
-    assert "' spend read'" in page and "'Read spend'" in page
-    # Занятость — короткое «reading…» и на сервере, и на странице (кнопка при
-    # нажатии, при опросе; третье — загрузка журнала): длинная подпись не
-    # влезала в колонку кнопок на 1280–1366px.
-    assert page.count("'reading…'") == 3 and "'reading spend…'" not in page
-    for stale in (">Read</button>", ">Read all</button>", "' read';", "'Read';", "'Reading ' +", "by the Read button"):
-        assert stale not in amap + country + page, stale
+    component = (tpl / "_campaign_table.html").read_text(encoding="utf-8")
+    assert 'Campaign list' in country and 'class="amap-list"' in country
+    assert 'list not read' in country
+    for stale in ('>Read all spend</button>', '>Read spend</button>',
+                  'amap-read-all', 'amap-live-summary-values'):
+        assert stale not in amap + country, stale
+    assert 'src="/static/account_refresh.js"' in component

@@ -32,6 +32,9 @@ from src.fb_api.telemetry import scrub
 TOKEN_CODES = {102, 190}
 RATE_CODES = {4, 17, 32, 613} | set(range(80000, 80015))
 POLICY_CODES = {368}
+#: Meta временно заблокировала действие (1404078, 2859015) или запретила аккаунту рекламу
+#: (1404163): каталог ошибок помечает их неповторяемыми, значит продолжать прогон нельзя (ACL-1805).
+BLOCK_CODES = {1404078, 2859015, 1404163}
 #: Подкоды 190, при которых сессия стоит на checkpoint: перезагрузка Ads
 #: Manager не поможет, только лишний заход в кабинет — стоп сразу (ревью O3).
 CHECKPOINT_SUBCODES = {459, 464}
@@ -72,6 +75,13 @@ def error_details(gerr: dict, reply: dict) -> dict:
         value = gerr.get(key)
         if value not in (None, ""):
             out[key] = scrub(str(value)[:200])
+    # ACL-1891: при неверном смещении загрузки Meta может назвать нужное - только цифры.
+    data = gerr.get("error_data")
+    if isinstance(data, dict):
+        for key in ("start_offset", "end_offset"):
+            value = str(data.get(key) or "")
+            if value.isdigit() and len(value) <= 13:
+                out[key] = value
     endpoint = reply.get("endpoint")
     if isinstance(endpoint, dict):
         for key in ("host", "version", "credentials"):
@@ -104,6 +114,8 @@ def _read_context(path: str, params: dict | None) -> dict[str, str]:
             context["search_type"] = search_type
     elif path == "/me/adaccounts":
         context["operation"] = "adaccounts"
+    elif path == "/me/accounts":
+        context["operation"] = "profile_pages"
     elif match := re.fullmatch(r"/act_[0-9]{1,32}/(campaigns|promote_pages|adspixels|insights)", path):
         context["operation"] = match.group(1)
     elif re.fullmatch(r"/[0-9]{1,32}/leadgen_forms", path):
@@ -196,12 +208,12 @@ _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", 
              "bad_path", "forbidden_param"}
 
 
-def classify(code: int | None) -> str:
+def classify(code: int | None, subcode: int | None = None) -> str:
     if code in TOKEN_CODES:
         return "token"
     if code in RATE_CODES:
         return "rate_limit"
-    if code in POLICY_CODES:
+    if code in POLICY_CODES or code in BLOCK_CODES or subcode in BLOCK_CODES:
         return "policy"
     return "other"
 
@@ -366,9 +378,9 @@ class GraphClient:
             details = error_details(gerr, reply)
             details.update(_read_context(path, params))
             msg = _with_details(msg, details)
-            kind = classify(code)
+            kind = classify(code, sub)
             if kind == "policy":
-                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+                raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code,
                                              subcode=sub, retry_after_s=usage["wait_s"] or None))
@@ -397,10 +409,67 @@ class GraphClient:
             self._slow = True
         return body
 
+    def validate_page(self, act: str, page_id: str, link: str = "") -> dict:
+        """One explicit no-creation proof. Unknown or unsupported responses never pass."""
+        from src.fb_api.page_validation import params
+
+        params(act, page_id, link)
+        validate = getattr(self.transport, "validate_page", None)
+        if not callable(validate):
+            raise GraphError("Safe account-bound Page validation is unavailable")
+        if self.stopped is not None:
+            raise self.stopped
+        if self.unreconciled is not None:
+            raise WritesBlocked(self.unreconciled)
+        if self.calls >= self.max_calls:
+            raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
+        self._pace()
+        self.calls += 1
+        self._last_call = self._clock()
+        try:
+            reply = validate(act, page_id, link)
+        except GraphStop as exc:
+            raise self._stop(exc)
+        except ValueError as exc:
+            raise GraphError(f"Page validation refused before sending: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001 - no retry and no creation on unknown validation
+            raise GraphError("Meta did not confirm Page validation") from exc
+        self._last_call = self._clock()
+        if not isinstance(reply, dict) or reply.get("error"):
+            raise GraphError("Meta did not confirm Page validation")
+        usage = usage_from_headers(reply.get("headers"))
+        self.last_usage = usage
+        self.usage_headers_seen = self.usage_headers_seen or bool(usage["seen"])
+        body, status = reply.get("body"), reply.get("status")
+        gerr = body.get("error") if isinstance(body, dict) else None
+        if isinstance(gerr, dict):
+            code, sub = _int(gerr.get("code")), _int(gerr.get("error_subcode"))
+            msg = str(gerr.get("message") or "Page validation refused")
+            kind = classify(code)
+            if kind == "policy":
+                raise self._stop(PolicyBlocked(msg, code=code, subcode=sub))
+            if kind == "rate_limit":
+                raise self._stop(RateLimited(msg, code=code, subcode=sub))
+            if kind == "token":
+                if sub in CHECKPOINT_SUBCODES:
+                    raise self._stop(Checkpoint(msg, code=code, subcode=sub))
+                raise self._stop(LoggedOut(msg, code=code, subcode=sub))
+            raise GraphError(msg, code=code, subcode=sub, status=status)
+        if (not isinstance(status, int) or not 200 <= status < 300
+                or not isinstance(body, dict) or body.get("success") is not True or "id" in body or "error" in body):
+            raise GraphError("Meta did not explicitly confirm no-creation Page validation")
+        pct = usage["max_pct"]
+        if usage["wait_s"] > 0 or pct is not None and pct >= STOP_PCT:
+            raise self._stop(RateLimited("Meta usage limit reached during Page validation",
+                                         retry_after_s=usage["wait_s"] or None))
+        if pct is not None and pct >= SLOW_PCT:
+            self._slow = True
+        return body
+
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
-             filename: str = "", on_ad: bool = False, form_page: str = "",
-             progress: Callable[[float], None] | None = None,
+             filename: str = "", on_ad: bool = False, children_active: bool = False,
+             form_page: str = "", progress: Callable[[float], None] | None = None,
              cancelled: Callable[[], bool] | None = None) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 
@@ -424,6 +493,9 @@ class GraphClient:
         try:
             # `on_ad` (ACL-1775) передаём, только когда он есть: прежние транспорты его не знают.
             extra = {"on_ad": True} if on_ad else {}
+            # ACL-2114: ACTIVE у набора/объявления под подтверждённой PAUSED кампанией; иначе ключа нет.
+            if children_active:
+                extra["children_active"] = True
             # ACL-1776: создание формы Страницы - своя цепочка политики, Страница плана.
             if form_page:
                 extra["form_page"] = str(form_page)
@@ -460,9 +532,9 @@ class GraphClient:
             sub = _int(gerr.get("error_subcode"))
             details = error_details(gerr, reply)
             msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
-            kind = classify(code)
+            kind = classify(code, sub)
             if kind == "policy":
-                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+                raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code, subcode=sub))
             if kind == "token":

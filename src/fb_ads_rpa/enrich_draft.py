@@ -178,7 +178,7 @@ def enrich_campaign_drafts(
         if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
             library_states.append(("Targeting", _pull_unless_just_pulled(
                 "targets", targeting_registry.pull, info)))
-        if any(ad.copy_name or ad.copy2_name for d in drafts for a in d.ad_sets for ad in a.ads):
+        if any(ad.copy_name or ad.copy2_name or ad.more_copy_names for d in drafts for a in d.ad_sets for ad in a.ads):
             library_states.append(("Ad texts", _pull_unless_just_pulled(
                 "ad_texts", ad_text_registry.pull, info)))
 
@@ -193,7 +193,10 @@ def enrich_campaign_drafts(
         # Источник запоминаем для «Check plan»; RPA эти поля не читает.
         draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
         draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
-        draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        if not draft.page_provided:
+            draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        elif not draft.page_id:
+            draft.page_source = "automatic"
         draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
@@ -233,7 +236,7 @@ def enrich_campaign_drafts(
         if not str(getattr(draft, "language", "") or "").strip():
             draft.warnings.append("audience language not set — the Language step will be skipped")
         # page_id is only required for ACTIVE campaigns; drafts publish without it
-        if not draft.page_id:
+        if not draft.page_id and not draft.page_provided:
             draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
         if not entry.profile_id:
             if preview_mode:
@@ -322,10 +325,54 @@ def enrich_campaign_drafts(
                         )
                         ad.ad_body2 = ""
 
+                # ACL-1774 (API-бэкенд): варианты текстов 2-5 — запись библиотеки целиком
+                # (основной текст, заголовок, описание). Пустое тело и повтор — предупреждение,
+                # такой вариант не берётся; нет записи — ошибка до записи в Meta.
+                ad.text_variants = []
+                def text_key(body, headline, description):
+                    return tuple("".join(str(x or "").split()) for x in (body, headline, description))
+                seen_texts = {text_key(ad.ad_body, ad.ad_title, ad.ad_link_description)}
+                wanted = ([(2, ad.copy2_name)] if ad.copy2_name and ad.ad_body else []) + [
+                    (3 + i, n) for i, n in enumerate(ad.more_copy_names) if str(n).strip()]
+                for slot_no, vname in wanted:
+                    from src.analysis_agent.ad_text_registry import AdTextError
+                    try:
+                        rec = lookup_ad_copy_by_title(vname)
+                    except AdTextError as exc:
+                        draft.errors.append(f"Primary text {slot_no} {vname!r}: {exc}")
+                        continue
+                    body = (rec.get("body") or "").strip()
+                    headline = (rec.get("headline") or "").strip()
+                    description = (rec.get("description") or "").strip()
+                    key = text_key(body, headline, description)
+                    if not body:
+                        draft.warnings.append(f"Primary text {slot_no} {vname!r} has no body — ignored")
+                    elif key in seen_texts:
+                        draft.warnings.append(f"Primary text {slot_no} {vname!r} repeats an earlier text, headline and description — ignored")
+                    else:
+                        seen_texts.add(key)
+                        ad.text_variants.append({"name": vname, "body": body,
+                                                 "headline": headline, "description": description})
+
+                # ACL-1774: вертикальный файл ищется так же, как основной.
+                if ad.vertical_filename and not preview_mode:
+                    try:
+                        ad.vertical_path = str(find_creative_file(root, ad.vertical_filename, fresh=True))
+                    except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
+                        draft.errors.append(f"Stories / Reels file: {exc}")
+                elif ad.vertical_filename:
+                    ad.vertical_path = str(Path(root) / ad.vertical_filename)
+
                 if ad.creative_filename and not preview_mode:
                     try:
                         ad.creative_path = str(find_creative_file(root, ad.creative_filename, fresh=True))
-                    except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
+                    except CreativeNotFoundError:
+                        # ACL-1668: выбранный файл удалили или переименовали после выбора.
+                        draft.errors.append(
+                            f"Creative file missing: {ad.creative_filename!r} was deleted or renamed "
+                            f"in the creatives folder - pick the file again"
+                        )
+                    except (AmbiguousCreativeError, FileNotFoundError) as exc:
                         draft.errors.append(str(exc))
                 elif ad.creative_filename:
                     ad.creative_path = str(Path(root) / ad.creative_filename)

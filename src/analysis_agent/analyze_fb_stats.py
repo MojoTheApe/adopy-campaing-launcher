@@ -442,6 +442,22 @@ def _log_unknown_interests(df: pd.DataFrame) -> None:
             log_unknown_target(interest, source=source, known=known)
 
 
+def _combo_cell_key(v) -> str:
+    if v is None or (isinstance(v, float) and pd.isna(v)) or (isinstance(v, str) and str(v).strip().lower() == "nan"):
+        return "__NA__"
+    return str(v).strip()
+
+
+def _combo_row_keys(frame: pd.DataFrame, cols: list) -> list:
+    """Ключ комбинации для склейки TopCM / TopAccount.
+
+    Без apply(axis=1): на годовой книге это ~90 тыс. строк, и Series на каждую
+    строку стоил десятки секунд холодной сборки.
+    """
+    columns = [frame[c].tolist() for c in cols]
+    return ["_".join(_combo_cell_key(v) for v in row) for row in zip(*columns)]
+
+
 def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
     group_cols = [
         "Country Final",
@@ -501,18 +517,8 @@ def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
                 columns={"CM": "TopCM", "Account Alias": "TopAccount"}
             ).reset_index(drop=True)
 
-            def _row_key(r: pd.Series, cols: list) -> str:
-                parts = []
-                for c in cols:
-                    v = r.get(c)
-                    if v is None or (isinstance(v, float) and pd.isna(v)) or (isinstance(v, str) and str(v).strip().lower() == "nan"):
-                        parts.append("__NA__")
-                    else:
-                        parts.append(str(v).strip())
-                return "_".join(parts)
-
-            grouped["_mk"] = grouped[group_cols].apply(lambda r: _row_key(r, group_cols), axis=1)
-            top_ca["_mk"] = top_ca[group_cols].apply(lambda r: _row_key(r, group_cols), axis=1)
+            grouped["_mk"] = _combo_row_keys(grouped, group_cols)
+            top_ca["_mk"] = _combo_row_keys(top_ca, group_cols)
             grouped = grouped.merge(
                 top_ca[["_mk", "TopCM", "TopAccount"]],
                 on="_mk",

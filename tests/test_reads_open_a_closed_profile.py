@@ -31,6 +31,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -286,7 +287,8 @@ def test_a_logged_out_profile_gets_a_plain_line_and_no_retry(reads):
     assert out.error_code == sp.LOGGED_OUT_CODE == "profile_logged_out"
     names = [e[0] for e in reads.ev if isinstance(e, tuple)]
     assert names.count("start") == 1 and names.count("goto") == 1, "чтение повторилось"
-    assert names.count("stop") == 1, "запущенный чтением профиль не закрыт"
+    # ACL-2091: разлогиненный профиль остаётся открытым — войти в нём человек может сразу.
+    assert names.count("stop") == 0, "разлогиненный профиль закрыт"
 
 
 def test_a_logged_out_open_profile_says_so_too(reads):
@@ -352,7 +354,7 @@ def _wait_for(predicate, seconds=5.0):
 
 def test_read_all_with_closed_profiles_respects_the_slots(monkeypatch, tmp_path, page_reads):
     accounts = [f"Facebook_{n}" for n in (1001, 1002, 1003, 1004)]
-    entries = {a: SimpleNamespace(profile_id=f"p-{a[-4:]}", folder_id="f", multilogin_instance="A",
+    entries = {a: SimpleNamespace(profile_id=fake_profile(a), folder_id="f", multilogin_instance="A",
                                   ad_account_id="act_123") for a in accounts}
     state = SimpleNamespace(open=set(), peak=0, notes=[], starts=[], stops=[], lock=threading.Lock(),
                             queued=threading.Event())

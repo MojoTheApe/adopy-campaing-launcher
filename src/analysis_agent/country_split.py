@@ -35,6 +35,7 @@ from pathlib import Path
 
 from config import paths
 from src.fb_ads_rpa.operations import serialized_browser
+from src.analysis_agent.account_spend import _failure_text as _as_failure_text
 from src.analysis_agent.account_spend import (
     _act_from_url,
     _profile_key,
@@ -235,7 +236,7 @@ def start_split(
             done = fn(account, date_from, date_to)
         except Exception as exc:  # падение чтения не должно ронять сервер
             done = CountrySplit(account=account, date_from=date_from, date_to=date_to,
-                                state="failed", error=f"{type(exc).__name__}: {exc}")
+                                state="failed", error=_as_failure_text(exc))
         done.started_at = started.started_at
         done.finished_at = _now()
         done.spend_at = started.spend_at
@@ -1219,12 +1220,23 @@ def _shown_period_text(page) -> str:
     return " ".join((page.evaluate(_PERIOD_JS) or "").split())
 
 
-@serialized_browser(key=_profile_key, reading=True)
+def _lease_error(exc, account, date_from, date_to=""):
+    out = CountrySplit(account=account, date_from=date_from, date_to=date_to or date_from,
+                       state="failed", error=str(exc))
+    # The public reader persists refusals too: an old successful report must
+    # not remain current after a new attempt failed at the ownership boundary.
+    try:
+        save_split(out)
+    except Exception as save_exc:
+        out.error += f"; Could not save reading ({type(save_exc).__name__}); stored data was not replaced"
+    return out
+
+
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_lease_error)
 def read_country_split(account: str, date_from: str, date_to: str = "") -> CountrySplit:
     """Read one fresh report, refusing unverified or partial results.
 
-    Uses ACL's process-wide browser lock. As with the ordinary spend reader,
-    one live profile must not be shared by several ACL processes.
+    Uses the physical-profile lease shared by ACM processes of one OS user.
     """
     date_to = date_to or date_from
     out = CountrySplit(account=account, date_from=date_from, date_to=date_to)
@@ -1401,7 +1413,8 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                 pass
         # ACL-1580: профиль, который запустило это чтение (или Read spend перед
         # ним), закрывается мягкой остановкой — и при отказе тоже.
-        _finish_started(held)
+        # ACL-2091: кроме проблемы аккаунта (разлогинен) — тогда окно остаётся открытым.
+        _finish_started(held, problem=out.error_code)
     return out
 
 

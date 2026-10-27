@@ -31,7 +31,7 @@ APP = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
 
 def test_the_account_row_has_a_button_that_starts_it():
     """Одна кнопка на строку — и она запускает обе половины чтения."""
-    assert "amapReadSpend(this)" in ROW, (
+    assert "amapReadSpend(this)" not in ROW, (
         "в строке аккаунта нет кнопки, запускающей чтение"
     )
     assert "amapReadCountries" not in ROW and "Countries</button>" not in ROW, (
@@ -127,8 +127,8 @@ def test_a_failed_split_does_not_look_like_a_failed_spend():
     с сервера — иначе он исчезал бы при перезагрузке страницы.
     """
     assert "function amapSplitMark(" in PAGE
-    assert "amap-split-bad" in PAGE and "amap-split-bad" in ROW
-    assert "amap.splits" in ROW, "клетка не знает о пострановом чтении с сервера"
+    assert "amap-split-bad" in PAGE and "amap-split-bad" not in ROW
+    assert "amap.splits" not in ROW  # preserved historical model is no longer a displayed metric
     assert "def _live_splits(" in APP and '"splits": splits' in APP
 
 
@@ -150,7 +150,8 @@ def test_the_result_is_drawn_by_the_server_not_a_second_time_by_us():
 
 def test_without_dates_the_button_says_so_instead_of_failing():
     """Период обязателен: чтение за «всё время» отчёт не строит."""
-    assert "Select dates to read account spend; Maximum is not supported" in ROW
+    assert "Select dates to read account spend; Maximum is not supported" not in ROW
+    assert "Campaign list" in ROW
 
 
 def test_read_all_follows_the_same_rule():

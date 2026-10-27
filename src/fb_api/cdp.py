@@ -34,13 +34,15 @@ Websocket-клиент не пишем второй раз: берём `RawCdp` 
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
 import urllib.request
 from typing import Any, Callable
 
 from src.fb_ads_rpa.tab_watchdog import CdpError, RawCdp
 
-__all__ = ["CdpError", "CdpTimeout", "PageError", "StaleContextError", "PageTab"]
+__all__ = ["CdpError", "CdpTimeout", "PageError", "StaleContextError",
+           "SessionLostError", "PageIdentityError", "PageTab"]
 
 #: Срок одного служебного вызова CDP (создать вкладку, подключиться, …).
 CALL_S = 10.0
@@ -69,6 +71,18 @@ class StaleContextError(CdpError):
     """Отдельный мир исчез (документ сменился): создать заново и повторить."""
 
 
+class SessionLostError(CdpError):
+    """The owned target's CDP session detached; the sent call is never replayed."""
+
+
+class PageIdentityError(CdpError):
+    """The owned target no longer shows the expected Ads Manager account."""
+
+    def __init__(self, kind: str = "other"):
+        self.kind = kind
+        super().__init__("the owned tab no longer shows the expected Ads Manager account")
+
+
 def _call(cdp: Any, method: str, params: dict | None = None, *, session_id: str = "",
           timeout: float = CALL_S) -> dict:
     try:
@@ -86,6 +100,43 @@ def _looks_stale(message: str) -> bool:
             or "unique context id" in low)
 
 
+def _profile_context(cdp: Any, timeout: float) -> tuple[str, int]:
+    """Контекст существующих страниц профиля; неоднозначность не угадываем."""
+    try:
+        reply = _call(cdp, "Target.getTargets", timeout=timeout)
+        pages = reply.get("targetInfos")
+        if not isinstance(pages, list) or any(not isinstance(row, dict) for row in pages):
+            raise ValueError("invalid target metadata")
+        pages = [row for row in pages if row.get("type") == "page" and not row.get("subtype")]
+        contexts = [row.get("browserContextId", "") for row in pages]
+        if not pages:
+            # У нового профиля страниц ещё нет: Chrome не перечисляет default
+            # среди getBrowserContexts, поэтому пустой список означает default.
+            contexts = _call(cdp, "Target.getBrowserContexts", timeout=timeout).get("browserContextIds")
+            if not isinstance(contexts, list):
+                raise ValueError("invalid context metadata")
+        if any(not isinstance(value, str) or len(value) > 256 or (value and not value.isprintable())
+               for value in contexts):
+            raise ValueError("invalid context metadata")
+    except CdpTimeout:
+        raise
+    except Exception:
+        raise CdpError("could not determine the profile browser context; no tab was opened") from None
+    choices = set(contexts)
+    if len(choices) > 1:
+        raise CdpError("the profile has multiple browser contexts; cannot safely open an owned tab")
+    if not pages and choices:
+        # Default существует неявно даже при одном именованном контексте.
+        # Без страницы профиля выбирать между ними по порядку нельзя.
+        raise CdpError("no page identifies the profile browser context; open Ads Manager in the profile first")
+    context = next(iter(choices), "")
+    # Только режим и количество: идентификаторы контекстов/целей и URL не пишем.
+    from src.fb_api import launch as _launch
+    _launch._record({"event": "fb_api_tab_context", "ok": True,
+                     "context_kind": "nondefault" if context else "default", "page_count": len(pages)})
+    return context, len(pages)
+
+
 class PageTab:
     """Одна своя вкладка в браузере профиля."""
 
@@ -95,17 +146,70 @@ class PageTab:
         self.target_id = target_id
         self.session_id = session_id
         self.closed = False
+        self._recovery_attempted = False
+        self._navigation_url = ""
         #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
         self.throttle: dict = {}
+        #: Первая навигация после нашего холодного старта ещё впереди (ACL-2095 п. 5/7).
+        self._first_nav_cold = False
+        self._sleep: Callable[[float], None] = time.sleep
 
     @classmethod
     def open(cls, cdp_url: str, *, connect: Callable[..., Any] | None = None,
-             call_s: float = CALL_S) -> "PageTab":
-        """Подключиться к браузеру профиля и открыть в нём свою пустую вкладку."""
+             call_s: float | None = None) -> "PageTab":
+        """Подключиться к браузеру профиля и открыть в нём свою пустую вкладку.
+
+        Холодный старт (TEST9095y, 9403A: `Page.enable` не ответил за 10 с):
+        профиль, который мы только что подняли (`launch.mark_started`), на первые
+        вызовы — подключение, вкладка, `Page.enable`, снятие троттлинга —
+        получает `ACL_CDP_COLD_START_S` (40 с). Дальше у вкладки обычные сроки
+        (`CALL_S`), а отметка порта снимается после первой удачной вкладки.
+        """
+        from src.fb_api import launch as _launch
+
+        since = _launch.cold_since(cdp_url) if call_s is None else None
+        cold = since is not None
+        if call_s is None:
+            call_s = _launch.cold_start_s() if cold else CALL_S
+        timings: dict = {}
+        step = "connect"
+        began = time.monotonic()
         try:
-            cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
-        except TimeoutError as exc:
-            raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
+            if cold and connect is None:
+                # П. 8a: порт от MLX — ещё не готовый браузер (B97 13:27: порт отдан за
+                # 11,6 с, браузер поднялся на 10–30 с позже). Ждём `/json/version`.
+                step = "ready"
+                ready, took = _launch.wait_ready(cdp_url, budget_s=call_s)
+                timings["ready_s"] = took
+                if not ready:
+                    raise CdpTimeout(f"ready: the browser did not answer /json/version within {call_s:.0f} s")
+                step = "connect"
+            try:
+                cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
+            except TimeoutError as exc:
+                raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
+            timings["connect_s"] = time.monotonic() - began
+            if cold:
+                _launch.mark_ready(cdp_url)
+            step = "tab"
+            tab = cls._open_on(cdp, cdp_url, call_s, timings, began)
+            # П. 5/7: первая навигация после холодного старта — сначала проба прокси.
+            tab._first_nav_cold = cold
+        except BaseException as exc:
+            if cold:
+                failed = str(exc).split(":", 1)[0] if isinstance(exc, CdpTimeout) else step
+                _launch.record_cold_open(ok=False, since_start_s=since, budget_s=call_s,
+                                         timings={**timings, "total_s": time.monotonic() - began},
+                                         step=failed)
+            raise
+        if cold:
+            _launch.record_cold_open(ok=True, since_start_s=since, budget_s=call_s,
+                                     timings={**timings, "total_s": time.monotonic() - began})
+            _launch.forget(cdp_url)
+        return tab
+
+    @classmethod
+    def _open_on(cls, cdp: Any, cdp_url: str, call_s: float, timings: dict, began: float) -> "PageTab":
         target_id = ""
         try:
             # Ровно как Playwright (`crBrowser`: {url:"about:blank", browserContextId}),
@@ -114,7 +218,11 @@ class PageTab:
             # Свёрнутое окно остаётся свёрнутым и на экран не выходит; наша вкладка
             # лишь становится активной в нём, а при закрытии браузер сам
             # активирует соседнюю.
-            created = _call(cdp, "Target.createTarget", {"url": "about:blank"}, timeout=call_s)
+            context, _ = _profile_context(cdp, call_s)
+            params = {"url": "about:blank"}
+            if context:
+                params["browserContextId"] = context
+            created = _call(cdp, "Target.createTarget", params, timeout=call_s)
             target_id = str(created.get("targetId") or "")
             if not target_id:
                 raise CdpError("the browser did not open a tab")
@@ -134,15 +242,16 @@ class PageTab:
             # же, на НАШЕЙ сессии. Если цель не на паузе, команда — пустая. Это не
             # Runtime.enable: домен Runtime не включается.
             try:
-                tab.call("Runtime.runIfWaitingForDebugger")
+                tab.call("Runtime.runIfWaitingForDebugger", timeout=call_s)
             except CdpTimeout:
                 raise
             except CdpError:
                 pass
             # Runtime.enable не зовём: Runtime.evaluate работает и без него, а
             # включённый домен Runtime — известный признак автоматизации.
-            tab.call("Page.enable")
-            tab.throttle = tab.keep_active()
+            tab.call("Page.enable", timeout=call_s)
+            timings["enable_s"] = time.monotonic() - began
+            tab.throttle = tab.keep_active(timeout=call_s)
             return tab
         except BaseException:
             if target_id:
@@ -183,25 +292,89 @@ class PageTab:
             return ""
 
     # -- вызовы во вкладку
+    @property
+    def navigation_url(self) -> str:
+        """Last successful explicit navigation intent, never a discovered URL.
+
+        A replacement Graph helper may inherit this account binding on our tab.
+        Recovery still verifies the actual target and frame against it.
+        """
+        return self._navigation_url
+
+    @property
+    def recovery_attempted(self) -> bool:
+        """Keep strict identity checks across helper replacements after recovery."""
+        return self._recovery_attempted
+
     def call(self, method: str, params: dict | None = None, *, timeout: float = CALL_S) -> dict:
         if self.closed:
             raise CdpError("the tab is closed")
-        return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
+        try:
+            return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
+        except CdpError as exc:
+            if "session with given id not found" in str(exc).lower():
+                raise SessionLostError("the owned tab's browser session was detached") from exc
+            raise
 
-    def keep_active(self) -> dict:
+    @staticmethod
+    def _check_url(actual: str, expected: str) -> None:
+        """Check location only; never navigate to repair a changed identity."""
+        got, wanted = urllib.parse.urlsplit(actual), urllib.parse.urlsplit(expected)
+        path = got.path.lower()
+        if path.startswith(("/checkpoint", "/two_step_verification", "/two_factor")):
+            raise PageIdentityError("checkpoint")
+        if path.startswith(("/login", "/recover")):
+            raise PageIdentityError("login")
+        account = urllib.parse.parse_qs(wanted.query).get("act")
+        if (not expected or wanted.scheme != "https" or
+                wanted.netloc != "adsmanager.facebook.com" or
+                not account or len(account) != 1 or not account[0].isdigit() or
+                (got.scheme, got.netloc, got.path) != (wanted.scheme, wanted.netloc, wanted.path) or
+                urllib.parse.parse_qs(got.query).get("act") != account):
+            raise PageIdentityError()
+
+    def verify_url(self, expected_url: str) -> None:
+        """Check the attached main frame, not a stale target-list snapshot."""
+        frame = (self.call("Page.getFrameTree").get("frameTree") or {}).get("frame") or {}
+        self._check_url(str(frame.get("url") or ""), expected_url)
+
+    def recover_session(self, expected_url: str) -> None:
+        """One reattach to our exact target on the existing browser connection.
+
+        Only a caller that has not sent a Graph call may retry its local work.
+        No endpoint discovery, replacement tab, reload, or original-call replay.
+        """
+        if self.closed or self._recovery_attempted:
+            raise CdpError("the owned browser session cannot be recovered again")
+        self._recovery_attempted = True
+        self._check_url(expected_url, expected_url)
+        info = _call(self._cdp, "Target.getTargetInfo", {"targetId": self.target_id}).get("targetInfo") or {}
+        if info.get("targetId") != self.target_id or info.get("type") != "page" or info.get("subtype"):
+            raise CdpError("the owned browser target is unavailable")
+        self._check_url(str(info.get("url") or ""), expected_url)
+        attached = _call(self._cdp, "Target.attachToTarget", {"targetId": self.target_id, "flatten": True})
+        session_id = str(attached.get("sessionId") or "")
+        if not session_id or session_id == self.session_id:
+            raise CdpError("the browser did not return a new owned-tab session")
+        self.session_id = session_id
+        self.call("Page.enable")
+        self.verify_url(expected_url)
+        self.throttle = self.keep_active()
+
+    def keep_active(self, *, timeout: float = CALL_S) -> dict:
         """Снять троттлинг фона на НАШЕЙ сессии, не показывая окно (как робот, ACL-1402)."""
         status = {"focus": False, "lifecycle": False}
         try:
-            self.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
+            self.call("Emulation.setFocusEmulationEnabled", {"enabled": True}, timeout=timeout)
             status["focus"] = True
-        except CdpTimeout:
+        except (CdpTimeout, SessionLostError):
             raise
         except Exception:
             pass
         try:
-            self.call("Page.setWebLifecycleState", {"state": "active"})
+            self.call("Page.setWebLifecycleState", {"state": "active"}, timeout=timeout)
             status["lifecycle"] = True
-        except CdpTimeout:
+        except (CdpTimeout, SessionLostError):
             raise
         except Exception:
             pass
@@ -252,9 +425,64 @@ class PageTab:
         return (got.get("result") or {}).get("value")
 
     def navigate(self, url: str, *, timeout: float = 30.0) -> None:
+        if self._first_nav_cold:
+            self._first_nav_cold = False
+            self._navigate_after_cold_start(url, timeout)
+            return
+        self._navigate_once(url, timeout)
+
+    def _navigate_once(self, url: str, timeout: float) -> None:
         got = self.call("Page.navigate", {"url": url}, timeout=timeout)
         if got.get("errorText"):
             raise PageError(f"navigation failed: {got['errorText']}")
+        self._navigation_url = url
+
+    def _navigate_after_cold_start(self, url: str, timeout: float) -> None:
+        """Первая навигация после нашего старта (ACL-2095 п. 5/7).
+
+        MLX включает вход в прокси через несколько секунд после готовности порта
+        (B97 22.10: api.ipify.org → ERR_INVALID_AUTH_CREDENTIALS, та же вкладка через
+        15 с — загрузилась). Поэтому сначала нейтральная проба (`ACL_PROXY_PROBE_URL`),
+        на ошибку входа — один повтор через `PROXY_RETRY_S`; только потом Facebook.
+        Второй отказ входа — окончательный. Проба упала иначе (сеть, DNS) — не держим.
+        """
+        from src.fb_api import launch as _launch
+
+        began = time.monotonic()
+        probe = _launch.proxy_probe_url()
+        retried = False
+        if probe:
+            try:
+                self._navigate_once(probe, min(timeout, 30.0))
+            except CdpTimeout:
+                probe = ""                # проба не ответила в срок — не решает, идём дальше
+            except PageError as exc:
+                if not _launch.is_proxy_auth_error(str(exc)):
+                    probe = ""            # проба не про вход в прокси — не решает
+                else:
+                    retried = True
+                    self._sleep(_launch.PROXY_RETRY_S)
+                    try:
+                        self._navigate_once(probe, min(timeout, 30.0))
+                    except CdpTimeout:
+                        probe = ""
+                    except PageError as again:
+                        _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
+                                         "took_s": round(time.monotonic() - began, 1)})
+                        if _launch.is_proxy_auth_error(str(again)):
+                            raise
+                        probe = ""
+        if probe:
+            _launch._record({"event": "fb_api_proxy_probe", "ok": True, "retried": retried,
+                             "took_s": round(time.monotonic() - began, 1)})
+        try:
+            self._navigate_once(url, timeout)
+        except PageError as exc:
+            # Пробы не было (выключена/не решила) — тот же один повтор на самой первой навигации.
+            if retried or not _launch.is_proxy_auth_error(str(exc)) or probe:
+                raise
+            self._sleep(_launch.PROXY_RETRY_S)
+            self._navigate_once(url, timeout)
 
     def reload(self, *, timeout: float = 30.0) -> None:
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)

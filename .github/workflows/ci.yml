@@ -113,7 +113,8 @@ jobs:
     # passed on this exact tree. Any other answer (or a failed scope) runs them.
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.linux != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # ACL-1710: шард 1 обычно 20-22 мин, самый долгий зелёный был 29.2; потолок 32.
+    timeout-minutes: 32
 
     env:
       PYTHONIOENCODING: utf-8
@@ -155,8 +156,40 @@ jobs:
       # Runtime still attaches to Multilogin; Chromium is only for isolated
       # tests of recorded/synthetic DOM fixtures. --with-deps installs the
       # system libraries Chromium needs on Ubuntu.
+      # ACL-1710: apt-get update на зеркале Azure иногда висит ~35 мин. Поэтому:
+      # скачанный браузер кэшируем по версии Playwright, а сам шаг ограничен
+      # (3 попытки по 150 с, между ними чистим замки apt) и жёстко 16 мин.
+      - name: Playwright version (cache key)
+        id: pw
+        run: echo "version=$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium download
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Chromium for isolated DOM tests
-        run: python -m playwright install --with-deps chromium
+        timeout-minutes: 16
+        env:
+          CI_RETRY_CLEANUP: |
+            sudo pkill -9 -x apt-get || true
+            sudo pkill -9 -x apt || true
+            sudo pkill -9 -x dpkg || true
+            sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
+            sudo rm -rf /var/lib/apt/lists/partial/*
+            sudo dpkg --configure -a || true
+        run: |
+          # ACL-2146: the hosted image also uses mirror+file: indirection.
+          # Resolve its local mirror list before install-deps calls apt-get update.
+          sudo -- "$(command -v python)" scripts/ci_ubuntu_mirror.py
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            # браузер уже скачан из кэша: нужны только системные библиотеки
+            bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install-deps chromium
+          else
+            bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install --with-deps chromium
+          fi
 
       # `loadfile` keeps each test file on one worker: 80+ files launch their
       # own Chromium in a module fixture. See docs/repository/WORKFLOW.md.
@@ -173,7 +206,7 @@ jobs:
     name: windows tests (${{ matrix.python-version }})
     needs: scope
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.windows != 'false') }}
-    runs-on: windows-latest
+    runs-on: windows-2022
     # Only the windows_only files and the smoke set; the full Windows suite
     # took ~20 min per shard before ACL-1582.
     timeout-minutes: 30
@@ -193,6 +226,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Verify Windows acceptance host
+        id: verify-windows-host
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $os = Get-CimInstance -ClassName Win32_OperatingSystem
+          if ($os.BuildNumber -ne '20348' -or $os.Caption -notlike '*Windows Server 2022*') {
+            throw "Windows acceptance requires Server 2022 build 20348; actual: $($os.Caption), build $($os.BuildNumber)"
+          }
+          Write-Host "Windows acceptance host: $($os.Caption), build $($os.BuildNumber)"
 
       - uses: actions/setup-python@v5
         with:
@@ -217,16 +261,105 @@ jobs:
       - name: Smoke check (does ACL start on Windows?)
         run: python scripts/acl_smoke.py
 
+      # ACL-1710: то же ограничение, что и на Linux (здесь apt нет, но сеть бывает
+      # такой же): кэш загрузки, 3 попытки по 180 с, жёсткий потолок 12 мин.
+      - name: Playwright version (cache key)
+        id: pw
+        shell: bash
+        run: echo "version=$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium download
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Chromium for isolated DOM tests
-        run: python -m playwright install chromium
+        timeout-minutes: 12
+        shell: bash
+        run: bash scripts/ci_retry.sh 3 180 10 -- python -m playwright install chromium
+
+      - name: Plan complete Windows acceptance
+        id: windows-test-plan
+        shell: python
+        run: |
+          from collections import Counter
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          ISOLATED_FILES = (
+              "tests/test_acl1309_two_windows_people.py",
+              "tests/test_acl2063_two_windows_people.py",
+              "tests/test_shared_file_locks.py",
+          )
+
+          def validate_windows_plan(selected, parallel, isolated):
+              if not selected or len(set(selected)) != len(selected):
+                  raise ValueError("Windows selection must be nonempty and unique")
+              if list(isolated) != list(ISOLATED_FILES) or not set(isolated).issubset(selected):
+                  raise ValueError("Every required isolated Windows file must be selected in order")
+              if not parallel or set(parallel).intersection(isolated):
+                  raise ValueError("General and isolated Windows phases must be nonempty and disjoint")
+              if Counter([*parallel, *isolated]) != Counter(selected):
+                  raise ValueError("The Windows plan must execute every selected file exactly once")
+
+          def plan_windows_tests(selected):
+              parallel = [name for name in selected if name not in ISOLATED_FILES]
+              validate_windows_plan(selected, parallel, ISOLATED_FILES)
+              return parallel, ISOLATED_FILES
+
+          if __name__ == "__main__":
+              selected = subprocess.check_output(
+                  [sys.executable, "scripts/acl_test_shard.py", "--platform", "windows", "1", "1"],
+                  text=True,
+              ).splitlines()
+              parallel, isolated = plan_windows_tests(selected)
+              with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+                  output.write("parallel_files=" + json.dumps(parallel) + "\n")
+                  for key, name in zip(("native_1309", "native_2063", "stress"), isolated):
+                      output.write(key + "=" + name + "\n")
+              print(f"Complete Windows plan: {len(parallel)} general + {len(isolated)} isolated files")
 
       - name: Tests (windows_only files and the Windows smoke set)
+        id: windows-parallel-tests
+        env:
+          WINDOWS_PARALLEL_FILES: ${{ steps.windows-test-plan.outputs.parallel_files }}
         run: |
           Write-Output "CPUs on this runner: $env:NUMBER_OF_PROCESSORS"
-          $files = @(python scripts/acl_test_shard.py --platform windows 1 1)
-          if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw "no Windows test files" }
-          Write-Output "$($files.Count) test files on Windows"
+          $files = @(ConvertFrom-Json $env:WINDOWS_PARALLEL_FILES)
+          if ($files.Count -eq 0) { throw "no general Windows test files" }
+          Write-Output "$($files.Count) general test files on Windows"
           python -m pytest @files -q -n auto --dist loadfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Tests (ACL-1309 real standard Windows users)
+        id: windows-native-1309
+        env:
+          WINDOWS_TEST_FILE: ${{ steps.windows-test-plan.outputs.native_1309 }}
+        run: |
+          if (-not $env:WINDOWS_TEST_FILE) { throw "missing ACL-1309 Windows test file" }
+          python -m pytest "$env:WINDOWS_TEST_FILE" -q -n 0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Tests (ACL-2063 real standard Windows users)
+        id: windows-native-2063
+        env:
+          WINDOWS_TEST_FILE: ${{ steps.windows-test-plan.outputs.native_2063 }}
+        run: |
+          if (-not $env:WINDOWS_TEST_FILE) { throw "missing ACL-2063 Windows test file" }
+          python -m pytest "$env:WINDOWS_TEST_FILE" -q -n 0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Tests (shared file locks under their own full CPU stress)
+        id: windows-lock-stress
+        env:
+          WINDOWS_TEST_FILE: ${{ steps.windows-test-plan.outputs.stress }}
+        run: |
+          if (-not $env:WINDOWS_TEST_FILE) { throw "missing Windows lock stress test file" }
+          python -m pytest "$env:WINDOWS_TEST_FILE" -q -n 0
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   admission:

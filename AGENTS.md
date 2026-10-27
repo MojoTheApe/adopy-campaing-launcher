@@ -19,7 +19,15 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
-- [Selected Master 1.7.2 standard](https://github.com/MojoTheApe/master-repo/blob/4f148cbbbc2c9c65a7fdebba9b37551f91566e04/standard.md).
+- [Selected Master 1.8.0 standard](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/standard.md).
+- [ACL standalone workflow provider](docs/repository/STANDALONE_PROVIDER_ACL.md):
+  the owner-selected executable source is published Task Tracker3.14.1 at
+  `771d55f3317397e7d56471aa966f0a9de37d1a2e`; Master remains the unchanged
+  documentation reference. Provider, engine, private checkout and canonical export must
+  agree. Use the immutable official provider entry point for rendering and
+  validation; do not run consumer-controlled validation with credentials or
+  rewrite global skills. Existing task ownership and all review/check/package
+  controls below remain required. No optional policy is activated by this pin.
 - [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
   [selected Tracker guide](docs/repository/TRACKER.md), [verification](docs/repository/VERIFICATION.md)
   and [file ownership](docs/repository/LAYOUT.md).

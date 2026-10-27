@@ -42,6 +42,11 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "page_identity": (
+        BLOCKING,
+        "the requested Facebook Page could not be selected and verified in Identity; "
+        "the draft must not be published. Check Identity in Ads Manager before continuing",
+    ),
     "account_blocked": (
         BLOCKING,
         "Meta has restricted this ad account (\"Verification required to advertise\", "
@@ -92,6 +97,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "the profile's browser stopped answering and the robot's restart of the "
         "profile through Multilogin failed; no draft was created - "
         + _profile.MESSAGES[_profile.RESTART_FAILED],
+    ),
+    # ACL-1403: Multilogin started the profile, its automation port refused connections.
+    _profile.CDP_REFUSED: (
+        BLOCKING,
+        "Multilogin started the profile but its browser refused the automation connection "
+        "(it may have crashed at start); no draft was created - "
+        + _profile.MESSAGES[_profile.CDP_REFUSED],
     ),
     # ACL-1320: Meta's new single-screen editor (URL .../simple_create).
     # ACL-1327: the robot walks this editor; the stop is left for a layout it
@@ -311,6 +323,11 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
 # of the long `reason()` paragraph. A test fails if a step of POLICY or
 # PER_AD_POLICY has no entry here, so add both in the same commit.
 GUIDE: dict[str, tuple[str, str, str]] = {
+    "page_identity": (
+        "Facebook Page could not be set in Identity",
+        "The Page chosen in the builder could not be selected and verified, so the draft was not published.",
+        "Check the Identity section in Ads Manager, refresh Pages in the builder and publish again.",
+    ),
     "account_blocked": (
         "Ad account restricted by Meta",
         "Meta asks for verification or has disabled this ad account, so nothing more was built.",
@@ -351,6 +368,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Profile restart failed",
         "The profile stopped answering and could not be restarted, so no draft was created.",
         "Open the profile in Multilogin, check that Ads Manager loads, close it and publish again.",
+    ),
+    _profile.CDP_REFUSED: (
+        "Profile browser did not accept the connection",
+        "Multilogin started the profile, but its browser refused the automation connection, so no draft was created.",
+        "Open the profile in Multilogin, check that it loads, close it and publish again.",
     ),
     "simple_create_layout": (
         "Unknown layout of Meta's single-screen editor",

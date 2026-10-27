@@ -83,7 +83,7 @@ function el(props) {
     dataset: {}, events: [], dispatchEvent(ev) { this.events.push(ev.type + (ev.bubbles ? ':bubbles' : '')); } }, props || {});
 }
 function build(opts) {
-  const o = Object.assign({ account: 'Acc', dest: 'website', formIds: ['', ''] }, opts || {});
+  const o = Object.assign({ account: 'Acc', dest: 'website', formIds: ['', ''], source: '' }, opts || {});
   const form = { querySelector: (s) => (s === '[name="account_label"]' ? { value: o.account } : null) };
   const optInstant = el({});
   const select = el({ value: o.dest, querySelector: (s) => (s === 'option[value="instant_form"]' ? optInstant : null) });
@@ -91,15 +91,17 @@ function build(opts) {
   const rows = o.formIds.map((id) => {
     const hid = el({ value: id, disabled: true });
     const only = [el({ hidden: true }), el({ hidden: true })];
+    const existing = [el({ hidden: true }), el({ hidden: true })];
+    const srcSel = el({ value: o.source, querySelector: () => null });
     const picker = el({ dataset: {} });
     const fnote = el({});
     const row = el({
       querySelector: (s) => (s === '.cb-form-select' ? picker : s === 'input[name$="_form_id"]' ? hid
-        : s === '[data-form-note]' ? fnote : null),
-      querySelectorAll: (s) => (s === '.cb-form-only' ? only : []),
+        : s === '[data-form-note]' ? fnote : s === '.cb-form-source' ? srcSel : null),
+      querySelectorAll: (s) => (s === '.cb-form-only' ? only : s === '.cb-form-existing' ? existing : []),
       closest: (s) => (s === 'form' ? form : null),
     });
-    row._ = { hid, only, picker, fnote };
+    row._ = { hid, only, existing, srcSel, picker, fnote };
     return row;
   });
   const slot = el({
@@ -157,10 +159,23 @@ assert.equal(t.optInstant.disabled, true);
 assert.equal(t.rows[0]._.hid.disabled, false);
 assert.equal(t.note.hidden, false);
 
+// ACL-2189: в режиме «Use existing form» выбор формы и «Refresh forms» видны,
+// в режиме «Create from template» скрыты (раньше было наоборот).
+setBackend('api');
+t = build({ dest: 'instant_form', source: 'existing', formIds: ['7000001'] });
+W.cbSyncDestination(t.slot);
+assert.ok(t.rows[0]._.existing.every((x) => x.hidden === false), 'Use existing form: выбор формы и Refresh forms должны быть видны');
+t.rows[0]._.srcSel.value = 'template';
+W.cbSyncDestination(t.slot);
+assert.ok(t.rows[0]._.existing.every((x) => x.hidden === true), 'Create from template: выбор формы и Refresh forms должны быть скрыты');
+t.rows[0]._.srcSel.value = 'existing';
+W.cbSyncDestination(t.slot);
+assert.ok(t.rows[0]._.existing.every((x) => x.hidden === false), 'возврат на Use existing form не показал выбор формы');
+
 // Повторная синхронизация ничего не пишет (форму слушает наблюдатель дерева).
 setBackend('api');
 t = build({ dest: 'instant_form', formIds: ['7000001'] });
-W.cbForms.Acc = { ok: true, forms: forms, message: '' };
+W.cbForms['Acc|'] = { ok: true, forms: forms, message: '' };
 W.cbSyncDestination(t.slot);
 const firstSig = t.rows[0]._.picker.dataset.sig;
 let writes = 0;
@@ -173,7 +188,7 @@ assert.equal(t.rows[0]._.picker.dataset.sig, firstSig);
 
 // Список: пригодные формы, выбранная выбрана, подпись про число форм.
 t = build({ dest: 'instant_form', formIds: ['7000003'] });
-W.cbForms.Acc = { ok: true, forms: forms, message: '' };
+W.cbForms['Acc|'] = { ok: true, forms: forms, message: '' };
 W.cbSyncDestination(t.slot);
 const picker = t.rows[0]._.picker;
 const ids = (picker.innerHTML.match(/value="([^"]*)"/g) || []).map((x) => x.slice(7, -1));
@@ -194,18 +209,19 @@ const fetched = [];
 sandbox.FormData = function FormData() { this.d = {}; this.append = (k, v) => { this.d[k] = v; }; };
 sandbox.document = { querySelectorAll: (s) => (s === '.cb-slot' ? [t.slot] : []) };
 sandbox.fetch = (url, init) => {
-  fetched.push({ url, account: init.body.d.account_label, method: init.method });
+  fetched.push({ url, account: init.body.d.account_label, method: init.method, page: init.body.d.page_id });
   return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, state: 'ok', forms: [forms[0]], message: '' }) });
 };
+W.cbResolvedPage = () => '111';   // ACL-1880: формы читаются только для разрешённой Страницы
 const btn = el({ closest: (s) => (s === '.cb-ad-row' ? row0 : null) });
 W.cbRefreshForms(btn);
 assert.equal(btn.disabled, true, 'кнопку можно нажать второй раз, пока идёт чтение');
 W.cbRefreshForms(btn);
 assert.equal(fetched.length, 1, 'второе нажатие во время чтения дало второй вызов');
 setTimeout(() => {
-  assert.deepEqual(fetched, [{ url: '/api/page-forms', account: 'Acc', method: 'POST' }]);
+  assert.deepEqual(fetched, [{ url: '/api/page-forms', account: 'Acc', method: 'POST', page: '111' }]);
   assert.equal(btn.disabled, false);
-  assert.equal(W.cbForms.Acc.forms.length, 1);
+  assert.equal(W.cbForms['Acc|111'].forms.length, 1);
   assert.equal(row0._.fnote.textContent, '1 form of the Page');
   // Сбой сети - подпись, а не немой отказ.
   sandbox.fetch = () => Promise.reject(new Error('down'));

@@ -137,7 +137,14 @@ or scope is not a waiver. Keep ordinary source/batch/Stage/main admission and ch
 only the real admitted main outcome can establish process completion. Do not request
 consumer product delivery for a proven process-only outcome. Preserve explicit
 publication scope and any existing requested delivery. Schema1 instruction admission
-is unchanged. Read [canonical process support](PROCESS_SUPPORT.md).
+is unchanged. For isolated manual verification tooling, the same command previews
+its bounded candidate proof; after ordinary admitted main completion, an actual
+independent assessor supplies `--evidence-file` and the exact successful official
+manual workflow run. Preview before `--apply`. This supplements retained source
+review/acceptance without taking over another developer or rewriting historical
+proof. Workflow syntax alone never proves isolation; unknown/mixed effects and
+any genuine publication request retain product delivery.
+Read [process support](PROCESS_SUPPORT.md).
 
 ## Read the workspace lifecycle
 
@@ -250,3 +257,11 @@ without confirmation freezes the work clock and shows activity unconfirmed;
 it never frees a claim. Do not run a detached heartbeat or impersonate another
 executor. Missing producers and historical gaps remain unknown. Installing a
 pin does not restart existing agents or select a new execution policy.
+
+The separately labeled current-stage clock includes waiting, not measured work.
+A recorded new stage starts its clock; explicit pause freezes it and supported
+resume continues it. Backlog has no clock; missing entry facts stay unknown.
+Activity loss does not restart a stage or release ownership. Confirmed
+Work/Review/Merge totals remain in task details. Compatible successful owned
+launch/resume commands seed only that caller's first report; minute renewal still
+requires the actual executor or its real foreground child wrapper.

@@ -26,6 +26,7 @@ from src.fb_api import profile as prof  # noqa: E402
 from src.fb_api import telemetry as tm  # noqa: E402
 from src.fb_api import token_capture as tc  # noqa: E402
 from src.fb_api.cdp import PageTab  # noqa: E402
+from tests.profile_lease_fakes import fake_profile  # noqa: E402
 from tests.test_acl1756_fb_api import ACT, PROFILE_UUID, TOKEN, FakeCdp, FakePage  # noqa: E402
 
 ACCOUNT = "Acc"
@@ -122,7 +123,7 @@ class FakeQueue:
     def release(self, job_id):
         self.calls.append(("release", job_id))
 
-    def keep(self, job_id, label=""):
+    def keep(self, job_id, label="", kind="review"):
         self.calls.append(("keep", job_id, label))
 
 
@@ -578,11 +579,23 @@ def test_started_profile_is_softly_stopped_and_its_slot_released(world):
 def test_failed_read_still_stops_what_it_started_and_releases_the_slot(world):
     world.local = ("none", None)
     world.started_now = True
+    world.page.routes["/ACT||"] = err(100)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "failed"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    assert world.soft_stops == [ACCOUNT]
+    assert world.cdp.closed_targets == ["T-mine"]
+
+
+def test_logged_out_read_keeps_the_profile_it_started_open(world):
+    """ACL-2091: разлогинен — окно остаётся открытым, место держится «на проверку»."""
+    world.local = ("none", None)
+    world.started_now = True
     world.page.state_value = {"kind": "login", "has_token": False}
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.state == "failed" and r.error_code == "profile_logged_out"
-    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
-    assert world.soft_stops == [ACCOUNT]
+    assert [c[0] for c in world.queue.calls] == ["acquire", "keep"]
+    assert world.soft_stops == []
     assert world.cdp.closed_targets == ["T-mine"]
 
 
@@ -731,7 +744,7 @@ def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
         settings=lambda: settings, clock=lambda: 1000.0, tick_s=0.05, usage=usage)
     monkeypatch.setattr(sp, "_slot_queue", lambda: queue)
 
-    profiles = {f"Acc{i}": SimpleNamespace(profile_id=f"p{i}", folder_id="", multilogin_instance="A",
+    profiles = {f"Acc{i}": SimpleNamespace(profile_id=fake_profile(f"Acc{i}"), folder_id="", multilogin_instance="A",
                                            ad_account_id=ACT) for i in (1, 2, 3)}
     monkeypatch.setattr(sp, "_entry_for", lambda account: profiles.get(account))
     monkeypatch.setattr(api, "_probe_local", lambda pid: ("none", None))
