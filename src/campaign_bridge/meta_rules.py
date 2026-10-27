@@ -10,9 +10,8 @@
 available». Чего реестр не знает (нет подходящего правила) — не проверяется:
 выдумывать ограничения нельзя.
 
-Длины текстов Meta лишь рекомендует (не жёсткий лимит), поэтому правил
-`text_limit` в реестре нет: блокировать по рекомендации нельзя. Вид правила
-оставлен для жёстких лимитов, если Meta когда-нибудь их объявит.
+Рекомендованные длины рекламного текста не являются жёсткими лимитами.
+`text_limit` содержит только явно документированные максимумы конкретных полей.
 """
 from __future__ import annotations
 
@@ -57,6 +56,7 @@ FIELD_LABELS = {
     "ad_title": "Ad title",
     "ad_body": "Ad body",
     "ad_link_description": "Link description",
+    "link": "Destination URL",
 }
 
 _META_KEYS = ("api_version_current", "api_versions", "checked_date", "sources")
@@ -142,6 +142,13 @@ def validate_rules(rules: Any) -> None:
             raise MetaRulesError(f"{rid}: note must be a string")
         if kind in ALLOWED_KINDS:
             allowed = rule.get("allowed")
+            if kind == "placements_by_objective" and "disallowed" in rule:
+                denied = rule["disallowed"]
+                if allowed is not None or not isinstance(denied, list) or not denied or not all(
+                    isinstance(x, str) and x for x in denied
+                ):
+                    raise MetaRulesError(f"{rid}: placements needs either allowed or non-empty disallowed")
+                continue
             if not isinstance(allowed, list) or not allowed:
                 raise MetaRulesError(f"{rid}: kind {kind} needs a non-empty 'allowed' list")
         elif kind == "text_limit":
@@ -224,6 +231,13 @@ def _field_value(job: Any, field: str) -> Any:
             val = val.get("type")
     if val is None and field == "placements":
         val = _dig(job, "api_preview.ad_set.placements")
+        if val is None:
+            val = _dig(job, "targeting_spec")
+    if field == "placements" and isinstance(val, dict):
+        # Graph targeting carries positions per platform; ignore unrelated audience keys.
+        val = [f"{key.removesuffix('_positions')}.{position}"
+               for key, positions in val.items() if key.endswith("_positions")
+               and isinstance(positions, (list, tuple)) for position in positions]
     return val
 
 
@@ -254,10 +268,20 @@ def _check_allowed(rules: list[dict[str, Any]], kind: str, job: Any) -> list[Vio
     applicable = [r for r in rules if r["kind"] == kind and _matches(r, job)]
     if not applicable:
         return []
+    denied_rules = [r for r in applicable if "disallowed" in r]
+    applicable = [r for r in applicable if "disallowed" not in r]
     values = value if isinstance(value, (list, tuple, set)) else [value]
     out: list[Violation] = []
     for item in values:
         key = _norm(item)
+        denied = next((r for r in denied_rules if r["status"] == "ga"
+                       and key in {_norm(a) for a in r["disallowed"]}), None)
+        if denied is not None:
+            msg = f"{_label(field)} '{item}' is not supported for this campaign. Remove this placement."
+            out.append(Violation(denied["id"], field, item, msg, denied["source_url"]))
+            continue
+        if not applicable:
+            continue  # A documented prohibition is not an exhaustive allowlist.
         if any(r["status"] == "ga" and key in {_norm(a) for a in r["allowed"]} for r in applicable):
             continue
         blocker = next((r for r in applicable if key in {_norm(a) for a in r["allowed"]}), None)
@@ -269,7 +293,10 @@ def _check_allowed(rules: list[dict[str, Any]], kind: str, job: Any) -> list[Vio
             out.append(Violation(blocker["id"], field, item, msg, blocker["source_url"]))
         else:
             first = applicable[0]
+            choices = ", ".join(str(a) for r in applicable if r["status"] == "ga" for a in r["allowed"])
             msg = f"{label} '{item}' is not an accepted Meta value for this campaign."
+            if kind == "cta_by_objective" and choices:
+                msg += f" Choose one of: {choices}."
             out.append(Violation(first["id"], field, item, msg, first["source_url"]))
     return out
 
@@ -331,7 +358,8 @@ def check_job(job: Any, ruleset: RuleSet | None = None, *, skip_kinds: tuple[str
             field = rule["applies_to"]["field"]
             text = _field_value(job, field)
             if isinstance(text, str) and len(text) > rule["max_len"]:
-                msg = f"{_label(field)} is {len(text)} characters; Meta allows at most {rule['max_len']}."
+                msg = (f"{_label(field)} is {len(text)} characters; Meta allows at most {rule['max_len']}. "
+                       f"Shorten {_label(field).lower()} to {rule['max_len']} characters or fewer.")
                 out.append(Violation(rule["id"], field, text, msg, rule["source_url"]))
         elif rule["kind"] == "required_field" and _matches(rule, job):
             for path in rule["required"]:
@@ -354,7 +382,8 @@ BUILDER_DESTINATIONS = {"website": "WEBSITE", "instant_form": "ON_AD"}
 
 
 def _ga_lists(ruleset: RuleSet, kind: str) -> list[tuple[dict[str, Any], list[str]]]:
-    return [(r, list(r["allowed"])) for r in ruleset.rules if r["kind"] == kind and r["status"] == "ga"]
+    return [(r, list(r["allowed"])) for r in ruleset.rules
+            if r["kind"] == kind and r["status"] == "ga" and "allowed" in r]
 
 
 def _uniq(items: Any) -> list[str]:
