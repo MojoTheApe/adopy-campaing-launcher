@@ -455,6 +455,36 @@ def _prepare_config_dir() -> None:
         pass
 
 
+def _unprotect_tokens(from_backup: bool) -> int:
+    """ACL-1358 rollback on an installed app: write the protected tokens back as plain text.
+
+    Needed before going back to a version older than ACL-1358. Refuses while the
+    dashboard runs: a running process would protect the tokens again.
+    """
+    if local_dashboard.find_own(_local_acl_dir()) is not None:
+        _show_message(
+            "Adopy Campaign Manager",
+            "Stop the dashboard first (ACL.exe --stop-server), then run this again.",
+        )
+        return 1
+    try:
+        from config.paths import unprotect_machine_secrets
+
+        notes = unprotect_machine_secrets(from_backup=from_backup)
+    except Exception as exc:
+        _show_message("Adopy Campaign Manager", f"Could not restore the tokens ({type(exc).__name__}).")
+        return 1
+    if notes:
+        text = "\n".join(notes) + "\n\nTokens are plain text again. A current version protects them again on its next start."
+    else:
+        text = "Nothing to restore: the tokens are already plain text."
+    if sys.stdout is not None:
+        print(text)
+    else:
+        _show_message("Adopy Campaign Manager", text)
+    return 0
+
+
 def main() -> int:
     os.environ["ACL_CONFIG_DIR"] = str(_local_acl_dir())
     _prepare_config_dir()
@@ -486,6 +516,8 @@ def main() -> int:
         from updater import main as update_main
 
         return update_main(args, _local_acl_dir())
+    if "--unprotect-tokens" in args:
+        return _unprotect_tokens("--from-backup" in args)
     if "--stop-server" in args:
         return _stop_server()
     if "--settings" in args:

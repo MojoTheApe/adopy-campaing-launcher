@@ -36,6 +36,25 @@ from scripts._console import use_utf8  # noqa: E402
 use_utf8()
 
 
+def _unprotect(from_backup: bool) -> int:
+    """Restore plain tokens; nothing else is touched and nothing is re-protected."""
+    try:
+        from config.paths import unprotect_machine_secrets
+
+        notes = unprotect_machine_secrets(from_backup=from_backup)
+        for note in notes:
+            print(f"  config: {note}")
+        if not notes:
+            print("  config: nothing to restore (tokens are already plain, or this is not Windows)")
+        else:
+            print("  config: tokens are plain text again; the next start of a current version "
+                  "protects them again")
+    except Exception as exc:
+        print(f"  config: could not restore tokens ({type(exc).__name__})")
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Migrate/provision durable ACL machine config")
     parser.add_argument(
@@ -43,7 +62,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also create safe machine-local examples when no legacy files exist",
     )
+    parser.add_argument(
+        "--unprotect",
+        action="store_true",
+        help="ACL-1358 rollback: write the Windows-protected tokens back as plain text "
+             "(same Windows user), before going back to an older version",
+    )
+    parser.add_argument(
+        "--from-backup",
+        action="store_true",
+        help="with --unprotect: restore the newest encrypted backup from protected-backup/ "
+             "instead of the live files",
+    )
     args = parser.parse_args(argv)
+    if args.from_backup and not args.unprotect:
+        parser.error("--from-backup only works together with --unprotect")
+    if args.unprotect:
+        return _unprotect(args.from_backup)
     try:
         from config.config_unify import prepare_config_dir
 
@@ -54,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             get_env_files,
             migrate_legacy_account_map,
             migrate_legacy_env,
+            protect_machine_secrets,
         )
 
         if args.provision:
@@ -66,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
                 notes.append(env_note)
             if map_note:
                 notes.append(map_note)
+            notes.extend(protect_machine_secrets())
         for note in notes:
             print(f"  config: {note}")
         if not notes:
