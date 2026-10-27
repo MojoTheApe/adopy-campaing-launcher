@@ -36,8 +36,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
+from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
 
@@ -51,6 +53,9 @@ PAUSED = "PAUSED"
 #: не включит кампанию. Только после чтения, подтвердившего PAUSED у кампании (`_confirm_campaign_paused`).
 ACTIVE = "ACTIVE"
 CHILD_STATUS = ACTIVE
+#: Паузы (с) между повторными чтениями метки объекта, которого Meta ещё «не показывает» (только чтения).
+#: Каждое чтение идёт через клиента и считается в потолке вызовов (CallBudget останавливает громко).
+LABEL_RECHECK_WAITS = (2.0, 4.0, 6.0)
 #: Что человек читает в плане, в «Check plan» и в итоге (ACL-2114).
 STATUS_NOTE = "Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on"
 OBJECTIVE = "OUTCOME_LEADS"
@@ -147,6 +152,51 @@ def upload_calls(size: int) -> int:
 VIDEO_WAIT_S = 300.0
 VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
+
+#: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
+#: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
+#: Берём с запасом; видео добавляет опросы обработки, Instant Form - чтения форм Страницы.
+CALLS_BASE = 20
+CALLS_PER_AD_SET = 7
+CALLS_PER_AD = 5
+CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
+                                # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
+CALLS_INSTANT_FORM = 10
+
+
+def estimate_targeting_reads(plan: "CampaignPlan") -> int:
+    """Запас на чтения таргетинга (ACL-1771) по ВСЕМ наборам: они идут из того же бюджета, что и записи.
+
+    Как потолок задания у резолвера: база + шаг на каждую различную строку (целую и каждую её часть),
+    но не выше `JOB_READ_ABS_CAP`. Без интересов - 0.
+    """
+    seen: set[str] = set()
+    for ad_set in plan.ad_sets:
+        for group in ad_set.interest_groups:
+            for term in group:
+                seen.add(_tr.norm(term))
+                seen.update(_tr.norm(p) for p in _tr.split_term(term))
+    seen.discard("")
+    if not seen:
+        return 0
+    return min(_tr.JOB_READ_ABS_CAP, _tr.JOB_READ_BASE + _tr.JOB_READ_PER_TERM * len(seen))
+
+
+def estimate_create_calls(plan: "CampaignPlan") -> int:
+    """Сколько вызовов Graph нужно на ЗАПИСИ кампании целиком (первый запуск, с запасом).
+
+    Чтения таргетинга не входят: их запас - `estimate_targeting_reads`, а `_prepare` сверяет остаток
+    бюджета именно с этим числом уже после чтений.
+    """
+    total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
+    for ad_set in plan.ad_sets:
+        total += CALLS_PER_AD * len(ad_set.ads)
+        total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.kind == "video")
+    if any(x.instant for x in plan.ad_sets):
+        total += CALLS_INSTANT_FORM
+    return total
+
+
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
 #: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
@@ -161,6 +211,20 @@ UPLOAD_STEP_EVERY_S = 12.0
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
+#: Тексты и вертикальный файл (ACL-1774).
+MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
+LABEL_MAIN = "acl_main"
+LABEL_VERTICAL = "acl_vertical"
+#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, вертикальный — 9:16 (допуск 1,5 %).
+MAIN_RATIOS = (1.0, 0.8)
+VERTICAL_RATIO = 9 / 16
+RATIO_TOLERANCE = 0.015
+#: Площадки вертикального файла (Stories и Reels); остальные из ручного списка — основному файлу.
+VERTICAL_FACEBOOK = ("story", "facebook_reels")
+VERTICAL_INSTAGRAM = ("story", "reels")
+#: Значения-заглушки для проверки политикой до записи (настоящие приходят после загрузки).
+PLACEHOLDER_HASH = "0" * 32
+PLACEHOLDER_VIDEO_ID = "100000"
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
 SUPPORTED_OBJECTIVES = frozenset({"leads"})
 
@@ -179,6 +243,8 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
                "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS",
                "WITH_ISSUES"]
 
+
+from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
 
 #: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
 FORM_ID_PLACEHOLDER = "0000000"
@@ -235,8 +301,32 @@ class AdPlan:
     form_id: str = ""
     #: Тип кнопки (ACL-1767); по умолчанию LEARN_MORE, как всегда.
     cta: str = CTA_TYPE
+    #: ACL-1774: все тексты по порядку (первый — `body`), заголовки и описания без повторов.
+    bodies: list[str] = field(default_factory=list)
+    titles: list[str] = field(default_factory=list)
+    descriptions: list[str] = field(default_factory=list)
+    #: ACL-1774: необязательный вертикальный файл Stories/Reels (того же вида, что основной).
+    vertical_path: str = ""
+    vertical_kind: str = ""
+    #: ACL-1772: точный выбор набора для правил двух файлов и их сверки.
+    placements: dict | None = None
+
+    @property
+    def multi_text(self) -> bool:
+        """Несколько текстов любого вида: объявление идёт как Dynamic Creative (ACL-1774)."""
+        return len(self.bodies) > 1 or len(self.titles) > 1 or len(self.descriptions) > 1
+
+    @property
+    def uses_feed(self) -> bool:
+        """Нужна лента ассетов (`asset_feed_spec`): несколько текстов или вертикальный файл.
+
+        Один текст и один файл идут прежним `object_story_spec` — байт в байт как раньше.
+        """
+        return self.multi_text or bool(self.vertical_path)
     #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
     form_template: dict | None = None
+    #: ACL-2180: «Form locale: ES_LA (Spanish, Colombia)», если шаблон с locale Auto (иначе пусто).
+    form_locale_note: str = ""
 
 
 @dataclass
@@ -255,10 +345,21 @@ class AdSetPlan:
     device: str = ""                 # "mobile" | "desktop"
     os_min: str = ""                 # минимальная версия iOS/Android: "14" или "14.0"
     start_time: str = ""             # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    #: ACL-1768: номер набора и поля уровня набора; пусто = как у кампании.
+    index: int = 1                   # 1-based порядковый номер набора в кампании
+    language: str = ""               # язык набора вместо языка кампании
+    pixel_id: str = ""               # пиксель набора вместо пикселя кампании
+
+    placements: dict | None = None
 
     @property
     def instant(self) -> bool:
         return self.destination == DEST_FORM
+
+    @property
+    def dynamic(self) -> bool:
+        """Набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774)."""
+        return any(a.multi_text for a in self.ads)
 
 
 @dataclass
@@ -305,6 +406,43 @@ def _kind_of(path: str, declared: str) -> str:
     return "video" if "video" in (declared or "").lower() else "image"
 
 
+def media_size(kind: str, data: bytes) -> tuple[int, int] | None:
+    """Ширина и высота файла по заголовку (PNG/GIF/JPEG, mp4/mov); не прочитали — None."""
+    from src.fb_api import preflight_rules as _pf
+
+    if kind == "video":
+        info = _pf.video_info(data)
+        if info and info.get("width") and info.get("height"):
+            return int(info["width"]), int(info["height"])
+        return None
+    return _pf.image_size(data)
+
+
+def _near(ratio: float, target: float) -> bool:
+    return abs(ratio - target) / target <= RATIO_TOLERANCE
+
+
+def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[str]:
+    """Основной файл 1:1 или 4:5 и вертикальный 9:16 — проверка ДО любой загрузки (ACL-1774).
+
+    Не прочитали размер — тоже отказ: пару, которую нельзя проверить, Meta обрежет молча.
+    """
+    out: list[str] = []
+    m, v = media_size(kind, main), media_size(kind, vertical)
+    hint = "use JPG/PNG for images or MP4/MOV for videos so the size can be checked"
+    if not m or not m[1]:
+        out.append(f"Ad {index}: the size of the main file cannot be read; {hint}")
+    elif not any(_near(m[0] / m[1], r) for r in MAIN_RATIOS):
+        out.append(f"Ad {index}: the main file is {m[0]}x{m[1]}; with a Stories / Reels file "
+                   "the main file must be 1:1 or 4:5")
+    if not v or not v[1]:
+        out.append(f"Ad {index}: the size of the Stories / Reels file cannot be read; {hint}")
+    elif not _near(v[0] / v[1], VERTICAL_RATIO):
+        out.append(f"Ad {index}: the Stories / Reels file is {v[0]}x{v[1]}; it must be 9:16 "
+                   "(for example 1080x1920)")
+    return out
+
+
 def _plan_cta(ad: Any, plan_set: AdSetPlan, index: int, problems: list[str]) -> str:
     cta = str(getattr(ad, "cta", "") or "").strip().upper() or CTA_TYPE
     allowed = CTA_FORM if plan_set.instant else CTA_WEBSITE
@@ -312,6 +450,123 @@ def _plan_cta(ad: Any, plan_set: AdSetPlan, index: int, problems: list[str]) -> 
         problems.append(f"Ad {index}: the button {cta!r} is not available for "
                         f"{'an Instant Form' if plan_set.instant else 'a website'} Leads ad")
     return cta
+
+
+def _unique(items: list[str]) -> list[str]:
+    """Без пустых и повторов (пробелы не в счёт), порядок сохраняется."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in items:
+        key = "".join(str(x).split())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(str(x).strip())
+    return out
+
+
+def _same_media_file(main: str, vertical: str) -> bool:
+    if not main or not vertical:
+        return False
+    try:
+        return Path(main).resolve() == Path(vertical).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, problems: list[str],
+                             warnings: list[str] | None = None) -> None:
+    """Тексты 1-5 и вертикальный файл объявления (ACL-1774). Только правила плана, без чтения файлов."""
+    i = plan_ad.index
+    variants = [dict(v) for v in (getattr(src, "text_variants", None) or []) if isinstance(v, dict)]
+    body2 = str(getattr(src, "ad_body2", "") or "").strip()
+    if body2 and not any(str(v.get("body") or "").strip() == body2 for v in variants):
+        # Черновик собран мимо библиотеки: второй текст без заголовка и описания.
+        variants.insert(0, {"body": body2, "headline": "", "description": ""})
+    plan_ad.bodies = _unique([plan_ad.body] + [str(v.get("body") or "") for v in variants])
+    plan_ad.titles = _unique([plan_ad.title] + [str(v.get("headline") or "") for v in variants])
+    plan_ad.descriptions = _unique([plan_ad.description] + [str(v.get("description") or "") for v in variants])
+    for label, items in (("primary texts", plan_ad.bodies), ("headlines", plan_ad.titles),
+                         ("descriptions", plan_ad.descriptions)):
+        if len(items) > MAX_TEXTS:
+            problems.append(f"Ad {i}: up to {MAX_TEXTS} {label} per ad (got {len(items)})")
+    for label, items, key in (("primary text", plan_ad.bodies, "bodies"), ("headline", plan_ad.titles, "titles"),
+                              ("description", plan_ad.descriptions, "descriptions")):
+        limit = _wpol.ASSET_FEED_TEXT_MAX[key]
+        for n, text in enumerate(items, 1):
+            if len(text) > limit:
+                problems.append(f"Ad {i}: {label} {n} is {len(text)} characters long, the limit is {limit}")
+    vertical = str(getattr(src, "vertical_path", "") or "").strip()
+    same_file = _same_media_file(plan_ad.path, vertical)
+    if same_file:
+        vertical = ""
+        if warnings is not None:
+            warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
+                            "it will be used once as the main file.")
+    if plan_ad.multi_text and vertical:
+        # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
+        # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
+        problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
+    if plan_ad.bodies and not plan_ad.body:
+        problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
+    if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
+        problems.append(f"Ad {i}: the Stories / Reels file was not found")
+    if vertical:
+        plan_ad.vertical_path = vertical
+        plan_ad.vertical_kind = _kind_of(vertical, "")
+        if not plan_ad.path:
+            problems.append(f"Ad {i}: a Stories / Reels file needs the main file too")
+        elif plan_ad.vertical_kind != plan_ad.kind:
+            problems.append(f"Ad {i}: the main file is {plan_ad.kind} and the Stories / Reels file is "
+                            f"{plan_ad.vertical_kind}; use two images or two videos")
+    if plan_ad.uses_feed and plan_set.instant:
+        problems.append(f"Ad {i}: several texts and a Stories / Reels file work only with a Website ad set "
+                        "for now (Instant Form with an asset feed is not verified on Meta yet); "
+                        "use one text and one file, or switch the ad set to Website")
+
+
+def placement_targeting(placements: dict | None) -> dict:
+    """None — прежний ручной список; Advantage+ — без ограничений платформ/позиций."""
+    if placements is None:
+        return {"publisher_platforms": list(PUBLISHER_PLATFORMS),
+                "facebook_positions": list(FACEBOOK_POSITIONS),
+                "instagram_positions": list(INSTAGRAM_POSITIONS)}
+    if placements["mode"] == "advantage_plus":
+        return {}
+    out = {k: list(placements[k]) for k in ("facebook_positions", "instagram_positions") if placements[k]}
+    out["publisher_platforms"] = [p for p in PUBLISHER_PLATFORMS if out.get(p + "_positions")]
+    return out
+
+
+def _plan_placements(src: Any, problems: list[str], name: str) -> dict | None:
+    raw = getattr(src, "placements", None)
+    if raw is None:
+        return None
+    error = f"Ad set {name!r}: Placement selection is invalid; choose Advantage+ or supported Manual positions"
+    if not isinstance(raw, dict) or raw.get("mode") not in ("manual", "advantage_plus"):
+        problems.append(error)
+        return None
+    if raw["mode"] == "advantage_plus":
+        if set(raw) != {"mode"}:
+            problems.append(error)
+        return {"mode": "advantage_plus"}
+    out = {"mode": "manual"}
+    if set(raw) - {"mode", "facebook_positions", "instagram_positions"}:
+        problems.append(error)
+    for key, supported in (("facebook_positions", FACEBOOK_POSITIONS), ("instagram_positions", INSTAGRAM_POSITIONS)):
+        values = raw.get(key, [])
+        if not isinstance(values, list) or any(not isinstance(v, str) or v not in supported for v in values):
+            problems.append(error)
+            values = []
+        out[key] = [v for v in supported if v in values]
+    if not out["facebook_positions"] and not out["instagram_positions"]:
+        problems.append(error)
+    # Ограничение комбинации отдельно от необязательного вертикального файла.
+    # https://developers.facebook.com/docs/marketing-api/audiences/reference/placement-targeting/
+    if ('story' in out['facebook_positions'] and 'feed' not in out['facebook_positions']
+            and 'story' not in out['instagram_positions']):
+        problems.append(f"Ad set {name!r}: Facebook Stories placements require Facebook Feed or Instagram Stories; "
+                        "add one of these placements or turn off Facebook Stories")
+    return out
 
 
 def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
@@ -332,10 +587,9 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
     mobile_os = plan_set.os.casefold() in ("ios", "android")
     if mobile_os and device == "desktop":
         problems.append(f"Ad set {name!r}: {plan_set.os} is a mobile system and cannot be combined with desktop only")
-    elif device == "desktop":
-        # ACL-1767 review B2: создатель всегда шлёт Instagram, Stories и Reels (только мобильные),
-        # поэтому «только десктоп» Meta отвергнет уже после создания кампании. Настоящее решение -
-        # ручные плейсменты (ACL-1772); до тех пор отказ здесь, до любой записи.
+    elif device == "desktop" and placement_targeting(plan_set.placements) != {"publisher_platforms": ["facebook"], "facebook_positions": ["feed"]}:
+        # ACL-1772: проверенная Desktop-комбинация — только ручной Facebook Feed.
+        # Другие комбинации не объявляем поддержанными без проверки возможностей API.
         problems.append(f"Ad set {name!r}: Desktop only isn't possible with automatic placements "
                         "(Instagram, Stories and Reels need mobile). Pick All devices or Mobile, "
                         "or wait for manual placements.")
@@ -382,6 +636,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     """
     load_template = template_loader or _ft.get
     problems: list[str] = list(getattr(draft, "errors", None) or [])
+    warnings = [str(w) for w in (getattr(draft, "warnings", None) or [])]
     raw_act = str(getattr(draft, "ad_account_id", "") or "").strip()
     try:
         act = normalize_act(raw_act)
@@ -400,12 +655,18 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         problems.append("Tracking link is empty; the API backend needs it for the ads")
     if not ad_sets_src:
         problems.append("No ad sets in the campaign")
+    if len(ad_sets_src) > MAX_AD_SETS:
+        problems.append(MAX_AD_SETS_ERROR)      # ACL-1768: потолок наборов
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
     if not budget or float(budget) <= 0:
         problems.append("Daily budget missing")
     ad_sets: list[AdSetPlan] = []
-    for s in ad_sets_src:
+    ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
+    for set_no, s in enumerate(ad_sets_src, start=1):
         plan_set = AdSetPlan(
+            index=set_no,
+            language=str(getattr(s, "language", "") or "").strip(),
+            pixel_id=str(getattr(s, "pixel_id", "") or "").strip(),
             name=str(s.name or draft.name).strip(),
             age_min=int(getattr(s, "age_min", 18) or 18),
             age_max=int(getattr(s, "age_max", 65) or 65),
@@ -417,13 +678,13 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             problems.append(f"Unknown conversion location {dest!r} in ad set {plan_set.name!r}")
         else:
             plan_set.destination = dest
+        plan_set.placements = _plan_placements(s, problems, plan_set.name)
         _plan_audience(plan_set, s, problems)
         if not s.ads:
             problems.append(f"No ads in ad set {plan_set.name!r}")
-        for i, ad in enumerate(s.ads, start=1):
-            if str(getattr(ad, "ad_body2", "") or "").strip():
-                problems.append(f"Ad {i}: Primary text 2 is not supported by the API backend yet "
-                                "(remove it or publish with RPA)")
+        for ad in s.ads:
+            ad_no += 1
+            i = ad_no
             path = str(getattr(ad, "creative_path", "") or "").strip()
             if not path:
                 problems.append(f"Ad {i}: no creative file")
@@ -433,6 +694,23 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 description=str(ad.ad_link_description or "").strip(),
                 form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else ""),
                 cta=_plan_cta(ad, plan_set, i, problems)))
+            _plan_texts_and_vertical(plan_set.ads[-1], ad, plan_set, problems, warnings)
+            planned_ad = plan_set.ads[-1]
+            planned_ad.placements = plan_set.placements
+            if plan_set.placements is not None:
+                targets = placement_targeting(plan_set.placements)
+                has_vertical = not targets or any(
+                    x in targets.get("facebook_positions", []) for x in VERTICAL_FACEBOOK) or any(
+                    x in targets.get("instagram_positions", []) for x in VERTICAL_INSTAGRAM)
+                if has_vertical and not planned_ad.vertical_path:
+                    warnings.append(f"Ad {i}: no separate vertical Stories / Reels file; Meta will crop the main file")
+                if planned_ad.vertical_path:
+                    main_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
+                    if not targets:
+                        problems.append(f"Ad {i}: Advantage+ placements with two files is not supported; use one file or Manual placements")
+                    elif not main_pos or not vert_pos:
+                        # Один тип площадок не требует непроверенных правил для пустой второй группы.
+                        problems.append(f"Ad {i}: the current app mapping for a two-file pair needs both Feed and Stories / Reels placements; clear the unused file and use the required file as main")
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -447,14 +725,24 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
                     else:
-                        plan_set.ads[-1].form_template = clean
+                        try:   # ACL-2180: Auto -> код из языка и страны, до любой записи
+                            clean, note = _fl.resolve_template(
+                                clean, str(getattr(draft, "language", "") or ""), str(draft.country or ""))
+                        except _fl.LocaleRefused as exc:
+                            problems.append(f"Ad {i}: {exc}")
+                        else:
+                            plan_set.ads[-1].form_template = clean
+                            plan_set.ads[-1].form_locale_note = note
             elif plan_set.instant and not plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms "
                                 "or a template)")
+        if plan_set.dynamic and len(plan_set.ads) > 1:
+            problems.append(f"Ad set {plan_set.name!r}: " + _wpol.MSG_TEXTS_DYNAMIC_SET)
         ad_sets.append(plan_set)
     # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
-    set_names = [x.name for x in ad_sets]
-    for dup in sorted({n for n in set_names if set_names.count(n) > 1}):
+    # ACL-1768: сравнение без учёта регистра и пробелов по краям - Meta ищет наборы по имени.
+    set_names = [x.name.casefold() for x in ad_sets]
+    for dup in sorted({x.name for x in ad_sets if set_names.count(x.name.casefold()) > 1}):
         problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
     for x in ad_sets:
         names = [a.name for a in x.ads]
@@ -472,7 +760,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
         daily_budget=float(budget), ad_sets=ad_sets,
         page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
-        warnings=[str(w) for w in (getattr(draft, "warnings", None) or [])])
+        warnings=warnings)
 
 
 def budget_minor(amount: float, currency: str) -> int:
@@ -607,13 +895,19 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
     """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`."""
     if plan.ad_sets and all(s.instant for s in plan.ad_sets):
         # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775).
-        pass
-    elif plan.pixel_id:
+        return
+    for s in plan.ad_sets:
+        # ACL-1768: пиксель набора, если задан, тоже должен быть на кабинете.
+        if s.pixel_id and not s.instant and s.pixel_id not in facts.pixels:
+            raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.")
+    if plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
                             f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
+    elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
+        return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
@@ -637,17 +931,53 @@ def _country_names_for(code: str) -> list[str]:
     return [n.title() for n, c in COUNTRY_CODES.items() if c == code][:2]
 
 
+class TargetingUnresolved(PlanError):
+    """Термин библиотеки не найден точно или ждёт подтверждения человека (ACL-1771).
+
+    `items` — непонятые термины/части: {term, state: pending|unresolved, candidates,
+    suggested?, reason}. Текст начинается так же, как раньше («Detailed targeting not found…»).
+    """
+
+    def __init__(self, items: list[dict]):
+        self.items = items
+        unknown = [i for i in items if i.get("state") == "unknown"]
+        lost = [i for i in items if i.get("state") not in ("pending", "unknown")]
+        asks = [i for i in items if i.get("state") == "pending"]
+
+        def cands(i: dict) -> str:
+            rows = i.get("candidates") or []
+            return ("; candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
+                    if rows else "; no candidates")
+
+        msg: list[str] = []
+        if lost:
+            msg.append("Detailed targeting not found by Meta: "
+                       + " | ".join(f"{i['term']}{cands(i)}" + (f" ({i['reason']})" if i.get("reason") else "")
+                                    for i in lost))
+        if asks:
+            msg.append("Detailed targeting needs your confirmation: "
+                       + " | ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
+                                    for i in asks) + " Confirm a candidate in Check plan")
+        if unknown:
+            msg.append(_tr.UNKNOWN_MESSAGE)
+        super().__init__(". ".join(msg))
+
+
 class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
-    def __init__(self, client: GraphClient):
+    def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = ""):
         self.client = client
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
-        self._interest: dict[str, dict] = {}
-        self._behaviors: list[dict] | None = None
+        #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope)
+        #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
+        #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
+        self.locale_groups: dict[int, dict[int, str]] = {}
 
     def country(self, value: str) -> str:
         key = (value or "").strip()
@@ -665,8 +995,9 @@ class TargetingResolver:
         else:
             queries = [(key, 10, 1)]
         for q, limit, pages in queries:
-            rows = self.client.get_all("/search", {"type": "adgeolocation", "location_types": ["country"],
-                                                   "q": q, "limit": limit}, max_pages=pages)
+            rows = _tr.named_search("adgeolocation", lambda: self.client.get_all(
+                "/search", {"type": "adgeolocation", "location_types": ["country"], "q": q, "limit": limit},
+                max_pages=pages))
             for r in rows:
                 cc = str(r.get("country_code") or r.get("key") or "").upper()
                 if cc == up or str(r.get("name") or "").casefold() == key.casefold():
@@ -685,7 +1016,8 @@ class TargetingResolver:
             return None
         if lang in self._locale:
             return self._locale[lang]
-        rows = self.client.get_all("/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1)
+        rows = _tr.named_search("adlocale", lambda: self.client.get_all(
+            "/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1))
         pick = None
         for want in (f"{lang} (All)", lang):
             pick = next((r for r in rows if str(r.get("name") or "").casefold() == want.casefold()), None)
@@ -695,40 +1027,59 @@ class TargetingResolver:
             raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search")
         self._locale[lang] = int(pick["key"])
         self.locale_names[lang] = str(pick.get("name") or lang)
+        pick_name = str(pick.get("name") or "")
+        if pick_name.casefold().endswith(" (all)"):
+            base = pick_name[:-len(" (All)")].strip().casefold()
+            self.locale_groups[self._locale[lang]] = {
+                int(r["key"]): str(r.get("name") or "") for r in rows
+                if r.get("key") is not None and r is not pick
+                and str(r.get("name") or "").strip().casefold() != pick_name.casefold()
+                and (str(r.get("name") or "").strip().casefold() == base
+                     or str(r.get("name") or "").strip().casefold().startswith(base + " ("))}
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
-        """Группы имён → `flexible_spec` (interests/behaviors с id)."""
-        names = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if names:
-            rows = self.client.get_all("/search", {"type": "adinterestvalid", "interest_list": names},
-                                       max_pages=1)
-            for r in rows:
-                if r.get("valid") is not False and r.get("id"):
-                    self._interest[str(r.get("name") or "").casefold()] = {
-                        "bucket": "interests", "id": str(r["id"]), "name": str(r.get("name") or "")}
-        missing = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if missing:
-            if self._behaviors is None:
-                self._behaviors = self.client.get_all(
-                    "/search", {"type": "adTargetingCategory", "class": "behaviors", "limit": 1000},
-                    max_pages=1)
-            for b in self._behaviors:
-                nm = str(b.get("name") or "").casefold()
-                if nm and b.get("id") and nm not in self._interest:
-                    self._interest[nm] = {"bucket": "behaviors", "id": str(b["id"]),
-                                          "name": str(b.get("name") or "")}
-            missing = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if missing:
-            raise PlanError("Detailed targeting not found by Meta: " + ", ".join(missing))
+        """Группы имён → `flexible_spec` (interests/behaviors/work_*/education_* с id).
+
+        Точное имя берётся само; всё остальное — `TargetingUnresolved` с кандидатами и
+        с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
+        """
+        terms = [n for g in groups for n in g]
+        self.terms.prefetch(terms)
+        results = {n: self.terms.resolve(n) for n in terms}
+        bad: list[dict] = []
+        for r in results.values():
+            if r["state"] in ("exact", "confirmed"):
+                continue
+            bad += r.get("bad_parts") or [r]
+        if bad:
+            raise TargetingUnresolved(bad)
         spec = []
         for g in groups:
             entry: dict[str, list] = {}
             for n in g:
-                hit = self._interest[n.casefold()]
-                entry.setdefault(hit["bucket"], []).append({"id": hit["id"], "name": hit["name"]})
+                for hit in results[n]["picks"]:
+                    bucket = entry.setdefault(hit["type"], [])
+                    item = {"id": hit["id"], "name": hit["name"]}
+                    if item not in bucket:
+                        bucket.append(item)
             spec.append(entry)
         return spec
+
+    def targeting_report(self) -> list[dict]:
+        """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
+        return self.terms.report()
+
+    def targeting_warnings(self) -> list[str]:
+        """ACL-1920: необязательные поиски, в которых Meta отказала (имя поиска в тексте)."""
+        return self.terms.warnings()
+
+
+def _placement_devices(ad_set: AdSetPlan) -> list[str]:
+    """Тот же фактический список устройств для API и агрегатной сверки режима площадок."""
+    if ad_set.os.casefold() in ("ios", "android"):
+        return ["mobile"]
+    return [ad_set.device] if ad_set.device else ["mobile", "desktop"]
 
 
 def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingResolver) -> dict:
@@ -739,7 +1090,7 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
         # Возраст и интересы — как в билдере; Meta не расширяет аудиторию сама.
         "targeting_automation": {"advantage_audience": 0},
     }
-    loc = resolver.locale(plan.language)
+    loc = resolver.locale(ad_set.language or plan.language)
     locales = [loc] if loc is not None else []
     for extra in ad_set.languages:
         # Язык кампании остаётся первым; дополнительные - только точные совпадения /search.
@@ -752,17 +1103,12 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
         t["genders"] = [GENDER_IDS[ad_set.gender]]
     if ad_set.interest_groups:
         t["flexible_spec"] = resolver.interests(ad_set.interest_groups)
-    # Площадки — вручную, как у робота (не Advantage+ placements).
-    t["publisher_platforms"] = list(PUBLISHER_PLATFORMS)
-    t["facebook_positions"] = list(FACEBOOK_POSITIONS)
-    t["instagram_positions"] = list(INSTAGRAM_POSITIONS)
+    t.update(placement_targeting(ad_set.placements))
     os_val = ad_set.os.casefold()
     if os_val in ("ios", "android"):
         # Как в билдере (решение по Android — за владельцем, пока как было).
         t["user_os"] = [user_os_value(os_val, ad_set.os_min)]
-        t["device_platforms"] = ["mobile"]
-    else:
-        t["device_platforms"] = [ad_set.device] if ad_set.device else ["mobile", "desktop"]
+    t["device_platforms"] = _placement_devices(ad_set)
     return t
 
 
@@ -776,14 +1122,14 @@ def user_os_value(os_val: str, os_min: str = "") -> str:
 
 
 def plan_has_instagram(targetings: list[dict]) -> bool:
-    """В каком-либо наборе плана есть площадки Instagram (ACL-1896; ACL-1772 сделает их выбираемыми)."""
-    return any("instagram" in (t.get("publisher_platforms") or []) and bool(t.get("instagram_positions"))
+    """Любой автоматический или явно выбранный Instagram-набор требует проверки identity."""
+    return any(not t.get("publisher_platforms") or "instagram" in t["publisher_platforms"]
                for t in targetings)
 
 
 def plan_has_instagram_placements(plan: "CampaignPlan") -> bool:
-    """То же без чтения таргетинга: пока площадки зашиты в создателе, они всегда с Instagram."""
-    return "instagram" in PUBLISHER_PLATFORMS and bool(INSTAGRAM_POSITIONS)
+    """До чтения таргетинга: автоматические площадки могут включать Instagram."""
+    return plan_has_instagram([placement_targeting(s.placements) for s in plan.ad_sets])
 
 
 def placements_text(t: dict) -> str:
@@ -911,6 +1257,8 @@ class Outcome:
     plan: dict = field(default_factory=dict)
     #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
     audit: list = field(default_factory=list)
+    #: ACL-1771: как найдены термины таргетинга и что ждёт подтверждения (для Check plan).
+    targeting: list = field(default_factory=list)
     #: Что показать человеку списком (ACL-1437): title/impact/action/severity/raw.
     problems: list = field(default_factory=list)
     manual_required: list[str] = field(default_factory=list)
@@ -1270,6 +1618,13 @@ class CampaignCreator:
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
         """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
         row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
+        # ACL-2206 (Doc120 26.10, Doc122 22.10, Doc120 18.10): Meta иногда отдаёт метку не сразу после создания.
+        # Перечитываем несколько раз (только GET), и лишь потом останавливаемся; запись не повторяется никогда.
+        for wait in LABEL_RECHECK_WAITS:
+            if label in _labels(row):
+                break
+            self.sleep(wait)
+            row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
         if label not in _labels(row):
             raise CreationStopped(
                 f"{what} was created but Meta did not keep the ACL tag ({label}) on it. "
@@ -1297,8 +1652,11 @@ class CampaignCreator:
         return self._creatives.get(name)
 
     # -- медиа
-    def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> str:
+    def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
+                    path: str = "", role: str = "") -> str:
         md5 = _md5(data)
+        path = path or ad.path
+        who = f"ad {ad.index}{role}"
 
         def find(pages: int = 1) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [md5], "fields": "hash"},
@@ -1306,7 +1664,7 @@ class CampaignCreator:
             return md5 if any(str(r.get("hash")) == md5 for r in rows) else None
 
         if find():
-            self._step(out, f"ad {ad.index}: image already in the ad account")
+            self._step(out, f"{who}: image already in the ad account")
             return md5
         def hash_of(body: dict) -> str | None:
             images = body.get("images") if isinstance(body, dict) else None
@@ -1316,15 +1674,18 @@ class CampaignCreator:
             return None
 
         # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
-        got = self._write(out, f"ad {ad.index}: image upload", f"/{plan.act}/adimages", {}, find,
-                          files={"filename": data}, filename=image_name(ad.path, data), id_of=hash_of,
-                          upload=(ad.index, "image"))
+        got = self._write(out, f"{who}: image upload", f"/{plan.act}/adimages", {}, find,
+                          files={"filename": data}, filename=image_name(path, data), id_of=hash_of,
+                          upload=(ad.index, f"{role.strip()} image".strip()))
         out.created.setdefault("images", []).append(got)
-        self._step(out, f"ad {ad.index}: image uploaded")
+        self._step(out, f"{who}: image uploaded")
         return got
 
-    def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> tuple[str, str]:
+    def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
+               path: str = "", role: str = "") -> tuple[str, str]:
         title = video_title(plan.tag, data)
+        path = path or ad.path
+        who = f"ad {ad.index}{role}"
 
         def find(pages: int = 10) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
@@ -1334,18 +1695,18 @@ class CampaignCreator:
 
         vid = find()
         if vid:
-            self._step(out, f"ad {ad.index}: video already in the ad account")
+            self._step(out, f"{who}: video already in the ad account")
         elif isinstance(data, LargeFile):
-            vid = self._video_chunked(out, plan, data, title, find, f"ad {ad.index}")
+            vid = self._video_chunked(out, plan, data, title, find, who)
             out.created.setdefault("videos", []).append(vid)
-            self._step(out, f"ad {ad.index}: video uploaded")
+            self._step(out, f"{who}: video uploaded")
         else:
-            vid = self._write(out, f"ad {ad.index}: video upload", f"/{plan.act}/advideos",
+            vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
-                              filename=Path(ad.path).name, upload=(ad.index, "video"))
+                              filename=Path(path).name, upload=(ad.index, f"{role.strip()} video".strip()))
             out.created.setdefault("videos", []).append(vid)
-            self._step(out, f"ad {ad.index}: video uploaded")
-        return vid, self._wait_video(out, ad, vid)
+            self._step(out, f"{who}: video uploaded")
+        return vid, self._wait_video(out, ad, vid, who=who)
 
     # -- загрузка большого видео кусками (ACL-1891)
     @staticmethod
@@ -1453,8 +1814,9 @@ class CampaignCreator:
                                   kind="video_error")
         return vid
 
-    def _wait_video(self, out: Outcome, ad: AdPlan, vid: str) -> str:
+    def _wait_video(self, out: Outcome, ad: AdPlan, vid: str, *, who: str = "") -> str:
         """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
+        who = who or f"ad {ad.index}"
         deadline = self.clock() + self.video_wait_s
         polls = 0
         while True:
@@ -1466,18 +1828,18 @@ class CampaignCreator:
             if state == "ready":
                 break
             if state == "error":
-                raise CreationStopped(f"ad {ad.index}: Meta could not process the video", created=out.created,
+                raise CreationStopped(f"{who}: Meta could not process the video", created=out.created,
                                       kind="video_error")
             if polls >= self.video_max_polls or self.clock() + self.video_poll_s > deadline:
                 raise CreationStopped(
-                    f"ad {ad.index}: the video is still processing after {int(self.video_wait_s)} s; "
+                    f"{who}: the video is still processing after {int(self.video_wait_s)} s; "
                     "publish again later (nothing is duplicated)", created=out.created, kind="video_timeout")
             self.sleep(self.video_poll_s)
-        self._step(out, f"ad {ad.index}: video processed")
+        self._step(out, f"{who}: video processed")
         thumbs = self.client.get_all(f"/{vid}/thumbnails", {"fields": "uri,is_preferred"}, max_pages=1)
         pick = next((t for t in thumbs if t.get("is_preferred")), thumbs[0] if thumbs else None)
         if not pick or not pick.get("uri"):
-            raise CreationStopped(f"ad {ad.index}: Meta returned no thumbnail for the video",
+            raise CreationStopped(f"{who}: Meta returned no thumbnail for the video",
                                   created=out.created, kind="video_error")
         return str(pick["uri"])
 
@@ -1500,11 +1862,15 @@ class CampaignCreator:
             params = {"name": ad_set.name, "campaign_id": campaign_id, "status": CHILD_STATUS,
                       "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
                       "destination_type": DESTINATION,
-                      "promoted_object": {"pixel_id": plan.pixel_id, "custom_event_type": CUSTOM_EVENT},
+                      "promoted_object": {"pixel_id": ad_set.pixel_id or plan.pixel_id,
+                                          "custom_event_type": CUSTOM_EVENT},
                       "targeting": targeting, "adlabels": [{"name": plan.label}]}
         if ad_set.start_time:
             # ACL-1767: ключа нет, пока старт не задан - прежние планы не меняются.
             params["start_time"] = self.start_iso(ad_set)
+        if ad_set.dynamic:
+            # ACL-1774: несколько текстов - Dynamic Creative на уровне набора; ключа нет у прежних планов.
+            params[_wpol.DYNAMIC_KEY] = True
         return params
 
     def _start_dt(self, ad_set: AdSetPlan) -> datetime:
@@ -1529,11 +1895,70 @@ class CampaignCreator:
 
     def creative_params(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict, name: str) -> dict:
         """Запись креатива: одно описание на запись, предпроверку политикой и сверку (ACL-1767)."""
-        return {"name": name, "object_story_spec": self._story(plan, ad, ad_set, media),
+        if ad.uses_feed:
+            # ACL-1774: несколько текстов и/или вертикальный файл - лента ассетов; рядом только страница.
+            story: dict = {"page_id": plan.page_id}
+            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media)}
+        else:
+            story, extra = self._story(plan, ad, ad_set, media), {}
+        return {"name": name, "object_story_spec": self.with_instagram(story), **extra,
                 "degrees_of_freedom_spec": creative_features(),
                 # Multi-advertiser ads - явно ВЫКЛЮЧЕНЫ (решение владельца 2026-10-10).
                 "contextual_multi_ads": dict(MULTI_ADS_OPT_OUT),
                 "adlabels": [{"name": plan.label}]}
+
+    @staticmethod
+    def rule_positions(placements: dict | None = None) -> tuple[dict, dict]:
+        """Площадки двух правил: вертикальный файл — Stories и Reels, основной — всё остальное."""
+        vertical = {"publisher_platforms": list(PUBLISHER_PLATFORMS),
+                    "facebook_positions": list(VERTICAL_FACEBOOK),
+                    "instagram_positions": list(VERTICAL_INSTAGRAM)}
+        main = {"publisher_platforms": list(PUBLISHER_PLATFORMS),
+                "facebook_positions": [x for x in FACEBOOK_POSITIONS if x not in VERTICAL_FACEBOOK],
+                "instagram_positions": [x for x in INSTAGRAM_POSITIONS if x not in VERTICAL_INSTAGRAM]}
+        if placements is not None:
+            selected = placement_targeting(placements)
+            for group in (main, vertical):
+                for platform in PUBLISHER_PLATFORMS:
+                    key = platform + "_positions"
+                    group[key] = [x for x in group[key] if x in selected.get(key, [])]
+                group["publisher_platforms"] = [p for p in PUBLISHER_PLATFORMS if group[p + "_positions"]]
+            main = {k: v for k, v in main.items() if v} if main["publisher_platforms"] else {}
+            vertical = {k: v for k, v in vertical.items() if v} if vertical["publisher_platforms"] else {}
+        return main, vertical
+
+    @staticmethod
+    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
+        """`asset_feed_spec` сайтового объявления: тексты (до 5) и один или два файла с метками.
+
+        Один файл — без правил. Два — правило Stories/Reels на вертикальный и правило на остальные
+        площадки на основной (Meta требует минимум два правила). Текстовые улучшения и Multi-advertiser
+        выключены рядом, в самом креативе.
+        """
+        key = "videos" if ad.kind == "video" else "images"
+
+        def item(m: dict, label: str | None) -> dict:
+            row = ({"video_id": m["video_id"], "thumbnail_url": m["thumb"]} if ad.kind == "video"
+                   else {"hash": m["image_hash"]})
+            if label:
+                row["adlabels"] = [{"name": label}]
+            return row
+
+        spec: dict[str, Any] = {
+            "bodies": [{"text": t} for t in ad.bodies], "titles": [{"text": t} for t in ad.titles],
+            key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
+            "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
+            "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
+        if ad.descriptions:
+            spec["descriptions"] = [{"text": t} for t in ad.descriptions]
+        if ad.vertical_path:
+            spec[key].append(item(media["vertical"], LABEL_VERTICAL))
+            label_key = "video_label" if ad.kind == "video" else "image_label"
+            main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
+            spec["asset_customization_rules"] = [
+                {"customization_spec": vert_pos, label_key: {"name": LABEL_VERTICAL}},
+                {"customization_spec": main_pos, label_key: {"name": LABEL_MAIN}}]
+        return spec
 
     @staticmethod
     def story_spec(plan: CampaignPlan, ad: AdPlan, media: dict, *, instant: bool = False) -> dict:
@@ -1562,9 +1987,36 @@ class CampaignCreator:
 
     # -- общие проверки кампании и группы (сверка после записи и предпроверка найденных)
     @staticmethod
-    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any) -> None:
-        checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
-                       "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
+    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any,
+                  note: str = "") -> None:
+        row = {"object": obj, "field": fld, "expected": expected, "actual": actual,
+               "ok": _same(expected, actual), "not_read": _not_read(expected, actual)}
+        if note:
+            row["note"] = note
+        checks.append(row)
+
+    def _language_check(self, checks: list[dict], obj: str, want: list, got: Any) -> None:
+        """ACL-1907: группа «Spanish (All)» равна набору локалей, на который её раскрыла Meta."""
+        self._mk_check(checks, obj, "languages", want, got)
+        groups = getattr(self.resolver, "locale_groups", None) or {}
+        if not isinstance(got, list) or checks[-1]["ok"] or not any(g in groups for g in want):
+            return
+        norm: list = []
+        unknown: list = []
+        for loc in want:
+            members = groups.get(loc) or {}
+            if loc in groups and loc not in got:
+                if members:
+                    norm += list(members)
+                    continue
+                unknown.append(loc)
+            norm.append(loc)
+        if _same(sorted(set(norm)), sorted(set(got))):
+            checks[-1]["ok"] = True
+            checks[-1]["expanded"] = True
+        elif unknown:
+            checks[-1]["note"] = ("language group " + ", ".join(map(str, unknown)) + " compared strictly: "
+                                  "Meta's search did not list the locales it expands into")
 
     def _campaign_checks(self, plan: CampaignPlan, camp: dict) -> list[dict]:
         checks: list[dict] = []
@@ -1579,11 +2031,19 @@ class CampaignCreator:
         check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
-        # ACL-2050: новый макет Advantage+ - Meta может молча включить автоплощадки. Поле не вернули
-        # (старый API / нет прав) - не блокируем, а отмечаем в диагностике; ENABLED - блокирует.
+        # ACL-1772: агрегат ENABLED только когда ВСЕ наборы без ограничений площадок.
+        # Ручной набор или device_platforms только mobile/desktop — ограничение: DISABLED.
+        # Устройства — placement restriction по тому же первичному placement-targeting reference;
+        # расчёт пользуется тем же helper, который строит фактический API payload.
+        # Первичный источник: https://developers.facebook.com/docs/marketing-api/advantage-campaigns/
+        # раздел Advantage+ placement state automation criteria. Сверка каждого набора остаётся ниже.
+        # Нет поля — прежняя явная диагностика unverified; незнакомый/пустой ответ — расхождение.
         state = _advantage_info(camp).get("advantage_placement_state")
         if state is not None:
-            check("advantage_placement_state", "DISABLED", state)
+            automatic = bool(plan.ad_sets) and all(
+                not placement_targeting(s.placements) and _placement_devices(s) == ["mobile", "desktop"]
+                for s in plan.ad_sets)
+            check("advantage_placement_state", "ENABLED" if automatic else "DISABLED", state)
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
@@ -1609,8 +2069,11 @@ class CampaignCreator:
             check("optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
             check("billing_event", BILLING_EVENT, row.get("billing_event"))
             check("destination_type", DESTINATION, row.get("destination_type"))
-            check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
+            check("pixel", ad_set.pixel_id or plan.pixel_id, str(po.get("pixel_id") or ""))
             check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
+        # Оба направления: набор прошлого запуска мог быть динамическим, а объявление теперь с одним текстом.
+        check("dynamic_creative", ad_set.dynamic,
+              bool(row.get("is_dynamic_creative")) if ("is_dynamic_creative" in row or not ad_set.dynamic) else None)
         check("schedule", "starts on activation, no end date",
               "starts on activation, no end date" if not row.get("end_time") else
               f"ends {row.get('end_time')}")
@@ -1621,8 +2084,8 @@ class CampaignCreator:
         # Локали: если Meta поле не вернула, это «Not read», а не «пусто».
         # None («Not read») только если локали ждали, а Meta их не вернула; иначе как раньше.
         want_locales = targeting.get("locales") or []
-        check("languages", want_locales,
-              None if want_locales and "locales" not in t else t.get("locales") or [])
+        self._language_check(checks, obj, want_locales,
+                             None if want_locales and "locales" not in t else t.get("locales") or [])
         check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
         check("os", targeting.get("user_os") or [], t.get("user_os") or [])
         if targeting.get("genders") or t.get("genders"):
@@ -1689,7 +2152,7 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
@@ -1726,11 +2189,28 @@ class CampaignCreator:
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
                             "to the ad account in Business Manager. Nothing was created.")
 
-    def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
-        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
+    def _prepare(self, plan: CampaignPlan, out: Outcome, *,
+                 writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
+        """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы.
+
+        `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
+        """
         out.warnings += resolve_page_pixel(plan, self.facts)
         self.check_profile_page(plan)
-        targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+        try:
+            # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
+            # ждущие подтверждения, за один раз, а не по набору за круг.
+            targetings = []
+            unresolved: list[dict] = []
+            for s in plan.ad_sets:
+                try:
+                    targetings.append(targeting_for(plan, s, self.resolver))
+                except TargetingUnresolved as exc:
+                    unresolved += [i for i in exc.items if i not in unresolved]
+            if unresolved:
+                raise TargetingUnresolved(unresolved)
+        finally:
+            self._note_targeting_warnings(out)
         self._step(out, "preflight: targeting resolved")
         self._require_instagram(plan, targetings, out)
         self._page_forms = None
@@ -1755,14 +2235,33 @@ class CampaignCreator:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
+                if ad.vertical_path:
+                    try:
+                        vdata = self.load_media(ad.vertical_path, ad.vertical_kind)
+                    except OSError as exc:
+                        raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})") from exc
+                    vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
+                    if not vdata or len(vdata) > vlimit:
+                        raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
+                                        f"{vlimit // (1024 * 1024)} MB")
+                    bad = pair_problems(ad.index, ad.kind, data, vdata)
+                    if bad:
+                        raise PlanError("; ".join(bad))
+                    files[ad.vertical_path] = vdata
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
         chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
-        if isinstance(budget, int) and chunk_calls and chunk_calls + CALLS_RESERVE_OTHER > budget:
-            raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks, more than "
-                            f"one run allows ({budget}). Use a smaller video or split the campaign. "
-                            "Nothing was created.")
+        # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
+        # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
+        # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
+        if isinstance(budget, int) and chunk_calls:
+            rest = estimate_create_calls(plan) if writing else CALLS_RESERVE_OTHER
+            if chunk_calls + rest > budget:
+                raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
+                                f"and the rest of the campaign about {rest}, more than "
+                                f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                                "Nothing was created.")
         self._check_planned(plan, targetings)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
@@ -1926,8 +2425,10 @@ class CampaignCreator:
                 continue  # No creative/ad write is planned until a Page is available.
             for ad in ad_set.ads:
                 ad = self._planned(ad, FORM_ID_PLACEHOLDER)
-                media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
-                         else {"image_hash": "0"})
+                media = ({"video_id": PLACEHOLDER_VIDEO_ID, "thumb": "https://example.invalid/t.jpg"}
+                         if ad.kind == "video" else {"image_hash": PLACEHOLDER_HASH})
+                if ad.vertical_path:
+                    media["vertical"] = dict(media)
                 ok("adcreatives", self.creative_params(plan, ad, ad_set, media,
                                                        f"{ad.name} #{ad.index} [{plan.label}]"),
                    f"ad {ad.index} creative", on_ad=ad_set.instant)
@@ -1994,7 +2495,7 @@ class CampaignCreator:
         renamed = name_error = ""
         requested, skipped = plan.name, []
         try:
-            targetings, files = self._prepare(plan, out)
+            targetings, files = self._prepare(plan, out, writing=False)
             choice = self._resolve_name(plan, targetings)
             plan, existing, skipped = choice.plan, choice.existing, choice.skipped
             out.published_as = plan.name
@@ -2011,11 +2512,17 @@ class CampaignCreator:
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
                     ad = self._planned(ad, "<form to be created>")
+                    if ad.vertical_path:
+                        media["vertical"] = dict(media)
                     ads.append({"name": ad.name, "status": CHILD_STATUS, "format": ad.kind,
                                 "file": Path(ad.path).name, "bytes": len(data),
+                                **({"vertical_file": Path(ad.vertical_path).name,
+                                    "vertical_bytes": len(files.get(ad.vertical_path, b""))}
+                                   if ad.vertical_path else {}),
                                 "library_name": (video_title(plan.tag, data) if ad.kind == "video"
                                                  else image_name(ad.path, data)),
-                                "creative": self._story(plan, ad, ad_set, media)})
+                                "creative": (self.creative_params(plan, ad, ad_set, media, ad.name)
+                                             if ad.uses_feed else self._story(plan, ad, ad_set, media))})
                 sets.append({**self.adset_params(plan, ad_set, "<campaign>", targeting), "ads": ads})
             out.plan = {"campaign": self.campaign_params(plan),
                         "existing_campaign_id": str(existing["id"]) if existing else "",
@@ -2036,11 +2543,31 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
+        out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
         return out
+
+    def _note_targeting_warnings(self, out: Outcome) -> None:
+        """ACL-1920: отказ Meta в необязательном поиске - предупреждение, а не ошибка (без дублей)."""
+        fn = getattr(self.resolver, "targeting_warnings", None)
+        try:
+            for w in (fn() if fn else []):
+                if w not in out.warnings:
+                    out.warnings.append(w)
+        except Exception:  # noqa: BLE001 — предупреждения вспомогательные
+            pass
+
+    def _targeting_report(self) -> list:
+        fn = getattr(self.resolver, "targeting_report", None)
+        try:
+            items = list(fn()) if fn else []
+            _tr.register_candidates(items)      # подтвердить можно только показанных кандидатов
+            return items
+        except Exception:  # noqa: BLE001 — отчёт вспомогательный
+            return []
 
     def _audit(self, plan: CampaignPlan, out: Outcome, *, existing: list | None, checked: bool,
                files: dict | None, renamed: str = "", name_error: str = "") -> None:
@@ -2068,13 +2595,26 @@ class CampaignCreator:
             row["gender"] = GENDER_LABELS[ad_set.gender]
         if ad_set.languages:
             names = self.resolver.locale_names
-            row["languages_picked"] = [names.get(x, x) for x in [plan.language, *ad_set.languages] if x]
+            row["languages_picked"] = [names.get(x, x) for x in [ad_set.language or plan.language, *ad_set.languages] if x]
         if ad_set.device:
             row["devices"] = f"{ad_set.device} only"
         if ad_set.os_min:
             row["os_min"] = (t.get("user_os") or [""])[0]
         if ad_set.start_time:
             row["start_time"] = self.start_iso(ad_set)
+
+    @staticmethod
+    def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
+        """Тексты и вертикальный файл в «Check plan»; у прежнего объявления ключей нет (ACL-1774)."""
+        if not ad.uses_feed:
+            return {}
+        row: dict[str, Any] = {"primary_texts": list(ad.bodies), "headlines": list(ad.titles),
+                               "descriptions": list(ad.descriptions)}
+        if ad.vertical_path:
+            row["stories_reels_file"] = Path(ad.vertical_path).name
+            row["stories_reels_bytes"] = len(files.get(ad.vertical_path, b""))
+            row["placements_by_file"] = "Stories and Reels use the vertical file; Feed uses the main file"
+        return row
 
     def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
                      existing: bool = False, existing_differences: list[dict] | None = None,
@@ -2087,7 +2627,7 @@ class CampaignCreator:
             sets.append({
                 "name": ad_set.name, "status": CHILD_STATUS,
                 "countries": list((t.get("geo_locations") or {}).get("countries") or []),
-                "language": plan.language, "locales": list(t.get("locales") or []),
+                "language": ad_set.language or plan.language, "locales": list(t.get("locales") or []),
                 "age": f"{ad_set.age_min}-{ad_set.age_max}",
                 "interests": interests,
                 "os": ad_set.os or "All",
@@ -2099,11 +2639,16 @@ class CampaignCreator:
                     "file": Path(ad.path).name, "bytes": len(files.get(ad.path, b"")),
                     "headline": ad.title, "primary_text": ad.body, "description": ad.description,
                     "link": plan.link, "cta": ad.cta,
+                    **self._texts_summary(ad, files),
                 } for ad in ad_set.ads],
                 # Multi-advertiser ads всегда выключены (ACL-1767).
                 "multi_advertiser": "off",
             })
+            if len(plan.ad_sets) > 1:
+                sets[-1]["index"] = ad_set.index        # ACL-1768: у одного набора ключа нет, как раньше
             self._audience_summary(sets[-1], plan, ad_set, t)
+            if ad_set.dynamic:
+                sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
             if ad_set.instant:
                 # ACL-1775: вместо сайта - форма Страницы (имя и id); ключей сайта у такого набора нет.
                 known = self._page_forms.by_id() if self._page_forms else {}
@@ -2118,6 +2663,8 @@ class CampaignCreator:
                     if ad.form_template:
                         step = self._form_steps.get(ad.form_template["id"])
                         item["form_template"] = ad.form_template["name"]
+                        if ad.form_locale_note:
+                            item["form_locale"] = ad.form_locale_note
                         if step is not None:
                             item["form_name"] = step.form_name
                             item["form_id"] = step.existing_id
@@ -2219,8 +2766,31 @@ class CampaignCreator:
                 else:
                     media = {"image_hash": self._image_hash(out, plan, ad, data)}
                     rec["image_hash"] = media["image_hash"]
-                # Номер объявления в имени креатива: два объявления не делят креатив (M2).
+                if ad.vertical_path:
+                    # ACL-1774: вертикальный файл грузится так же, до креатива; записи - в `rec` для сверки.
+                    vdata = files[ad.vertical_path]
+                    if ad.kind == "video":
+                        vvid, vthumb = self._video(out, plan, ad, vdata, path=ad.vertical_path,
+                                                   role=" Stories / Reels file")
+                        media["vertical"] = {"video_id": vvid, "thumb": vthumb}
+                        rec["vertical_video_id"] = vvid
+                    else:
+                        media["vertical"] = {"image_hash": self._image_hash(
+                            out, plan, ad, vdata, path=ad.vertical_path, role=" Stories / Reels file")}
+                        rec["vertical_image_hash"] = media["vertical"]["image_hash"]
+                # Номер объявления в имени креатива: два объявления не делят креатив (M2). Номер сквозной по
+                # кампании (ACL-1768): добавленное в первый набор объявление сдвигает номера следующих наборов,
+                # и креатив, оставшийся от неполного запуска под старым номером, будет создан заново.
+                # Объявления при этом находятся по имени внутри набора, так что дублей не возникает.
                 creative_name = f"{ad.name} #{ad.index} [{plan.label}]"
+                if ad.uses_feed:
+                    payload = self.creative_params(plan, ad, ad_set, media, "")
+                    for video in payload["asset_feed_spec"].get("videos", []):
+                        # Meta's thumbnail URL may expire; the video ID binds the asset.
+                        video.pop("thumbnail_url", None)
+                    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True,
+                                                           ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:12]
+                    creative_name = f"{ad.name} #{ad.index} {fingerprint} [{plan.label}]"
                 creative_id = self._find_creative(plan, creative_name)
                 if creative_id:
                     self._step(out, f"ad {ad.index}: creative found from a previous run")
@@ -2269,6 +2839,105 @@ class CampaignCreator:
         on_page = bool(page_forms and page_forms.ok and ad.form_id in page_forms.by_id())
         check(aobj, "form_on_page", True, on_page)
 
+    def _video_file_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str,
+                           id_field: str, content_field: str, uploaded_id: str, actual_id: str,
+                           tag: str, data: Any, identities: list[dict] | None = None) -> None:
+        """ACL-2224: a creative may reference a copy, not the uploaded video ID.
+
+        Verify the returned video's existing deterministic content title. A changed
+        ID is acceptable only with that positive evidence; never infer equivalence
+        from a label binding, a successful upload or an unreadable/missing title.
+        Titles are application-generated file fingerprints, not downloaded bytes.
+        """
+        expected_title = video_title(tag, data) if data else ""
+        actual_title = (self.client.get(f"/{actual_id}", {"fields": "title"}).get("title")
+                        if data and actual_id else "")
+        verified = bool(expected_title and actual_title == expected_title)
+        if uploaded_id and (str(uploaded_id) == actual_id or not verified):
+            check(aobj, id_field, str(uploaded_id), actual_id)
+        if data:
+            check(aobj, content_field, expected_title, actual_title)
+        if identities is not None:
+            identities.append({"object": aobj, "field": id_field,
+                               "uploaded_id": str(uploaded_id or ""),
+                               "creative_video_id": actual_id,
+                               "content_verified": verified,
+                               "verified_by": "content_title" if verified else "unverified"})
+
+    def _feed_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str, plan: CampaignPlan,
+                     ad: AdPlan, creative: dict, rec: dict, files: dict[str, bytes],
+                     identities: list[dict] | None = None) -> list[tuple[str, str, str]]:
+        """Сверка ленты ассетов (ACL-1774): все тексты как набор и привязка файлов к площадкам.
+
+        Возвращает картинки, чей хэш не равен md5 нашего файла, — по ним ещё сверяется имя в библиотеке.
+        """
+        fs = creative.get("asset_feed_spec") or {}
+        if not isinstance(fs, dict):
+            fs = {}
+
+        def texts(key: str) -> list[str]:
+            return [str(x.get("text") or "") for x in (fs.get(key) or []) if isinstance(x, dict)]
+
+        check(aobj, "primary_texts", list(ad.bodies), texts("bodies"))
+        check(aobj, "headlines", list(ad.titles), texts("titles"))
+        check(aobj, "descriptions", list(ad.descriptions), texts("descriptions"))
+        ctas = fs.get("call_to_action_types") or [""]
+        check(aobj, "call_to_action", ad.cta, ctas[0] if isinstance(ctas, list) and ctas else "")
+        links = fs.get("link_urls") or [{}]
+        check(aobj, "link", plan.link, (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        key = "videos" if ad.kind == "video" else "images"
+        check(aobj, "format", ad.kind, "video" if fs.get("videos") else ("image" if fs.get("images") else ""))
+        id_key = "video_id" if ad.kind == "video" else "hash"
+        rows = [x for x in (fs.get(key) or []) if isinstance(x, dict)]
+
+        def label_of(row: dict) -> str:
+            raw = row.get("adlabels")
+            if isinstance(raw, dict):
+                raw = raw.get("data")
+            first = raw[0] if isinstance(raw, list) and len(raw) == 1 else None
+            return str(first.get("name") or "") if isinstance(first, dict) else ""
+
+        by_label = {label_of(r): str(r.get(id_key) or "") for r in rows}
+        bound = {"main": by_label.get(LABEL_MAIN) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
+        bound["vertical"] = by_label.get(LABEL_VERTICAL, "")
+        check(aobj, "file_count", 2 if ad.vertical_path else 1, len(rows))
+        if ad.vertical_path:
+            check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
+        else:
+            check(aobj, "placement_rules", [], fs.get("asset_customization_rules") or [])
+        extra: list[tuple[str, str, str]] = []
+        wants = [("main", "main_file", ad.path, rec.get("video_id") or rec.get("image_hash"))]
+        if ad.vertical_path:
+            wants.append(("vertical", "stories_reels_file", ad.vertical_path,
+                          rec.get("vertical_video_id") or rec.get("vertical_image_hash")))
+        for slot, name, path, made in wants:
+            got = bound[slot] or ""
+            check(aobj, name + "_binding", True, bool(got))
+            data = files.get(path, b"")
+            if ad.kind == "video":
+                self._video_file_checks(check, aobj, name, name + "_content", made, got,
+                                        plan.tag, data, identities)
+            else:
+                if made:
+                    check(aobj, name, str(made), got)
+                if data and got and got != _md5(data):
+                    extra.append((aobj, path, got))
+        if ad.vertical_path:
+            # Какие площадки получили какой файл: правило на метку должно нести ровно наши площадки.
+            main_pos, vert_pos = self.rule_positions(ad.placements)
+            label_key = "video_label" if ad.kind == "video" else "image_label"
+            rules: dict[str, dict] = {}
+            for r in fs.get("asset_customization_rules") or []:
+                lab = r.get(label_key) if isinstance(r, dict) else None
+                if isinstance(lab, dict) and lab.get("name"):
+                    cs = r.get("customization_spec") or {}
+                    rules[str(lab["name"])] = {k: sorted(cs.get(k) or []) for k in
+                                               ("publisher_platforms", "facebook_positions", "instagram_positions")}
+            for label, want in ((LABEL_VERTICAL, vert_pos), (LABEL_MAIN, main_pos)):
+                check(aobj, "placements_" + ("stories_reels" if label == LABEL_VERTICAL else "main"),
+                      {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")}, rules.get(label, {}))
+        return extra
+
     def readback(self, plan: CampaignPlan, out: Outcome, targetings: list[dict],
                  files: dict[str, bytes] | None = None) -> dict:
         checks: list[dict] = []
@@ -2300,7 +2969,7 @@ class CampaignCreator:
         # ACL-1775: форма принадлежит Странице - читаем список форм ещё раз, уже после записи.
         page_forms = (_forms.read_page_forms(self.client, plan.page_id)
                       if any(s.instant for s in plan.ad_sets) else None)
-        image_ads: list[tuple[str, AdPlan, str]] = []    # (объект, объявление, hash в объявлении)
+        image_ads: list[tuple[str, str, str]] = []    # (объект, путь файла, hash в объявлении)
         for ad_set, adset_id, targeting in zip(plan.ad_sets, out.adset_ids, targetings):
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
@@ -2316,7 +2985,7 @@ class CampaignCreator:
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
                           "creative{id,adlabels{name},instagram_user_id,object_story_spec,degrees_of_freedom_spec,"
-                          "contextual_multi_ads}",
+                          "contextual_multi_ads,asset_feed_spec}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
             by_name: dict[str, list[dict]] = {}
             for a in ads:
@@ -2356,17 +3025,20 @@ class CampaignCreator:
                     # или полем креатива (живая проверка скажет, где именно).
                     check(aobj, "instagram_user_id", self._ig_id,
                           str(spec.get(_ig.IG_KEY) or creative.get(_ig.IG_KEY) or ""))
+                if ad.uses_feed:
+                    # ACL-1774: тексты и файлы в ленте ассетов, а не в object_story_spec.
+                    image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files,
+                                                   diag.setdefault("video_identity", []))
+                    continue
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
                     vd = spec.get("video_data") or {}
                     cta = vd.get("call_to_action") or {}
                     check(aobj, "format", "video", "video" if vd else "image")
                     vid = str(vd.get("video_id") or "")
-                    if rec.get("video_id"):
-                        check(aobj, "video_id", rec["video_id"], vid)
-                    if data and vid:
-                        title = self.client.get(f"/{vid}", {"fields": "title"}).get("title")
-                        check(aobj, "video_file", video_title(plan.tag, data), title)
+                    self._video_file_checks(check, aobj, "video_id", "video_file",
+                                            rec.get("video_id"), vid, plan.tag, data,
+                                            diag.setdefault("video_identity", []))
                     check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
@@ -2386,7 +3058,7 @@ class CampaignCreator:
                     # R2-M1: хэш равен md5 нашего файла — содержимое доказано, имя в
                     # библиотеке (старая загрузка RPA или руками) не проверяем.
                     if data and h and h != _md5(data):
-                        image_ads.append((aobj, ad, h))
+                        image_ads.append((aobj, ad.path, h))
                     check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
@@ -2401,8 +3073,8 @@ class CampaignCreator:
             rows = self.client.get_all(f"/{plan.act}/adimages", {
                 "hashes": sorted({h for _, _, h in image_ads}), "fields": "hash,name"}, max_pages=1)
             names = {str(r.get("hash")): str(r.get("name") or "") for r in rows}
-            for aobj, ad, h in image_ads:
-                check(aobj, "image_file", image_name(ad.path, files[ad.path]), names.get(h, ""))
+            for aobj, path, h in image_ads:
+                check(aobj, "image_file", image_name(path, files[path]), names.get(h, ""))
         mismatches = [c for c in checks if not c["ok"]]
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
                 "diagnostics": diag}
@@ -2412,12 +3084,12 @@ class CampaignCreator:
 CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,bid_strategy,adlabels{name},"
                    "advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state}")
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,adlabels{name},"
+                "promoted_object,targeting,start_time,end_time,is_dynamic_creative,adlabels{name},"
                 "value_rules_applied,value_rule_set_id")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
 _SKIP_DIFF = {"name", "tag", "campaign_id", "schedule", "placements_summary"}
-_FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
+_FIELD_TITLES = {"dynamic_creative": "Dynamic Creative", "geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
                  "languages": "languages", "detailed_targeting": "detailed targeting",
                  "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
                  "optimization_goal": "optimization goal", "billing_event": "billing event",
@@ -2433,6 +3105,12 @@ def _utc(value: Any) -> str:
     except ValueError:
         return str(value or "")
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _lookup_note(exc: BaseException) -> str:
+    """ACL-1920: каталог ошибок прячет сырой текст, а какой поиск отказан - нужно человеку."""
+    m = re.search(r"(?:search_type|lookup)=(\w+)", str(exc))
+    return f" (search: {m.group(1)})" if m else ""
 
 
 def graph_problem(exc: BaseException) -> dict:
@@ -2476,7 +3154,8 @@ def _describe_diffs(checks: list[dict]) -> list[str]:
         if c["field"] in _PLACEMENT_FIELDS:
             continue
         out.append(f"{_FIELD_TITLES.get(c['field'], c['field'])} "
-                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})")
+                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})"
+                   + (f" - {c['note']}" if c.get("note") else ""))
     return out
 
 

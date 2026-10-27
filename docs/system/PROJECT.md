@@ -125,6 +125,15 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   stop the account with `profile_no_proxy` when none is configured. A failed check
   does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
   browser's `--proxy-server` flag is only logged as evidence.
+- `src/fb_api/targeting_resolver.py`: the API Builder resolves library names through
+  exact normalized interests, paged interest/behavior search and work/education
+  searches. Each job caches its reads and results within bounded Graph budgets.
+  A near match or a split into several targets remains a candidate in Check plan;
+  creation refuses it until the user explicitly confirms a displayed choice.
+  Confirmed choices live in machine-local `targeting_confirmed.json` and can be
+  cleared. A new result for the same term invalidates its previous candidates,
+  including when no candidates remain. These searches only read through the
+  existing guarded session; the RPA backend cannot use confirmation endpoints.
 - `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
@@ -276,6 +285,21 @@ extra asset reads or fallback writes. This is Page/account usability evidence,
 not a full media/content/ad-review guarantee. Tests use synthetic transports and
 the actual helper offline; no live Meta or profile pilot has been performed.
 
+## ACL-1990 — Pre-flight topics and bounded read failures
+
+The builder groups its audit into seven topics, uses each topic's worst status,
+opens errors/warnings and offers Check with Meta in the card header. The check
+explains profile opening and its usual 30 s–3 min duration, shows elapsed time,
+the last checked time, edited-since-check state and Retry. Drawer-foot wording
+names the campaigns being checked. Rendering and topic toggling make no requests.
+
+Only a transient session refusal before any campaign was checked is `not_checked`
+and nonblocking. A failure during a later campaign or session teardown preserves
+the completed result objects and their server audits; unfinished campaigns after
+a partial check stay blocking. A known local draft error stays blocking even if
+the profile never opens. Inactive/unavailable accounts remain account-rule errors.
+Check plan stays read-only; no additional Graph calls or UI are introduced.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling
@@ -307,6 +331,38 @@ existing release publisher, verifies actual published packages on isolated Windo
 and records exact task delivery only from the successful native acceptance job.
 Source preparation, policy activation and actual delivery remain distinct facts;
 see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
+
+## Several primary texts and Stories / Reels media (ACL-1774)
+
+API backend only. One text and one file keep the old `object_story_spec`. Findings from the
+Meta capability spike (Doc120, 2026-10-14): `asset_feed_spec` with 3 bodies plus two placement
+customization rules was refused (error 100, subcode 1885878); a rule applies one asset per type.
+Owner decision 2026-10-20 (the recorded PAUSED capability spike accepted Dynamic Creative;
+the visual Ads Manager presentation check remains pending):
+
+- 2-5 texts (or several headlines/descriptions) go as Dynamic Creative: `is_dynamic_creative: true`
+  on the ad set (the only new ad-set key in the write allowlist, `true` only), one file, no rules,
+  text optimizations stay OFF. The ad must be alone in its ad set; Instant Form refuses it.
+- A Stories / Reels 9:16 file (two labelled files, two placement rules) works with one text per kind.
+- Both write-policy layers (`write_policy.py`, the in-page mirror in `token_capture.py`) and the
+  pre-flight rules (Python table + `cbPreflight` in `report.html`) carry the same limits.
+- Library entries with the same body retain their distinct headlines/descriptions. Empty text
+  slots preserve their field numbers. A partially created feed creative is reused only for the
+  same payload; a retry with changed texts uses a new creative without uploading the media twice.
+- Readback checks media labels and IDs even when ads are reused. Feed creatives retain the current
+  Instagram identity; vertical videos use the same bounded/chunked loader as the main video.
+  Website media/CTA controls stay outside the hidden Instant Form section, and campaign copies
+  preserve their ad counts. Choosing a square `..._post` file that has a `..._story` partner in
+  the same folder fills the empty Stories / Reels field from `creative_pairing` (the person can
+  change or clear it; an ad with several texts is not prefilled).
+- Over-length texts (1024 body, 255 headline/description) are refused before any write with a message
+  naming the length. The vertical file upload is labelled "Stories / Reels file image/video" in progress.
+- Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
+  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 is merged.
+  The RPA backend is out of scope (owner decision 2026-10-25). Open conditions: the live checks on
+  TEST9095 (2-5 texts as Dynamic Creative; one text with a square + 9:16 pair and placement rules)
+  and Instant Form asset feeds, which stay refused.
+
 
 ## ACL-1891 — Videos over 200 MB upload in chunks ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891), 2026-10-14)
 
@@ -353,3 +409,7 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
+
+## ACL-1907 — Language groups equal their expansion ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/907), 2026-10-14)
+
+Live finding on Doc120: readback reported ad set `languages` expected `[1002]` ("Spanish (All)") vs Meta `[7, 23]`, and a re-run stopped with "Existing ad set ... differs from the builder: languages (builder: 1002, Meta: 7, 23)". `TargetingResolver.locale()` now records, for a pick named "X (All)", the members seen in the same `adlocale` result (`locale_groups`: names equal to X or starting "X (", never hard-coded). `CampaignCreator._language_check` (used by both readback and `_existing_differences` through `_adset_checks`) treats a group id absent from Meta's list as equal to its complete known member set; a missing known member or any locale outside the group stays a mismatch. When the search listed no members, the compare is strict and the difference text adds "compared strictly: Meta's search did not list the locales it expands into". Read-only change. Preserved real test-dashboard creation and rerun results show the exact Spanish (All) contract: expected `[1002]`, complete Meta locales `[7, 23]`, and passing language readback on both campaigns. The rerun retained the same campaigns and ad sets with no new creations. The locale resolver, comparison helpers and locale-specific readback/reuse caller nodes match the tested compositions by normalized AST after the current-main refresh. Private record hashes and installation/source provenance are retained in the author handoff for independent assessment. This scoped evidence does not resolve separate video-ID findings or establish package delivery; fresh source review, applicable CI and actual delivery remain separate.

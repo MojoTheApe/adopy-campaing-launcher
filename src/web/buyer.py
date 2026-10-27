@@ -17,9 +17,12 @@ screen, and does not claim to keep anyone out of anyone else's data.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 _FILE = "selected_cm.txt"
+_RENDER_CM: ContextVar[str | None] = ContextVar("acl_render_cm", default=None)
 
 
 def _path() -> Path:
@@ -32,8 +35,22 @@ def default_cm() -> str:
     return (os.environ.get("MY_CM_NAME") or "").strip()
 
 
+@contextmanager
+def rendering_cm(name: str):
+    token = _RENDER_CM.set((name or "").strip())
+    try:
+        yield
+    finally:
+        _RENDER_CM.reset(token)
+
+
 def get_selected_cm() -> str:
     """The CM whose dashboard to render. Falls back to MY_CM_NAME."""
+    current = _RENDER_CM.get()
+    return _saved_selected_cm() if current is None else current
+
+
+def _saved_selected_cm() -> str:
     try:
         stored = _path().read_text(encoding="utf-8").strip()
         if stored:
@@ -55,7 +72,7 @@ def set_selected_cm(name: str) -> str:
             f.unlink()
     except Exception:
         pass
-    return get_selected_cm()
+    return _saved_selected_cm()
 
 
 def known_cms(df) -> list[str]:

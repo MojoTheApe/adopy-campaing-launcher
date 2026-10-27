@@ -559,6 +559,7 @@ def _open_session(account: str, *, commands: bool = False):
     held = _as._ReadOpen(account)
     tab = None
     sess: _Session | None = None
+    problem: BaseException | None = None
     try:
         try:
             opened = _open_gated(entry, account, held)
@@ -611,7 +612,11 @@ def _open_session(account: str, *, commands: bool = False):
         finally:
             if client.stopped is not None:
                 _start_cooldown(key, client.stopped)
+                problem = client.stopped
             sess.notes["calls"] = client.calls
+    except BaseException as exc:
+        problem = problem or exc
+        raise
     finally:
         if tab is not None:
             try:
@@ -620,10 +625,12 @@ def _open_session(account: str, *, commands: bool = False):
                 log.exception("Could not close our tab for %s", account)
         # ACL-1580: профиль, который поднято этим чтением, закрывается мягкой
         # остановкой (и при отказе тоже) или ждёт `CLOSE_GRACE_S` под страны.
+        # ACL-2091: разлогинен / checkpoint / зависшая вкладка / блок 368 — окно остаётся.
         try:
             _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
                                 grace_s=(sess.keep_grace_s if sess else None),
-                                convenience=bool(sess and sess.keep_convenience))
+                                convenience=bool(sess and sess.keep_convenience),
+                                problem=problem)
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 

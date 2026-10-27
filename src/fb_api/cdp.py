@@ -100,6 +100,43 @@ def _looks_stale(message: str) -> bool:
             or "unique context id" in low)
 
 
+def _profile_context(cdp: Any, timeout: float) -> tuple[str, int]:
+    """Контекст существующих страниц профиля; неоднозначность не угадываем."""
+    try:
+        reply = _call(cdp, "Target.getTargets", timeout=timeout)
+        pages = reply.get("targetInfos")
+        if not isinstance(pages, list) or any(not isinstance(row, dict) for row in pages):
+            raise ValueError("invalid target metadata")
+        pages = [row for row in pages if row.get("type") == "page" and not row.get("subtype")]
+        contexts = [row.get("browserContextId", "") for row in pages]
+        if not pages:
+            # У нового профиля страниц ещё нет: Chrome не перечисляет default
+            # среди getBrowserContexts, поэтому пустой список означает default.
+            contexts = _call(cdp, "Target.getBrowserContexts", timeout=timeout).get("browserContextIds")
+            if not isinstance(contexts, list):
+                raise ValueError("invalid context metadata")
+        if any(not isinstance(value, str) or len(value) > 256 or (value and not value.isprintable())
+               for value in contexts):
+            raise ValueError("invalid context metadata")
+    except CdpTimeout:
+        raise
+    except Exception:
+        raise CdpError("could not determine the profile browser context; no tab was opened") from None
+    choices = set(contexts)
+    if len(choices) > 1:
+        raise CdpError("the profile has multiple browser contexts; cannot safely open an owned tab")
+    if not pages and choices:
+        # Default существует неявно даже при одном именованном контексте.
+        # Без страницы профиля выбирать между ними по порядку нельзя.
+        raise CdpError("no page identifies the profile browser context; open Ads Manager in the profile first")
+    context = next(iter(choices), "")
+    # Только режим и количество: идентификаторы контекстов/целей и URL не пишем.
+    from src.fb_api import launch as _launch
+    _launch._record({"event": "fb_api_tab_context", "ok": True,
+                     "context_kind": "nondefault" if context else "default", "page_count": len(pages)})
+    return context, len(pages)
+
+
 class PageTab:
     """Одна своя вкладка в браузере профиля."""
 
@@ -181,7 +218,11 @@ class PageTab:
             # Свёрнутое окно остаётся свёрнутым и на экран не выходит; наша вкладка
             # лишь становится активной в нём, а при закрытии браузер сам
             # активирует соседнюю.
-            created = _call(cdp, "Target.createTarget", {"url": "about:blank"}, timeout=call_s)
+            context, _ = _profile_context(cdp, call_s)
+            params = {"url": "about:blank"}
+            if context:
+                params["browserContextId"] = context
+            created = _call(cdp, "Target.createTarget", params, timeout=call_s)
             target_id = str(created.get("targetId") or "")
             if not target_id:
                 raise CdpError("the browser did not open a tab")

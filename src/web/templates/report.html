@@ -948,6 +948,12 @@
     }
 
     /* Multilogin connect panel */
+    .mlx-expiry { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 1rem 0;
+      padding: 0.5rem 0.85rem; border: 1px solid var(--warn, #b26a00); border-radius: 6px;
+      background: var(--bg-hover); color: var(--text); font-size: var(--adopy-text-table); }
+    .mlx-expiry[hidden] { display: none; }
+    .mlx-expiry.mlx-expired { border-color: var(--danger, #b00020); color: var(--danger, #b00020); font-weight: 600; }
+    .mlx-expiry button { margin-left: auto; }
     .ml-connect-panel {
       border: 1px solid var(--border); border-radius: 6px;
       margin-bottom: 1rem; overflow: hidden;
@@ -2050,7 +2056,7 @@
        в файле два дня, — значит приглашать выбрать день и решить, что аккаунты
        умерли: данных там не было никогда, и сказать это надо до клика. */
     .amap-cal {
-      position: absolute; z-index: 40; padding: 0.7rem;
+      position: absolute; z-index: 890; padding: 0.7rem;
       background: var(--bg-elev); border: 1px solid var(--border);
       border-radius: var(--radius-md); box-shadow: var(--adopy-shadow-popover);
       font-size: var(--adopy-text-table);
@@ -2856,7 +2862,8 @@
        Ширина фиксированная; открытое состояние помнится между
        перезагрузками. */
     .cbd-root {
-      position: fixed; top: 0; right: calc(-1 * var(--cbd-w)); height: 100vh;
+      position: fixed; top: var(--cbd-top, 0px); right: calc(-1 * var(--cbd-w));
+      height: calc(100vh - var(--cbd-top, 0px));
       z-index: 880; display: flex; align-items: stretch;
       pointer-events: none;
       transition: right 220ms var(--ease-out);
@@ -3555,7 +3562,7 @@
       background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md);
     }
     .cbd-pf[hidden] { display: none; }
-    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
     .cbd-pf-title { margin: 0; font-size: var(--adopy-text-body); font-weight: 700; color: var(--text); }
     .cbd-pf-badge {
       padding: 0.1rem 0.6rem; border-radius: 999px; border: 1px solid currentColor;
@@ -3564,10 +3571,65 @@
     .cbd-pf-badge.cbd-pf-bad { color: var(--bad); background: var(--bad-soft); }
     .cbd-pf-badge.cbd-pf-warn { color: var(--warn); background: var(--warn-soft); }
     .cbd-pf-badge.cbd-pf-ok { color: var(--good); background: var(--good-soft); }
-    .cbd-pf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+    /* ACL-1990: разделы вместо длинного списка. Раздел — одна строка со статусом;
+       раскрывается щелчком и сам, когда в нём ошибка или предупреждение. */
+    .cbd-pf-topics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .cbd-pf-topic { border-radius: var(--radius-sm); }
+    .cbd-pf-topic.cbd-pf-open { background: var(--bg-hover); }
+    .cbd-pf-tbtn {
+      display: flex; align-items: center; gap: var(--space-sm); width: 100%;
+      padding: 0.4rem 0.3rem; background: none; border: 0; border-radius: var(--radius-sm);
+      color: var(--text); font: inherit; font-size: var(--adopy-text-body); text-align: left; cursor: pointer;
+    }
+    .cbd-pf-tbtn:hover { background: var(--bg-hover); }
+    .cbd-pf-tbtn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .cbd-pf-caret { flex: none; width: 0.8rem; color: var(--muted); display: inline-block; transition: transform 150ms var(--ease-out); }
+    .cbd-pf-open > .cbd-pf-tbtn .cbd-pf-caret { transform: rotate(90deg); }
+    .cbd-pf-tname { flex: 1; min-width: 0; font-weight: 600; line-height: 1.35; }
+    .cbd-pf-tsum { display: block; font-weight: 400; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .cbd-pf-t-error > .cbd-pf-tbtn .cbd-pf-sign { color: var(--bad); }
+    .cbd-pf-t-warning > .cbd-pf-tbtn .cbd-pf-sign { color: var(--warn); }
+    .cbd-pf-t-ok > .cbd-pf-tbtn .cbd-pf-sign { color: var(--good); }
+    .cbd-pf-t-unknown > .cbd-pf-tbtn .cbd-pf-sign { color: var(--muted); border-style: dashed; }
+    .cbd-pf-t-busy > .cbd-pf-tbtn .cbd-pf-sign { color: var(--accent); border-style: dotted; }
+    .cbd-pf-t-error > .cbd-pf-tbtn .cbd-pf-state { color: var(--bad); font-weight: 700; }
+    .cbd-pf-t-warning > .cbd-pf-tbtn .cbd-pf-state { color: var(--warn); font-weight: 700; }
+    .cbd-pf-list { list-style: none; margin: 0; padding: 0 0.3rem 0.35rem 1.7rem; display: flex; flex-direction: column; gap: 0.1rem; }
+    .cbd-pf-list[hidden] { display: none; }
+    .cbd-pf-list > li { display: flex; align-items: flex-start; flex-wrap: wrap; }
+    .cbd-pf-list .cbd-pf-sign { width: 1.05rem; height: 1.05rem; font-size: var(--adopy-text-xs); }
+    .cbd-pf-list .cbd-pf-line:hover { background: var(--bg-elev); }
+    .cbd-pf-retry {
+      margin: 0 0 0.3rem 1.9rem; padding: 0; background: none; border: 0; cursor: pointer;
+      color: var(--accent); font: inherit; font-size: var(--adopy-text-sm); font-weight: 600; text-decoration: underline;
+    }
+    /* Полоса проверки с Meta: что нашла последняя проверка, слева; кнопка — справа. */
+    .cbd-pf-meta {
+      display: flex; align-items: center; gap: var(--space-sm); margin: var(--space-sm) 0;
+      padding: 0.45rem 0.6rem; border-radius: var(--radius-sm); background: var(--bg-hover);
+    }
+    .cbd-pf-meta .cbd-pf-when { flex: 1; min-width: 0; line-height: 1.4; }
+    .cbd-pf-meta .cbd-pf-when strong { color: var(--text); }
+    .cbd-pf-meta-stale, .cbd-pf-meta-failed { background: var(--warn-soft); }
+    .cbd-pf-meta-stale .cbd-pf-when, .cbd-pf-meta-failed .cbd-pf-when { color: var(--text); }
+    .cbd-pf-check {
+      flex: none; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); white-space: nowrap; cursor: pointer;
+      border: 1px solid var(--accent); color: var(--accent); background: var(--bg-elev);
+      font: inherit; font-size: var(--adopy-text-sm); font-weight: 600;
+    }
+    .cbd-pf-check:hover { background: var(--accent-soft); }
+    .cbd-pf-check:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    .cbd-pf-check[disabled] { cursor: default; border-color: var(--border); color: var(--muted); background: var(--bg-elev); }
+    .cbd-pf-spin {
+      display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.35em; vertical-align: -1px;
+      border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+      animation: cbd-pf-spin 0.9s linear infinite;
+    }
+    @keyframes cbd-pf-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .cbd-pf-spin { animation: none; } }
     .cbd-pf-line {
       display: flex; align-items: flex-start; gap: var(--space-sm); width: 100%;
-      padding: 0.3rem 0.25rem; background: none; border: 0; border-radius: var(--radius-sm);
+      padding: 0.25rem 0.2rem; background: none; border: 0; border-radius: var(--radius-sm);
       color: var(--text); font: inherit; font-size: var(--adopy-text-body); text-align: left; cursor: pointer;
     }
     .cbd-pf-line:hover { background: var(--bg-hover); }
@@ -3581,6 +3643,7 @@
     .cbd-pf-warning .cbd-pf-sign { color: var(--warn); }
     .cbd-pf-ok .cbd-pf-sign { color: var(--good); }
     .cbd-pf-unknown .cbd-pf-sign { color: var(--muted); border-style: dashed; }
+    .cbd-pf-busy .cbd-pf-sign { color: var(--accent); border-style: dotted; }
     .cbd-pf-text { flex: 1; min-width: 0; line-height: 1.4; }
     .cbd-pf-hint { color: var(--muted); }
     /* Статус словом: цвет — не единственный носитель (красный и зелёный путают). */
@@ -3604,6 +3667,34 @@
     .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
+    /* ACL-1768: показан только выбранный набор. */
+    .cbd-host .cb-adset-sec.cbd-set-off { display: none; }
+    .cb-adsets { display: block; }
+    /* Наборы в дереве: узлы под открытой кампанией. */
+    .cbd-sets { display: flex; flex-direction: column; padding: 0 var(--space-xs) var(--space-xs) 1.6rem; gap: 1px; }
+    .cbd-set {
+      display: flex; align-items: baseline; gap: var(--space-xs); width: 100%;
+      min-height: var(--adopy-control-sm); padding: 0.2rem 0.4rem; text-align: left;
+      background: none; border: 0; border-radius: var(--radius-sm); color: var(--text);
+      font: inherit; font-size: var(--adopy-text-body); cursor: pointer;
+    }
+    .cbd-set:hover { background: var(--bg-hover); }
+    .cbd-set:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .cbd-set[aria-current="true"] { background: var(--adopy-selected-bg); color: var(--adopy-selected-text); font-weight: 600; }
+    .cbd-set-branch { color: var(--muted); flex-shrink: 0; }
+    .cbd-set-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cbd-set-sub { color: var(--muted); font-size: var(--adopy-text-sm); flex-shrink: 0; font-weight: 400; }
+    #cbd-panel[data-names-only="1"] .cbd-sets { display: none; }
+    .cbd-camp-sets::before { content: "·"; margin-right: var(--space-xs); }
+    .cbd-ed-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); }
+    /* Кнопки набора и список объявлений - компактные чипы, а не полосы на всю ширину. */
+    .cbd-ed-actions .cbd-add, .cbd-ed-inset .cbd-add {
+      display: inline-block; width: auto; margin-top: 0; padding: 0.15rem 0.55rem;
+    }
+    .cbd-ed-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cbd-ed-note { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin-top: var(--space-xs); }
+    .cbd-ed-inset { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
+    .cbd-ed-inset .cbd-ed-inset-label { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
@@ -3640,6 +3731,11 @@
     .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
     .cb-headline-line[hidden] { display: none; }
     .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
+    .cb-textx-label[hidden], .cb-textx-sel-wrap[hidden] { display: none; }
+    .cb-textx-add-wrap { display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+    .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+    .cb-textx-add:disabled { opacity: 0.55; cursor: not-allowed; }
+    .cb-textx-note { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* ACL-1775: выбор формы Страницы в объявлении */
     .cb-form-wrap { min-width: 0; }
     .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
@@ -4122,6 +4218,17 @@
     </dl>
   </div>
 </header>
+
+{#- ACL-2185: токен автоматизации Multilogin живёт месяц и гаснет молча — после
+    этого каждый старт профиля отвечает 401. Плашка появляется за час до срока
+    (с точным временем) и становится ошибкой после него. Данные — из
+    /multilogin-token-expiry: срок читается из самого токена без сети, сам
+    токен на страницу не попадает. «Sign in again» открывает обычное подключение
+    Multilogin на странице Accounts. -#}
+<div id="mlx-expiry-banner" class="mlx-expiry" role="status" aria-live="polite" hidden>
+  <span id="mlx-expiry-text"></span>
+  <button type="button" class="head-btn" id="mlx-expiry-signin" onclick="aclMlxSignInAgain()">Sign in again</button>
+</div>
 
 {#- ACL-1827: «Robot health» открывается панелью под шапкой. Ссылка остаётся
     настоящей (/robot-health) — без скрипта и по прямой ссылке открывается
@@ -4749,17 +4856,16 @@ async function dashRefresh(ev) {
         <input id="fm-name" type="text" maxlength="60" placeholder="Demo form template" style="width:100%"></label>
       <label style="flex:2 1 16rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Headline</div>
         <input id="fm-headline" type="text" maxlength="60" placeholder="Get more information" style="width:100%"></label>
-      <label style="flex:0 0 7rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale</div>
-        <input id="fm-locale" type="text" maxlength="5" value="EN_US" style="width:100%"></label>
+      <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale (language of the built-in Meta labels)</div>
+        <select id="fm-locale" style="width:100%"></select></label>
     </div>
-    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Intro (optional)</div>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
-      <label><input type="checkbox" id="fm-c-name" checked> Full name</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-first_name"> First name</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name"> Last name</label>
+      <label><input type="checkbox" id="fm-c-first_name" checked> First name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name" checked> Last name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
-      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone"> Phone</label></div>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone" checked> Phone</label></div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
       <div id="fm-questions"></div>
       <button type="button" id="fm-add-q-btn" class="btn">+ Add question</button></div>
@@ -5981,6 +6087,17 @@ window.cbDrawer = (function () {
   }
   function isExpanded() { return width() >= WIDE_AT; }
 
+  /* ACL-2124: немодальный ящик начинается под реальной шапкой, в том числе
+     когда она переносится на несколько строк. При прокрутке за пределы экрана
+     шапка освобождает место; высоту не угадываем по ширине окна. */
+  function syncHeaderTop() {
+    var header = document.querySelector('header.page-header');
+    var top = header ? Math.ceil(header.getBoundingClientRect().bottom) : 0;
+    top = Math.max(0, Math.min(window.innerHeight, top));
+    var value = top + 'px';
+    if (root.style.getPropertyValue('--cbd-top') !== value) root.style.setProperty('--cbd-top', value);
+  }
+
   function pressed(btn, on) { if (btn) btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   function applySize() {
     var w = width(), wide = w >= WIDE_AT;
@@ -5988,6 +6105,7 @@ window.cbDrawer = (function () {
     root.setAttribute('data-expanded', wide ? '1' : '0');
     document.body.classList.toggle('cbd-expanded', wide);
     document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < 600);
+    syncHeaderTop();
     var open = isOpen();
     pressed(presetClosed, !open);
     pressed(presetNormal, open && mode === 'normal');
@@ -6096,6 +6214,12 @@ window.cbDrawer = (function () {
   if (presetWide) presetWide.addEventListener('click', function () { setPreset('wide'); });
   /* Окно сузилось — сохранённая ширина не должна его переросить. */
   if (window.addEventListener) window.addEventListener('resize', applySize);
+  window.addEventListener('scroll', syncHeaderTop, { passive: true });
+  if (window.ResizeObserver) {
+    var header = document.querySelector('header.page-header');
+    if (header) new ResizeObserver(syncHeaderTop).observe(header);
+  }
+
 
   readSize();
   lastExpanded = isExpanded();
@@ -6160,7 +6284,7 @@ window.cbDrawer = (function () {
  */
 window.cbKeep = (function () {
   var KEY = 'acl.builder.v2';
-  var VERSION = 3;
+  var VERSION = 4;
   /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
      нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
   var STALE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -6184,6 +6308,23 @@ window.cbKeep = (function () {
         });
       });
       parsed.v = 3;
+    }
+    /* v3 -> v4 (ACL-1768): появились наборы. Старый черновик - это один набор, и все его
+       объявления в нём; всё остальное остаётся как есть. */
+    if (parsed.v === 3) {
+      Object.keys(parsed.forms).forEach(function (k) {
+        var entry = parsed.forms[k];
+        if (!entry || !Array.isArray(entry.campaigns)) return;
+        entry.campaigns.forEach(function (c) {
+          if (!c || !c.fields || typeof c.fields !== 'object') return;
+          if (!('adset_count' in c.fields)) c.fields.adset_count = '1';
+          var n = Number.isInteger(c.ads) ? c.ads : 1;
+          for (var i = 0; i < n; i += 1) {
+            if (!(('ad_' + i + '_adset') in c.fields)) c.fields['ad_' + i + '_adset'] = '0';
+          }
+        });
+      });
+      parsed.v = 4;
     }
     return parsed;
   }
@@ -6257,10 +6398,13 @@ window.cbKeep = (function () {
     var ov = slot.querySelector('.cb-name-override');
     if (ov) fields.name_override = ov.value;
     var hint = slot.querySelector('.cb-targeting-hint');
+    /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
+    var hints = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hint'), function (h) { return h.textContent; });
     var out = {
       fields: fields,
       shown: shown,
       hint: hint ? hint.textContent : '',
+      hints: hints,
       ads: slot.querySelectorAll('.cb-ad-row').length
     };
     // Галочка «собрать эту» (ACL-1360) едет вместе с карточкой: номер
@@ -6270,6 +6414,11 @@ window.cbKeep = (function () {
   }
 
   function writeSlot(slot, data) {
+    /* ACL-1768: сначала наборы - поля и принадлежность объявлений ложатся по готовым разделам.
+       Нет сохранённого числа (старый черновик) - один набор. */
+    var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
+    var haveSets = slot.querySelectorAll('.cb-adset-sec').length;
+    for (var ks = haveSets; ks < wantSets && ks < 10 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
     var have = slot.querySelectorAll('.cb-ad-row').length;
     var addAd = slot.querySelector('.cb-add-btn-sm');
     for (var i = have; i < (data.ads || 1) && addAd; i += 1) window.cbAddAd(addAd);
@@ -6286,16 +6435,30 @@ window.cbKeep = (function () {
       if (!hidden || !text) return;
       var f = field(hidden);
       if (f && f in data.shown) text.value = data.shown[f];
+      if (wrap.classList.contains('cb-creative-sel-wrap') && hidden.value) text.value = hidden.value;
       /* ACL-1344 (ревью PR #346): недонабранный «Primary text 2» — в поле
          текст, а выбора нет. После перезагрузки красная обводка должна
          вернуться, иначе видно одно, а на сервер уходит пусто. */
       if (wrap.classList.contains('cb-text2-sel-wrap'))
         text.classList.toggle('cb-text2-unmatched', !!text.value.trim() && !hidden.value);
     });
+    /* ACL-2197: источник формы хранится в черновике (`ad_N_form_source`). Старый черновик его не знает:
+       шаблон без form_id в нём = режим шаблона. */
+    slot.querySelectorAll('.cb-form-source').forEach(function (sel) {
+      var f = field(sel), row = sel.closest('.cb-ad-row');
+      if (!row || (f && f in data.fields)) return;
+      var t = row.querySelector('input[name$="_form_template"]'), i = row.querySelector('input[name$="_form_id"]');
+      if (t && t.value && !(i && i.value)) sel.value = 'template';
+    });
     var ov = slot.querySelector('.cb-name-override');
     if (ov && typeof data.fields.name_override === 'string') ov.value = data.fields.name_override;
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
+    if (Array.isArray(data.hints)) {
+      slot.querySelectorAll('.cb-targeting-hint').forEach(function (h, i) {
+        if (typeof data.hints[i] === 'string') h.textContent = data.hints[i];
+      });
+    }
     slot._cbdPick = data.picked === true;
     if (window.cbSyncDestination) window.cbSyncDestination(slot);
     if (window.cbUpdateName) window.cbUpdateName(slot);
@@ -6457,8 +6620,7 @@ window.cbKeep = (function () {
  * его ответ ложится на поля редактора.
  */
 window.cbLayout = (function () {
-  /* Объект редактора. Сегодня у кампании ровно один набор объявлений —
-     уровень «Ad set» показывает его отдельно; несколько наборов — ACL-1768. */
+  /* Объект редактора. Кампания состоит из наборов (ACL-1768), набор - из объявлений. */
   var LEVELS = ['campaign', 'adset', 'ad'];
   var LEVEL_LABEL = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
 
@@ -6468,11 +6630,6 @@ window.cbLayout = (function () {
      выключенным, без `name` (в форму не попадает, значения не подменяет), с
      подсказкой, называющей задачу. Подставлять ему состояние нельзя. */
   var FUTURE = {
-    adsets:     { task: 'ACL-1768', what: 'Multiple ad sets' },
-    copyAdset:  { task: 'ACL-1768', what: 'Copy ad set' },
-    texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
-    placements: { task: 'ACL-1772', what: 'Placement editor' },
-    media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
     copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
   };
 
@@ -6521,6 +6678,21 @@ window.cbLayout = (function () {
     return { state: 'ok', sign: '✓', why: 'Account is configured' };
   }
 
+  /* Имя набора: своё, иначе имя кампании (набор 0, как всегда) или «<кампания> - Ad set N».
+     Зеркало build_draft.slots_to_campaign_drafts. */
+  function adsetName(campName, k, own) {
+    var o = String(own == null ? '' : own).trim();
+    if (o) return o;
+    var c = String(campName == null ? '' : campName).trim();
+    return k === 0 ? c : c + ' - Ad set ' + (k + 1);
+  }
+
+  /* Подпись набора в списке и дереве. */
+  function adsetLabel(campName, k, own, ads) {
+    var n = ads | 0;
+    return 'Ad set ' + (k + 1) + ' · ' + (adsetName(campName, k, own) || 'Untitled') + ' · ' + n + (n === 1 ? ' ad' : ' ads');
+  }
+
   function clampAd(count, idx) {
     var n = Math.max(1, count | 0), i = idx | 0;
     return i < 0 ? 0 : i > n - 1 ? n - 1 : i;
@@ -6531,8 +6703,10 @@ window.cbLayout = (function () {
      creator.plan_from_draft), а здесь только куда её показать. */
   var ROUTES = [
     [/primary text 2/i, '.cb-text2-search', 'ad'],
-    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
-    [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
+    [/primary text [3-5]/i, '.cb-textx-search', 'ad'],
+    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text [2-5]'],
+    [/stories ?\/ ?reels/i, '.cb-vertical-search', 'ad'],
+    [/creative|file|image|video/i, '.cb-creative-search', 'ad', 'stories ?\/ ?reels|dynamic creative'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
     [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
@@ -6601,6 +6775,23 @@ window.cbLayout = (function () {
   var FORM_LOCALES = ['AR_AR', 'CS_CZ', 'DA_DK', 'DE_DE', 'EL_GR', 'EN_GB', 'EN_US', 'ES_ES', 'ES_LA', 'FI_FI', 'FR_FR',
     'HE_IL', 'HI_IN', 'HU_HU', 'ID_ID', 'IT_IT', 'JA_JP', 'KO_KR', 'NB_NO', 'NL_NL', 'PL_PL', 'PT_BR',
     'PT_PT', 'RO_RO', 'RU_RU', 'SV_SE', 'TH_TH', 'TR_TR', 'VI_VN', 'ZH_CN', 'ZH_HK', 'ZH_TW'];
+  /* ACL-2180: Auto - язык формы из языка и страны набора. Зеркало src/fb_api/form_locale.py
+     (LOCALE_NAMES, RULES; сверяет тест). Форму задаёт основной язык набора, дополнительные не влияют. */
+  var FORM_LOCALE_AUTO = 'AUTO';
+  var FORM_LOCALE_AUTO_LABEL = "Auto (from the ad set language and country)";
+  var FORM_LOCALE_NAMES = {"AR_AR": "Arabic", "CS_CZ": "Czech", "DA_DK": "Danish", "DE_DE": "German", "EL_GR": "Greek", "EN_GB": "English (UK)", "EN_US": "English (US)", "ES_ES": "Spanish (Spain)", "ES_LA": "Spanish (Latin America)", "FI_FI": "Finnish", "FR_FR": "French", "HE_IL": "Hebrew", "HI_IN": "Hindi", "HU_HU": "Hungarian", "ID_ID": "Indonesian", "IT_IT": "Italian", "JA_JP": "Japanese", "KO_KR": "Korean", "NB_NO": "Norwegian (Bokmal)", "NL_NL": "Dutch", "PL_PL": "Polish", "PT_BR": "Portuguese (Brazil)", "PT_PT": "Portuguese (Portugal)", "RO_RO": "Romanian", "RU_RU": "Russian", "SV_SE": "Swedish", "TH_TH": "Thai", "TR_TR": "Turkish", "VI_VN": "Vietnamese", "ZH_CN": "Chinese (Simplified)", "ZH_HK": "Chinese (Hong Kong)", "ZH_TW": "Chinese (Taiwan)"};
+  var FORM_LOCALE_RULES = {"english": {"GB": "EN_GB", "*": "EN_US"}, "spanish": {"ES": "ES_ES", "AR": "ES_LA", "BO": "ES_LA", "CL": "ES_LA", "CO": "ES_LA", "CR": "ES_LA", "CU": "ES_LA", "DO": "ES_LA", "EC": "ES_LA", "GT": "ES_LA", "HN": "ES_LA", "MX": "ES_LA", "NI": "ES_LA", "PA": "ES_LA", "PE": "ES_LA", "PY": "ES_LA", "SV": "ES_LA", "UY": "ES_LA", "VE": "ES_LA"}, "portuguese": {"BR": "PT_BR", "*": "PT_PT"}, "chinese": {"CN": "ZH_CN", "HK": "ZH_HK", "TW": "ZH_TW"}, "arabic": {"*": "AR_AR"}, "french": {"*": "FR_FR"}, "german": {"*": "DE_DE"}, "italian": {"*": "IT_IT"}, "turkish": {"*": "TR_TR"}, "russian": {"*": "RU_RU"}, "czech": {"*": "CS_CZ"}, "danish": {"*": "DA_DK"}, "greek": {"*": "EL_GR"}, "finnish": {"*": "FI_FI"}, "hebrew": {"*": "HE_IL"}, "hindi": {"*": "HI_IN"}, "hungarian": {"*": "HU_HU"}, "indonesian": {"*": "ID_ID"}, "japanese": {"*": "JA_JP"}, "korean": {"*": "KO_KR"}, "norwegian": {"*": "NB_NO"}, "dutch": {"*": "NL_NL"}, "polish": {"*": "PL_PL"}, "romanian": {"*": "RO_RO"}, "swedish": {"*": "SV_SE"}, "thai": {"*": "TH_TH"}, "vietnamese": {"*": "VI_VN"}};
+  function formLocaleOptions(selected) {
+    var cur = squeeze(selected).toUpperCase().replace(/-/g, '_') || FORM_LOCALE_AUTO;
+    var out = '<option value="AUTO"' + (cur === FORM_LOCALE_AUTO ? ' selected' : '') + '>' + FORM_LOCALE_AUTO_LABEL + '</option>';
+    FORM_LOCALES.forEach(function (l) {
+      out += '<option value="' + l + '"' + (l === cur ? ' selected' : '') + '>' + (FORM_LOCALE_NAMES[l] || l) + ' (' + l + ')</option>';
+    });
+    if (cur !== FORM_LOCALE_AUTO && FORM_LOCALES.indexOf(cur) === -1 && /^[A-Z]{2}_[A-Z]{2}$/.test(cur)) {
+      out += '<option value="' + cur + '" selected>' + cur + ' (saved earlier)</option>';
+    }
+    return out;
+  }
 
   function httpsUrl(u) {
     return /^https:\/\/[^\s\/?#:]+\.[^\s\/?#:]+(:\d+)?([\/?#]\S*)?$/i.test(String(u == null ? '' : u).trim());
@@ -6652,7 +6843,7 @@ window.cbLayout = (function () {
     var site = String(t.website_url || '').trim();
     if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
     var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
-    if (FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
+    if (locale !== FORM_LOCALE_AUTO && FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
     var ftype = squeeze(t.form_type).toLowerCase() || 'more_volume';
     if (ftype !== 'more_volume' && ftype !== 'higher_intent') e.push('Form type must be More volume or Higher intent');
     return e;
@@ -6684,9 +6875,10 @@ window.cbLayout = (function () {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
     validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
-    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES,
+    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
+    FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
-    accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
+    accountState: accountState, adsetName: adsetName, adsetLabel: adsetLabel, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
 })();
 </script>
@@ -6705,75 +6897,158 @@ window.cbPreflight = (function () {
   function table() { return (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.rules) || []; }
   function consts() { return (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.consts) || {}; }
   function s(v) { return String(v == null ? '' : v).trim(); }
-  function v(rule, status, detail, ads) { return { rule: rule, status: status, detail: detail || '', ads: ads || [] }; }
+  function v(rule, status, detail, ads, sets) {
+    var o = { rule: rule, status: status, detail: detail || '', ads: ads || [] };
+    if (sets && sets.length) o.sets = sets;       // ACL-1768: какие наборы (1-based), только у нескольких
+    return o;
+  }
 
   function applies(rule, dest) { return rule.applies === 'always' || rule.applies === dest; }
 
-  function perAd(rule, inp, bad, status) {
+  /* ACL-1768: наборы входа; плоский вход прежней формы - один набор (зеркало audit_sets). */
+  function auditSets(inp) {
+    if (Array.isArray(inp.ad_sets) && inp.ad_sets.length) return inp.ad_sets;
+    return [{ name: inp.name, destination: inp.destination, age_min: inp.age_min, age_max: inp.age_max,
+              os: inp.os, device: inp.device, os_min: inp.os_min, start_time: inp.start_time, ads: inp.ads }];
+  }
+  function destOf(st) { return s(st.destination) === 'instant_form' ? 'instant_form' : 'website'; }
+  function campaignDests(inp) {
+    var d = {};
+    auditSets(inp).forEach(function (st) { d[destOf(st)] = true; });
+    return d;
+  }
+  /* [{si: набор 1-based, n: сквозной номер объявления, st: набор, ad: объявление}] */
+  function numbered(inp) {
+    var out = [], n = 0;
+    auditSets(inp).forEach(function (st, i) {
+      (st.ads || []).forEach(function (ad) { n += 1; out.push({ si: i + 1, n: n, st: st, ad: ad }); });
+    });
+    return out;
+  }
+
+  /* Непустые тексты без повторов (пробелы не в счёт) — как creator._unique / _distinct на сервере. */
+  function distinct(items) {
+    var seen = {}, out = [];
+    (Array.isArray(items) ? items : []).forEach(function (x) {
+      var key = s(x).replace(/\s+/g, '');
+      if (key && !seen[key]) { seen[key] = 1; out.push(key); }
+    });
+    return out;
+  }
+
+  function perAd(rule, inp, bad, status, onlyDest) {
     var ads = [];
-    (inp.ads || []).forEach(function (ad, i) { if (bad(ad)) ads.push(i + 1); });
+    numbered(inp).forEach(function (x) {
+      if ((!onlyDest || destOf(x.st) === onlyDest) && bad(x.ad, x.st)) ads.push(x.n);
+    });
     return v(rule, ads.length ? (status || 'error') : 'ok', ads.length ? 'Ad ' + ads.join(', ') : '', ads);
+  }
+
+  /* Правило уровня набора: check(набор) -> код ошибки или ''. */
+  function perSet(rule, inp, check) {
+    var bad = [];
+    auditSets(inp).forEach(function (st, i) {
+      var code = check(st);
+      if (code) bad.push({ i: i + 1, code: code });
+    });
+    if (!bad.length) return v(rule, 'ok');
+    if (auditSets(inp).length === 1) return v(rule, 'error', bad[0].code);
+    var idx = bad.map(function (b) { return b.i; });
+    return v(rule, 'error', 'Ad set ' + idx.join(', '), [], idx);
   }
 
   /* Клиентские вердикты в порядке таблицы (зеркало evaluate_client). */
   function evaluate(inp, rules) {
     rules = rules || table();
     var C = consts();
-    var dest = s(inp.destination) === 'instant_form' ? 'instant_form' : 'website';
+    var sets = auditSets(inp), dests = campaignDests(inp);
     var link = s(inp.link);
     var linkRe = new RegExp(C.link_re || '^$', 'i'), trackRe = new RegExp(C.track_re || '^$');
     var linkOk = linkRe.test(link);
     var out = [];
     rules.forEach(function (rule) {
-      if (rule.side !== 'client' || !applies(rule, dest)) return;
-      var id = rule.id, ads = inp.ads || [];
-      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id) && !a.template; }));
+      if (rule.side !== 'client' || !(rule.applies === 'always' || dests[rule.applies])) return;
+      var id = rule.id;
+      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id) && !a.template; }, 'error', 'instant_form'));
       else if (id === 'form_template_privacy') out.push(perAd(id, inp, function (a) {
         return !!a.template && !new RegExp(C.link_re || '^$', 'i').test(s(a.template.privacy_url));
-      }));
+      }, 'error', 'instant_form'));
       else if (id === 'form_template_contacts') out.push(perAd(id, inp, function (a) {
         return !!a.template && !(a.template.contact_fields || []).length;
-      }));
+      }, 'error', 'instant_form'));
       else if (id === 'country_set') out.push(v(id, s(inp.country) ? 'ok' : 'error'));
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
       else if (id === 'media_chosen') out.push(perAd(id, inp, function (a) { return !s(a.file); }));
+      else if (id === 'vertical_needs_main') out.push(perAd(id, inp, function (a) { return !!s(a.vertical_file) && !s(a.file); }));
+      else if (id === 'texts_limit') out.push(perAd(id, inp, function (a) {
+        return ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > (C.max_texts || 5); });
+      }));
+      else if (id === 'texts_vertical' || id === 'texts_dynamic') out.push(perAd(id, inp, function (a, st) {
+        var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
+        return multi && (id === 'texts_vertical') === !!s(a.vertical_file)
+          && (id === 'texts_vertical' || (st.ads || []).length > 1);
+      }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
-        var allowed = (C.allowed_cta || {})[(s(inp.objective).toLowerCase() || C.default_objective)
-          + (dest === 'instant_form' ? '_instant_form' : '')] || [];
-        out.push(perAd(id, inp, function (a) { return allowed.indexOf(s(a.cta) || 'LEARN_MORE') === -1; }));
+        var objective = s(inp.objective).toLowerCase() || C.default_objective;
+        out.push(perAd(id, inp, function (a, st) {
+          var allowed = (C.allowed_cta || {})[objective + (destOf(st) === 'instant_form' ? '_instant_form' : '')] || [];
+          return allowed.indexOf(s(a.cta) || 'LEARN_MORE') === -1;
+        }));
       } else if (id === 'budget_set') {
         var b = inp.budget, n = Number(b);
         out.push(v(id, b !== null && b !== undefined && b !== '' && isFinite(n) && n > 0 ? 'ok' : 'error'));
       } else if (id === 'age_range') {
-        var lo = parseInt(inp.age_min, 10), hi = parseInt(inp.age_max, 10);
-        var good = isFinite(lo) && isFinite(hi) && lo >= C.age_min && lo <= C.age_max
-          && hi >= C.age_min && hi <= C.age_max && lo <= hi;
-        out.push(v(id, good ? 'ok' : 'error'));
+        out.push(perSet(id, inp, function (st) {
+          var lo = parseInt(st.age_min, 10), hi = parseInt(st.age_max, 10);
+          var good = isFinite(lo) && isFinite(hi) && lo >= C.age_min && lo <= C.age_max
+            && hi >= C.age_min && hi <= C.age_max && lo <= hi;
+          return good ? '' : 'range';
+        }));
       } else if (id === 'devices_consistent') {
-        var os = s(inp.os).toLowerCase() || 'all', dev = s(inp.device).toLowerCase(), ver = s(inp.os_min);
-        var mobile = os === 'ios' || os === 'android';
-        if (mobile && dev === 'desktop') out.push(v(id, 'error', 'mobile_os_desktop'));
-        else if (ver && !mobile) out.push(v(id, 'error', 'version_needs_os'));
-        else if (ver && !(new RegExp(C.os_min_re || '^$').test(ver)
-          && ((C.os_versions || {})[os] || []).indexOf(ver.indexOf('.') === -1 ? ver + '.0' : ver) !== -1)) out.push(v(id, 'error', 'bad_version'));
-        else out.push(v(id, 'ok'));
+        out.push(perSet(id, inp, function (st) {
+          var os = s(st.os).toLowerCase() || 'all', dev = s(st.device).toLowerCase(), ver = s(st.os_min);
+          var mobile = os === 'ios' || os === 'android';
+          if (mobile && dev === 'desktop') return 'mobile_os_desktop';
+          if (ver && !mobile) return 'version_needs_os';
+          if (ver && !(new RegExp(C.os_min_re || '^$').test(ver)
+            && ((C.os_versions || {})[os] || []).indexOf(ver.indexOf('.') === -1 ? ver + '.0' : ver) !== -1)) return 'bad_version';
+          return '';
+        }));
       } else if (id === 'start_time_valid') {
-        var st = s(inp.start_time), nw = s(inp.now), stRe = new RegExp(C.start_re || '^$');
-        if (!st) out.push(v(id, 'ok'));
-        else if (!stRe.test(st)) out.push(v(id, 'error', 'format'));
-        else if (stRe.test(nw) && st.slice(0, 10) < nw.slice(0, 10)) out.push(v(id, 'error', 'past'));
-        else out.push(v(id, 'ok'));
+        var nw = s(inp.now), stRe = new RegExp(C.start_re || '^$');
+        out.push(perSet(id, inp, function (st) {
+          var t = s(st.start_time);
+          if (!t) return '';
+          if (!stRe.test(t)) return 'format';
+          if (stRe.test(nw) && t.slice(0, 10) < nw.slice(0, 10)) return 'past';
+          return '';
+        }));
       } else if (id === 'ad_names_unique') {
-        var names = ads.map(function (a) { return s(a.name); }), bad = [];
-        names.forEach(function (nm, i) {
-          if (nm && names.filter(function (x) { return x === nm; }).length > 1) bad.push(i + 1);
+        /* Имена различаются внутри набора (так создатель ищет и сверяет объявления). */
+        var bad = [], all = numbered(inp);
+        sets.forEach(function (st, i) {
+          var mine = all.filter(function (x) { return x.si === i + 1; });
+          mine.forEach(function (x) {
+            var nm = s(x.ad.name);
+            if (nm && mine.filter(function (y) { return s(y.ad.name) === nm; }).length > 1) bad.push(x.n);
+          });
         });
         out.push(v(id, bad.length ? 'error' : 'ok', bad.length ? 'Ad ' + bad.join(', ') : '', bad));
+      } else if (id === 'adset_names_unique') {
+        var names = sets.map(function (st) { return s(st.name).toLowerCase(); }), badSets = [];
+        names.forEach(function (nm, i) {
+          if (nm && names.filter(function (x) { return x === nm; }).length > 1) badSets.push(i + 1);
+        });
+        out.push(v(id, badSets.length ? 'error' : 'ok', badSets.length ? 'Ad set ' + badSets.join(', ') : '', [], badSets));
+      } else if (id === 'adset_has_ads') {
+        var empty = [];
+        sets.forEach(function (st, i) { if (!(st.ads || []).length) empty.push(i + 1); });
+        out.push(v(id, empty.length ? 'error' : 'ok', empty.length ? 'Ad set ' + empty.join(', ') : '', [], empty));
       }
     });
     return out;
@@ -6781,36 +7056,64 @@ window.cbPreflight = (function () {
 
   /* Строки карточки: клиентские вердикты + серверные, в порядке таблицы.
      opts: backend ('api'|'rpa'), server (вердикты или null), stale (правка после
-     проверки), planError (ошибка плана без вердиктов), accountAudit. */
+     проверки), planError (ошибка плана без вердиктов), planErrorKind ('not_checked' —
+     проверка не дошла до кампании: профиль занят, сеть, таймаут; ACL-1990), accountAudit.
+     Под API последней идёт строка `plan_check` раздела «Meta plan check»: прошла ли
+     сама проверка с Meta. «Не удалось проверить» — unknown, Publish не выключает. */
   function lines(inp, opts, rules) {
     rules = rules || table();
     opts = opts || {};
-    var dest = s(inp.destination) === 'instant_form' ? 'instant_form' : 'website';
+    var dests = campaignDests(inp);
     var client = {}, server = {}, out = [];
     evaluate(inp, rules).forEach(function (x) { client[x.rule] = x; });
     var serverOn = opts.backend === 'api';
     var fresh = serverOn && opts.server && !opts.stale;
+    var notChecked = fresh && !!opts.planError && opts.planErrorKind === 'not_checked';
     if (fresh) opts.server.forEach(function (x) { server[x.rule] = x; });
     if (fresh && opts.accountAudit) server.account_active = opts.accountAudit;
     rules.forEach(function (rule) {
-      if (!applies(rule, dest)) return;
+      if (!(rule.applies === 'always' || dests[rule.applies])) return;
       var got = rule.side === 'client' ? client[rule.id] : server[rule.id];
       if (rule.side === 'server' && !serverOn) return;     // RPA: серверных строк нет
       if (!got) {
-        var why = opts.server && opts.stale ? 'Edited since the last check: press Check'
-          : fresh ? 'Not checked' : 'Not checked yet: press Check';
+        var why = opts.server && opts.stale ? 'Edited since the check'
+          : notChecked ? 'Could not check' : fresh ? 'Not checked' : 'Not checked yet';
         got = v(rule.id, 'unknown', why);
       }
       out.push({ rule: rule.id, label: rule.label, hint: rule.hint, status: got.status, detail: got.detail,
-                 ads: got.ads || [], field: rule.field, side: rule.side, severity: rule.severity });
+                 ads: got.ads || [], sets: got.sets || [], field: rule.field, side: rule.side, severity: rule.severity, topic: rule.topic });
     });
-    if (fresh && opts.planError && !out.some(function (x) { return x.status === 'error' && x.side === 'server'; })) {
-      out.push({ rule: 'plan_error', label: 'Plan check', hint: '', status: 'error', detail: opts.planError,
-                 ads: [], field: { sel: '', level: 'campaign' }, side: 'server', severity: 'error' });
-    }
+    if (serverOn) out.push(planLine(opts, fresh, notChecked, out));
     /* ACL-1807: выбор, который Meta не принимает (реестр правил), блокирует как error. */
     if (window.cbMetaCaps) out = out.concat(window.cbMetaCaps.lines(inp));
     return capSeverity(out);
+  }
+
+  /* Строка «Meta plan check» (ACL-1990): итог самой проверки с Meta. */
+  function planLine(opts, fresh, notChecked, out) {
+    var otherError = out.some(function (x) { return x.status === 'error' && x.side === 'server'; });
+    var st = 'ok', detail = '', label = 'Meta accepted the plan';
+    if (!opts.server) { st = 'unknown'; label = 'Not checked yet'; }
+    else if (opts.stale) { st = 'unknown'; label = 'Edited since the check'; }
+    else if (notChecked) { st = 'unknown'; label = 'Could not check'; detail = opts.planError; }
+    else if (opts.planError && !otherError) { st = 'error'; label = 'Meta refused the plan'; detail = opts.planError; }
+    else if (opts.planError) { st = 'unknown'; label = 'Plan not finished'; detail = 'fix the errors above, then check again'; }
+    return { rule: 'plan_check', label: label, hint: '', status: st, detail: detail, ads: [], retry: notChecked,
+             field: { sel: '', level: 'campaign' }, side: 'server', severity: 'error', topic: 'meta' };
+  }
+
+  /* Порядок статусов раздела: худший из его строк. */
+  var RANK = { error: 3, warning: 2, unknown: 1, ok: 0 };
+
+  /* Строки → разделы карточки (ACL-1990), в порядке таблицы разделов. Раздел без
+     строк не показывается (под RPA нет «Meta plan check»). */
+  function topics(ls, list) {
+    list = list || (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.topics) || [];
+    return list.map(function (t) {
+      var mine = ls.filter(function (x) { return x.topic === t.id; });
+      var status = mine.reduce(function (a, x) { return RANK[x.status] > RANK[a] ? x.status : a; }, 'ok');
+      return { id: t.id, label: t.label, status: status, lines: mine, count: count(mine) };
+    }).filter(function (t) { return t.lines.length; });
   }
 
   /* Имя объявления, как его строит сервер (AdDraft.ad_name): номер креатива из имени
@@ -6868,7 +7171,7 @@ window.cbPreflight = (function () {
   }
 
   return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
-           lineText: lineText, table: table };
+           lineText: lineText, table: table, topics: topics };
 })();
 </script>
 
@@ -6950,7 +7253,7 @@ window.cbMetaCaps = (function () {
       return { rule: 'meta_rules', label: 'Meta rules', hint: 'Pick a value Meta accepts for this objective',
                status: 'error', detail: r.x.message, ads: r.ad ? [r.ad] : [],
                field: { sel: r.x.field === 'destination_type' ? '.cb-destination' : '', level: r.level },
-               side: 'client', severity: 'error' };
+               side: 'client', severity: 'error', topic: 'meta' };
     });
   }
   /* Можно ли выбрать это «место конверсии» билдера (website / instant_form) по реестру. */
@@ -7005,6 +7308,9 @@ window.cbTree = (function () {
   var level = L.level(store(LEVEL_KEY));
   var namesOnly = store(NAMES_KEY) === '1';
   var folded = L.parseList(store(FOLD_KEY));
+  var adIdx = 0, lastAdFor = '', lastAdCount = 0;
+  /* ACL-1768: выбранный набор выбранной кампании (интерфейс, не данные). */
+  var setIdx = 0, lastSetFor = '', lastSetCount = 0;
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -7047,6 +7353,22 @@ window.cbTree = (function () {
     return '';
   }
 
+  /* ACL-1768: наборы карточки: номер, своё имя, сколько объявлений. Нет разделов
+     (чужая разметка) - один набор со всеми объявлениями. */
+  function slotSets(slot) {
+    var secs = slot.querySelectorAll('.cb-adset-sec'), rows = slot.querySelectorAll('.cb-ad-row'), out = [];
+    if (!secs.length) return [{ idx: 0, own: '', ads: rows.length }];
+    Array.prototype.forEach.call(secs, function (sec, k) {
+      var nm = sec.querySelector('.cb-adset-name');
+      out.push({ idx: k, own: nm ? String(nm.value || '') : '', ads: 0 });
+    });
+    Array.prototype.forEach.call(rows, function (row) {
+      var k = window.cbRowSet ? window.cbRowSet(row) : 0;
+      if (out[k]) out[k].ads += 1;
+    });
+    return out;
+  }
+
   function realTree() {
     var out = [], byCountry = Object.create(null);
     document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
@@ -7068,6 +7390,7 @@ window.cbTree = (function () {
             slot: slot,
             name: slotName(slot),
             ads: slot.querySelectorAll('.cb-ad-row').length,
+            sets: slotSets(slot),
             budget: slotBudget(slot)
           };
         });
@@ -7236,6 +7559,18 @@ window.cbTree = (function () {
     btn.disabled = uncertain || !count;
   }
 
+  /* ACL-1990: кнопка проверки всего плана говорит, что делает и сколько кампаний;
+     пока идёт — сколько времени (проверка открывает профили Multilogin). */
+  function planLabel(t) {
+    var started = window.CB_PLAN_STARTED;
+    if (started) {
+      var secs = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      return 'Checking with Meta… ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+    }
+    var n = t.some ? t.send.length : t.total;
+    return 'Check ' + n + (n === 1 ? ' campaign' : ' campaigns') + ' with Meta';
+  }
+
   /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
      перерисовка сняла бы фокус с чекбокса, по которому ходят Tab/Space. */
   function refreshTicks() {
@@ -7262,6 +7597,8 @@ window.cbTree = (function () {
       bar.querySelector('.cbd-tick-count').textContent = t.on.length ? t.on.length + ' of ' + t.total + ' selected' : '';
     }
     refreshPublication(t);
+    var planBtn = foot.querySelector('.cbd-plan');
+    if (planBtn) { planBtn.textContent = planLabel(t); planBtn.disabled = !!window.CB_PLAN_STARTED; }
     refreshAccountStates();
     refreshAudit();
   }
@@ -7330,6 +7667,7 @@ window.cbTree = (function () {
           : '<span class="cbd-camp-name cbd-camp-name-empty">Untitled campaign</span>')
       /* Под именем — то, что «Names only» прячет: счётчик объявлений и бюджет. */
       + '<span class="cbd-camp-sub"><span class="cbd-camp-ads">' + c.ads + (c.ads === 1 ? ' ad' : ' ads') + '</span>'
+      + (c.sets.length > 1 ? '<span class="cbd-camp-sets">' + c.sets.length + ' ad sets</span>' : '')
       + '<span class="cbd-camp-meta">' + aclEscHtml(meta) + '</span>'
       + '<span class="cbd-pf-tree" hidden></span></span>'
       + '</span>'
@@ -7337,7 +7675,20 @@ window.cbTree = (function () {
       + '<button type="button" class="cbd-camp-drop" data-act="drop"'
       + ' title="Remove this campaign" aria-label="Remove this campaign">×</button>'
       + '</div>'
+      + (open ? '<div class="cbd-sets" role="group" aria-label="Ad sets">' + setsHtml(c) + '</div>' : '')
       + '</div>';
+  }
+
+  /* Узлы наборов под открытой кампанией: набор - узел дерева, как в дизайне. */
+  function setsHtml(c) {
+    return c.sets.map(function (st) {
+      var name = L.adsetName(c.name, st.idx, st.own) || 'Untitled ad set';
+      return '<button type="button" class="cbd-set" data-act="pick-set" data-set="' + st.idx + '"'
+        + ' aria-current="' + (st.idx === setIdx ? 'true' : 'false') + '" title="' + aclEscHtml(name) + '">'
+        + '<span class="cbd-set-branch" aria-hidden="true">└</span>'
+        + '<span class="cbd-set-name">' + aclEscHtml(name) + '</span>'
+        + '<span class="cbd-set-sub">' + st.ads + (st.ads === 1 ? ' ad' : ' ads') + '</span></button>';
+    }).join('');
   }
 
   /* Аккаунт в дереве: стрелка сворачивает его кампании до одной строки,
@@ -7485,8 +7836,10 @@ window.cbTree = (function () {
           // ACL-1761: план без записей — только при ACL_FB_BACKEND=api.
           + (window.ACL_FB_BACKEND === 'api' && t.total
             ? '<button type="button" class="cbd-add cbd-plan" data-act="check-plan"'
-              + ' title="Preflight and plan through the Graph API; nothing is created">'
-              + 'Check plan (no writes)</button><div class="cbd-plan-out" hidden></div>'
+              + (window.CB_PLAN_STARTED ? ' disabled' : '')
+              + ' title="Opens each account\'s Multilogin profile and checks the plan through the Graph API'
+              + ' (30 s – 3 min per account); nothing is created">'
+              + aclEscHtml(planLabel(t)) + '</button><div class="cbd-plan-out" hidden></div>'
             : '')
           + '<div class="cbd-queue" hidden></div>'
         : '')
@@ -7584,12 +7937,46 @@ window.cbTree = (function () {
         + L.LEVEL_LABEL[lv] + '</button>';
     }).join('');
     var pick = '';
+    var sets = slotSets(slot);
     /* Вкладка Ad без выбора объявления: все карточки набора идут одним
        вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
-    if (level === 'adset') {
-      /* Сегодня у кампании один набор объявлений; несколько — ACL-1768. */
-      pick = '<div class="cbd-ed-pick"><span class="cbd-ed-fixed">Ad set 1 · the only ad set of this campaign</span>'
-        + L.futureHtml('adsets', 'button', '+ Ad set') + L.futureHtml('copyAdset', 'button', 'Copy ad set') + '</div>';
+    if (level === 'ad') {
+      /* ACL-1768: все карточки видны, подпись «Ad set N»; выбор набора задаёт, куда встанет «+ Ad». */
+      if (sets.length > 1) {
+        pick = '<div class="cbd-ed-pick"><label for="cbd-ed-set">Ad set</label>'
+          + '<select id="cbd-ed-set" class="cbd-ed-set">'
+          + sets.map(function (st) {
+              return '<option value="' + st.idx + '"' + (st.idx === setIdx ? ' selected' : '') + '>'
+                + aclEscHtml(L.adsetLabel(c.name, st.idx, st.own, st.ads)) + '</option>';
+            }).join('') + '</select></div>';
+      }
+    } else if (level === 'adset') {
+      var atMax = sets.length >= 10;
+      pick = '<div class="cbd-ed-pick"><label for="cbd-ed-set">Ad set</label>'
+        + '<select id="cbd-ed-set" class="cbd-ed-set">'
+        + sets.map(function (st) {
+            return '<option value="' + st.idx + '"' + (st.idx === setIdx ? ' selected' : '') + '>'
+              + aclEscHtml(L.adsetLabel(c.name, st.idx, st.own, st.ads)) + '</option>';
+          }).join('')
+        + '</select>'
+        /* Кнопки набора в одной строке с выбором набора: столбец кнопок на всю ширину
+           занимал полэкрана и прятал форму набора. */
+        + '<span class="cbd-ed-actions">'
+        + '<button type="button" class="cbd-add" data-act="add-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Add an ad set to this campaign"') + '>+ Ad set</button>'
+        + '<button type="button" class="cbd-add" data-act="copy-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Copy this ad set with its ads"') + '>Copy ad set</button>'
+        + '<button type="button" class="cbd-add" data-act="remove-adset"'
+        + (setIdx === 0 ? ' disabled title="The first ad set stays; remove the campaign instead"' : ' title="Remove this ad set and its ads"')
+        + '>Remove ad set</button></span></div>'
+        + (atMax ? '<div class="cbd-ed-note" role="note">A campaign can have at most 10 ad sets.</div>' : '');
+      /* Объявления выбранного набора: открыть любое одним нажатием. */
+      var mine = [], all = slot.querySelectorAll('.cb-ad-row');
+      Array.prototype.forEach.call(all, function (row, i) {
+        if ((window.cbRowSet ? window.cbRowSet(row) : 0) === setIdx) {
+          mine.push('<button type="button" class="cbd-add" data-act="open-ad" data-ad="' + i + '">Ad ' + (i + 1) + '</button>');
+        }
+      });
+      pick += '<div class="cbd-ed-pick cbd-ed-inset"><span class="cbd-ed-inset-label">Ads in this ad set</span>'
+        + (mine.length ? mine.join('') : '<span class="cbd-ed-inset-label">none yet</span>') + '</div>';
     }
     return '<div class="cbd-ed-crumb" title="' + aclEscHtml(found.account.account + ' › ' + (c.name || 'Untitled campaign')) + '">'
       + '<strong>' + aclEscHtml(found.account.account) + '</strong> › ' + aclEscHtml(c.name || 'Untitled campaign') + '</div>'
@@ -7600,19 +7987,20 @@ window.cbTree = (function () {
   function syncHost(found) {
     host.dataset.level = level;
     var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
+    var secs = found.camp.slot.querySelectorAll('.cb-adset-sec');
+    /* ACL-1768: набор. Добавили набор - открыть его; открыто объявление - показать его набор. */
+    if (lastSetFor !== openId) { setIdx = 0; lastSetFor = openId; lastSetCount = secs.length; }
+    if (secs.length > lastSetCount) setIdx = secs.length - 1;
+    lastSetCount = secs.length;
+    setIdx = Math.max(0, Math.min(setIdx, Math.max(0, secs.length - 1)));
+    found.camp.slot.dataset.activeSet = String(setIdx);
+    Array.prototype.forEach.call(secs, function (sec, i) { sec.classList.toggle('cbd-set-off', i !== setIdx); });
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
     for (var i = 0; i < rows.length; i += 1) {
-      /* Создатель по API второй основной текст не принимает: пустое поле
-         выключено с причиной, непустое остаётся рабочим (иначе набранное
-         молча пропало бы из отправки) и проверка покажет ошибку на нём. */
-      var t2 = rows[i].querySelector('.cb-text2-search');
-      var note = rows[i].querySelector('[data-api-only]');
-      if (t2) {
-        t2.disabled = api && !t2.value;
-        if (t2.disabled) t2.title = 'API backend: a second primary text is not supported yet (ACL-1774)';
-      }
-      if (note) note.hidden = !api;
+      /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
+         кнопкой или когда в них уже есть значение (восстановленный черновик). */
+      if (window.cbSyncTextRows) window.cbSyncTextRows(rows[i], api);
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
@@ -7682,34 +8070,62 @@ window.cbTree = (function () {
     return { privacy_url: hit ? String(hit.privacy_url || '') : '', contact_fields: hit ? (hit.contact_fields || []) : [] };
   }
 
-  /* Вход аудита с карточки (то, что понимает evaluate_client / cbPreflight.evaluate). */
+  /* Вход аудита с карточки (то, что понимает evaluate_client / cbPreflight.evaluate).
+     ACL-1768: поля уровня набора и объявления - по каждому набору (`ad_sets`). */
   function auditInput(slot) {
     var form = slot.closest ? slot.closest('form') : null;
     function val(root, sel) { var el = root && root.querySelector(sel); return el ? String(el.value || '') : ''; }
-    var destEl = slot.querySelector('.cb-destination');
-    var age = parseInt(val(slot, '[name$="_age"]'), 10);
     var budget = val(slot, '[name$="_budget"]').trim();
-    var ads = [];
-    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
-      var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
-      var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
-      var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
-      ads.push({
-        /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
-        name: window.cbPreflight.adName(file, copy),
-        file: file, body: entry ? String(entry.body || '') : '',
-        headline: entry ? String(entry.headline || entry.ad_title || '') : '',
-        form_id: formMode(row) === 'template' ? '' : val(row, 'input[type="hidden"][name$="_form_id"]').trim(),
-        template: templateAudit(row), cta: val(row, 'select[name$="_cta"]').trim() || 'LEARN_MORE'
+    var campName = slotName(slot);
+    var secs = Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec'));
+    if (!secs.length) secs = [slot];
+    var rows = Array.prototype.slice.call(slot.querySelectorAll('.cb-ad-row'));
+    var sets = secs.map(function (sec, k) {
+      var destEl = sec.querySelector('.cb-destination');
+      var age = parseInt(val(sec, '[name$="_age"]'), 10);
+      var ads = [];
+      rows.forEach(function (row) {
+        if ((window.cbRowSet ? window.cbRowSet(row) : 0) !== k) return;
+        var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
+        var vertical = val(row, 'input[type="hidden"][name$="_creative_file_vertical"]').trim();
+        if (window.cbSameCreativeFile && cbSameCreativeFile(file, vertical)) vertical = '';
+        var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
+        var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
+        /* ACL-1774: все тексты объявления - записи библиотеки 1-5 по порядку. */
+        var entries = [];
+        ['_copy', '_copy2', '_copy3', '_copy4', '_copy5'].forEach(function (suf) {
+          var nm = val(row, 'input[type="hidden"][name$="' + suf + '"]').trim();
+          var en = nm && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(nm) : null;
+          if (en) entries.push(en);
+        });
+        ads.push({
+          bodies: entries.map(function (e) { return String(e.body || ''); }),
+          headlines: entries.map(function (e) { return String(e.headline || e.ad_title || ''); }),
+          descriptions: entries.map(function (e) { return String(e.description || ''); }),
+          vertical_file: vertical,
+          /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
+          name: window.cbPreflight.adName(file, copy),
+          file: file, body: entry ? String(entry.body || '') : '',
+          headline: entry ? String(entry.headline || entry.ad_title || '') : '',
+          form_id: formMode(row) === 'template' ? '' : val(row, 'input[type="hidden"][name$="_form_id"]').trim(),
+          template: templateAudit(row), cta: val(row, 'select[name$="_cta"]').trim() || 'LEARN_MORE'
+        });
       });
+      var nameEl = sec.querySelector('.cb-adset-name');
+      return {
+        name: L.adsetName(campName, k, nameEl ? nameEl.value : ''),
+        destination: L.destination(destEl ? destEl.value : 'website'),
+        age_min: age, age_max: age, ads: ads,
+        /* ACL-1767: устройства, версия ОС и старт набора. */
+        os: val(sec, 'input[name$="_os"]').trim() || 'All', device: val(sec, '[name$="_device"]').trim(),
+        os_min: val(sec, '[name$="_os_min"]').trim(), start_time: val(sec, '[name$="_start_time"]').trim()
+      };
     });
     return {
-      destination: L.destination(destEl ? destEl.value : 'website'), objective: 'leads',
+      objective: 'leads',
       link: val(form, 'input[name="tracking_link"]'), country: val(form, '[name="country"]'),
-      budget: budget === '' ? null : budget, age_min: age, age_max: age, ads: ads,
-      /* ACL-1767: устройства, версия ОС и старт; «сейчас» - часы страницы (сверка по дате). */
-      os: val(slot, 'input[name$="_os"]').trim() || 'All', device: val(slot, '[name$="_device"]').trim(),
-      os_min: val(slot, '[name$="_os_min"]').trim(), start_time: val(slot, '[name$="_start_time"]').trim(),
+      budget: budget === '' ? null : budget, ad_sets: sets,
+      /* «Сейчас» - часы страницы (сверка по дате). */
       now: cbNowLocal()
     };
   }
@@ -7723,6 +8139,7 @@ window.cbTree = (function () {
     if (pfApi() && hit) {
       opts.server = hit.audit || [];
       opts.planError = hit.error || '';
+      opts.planErrorKind = hit.errorKind || '';
       opts.accountAudit = hit.accountAudit || null;
       opts.stale = hit.rev !== pfRev(slot);
     }
@@ -7731,7 +8148,90 @@ window.cbTree = (function () {
 
   function auditCounts(slot) { return window.cbPreflight.count(auditLines(slot)); }
 
-  var PF_SIGN = { error: '✗', warning: '!', ok: '✓', unknown: '?' };
+  var PF_SIGN = { error: '✗', warning: '!', ok: '✓', unknown: '?', busy: '…' };
+  var PF_WORD = { error: 'error', warning: 'warning', ok: 'ok', unknown: 'not checked', busy: 'checking' };
+
+  /* ACL-1990: раскрыт ли раздел. Сам раскрывается, когда в нём ошибка,
+     предупреждение или «Could not check — Retry»; щелчок человека запоминается,
+     пока статус раздела тот же — новая беда раскроет его снова. */
+  var pfOpen = Object.create(null);
+  function topicOpen(t) {
+    var o = pfOpen[t.id];
+    if (o && o.status === t.status) return o.open;
+    return t.status === 'error' || t.status === 'warning' || t.lines.some(function (x) { return x.retry; });
+  }
+
+  /* «0:42» — сколько идёт проверка. */
+  function pfElapsed(form) {
+    var secs = form && form._pfStarted ? Math.max(0, Math.floor((Date.now() - form._pfStarted) / 1000)) : 0;
+    return Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+  }
+
+  /* Полоса «Check with Meta»: что нашла последняя проверка и кнопка (ACL-1990).
+     Проверка открывает профиль Multilogin — 30 с … 3 мин; пока идёт, считаем время. */
+  function pfMetaHtml(c, form, busy) {
+    var store = form && form._pfAudit, hit = store && store.byName[slotName(c.slot)];
+    var cls = '', text, label = 'Check with Meta';
+    if (busy) {
+      text = '<strong>Opening the profile and reading the ad account</strong> · usually 30 s – 3 min.'
+        + ' You can keep editing.';
+    } else if (!hit) {
+      text = 'Meta checks read the ad account through its Multilogin profile: 30 s – 3 min. Nothing is created.';
+    } else if (hit.rev !== pfRev(c.slot)) {
+      cls = ' cbd-pf-meta-stale';
+      text = '<strong>Edited since the check</strong> at ' + aclEscHtml(new Date(hit.at).toLocaleTimeString());
+      label = 'Check again';
+    } else if (hit.error && hit.errorKind === 'not_checked') {
+      cls = ' cbd-pf-meta-failed';
+      text = '<strong>Could not check:</strong> ' + aclEscHtml(hit.error);
+      label = 'Retry';
+    } else {
+      text = '<strong>Checked with Meta</strong> at ' + aclEscHtml(new Date(hit.at).toLocaleTimeString());
+      label = 'Check again';
+    }
+    return '<div class="cbd-pf-meta' + cls + '"><span class="cbd-pf-when" aria-live="polite">' + text + '</span>'
+      + '<button type="button" class="cbd-pf-check" data-act="pf-check"' + (busy ? ' disabled' : '')
+      + ' title="Opens the account\'s Multilogin profile and reads the ad account through the Graph API; nothing is created">'
+      + (busy ? '<span class="cbd-pf-spin" aria-hidden="true"></span>Checking… <span class="cbd-pf-elapsed">'
+        + pfElapsed(form) + '</span>' : label)
+      + '</button></div>';
+  }
+
+  function pfLineHtml(x) {
+    var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
+    /* Что дописать серым после названия: подсказка, как исправить. У клиентской
+       строки «Ad 2» — какие объявления; у серверной detail — сама причина от Meta/создателя;
+       у непроверенной — только почему не проверено. */
+    var tail = x.status === 'ok' ? ''
+      : x.status === 'unknown' || x.status === 'busy' ? detail
+      : x.side === 'server' && detail ? detail
+      : (detail ? detail + ': ' : '') + x.hint;
+    return '<li><button type="button" class="cbd-pf-line cbd-pf-' + x.status + '" data-act="pf-focus"'
+      + ' data-rule="' + aclEscHtml(x.rule) + '" data-side="' + x.side + '"'
+      + ' title="' + aclEscHtml(x.status === 'ok' ? x.label : (x.hint || x.label)) + '">'
+      + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[x.status] + '</span>'
+      + '<span class="cbd-pf-text"><span class="cbd-pf-label">' + aclEscHtml(x.label) + '</span>'
+      + (tail ? ' <span class="cbd-pf-hint">— ' + aclEscHtml(tail) + '</span>' : '')
+      + '</span><span class="cbd-pf-state">' + PF_WORD[x.status] + '</span>'
+      + '</button>'
+      + (x.retry ? '<button type="button" class="cbd-pf-retry" data-act="pf-check">Retry</button>' : '')
+      + '</li>';
+  }
+
+  /* Строка-итог раздела: что в нём не так, или сколько проверок прошло. */
+  function pfTopicSummary(t) {
+    var n = t.lines.length;
+    if (t.status === 'busy') return 'Checking with Meta…';
+    if (t.id === 'meta') return t.lines[0].label;
+    if (t.status === 'ok') return n + (n === 1 ? ' check' : ' checks') + ' ok';
+    if (t.status === 'unknown') {
+      var u = t.lines.filter(function (x) { return x.status === 'unknown'; });
+      var why = u[0].detail || 'Not checked yet';
+      return u.length + ' of ' + n + ': ' + why.charAt(0).toLowerCase() + why.slice(1);
+    }
+    return t.lines.filter(function (x) { return x.status === t.status; })
+      .map(function (x) { return x.label; }).join(', ');
+  }
 
   function auditCardHtml(c) {
     var ls = auditLines(c.slot), n = window.cbPreflight.count(ls);
@@ -7740,36 +8240,39 @@ window.cbTree = (function () {
       ? '<span class="cbd-pf-badge cbd-pf-bad">errors: ' + n.error + '</span>'
       : n.warning ? '<span class="cbd-pf-badge cbd-pf-warn">warnings: ' + n.warning + '</span>'
       : '<span class="cbd-pf-badge cbd-pf-ok">no errors</span>';
-    var items = ls.map(function (x) {
-      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
-      /* Что дописать серым после названия: подсказка, как исправить. У клиентской
-         строки «Ad 2» — какие объявления; у серверной detail — сама причина от Meta/создателя;
-         у непроверенной — только почему не проверено. */
-      var tail = x.status === 'ok' ? ''
-        : x.status === 'unknown' ? detail
-        : x.side === 'server' && detail ? detail
-        : (detail ? detail + ': ' : '') + x.hint;
-      return '<li><button type="button" class="cbd-pf-line cbd-pf-' + x.status + '" data-act="pf-focus"'
-        + ' data-rule="' + aclEscHtml(x.rule) + '" data-side="' + x.side + '"'
-        + ' title="' + aclEscHtml(x.status === 'ok' ? x.label : (x.hint || x.label)) + '">'
-        + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[x.status] + '</span>'
-        + '<span class="cbd-pf-text"><span class="cbd-pf-label">' + aclEscHtml(x.label) + '</span>'
-        + (tail ? ' <span class="cbd-pf-hint">— ' + aclEscHtml(tail) + '</span>' : '')
-        + '</span><span class="cbd-pf-state">' + ({ error: 'error', warning: 'warning', ok: 'ok', unknown: 'not checked' }[x.status]) + '</span>'
-        + '</button></li>';
+    /* Пока идёт проверка, серверные строки без вердикта рисуются «checking» —
+       только на экране: гейт Publish считает их как раньше (unknown). */
+    var shown = busy ? ls.map(function (x) {
+      return x.side === 'server' && x.status === 'unknown'
+        ? Object.assign({}, x, { status: 'busy', detail: 'Checking…', retry: false }) : x;
+    }) : ls;
+    var topics = window.cbPreflight.topics(shown).map(function (t) {
+      if (t.status !== 'error' && t.status !== 'warning'
+          && t.lines.some(function (x) { return x.status === 'busy'; })) t.status = 'busy';
+      var open = topicOpen(t);
+      return '<li class="cbd-pf-topic cbd-pf-t-' + t.status + (open ? ' cbd-pf-open' : '') + '"'
+        + ' data-topic="' + t.id + '" data-status="' + t.status + '">'
+        + '<button type="button" class="cbd-pf-tbtn" data-act="pf-topic" data-topic="' + t.id + '" aria-expanded="' + open + '">'
+        + '<span class="cbd-pf-caret" aria-hidden="true">▸</span>'
+        + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[t.status] + '</span>'
+        + '<span class="cbd-pf-tname">' + aclEscHtml(t.label)
+        + '<span class="cbd-pf-tsum">' + aclEscHtml(pfTopicSummary(t)) + '</span></span>'
+        + '<span class="cbd-pf-state">' + PF_WORD[t.status] + '</span></button>'
+        + '<ul class="cbd-pf-list"' + (open ? '' : ' hidden') + '>' + t.lines.map(pfLineHtml).join('') + '</ul></li>';
     }).join('');
-    var foot;
-    if (pfApi()) {
-      var store = form && form._pfAudit, hit = store && store.byName[slotName(c.slot)];
-      var when = hit ? (hit.rev !== pfRev(c.slot) ? 'Edited since the last check' : 'Checked ' + new Date(hit.at).toLocaleTimeString()) : 'Account checks have not run yet';
-      foot = '<div class="cbd-pf-foot"><button type="button" class="cbd-add cbd-pf-check" data-act="pf-check"'
-        + (busy ? ' disabled' : '') + ' title="Reads the ad account through the Graph API; nothing is created">'
-        + (busy ? 'Checking…' : 'Check') + '</button><span class="cbd-pf-when" aria-live="polite">' + aclEscHtml(busy ? 'Reading the ad account…' : when) + '</span></div>';
-    } else {
-      foot = '<div class="cbd-pf-foot"><span class="cbd-pf-when cbd-pf-note">Account checks need the API backend</span></div>';
-    }
+    var meta = pfApi() ? pfMetaHtml(c, form, busy)
+      : '<div class="cbd-pf-meta"><span class="cbd-pf-when cbd-pf-note">Account checks need the API backend</span></div>';
     return '<div class="cbd-pf-head"><h3 class="cbd-pf-title">Pre-flight audit</h3>' + badge + '</div>'
-      + '<ul class="cbd-pf-list">' + items + '</ul>' + foot;
+      + meta + '<ul class="cbd-pf-topics">' + topics + '</ul>';
+  }
+
+  /* Счётчик времени идущей проверки — только текст (часы — cbPfTick). */
+  function tickElapsed() {
+    if (edAudit.hidden) return;
+    var el = edAudit.querySelector('.cbd-pf-elapsed');
+    var found = el && openId ? findCampaign(openId) : null;
+    var form = found && found.camp.slot.closest('form');
+    if (el && form && form._pfBusy) el.textContent = pfElapsed(form);
   }
 
   /* Значок «errors: N» у кампании в дереве и состояние Publish. */
@@ -7848,9 +8351,16 @@ window.cbTree = (function () {
     var line = ls.filter(function (x) { return x.rule === rule; })[0];
     if (!line || !line.field || !line.field.sel) return;
     if (line.field.level === 'ad' && line.ads && line.ads.length) adIdx = L.clampAd(found.camp.slot.querySelectorAll('.cb-ad-row').length, line.ads[0] - 1);
+    /* ACL-1768: у объявления из другого набора открывается его набор. */
+    if (line.field.level === 'ad' && line.ads && line.ads.length && window.cbRowSet) {
+      var jr = found.camp.slot.querySelectorAll('.cb-ad-row')[adIdx];
+      if (jr) setIdx = window.cbRowSet(jr);
+    }
+    if (line.field.level === 'adset' && line.sets && line.sets.length) setIdx = line.sets[0] - 1;
     setLevel(line.field.level);
     var slot = found.camp.slot, root = slot, el = null;
     if (line.field.level === 'ad') root = slot.querySelectorAll('.cb-ad-row')[adIdx] || slot;
+    if (line.field.level === 'adset') root = slot.querySelectorAll('.cb-adset-sec')[setIdx] || slot;
     el = root.querySelector(line.field.sel) || (BORROWED ? BORROWED.form.querySelector(line.field.sel) : null);
     if (!el) return;
     if (window.cbHighlightField) window.cbHighlightField(el);
@@ -7867,7 +8377,16 @@ window.cbTree = (function () {
     var hit = e.target.closest ? e.target.closest('[data-act]') : null;
     if (!hit) return;
     if (hit.dataset.act === 'pf-focus') focusRule(hit.dataset.rule);
-    else if (hit.dataset.act === 'pf-check') {
+    else if (hit.dataset.act === 'pf-topic') {
+      var li = hit.closest('.cbd-pf-topic'), list = li && li.querySelector('.cbd-pf-list');
+      if (!li || !list) return;
+      var open = list.hidden;
+      list.hidden = !open;
+      li.classList.toggle('cbd-pf-open', open);
+      hit.setAttribute('aria-expanded', String(open));
+      pfOpen[hit.dataset.topic] = { open: open, status: li.dataset.status || '' };
+      lastAudit = '';                        // следующая отрисовка возьмёт новое состояние
+    } else if (hit.dataset.act === 'pf-check') {
       var found = openId ? findCampaign(openId) : null;
       if (found) runCheck(found.camp.slot);
     }
@@ -7909,6 +8428,13 @@ window.cbTree = (function () {
     if (again && again.focus) again.focus();
   }
 
+  editor.addEventListener('change', function (e) {
+    if (!e.target.classList) return;
+    if (e.target.classList.contains('cbd-ed-set')) {
+      setIdx = parseInt(e.target.value, 10) || 0;
+      paint();
+    }
+  });
   editor.addEventListener('scroll', function () { cbdPlaceDropdowns(); });
 
   /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
@@ -8166,6 +8692,27 @@ window.cbTree = (function () {
       } else if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
     } else if (act === 'level') {
       setLevel(hit.dataset.level);
+    } else if (act === 'pick-set') {
+      var wantSet = parseInt(hit.dataset.set, 10) || 0;
+      if (id && id !== openId) openCampaign(id);
+      setIdx = wantSet;
+      setLevel('adset');
+      paint();
+    } else if (act === 'add-adset' || act === 'copy-adset' || act === 'remove-adset') {
+      var cur = openId ? findCampaign(openId) : null;
+      if (!cur) return;
+      if (act === 'add-adset') window.cbAddAdset(cur.camp.slot);          /* на 10 наборах вернёт null */
+      else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
+      else {
+        if (setIdx < 1) return;
+        if (!window.confirm('Remove this ad set and its ads from the campaign?')) return;
+        window.cbRemoveAdset(cur.camp.slot, setIdx);
+        setIdx = Math.max(0, setIdx - 1);
+      }
+      paint();
+    } else if (act === 'open-ad') {
+      adIdx = parseInt(hit.dataset.ad, 10) || 0;
+      setLevel('ad');
     } else if (act === 'acc-toggle') {
       toggleFold(hit.dataset.key || '');
     } else if (act === 'names-only') {
@@ -8332,6 +8879,11 @@ window.cbTree = (function () {
     }
     var adsEl = card.querySelector('.cbd-camp-ads');
     if (adsEl) adsEl.textContent = c.ads + (c.ads === 1 ? ' ad' : ' ads');
+    var setsEl = card.querySelector('.cbd-sets');
+    if (setsEl) {
+      var setsHtmlNow = setsHtml(c);
+      if (setsEl.innerHTML !== setsHtmlNow) setsEl.innerHTML = setsHtmlNow;
+    }
     var metaEl = card.querySelector('.cbd-camp-meta');
     if (metaEl) metaEl.textContent = L.campMeta(c);
     paintEditor();
@@ -8388,6 +8940,7 @@ window.cbTree = (function () {
     refresh: refreshOpenRow,
     refreshEditor: paintEditor,
     refreshAudit: refreshAudit,
+    tickElapsed: tickElapsed,
     auditLines: auditLines,
     gateState: gateState,
     setLevel: setLevel,
@@ -12583,7 +13136,7 @@ function amapMlPaint(block) {
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
   var signin = ml.querySelector('.amap-ml-signin');
-  if (alive && signin) signin.remove();
+  if (alive && signin && !block.dataset.mlRenew) signin.remove();
 }
 function amapMlPaintAll() { document.querySelectorAll('.amap-add').forEach(amapMlPaint); }
 function amapMlRefresh(inst, force) {
@@ -12603,9 +13156,10 @@ function amapMlRefresh(inst, force) {
   AMAP_ML_PENDING[inst] = pending;
   return pending;
 }
-function amapMlOpen(btn) {
+function amapMlOpen(btn, force) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
-  if (AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  if (!force && AMAP_ML_STATE[inst] && AMAP_ML_STATE[inst].alive) return;
+  if (force && block.querySelector('.amap-ml-signin')) { block.querySelector('.amap-ml-email').focus(); return; }
   // A pending sign-in owns its form until its response; never detach its inputs.
   if (document.querySelector('.amap-ml-signin[data-busy]')) return;
   document.querySelectorAll('.amap-ml-signin').forEach(function (el) { el.remove(); });
@@ -12681,7 +13235,11 @@ async function amapMlSubmit(btn, paste) {
     });
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
+    /* ACL-2185: токен обновлён — форма, открытая кнопкой «Sign in again»,
+       больше не нужна (её уберёт перерисовка), плашка о сроке перечитывается. */
+    delete block.dataset.mlRenew;
     var state = await amapMlRefresh(inst, true);
+    aclMlxExpiryRefresh();
     amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
@@ -12721,6 +13279,78 @@ function amapMlWorkspacePicker(form, workspaces, chosen) {
   select.value = pick;
 }
 function amapMlSaveToken(btn) { return amapMlSubmit(btn, true); }
+/* ACL-2185: плашка срока токена Multilogin. Срок приходит из
+   /multilogin-token-expiry (офлайн-разбор exp, токена в ответе нет). Между
+   запросами состояние пересчитывается по часам браузера, чтобы плашка
+   включилась ровно за час до срока без лишних обращений к серверу. */
+var ACL_MLX_EXPIRY = {slots: [], warn: 3600, timer: 0};
+function aclMlxPad(n) { return ('0' + n).slice(-2); }
+function aclMlxWhen(epoch) {
+  var d = new Date(epoch * 1000);
+  return d.getFullYear() + '-' + aclMlxPad(d.getMonth() + 1) + '-' + aclMlxPad(d.getDate())
+    + ' ' + aclMlxPad(d.getHours()) + ':' + aclMlxPad(d.getMinutes());
+}
+function aclMlxExpiryModel(slots, warn, nowEpoch) {
+  /* Самый срочный слот: истёкший важнее скоро истекающего. */
+  var worst = null;
+  (slots || []).forEach(function (s) {
+    if (typeof s.expires_epoch !== 'number') return;
+    var left = s.expires_epoch - nowEpoch;
+    var state = left <= 0 ? 'expired' : left <= warn ? 'warning' : 'ok';
+    if (state === 'ok') return;
+    var rank = state === 'expired' ? 0 : 1;
+    if (!worst || rank < worst.rank || (rank === worst.rank && s.expires_epoch < worst.epoch)) {
+      worst = {rank: rank, state: state, epoch: s.expires_epoch, instance: s.instance, left: left};
+    }
+  });
+  return worst;
+}
+function aclMlxExpiryPaint() {
+  var box = document.getElementById('mlx-expiry-banner'), text = document.getElementById('mlx-expiry-text');
+  if (!box || !text) return;
+  var m = aclMlxExpiryModel(ACL_MLX_EXPIRY.slots, ACL_MLX_EXPIRY.warn, Date.now() / 1000);
+  if (!m) { box.hidden = true; box.classList.remove('mlx-expired'); return; }
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[m.instance]) || m.instance;
+  var when = aclMlxWhen(m.epoch);
+  box.classList.toggle('mlx-expired', m.state === 'expired');
+  text.textContent = m.state === 'expired'
+    ? 'Multilogin token expired at ' + when + ' (' + label + '). Profiles cannot start until you sign in again.'
+    : 'Multilogin token (' + label + ') expires at ' + when + ' — in ' + Math.max(1, Math.ceil(m.left / 60)) + ' min. Sign in again to renew it.';
+  box.hidden = false;
+}
+function aclMlxExpiryRefresh() {
+  return fetch('/multilogin-token-expiry', {credentials: 'same-origin'})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (j && j.ok) { ACL_MLX_EXPIRY.slots = j.slots || []; ACL_MLX_EXPIRY.warn = j.warn_seconds || 3600; }
+      aclMlxExpiryPaint();
+    })
+    .catch(function () { aclMlxExpiryPaint(); });
+}
+function aclMlxExpiryBoot() {
+  aclMlxExpiryRefresh();
+  if (!ACL_MLX_EXPIRY.timer) ACL_MLX_EXPIRY.timer = setInterval(aclMlxExpiryRefresh, 60000);
+}
+/* «Sign in again» — то же подключение, что и «Connect Multilogin» на странице
+   Accounts, только форма открывается и при ещё живом токене. */
+function aclMlxSignInAgain() {
+  var worst = aclMlxExpiryModel(ACL_MLX_EXPIRY.slots, ACL_MLX_EXPIRY.warn, Date.now() / 1000);
+  var link = document.querySelector('.sidebar-link[data-view="accounts"]');
+  if (link) link.click();
+  var block = document.querySelector('#view-accounts .amap-add');
+  if (!block) return;
+  var sel = block.querySelector('.amap-inst');
+  if (sel && worst && sel.value !== worst.instance) {
+    sel.value = worst.instance;
+    amapMlRefresh(worst.instance, false);
+  }
+  block.dataset.mlRenew = '1';
+  amapMlPaint(block);
+  amapMlOpen(block.querySelector('.amap-ml-open') || block, true);
+  block.scrollIntoView({block: 'center'});
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aclMlxExpiryBoot);
+else aclMlxExpiryBoot();
 function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
@@ -13805,7 +14435,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   };
 
   function cbCreativeSig(f) {
-    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
+    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file, f.vertical_partner] : null;
   }
 
   // Карточки перерисовываем только там, где изменился выбранный файл:
@@ -13861,6 +14491,52 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return ' <span style="font-size:var(--adopy-text-xs);color:var(--'
          + (heavy ? 'warn' : 'muted') + ')'
          + (heavy ? ';font-weight:600' : '') + '">' + text + '</span>';
+  };
+
+  /* ACL-1903: видимое окно — только поиск; выбранный файл лежит в скрытом поле, и план
+     читает его. Раньше стёртый текст оставлял в скрытом поле старый файл: в окне пусто,
+     а публикация загружала файл. Теперь любая правка текста, после которой он уже не равен
+     выбранному значению (в том числе пустой), снимает выбор. Вызывается только из oninput —
+     значение, положенное без ввода (Send-to-Builder, дубль объявления), не трогается. */
+  window.cbSameCreativeFile = function(a, b) {
+    function norm(value) { return String(value || '').trim().replace(/\\/g, '/').toLowerCase(); }
+    a = norm(a); b = norm(b);
+    if (!a || !b) return false;
+    /* Как creative_finder: регистр и разделитель не меняют файл; путь ищется
+       по суффиксу, имя — только среди уникальных совпадений. */
+    function key(value) {
+      var hasPath = value.indexOf('/') !== -1;
+      var matches = CREATIVES.filter(function(f) {
+        return hasPath ? norm(f.rel_path || f.filename).endsWith(value) : norm(f.filename) === value;
+      });
+      return matches.length === 1 ? norm(matches[0].rel_path || matches[0].filename) : '';
+    }
+    var left = key(a), right = key(b);
+    return !!left && left === right;
+  };
+
+  window.cbCreativeTyped = function(input, ev) {
+    var wrap = input.closest('.cb-creative-sel-wrap');
+    var hidden = wrap && wrap.querySelector('input[type="hidden"]');
+    /* Ctrl+Z / Ctrl+Y возвращают в окно прежний текст без выбора: окно полное, в плане пусто.
+       Если возвращённый текст — ровно имя одного файла из папки, выбор возвращается вместе с ним. */
+    if (hidden && !hidden.value && ev && /^history/.test(ev.inputType || '')) {
+      var t = input.value.trim();
+      var hits = t ? CREATIVES.filter(function(f) { return f.filename === t || f.rel_path === t; }) : [];
+      var okType = hits.length === 1 && hits[0].type === (wrap.dataset.ctype || 'Image');
+      if (okType && (hits[0].rel_path === t || CREATIVES.filter(function(f) { return f.filename === t; }).length === 1)) {
+        hidden.value = t;
+        var slot0 = wrap.closest('.cb-slot');
+        if (slot0 && window.cbUpdateName) cbUpdateName(slot0);
+        return;
+      }
+    }
+    if (hidden && hidden.value && input.value.trim() !== hidden.value) {
+      hidden.value = '';
+      var slot = wrap.closest('.cb-slot');
+      if (slot && window.cbUpdateName) cbUpdateName(slot);
+    }
+    cbCreativeSearch(input);
   };
 
   window.cbCreativeSearch = function(input, noRefresh) {
@@ -13929,9 +14605,39 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbPrefillVertical(wrap, val);
         cbMarkMissingCreatives();
       });
     });
+  };
+
+  /* ACL-1774: «Reuse creative_pairing»: выбран квадратный файл с готовой вертикальной парой
+     (`N_post` + `N_story`) - пустое поле Stories / Reels заполняется этой парой. Только API.
+     Не трогаем: непустое поле (выбор человека главнее) и объявление с несколькими текстами
+     (вместе с вертикальным файлом такой запрос отказывается до записи). Подставляем только в момент
+     выбора основного файла, поэтому очищенное человеком поле само не возвращается. */
+  window.cbPrefillVertical = function (wrap, picked) {
+    if (window.ACL_FB_BACKEND !== 'api' || !wrap || wrap.classList.contains('cb-vertical-sel-wrap')) return;
+    var row = wrap.closest('.cb-ad-row');
+    var vwrap = row && row.querySelector('.cb-vertical-sel-wrap');
+    if (!vwrap) return;
+    var vh = vwrap.querySelector('input[type="hidden"]');
+    var vt = vwrap.querySelector('.cb-vertical-search');
+    if ((vh && vh.value.trim()) || (vt && vt.value.trim())) return;
+    var more = ['_copy2', '_copy3', '_copy4', '_copy5'].some(function (suf) {
+      var h = row.querySelector('input[type="hidden"][name$="' + suf + '"]');
+      return h && h.value.trim();
+    });
+    if (more) return;
+    var f = CREATIVES.filter(function (c) { return c.filename === picked || c.rel_path === picked; })[0];
+    var partner = f && f.vertical_partner;
+    if (!partner) return;
+    var pf = CREATIVES.filter(function (c) { return c.rel_path === partner; })[0];
+    if (!pf || pf.type !== f.type) return;
+    var dup = CREATIVES.filter(function (c) { return c.filename.toLowerCase() === pf.filename.toLowerCase(); }).length > 1;
+    var v = dup ? pf.rel_path : pf.filename;
+    if (vt) vt.value = v;
+    if (vh) vh.value = v;
   };
 
   // close creative dropdown on blur
@@ -13950,7 +14656,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (e.target.classList && e.target.classList.contains('cb-creative-search')) _cbMissLatched = false;
   });
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-creative-search')) {
+    if (e.target.classList && (e.target.classList.contains('cb-creative-search') || e.target.classList.contains('cb-vertical-search'))) {
       // ACL-1651: фокус в поиске обновляет список (не чаще раза в 10 с).
       window.cbRefreshCreatives(CB_CREATIVES_THROTTLE_MS).then(cbCreativesRedraw);
       if (e.target.value) cbCreativeSearch(e.target);
@@ -14348,6 +15054,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (nameDisplay) nameDisplay.textContent = name;
     var autoEl = slot.querySelector('[data-auto-name]');
     if (autoEl) autoEl.textContent = auto;
+    /* ACL-1768: имя набора по умолчанию зависит от имени кампании. */
+    slot.querySelectorAll('.cb-adset-name').forEach(function (inp) {
+      var sec = inp.closest('.cb-adset-sec');
+      var k = sec ? (parseInt(sec.dataset.adset, 10) || 0) : 0;
+      var ph = window.cbLayout ? window.cbLayout.adsetName(name, k, '') : name;
+      if (inp.placeholder !== ph) inp.placeholder = ph;
+    });
   };
 
   // ── Searchable select ─────────────────────────────────────────────────
@@ -14613,32 +15326,51 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     });
   };
 
-  /* Место конверсии набора -> что видно и что уходит на сервер. */
+  /* ACL-1768: к какому набору относится объявление (скрытое поле `camp_N_ad_M_adset`). */
+  function rowSet(row) {
+    var h = row && row.querySelector ? row.querySelector('input[name$="_adset"]') : null;
+    return h ? (parseInt(h.value, 10) || 0) : 0;
+  }
+  window.cbRowSet = rowSet;
+
+  /* Место конверсии набора -> что видно и что уходит на сервер. Набор у каждого свой:
+     у одного Instant Form, у другого сайт. */
   window.cbSyncDestination = function (slot) {
+    if (window.cbSyncPlacements) window.cbSyncPlacements(slot);
     if (window.cbSyncPages) window.cbSyncPages(slot);
     var L = window.cbLayout;
-    var sel = slot && slot.querySelector ? slot.querySelector('.cb-destination') : null;
-    if (!L || !sel) return;
+    if (!L || !slot || !slot.querySelectorAll) return;
+    var secs = Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec'));
+    if (!secs.length) secs = [slot];
+    if (!slot.querySelector('.cb-destination')) return;
     var api = window.ACL_FB_BACKEND === 'api';
-    var instant = L.destination(sel.value) === 'instant_form';
-    /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
-       проверка сказала об этом вслух, а не молча вернула сайт. */
-    /* ACL-1807: вариант, которого реестр Meta не разрешает, выключен с причиной. */
-    var caps = window.cbMetaCaps;
-    ['website', 'instant_form'].forEach(function (v) {
-      var o = sel.querySelector('option[value="' + v + '"]');
-      var bad = !!(caps && !caps.destinationAllowed(v));
-      var off2 = bad || (v === 'instant_form' && !api);
-      if (o && o.disabled !== off2) o.disabled = off2;
-      if (o && bad) o.title = caps.destinationReason(v); else if (o && o.title && !(v === 'instant_form' && !api)) o.removeAttribute('title');
+    var instantOf = {};
+    secs.forEach(function (sec, i) {
+      var sel = sec.querySelector('.cb-destination');
+      if (!sel) return;
+      var k = sec === slot ? 0 : (parseInt(sec.dataset.adset, 10) || 0);
+      var instant = L.destination(sel.value) === 'instant_form';
+      instantOf[k] = instant;
+      /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
+         проверка сказала об этом вслух, а не молча вернула сайт. */
+      /* ACL-1807: вариант, которого реестр Meta не разрешает, выключен с причиной. */
+      var caps = window.cbMetaCaps;
+      ['website', 'instant_form'].forEach(function (v) {
+        var o = sel.querySelector('option[value="' + v + '"]');
+        var bad = !!(caps && !caps.destinationAllowed(v));
+        var off2 = bad || (v === 'instant_form' && !api);
+        if (o && o.disabled !== off2) o.disabled = off2;
+        if (o && bad) o.title = caps.destinationReason(v); else if (o && o.title && !(v === 'instant_form' && !api)) o.removeAttribute('title');
+      });
+      var off = !api && !instant;
+      if (sel.disabled !== off) sel.disabled = off;
+      var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
+      if (sel.title !== tip) sel.title = tip;
+      var note = sec.querySelector('[data-forms-api-only]');
+      if (note && note.hidden === !api) note.hidden = api;
     });
-    var off = !api && !instant;
-    if (sel.disabled !== off) sel.disabled = off;
-    var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
-    if (sel.title !== tip) sel.title = tip;
-    var note = slot.querySelector('[data-forms-api-only]');
-    if (note && note.hidden === !api) note.hidden = api;
     slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var instant = !!instantOf[rowSet(row)];
       row.querySelectorAll('.cb-form-only').forEach(function (el) {
         if (el.hidden === instant) el.hidden = !instant;
       });
@@ -14651,7 +15383,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         var tTip = !api ? 'API backend only: the robot creates forms through the Graph API' : '';
         if (srcSel.title !== tTip) srcSel.title = tTip;
       }
-      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden === tmpl) el.hidden = !tmpl; });
+      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden !== tmpl) el.hidden = tmpl; });
       var panelOpen = row.querySelector('.cb-form-create') && !row.querySelector('.cb-form-create').hidden;
       row.querySelectorAll('.cb-form-templatebox').forEach(function (el) {
         var want = !(tmpl && !panelOpen);
@@ -14663,18 +15395,20 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var hidT = row.querySelector('input[name$="_form_template"]');
       var wantT = !(instant && tmpl);
       if (hidT && hidT.disabled !== wantT) hidT.disabled = wantT;
+      /* ACL-1767: список кнопок зависит от места конверсии набора объявления. */
+      var cta = row.querySelector('select.cb-cta');
+      if (cta) {
+        var dest = instant ? 'instant_form' : 'website';
+        if (cta.dataset.dest !== dest) {
+          var cur = cta.value || 'LEARN_MORE';
+          cta.innerHTML = cbCtaOptionsHtml(dest, cur);
+          cta.value = cur;
+          cta.dataset.dest = dest;
+        }
+      }
     });
-    if (instant) window.cbLoadFormTemplates();
+    if (Object.keys(instantOf).some(function (k) { return instantOf[k]; })) window.cbLoadFormTemplates();
     window.cbFillFormSelects(slot);
-    /* ACL-1767: список кнопок зависит от места конверсии. */
-    slot.querySelectorAll('select.cb-cta').forEach(function (cta) {
-      var dest = instant ? 'instant_form' : 'website';
-      if (cta.dataset.dest === dest) return;
-      var cur = cta.value || 'LEARN_MORE';
-      cta.innerHTML = cbCtaOptionsHtml(dest, cur);
-      cta.value = cur;
-      cta.dataset.dest = dest;
-    });
     window.cbFillTemplateSelects(slot);
     window.cbSyncApiOnly(slot);
   };
@@ -14690,8 +15424,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var tip = off ? 'API backend only: ' + (el.dataset.tip || 'this field') + ' is set through the Graph API' : (el.dataset.tip || '');
       if (el.title !== tip && el.dataset.tip) el.title = tip;
     });
-    var note = slot.querySelector('[data-api-fields-note]');
-    if (note && note.hidden === !api) note.hidden = api;
+    slot.querySelectorAll('[data-api-fields-note]').forEach(function (note) {
+      if (note.hidden === !api) note.hidden = api;
+    });
     slot.querySelectorAll('.cb-sel-opt[data-val="Android"]').forEach(function (o) {
       var bad = !api ? 'true' : 'false';
       if (o.getAttribute('aria-disabled') !== bad) o.setAttribute('aria-disabled', bad);
@@ -14867,7 +15602,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       privacy_url: panelValue(panel, '.cb-fc-privacy'), thank_you_text: panelValue(panel, '.cb-fc-thanks'),
       website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
       form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
-      locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
+      locale: panelValue(panel, '.cb-fc-locale') || 'AUTO'
     };
   };
 
@@ -14922,13 +15657,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label class="cb-fc-label">Template name<input type="text" class="cb-input cb-fc-name" maxlength="60" placeholder="Demo form template"></label>' +
       '<label class="cb-fc-label">Headline<input type="text" class="cb-input cb-fc-headline" maxlength="60" placeholder="Get more information"></label>' +
       '<label class="cb-fc-label">Intro title <span class="cb-fc-opt">(optional, the headline is used if empty)</span><input type="text" class="cb-input cb-fc-intro-title" maxlength="60"></label>' +
-      '<label class="cb-fc-label">Intro <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
+      '<label class="cb-fc-label">Description <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
       '<div class="cb-fc-label">Contact fields<div class="cb-fc-checks">' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Full name</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="first_name"> First name</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="last_name"> Last name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="first_name" checked> First name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="last_name" checked> Last name</label>' +
       '<label><input type="checkbox" class="cb-fc-contact" value="email" checked> Email</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="phone" checked> Phone</label></div>' +
       '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
       '<div class="cb-fc-questions"></div>' +
@@ -14939,8 +15673,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label class="cb-fc-label">Follow-up URL <span class="cb-fc-opt">(optional, https; where the lead goes after submitting. Without a completion screen text the screen is skipped)</span><input type="text" class="cb-input cb-fc-followup" placeholder="https://example.com/thanks"></label>' +
       '<label class="cb-fc-label">Form type<select class="cb-input cb-select cb-fc-form-type">' +
       '<option value="more_volume" selected>More volume</option><option value="higher_intent">Higher intent</option></select></label>' +
-      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels)</span><select class="cb-input cb-select cb-fc-locale">' +
-      ((window.cbLayout && window.cbLayout.FORM_LOCALES) || ['EN_US']).map(function (l) { return '<option value="' + l + '"' + (l === 'EN_US' ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>' +
+      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels; Auto follows the ad set language and country)</span><select class="cb-input cb-select cb-fc-locale">' +
+      ((window.cbLayout && window.cbLayout.formLocaleOptions) ? window.cbLayout.formLocaleOptions('AUTO') : '<option value="EN_US" selected>EN_US</option>') + '</select></label>' +
       '<div class="cb-fc-actions">' +
       '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
@@ -14950,9 +15684,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   // ── Ad row HTML builder ───────────────────────────────────────────────
-  function buildAdRowHTML(cIdx, aIdx) {
+  function buildAdRowHTML(cIdx, aIdx, setIdx) {
     var pfx = 'camp_' + cIdx + '_ad_' + aIdx + '_';
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
+      /* ACL-1768: объявление принадлежит набору; номер набора - скрытое поле. */
+      '<input type="hidden" name="' + pfx + 'adset" class="cb-ad-adset" value="' + (setIdx | 0) + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
       '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">Duplicate</button>' +
@@ -14966,7 +15702,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</div>' +
       '<span class="cb-label">File</span>' +
       '<div class="cb-sel-wrap cb-creative-sel-wrap" data-ctype="Image">' +
-      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeSearch(this)">' +
+      '<input type="text" class="cb-sel-text cb-creative-search" placeholder="— type to search file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
       '</div>' +
@@ -14989,20 +15725,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<input type="text" class="cb-sel-text cb-text2-search" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional second primary text: the body of the chosen ad text is added as a second text option">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy2" value="">' +
-      /* ACL-1769: создатель по Graph API второй текст не принимает (ошибка
-         «Primary text 2 is not supported by the API backend yet»), поэтому при
-         бэкенде API поле гасится, пока пусто, и подпись говорит почему.
-         Набранное не теряется: непустое поле остаётся рабочим, а проверка
-         покажет ошибку на нём. Гасит cbTree.syncHost. */
-      '<div class="cb-api-note" data-api-only hidden>Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty.</div>' +
       '</div>' +
+      /* ACL-1774: тексты 3-5 — те же записи библиотеки (основной текст, заголовок и описание),
+         ряды скрыты, пока их не откроют кнопкой; максимум 5 текстов у объявления.
+         Подписи — «Primary text N», как просил владелец. Только API-бэкенд (cb-api-field). */
+      textxRowHtml(pfx, 3) + textxRowHtml(pfx, 4) + textxRowHtml(pfx, 5) +
+      '<span class="cb-label cb-textx-add-label">More primary texts</span>' +
+      '<div class="cb-textx-add-wrap"><button type="button" class="cb-textx-add" onclick="cbAddTextRow(this)">+ Primary text 3</button>' +
+      '<span class="cb-textx-note">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span></div>' +
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
       '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
       /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
-      '<select class="cb-input cb-select cb-form-source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
+      '<select class="cb-input cb-select cb-form-source" name="' + pfx + 'form_source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
       '<option value="existing">Use existing form</option><option value="template">Create from template</option></select>' +
       '<div class="cb-form-templatebox" hidden>' +
       '<div class="cb-form-line">' +
@@ -15022,30 +15759,57 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<div class="cb-form-note" data-form-note></div>' +
       '</div>' +
       '</div>' +
-      '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
          Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
       '<span class="cb-label">CTA</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
-      '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
+      /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
+         (1:1 или 4:5). Соотношение и размер проверяет сервер до любой загрузки. Только API. */
+      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16, optional)</span></span>' +
+      '<div class="cb-sel-wrap cb-creative-sel-wrap cb-vertical-sel-wrap" data-ctype="Image">' +
+      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
+      '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +
+      '</div>' +
       '</div></div>';
   }
 
   // ── Add / Remove ad within campaign ──────────────────────────────────
-  window.cbAddAd = function(btn) {
-    var slot = btn.closest('.cb-slot');
-    if (!slot) return;
-    var cIdx = slot.dataset.idx;
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var aIdx = rows.length;
+  /* ACL-1768: объявления лежат в форме по порядку наборов, и «Ad N» в редакторе - тот же
+     номер, что у сервера и плана. Новое объявление встаёт после последнего своего набора. */
+  function placeAdRow(slot, k, html) {
     var container = slot.querySelector('.cb-ad-rows');
-    container.insertAdjacentHTML('beforeend', buildAdRowHTML(cIdx, aIdx));
-    var newRow = container.querySelector('.cb-ad-row[data-ad-idx="' + aIdx + '"]');
+    var anchor = null;
+    container.querySelectorAll('.cb-ad-row').forEach(function (r) { if (rowSet(r) <= k) anchor = r; });
+    if (anchor) { anchor.insertAdjacentHTML('afterend', html); return anchor.nextElementSibling; }
+    container.insertAdjacentHTML('afterbegin', html);
+    return container.firstElementChild;
+  }
+
+  function activeSet(slot) {
+    var n = slot.querySelectorAll('.cb-adset-sec').length || 1;
+    var k = parseInt(slot.dataset.activeSet, 10) || 0;
+    return k < 0 ? 0 : k > n - 1 ? n - 1 : k;
+  }
+
+  function addAdRow(slot, k) {
+    var cIdx = slot.dataset.idx;
+    var aIdx = slot.querySelectorAll('.cb-ad-row').length;
+    var newRow = placeAdRow(slot, k, buildAdRowHTML(cIdx, aIdx, k));
     if (newRow) initAllSelects(newRow);
+    cbRenumberAds(slot);
     cbUpdateAdCount(slot);
     cbUpdateAdLabels(slot);
     window.cbSyncDestination(slot);
+    return newRow;
+  }
+
+  window.cbAddAd = function(btn) {
+    var slot = btn.closest('.cb-slot');
+    if (!slot) return;
+    addAdRow(slot, activeSet(slot));
   };
 
   window.cbRemoveAd = function(btn) {
@@ -15101,6 +15865,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       newCta.value = srcCta.value;
       newCta.dataset.dest = srcCta.dataset.dest || 'website';
     }
+    // ACL-1768: объявление остаётся в своём наборе (копия набора переопределяет).
+    var srcSet = srcRow.querySelector('input[name$="_adset"]');
+    var newSet = newRow.querySelector('input[name$="_adset"]');
+    if (srcSet && newSet) newSet.value = srcSet.value;
     // ACL-1775: выбранная форма Страницы едет в копию.
     var srcForm = srcRow.querySelector('input[name$="_form_id"]');
     var newForm = newRow.querySelector('input[name$="_form_id"]');
@@ -15123,6 +15891,25 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var t2hNew = newText2.querySelector('input[type=hidden]');
       if (t2hSrc && t2hNew) t2hNew.value = t2hSrc.value;
     }
+    // ACL-1774: тексты 3-5 и вертикальный файл едут в копию (открытые ряды остаются открытыми).
+    srcRow.querySelectorAll('.cb-textx-sel-wrap').forEach(function (sw) {
+      var nw = newRow.querySelector('.cb-textx-sel-wrap[data-textx="' + sw.dataset.textx + '"]');
+      if (!nw) return;
+      var a = sw.querySelector('.cb-textx-search'), b = nw.querySelector('.cb-textx-search');
+      if (a && b) b.value = a.value;
+      var ah = sw.querySelector('input[type=hidden]'), bh = nw.querySelector('input[type=hidden]');
+      if (ah && bh) bh.value = ah.value;
+    });
+    if (srcRow.dataset.textsShown) newRow.dataset.textsShown = srcRow.dataset.textsShown;
+    var srcVert = srcRow.querySelector('.cb-vertical-sel-wrap');
+    var newVert = newRow.querySelector('.cb-vertical-sel-wrap');
+    if (srcVert && newVert) {
+      newVert.dataset.ctype = srcVert.dataset.ctype;
+      var vsA = srcVert.querySelector('.cb-vertical-search'), vsB = newVert.querySelector('.cb-vertical-search');
+      if (vsA && vsB) vsB.value = vsA.value;
+      var vhA = srcVert.querySelector('input[type=hidden]'), vhB = newVert.querySelector('input[type=hidden]');
+      if (vhA && vhB) vhB.value = vhA.value;
+    }
     initAllSelects(newRow);
   }
 
@@ -15136,7 +15923,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (!srcRow || !slot) return;
     var cIdx = slot.dataset.idx;
     var aIdx = slot.querySelectorAll('.cb-ad-row').length;
-    srcRow.insertAdjacentHTML('afterend', buildAdRowHTML(cIdx, aIdx));
+    srcRow.insertAdjacentHTML('afterend', buildAdRowHTML(cIdx, aIdx, rowSet(srcRow)));
     var newRow = srcRow.nextElementSibling;
     _copyAdRowValues(srcRow, newRow);
     cbRenumberAds(slot);
@@ -15168,6 +15955,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (!newSlot) return;
     initAllSelects(newSlot);
 
+    // ACL-1768: у копии столько же наборов, сколько у источника (разделы - до копирования полей).
+    var srcSecs = srcSlot.querySelectorAll('.cb-adset-sec');
+    for (var ks = newSlot.querySelectorAll('.cb-adset-sec').length; ks < srcSecs.length; ks += 1) {
+      window.cbAddAdset(newSlot, { noAd: true });
+    }
     var srcIdx = srcSlot.dataset.idx;
     var srcTgtSearch = srcSlot.querySelector('.cb-targeting-search');
     var newTgtSearch = newSlot.querySelector('.cb-targeting-search');
@@ -15222,6 +16014,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         if (a && b) b.value = a.value;
       }
     });
+    // ACL-1768: подсказки таргетинга остальных наборов (у набора 0 - выше).
+    var srcHints = srcSlot.querySelectorAll('.cb-targeting-hint'), newHints = newSlot.querySelectorAll('.cb-targeting-hint');
+    for (var kh = 1; kh < srcHints.length && kh < newHints.length; kh += 1) newHints[kh].textContent = srcHints[kh].textContent;
     // ACL-1769: своё имя живёт вне `name` — копируется отдельно.
     var srcOv = srcSlot.querySelector('.cb-name-override');
     var newOv = newSlot.querySelector('.cb-name-override');
@@ -15233,7 +16028,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var newAdRows = newSlot.querySelector('.cb-ad-rows');
     newAdRows.innerHTML = '';
     srcSlot.querySelectorAll('.cb-ad-row').forEach(function(srcRow, aIdx) {
-      newAdRows.insertAdjacentHTML('beforeend', buildAdRowHTML(idx, aIdx));
+      newAdRows.insertAdjacentHTML('beforeend', buildAdRowHTML(idx, aIdx, rowSet(srcRow)));
       _copyAdRowValues(srcRow, newAdRows.lastElementChild);
     });
     cbRenumberAds(newSlot);
@@ -15245,6 +16040,112 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     cbRenumber(form);
     cbUpdateCount(form);
     window.cbSyncDestination(newSlot);
+  };
+
+  // ── Ad sets (ACL-1768) ───────────────────────────────────────────────
+  function adsetPrefix(idx, k) { return k === 0 ? 'camp_' + idx + '_' : 'camp_' + idx + '_adset_' + k + '_'; }
+
+  function adsetSections(slot) { return Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec')); }
+
+  function updateAdsetCount(slot) {
+    var c = slot.querySelector('.cb-adset-count');
+    if (c) c.value = slot.querySelectorAll('.cb-adset-sec').length || 1;
+  }
+
+  /* ACL-1768: не больше 10 наборов в кампании (как MAX_AD_SETS на сервере). */
+  var CB_MAX_ADSETS = 10;
+
+  /* Новый набор в конец кампании. `noAd`: без объявления (его положит вызывающий). */
+  window.cbAddAdset = function (slot, opts) {
+    opts = opts || {};
+    var wrap = slot && slot.querySelector('.cb-adsets');
+    if (!wrap) return null;
+    var idx = slot.dataset.idx;
+    var k = wrap.querySelectorAll('.cb-adset-sec').length;
+    if (k >= CB_MAX_ADSETS) return null;     /* потолок: и кнопки, и восстановление черновика */
+    wrap.insertAdjacentHTML('beforeend', buildAdsetSectionHTML(idx, k));
+    var sec = wrap.lastElementChild;
+    initAllSelects(sec);
+    updateAdsetCount(slot);
+    if (!opts.noAd) addAdRow(slot, k);
+    cbUpdateName(slot);
+    cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    return sec;
+  };
+
+  /* Копия набора k: поля и объявления; имя пустое (по умолчанию), чтобы имена не совпали. */
+  window.cbCopyAdset = function (slot, k) {
+    var secs = adsetSections(slot);
+    var src = secs[k];
+    if (!src) return -1;
+    var idx = slot.dataset.idx;
+    var dst = window.cbAddAdset(slot, { noAd: true });
+    if (!dst) return -1;                     /* уже 10 наборов */
+    var nk = secs.length;
+    var from = adsetPrefix(idx, k), to = adsetPrefix(idx, nk);
+    src.querySelectorAll('[name]').forEach(function (el) {
+      if (el.classList.contains('cb-adset-name')) return;
+      var suffix = el.name.slice(from.length);
+      if (el.name.indexOf(from) !== 0) return;
+      var twin = dst.querySelector('[name="' + to + suffix + '"]');
+      if (!twin) return;
+      twin.value = el.value;
+      var sw = el.closest('.cb-sel-wrap'), tw = twin.closest('.cb-sel-wrap');
+      if (sw && tw) {
+        var a = sw.querySelector('.cb-sel-text'), b = tw.querySelector('.cb-sel-text');
+        if (a && b) b.value = a.value;
+      }
+    });
+    var sh = src.querySelector('.cb-targeting-hint'), dh = dst.querySelector('.cb-targeting-hint');
+    if (sh && dh) dh.textContent = sh.textContent;
+    var copied = 0;
+    Array.prototype.slice.call(slot.querySelectorAll('.cb-ad-row')).forEach(function (row) {
+      if (rowSet(row) !== k) return;
+      var aIdx = slot.querySelectorAll('.cb-ad-row').length;
+      var made = placeAdRow(slot, nk, buildAdRowHTML(idx, aIdx, nk));
+      _copyAdRowValues(row, made);
+      var hid = made.querySelector('input[name$="_adset"]');
+      if (hid) hid.value = String(nk);
+      cbRenumberAds(slot);
+      copied += 1;
+    });
+    if (!copied) addAdRow(slot, nk);
+    cbUpdateAdCount(slot);
+    cbUpdateName(slot);
+    cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    return nk;
+  };
+
+  /* Убрать набор k (кроме первого) вместе с его объявлениями; следующие сдвигаются вниз. */
+  window.cbRemoveAdset = function (slot, k) {
+    var secs = adsetSections(slot);
+    if (k < 1 || !secs[k]) return false;
+    var idx = slot.dataset.idx;
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var set = rowSet(row);
+      if (set === k) row.remove();
+      else if (set > k) row.querySelector('input[name$="_adset"]').value = String(set - 1);
+    });
+    secs[k].remove();
+    for (var j = k + 1; j < secs.length; j += 1) {
+      var from = adsetPrefix(idx, j), to = adsetPrefix(idx, j - 1);
+      secs[j].dataset.adset = String(j - 1);
+      secs[j].querySelectorAll('[name]').forEach(function (el) {
+        if (el.name.indexOf(from) === 0) el.name = to + el.name.slice(from.length);
+      });
+      var names = secs[j].querySelectorAll('.cb-adset-name');
+      names.forEach(function (el) { el.name = 'camp_' + idx + '_adset_' + (j - 1) + '_name'; });
+    }
+    updateAdsetCount(slot);
+    if (!slot.querySelectorAll('.cb-ad-row').length) addAdRow(slot, 0);
+    cbRenumberAds(slot);
+    cbUpdateAdCount(slot);
+    cbUpdateName(slot);
+    cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    return true;
   };
 
   function cbRenumberAds(slot) {
@@ -15266,19 +16167,79 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   function cbUpdateAdLabels(slot) {
+    var many = slot.querySelectorAll('.cb-adset-sec').length > 1;
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
       var lbl = row.querySelector('.cb-ad-row-label');
-      if (lbl) lbl.textContent = 'Ad ' + (i + 1);
+      var want = 'Ad ' + (i + 1) + (many ? ' · Ad set ' + (rowSet(row) + 1) : '');
+      if (lbl && lbl.textContent !== want) lbl.textContent = want;
     });
   }
 
   // ── Ad type toggle (per-ad-row) ───────────────────────────────────────
+  /* ACL-1774: ряд текста N (3-5): запись библиотеки, скрыт до открытия. */
+  function textxRowHtml(pfx, n) {
+    return '<span class="cb-label cb-textx-label" data-textx="' + n + '" hidden>Primary text ' + n + '</span>' +
+      '<div class="cb-sel-wrap cb-text2-sel-wrap cb-textx-sel-wrap" data-textx="' + n + '" hidden>' +
+      '<input type="text" class="cb-sel-text cb-text2-search cb-textx-search cb-api-field" data-default="" data-tip="Primary text ' + n + ' with its headline and description" placeholder="— optional: search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Optional primary text ' + n + ': the library entry gives the text, its headline and its description">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'copy' + n + '" value="">' +
+      '</div>';
+  }
+
+  /* Показать ряды 3-5: открытые кнопкой или с непустым значением. Запись в DOM только при изменении. */
+  window.cbSyncTextRows = function (row, api) {
+    var shown = parseInt(row.dataset.textsShown || '2', 10) || 2;
+    var last = 2;
+    [3, 4, 5].forEach(function (n) {
+      var wrap = row.querySelector('.cb-textx-sel-wrap[data-textx="' + n + '"]');
+      var lab = row.querySelector('.cb-textx-label[data-textx="' + n + '"]');
+      if (!wrap) return;
+      var hid = wrap.querySelector('input[type="hidden"]');
+      var txt = wrap.querySelector('.cb-textx-search');
+      var has = !!((hid && hid.value) || (txt && txt.value.trim()));
+      var on = has || n <= shown;
+      if (on) last = n;
+      if (wrap.hidden === on) wrap.hidden = !on;
+      if (lab && lab.hidden === on) lab.hidden = !on;
+    });
+    var btn = row.querySelector('.cb-textx-add');
+    if (btn) {
+      var full = last >= 5;
+      var want = full ? 'All 5 primary texts in use' : '+ Primary text ' + (last + 1);
+      if (btn.textContent !== want) btn.textContent = want;
+      var off = full || !api;
+      if (btn.disabled !== off) btn.disabled = off;
+      var tip = full ? 'An ad takes up to 5 primary texts'
+        : (!api ? 'API backend only: several primary texts are set through the Graph API' : '');
+      if (btn.title !== tip) btn.title = tip;
+    }
+    var vnote = row.querySelector('[data-vertical-note]');
+    if (vnote) {
+      var main = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+      var vert = row.querySelector('input[type="hidden"][name$="_creative_file_vertical"]');
+      var same = window.cbSameCreativeFile && cbSameCreativeFile(main && main.value, vert && vert.value);
+      var noteText = same
+        ? 'The same file is selected twice. It will be used once as the main file.'
+        : 'Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.';
+      if (vnote.textContent !== noteText) vnote.textContent = noteText;
+      if (vnote.hidden === api) vnote.hidden = !api;
+    }
+  };
+
+  window.cbAddTextRow = function (btn) {
+    var row = btn.closest('.cb-ad-row');
+    if (!row || btn.disabled) return;
+    var n = Math.min(5, (parseInt(row.dataset.textsShown || '2', 10) || 2) + 1);
+    row.dataset.textsShown = String(n);
+    window.cbSyncTextRows(row, window.ACL_FB_BACKEND === 'api');
+  };
+
   window.cbAdTypeChange = function(radio) {
     var row = radio.closest('.cb-ad-row');
     if (!row) return;
     var ctype = radio.value;
-    var wrap = row.querySelector('.cb-creative-sel-wrap');
-    if (wrap) {
+    /* ACL-1774: тип относится к обоим файлам (основному и Stories / Reels). */
+    row.querySelectorAll('.cb-creative-sel-wrap').forEach(function (wrap) {
       wrap.dataset.ctype = ctype;
       var h = wrap.querySelector('input[type="hidden"]');
       var t = wrap.querySelector('.cb-sel-text');
@@ -15286,7 +16247,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       if (h) h.value = '';
       if (t) t.value = '';
       if (dd) dd.hidden = true;
-    }
+    });
   };
 
   // ── Remove campaign / Renumber ────────────────────────────────────────
@@ -15328,7 +16289,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   };
 
   // ── Build blank campaign slot ─────────────────────────────────────────
-  function mkSel(cIdx, field, opts, placeholder) {
+  function mkSel(cIdx, field, opts, placeholder, pfx) {
     var optsHtml = '<div class="cb-sel-opt" data-val="">— select —</div>';
     opts.forEach(function(o) {
       var val = typeof o === 'string' ? o : o.id;
@@ -15338,8 +16299,143 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return '<div class="cb-sel-wrap">' +
       '<input type="text" class="cb-sel-text" placeholder="' + placeholder + '" autocomplete="off" value="">' +
       '<div class="cb-sel-dropdown" hidden>' + optsHtml + '</div>' +
-      '<input type="hidden" name="camp_' + cIdx + '_' + field + '" value="">' +
+      '<input type="hidden" name="' + (pfx || ('camp_' + cIdx + '_')) + field + '" value="">' +
       '</div>';
+  }
+
+  /* ACL-1768: раздел «Ad set». Набор 0 живёт под прежними именами `camp_N_*`; остальные -
+     под `camp_N_adset_K_*`. Имя набора - `camp_N_adset_K_name` у всех. */
+  /* ACL-1772: именованное поле хранит канонический выбор; видимые контролы его редактируют.
+     Это тот же путь cbKeep/copy/form, без отдельного хранилища или скрытых defaults при submit. */
+  function buildPlacementHTML(pfx) {
+    var html = '<div class="cb-placements"><input type="hidden" class="cb-placement-value cb-api-field" data-default="" data-tip="Placements" name="' + pfx + 'placements" value="">' +
+      '<input type="hidden" class="cb-placement-manual" name="' + pfx + 'placements_manual" value="">' +
+      '<select class="cb-placement-mode cb-input cb-select" aria-label="Placement mode" oninput="cbPlacementsChanged(this)">' +
+      '<option value="manual">Manual</option><option value="advantage_plus">Advantage+</option></select>' +
+      '<div class="cb-placement-options">';
+    [['facebook', 'Facebook', [['feed', 'Feed'], ['story', 'Stories'], ['facebook_reels', 'Reels'], ['instream_video', 'In-stream reels']]],
+     ['instagram', 'Instagram', [['stream', 'Feed'], ['story', 'Stories'], ['reels', 'Reels']]]].forEach(function (group) {
+      html += '<div><label><input type="checkbox" checked data-placement-platform="' + group[0] + '" oninput="cbPlacementPlatformChanged(this)"> ' + group[1] + '</label>';
+      group[2].forEach(function (position) {
+        html += '<label style="display:block;margin-left:1rem"><input type="checkbox" checked data-placement-position="' + position[0] + '" data-platform="' + group[0] + '" oninput="cbPlacementsChanged(this)"> ' + position[1] + '</label>';
+      });
+      html += '</div>';
+    });
+    return html + '</div><div class="cb-api-note" data-placement-note>Manual: Facebook and Instagram placements. A separate vertical file is optional.</div></div>';
+  }
+
+  window.cbPlacementPlatformChanged = function (el) {
+    var wrap = el.closest('.cb-placements');
+    wrap.querySelectorAll('[data-platform="' + el.dataset.placementPlatform + '"]').forEach(function (p) { p.checked = el.checked; });
+    window.cbPlacementsChanged(el);
+  };
+  window.cbPlacementsChanged = function (el) {
+    var wrap = el.closest('.cb-placements'), mode = wrap.querySelector('.cb-placement-mode').value;
+    var stash = wrap.querySelector('.cb-placement-manual');
+    if (mode === 'manual' && el.classList.contains('cb-placement-mode') && stash.value) {
+      try {
+        var previous = JSON.parse(stash.value);
+        wrap.querySelectorAll('[data-placement-position]').forEach(function (p) {
+          p.checked = (previous[p.dataset.platform + '_positions'] || []).indexOf(p.dataset.placementPosition) !== -1;
+        });
+      } catch (e) { /* повреждённый запас не меняет текущий явный выбор */ }
+    }
+    var value = { mode: mode };
+    if (mode === 'manual') {
+      ['facebook', 'instagram'].forEach(function (platform) {
+        value[platform + '_positions'] = Array.prototype.filter.call(wrap.querySelectorAll('[data-platform="' + platform + '"]'), function (p) { return p.checked; })
+          .map(function (p) { return p.dataset.placementPosition; });
+      });
+    }
+    var input = wrap.querySelector('.cb-placement-value');
+    if (mode === 'manual') stash.value = JSON.stringify(value);
+    input.value = JSON.stringify(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    window.cbSyncDestination(el.closest('.cb-slot'));
+  };
+  window.cbSyncPlacements = function (slot) {
+    var api = window.ACL_FB_BACKEND === 'api';
+    slot.querySelectorAll('.cb-placements').forEach(function (wrap) {
+      var raw = wrap.querySelector('.cb-placement-value').value, value;
+      try { value = raw ? JSON.parse(raw) : { mode: 'manual', facebook_positions: ['feed', 'story', 'facebook_reels', 'instream_video'], instagram_positions: ['stream', 'story', 'reels'] }; }
+      catch (e) { value = { mode: 'invalid' }; }
+      if (!value || typeof value !== 'object' || ['manual', 'advantage_plus'].indexOf(value.mode) === -1 ||
+          (value.mode === 'manual' && (!Array.isArray(value.facebook_positions) || !Array.isArray(value.instagram_positions)))) value = { mode: 'invalid' };
+      var automatic = value.mode === 'advantage_plus', manual = value;
+      if (automatic) {
+        try { manual = JSON.parse(wrap.querySelector('.cb-placement-manual').value || 'null') || { facebook_positions: ['feed', 'story', 'facebook_reels', 'instream_video'], instagram_positions: ['stream', 'story', 'reels'] }; }
+        catch (e) { manual = {}; }
+      }
+      wrap.querySelector('.cb-placement-mode').value = value.mode;
+      if (wrap.querySelector('.cb-placement-mode').disabled === api) wrap.querySelector('.cb-placement-mode').disabled = !api;
+      if (wrap.querySelector('.cb-placement-options').hidden !== automatic) wrap.querySelector('.cb-placement-options').hidden = automatic;
+      wrap.querySelectorAll('[data-placement-position]').forEach(function (p) {
+        p.checked = (manual[p.dataset.platform + '_positions'] || []).indexOf(p.dataset.placementPosition) !== -1;
+        if (p.disabled !== (!api || automatic)) p.disabled = !api || automatic;
+      });
+      wrap.querySelectorAll('[data-placement-platform]').forEach(function (p) {
+        var count = (manual[p.dataset.placementPlatform + '_positions'] || []).length;
+        p.checked = count > 0;
+        p.indeterminate = count > 0 && count < wrap.querySelectorAll('[data-platform="' + p.dataset.placementPlatform + '"]').length;
+        if (p.disabled !== (!api || automatic)) p.disabled = !api || automatic;
+      });
+      var noteText = !api ? 'API backend only. Saved placement choices are preserved.' :
+        value.mode === 'invalid' ? 'Placement selection is invalid. Choose a placement mode.' :
+        automatic ? 'Meta chooses placements. Instagram identity may be required. Use one media file.' :
+        !(value.facebook_positions || []).length && !(value.instagram_positions || []).length ? 'Choose at least one placement.' :
+        (value.facebook_positions || []).indexOf('story') !== -1 && (value.facebook_positions || []).indexOf('feed') === -1 && (value.instagram_positions || []).indexOf('story') === -1 ?
+        'Facebook Stories placements require Facebook Feed or Instagram Stories. Add one of these placements or turn off Facebook Stories.' :
+        'Manual placements. Stories / Reels without a separate vertical file use the main file with a warning. Two files require both Feed and Stories / Reels.';
+      var note = wrap.querySelector('[data-placement-note]');
+      if (note.textContent !== noteText) note.textContent = noteText;
+    });
+  };
+
+  function buildAdsetSectionHTML(idx, k) {
+    var pfx = k === 0 ? 'camp_' + idx + '_' : 'camp_' + idx + '_adset_' + k + '_';
+    var lang = k === 0 ? idx + '' : idx + '-' + k;
+    return '<section class="cb-lvl cb-lvl-adset cb-adset-sec" data-adset="' + k + '">' +
+      '<div class="cb-fields">' +
+      '<span class="cb-label">Ad set name</span>' +
+      '<input type="text" name="camp_' + idx + '_adset_' + k + '_name" class="cb-input cb-api-field cb-adset-name" data-default="" data-tip="Own name of the ad set" value="" placeholder="" autocomplete="off" title="Optional. Empty = the default shown here.">' +
+      '<span class="cb-label">Targeting</span>' +
+      '<div class="cb-sel-wrap cb-targeting-wrap">' +
+      '<input type="text" class="cb-sel-text cb-targeting-search" placeholder="— search by code or interest —" autocomplete="off" value="" oninput="cbTargetingSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'targeting" class="cb-targeting-hidden" value="">' +
+      '<div class="cb-targeting-hint" style="font-size:var(--adopy-text-xs);color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
+      '</div>' +
+      '<span class="cb-label">OS / Age / Language</span>' +
+      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS', pfx) +
+      '<input type="number" name="' + pfx + 'age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      /* Язык набора 0 - язык кампании (пусто = пропустить шаг, как всегда). У остальных наборов
+         пусто значит «как у набора 1». */
+      '<input type="text" name="' + pfx + 'language" class="cb-input cb-input-sm' + (k === 0 ? ' cb-language' : '') + '" value="" placeholder="' + (k === 0 ? 'Language' : 'Same as ad set 1') + '"' + (k === 0 ? ' oninput="cbLanguageChanged(this)"' : '') + ' title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
+      '</div>' +
+      '<span class="cb-label">Gender</span>' +
+      '<select name="' + pfx + 'gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
+      '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
+      '<span class="cb-label">More languages</span>' +
+      '<input type="text" name="' + pfx + 'languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + lang + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
+      '<datalist id="cb-lang-' + lang + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
+      '<span class="cb-label">Devices</span>' +
+      '<div class="cb-inline"><select name="' + pfx + 'device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
+      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only (Manual Facebook Feed)</option></select>' +
+      '<input type="text" name="' + pfx + 'os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
+      '<span class="cb-label">Start time</span>' +
+      '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
+      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android, Start time and the ad set name work only with the API backend.</div>' +
+      '<span class="cb-label">Conversion location</span>' +
+      '<div class="cb-dest-wrap">' +
+      '<select name="' + pfx + 'destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
+      '<option value="website" selected>Website</option>' +
+      '<option value="instant_form">Instant Form</option>' +
+      '</select>' +
+      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '</div>' +
+      '<span class="cb-label">Placements</span>' + buildPlacementHTML(pfx) +
+      '</div>' +
+      '</section>';
   }
 
   /* ACL-1769: карточка кампании поделена на три раздела — Campaign, Ad set,
@@ -15353,6 +16449,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
+      /* ACL-1768: сколько наборов у кампании (нет поля у старой страницы = один). */
+      '<input type="hidden" name="camp_' + idx + '_adset_count" class="cb-adset-count" value="1">' +
       '<section class="cb-lvl cb-lvl-campaign">' +
       '<div class="cb-fields">' +
       /* Имя: собранное, как раньше, плюс необязательное своё. Своё берётся,
@@ -15380,57 +16478,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       future('copyTo', 'button', 'Copy to accounts') +
       '</div>' +
       '</section>' +
-      '<section class="cb-lvl cb-lvl-adset">' +
-      '<div class="cb-fields">' +
-      '<span class="cb-label">Targeting</span>' +
-      '<div class="cb-sel-wrap cb-targeting-wrap">' +
-      '<input type="text" class="cb-sel-text cb-targeting-search" placeholder="— search by code or interest —" autocomplete="off" value="" oninput="cbTargetingSearch(this)">' +
-      '<div class="cb-sel-dropdown" hidden></div>' +
-      '<input type="hidden" name="camp_' + idx + '_targeting" class="cb-targeting-hidden" value="">' +
-      '<div class="cb-targeting-hint" style="font-size:var(--adopy-text-xs);color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
-      '</div>' +
-      '<span class="cb-label">OS / Age / Language</span>' +
-      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS') +
-      '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
-      /* Язык — и здесь тоже. Карточку строит одно место — эта функция по
-         «+ Add Campaign»; поле, добавленное не сюда, выглядит добавленным, а
-         на половине, которой человек пользуется, его нет. Значение подставляется
-         из `data-language` формы, чтобы правило считалось в одном месте. */
-      '<input type="text" name="camp_' + idx + '_language" class="cb-input cb-input-sm cb-language" value="" placeholder="Language" oninput="cbLanguageChanged(this)" title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
-      '</div>' +
-      /* ACL-1767: поля набора только для API-бэкенда. Пусто = ключа в форме нет по сути, план прежний.
-         При RPA пустое поле выключено с причиной, заполненное остаётся рабочим (cbSyncApiOnly). */
-      '<span class="cb-label">Gender</span>' +
-      '<select name="camp_' + idx + '_gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
-      '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
-      '<span class="cb-label">More languages</span>' +
-      '<input type="text" name="camp_' + idx + '_languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + idx + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
-      '<datalist id="cb-lang-' + idx + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
-      '<span class="cb-label">Devices</span>' +
-      '<div class="cb-inline"><select name="camp_' + idx + '_device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
-      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop" disabled>Desktop only (unavailable: Instagram, Stories and Reels placements need mobile)</option></select>' +
-      '<input type="text" name="camp_' + idx + '_os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
-      '<span class="cb-label">Start time</span>' +
-      '<input type="datetime-local" name="camp_' + idx + '_start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
-      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android and Start time work only with the API backend.</div>' +
-      /* ACL-1775: Website / Instant Form. При бэкенде RPA выключено с причиной
-         (cbSyncDestination); без `name` оно не уходит, а значение сайта - умолчание сервера. */
-      '<span class="cb-label">Conversion location</span>' +
-      '<div class="cb-dest-wrap">' +
-      '<select name="camp_' + idx + '_destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
-      '<option value="website" selected>Website</option>' +
-      '<option value="instant_form">Instant Form</option>' +
-      '</select>' +
-      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
-      '</div>' +
-      '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
-      '</div>' +
-      '</section>' +
+      '<div class="cb-adsets">' + buildAdsetSectionHTML(idx, 0) + '</div>' +
       '<div class="cb-slot-grid cb-lvl cb-lvl-ad">' +
       '<div class="cb-slot-main">' +
       '<div class="cb-ads-section">' +
       '<div class="cb-ads-divider">Ads</div>' +
-      '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
+      '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
       '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Ad</button>' +
       '</div>' +
@@ -16440,15 +17493,32 @@ function cbPfRefresh() {
 
 function cbPfName(slot) { return String((slot.querySelector('.cb-name-hidden') || {}).value || ''); }
 
+/* ACL-1990: часы карточки. Пока хоть одна форма проверяется, раз в секунду
+ * обновляют счётчик «Checking… 0:42» — только текст, в сеть не ходят. */
+var cbPfClock = 0;
+function cbPfTick() {
+  if (cbPfClock || typeof setInterval !== 'function') return;
+  cbPfClock = setInterval(function () {
+    var busy = Array.prototype.some.call(document.querySelectorAll('form'), function (f) { return f._pfBusy; });
+    if (!busy) { clearInterval(cbPfClock); cbPfClock = 0; return; }
+    if (window.cbTree && window.cbTree.tickElapsed) window.cbTree.tickElapsed();
+  }, 1000);
+}
+
 function cbPfStore(form, data, revs) {
   var a = form._pfAudit || (form._pfAudit = { byName: Object.create(null) });
   var byName = Object.create(null), now = Date.now();
   ((data && data.results) || []).forEach(function (r) { byName[String(r.campaign_name || '')] = r; });
   Object.keys(revs).forEach(function (name) {
     var r = byName[name];
+    /* ACL-1990: вид ошибки. 'not_checked' — проверка не дошла до кампании (профиль
+       занят, сеть, таймаут, сервер не ответил): строка «Could not check», Publish не
+       выключается. Ошибка самой кампании (r.error) и отказ кабинета — как раньше. */
+    var kind = r ? '' : (data && data.error ? (data.error_kind || '') : 'not_checked');
     a.byName[name] = {
       audit: r ? (r.audit || []) : [],   // нет ключа — плана не было (ошибка черновика)
       error: r ? (r.error || '') : ((data && data.error) || 'This campaign was not checked'),
+      errorKind: kind,
       accountAudit: (data && data.account_audit) || null,
       rev: revs[name], at: now
     };
@@ -16461,10 +17531,13 @@ window.cbPreflightRun = function (form, slots) {
   list.forEach(function (slot) { revs[cbPfName(slot)] = window.cbPfRev(slot); });
   var fd = cbPlanFormData(form, slots && slots.length ? list : null);
   form._pfBusy = true;
+  form._pfStarted = Date.now();          // ACL-1990: карточка считает, сколько идёт проверка
   cbPfRefresh();
+  cbPfTick();
+  var silent = { error: 'The dashboard did not answer', error_kind: 'not_checked' };
   return fetch('/publish-plan', { method: 'POST', body: fd })
-    .then(function (r) { return r.json().catch(function () { return { error: 'The server did not answer' }; }); })
-    .catch(function () { return { error: 'The server did not answer' }; })
+    .then(function (r) { return r.json().catch(function () { return silent; }); })
+    .catch(function () { return silent; })
     .then(function (data) {
       cbPfStore(form, data || {}, revs);
       form._pfBusy = false;
@@ -16586,6 +17659,44 @@ function cbPlanMoney(s) {
   return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
 }
 
+/* ACL-1771: термины таргетинга. Точное имя берётся само; всё остальное - «picked X for Y?»
+ * с кандидатами и кнопкой Confirm (запоминается на этой машине), подтверждённое - с Clear. */
+function cbTargetingHtml(items) {
+  var rows = '';
+  function cand(term, c) {
+    return '<li>' + aclEscHtml(c.name) + ' <span style="color:var(--muted)">[' + aclEscHtml(c.type) + ']</span> '
+      + '<button type="button" class="cbd-add" data-act="confirm-target" data-term="' + aclEscHtml(term)
+      + '" data-id="' + aclEscHtml(c.id) + '" data-type="' + aclEscHtml(c.type)
+      + '" data-name="' + aclEscHtml(c.name) + '">Confirm</button></li>';
+  }
+  function ask(i) {
+    var cs = i.candidates || [];
+    var head = i.suggested
+      ? 'Picked <strong>' + aclEscHtml(i.suggested.name) + '</strong> [' + aclEscHtml(i.suggested.type)
+        + '] for <strong>' + aclEscHtml(i.term) + '</strong>? Publish is blocked until you confirm or pick another.'
+      : '<strong>' + aclEscHtml(i.term) + '</strong> was not found in Meta'
+        + (cs.length ? '. Pick a candidate:' : ' and there are no candidates.');
+    return '<div class="cbd-plan-warn" style="color:var(--bad);margin:0.15rem 0">&#10005; ' + head
+      + (i.reason ? ' (' + aclEscHtml(i.reason) + ')' : '')
+      + (cs.length ? '<ul style="margin:0.1rem 0 0 1.1rem">' + cs.map(function (c) { return cand(i.term, c); }).join('') + '</ul>' : '')
+      + '</div>';
+  }
+  (items || []).forEach(function (i) {
+    if (i.state === 'unknown') {
+      rows += '<div class="cbd-plan-warn" style="color:#b45309;margin:0.15rem 0">&#9888; ' + aclEscHtml(i.term)
+        + ': ' + aclEscHtml(i.reason || "Couldn't check all interests — press Check plan again") + '</div>';
+    } else if (i.state === 'pending' || i.state === 'unresolved') {
+      (i.bad_parts && i.bad_parts.length ? i.bad_parts : [i]).forEach(function (p) { rows += ask(p); });
+    } else if (i.state === 'confirmed' && (i.picks || [])[0]) {
+      rows += '<div style="font-size:0.72rem">' + aclEscHtml(i.term) + ' &rarr; '
+        + i.picks.map(function (p) { return aclEscHtml(p.name) + ' [' + aclEscHtml(p.type) + ']'; }).join(' + ')
+        + ' (confirmed earlier) <button type="button" class="cbd-add" '
+        + 'data-act="clear-target" data-term="' + aclEscHtml(i.term) + '">Clear</button></div>';
+    }
+  });
+  return rows ? '<div class="cbd-plan-targeting" style="margin:0.2rem 0">' + rows + '</div>' : '';
+}
+
 /* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
 function cbPlanHtml(data) {
   var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
@@ -16607,6 +17718,7 @@ function cbPlanHtml(data) {
       if (w === 'Dry run: nothing was created') return;
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
+    h += cbTargetingHtml(r.targeting || []);
     if (s) {
       if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
         + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
@@ -16635,6 +17747,7 @@ function cbPlanHtml(data) {
             + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')
+            + (ad.form_locale ? '<br>' + aclEscHtml(ad.form_locale) : '')
             + (ad.form_note ? '<br>Instant Form: ' + aclEscHtml(ad.form_note)
                               + (ad.form_id ? ' (' + aclEscHtml(ad.form_id) + ')' : '')
               : ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
@@ -16668,6 +17781,20 @@ function cbPlanBindFrame(out) {
     var b = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
     if (!b) return;
     var act = b.getAttribute('data-act');
+    if (act === 'confirm-target' || act === 'clear-target') {
+      ev.stopPropagation();
+      var confirm = act === 'confirm-target';
+      b.disabled = true;
+      fetch(confirm ? '/targeting-resolver/confirm' : '/targeting-resolver/clear', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(confirm
+          ? { term: b.dataset.term, id: b.dataset.id, type: b.dataset.type, name: b.dataset.name }
+          : { term: b.dataset.term })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        b.outerHTML = '<em>' + (d && d.error ? aclEscHtml(d.error) : (confirm ? 'Saved' : 'Cleared') + ' - run Check plan again') + '</em>';
+      }).catch(function () { b.disabled = false; });
+      return;
+    }
     if (act === 'close-plan') {
       ev.stopPropagation();
       out.hidden = true;
@@ -16696,7 +17823,14 @@ window.cbCheckPlan = function (picked, out, btn) {
   });
   out.hidden = false;
   if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
-  out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Checking the plan through the Graph API; nothing is written…</div>');
+  out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Opening the Multilogin profile and checking the plan'
+    + ' through the Graph API (usually 30 s – 3 min per account); nothing is written…</div>');
+  // ACL-1990: на кнопке — сколько идёт проверка; refreshTicks перерисовывает подпись.
+  window.CB_PLAN_STARTED = Date.now();
+  var tick = setInterval(function () {
+    if (window.cbTree && window.cbTree.refreshTicks) window.cbTree.refreshTicks();
+    else if (btn) btn.disabled = true;
+  }, 1000);
   if (btn) btn.disabled = true;
   var parts = new Array(forms.length);
   var left = forms.length;
@@ -16738,8 +17872,13 @@ window.cbCheckPlan = function (picked, out, btn) {
         parts[i] = cbPlanHtml(data);
         pending[i] = '';
         left -= 1;
-        if (!left) clearInterval(waitTimer);
-        if (!left && btn) btn.disabled = false;
+        if (!left) {
+          clearInterval(waitTimer);
+          clearInterval(tick);
+          window.CB_PLAN_STARTED = 0;
+          if (window.cbTree && window.cbTree.refreshTicks) window.cbTree.refreshTicks();
+          if (btn) btn.disabled = false;
+        }
         render();
       });
   });
@@ -19602,7 +20741,7 @@ window.aclTeamLibrary = (function () {
 // (зеркало form_templates.validate); окончательно проверяет сервер.
 (function () {
   var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
-  var contactKeys = ['name', 'first_name', 'last_name', 'email', 'phone'];
+  var contactKeys = ['first_name', 'last_name', 'email', 'phone'];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -19740,11 +20879,15 @@ window.aclTeamLibrary = (function () {
     el('fm-name').value = tpl.name || '';
     el('fm-headline').value = tpl.headline || '';
     el('fm-intro').value = tpl.intro || '';
-    el('fm-locale').value = tpl.locale || 'EN_US';
+    var lay = window.cbLayout;
+    if (lay && lay.formLocaleOptions) el('fm-locale').innerHTML = lay.formLocaleOptions(tpl.locale || 'AUTO');
+    el('fm-locale').value = tpl.locale || 'AUTO';
     el('fm-privacy').value = tpl.privacy_url || '';
     el('fm-thanks').value = tpl.thank_you_text || '';
     el('fm-site').value = tpl.website_url || '';
-    var contacts = tpl.contact_fields || ['name', 'email'];
+    var contacts = tpl.contact_fields || ['first_name', 'last_name', 'email', 'phone'];
+    // Старые шаблоны с «Full name»: поле убрано из редактора, при правке имя превращается в имя + фамилию.
+    if (contacts.indexOf('name') !== -1) contacts = contacts.filter(function (k) { return k !== 'name'; }).concat(['first_name', 'last_name']);
     contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
     questions = (tpl.questions || []).map(function (q) {
       return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
@@ -19782,7 +20925,7 @@ window.aclTeamLibrary = (function () {
         return item;
       }),
       privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
-      website_url: el('fm-site').value, locale: el('fm-locale').value || 'EN_US'
+      website_url: el('fm-site').value, locale: el('fm-locale').value || 'AUTO'
     });
   }
 
@@ -20323,7 +21466,11 @@ window.cwWorkbench = (function () {
     var fileIn = row.querySelector('.cb-creative-search');
     if (fileIn && ev.pack) {
       fileIn.value = ev.pack;
-      if (typeof window.cbCreativeSearch === 'function') window.cbCreativeSearch(fileIn);
+      /* ACL-1903: текст положен кодом, а не человеком, но прежний выбранный файл в скрытом поле
+         от него не должен остаться: если подходящего файла не нашлось, в окне — искомый пакет,
+         а в плане — старый файл. cbCreativeTyped снимает выбор, потом поиск ставит новый. */
+      if (typeof window.cbCreativeTyped === 'function') window.cbCreativeTyped(fileIn);
+      else if (typeof window.cbCreativeSearch === 'function') window.cbCreativeSearch(fileIn);
       var opts = Array.prototype.slice.call(row.querySelectorAll('.cb-creative-sel-wrap .cb-sel-opt[data-val]'));
       var ix = pickCreativeFile(opts.map(function (o) { return o.dataset.val; }), ev.pack, ev.version);
       if (ix >= 0) {

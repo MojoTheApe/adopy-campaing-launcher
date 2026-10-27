@@ -516,12 +516,32 @@ def test_a_plan_that_cannot_fit_the_call_budget_is_refused_up_front(small, tmp_p
     assert meta.posts == []
 
 
-def test_the_default_budget_fits_a_typical_big_video_and_refuses_the_largest():
+def test_chunks_and_the_rest_of_the_plan_share_one_budget_and_the_refusal_comes_before_writes(small, tmp_path,
+                                                                                            monkeypatch):
+    """ACL-1768: куски + записи ВСЕХ наборов (оценка плана) против бюджета, а не куски + фиксированный запас."""
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr, "CALLS_RESERVE_OTHER", 0)       # прежняя проверка (куски + запас) пропустила бы
+    meta = ChunkMeta()
+    chunks = cr.upload_calls(f.stat().st_size)
+    rest = cr.estimate_create_calls(cr.plan_from_draft(d))
+    out, _ = _run(meta, d, max_calls=chunks + rest - 1)
+    assert out.stop_kind == "plan" and "rest of the campaign" in out.error and meta.posts == []
+
+
+def test_the_default_budget_fits_a_typical_big_video_and_refuses_the_largest(tmp_path):
+    """Бюджет считается по плану (ACL-1768): кусков и остальной кампании вместе - не больше него."""
+    import tests.test_acl1768_ad_sets as T
     from src.web import publish_api
 
-    # 247 МБ = 31 кусок + 3: влезает в бюджет по умолчанию; 1,5 ГБ = 195 вызовов - отказ заранее («разбейте»).
-    assert cr.upload_calls(247 * 1024 * 1024) + cr.CALLS_RESERVE_OTHER <= publish_api.DEFAULT_CREATE_MAX_CALLS
-    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) + cr.CALLS_RESERVE_OTHER > publish_api.DEFAULT_CREATE_MAX_CALLS
+    one = T._draft(tmp_path, sets=2, ads=1)
+    one.ad_sets = one.ad_sets[:1]
+    plan = cr.plan_from_draft(one)
+    budget, refusal = publish_api.create_call_budget(plan)
+    rest = cr.estimate_create_calls(plan)
+    assert refusal == ""
+    # 247 МБ = 31 кусок + 3: влезает; 1,5 ГБ = 195 вызовов вместе с остальным планом - отказ заранее («разбейте»).
+    assert cr.upload_calls(247 * 1024 * 1024) + rest <= budget
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) + rest > budget
 
 
 # ───────────────────────── мутации: охранники обязаны падать ─────────────────────────

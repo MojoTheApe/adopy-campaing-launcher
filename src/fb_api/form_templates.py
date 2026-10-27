@@ -56,6 +56,8 @@ SHORT, CHOICE = "short_answer", "multiple_choice"
 QUESTION_KINDS = (SHORT, CHOICE)
 
 DEFAULT_LOCALE = "EN_US"
+#: ACL-2180: язык формы выбирается при публикации из языка и страны набора.
+AUTO_LOCALE = "AUTO"
 #: ACL-2053: языки Instant Form, которые принимает Graph при создании формы (enum `locale` в
 #: справочнике Page/leadgen_forms). Язык задаёт лишь встроенные подписи Meta, не текст формы.
 #: Зеркало - `FORM_LOCALES` в report.html (сверяет тест).
@@ -217,7 +219,8 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
     out["button_text"] = _s(src.get("button_text")) or DEFAULT_BUTTON_TEXT
 
     locale = _s(src.get("locale")).upper().replace("-", "_") or DEFAULT_LOCALE
-    if not (locale in LOCALES or (lenient_locale and _LOCALE_RE.match(locale))):
+    # ACL-2180: AUTO - код выбирает план по языку и стране набора (form_locale.py).
+    if not (locale in LOCALES or locale == AUTO_LOCALE or (lenient_locale and _LOCALE_RE.match(locale))):
         errors.append(f"Unknown locale: {locale} (choose a language from the list)")
     out["locale"] = locale
 
@@ -255,6 +258,8 @@ def expected_questions(tpl: dict[str, Any]) -> list[dict[str, Any]]:
 
 def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
     """Тело `POST /{page}/leadgen_forms`: только то, что нужно шаблону. Без `tos_accepted`."""
+    if tpl.get("locale") == AUTO_LOCALE:
+        raise ValueError("form locale Auto must be resolved from the ad set language and country before writing")
     params: dict[str, Any] = {
         "name": form_name(tpl),
         "questions": expected_questions(tpl),

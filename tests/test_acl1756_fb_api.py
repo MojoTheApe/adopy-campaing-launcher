@@ -1098,7 +1098,7 @@ def _tab_with_stuck_socket(other_tabs, list_pages):
 
     class StuckCdp(FakeCdp):
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets":
+            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):
                 raise CdpTimeout("Target.getTargets: the browser did not answer within 10 s")
             return super().call(method, params, session_id=session_id, timeout=timeout)
 
@@ -1225,7 +1225,7 @@ def test_close_falls_back_to_http_when_the_socket_times_out():
 
     class StuckCdp(FakeCdp):
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets":  # сокет завис на закрытии
+            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):  # сокет завис на закрытии
                 raise CdpTimeout("Target.getTargets: the browser did not answer within 10 s")
             return super().call(method, params, session_id=session_id, timeout=timeout)
 
@@ -1251,7 +1251,7 @@ def test_close_catches_keyboard_interrupt_and_still_tries_http():
 
     class InterruptingCdp(FakeCdp):
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets":
+            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):
                 raise KeyboardInterrupt()
             return super().call(method, params, session_id=session_id, timeout=timeout)
 

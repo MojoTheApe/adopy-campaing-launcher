@@ -43,7 +43,7 @@ def test_the_forms_button_opens_an_existing_panel_after_the_old_links():
 
 def test_every_element_the_script_reads_exists_in_the_panel():
     ids = set(re.findall(r"el\('([a-z0-9-]+)'\)", _script())) | set(re.findall(r"getElementById\('([a-z0-9-]+)'\)", _script()))
-    ids |= {f"fm-c-{k}" for k in ("name", "first_name", "last_name", "email", "phone")}
+    ids |= {f"fm-c-{k}" for k in ("first_name", "last_name", "email", "phone")}
     ids -= {"fm-c-"}
     panel = _panel()
     # Остальное (fm-migrate-btn и т.п.) рисуется скриптом.
@@ -73,7 +73,7 @@ def test_the_tab_refreshes_the_builder_picker_and_nothing_says_this_computer_onl
     assert "save it on this computer" not in t and "Saving the template on this computer" not in t
 
 
-@pytest.mark.parametrize("scenario", ["default", "contacts", "legacy-locale"])
+@pytest.mark.parametrize("scenario", ["default", "contacts", "legacy-locale", "auto-locale", "legacy-name"])
 def test_the_forms_tab_behaves_when_the_code_is_actually_run(scenario):
     node = shutil.which("node")
     if not node:

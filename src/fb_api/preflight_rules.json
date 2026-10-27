@@ -26,6 +26,7 @@
     "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
     "max_headline": 40,
     "max_primary_visible": 125,
+    "max_texts": 5,
     "os_min_re": "^[0-9]{1,2}(\\.[0-9]{1,2})?$",
     "os_versions": {
       "android": [
@@ -91,6 +92,7 @@
       "label": "Ad account is active",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -104,6 +106,7 @@
       "label": "Facebook Page",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -112,11 +115,12 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or wait for manual placements (ACL-1772) to publish Facebook-only",
+      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or choose Manual Facebook-only placements",
       "id": "instagram_identity",
       "label": "Instagram account of the Page",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -130,6 +134,7 @@
       "label": "Pixel for conversions",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -143,6 +148,7 @@
       "label": "Instant Form of the Page",
       "severity": "error",
       "side": "server",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -156,6 +162,7 @@
       "label": "Instant Form chosen",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -169,6 +176,7 @@
       "label": "Form template: privacy policy URL (https)",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -182,6 +190,7 @@
       "label": "Form template: a contact field",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -195,6 +204,7 @@
       "label": "Lead Ads terms accepted on the Page",
       "severity": "error",
       "side": "server",
+      "topic": "destination",
       "unit": "campaign"
     },
     {
@@ -208,6 +218,7 @@
       "label": "Country",
       "severity": "error",
       "side": "client",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -221,6 +232,7 @@
       "label": "Country found in Meta targeting",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -234,6 +246,7 @@
       "label": "Language found in Meta targeting",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -242,11 +255,26 @@
         "level": "adset",
         "sel": ".cb-targeting-search"
       },
-      "hint": "Meta found no exact match for some interests: pick rows from the list",
+      "hint": "Meta found no exact match for some terms: pick one of the candidates or fix the term in the library",
       "id": "interests_resolve",
       "label": "Detailed targeting found in Meta",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": ".cb-targeting-search"
+      },
+      "hint": "Meta has only a near match for some terms: Confirm the pick in Check plan (it is remembered)",
+      "id": "interests_confirmed",
+      "label": "Detailed targeting picks confirmed",
+      "severity": "error",
+      "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -260,6 +288,7 @@
       "label": "Link https://",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "campaign"
     },
     {
@@ -273,6 +302,7 @@
       "label": "Tracking parameters in the link",
       "severity": "warning",
       "side": "client",
+      "topic": "destination",
       "unit": "campaign"
     },
     {
@@ -286,6 +316,7 @@
       "label": "Media chosen",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -299,6 +330,7 @@
       "label": "Media file exists and is readable",
       "severity": "error",
       "side": "server",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -312,6 +344,7 @@
       "label": "Media within Meta limits",
       "severity": "error",
       "side": "server",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -325,6 +358,77 @@
       "label": "Vertical file for Stories and Reels",
       "severity": "warning",
       "side": "server",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-creative-search"
+      },
+      "hint": "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
+      "id": "vertical_needs_main",
+      "label": "Main file next to the Stories / Reels file",
+      "severity": "error",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-vertical-search"
+      },
+      "hint": "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+      "id": "vertical_ratio",
+      "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16",
+      "severity": "error",
+      "side": "server",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
+      "id": "texts_limit",
+      "label": "Up to 5 texts per field",
+      "severity": "error",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-vertical-search"
+      },
+      "hint": "Several primary texts and a Stories/Reels file can't be combined: Meta applies one text per placement group. Use several texts without the vertical file, or one text with it.",
+      "id": "texts_vertical",
+      "label": "Several texts and a Stories / Reels file",
+      "severity": "error",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an ad set: move the other ads of this ad set to a separate ad set",
+      "id": "texts_dynamic",
+      "label": "Several texts need their own ad set",
+      "severity": "error",
+      "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -338,6 +442,7 @@
       "label": "Primary text",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -351,6 +456,7 @@
       "label": "Headline",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -364,6 +470,7 @@
       "label": "Headline up to 40 characters",
       "severity": "warning",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -377,6 +484,7 @@
       "label": "Text visible in full (up to 125)",
       "severity": "warning",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -390,6 +498,7 @@
       "label": "CTA allowed for the objective",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -403,6 +512,7 @@
       "label": "Daily budget",
       "severity": "error",
       "side": "client",
+      "topic": "budget",
       "unit": "campaign"
     },
     {
@@ -416,6 +526,7 @@
       "label": "Budget is at least Meta's minimum",
       "severity": "error",
       "side": "server",
+      "topic": "budget",
       "unit": "campaign"
     },
     {
@@ -429,6 +540,7 @@
       "label": "Age 18-65",
       "severity": "error",
       "side": "client",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -442,6 +554,7 @@
       "label": "Devices and OS version fit together",
       "severity": "error",
       "side": "client",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -455,6 +568,7 @@
       "label": "Start time",
       "severity": "error",
       "side": "client",
+      "topic": "budget",
       "unit": "campaign"
     },
     {
@@ -468,7 +582,36 @@
       "label": "Ad names are unique",
       "severity": "error",
       "side": "client",
+      "topic": "names",
       "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": ".cb-adset-name"
+      },
+      "hint": "give every ad set of the campaign its own name",
+      "id": "adset_names_unique",
+      "label": "Ad set names are unique",
+      "severity": "error",
+      "side": "client",
+      "topic": "names",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ""
+      },
+      "hint": "add an ad to the ad set or remove the ad set",
+      "id": "adset_has_ads",
+      "label": "Every ad set has an ad",
+      "severity": "error",
+      "side": "client",
+      "topic": "names",
+      "unit": "campaign"
     },
     {
       "applies": "always",
@@ -481,7 +624,38 @@
       "label": "Campaign name is free, or gets a _2, _3 suffix",
       "severity": "error",
       "side": "server",
+      "topic": "names",
       "unit": "campaign"
+    }
+  ],
+  "topics": [
+    {
+      "id": "account",
+      "label": "Account & access"
+    },
+    {
+      "id": "audience",
+      "label": "Audience & targeting"
+    },
+    {
+      "id": "budget",
+      "label": "Budget"
+    },
+    {
+      "id": "destination",
+      "label": "Link & Instant Form"
+    },
+    {
+      "id": "creative",
+      "label": "Creatives & texts"
+    },
+    {
+      "id": "names",
+      "label": "Names & duplicates"
+    },
+    {
+      "id": "meta",
+      "label": "Meta plan check"
     }
   ],
   "version": 1

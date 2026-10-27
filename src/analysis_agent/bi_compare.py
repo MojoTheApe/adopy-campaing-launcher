@@ -87,6 +87,23 @@ def period_rows(df: pd.DataFrame, date_from: str = "", date_to: str = "") -> pd.
     return df[selected]
 
 
+#: Валюта BI / книги статистики, если источник её не объявил (ACL-2204).
+DEFAULT_SOURCE_CURRENCY = "USD"
+
+
+def _source_currency(frame: Any) -> tuple[str, bool]:
+    """(валюта, подставлена ли по умолчанию). Строка без валюты считается USD;
+    разные валюты по строкам дают пустую валюту (смесь), а не USD."""
+    column = METADATA_COLUMNS["currency_code"]
+    if frame is None or frame.empty or column not in frame:
+        return DEFAULT_SOURCE_CURRENCY, True
+    declared = [currency_code(v) for v in frame[column]]
+    values = {v or DEFAULT_SOURCE_CURRENCY for v in declared}
+    if len(values) != 1:
+        return "", False
+    return values.pop(), not any(declared)
+
+
 def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
     """Описание именно выбранных строк; архив — хранилище, а не их поставщик."""
     if frame is None:
@@ -107,15 +124,23 @@ def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict
         values = {clean(v) for v in frame[column]}
         return values.pop() if len(values) == 1 and "" not in values else ""
 
-    currency, zone, boundary = (uniform(k) for k in METADATA_COLUMNS)
+    _, zone, boundary = (uniform(k) for k in METADATA_COLUMNS)
+    # ACL-2204, решение владельца 26.10.2026: BI и книга статистики без
+    # объявленной валюты — доллары. Явное объявление (BI_CURRENCY /
+    # STATS_CURRENCY) по-прежнему главнее; смесь разных валют по строкам
+    # остаётся «unknown» и в доллары не превращается.
+    currency, currency_defaulted = _source_currency(frame)
     name = " + ".join(SOURCE_NAMES.get(s, SOURCE_NAMES["unknown"]) for s in sources) or "No source rows"
-    incomplete = not (currency and zone and boundary)
-    note = (f"{name}; currency: {currency or 'unknown'}; time zone: {zone or 'unknown'}; "
+    incomplete = not (zone and boundary)
+    shown_currency = f"{currency} (default)" if currency_defaulted else (currency or "unknown")
+    note = (f"{name}; currency: {shown_currency}; time zone: {zone or 'unknown'}; "
             f"day boundary: {boundary or 'unknown'}.")
     if incomplete:
-        note += " Missing source metadata is unknown; money or day boundaries are not assumed to match an account."
+        note += " Missing source metadata is unknown; day boundaries are not assumed to match an account."
+    if not currency:
+        note += " Source rows declare different currencies; money is not assumed to match an account."
     return {"source": name, "sources": sources, "currency": currency or "unknown",
-            "currency_code": currency, "timezone": zone, "day_boundary": boundary,
+            "currency_code": currency, "currency_defaulted": currency_defaulted, "timezone": zone, "day_boundary": boundary,
             "assumed": incomplete, "note": note,
             "description": "the BI data" if sources == ["bi"] else
                            "the Stats workbook" if sources == ["workbook"] else
@@ -168,6 +193,8 @@ def compare_spend(
         reading = account_readings.get(reading_account) or {}
         info = (source_context or {}).get(source_account) or provenance()
         unit = currency_code(source_currency) if source_currency is not None else info["currency_code"]
+        if not unit and source_currency is not None:
+            unit = DEFAULT_SOURCE_CURRENCY  # undeclared source currency is USD (ACL-2204)
         has_reading = reading.get("state") == "ok" and reading.get("spend") is not None
         account_spend = round(float(reading["spend"]), 2) if has_reading else None
         account_currency = (currency_code(reading.get("currency_code")) or

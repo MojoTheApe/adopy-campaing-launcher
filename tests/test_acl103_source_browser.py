@@ -156,9 +156,15 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         page.goto("http://acl.test/?date_from=2026-01-05&date_to=2026-10-18")
         info = page.locator("#acl-source-info")
         assert info.is_visible()
-        assert "BI + Stats workbook" in info.inner_text() and "unknown" in info.inner_text()
+        assert "BI + Stats workbook" in info.inner_text()
         assert "incomplete metadata" in info.inner_text()
         assert "time zone: unknown" in info.get_attribute("title")
+        # ACL-2204: без объявленной валюты — USD; EUR из BI + книга без валюты (USD) — смесь, не сумма.
+        if currency:
+            assert "currency: unknown" in info.get_attribute("title")
+        else:
+            assert "currency: unknown" not in info.get_attribute("title")
+            assert "currency: USD (default)" in info.get_attribute("title")
         geometry = info.evaluate("e => {const r=e.getBoundingClientRect();return {left:r.left,right:r.right,scroll:e.scrollWidth,client:e.clientWidth,viewport:innerWidth}}")
         assert geometry["left"] >= 0 and geometry["right"] <= width + 1, geometry
         assert geometry["scroll"] <= geometry["client"] + 1, geometry
@@ -170,12 +176,15 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         assert page.evaluate("AMAP_SOURCE") == "the BI data"
         assert page.evaluate("AMAP_BOOK_SOURCE") is False
         assert page.evaluate("AMAP_SHARED_TIP").startswith("The source data")
-        expected = "EUR 13" if currency else "currency unknown 13"
+        expected = "EUR 13" if currency else "$13"
         assert page.evaluate("acl6Metrics(12.5,5,1)[0]") == expected
+        # ACL-2204: подпись суммы с Meta без валюты не меняется (только BI / книга получают USD).
+        assert page.evaluate("amapMoney(5, '')") == "currency unknown 5.00"
         page.locator("#amap-slot details.amap-country > summary").first.click()
         assert expected in page.locator("#amap-slot .amap-grid").inner_text()
         if not currency:
-            assert page.locator('#home-kpis [data-kpi="spend"] .hk-you').evaluate("e => {const c=document.createElement('canvas').getContext('2d');c.font=getComputedStyle(e).font;return c.measureText('unknown').width <= e.clientWidth}")
+            assert "currency unknown" not in page.locator("#home-kpis").inner_text()
+            assert page.locator('#home-kpis [data-kpi="spend"] .hk-you').inner_text().strip().startswith("$")
         artifacts = Path(os.environ.get("ACL_REVIEW_ARTIFACT_DIR", str(tmp_path)))
         artifacts.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(artifacts / f"source-{width}-{theme}.png"))
@@ -188,7 +197,8 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         assert page.evaluate("AMAP_SHARED_TIP").startswith("The workbook")
         assert "numbers from the Stats workbook" in page.locator(".amap-head").inner_text()
         assert "2026-01-05" in page.locator(".amap-head").inner_text()
-        assert "unknown" in info.inner_text() and "incomplete metadata" in info.inner_text()
+        assert "USD" in info.inner_text() and "incomplete metadata" in info.inner_text()
+        assert "unknown" not in info.inner_text()  # книга без валюты — USD, не unknown
         assert not errors, errors
     finally:
         context.close()

@@ -70,10 +70,69 @@ _TRACK_RE = r"\?[^#\s]*[^=&#\s]="
 JSON_PATH = Path(__file__).with_name("preflight_rules.json")
 
 
+#: Разделы карточки (ACL-1990): карточка показывает разделы с одним статусом, а не
+#: двадцать строк. Порядок = порядок разделов. «meta» — сама проверка плана с Meta:
+#: в нём одна строка `plan_check`, которую страница добавляет сама (правила в таблице нет).
+TOPICS: list[dict[str, str]] = [
+    {"id": "account", "label": "Account & access"},
+    {"id": "audience", "label": "Audience & targeting"},
+    {"id": "budget", "label": "Budget"},
+    {"id": "destination", "label": "Link & Instant Form"},
+    {"id": "creative", "label": "Creatives & texts"},
+    {"id": "names", "label": "Names & duplicates"},
+    {"id": "meta", "label": "Meta plan check"},
+]
+TOPIC_IDS = [t["id"] for t in TOPICS]
+
+_TOPIC_OF = {
+    "account_active": "account",
+    "page_ok": "account",
+    "pixel_ok": "account",
+    "form_active": "destination",
+    "form_chosen": "destination",
+    "link_https": "destination",
+    "link_tracking": "destination",
+    "country_set": "audience",
+    "country_resolves": "audience",
+    "language_resolves": "audience",
+    "interests_resolve": "audience",
+    "age_range": "audience",
+    "media_chosen": "creative",
+    "media_readable": "creative",
+    "media_limits": "creative",
+    "media_vertical": "creative",
+    "primary_text": "creative",
+    "headline": "creative",
+    "headline_len": "creative",
+    "primary_len": "creative",
+    "cta_allowed": "creative",
+    "budget_set": "budget",
+    "budget_min": "budget",
+    "ad_names_unique": "names",
+    "existing_diffs": "names",
+    # Правила из соседних задач (ACL-1896, 1776, 1771, 1774, 1767, 1768): на TEST9095 они стоят
+    # вместе с этим PR, и без темы `_r()` падал KeyError — Check plan ломался целиком.
+    "instagram_identity": "account",
+    "form_template_privacy": "destination",
+    "form_template_contacts": "destination",
+    "form_terms": "destination",
+    "interests_confirmed": "audience",
+    "vertical_needs_main": "creative",
+    "vertical_ratio": "creative",
+    "texts_limit": "creative",
+    "texts_vertical": "creative",
+    "texts_dynamic": "creative",
+    "devices_consistent": "audience",
+    "start_time_valid": "budget",
+    "adset_names_unique": "names",
+    "adset_has_ads": "names",
+}
+
+
 def _r(rid: str, label: str, severity: str, side: str, hint: str, *, sel: str = "", level: str = "campaign",
        applies: str = "always", unit: str = "campaign") -> dict[str, Any]:
     return {"id": rid, "label": label, "severity": severity, "side": side, "hint": hint,
-            "field": {"sel": sel, "level": level}, "applies": applies, "unit": unit}
+            "field": {"sel": sel, "level": level}, "applies": applies, "unit": unit, "topic": _TOPIC_OF.get(rid, "meta")}
 
 
 #: Порядок = порядок строк в карточке. `applies`: always | website | instant_form.
@@ -84,7 +143,7 @@ RULES: list[dict[str, Any]] = [
        "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
     _r("instagram_identity", "Instagram account of the Page", ERROR, "server",
        "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, "
-       "or wait for manual placements (ACL-1772) to publish Facebook-only"),
+       "or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -111,7 +170,10 @@ RULES: list[dict[str, Any]] = [
        "Meta found no exact match for the language: pick it from the list or clear the field",
        sel='[name$="_language"]', level="adset"),
     _r("interests_resolve", "Detailed targeting found in Meta", ERROR, "server",
-       "Meta found no exact match for some interests: pick rows from the list",
+       "Meta found no exact match for some terms: pick one of the candidates or fix the term in the library",
+       sel=".cb-targeting-search", level="adset"),
+    _r("interests_confirmed", "Detailed targeting picks confirmed", ERROR, "server",
+       "Meta has only a near match for some terms: Confirm the pick in Check plan (it is remembered)",
        sel=".cb-targeting-search", level="adset"),
     _r("link_https", "Link https://", ERROR, "client", "enter the website URL, starting with https://",
        sel='input[name="tracking_link"]', level="campaign", applies="website"),
@@ -129,6 +191,21 @@ RULES: list[dict[str, Any]] = [
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 file: without one Facebook crops the picture itself",
        sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_needs_main", "Main file next to the Stories / Reels file", ERROR, "client",
+       "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
+       sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_ratio", "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16", ERROR, "server",
+       "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images "
+       "or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+       sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
+       "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
+       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
+       _wp.MSG_TEXTS_DYNAMIC_SET,
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline", "Headline", ERROR, "client", "the chosen text has no headline: pick another library entry",
@@ -156,6 +233,10 @@ RULES: list[dict[str, Any]] = [
     _r("ad_names_unique", "Ad names are unique", ERROR, "client",
        "give the ads different creatives or texts: their names must differ inside a campaign",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("adset_names_unique", "Ad set names are unique", ERROR, "client",
+       "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
+    _r("adset_has_ads", "Every ad set has an ad", ERROR, "client",
+       "add an ad to the ad set or remove the ad set", sel="", level="ad"),
     _r("existing_diffs", "Campaign name is free, or gets a _2, _3 suffix", ERROR, "server",
        "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... "
        "(up to _20); an error only when all 20 names are taken: rename the campaign"),
@@ -170,11 +251,12 @@ def export_rules() -> dict[str, Any]:
     return {
         "version": 1,
         "rules": RULES,
+        "topics": TOPICS,
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
                    "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
                    "os_min_re": _OS_MIN_RE, "os_versions": {k: list(v) for k, v in _wp.OS_VERSIONS.items()},
-                   "start_re": _START_RE},
+                   "start_re": _START_RE, "max_texts": MAX_TEXTS},
     }
 
 
@@ -188,19 +270,47 @@ def load_json() -> dict[str, Any]:
 
 # ───────────────────────── клиентские правила ─────────────────────────
 #
-# Вход аудита (одна кампания; сегодня у неё один набор объявлений):
+# Вход аудита (одна кампания; ACL-1768: наборы - `ad_sets`, плоский вход = один набор):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str,
+#             ACL-1774 (необязательные): "bodies": [str], "headlines": [str], "descriptions": [str],
+#             "vertical_file": str}],
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
+
+def _multi_text(a: dict) -> bool:
+    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
+    return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
+
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
 
 
-def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None) -> dict[str, Any]:
-    return {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None,
+       sets: list[int] | None = None) -> dict[str, Any]:
+    out = {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+    if sets:
+        # ACL-1768: у кампании с несколькими наборами - какие наборы (1-based); иначе ключа нет.
+        out["sets"] = list(sets)
+    return out
+
+
+#: Сколько текстов каждого вида допускает одно объявление (ACL-1774; справочник Graph).
+MAX_TEXTS = _wp.ASSET_FEED_MAX_TEXTS
+
+
+def _distinct(items: Any) -> list[str]:
+    """Непустые тексты без повторов (пробелы не в счёт) — как на сервере (`creator._unique`)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in items if isinstance(items, list) else []:
+        key = "".join(_s(x).split())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
 
 
 def applies(rule: dict[str, Any], destination: str) -> bool:
@@ -208,30 +318,81 @@ def applies(rule: dict[str, Any], destination: str) -> bool:
     return a == "always" or a == destination
 
 
-def _per_ad(rule: str, inp: dict, bad, status: str = ERROR) -> dict[str, Any]:
-    ads = [i + 1 for i, ad in enumerate(inp.get("ads") or []) if bad(ad)]
+def audit_sets(inp: dict[str, Any]) -> list[dict[str, Any]]:
+    """Наборы входа аудита. Старый плоский вход (без `ad_sets`) - один набор (ACL-1768)."""
+    given = inp.get("ad_sets")
+    if isinstance(given, list) and given:
+        return given
+    flat = {k: inp.get(k) for k in ("name", "destination", "age_min", "age_max", "os", "device", "os_min",
+                                     "start_time", "ads")}
+    return [flat]
+
+
+def _dest_of(a_set: dict[str, Any]) -> str:
+    return "instant_form" if _s(a_set.get("destination")) == "instant_form" else "website"
+
+
+def campaign_dests(inp: dict[str, Any]) -> set[str]:
+    """Какие места конверсии есть среди наборов: по ним правила показываются или нет."""
+    return {_dest_of(x) for x in audit_sets(inp)}
+
+
+def _numbered(inp: dict[str, Any]) -> list[tuple[int, int, dict[str, Any], dict[str, Any]]]:
+    """(номер набора 1-based, сквозной номер объявления 1-based, набор, объявление)."""
+    out = []
+    n = 0
+    for si, st in enumerate(audit_sets(inp), start=1):
+        for ad in st.get("ads") or []:
+            n += 1
+            out.append((si, n, st, ad))
+    return out
+
+
+def _per_ad(rule: str, inp: dict, bad, status: str = ERROR, only_dest: str = "") -> dict[str, Any]:
+    ads = [n for _si, n, st, ad in _numbered(inp)
+           if (not only_dest or _dest_of(st) == only_dest) and bad(ad, st)]
     return _v(rule, status if ads else OK, ("Ad " + ", ".join(map(str, ads))) if ads else "", ads)
 
 
+def _per_set(rule: str, inp: dict, check) -> dict[str, Any]:
+    """Правило уровня набора: `check(набор)` -> код ошибки или пустая строка."""
+    bad: list[tuple[int, str]] = []
+    for si, st in enumerate(audit_sets(inp), start=1):
+        code = check(st)
+        if code:
+            bad.append((si, code))
+    if not bad:
+        return _v(rule, OK)
+    if len(audit_sets(inp)) == 1:
+        return _v(rule, ERROR, bad[0][1])
+    return _v(rule, ERROR, "Ad set " + ", ".join(str(i) for i, _ in bad), sets=[i for i, _ in bad])
+
+
 def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
-    """Клиентские вердикты в порядке таблицы. Зеркало `cbPreflight.evaluate` в report.html."""
-    dest = "instant_form" if _s(inp.get("destination")) == "instant_form" else "website"
-    ads = inp.get("ads") or []
+    """Клиентские вердикты в порядке таблицы. Зеркало `cbPreflight.evaluate` в report.html.
+
+    ACL-1768: правила уровня набора считаются на КАЖДЫЙ набор (`inp["ad_sets"]`); плоский
+    вход прежней формы - один набор, вердикты те же.
+    """
+    sets = audit_sets(inp)
+    dests = campaign_dests(inp)
     out: list[dict[str, Any]] = []
     link = _s(inp.get("link"))
     link_ok = bool(re.match(_LINK_RE, link, re.I))
     for rule in RULES:
-        if rule["side"] != "client" or not applies(rule, dest):
+        if rule["side"] != "client" or not (rule["applies"] == "always" or rule["applies"] in dests):
             continue
         rid = rule["id"]
         if rid == "form_chosen":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("form_id")) and not a.get("template")))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("form_id")) and not a.get("template"), only_dest="instant_form"))
         elif rid == "form_template_privacy":
-            out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
-                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I)))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I),
+                               only_dest="instant_form"))
         elif rid == "form_template_contacts":
-            out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
-                               and not (a.get("template") or {}).get("contact_fields")))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not (a.get("template") or {}).get("contact_fields"),
+                               only_dest="instant_form"))
         elif rid == "country_set":
             out.append(_v(rid, OK if _s(inp.get("country")) else ERROR))
         elif rid == "link_https":
@@ -247,19 +408,32 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             else:
                 out.append(_v(rid, OK if re.search(_TRACK_RE, link) else WARNING))
         elif rid == "media_chosen":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("file"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("file"))))
+        elif rid == "vertical_needs_main":
+            out.append(_per_ad(rid, inp, lambda a, st: bool(_s(a.get("vertical_file"))) and not _s(a.get("file"))))
+        elif rid == "texts_limit":
+            out.append(_per_ad(rid, inp, lambda a, st: any(
+                len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
+        elif rid == "texts_vertical":
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+        elif rid == "texts_dynamic":
+            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))
+                                      and len(st.get("ads") or []) > 1))
         elif rid == "primary_text":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("body"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
         elif rid == "headline":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("headline"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline"))))
         elif rid == "headline_len":
-            out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "primary_len":
-            out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
-            key = (_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE) + ("_instant_form" if dest == "instant_form" else "")
-            allowed = ALLOWED_CTA.get(key, ())
-            out.append(_per_ad(rid, inp, lambda a: (_s(a.get("cta")) or "LEARN_MORE") not in allowed))
+            objective = _s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE
+
+            def cta_bad(a, st, objective=objective):
+                key = objective + ("_instant_form" if _dest_of(st) == "instant_form" else "")
+                return (_s(a.get("cta")) or "LEARN_MORE") not in ALLOWED_CTA.get(key, ())
+            out.append(_per_ad(rid, inp, cta_bad))
         elif rid == "budget_set":
             b = inp.get("budget")
             try:
@@ -268,40 +442,57 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 good = False
             out.append(_v(rid, OK if good else ERROR))
         elif rid == "age_range":
-            lo, hi = inp.get("age_min"), inp.get("age_max")
-            try:
-                lo, hi = int(lo), int(hi)
-                good = AGE_MIN <= lo <= AGE_MAX and AGE_MIN <= hi <= AGE_MAX and lo <= hi
-            except (TypeError, ValueError):
-                good = False
-            out.append(_v(rid, OK if good else ERROR))
+            def age_bad(st):
+                try:
+                    lo, hi = int(st.get("age_min")), int(st.get("age_max"))
+                    return "" if AGE_MIN <= lo <= AGE_MAX and AGE_MIN <= hi <= AGE_MAX and lo <= hi else "range"
+                except (TypeError, ValueError):
+                    return "range"
+            out.append(_per_set(rid, inp, age_bad))
         elif rid == "devices_consistent":
-            os_ = _s(inp.get("os")).lower() or "all"
-            dev, ver = _s(inp.get("device")).lower(), _s(inp.get("os_min"))
-            mobile = os_ in ("ios", "android")
-            if mobile and dev == "desktop":
-                out.append(_v(rid, ERROR, "mobile_os_desktop"))
-            elif ver and not mobile:
-                out.append(_v(rid, ERROR, "version_needs_os"))
-            elif ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
-                out.append(_v(rid, ERROR, "bad_version"))
-            else:
-                out.append(_v(rid, OK))
+            def dev_bad(st):
+                os_ = _s(st.get("os")).lower() or "all"
+                dev, ver = _s(st.get("device")).lower(), _s(st.get("os_min"))
+                mobile = os_ in ("ios", "android")
+                if mobile and dev == "desktop":
+                    return "mobile_os_desktop"
+                if ver and not mobile:
+                    return "version_needs_os"
+                if ver and not (re.fullmatch(_OS_MIN_RE, ver) and _wp.os_version_ok(os_, ver)):
+                    return "bad_version"
+                return ""
+            out.append(_per_set(rid, inp, dev_bad))
         elif rid == "start_time_valid":
-            st, now = _s(inp.get("start_time")), _s(inp.get("now"))
-            if not st:
-                out.append(_v(rid, OK))
-            elif not re.fullmatch(_START_RE, st):
-                out.append(_v(rid, ERROR, "format"))
-            elif re.fullmatch(_START_RE, now) and st[:10] < now[:10]:
-                out.append(_v(rid, ERROR, "past"))
-            else:
-                out.append(_v(rid, OK))
+            now = _s(inp.get("now"))
+
+            def start_bad(st, now=now):
+                stt = _s(st.get("start_time"))
+                if not stt:
+                    return ""
+                if not re.fullmatch(_START_RE, stt):
+                    return "format"
+                if re.fullmatch(_START_RE, now) and stt[:10] < now[:10]:
+                    return "past"
+                return ""
+            out.append(_per_set(rid, inp, start_bad))
         elif rid == "ad_names_unique":
-            names = [_s(a.get("name")) for a in ads]
-            dup = {n for n in names if n and names.count(n) > 1}
-            bad = [i + 1 for i, n in enumerate(names) if n in dup]
+            # Имена объявлений различаются внутри набора (так создатель ищет и сверяет их).
+            bad: list[int] = []
+            for si, st in enumerate(sets, start=1):
+                nums = [(n, _s(ad.get("name"))) for s1, n, _s2, ad in _numbered(inp) if s1 == si]
+                names = [nm for _n, nm in nums]
+                dup = {nm for nm in names if nm and names.count(nm) > 1}
+                bad += [n for n, nm in nums if nm in dup]
             out.append(_v(rid, ERROR if bad else OK, ("Ad " + ", ".join(map(str, bad))) if bad else "", bad))
+        elif rid == "adset_names_unique":
+            names = [_s(st.get("name")).casefold() for st in sets]
+            bad_sets = [i + 1 for i, nm in enumerate(names) if nm and names.count(nm) > 1]
+            out.append(_v(rid, ERROR if bad_sets else OK,
+                          ("Ad set " + ", ".join(map(str, bad_sets))) if bad_sets else "", sets=bad_sets))
+        elif rid == "adset_has_ads":
+            empty = [i + 1 for i, st in enumerate(sets) if not (st.get("ads") or [])]
+            out.append(_v(rid, ERROR if empty else OK, ("Ad set " + ", ".join(map(str, empty))) if empty else "",
+                          sets=empty))
     return out
 
 
@@ -385,6 +576,14 @@ def video_info(data: bytes) -> dict[str, float] | None:
 
 def min_budget_for(currency: str) -> float | None:
     return MIN_DAILY_BUDGET.get((currency or "").strip().upper())
+
+
+def _item_text(item: dict) -> str:
+    """Термин без находки: имя и кандидаты (или честное «кандидатов нет»)."""
+    rows = item.get("candidates") or []
+    cands = ("candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
+             if rows else "no candidates")
+    return f"'{item['term']}' not found ({cands})" + (f" - {item['reason']}" if item.get("reason") else "")
 
 
 def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = None,
@@ -479,6 +678,8 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     def languages() -> None:
         resolver.locale(plan.language)
         for s in plan.ad_sets:          # ACL-1767: дополнительные языки - тоже только точные совпадения
+            if s.language:              # ACL-1768: свой язык набора
+                resolver.locale(s.language)
             for extra in s.languages:
                 resolver.locale(extra)
         put("language_resolves", OK)
@@ -488,12 +689,64 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         for s in plan.ad_sets:
             if s.interest_groups:
                 resolver.interests(s.interest_groups)
-        put("interests_resolve", OK)
-    guarded("interests_resolve", interests)
+        put_resolved()
+        put("interests_confirmed", OK)
+
+    def put_resolved() -> None:
+        # ACL-1920: необязательный поиск, в котором Meta отказала, - предупреждение с названием поиска.
+        fn = getattr(resolver, "targeting_warnings", None)
+        warns = list(fn()) if fn else []
+        put("interests_resolve", WARNING if warns else OK, " ".join(warns))
+
+    def interests_guard() -> None:
+        # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.
+        try:
+            interests()
+        except cr.TargetingUnresolved as exc:
+            lost = [i for i in exc.items if i.get("state") not in ("pending", "unknown")]
+            asks = [i for i in exc.items if i.get("state") == "pending"]
+            unknown = any(i.get("state") == "unknown" for i in exc.items)
+            if lost:
+                # Уже найденные «не найдено» показываем даже когда другой термин не успели проверить.
+                put("interests_resolve", ERROR,
+                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost)
+                    + (". " + cr._tr.UNKNOWN_MESSAGE if unknown else ""))
+                out["interests_resolve"]["items"] = lost
+            elif unknown:
+                # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
+                put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
+            else:
+                put_resolved()
+            if asks:
+                put("interests_confirmed", ERROR,
+                    "; ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
+                              for i in asks))
+                out["interests_confirmed"]["items"] = asks
+                out["interests_confirmed"]["action"] = "confirm"
+            else:
+                put("interests_confirmed", OK)
+
+    if state["stopped"]:
+        for rid in ("interests_resolve", "interests_confirmed"):
+            put(rid, UNKNOWN, "Not checked: " + state["stopped"])
+    else:
+        try:
+            interests_guard()
+        except cr.PlanError as exc:
+            put("interests_resolve", ERROR, str(exc))
+            put("interests_confirmed", OK)
+        except GraphStop as exc:
+            state["stopped"] = str(exc) or "Graph API stopped"
+            for rid in ("interests_resolve", "interests_confirmed"):
+                put(rid, UNKNOWN, "Not checked: " + state["stopped"])
+        except GraphError as exc:
+            for rid in ("interests_resolve", "interests_confirmed"):
+                put(rid, UNKNOWN, f"Meta did not answer: {exc}")
 
     # Файлы: читаем с диска как создатель (или берём уже прочитанные).
     readable: list[int] = []
     problems: dict[str, list[tuple[int, str]]] = {"media_readable": [], "media_limits": []}
+    ratio_bad: list[tuple[int, str]] = []
     vertical_bad: list[int] = []
     vertical_unknown: list[int] = []
     long_video: list[int] = []
@@ -517,6 +770,22 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
             size = None
+            if ad.vertical_path:
+                # ACL-1774: пара файлов — читаем вертикальный, сверяем соотношения и вид.
+                try:
+                    vdata = (files or {}).get(ad.vertical_path)
+                    if vdata is None:
+                        vdata = creator.load_media(ad.vertical_path, ad.vertical_kind)
+                except OSError as exc:
+                    problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
+                    vdata = b""
+                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                if vdata and len(vdata) > vlimit:
+                    problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
+                if vdata and ad.vertical_kind != ad.kind:
+                    ratio_bad.append((ad.index, f"Ad {ad.index}: the main file is {ad.kind} and the Stories / Reels file is {ad.vertical_kind}"))
+                elif vdata:
+                    ratio_bad += [(ad.index, m) for m in cr.pair_problems(ad.index, ad.kind, data, vdata)]
             if ad.kind == "video":
                 vi = video_info(data)
                 if vi and vi.get("seconds", 0) > VIDEO_MAX_SECONDS:
@@ -527,11 +796,19 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                     size = (int(vi["width"]), int(vi["height"]))
             else:
                 size = image_size(data)
-            if size and size[1]:
+            selected = cr.placement_targeting(s.placements)
+            uses_vertical = not selected or any(p in selected.get("facebook_positions", []) for p in cr.VERTICAL_FACEBOOK) or any(p in selected.get("instagram_positions", []) for p in cr.VERTICAL_INSTAGRAM)
+            if ad.vertical_path or not uses_vertical:
+                pass                      # вертикальный файл есть: «обрежет сама» не про это объявление
+            elif size and size[1]:
                 if size[0] / size[1] > VERTICAL_MAX_RATIO:
                     vertical_bad.append(ad.index)
             else:
                 vertical_unknown.append(ad.index)
+    if ratio_bad:
+        put("vertical_ratio", ERROR, "; ".join(m for _, m in ratio_bad), sorted({i for i, _ in ratio_bad}))
+    else:
+        put("vertical_ratio", OK)
     for rid in ("media_readable", "media_limits"):
         if problems[rid]:
             put(rid, ERROR, "; ".join(m for _, m in problems[rid]), [i for i, _ in problems[rid]])

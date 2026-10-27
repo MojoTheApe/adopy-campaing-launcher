@@ -545,7 +545,7 @@ class FakeMeta:
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
                     row["creative"] = {k: cre[k] for k in ("id", "object_story_spec", "adlabels",
-                                                          "degrees_of_freedom_spec", "contextual_multi_ads") if k in cre}
+                                                          "degrees_of_freedom_spec", "contextual_multi_ads", "asset_feed_spec") if k in cre}
                     row = json.loads(json.dumps(row))
                     for key, value in self.mutate_ads.items():
                         target = row
@@ -736,8 +736,13 @@ def test_no_delete_and_only_allowlisted_writes(tmp_path):
 
 
 def test_plan_errors_are_raised_before_any_call(tmp_path):
-    with pytest.raises(cr.PlanError):
+    # ACL-1774 (после живого прогона 2026-10-14): несколько текстов - отказ плана (Dynamic Creative не поддержан).
+    with pytest.raises(cr.PlanError, match="Dynamic Creative"):
         cr.plan_from_draft(_draft(tmp_path, body2="second text"))
+    six = _draft(tmp_path)
+    six.ad_sets[0].ads[0].text_variants = [{"body": f"v{i}", "headline": "", "description": ""} for i in range(5)]
+    with pytest.raises(cr.PlanError):
+        cr.plan_from_draft(six)
     d = _draft(tmp_path)
     d.link = ""
     with pytest.raises(cr.PlanError):
@@ -1343,3 +1348,58 @@ def test_page_helper_without_policy_stays_read_only_in_node():
     out = _node_run(None)
     assert out["ok"]["error"] == "read_only" and out["calls"] == []
     assert out["stage"]["error"] == "read_only"
+
+
+# ───────────────────────── ACL-2206: метка видна с опозданием ─────────────────────────
+
+def _label_creator(replies, *, max_calls=None):
+    """Создатель только с `_verify_label`: чтения идут по списку, паузы копятся в `slept`."""
+    calls: list[str] = []
+    slept: list[float] = []
+
+    class Client:
+        writes = 0
+
+        def get(self, path, params=None):
+            calls.append(path)
+            return replies.pop(0) if len(replies) > 1 else replies[0]
+
+    c = cr.CampaignCreator.__new__(cr.CampaignCreator)
+    c.client, c.sleep = Client(), slept.append
+    return c, calls, slept
+
+
+_SHOWN = {"adlabels": {"data": [{"name": "acl-x"}]}}
+
+
+@pytest.mark.parametrize("replies,reads,waits", [
+    ([_SHOWN], 1, []),
+    ([{}, _SHOWN], 2, [2.0]),
+    ([{}, {}, _SHOWN], 3, [2.0, 4.0]),
+    ([{}, {}, {}, _SHOWN], 4, [2.0, 4.0, 6.0]),
+])
+def test_label_verification_continues_when_tag_appears_late(replies, reads, waits):
+    c, calls, slept = _label_creator(list(replies))
+    c._verify_label(cr.Outcome(campaign_name="n"), "The creative", "1", "acl-x")
+    assert len(calls) == reads and slept == waits and c.client.writes == 0
+
+
+def test_label_verification_rereads_before_it_stops():
+    c, calls, slept = _label_creator([{}])
+    with pytest.raises(cr.CreationStopped) as exc:
+        c._verify_label(cr.Outcome(campaign_name="n"), "The creative", "1", "acl-x")
+    assert exc.value.kind == "label_missing" and "did not keep the ACL tag" in str(exc.value)
+    assert len(calls) == 1 + len(cr.LABEL_RECHECK_WAITS) and slept == list(cr.LABEL_RECHECK_WAITS)
+    assert c.client.writes == 0 and set(calls) == {"/1"}
+
+
+def test_label_rereads_are_charged_to_the_call_budget():
+    """Повторное чтение - обычный вызов клиента: потолок вызовов его считает и останавливает громко."""
+    tr = ScriptedTransport([])
+    client = g.GraphClient(tr, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=3)
+    slept: list[float] = []
+    c = cr.CampaignCreator.__new__(cr.CampaignCreator)
+    c.client, c.sleep = client, slept.append
+    with pytest.raises(g.CallBudget):
+        c._verify_label(cr.Outcome(campaign_name="n"), "The creative", "1", "acl-x")
+    assert client.calls == 3 and len(tr.gets) == 3 and client.writes == 0 and tr.writes == []

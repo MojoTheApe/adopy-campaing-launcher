@@ -136,6 +136,25 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "tracking_unknown_when_link_broken": (_with(link="nope"), "link_tracking", "unknown", []),
     "media_ok": (_with(), "media_chosen", "ok", []),
     "media_missing": (_with(ads=_ad(1, file="")), "media_chosen", "error", [2]),
+    # ACL-1774: до 5 текстов и вертикальный файл только рядом с основным.
+    "texts_ok": (_with(), "texts_limit", "ok", []),
+    "texts_six_bodies": (_with(ads=_ad(0, bodies=[f"b{i}" for i in range(6)])), "texts_limit", "error", [1]),
+    "vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "vertical_needs_main", "ok", []),
+    "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
+                              "vertical_needs_main", "error", [2]),
+    # Живой 2026-10-14: несколько текстов вместе с вертикальным файлом - отказ Meta; без него - отдельный набор.
+    "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
+    "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
+                             "texts_vertical", "error", [1]),
+    "texts_vertical_titles": (_with(ads=_ad(1, vertical_file="v.png", headlines=["a", "b"])),
+                              "texts_vertical", "error", [2]),
+    "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
+    "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
+    "texts_dynamic_descriptions": (_with(ads=_ad(1, descriptions=["a", "b"])), "texts_dynamic", "error", [2]),
+    # Решение владельца 2026-10-20: несколько текстов - Dynamic Creative, объявление одно в наборе.
+    "texts_dynamic_alone_ok": (_with(ads=_ad(0, bodies=["a", "b", "c", "d", "e"])[:1]), "texts_dynamic", "ok", []),
+    "texts_dynamic_not_with_vertical": (_with(ads=_ad(0, vertical_file="v.png", bodies=["a", "b"])),
+                                        "texts_dynamic", "ok", []),
     "primary_ok": (_with(), "primary_text", "ok", []),
     "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "error", [1]),
     "headline_ok": (_with(), "headline", "ok", []),
@@ -200,6 +219,53 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
 }
+
+
+# ACL-1768: наборы. Те же фикстуры идут и через страницу (паритет), и через Python.
+def _set(name: str, ads=None, **over) -> dict:
+    base = {"name": name, "destination": "website", "age_min": 35, "age_max": 35, "os": "All",
+            "device": "", "os_min": "", "start_time": "", "ads": copy.deepcopy(ads if ads is not None else _ok_input()["ads"])}
+    base.update(over)
+    return base
+
+
+def _multi(*sets: dict, **over) -> dict:
+    inp = _ok_input()
+    inp.pop("ads")
+    inp["ad_sets"] = list(sets)
+    inp.update(over)
+    return inp
+
+
+CLIENT_CASES.update({
+    "adset_names_ok": (_with(), "adset_names_unique", "ok", []),
+    "adset_names_two_ok": (_multi(_set("A"), _set("B")), "adset_names_unique", "ok", []),
+    "adset_names_dup": (_multi(_set("A"), _set(" a ")), "adset_names_unique", "error", []),
+    "adset_has_ads_ok": (_with(), "adset_has_ads", "ok", []),
+    "adset_empty": (_multi(_set("A"), _set("B", ads=[])), "adset_has_ads", "error", []),
+    "second_set_age_bad": (_multi(_set("A"), _set("B", age_min=17, age_max=17)), "age_range", "error", []),
+    "second_set_devices_bad": (_multi(_set("A"), _set("B", os="iOS", device="desktop")),
+                               "devices_consistent", "error", []),
+    "second_set_start_past": (_multi(_set("A"), _set("B", start_time="2026-10-01T10:00"), now="2026-10-12T12:00"),
+                              "start_time_valid", "error", []),
+    "ads_numbered_across_sets": (_multi(_set("A"), _set("B", ads=_ad(0, file=""))), "media_chosen", "error", [3]),
+    "same_ad_names_in_two_sets_ok": (_multi(_set("A"), _set("B")), "ad_names_unique", "ok", []),
+    "same_ad_names_inside_a_set": (_multi(_set("A"), _set("B", ads=_ad(1, name="1000 - Text0"))),
+                                   "ad_names_unique", "error", [3, 4]),
+    "mixed_destinations_cta_per_set": (
+        _multi(_set("A"), _set("B", destination="instant_form",
+                               ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]])),
+        "cta_allowed", "error", [3, 4]),
+    # ACL-1768: «несколько текстов» считает объявления СВОЕГО набора, а не кампании.
+    "texts_dynamic_alone_in_its_set": (
+        _multi(_set("A", ads=_ad(0, bodies=["a", "b"])[:1]), _set("B")), "texts_dynamic", "ok", []),
+    "texts_dynamic_shared_set": (
+        _multi(_set("A", ads=_ad(0, bodies=["a", "b"])[:1]), _set("B", ads=_ad(0, bodies=["a", "b"]))),
+        "texts_dynamic", "error", [2]),
+    "mixed_destinations_forms_only_for_forms": (
+        _multi(_set("A"), _set("B", destination="instant_form", ads=_ad(0, form_id="7"))),
+        "form_chosen", "error", [4]),
+})
 
 
 @pytest.mark.parametrize("name", sorted(CLIENT_CASES))
@@ -336,8 +402,8 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     assert out.error == "" and not pf.blocks(out.audit)
     assert {v["rule"]: v["status"] for v in out.audit} == {
         "account_active": "ok", "page_ok": "ok", "instagram_identity": "ok", "pixel_ok": "ok", "country_resolves": "ok",
-        "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
-        "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
+        "language_resolves": "ok", "interests_resolve": "ok", "interests_confirmed": "ok", "media_readable": "ok", "media_limits": "ok",
+        "media_vertical": "ok", "vertical_ratio": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
 
 def test_page_not_on_the_account(tmp_path):
@@ -557,7 +623,7 @@ def test_the_card_under_api_waits_for_the_check_and_shows_the_server_verdicts(tm
     assert _status(shown["lines"], "page_ok") == "error" and shown["blocks"] is True
     stale = _lines({"input": _ok_input(), "opts": {"backend": "api", "server": out.audit, "stale": True}})
     assert _status(stale["lines"], "page_ok") == "unknown" and stale["blocks"] is False
-    assert "press Check" in next(x for x in stale["lines"] if x["rule"] == "page_ok")["detail"]
+    assert "Edited since the check" in next(x for x in stale["lines"] if x["rule"] == "page_ok")["detail"]
 
 
 def test_warnings_never_block_and_a_server_warning_rule_cannot_become_an_error():
@@ -571,7 +637,98 @@ def test_warnings_never_block_and_a_server_warning_rule_cannot_become_an_error()
 
 def test_a_plan_error_without_verdicts_still_blocks():
     shown = _lines({"input": _ok_input(), "opts": {"backend": "api", "server": [], "planError": "Ad 1: boom"}})
-    assert shown["blocks"] is True and shown["lines"][-1]["rule"] == "plan_error"
+    last = shown["lines"][-1]
+    assert shown["blocks"] is True and last["rule"] == "plan_check" and last["status"] == "error"
+    assert last["detail"] == "Ad 1: boom" and last["topic"] == "meta"
+
+
+# ───────────────────────────── ACL-1990: разделы и «не удалось проверить» ─────────────────────────────
+
+def test_every_rule_belongs_to_a_topic_and_the_page_gets_the_topics():
+    assert pf.TOPIC_IDS[-1] == "meta" and len(set(pf.TOPIC_IDS)) == len(pf.TOPIC_IDS)
+    for r in pf.RULES:
+        assert r["topic"] in pf.TOPIC_IDS and r["topic"] != "meta", r["id"]
+    assert all(t["label"].isascii() for t in pf.TOPICS), "UI на английском"
+    assert pf.export_rules()["topics"] == pf.TOPICS
+    # Каждый раздел, кроме «meta», чем-то заполнен; «meta» держит только строку plan_check.
+    assert {r["topic"] for r in pf.RULES} == set(pf.TOPIC_IDS) - {"meta"}
+
+
+def _topics(case: dict) -> list:
+    return _harness("--topics", {"x": case})["x"]
+
+
+def test_topics_take_the_worst_status_of_their_checks():
+    broken = _with(link="https://track.example.com/c", ads=_ad(0, body=""))
+    got = {t["id"]: t for t in _topics({"input": broken, "opts": {"backend": "rpa"}})}
+    assert "meta" not in got, "под RPA нет проверки с Meta"
+    assert got["creative"]["status"] == "error" and "primary_text" in got["creative"]["rules"]
+    assert got["destination"]["status"] == "warning"
+    assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set", "start_time_valid"]
+    # Новое правило main участвует в максимуме своего раздела, а не теряется.
+    invalid_start = _with(start_time="bad")
+    timed = {t["id"]: t for t in _topics({"input": invalid_start, "opts": {"backend": "rpa"}})}
+    assert timed["budget"]["status"] == "error" and "start_time_valid" in timed["budget"]["rules"]
+    api = {t["id"]: t for t in _topics({"input": _ok_input(), "opts": {"backend": "api", "server": None}})}
+    # До проверки серверные строки «not checked»: раздел серый, не красный.
+    assert api["account"]["status"] == "unknown" and api["meta"]["rules"] == ["plan_check"]
+    assert [t["id"] for t in _topics({"input": _ok_input(), "opts": {"backend": "api"}})] == pf.TOPIC_IDS
+
+
+def test_a_check_that_could_not_run_is_not_checked_and_does_not_block():
+    opts = {"backend": "api", "server": [], "planError": "The profile is busy with another job",
+            "planErrorKind": "not_checked"}
+    shown = _lines({"input": _ok_input(), "opts": opts})
+    plan = shown["lines"][-1]
+    assert shown["blocks"] is False and plan["rule"] == "plan_check"
+    assert plan["status"] == "unknown" and plan["retry"] is True and "busy" in plan["detail"]
+    assert _status(shown["lines"], "page_ok") == "unknown"
+    assert next(x for x in shown["lines"] if x["rule"] == "page_ok")["detail"] == "Could not check"
+    # Клиентская ошибка при этом блокирует, как и раньше.
+    assert _lines({"input": _with(link=""), "opts": opts})["blocks"] is True
+
+
+@pytest.mark.parametrize("exc", [
+    ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host"),
+    TimeoutError("CDP did not answer in 30 s"),
+    RuntimeError("Profile p-Test is busy with another job"),
+])
+def test_check_plan_marks_a_failed_read_session_as_not_checked(tmp_path, monkeypatch, exc):
+    from contextlib import contextmanager
+
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+    from src.web import publish_api
+
+    @contextmanager
+    def session(account):
+        raise exc
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    monkeypatch.setattr(_api, "_session", session)
+    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: "p-" + account)
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert out["results"] == [] and out["error"] and out["error_kind"] == "not_checked"
+    assert out["account_audit"] is None
+
+
+def test_check_plan_kinds_for_the_account_and_a_broken_draft(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    meta = AuditMeta(status=2)
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    _read_session(monkeypatch, meta)
+    assert publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")["error_kind"] == "account"
+
+    def broken(slots, **kw):
+        raise ValueError("bad slot")
+    monkeypatch.setattr(publish_api, "build_drafts", broken)
+    assert publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")["error_kind"] == "plan"
+    d = _draft(tmp_path, ads=1)
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [d])
+    _read_session(monkeypatch, AuditMeta())
+    assert publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")["error_kind"] == ""
 
 
 def test_the_account_verdict_is_shown_on_the_account_line():
@@ -688,6 +845,12 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
     assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
+
+
+def test_a_rule_without_a_topic_lands_in_the_meta_topic():
+    """Правило соседней задачи без строки в _TOPIC_OF не роняет таблицу (TEST9095, 18.10)."""
+    rule = pf._r("rule_from_another_task", "Label", "error", "server", "hint")
+    assert rule["topic"] == "meta"
 
 
 def test_resolve_page_sets_the_account_default_source():

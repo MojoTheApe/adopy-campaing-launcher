@@ -27,6 +27,7 @@ function makeElement(id) {
     hidden: false,
     inert: false,
     handlers: {},
+    style: { props: {}, setProperty(k, v) { this.props[k] = v; }, getPropertyValue(k) { return this.props[k] || ''; } },
     classes: new Set(),
     setAttribute(name, value) { this.attrs[name] = String(value); },
     getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null; },
@@ -59,6 +60,7 @@ function makePage(store, vw) {
   const document = {
     body,
     getElementById(id) { return els[id] || null; },
+    querySelector() { return null; },
     addEventListener(name, fn) { documentHandlers.push(name); },
     dispatchEvent(e) { events.push(e); return true; },
     documentElement: { style: { props: {}, setProperty(k, v) { this.props[k] = v; } } },
@@ -68,7 +70,7 @@ function makePage(store, vw) {
     document,
     localStorage: store,
     CustomEvent: function (type, init) { this.type = type; this.detail = (init || {}).detail; },
-    window: { innerWidth: vw || 1400 },
+    window: { innerWidth: vw || 1400, innerHeight: 900, addEventListener() {} },
   };
   vm.runInNewContext(code, sandbox);
   return { api: sandbox.window.cbDrawer, els, body, events, documentHandlers, doc: document };
