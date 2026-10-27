@@ -132,6 +132,12 @@ def _shots(p, name):
         p.screenshot(path=str(Path(out) / f"{name}.png"))
 
 
+def _topic_rule_ids(p, topic):
+    """Точный состав строк раздела: число не скрывает потерянное или чужое правило."""
+    return p.locator(f'.cbd-pf-topic[data-topic="{topic}"] .cbd-pf-line').evaluate_all(
+        "rows => rows.map(row => row.dataset.rule)")
+
+
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, theme):
     p, state = _open(browser, "rpa", theme=theme)
@@ -149,7 +155,8 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         # Раздел с ошибкой раскрыт сам, чистый — свёрнут.
         assert _topic(p, "creative")["status"] == "error" and _topic(p, "creative")["open"]
         assert "Primary text" in _topic(p, "creative")["summary"]
-        assert _topic(p, "audience") == {"status": "ok", "open": False, "summary": "2 checks ok"}
+        assert _topic(p, "audience") == {"status": "ok", "open": False, "summary": "3 checks ok"}
+        assert _topic_rule_ids(p, "audience") == ["country_set", "age_range", "devices_consistent"]
         btn = p.locator(".cbd-publish-all")
         assert btn.is_disabled(), "Publish all включён при ошибках"
         assert "Publish is off" in p.locator(".cbd-gate-reason").inner_text()
@@ -165,7 +172,10 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         assert _badge(p) == "no errors", p.locator(".cbd-pf").inner_text()
         assert btn.is_enabled() and p.locator(".cbd-gate-reason").count() == 0
         # Исправлено — раздел свернулся сам; щелчок по нему раскрывает и сворачивает.
-        assert _topic(p, "creative") == {"status": "ok", "open": False, "summary": "6 checks ok"}
+        assert _topic(p, "creative") == {"status": "ok", "open": False, "summary": "10 checks ok"}
+        assert _topic_rule_ids(p, "creative") == [
+            "media_chosen", "vertical_needs_main", "texts_limit", "texts_vertical", "texts_dynamic",
+            "primary_text", "headline", "headline_len", "primary_len", "cta_allowed"]
         p.locator(".cbd-pf-tbtn[data-topic='creative']").click()
         assert _topic(p, "creative")["open"] and p.locator(".cbd-pf-line[data-rule='headline']").is_visible()
         p.evaluate("() => cbTree.refreshEditor()")
