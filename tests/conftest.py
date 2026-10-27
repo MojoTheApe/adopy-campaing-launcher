@@ -58,6 +58,9 @@ os.environ["ACL_SENTRY_RUN_SUMMARY"] = "0"
 # monkeypatch — позже, и действует его значение.
 for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
     os.environ[_name] = ""
+# ACL-103: с паролем BI из машинного .env тесты отчёта читали бы живую базу
+# вместо своих книг. Тесты BI включают его сами через monkeypatch.
+os.environ["BI_MYSQL_PASSWORD"] = ""
 
 # Тесты не спрашивают MLX API про прокси профиля (ACL-1138).
 #
@@ -102,6 +105,17 @@ def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
 
     root = tmp_path_factory.mktemp("profile_leases")
     monkeypatch.setattr(profile_lease, "_lease_root", lambda: root)
+
+
+@pytest.fixture(autouse=True)
+def _account_refresh_off_the_live_machine(tmp_path_factory):
+    from src.analysis_agent import account_refresh_state
+    root = tmp_path_factory.mktemp("account_refresh_machine") / "coordination"
+    # A private patch avoids moving the shared monkeypatch fixture before the
+    # existing RPA reset/undo boundary (which must restore mocks before reset).
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(account_refresh_state, "machine_root", lambda: root)
+        yield
 
 
 # Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
@@ -204,6 +218,12 @@ def _slot_queue_never_reads_the_host_memory(monkeypatch):
         return ps.MemoryReading(total_mb=64 * 1024, available_mb=48 * 1024)
 
     monkeypatch.setitem(ps.ProfileSlots.__init__.__kwdefaults__, "memory", plenty)
+    # ACL-1642: «профиль уже открыт?» тоже не спрашиваем у машины — иначе каждое
+    # ожидание гоняет psutil по процессам раннера. Тесты самой проверки
+    # передают `check` явно.
+    if hasattr(ps, "OpenProfileProbe"):
+        monkeypatch.setattr(ps.OpenProfileProbe.__init__, "__defaults__",
+                            (lambda profiles: set(),))
     # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
     # (`keep`), не должны занимать места следующему.
     monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))
@@ -374,4 +394,15 @@ def _static_scripts_come_from_disk(monkeypatch):
 
         patched.static_wrap = wrap       # для test_static_scripts_from_disk
         monkeypatch.setattr(cls, "route", patched)
+    yield
+
+
+# ACL-1771: результаты поиска таргетинга живут между Check plan на уровне модуля — между тестами их не носим.
+@pytest.fixture(autouse=True)
+def _clear_plan_search_cache():
+    try:
+        from src.web import publish_api
+        publish_api.PLAN_SEARCH_CACHE.clear()
+    except Exception:
+        pass
     yield

@@ -5,8 +5,9 @@ import json
 import os
 import platform
 import shutil
-import socket
+import sys
 import tempfile
+import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,11 +56,50 @@ def setup_is_complete(config_directory: str | Path) -> bool:
         return False
 
 
+STATS_WORKBOOK_HELP = (
+    "The Stats workbook is the Excel report your team lead keeps; it lists every campaign manager "
+    "(CM column) with their ad accounts. ACL does not create or download it: ask your team lead or "
+    "support to send you the current file, save it on this computer, then choose it here."
+)
+
+
+def default_stats_workbook() -> str:
+    """The workbook in the usual location (FB_STATS_EXCEL or Desktop), or '' if it is not there."""
+    try:
+        from config.paths import get_excel_path
+
+        candidate = get_excel_path()
+    except Exception:
+        return ""
+    try:
+        return candidate if candidate and Path(candidate).is_file() else ""
+    except OSError:
+        return ""
+
+
 def validate_stats_workbook(path: str) -> str:
+    if not (path or "").strip():
+        raise WizardValidationError("No Stats workbook chosen. " + STATS_WORKBOOK_HELP)
     try:
         return _validate_stats_workbook(path)
     except StatsWorkbookError as exc:
-        raise WizardValidationError(str(exc)) from exc
+        message = str(exc)
+        if "does not exist" in message:
+            message += " " + STATS_WORKBOOK_HELP
+        else:
+            message += " Ask your team lead for the current report file, then choose it again."
+        raise WizardValidationError(message) from exc
+
+
+def similar_names(name: str, candidates, limit: int = 3) -> list[str]:
+    """Candidates that look like `name` (case-insensitive), best first."""
+    import difflib
+
+    by_fold: dict[str, str] = {}
+    for candidate in candidates:
+        by_fold.setdefault(candidate.casefold(), candidate)
+    close = difflib.get_close_matches(name.casefold(), list(by_fold), n=limit, cutoff=0.6)
+    return [by_fold[key] for key in close]
 
 
 def default_creatives_directory() -> Path:
@@ -116,8 +156,11 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
         cm_index = by_name["cm"]
         account_index = by_name["account alias"]
         aliases: dict[str, str] = {}
+        known_managers: list[str] = []
         for row in rows:
             manager = str(row[cm_index] or "").strip() if cm_index < len(row) else ""
+            if manager and manager not in known_managers:
+                known_managers.append(manager)
             alias = str(row[account_index] or "").strip() if account_index < len(row) else ""
             if manager.casefold() == name.casefold() and alias:
                 aliases.setdefault(alias.casefold(), alias)
@@ -125,9 +168,17 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
         workbook.close()
 
     if not aliases:
+        close = similar_names(name, known_managers)
+        hint = (
+            "Did you mean: " + ", ".join(f"“{item}”" for item in close) + "? "
+            "Go back to the name step and type it exactly as shown."
+            if close
+            else "No similar name was found. Check the spelling, or ask your team lead whether "
+                 "you are listed in the CM column of this workbook."
+        )
         raise WizardValidationError(
-            "No accounts were found for this campaign manager in the Stats workbook. "
-            "Check the name or ask support."
+            f"“{name}” is not in the CM column of this Stats workbook, so the dashboard "
+            f"would show no accounts. {hint}"
         )
     return MachineConfiguration(
         name,
@@ -135,7 +186,7 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
     )
 
 
-def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[ReadinessCheck]:
+def system_readiness(config_directory: str | Path) -> list[ReadinessCheck]:
     config_dir = Path(config_directory)
     checks: list[ReadinessCheck] = []
     windows_x64 = platform.system() == "Windows" and platform.machine().casefold() in {
@@ -164,14 +215,21 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
             f"{free_bytes // (1024 * 1024)} MB available",
         )
     )
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.5)
-        port_free = sock.connect_ex(("127.0.0.1", port)) != 0
+    # Занятый 9090 — не повод останавливать установку: там может работать
+    # дешборд соседа по машине или посторонняя программа, и лаунчер встанет
+    # рядом. Раньше здесь горел красный крестик, и второй человек на общей
+    # машине упирался в него на втором шаге (ACL-1309).
+    import local_dashboard
+
+    # Тот же порт, что займёт лаунчер, — но ничего не закрепляем: это проверка.
+    port = local_dashboard.choose_port(config_dir, remember=False)
+    first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
     checks.append(
         ReadinessCheck(
             "Local dashboard port",
-            port_free,
-            f"port {port} is {'available' if port_free else 'already in use'}",
+            port is not None,
+            f"port {port} is available" if port is not None
+            else f"ports {first}-{last} are all used by other applications",
         )
     )
     return checks
@@ -225,6 +283,27 @@ def enable_clipboard_shortcuts(widget, tk_module) -> None:
             menu.grab_release()
 
     widget.bind_all("<Button-3>", on_right_click, add="+")
+
+
+def setup_guide_path() -> Path:
+    """Страница установки (ACL-1175): в пакете — готовый HTML, из исходников — сам Markdown."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        return Path(bundle) / "setup-guide.html"
+    return Path(__file__).resolve().parents[2] / "docs" / "SETUP-NEW-PC.md"
+
+
+def open_setup_guide(opener: Callable[[str], bool] = webbrowser.open) -> str:
+    """Open the setup guide; return a message for the status line when it cannot be opened."""
+    path = setup_guide_path()
+    if not path.is_file():
+        return "The setup guide is missing from this installation. Ask Evgeni for the guide link."
+    try:
+        if opener(path.as_uri()):
+            return ""
+    except Exception:
+        pass
+    return f"Could not open the setup guide. Open this file yourself: {path}"
 
 
 def write_ready_state(config_directory: str | Path, version: str) -> None:
@@ -282,7 +361,9 @@ class SetupWizard:
         self.configuration: MachineConfiguration | None = None
         self.completed = False
         self.campaign_manager_name = tk.StringVar(value=self._existing_env_value("MY_CM_NAME"))
-        self.stats_path = tk.StringVar(value=self._existing_env_value("FB_STATS_EXCEL"))
+        self.stats_path = tk.StringVar(
+            value=self._existing_env_value("FB_STATS_EXCEL") or default_stats_workbook()
+        )
         self.creatives_path = tk.StringVar(
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.status = tk.StringVar()
@@ -322,6 +403,9 @@ class SetupWizard:
             wraplength=500,
             justify="left",
         )
+        # ACL-1175: страница установки всегда в одном клике от любого шага —
+        # человек сверяет экран с текстом, не выходя из мастера.
+        tk.Button(self.footer, text="Setup guide", command=self._open_guide).pack(side="left", padx=(0, 12))
         self.status_label.pack(side="left", fill="x", expand=True)
         self.back_button = tk.Button(self.footer, text="Back", width=10, command=self._back)
         self.back_button.pack(side="right", padx=(8, 0))
@@ -377,6 +461,8 @@ class SetupWizard:
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
         )
         self._text("New versions are offered in the dashboard and installed only when you click Update.")
+        self._text("Step-by-step instructions, with what you should see at each step: click Setup guide below. "
+                   "It is also in Start → Adopy Campaign Launcher → Setup guide.")
 
     def _system(self) -> None:
         self.system_checks = system_readiness(self.config_directory)
@@ -416,6 +502,10 @@ class SetupWizard:
 
     def _files(self) -> None:
         self._text("Use the file pickers; no path needs to be typed or edited.")
+        self._text(STATS_WORKBOOK_HELP)
+        if self.stats_path.get() and default_stats_workbook() == self.stats_path.get():
+            self._text("A workbook was found in the usual place and is filled in below. "
+                       "Change it only if you were sent a different file.", color="#17663a")
         self._path_row("Stats workbook (Excel)", self.stats_path)
         self._path_row("Creatives folder", self.creatives_path, directory=True)
         self._text("Put your videos and images into the Creatives folder. ACL creates it if it does not exist yet. "
@@ -449,6 +539,11 @@ class SetupWizard:
             text="Copy sanitized setup summary",
             command=self._copy_summary,
         ).pack(anchor="w", pady=10)
+
+    def _open_guide(self) -> None:
+        problem = open_setup_guide()
+        if problem:
+            self.status.set(problem)
 
     def _copy_summary(self) -> None:
         if not self.configuration:

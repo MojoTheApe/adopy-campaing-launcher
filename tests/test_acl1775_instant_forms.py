@@ -647,6 +647,18 @@ def _golden_run(cr_mod, tmp):
     return json.loads(json.dumps(out))
 
 
+def _without_multi_advertiser(got: dict) -> dict:
+    """ACL-1767: единственное, что добавилось к плану пустого черновика, - явный OPT_OUT
+    Multi-advertiser ads (решение владельца). Всё остальное обязано совпасть побайтно."""
+    got = json.loads(json.dumps(got))
+    for _path, params in got["posts"]:
+        params.pop("contextual_multi_ads", None)
+    got["readback_checks"] = [c for c in got["readback_checks"] if c["field"] != "multi_advertiser"]
+    for row in got["plan"]["summary"]["ad_sets"]:
+        row.pop("multi_advertiser", None)
+    return got
+
+
 def _without_instagram(value):
     """ACL-1896 добавляет ровно Instagram-идентичность: поле креатива, шаг предпроверки и строку сверки."""
     if isinstance(value, dict):
@@ -663,12 +675,18 @@ def _without_instagram(value):
 def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(tmp_path):
     """Золотой файл снят прежним создателем (до ACL-1775) на том же черновике.
 
-    ACL-1896: кроме Instagram-идентичности (поле, шаг, строка сверки) не меняется ни байта.
+    ACL-1767/1774 add explicit multi-advertiser opt-out and dynamic-mode verification;
+    ACL-1896 adds Instagram identity. Every other old-draft field remains identical.
     """
     want = json.loads(GOLDEN.read_text(encoding="utf-8"))
     got = _golden_run(cr, tmp_path)
-    assert got != want, "креатив должен нести Instagram-идентичность Страницы"
-    assert _without_instagram(got) == want
+    flags = [c for c in got["readback_checks"] if c["field"] == "dynamic_creative"]
+    assert flags == [{"object": "ad set MX Leads 1", "field": "dynamic_creative",
+                      "expected": False, "actual": False, "ok": True, "not_read": False}]
+    assert got != want, "creative identity and safety verification must be present"
+    unchanged = _without_multi_advertiser(_without_instagram(got))
+    unchanged["readback_checks"] = [c for c in unchanged["readback_checks"] if c not in flags]
+    assert unchanged == want
 
 
 def test_website_draft_does_not_grow_new_keys(tmp_path):
@@ -821,3 +839,20 @@ def test_the_forms_read_failure_comes_back_as_text(monkeypatch):
     monkeypatch.setattr(_as, "serialized_browser", lambda **kw: (lambda fn: fn))
     out = page_forms.read_forms("Nope")
     assert out["ok"] is False and out["state"] == "failed" and "not in the account map" in out["message"]
+
+
+def test_page_for_takes_the_first_page_when_the_map_is_empty():
+    # ACL-1897: пустой page_id в карте — первая Страница кабинета, одна или несколько.
+    from src.web import page_forms as pf
+
+    class _C:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def get_all(self, *a, **k):
+            return [{"id": i} for i in self.ids]
+
+    assert pf.page_for("", _C(["111", "222"]), "act_1") == "111"
+    assert pf.page_for("", _C(["111"]), "act_1") == "111"
+    assert pf.page_for("", _C([]), "act_1") == ""
+    assert pf.page_for("999", _C(["111"]), "act_1") == "999"

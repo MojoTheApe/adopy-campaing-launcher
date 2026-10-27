@@ -516,12 +516,32 @@ def test_a_plan_that_cannot_fit_the_call_budget_is_refused_up_front(small, tmp_p
     assert meta.posts == []
 
 
-def test_the_default_budget_fits_a_typical_big_video_and_refuses_the_largest():
+def test_chunks_and_the_rest_of_the_plan_share_one_budget_and_the_refusal_comes_before_writes(small, tmp_path,
+                                                                                            monkeypatch):
+    """ACL-1768: куски + записи ВСЕХ наборов (оценка плана) против бюджета, а не куски + фиксированный запас."""
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr, "CALLS_RESERVE_OTHER", 0)       # прежняя проверка (куски + запас) пропустила бы
+    meta = ChunkMeta()
+    chunks = cr.upload_calls(f.stat().st_size)
+    rest = cr.estimate_create_calls(cr.plan_from_draft(d))
+    out, _ = _run(meta, d, max_calls=chunks + rest - 1)
+    assert out.stop_kind == "plan" and "rest of the campaign" in out.error and meta.posts == []
+
+
+def test_the_default_budget_fits_a_typical_big_video_and_refuses_the_largest(tmp_path):
+    """Бюджет считается по плану (ACL-1768): кусков и остальной кампании вместе - не больше него."""
+    import tests.test_acl1768_ad_sets as T
     from src.web import publish_api
 
-    # 247 МБ = 31 кусок + 3: влезает в бюджет по умолчанию; 1,5 ГБ = 195 вызовов - отказ заранее («разбейте»).
-    assert cr.upload_calls(247 * 1024 * 1024) + cr.CALLS_RESERVE_OTHER <= publish_api.DEFAULT_CREATE_MAX_CALLS
-    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) + cr.CALLS_RESERVE_OTHER > publish_api.DEFAULT_CREATE_MAX_CALLS
+    one = T._draft(tmp_path, sets=2, ads=1)
+    one.ad_sets = one.ad_sets[:1]
+    plan = cr.plan_from_draft(one)
+    budget, refusal = publish_api.create_call_budget(plan)
+    rest = cr.estimate_create_calls(plan)
+    assert refusal == ""
+    # 247 МБ = 31 кусок + 3: влезает; 1,5 ГБ = 195 вызовов вместе с остальным планом - отказ заранее («разбейте»).
+    assert cr.upload_calls(247 * 1024 * 1024) + rest <= budget
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) + rest > budget
 
 
 # ───────────────────────── мутации: охранники обязаны падать ─────────────────────────
@@ -568,3 +588,43 @@ def test_every_phase_of_one_upload_carries_the_same_waterfall_id(small, tmp_path
     ids = {params.get("waterfall_id") for _path, params in meta.posts if "upload_phase" in params}
     assert len(ids) == 1 and None not in ids
     assert re.fullmatch(r"[0-9a-f]{32}", ids.pop())
+
+
+# ───────────────────────── ACL-1998: шаги прогресса при долгой загрузке ─────────────────────────
+
+def _upload_steps(out):
+    return [s for s in out.steps if ": uploaded " in s]
+
+
+def test_a_frozen_clock_reports_progress_about_every_ten_percent(small, tmp_path):
+    # 25 кусков по 1 МБ, часы стоят: сработать может только правило «каждые 10%» (2,5 МБ -> каждый 3-й кусок).
+    d, f = _big_draft(tmp_path, size=25 * MB)
+    meta = ChunkMeta()
+    out, _ = _run(meta, d, clock=lambda: 0.0)
+    assert out.error == "", out.error
+    steps = _upload_steps(out)
+    assert 5 <= len(steps) <= 10 and len(steps) < 25
+    done = [int(re.search(r"uploaded (\d+)/25 MB", s).group(1)) for s in steps]
+    assert done == sorted(done) and done[-1] < 25
+    # Итог тот же: файл цел, видео одно.
+    assert next(iter(meta.sessions.values()))["sha"].hexdigest() == _sha(f)
+    assert len(_video_objects(meta)) == 1
+
+
+def test_slow_chunks_report_by_time_not_per_chunk(small, tmp_path, monkeypatch):
+    # Файл 100 кусков: 10% = каждые 10 кусков. Часы идут по 5 с на вызов часов -> шаг по времени чаще 10%.
+    d, _ = _big_draft(tmp_path, size=100 * MB)
+    ticks = iter(range(0, 10_000_000, 5))
+    out, _ = _run(ChunkMeta(), d, clock=lambda: float(next(ticks)), max_calls=400)
+    assert out.error == "", out.error
+    steps = _upload_steps(out)
+    assert 10 < len(steps) < 100            # чаще 10%-правила, но не на каждый кусок
+
+
+def test_progress_steps_do_not_change_the_result(small, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ChunkMeta()
+    out, _ = _run(meta, d)
+    assert out.error == "" and out.readback["ok"] is True
+    assert [o for p, o in meta.phases if p == "transfer"] == [0, MB, 2 * MB, 3 * MB]
+    assert any("chunked upload started" in s for s in out.steps)

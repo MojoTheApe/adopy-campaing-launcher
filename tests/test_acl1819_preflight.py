@@ -136,6 +136,25 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "tracking_unknown_when_link_broken": (_with(link="nope"), "link_tracking", "unknown", []),
     "media_ok": (_with(), "media_chosen", "ok", []),
     "media_missing": (_with(ads=_ad(1, file="")), "media_chosen", "error", [2]),
+    # ACL-1774: до 5 текстов и вертикальный файл только рядом с основным.
+    "texts_ok": (_with(), "texts_limit", "ok", []),
+    "texts_six_bodies": (_with(ads=_ad(0, bodies=[f"b{i}" for i in range(6)])), "texts_limit", "error", [1]),
+    "vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "vertical_needs_main", "ok", []),
+    "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
+                              "vertical_needs_main", "error", [2]),
+    # Живой 2026-10-14: несколько текстов вместе с вертикальным файлом - отказ Meta; без него - отдельный набор.
+    "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
+    "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
+                             "texts_vertical", "error", [1]),
+    "texts_vertical_titles": (_with(ads=_ad(1, vertical_file="v.png", headlines=["a", "b"])),
+                              "texts_vertical", "error", [2]),
+    "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
+    "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
+    "texts_dynamic_descriptions": (_with(ads=_ad(1, descriptions=["a", "b"])), "texts_dynamic", "error", [2]),
+    # Решение владельца 2026-10-20: несколько текстов - Dynamic Creative, объявление одно в наборе.
+    "texts_dynamic_alone_ok": (_with(ads=_ad(0, bodies=["a", "b", "c", "d", "e"])[:1]), "texts_dynamic", "ok", []),
+    "texts_dynamic_not_with_vertical": (_with(ads=_ad(0, vertical_file="v.png", bodies=["a", "b"])),
+                                        "texts_dynamic", "ok", []),
     "primary_ok": (_with(), "primary_text", "ok", []),
     "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "error", [1]),
     "headline_ok": (_with(), "headline", "ok", []),
@@ -146,6 +165,23 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "primary_126_warns": (_with(ads=_ad(1, body="y" * 126)), "primary_len", "warning", [2]),
     "cta_ok": (_with(), "cta_allowed", "ok", []),
     "cta_wrong": (_with(ads=_ad(0, cta="SHOP_NOW")), "cta_allowed", "error", [1]),
+    # ACL-1767: список кнопок по месту конверсии, устройства и старт набора.
+    "cta_new_website_ok": (_with(ads=_ad(0, cta="CONTACT_US")), "cta_allowed", "ok", []),
+    "cta_book_now_not_for_website_leads": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "error", [1]),
+    "cta_order_now_not_for_forms": (_with(destination="instant_form",
+                                          ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]]),
+                                    "cta_allowed", "error", [1, 2]),
+    "devices_version_not_listed": (_with(os="iOS", os_min="99", device="mobile"), "devices_consistent", "error", []),
+    "devices_ok": (_with(), "devices_consistent", "ok", []),
+    "devices_ios_version_ok": (_with(os="iOS", os_min="14.0", device="mobile"), "devices_consistent", "ok", []),
+    "devices_ios_desktop": (_with(os="iOS", device="desktop"), "devices_consistent", "error", []),
+    "devices_version_needs_os": (_with(os="All", os_min="14"), "devices_consistent", "error", []),
+    "devices_version_bad": (_with(os="Android", os_min="14.x"), "devices_consistent", "error", []),
+    "start_empty_ok": (_with(), "start_time_valid", "ok", []),
+    "start_future_ok": (_with(start_time="2026-10-20T10:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
+    "start_today_ok": (_with(start_time="2026-10-12T08:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
+    "start_bad_format": (_with(start_time="20.10.2026 10:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
+    "start_in_the_past": (_with(start_time="2026-10-11T23:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
     "budget_ok": (_with(), "budget_set", "ok", []),
     "budget_missing": (_with(budget=None), "budget_set", "error", []),
     "budget_zero": (_with(budget="0"), "budget_set", "error", []),
@@ -183,6 +219,53 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
 }
+
+
+# ACL-1768: наборы. Те же фикстуры идут и через страницу (паритет), и через Python.
+def _set(name: str, ads=None, **over) -> dict:
+    base = {"name": name, "destination": "website", "age_min": 35, "age_max": 35, "os": "All",
+            "device": "", "os_min": "", "start_time": "", "ads": copy.deepcopy(ads if ads is not None else _ok_input()["ads"])}
+    base.update(over)
+    return base
+
+
+def _multi(*sets: dict, **over) -> dict:
+    inp = _ok_input()
+    inp.pop("ads")
+    inp["ad_sets"] = list(sets)
+    inp.update(over)
+    return inp
+
+
+CLIENT_CASES.update({
+    "adset_names_ok": (_with(), "adset_names_unique", "ok", []),
+    "adset_names_two_ok": (_multi(_set("A"), _set("B")), "adset_names_unique", "ok", []),
+    "adset_names_dup": (_multi(_set("A"), _set(" a ")), "adset_names_unique", "error", []),
+    "adset_has_ads_ok": (_with(), "adset_has_ads", "ok", []),
+    "adset_empty": (_multi(_set("A"), _set("B", ads=[])), "adset_has_ads", "error", []),
+    "second_set_age_bad": (_multi(_set("A"), _set("B", age_min=17, age_max=17)), "age_range", "error", []),
+    "second_set_devices_bad": (_multi(_set("A"), _set("B", os="iOS", device="desktop")),
+                               "devices_consistent", "error", []),
+    "second_set_start_past": (_multi(_set("A"), _set("B", start_time="2026-10-01T10:00"), now="2026-10-12T12:00"),
+                              "start_time_valid", "error", []),
+    "ads_numbered_across_sets": (_multi(_set("A"), _set("B", ads=_ad(0, file=""))), "media_chosen", "error", [3]),
+    "same_ad_names_in_two_sets_ok": (_multi(_set("A"), _set("B")), "ad_names_unique", "ok", []),
+    "same_ad_names_inside_a_set": (_multi(_set("A"), _set("B", ads=_ad(1, name="1000 - Text0"))),
+                                   "ad_names_unique", "error", [3, 4]),
+    "mixed_destinations_cta_per_set": (
+        _multi(_set("A"), _set("B", destination="instant_form",
+                               ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]])),
+        "cta_allowed", "error", [3, 4]),
+    # ACL-1768: «несколько текстов» считает объявления СВОЕГО набора, а не кампании.
+    "texts_dynamic_alone_in_its_set": (
+        _multi(_set("A", ads=_ad(0, bodies=["a", "b"])[:1]), _set("B")), "texts_dynamic", "ok", []),
+    "texts_dynamic_shared_set": (
+        _multi(_set("A", ads=_ad(0, bodies=["a", "b"])[:1]), _set("B", ads=_ad(0, bodies=["a", "b"]))),
+        "texts_dynamic", "error", [2]),
+    "mixed_destinations_forms_only_for_forms": (
+        _multi(_set("A"), _set("B", destination="instant_form", ads=_ad(0, form_id="7"))),
+        "form_chosen", "error", [4]),
+})
 
 
 @pytest.mark.parametrize("name", sorted(CLIENT_CASES))
@@ -319,8 +402,8 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     assert out.error == "" and not pf.blocks(out.audit)
     assert {v["rule"]: v["status"] for v in out.audit} == {
         "account_active": "ok", "page_ok": "ok", "instagram_identity": "ok", "pixel_ok": "ok", "country_resolves": "ok",
-        "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
-        "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
+        "language_resolves": "ok", "interests_resolve": "ok", "interests_confirmed": "ok", "media_readable": "ok", "media_limits": "ok",
+        "media_vertical": "ok", "vertical_ratio": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
 
 def test_page_not_on_the_account(tmp_path):
@@ -337,6 +420,27 @@ def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path
     assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
     assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
+
+
+def test_page_not_chosen_takes_the_first_page(tmp_path):
+    # ACL-1897: пустой выбор берёт первую Страницу кабинета, одна она или несколько.
+    d = _draft(tmp_path, ads=1)
+    d.page_id = ""
+    out = _audit(AuditMeta(pages=("111", "222")), d)
+    assert _by(out)["page_ok"]["status"] == "ok"
+    assert any("the first available page" in w for w in out.warnings)
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"  # ACL-1880: website manual completion
+
+
+def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    d.page_id = "222"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    d.page_id = "333"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
 
 
 def test_pixel_missing_for_website_conversions(tmp_path):
@@ -743,3 +847,12 @@ def test_a_rule_without_a_topic_lands_in_the_meta_topic():
     """Правило соседней задачи без строки в _TOPIC_OF не роняет таблицу (TEST9095, 18.10)."""
     rule = pf._r("rule_from_another_task", "Label", "error", "server", "hint")
     assert rule["topic"] == "meta"
+
+
+def test_resolve_page_sets_the_account_default_source():
+    # ACL-1897: прямая проверка источника; кабинет с несколькими Страницами не стопорит запуск.
+    plan = cr.CampaignPlan.__new__(cr.CampaignPlan)
+    plan.page_id, plan.page_source = "", ""
+    facts = cr.AccountFacts(act=ACT, currency="USD", pages=["111", "222"], pixels=[])
+    cr.resolve_page(plan, facts)
+    assert (plan.page_id, plan.page_source) == ("111", "account default")

@@ -2371,7 +2371,9 @@ class AdsManagerFlow:
         dry_run: bool = False,
         skip_creative_upload: bool = False,
     ) -> RpaPublishResult:
-        result = RpaPublishResult(campaign_name=draft.name)
+        result = RpaPublishResult(campaign_name=draft.name, page_id=getattr(draft, "page_id", "") or "",
+                                 page_name=getattr(draft, "page_name", ""),
+                                 page_origin=getattr(draft, "page_origin", ""))
         if draft.errors:
             result.error = "; ".join(draft.errors)
             return result
@@ -2700,7 +2702,7 @@ class AdsManagerFlow:
 
 
 def explicit_page_choice(draft) -> bool:
-    """ACL-1880: Identity is verified only when the person chose a Page; Automatic (empty) leaves it untouched."""
+    """A campaign-local Page, explicit or resolved Automatic, needs Identity verification."""
     return bool(getattr(draft, "page_provided", False) and getattr(draft, "page_id", None))
 
 

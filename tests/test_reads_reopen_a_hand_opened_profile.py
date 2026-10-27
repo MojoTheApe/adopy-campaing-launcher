@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
 from src.analysis_agent import country_split as cs  # noqa: E402
+from tests.test_acl2063_dashboard_browser import dashboard  # noqa: E402,F401 -- shared production fixture
 from src.fb_ads_rpa import browser as br  # noqa: E402
 from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
 
@@ -186,8 +187,8 @@ def test_the_row_shows_the_wait_and_the_plain_message():
     assert "mark.textContent = plain ? why : 'countries failed';" in js
     assert "s.error_code" in js
     row = ROW.read_text(encoding="utf-8")
-    assert "sr.error_code == 'open_by_hand'" in row
-    assert "sp.error_code == 'open_by_hand'" in row
+    assert 'class="amap-list"' in row and 'list not read' in row
+    assert 'class="amap-live' not in row
 
 
 # ── строка карты в деле (node) ─────────────────────────────────────────────
@@ -313,26 +314,43 @@ def _cell(html, marker):
     return part[:part.index("</td>")]
 
 
-def test_the_server_row_shows_the_plain_message_for_a_hand_opened_profile(rendered):
+def _current_failure_row(dashboard, message, code):
+    """Actual persisted queue result -> production JS, without opening a profile."""
+    from datetime import datetime, timezone
+    from src.analysis_agent import campaign_inventory as ci
+    site, page = dashboard
+    stamp = datetime.fromtimestamp(site.now, timezone.utc).isoformat()
+    failed = ci.Snapshot(account='Acc', state='failed', error=message,
+                         error_code=code, finished_at_utc=stamp)
+    ci.put_result(failed)
+    site.q.record_result(failed, trigger='action')
+    page.goto('http://acl.test/')
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state.refreshRows?.Acc?.state === 'failed'")
+    return site, page, page.locator('tr:has(td[data-account="Acc"])')
+
+
+def test_the_server_row_shows_the_plain_message_for_a_hand_opened_profile(rendered, dashboard):
     html = rendered(sp.HAND_OPEN_MESSAGE, sp.HAND_OPEN_CODE, split_code=sp.HAND_OPEN_CODE)
-    cell = _cell(html, 'class="num amap-live"')
-    # Текст целиком, в своём классе, не обрезан до 40 знаков.
-    assert (f'<span class="amap-live-hand" title="{sp.HAND_OPEN_MESSAGE}">'
-            f'{sp.HAND_OPEN_MESSAGE}</span>') in cell
-    assert "amap-live-bad" not in cell
-    # Страны — тем же текстом, не «countries failed».
-    assert '<small class="amap-split-bad hand"' in cell and "countries failed" not in cell
-    actions = _cell(html, '<td class="amap-actions">')
-    assert ">Read spend</button>" in actions and "failed · retry" not in actions
-    assert "amap-openprof" in actions, "open profile is still offered"
+    assert 'list not read' in _cell(html, 'class="amap-list"')
+    assert 'class="num amap-live"' not in html
+    site, page, row = _current_failure_row(dashboard, sp.HAND_OPEN_MESSAGE, sp.HAND_OPEN_CODE)
+    assert row.locator('.hc-snap').get_attribute('title') == sp.HAND_OPEN_MESSAGE
+    assert row.locator('button.hc-rc:visible').all_inner_texts() == ['Retry']
+    page.reload()
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state.refreshRows?.Acc?.state === 'failed'")
+    assert row.locator('.hc-snap').get_attribute('title') == sp.HAND_OPEN_MESSAGE
+    assert site.reads == [] and site.errors == []
 
 
-def test_the_server_row_keeps_failed_retry_for_other_failures(rendered):
+def test_the_server_row_keeps_failed_retry_for_other_failures(rendered, dashboard):
     html = rendered("Ads Manager did not finish loading in time", "", split_code="")
-    cell = _cell(html, 'class="num amap-live"')
-    assert "amap-live-hand" not in cell and 'class="amap-live-bad"' in cell
-    assert "countries failed" in cell
-    assert "failed · retry" in _cell(html, '<td class="amap-actions">')
+    assert 'list not read' in _cell(html, 'class="amap-list"')
+    assert 'class="num amap-live"' not in html
+    message = 'Ads Manager did not finish loading in time'
+    site, page, row = _current_failure_row(dashboard, message, '')
+    assert row.locator('.hc-snap').get_attribute('title') == message
+    assert row.locator('button.hc-rc:visible').all_inner_texts() == ['Retry']
+    assert site.reads == [] and site.errors == []
 
 
 def _attach_without_reopen():

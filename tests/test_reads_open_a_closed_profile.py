@@ -287,7 +287,8 @@ def test_a_logged_out_profile_gets_a_plain_line_and_no_retry(reads):
     assert out.error_code == sp.LOGGED_OUT_CODE == "profile_logged_out"
     names = [e[0] for e in reads.ev if isinstance(e, tuple)]
     assert names.count("start") == 1 and names.count("goto") == 1, "чтение повторилось"
-    assert names.count("stop") == 1, "запущенный чтением профиль не закрыт"
+    # ACL-2091: разлогиненный профиль остаётся открытым — войти в нём человек может сразу.
+    assert names.count("stop") == 0, "разлогиненный профиль закрыт"
 
 
 def test_a_logged_out_open_profile_says_so_too(reads):

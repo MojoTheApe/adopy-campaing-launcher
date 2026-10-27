@@ -186,6 +186,8 @@ def test_the_country_attributed_part_shows_only_amounts(splits):
     """ACL-1264: «in Kuwait: …» — как сводка рядом (ACL-1258): без «currency
     unknown» и без имён кабинетов. Суммы под знаком не складываются."""
     from src.web.app import templates
+    import pandas as pd
+    from src.analysis_agent import bi_compare
 
     links.link("FacebookX", "country", "Kuwait")
     links.link("FacebookY", "country", "Kuwait")
@@ -196,19 +198,15 @@ def test_the_country_attributed_part_shows_only_amounts(splits):
     _split(splits, "FacebookY", [{"country": "Kuwait", "spend": 20.25, "currency": "$"}])
     _split(splits, "FacebookZ", [{"country": "Kuwait", "spend": 7.0, "currency": "KWD"}])
 
-    view = _build_account_map_view(_report_with("Kuwait", "FacebookX", 120.0),
-                                   date_from="2026-09-01", date_to="2026-09-15")
-    html = templates.env.get_template("_account_map.html").render(amap=view, mlx={})
-    part = html.split('class="amap-country-read"', 1)[1].split("</i>", 1)[0]
-    assert "KWD 7.00" in part
-    assert "$10.50" in part and "$20.25" in part, "суммы под знаком — порознь, не сложены"
-    assert "$30.75" not in part
-    assert "currency unknown" not in part
-    assert ">3.00</b>" in part, "без валюты — голое число"
-    assert "FacebookX" not in part and "FacebookY" not in part and "FacebookZ" not in part
-    assert "FacebookW" not in part
-    import re
-    text = re.sub(r"<[^>]+>", "", part.split(">", 1)[1])
-    assert re.search(r"in Kuwait: \S", " ".join(text.split())), f"сумма прилипла к двоеточию: {text!r}"
-    assert "Meta did not write a currency" in part, "подсказка для суммы без валюты — своя"
-
+    for sources, description in [(None, "the selected statistics"),
+            (["workbook"], "the Stats workbook"), (["bi"], "the BI data"),
+            (["bi", "workbook"], "the selected source data")]:
+        report = _report_with("Kuwait", "FacebookX", 120.0)
+        report["source_info"] = bi_compare.provenance(frame=pd.DataFrame({"_stats_source": sources})) if sources else None
+        view = _build_account_map_view(report, date_from="2026-09-01", date_to="2026-09-15")
+        assert view["source_info"] == report["source_info"]
+        html = templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+        # Keep historical amounts in the model without showing Meta spend as BI.
+        assert 'class="amap-country-read"' not in html
+        assert 'class="amap-live-summary"' not in html
+        assert 'Campaign list' in html and f'numbers from {description}' in html

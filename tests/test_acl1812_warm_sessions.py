@@ -791,7 +791,7 @@ def test_publisher_uses_the_warm_tab_and_leaves_it_open(monkeypatch, tmp_path):
     monkeypatch.setattr(publish_api, "_open_tab", lambda url: pytest.fail("no own tab for a warm profile"))
     monkeypatch.setattr(publish_api, "_make_graph", lambda tab, act, *, writes=True: rig.make(tab))
     monkeypatch.setattr(publish_api, "preflight_account", lambda client, act: SimpleNamespace())
-    monkeypatch.setattr(publish_api, "TargetingResolver", lambda client: object())
+    monkeypatch.setattr(publish_api, "TargetingResolver", lambda client, **k: object())
     monkeypatch.setattr(publish_api, "GraphClient", lambda graph, **kw: SimpleNamespace(graph=graph, **kw))
     monkeypatch.setattr(publish_api, "_cooldown", lambda label: (0.0, ""))
     for _ in range(2):
@@ -915,7 +915,7 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
     assert page.count('<script src="/static/warm_sessions.js"></script>') == 1
     assert "setInterval" not in js, "no timers: the screen never polls on its own"
     assert js.count("setTimeout") == 2, "the only waits: the local open-job status and the refresh debounce"
-    assert "window.confirm(" in js and "confirm: true" in js
+    assert "window.aclConfirm(" in js and "confirm: true" in js
     for url in ("/warm/state", "/warm/open", "/warm/close", "/warm/job/"):
         assert url in js
     for forbidden in ("/account-spend", "/campaign-inventory", "/campaign-commands", "/publish"):

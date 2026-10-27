@@ -27,8 +27,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
+    resolve_page,
     AccountFacts,
     CampaignCreator,
     Outcome,
@@ -45,13 +47,16 @@ log = logging.getLogger(__name__)
 BACKEND_ENV = "ACL_FB_BACKEND"
 CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
-#: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
-#: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
-#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
-#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
-#: условия), поэтому запас на них +10. Свой потолок кончает только эту
+#: Потолок вызовов Graph на одну кампанию (ACL-1768): сам бюджет считается по плану
+#: (`creator.estimate_create_calls`: основа + за набор + за объявление + опросы видео +
+#: чтения форм Instant Form) и зажимается этим потолком. Он же верхняя граница для
+#: `ACL_FB_API_CREATE_MAX_CALLS`. Кампания, которой нужно больше, отклоняется заранее
+#: ("split it"), а не останавливается на полпути. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 150
+DEFAULT_CREATE_MAX_CALLS = 250
+#: Бюджет вызовов на кампанию не опускается ниже прежнего фиксированного (ревью 833, раунд 2).
+CREATE_BUDGET_FLOOR = 150
+CREATE_CALLS_FLOOR = 20
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -73,6 +78,29 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
     except ValueError:
         value = default
     return max(lo, min(hi, value))
+
+
+def create_call_budget(plan: Any) -> tuple[int, str]:
+    """(бюджет вызовов на кампанию, отказ). Бюджет - по плану, не больше потолка из окружения.
+
+    Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
+    остановка на полпути.
+    """
+    from src.fb_api.creator import estimate_create_calls, estimate_targeting_reads
+
+    # Записи кампании - не больше DEFAULT_CREATE_MAX_CALLS; сверх них бюджет несёт запас на чтения
+    # таргетинга (ACL-1771), которые идут из того же счётчика вызовов.
+    hard_max = DEFAULT_CREATE_MAX_CALLS + _tr_cap.JOB_READ_ABS_CAP
+    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, hard_max, CREATE_CALLS_FLOOR, hard_max))
+    need = estimate_create_calls(plan)
+    if need > DEFAULT_CREATE_MAX_CALLS:
+        return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
+                         "— split it. Nothing was created.")
+    # Не ниже прежних 150: малые планы не теряют запас на медленное видео. Нижний потолок в окружении -
+    # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
+    # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
+    # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
+    return min(max(need + estimate_targeting_reads(plan), CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:
@@ -193,6 +221,8 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
         "audit": list(outcome.audit),
+        # ACL-1771: термины таргетинга (найдены / ждут подтверждения) и кэш подтверждённых.
+        "targeting": list(outcome.targeting),
     }
 
 
@@ -222,6 +252,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "run_id": None,
         "campaign_id": outcome.campaign_id or None,
         "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
+        # ACL-1768: все наборы кампании (adset_id - первый, как всегда).
+        "adset_ids": list(outcome.adset_ids),
         "creative_id": None,
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
@@ -257,6 +289,7 @@ class ApiPublisher:
         self._facts: AccountFacts | None = None
         self._resolver: TargetingResolver | None = None
         self._entry = None
+        self._session_profile_id = ""
         self._opened = None
         #: ACL-2113: окно открыто прошлым заданием и оставлено (мы его взяли без перезапуска) —
         #: для решений «закрыть/держать» оно наше, как поднятое этим заданием.
@@ -310,6 +343,7 @@ class ApiPublisher:
                 f"{account_label}: Meta stopped the last API call ({why}); waiting about "
                 f"{int(left // 60) + 1} min before calling again. Nothing was created.")
         self._entry = entry
+        self._session_profile_id = profile_id
         from src.fb_api import profile as _fb_profile
 
         if self._open_warm(account_label, profile_id):
@@ -370,7 +404,7 @@ class ApiPublisher:
             self._halt(exc)
         except GraphError as exc:
             raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}") from exc
-        self._resolver = TargetingResolver(self._client)
+        self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
         self.progress("ad account verified")
 
     def _open_warm(self, account_label: str, profile_id: str) -> bool:
@@ -429,10 +463,29 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        budget, too_big = create_call_budget(plan)
+        if too_big:
+            return result_dict(Outcome(campaign_name=name), error=too_big)
+        early_notes: list[str] = []
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
             try:
+                # ACL-2192: черновик без Страницы («Automatic») - выбрать её ДО закрепления:
+                # pin_page принимает только числовой id, а creator выбирает Страницу позже
+                # (повторный resolve_page в _prepare идемпотентен: page_id уже задан и на кабинете).
+                if not plan.page_id:
+                    early_notes = list(resolve_page(plan, self._facts))
                 pinned = self._client.transport.pin_page(plan.page_id)
+            except PlanError as exc:
+                return result_dict(Outcome(campaign_name=name), error=f"{exc}. Nothing was created.")
+            except GraphStop as exc:
+                # Чтение Страниц профиля до закрепления тоже может упереться в стоп: как в creator.run.
+                if not isinstance(exc, CallBudget):
+                    self.stop = exc
+                    _start_cooldown(self.account_label, exc)
+                    _tm.report_stop(exc.kind, str(exc), {"source": "publish", "code": exc.code})
+                return result_dict(Outcome(campaign_name=name), error=(
+                    f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created."))
             except ValueError as exc:
                 return result_dict(Outcome(campaign_name=name),
                                    error=f"The Page of this draft cannot be used in this run ({exc}). "
@@ -441,7 +494,7 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
-        self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
+        self._client.reset_budget(budget)
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
         counter = None if self.dry_run else self._counter(plan)
@@ -490,6 +543,8 @@ class ApiPublisher:
             _start_cooldown(self.account_label, self.stop)
             _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
         res = result_dict(outcome)
+        # ACL-2192: заметка «Automatic Facebook Page» выбрана раньше creator - в итог она переносится здесь.
+        res["warnings"] = [n for n in early_notes if n not in res["warnings"]] + res["warnings"]
         _record("api_create_campaign", res["publishable"], campaign=name,
                 duration_s=round(time.monotonic() - began, 1),
                 diag={"calls": self._client.calls, "writes": self._client.writes,
@@ -517,6 +572,22 @@ class ApiPublisher:
             pass
 
     # -- конец
+    def refresh_structure(self) -> None:
+        """Read the account list before releasing this already-open session.
+
+        The job calls this only after confirmed publishing. Keep its original
+        call budget and stops; a failed refresh never repeats a publish.
+        """
+        if (self.dry_run or self.blocked or self.stop or self.cancelled()
+                or self._client is None):
+            return
+        from types import SimpleNamespace
+        from src.analysis_agent import account_refresh, campaign_inventory
+
+        snap = campaign_inventory.read_in_session(
+            self.account_label, SimpleNamespace(client=self._client, act=self.act, profile_id=self._session_profile_id), trigger="action")
+        account_refresh.queue().record_result(snap, trigger="action")
+
     def close(self, *, force: bool = False) -> None:
         """Закрыть свою вкладку. Профиль не трогаем."""
         _ = force
@@ -580,7 +651,11 @@ class ApiPublisher:
 # дополнительно требует один отдельный validate-only creative, без создания объектов.
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-PLAN_PREFLIGHT_MAX_CALLS = 12
+# ACL-1771: поиск детального таргетинга ходит за списками Meta. Потолок задания в резолвере растёт с числом
+# терминов, но не выше `JOB_READ_ABS_CAP`; здесь он лежит выше него с запасом на предпроверку кабинета.
+PLAN_PREFLIGHT_MAX_CALLS = 30 + _tr_cap.JOB_READ_ABS_CAP
+#: Результаты поиска переживают Check plan на короткое время: повтор после «unknown» идёт дальше.
+PLAN_SEARCH_CACHE = _tr_cap.SearchCache()
 
 #: ACL-2117: сколько секунд Check plan держит открытым профиль, который сам поднял
 #: (0 — закрывать как раньше, через `CLOSE_GRACE_S`).
@@ -611,7 +686,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
-        pub._resolver = TargetingResolver(client)
+        pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
         for draft in drafts:
             if draft.errors:
                 out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))

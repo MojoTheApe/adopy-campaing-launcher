@@ -159,23 +159,46 @@ class RpaPublisher:
                 account_label=account_label,
                 preview_mode=preview_mode,
             )
+            # ACL-1768: робот ведёт один набор (`ad_sets[0]`); остальные не отбрасываем молча.
+            for d in drafts:
+                if len(getattr(d, "ad_sets", None) or []) > 1:
+                    d.errors.append("Several ad sets need the API backend: the RPA backend builds "
+                                    "one ad set per campaign")
         self._built_at = time.monotonic()
-        if not preview_mode and any(getattr(d, 'page_provided', False) and getattr(d, 'page_id', None) and not d.errors for d in drafts):
-            from src.web.account_pages import read_pages, resolve_selection
+        if not preview_mode and any(getattr(d, 'page_provided', False) and not d.errors for d in drafts):
+            from src.web.account_pages import read_pages, resolve_selection, validate_profile_page
+            from src.fb_api import pages as pg
             from src.fb_api.graph import normalize_act
 
             available = read_pages(account_label, force=True)
+            proofs: dict[tuple[str, str, str], str] = {}
             for draft in drafts:
-                # Automatic (empty) on RPA leaves Identity untouched: no pick, no verification.
-                if not getattr(draft, 'page_provided', False) or not getattr(draft, 'page_id', None) or draft.errors:
+                if not getattr(draft, 'page_provided', False) or draft.errors:
                     continue
                 try:
                     if not available.get("ok"):
                         raise ValueError(available.get("message") or "Could not load Facebook Pages. Refresh pages to retry.")
                     if available.get("act") != normalize_act(draft.ad_account_id or ""):
                         raise ValueError("The account changed while reading Facebook Pages. Refresh pages and retry.")
+                    # The confirmed-empty Website RPA path keeps its existing
+                    # Identity. API Website manual shells and the Forms gate
+                    # retain their own existing behavior.
+                    if not available["pages"] and not draft.page_id:
+                        continue
                     chosen = resolve_selection(available["pages"], draft.page_id or "")
+                    origin = chosen.get("source", "")
+                    if origin not in (pg.SOURCE_ACCOUNT, pg.SOURCE_PROFILE):
+                        raise ValueError("The Facebook Page source is unknown. Refresh pages and retry.")
+                    if origin == pg.SOURCE_PROFILE:
+                        key = (available["act"], chosen["id"], draft.link)
+                        if key not in proofs:
+                            proofs[key] = validate_profile_page(account_label, act=key[0], page_id=key[1],
+                                                               page_name=chosen["name"], link=key[2])
+                        if proofs[key] != "":
+                            raise ValueError(proofs[key] or "Safe account-bound Page validation was not confirmed.")
+                    draft.page_source = "draft" if draft.page_id else "account default"
                     draft.page_id, draft.page_name = chosen["id"], chosen["name"]
+                    draft.page_origin = origin
                     draft.page_name_unique = sum(p["name"] == chosen["name"] for p in available["pages"]) == 1
                 except ValueError as exc:
                     draft.errors.append(str(exc))
