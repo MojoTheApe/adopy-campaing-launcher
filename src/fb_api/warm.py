@@ -55,6 +55,9 @@ from src.fb_api import stop_log as _stop_log
 from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageFailed, PageUnresponsive
 from src.fb_api.telemetry import scrub
 
+# Upper limit of the connection preparation. It was 45 s: on a loaded machine (a profile takes 2-3 minutes to start)
+# the preparation did not fit and the job failed with "Connection preparation time budget exhausted".
+PREPARE_BUDGET_CAP_S = 150.0
 _PREPARE_DEADLINE = ContextVar("acl_warm_prepare_deadline",default=None)
 
 log = logging.getLogger(__name__)
@@ -1108,7 +1111,7 @@ class WarmRegistry:
                  make_graph: Callable[[Any], Any], timeout: float) -> tuple[Any, dict]:
         """An absolute shared deadline covers CDP creation, reuse and one replacement."""
         from src.fb_api.cdp import command_budget
-        budget = min(float(timeout),45.0)
+        budget = min(float(timeout),PREPARE_BUDGET_CAP_S)
         token = _PREPARE_DEADLINE.set(self._mono()+budget)
         try:
             with command_budget(budget):
