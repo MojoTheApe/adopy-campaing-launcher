@@ -111,11 +111,10 @@ def test_closed_profile_behaves_as_before():
     job = Job(slots, "C", "p3")
     assert _until(lambda: job.holds)
     assert job.holds[0]["reason"] == "below_reserve" and job.holds[0]["profile_open"] is False
-    m.available_gb = 5.0   # выше запаса, но меньше «профиль + запас»
+    m.available_gb = 5.0   # ACL-2255: занято меньше 90 % — закрытому профилю тоже можно
     slots.wake()
-    assert _until(lambda: any(h["reason"] == "memory_low" for h in job.holds))
-    assert not job.done
-    job.cancel(slots)
+    assert _until(lambda: job.done)
+    assert job.grant["decision"]["reason"] == "memory_ok"
 
 
 def test_ceiling_still_applies_to_an_open_profile():
@@ -156,9 +155,9 @@ def test_a_later_open_profile_job_starts_ahead_of_a_memory_blocked_head():
     m = Machine(open_profiles={"p3"})
     slots = m.slots()
     slots.acquire("A", "p1")
-    m.available_gb = 5.0
+    m.available_gb = 3.0   # ACL-2255: занято больше 90 % от 32 ГБ
     head = Job(slots, "H", "p2")             # закрытый профиль — голова, ждёт память
-    assert _until(lambda: head.holds and head.holds[0]["reason"] == "memory_low")
+    assert _until(lambda: head.holds and head.holds[0]["reason"] == "below_reserve")
     later = Job(slots, "L", "p3")            # открытый — идёт вперёд
     assert _until(lambda: later.done)
     assert later.grant["decision"]["started_ahead"] is True
@@ -183,7 +182,7 @@ def test_nobody_jumps_a_head_that_is_not_blocked_on_memory():
     m = Machine(open_profiles={"p4"}, ceiling=4)
     slots = m.slots()
     slots.acquire("A", "p1")
-    m.available_gb = 5.0
+    m.available_gb = 3.0   # ACL-2255: занято больше 90 % от 32 ГБ
     _enqueue(slots, ("H", "p3"), ("L", "p4"))
     with slots._cond:
         real = slots._decide_now
@@ -229,7 +228,7 @@ def test_among_open_profile_jobs_the_earlier_one_goes_first():
     m = Machine(open_profiles={"p3", "p4"}, ceiling=5)   # потолок не держит второго
     slots = m.slots()
     slots.acquire("A", "p1")
-    m.available_gb = 5.0
+    m.available_gb = 3.0   # ACL-2255: занято больше 90 % от 32 ГБ
     _enqueue(slots, ("H", "p2"), ("L1", "p3"), ("L2", "p4"))
     with slots._cond:
         second = slots._verdict("L2")
@@ -242,13 +241,13 @@ def test_an_open_profile_job_still_reserves_its_growth_like_any_starting_job():
     """Ревью #644, B2: только что стартовавший открытый профиль ещё может вырасти."""
     m = Machine(open_profiles={"pO"}, warmup_s=90.0, ceiling=3)
     slots = m.slots()
-    need_one = m.settings.profile_mb + m.settings.reserve_mb
-    m.available_gb = (need_one + 100) / GB   # памяти ровно на один профиль
+    keep = ps.keep_free_mb(32 * GB, m.settings)
+    m.available_gb = (keep + m.settings.profile_mb - 100) / GB   # доля в норме, но не на ещё не занявший память профиль
     assert slots.acquire("J", "pO")["decision"]["reason"] == "profile_open"
     assert slots._warming() == 1
     head = slots._decide_now("pC")           # закрытый профиль сразу следом
     assert head["allow"] is False and head["reason"] == "memory_low"
-    assert head["need_mb"] == 2 * m.settings.profile_mb + m.settings.reserve_mb
+    assert head["need_mb"] == keep + m.settings.profile_mb
 
 
 def test_detection_is_cached_and_only_reads():
@@ -679,7 +678,7 @@ def test_job_started_ahead_and_telemetry_carry_the_flags(monkeypatch):
     m = Machine(open_profiles={"Doc19"})
     slots = m.slots()
     slots.acquire("A", "p1")
-    m.available_gb = 5.0
+    m.available_gb = 3.0   # ACL-2255: занято больше 90 % от 32 ГБ
     head = Job(slots, "H", "pH")              # голова ждёт память
     assert _until(lambda: head.holds)
     rows = []
@@ -716,7 +715,7 @@ def test_a_job_behind_a_memory_blocked_head_says_so():
     m = Machine()
     slots = m.slots()
     slots.acquire("A", "p1")
-    m.available_gb = 5.0
+    m.available_gb = 3.0   # ACL-2255: занято больше 90 % от 32 ГБ
     _enqueue(slots, ("H", "p2"), ("X", "p3"))
     with slots._cond:
         verdict = slots._verdict("X")
