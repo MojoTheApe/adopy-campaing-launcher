@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from itertools import count
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -110,6 +111,30 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
     return peek_cached_report(my_cm) is not None
 
 
+def rebuild_deferred() -> bool:
+    """ACL-2260: a publish job or a kept profile window is active.
+
+    A rebuild of the report parses a 70k-row workbook and takes memory the
+    profiles need ("not enough free memory for another profile"), so nothing
+    starts one by itself while this is true. Refresh (force_rebuild) is the
+    person's own choice and is never deferred. If the publish module was never
+    loaded there cannot be a job: no import, no side effects.
+    """
+    module = sys.modules.get("src.web.publish_jobs")
+    if module is None:
+        return False
+    try:
+        return bool(module.publishing_busy())
+    except Exception:  # noqa: BLE001 - an unreadable state must not block the page
+        return False
+
+
+def has_entry(my_cm: Optional[str] = None) -> bool:
+    """Some report (possibly of an older source) is in memory for this manager."""
+    entry = _CACHE["entry"]
+    return entry is not None and entry[1].get(_cm_key(my_cm)) is not None
+
+
 def get_cached_report(
     *, force_rebuild: bool = False, my_cm: Optional[str] = None,
     progress: Callable[[str], None] | None = None,
@@ -137,6 +162,12 @@ def get_cached_report(
         hit = _warm_hit(expected_key, cm_key)
         if hit is not None:
             return hit
+        # ACL-2260: the source moved (new BI revision / workbook), but a publish
+        # is running: keep serving the report already in memory. Only when there
+        # is none at all the build must run - there is nothing to show instead.
+        if rebuild_deferred() and has_entry(cm_key):
+            entry = _CACHE["entry"]
+            return entry[1][cm_key], entry[2], entry[3]
 
     requested = _BUILDS_STARTED[0]
     with _BUILD_LOCK:
