@@ -1773,6 +1773,15 @@ class CampaignCreator:
                         out.reused.setdefault("creatives", []).append(creative_id)
                         receipt.save(creative_id, accepted_identical=True)
                     return creative_id, True
+                if (isinstance(row, dict) and str(row.get("id") or "") == creative_id and not foreign_tag
+                        and not _cr.matches(plan.act, params, row) and self._same_videos(plan, params, row)):
+                    # Same creative (account, Page, form and all other content), but its video is an earlier
+                    # upload of the same file: accepted. _same_videos refuses when the lengths are known and differ.
+                    out.warnings.append("The creative points at an earlier upload of the same video; "
+                                        "everything else matches, so it was accepted.")
+                    if creative_id not in out.reused.get("creatives", []):
+                        out.reused.setdefault("creatives", []).append(creative_id)
+                    return creative_id, True
                 if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
                         or (foreign_tag and not identical_existing)
                         or not (identical_existing or _cr.matches(plan.act, params, row))):
