@@ -828,6 +828,80 @@ def _run_job_inner(
                 _slots.release(job_id)
 
 
+def _load_sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _open_with_load_requeue(job_id: str, publisher: Any, account_label: str) -> None:
+    """ACL-2283: open the profile; a start that failed because the machine is loaded is tried again.
+
+    A page that does not answer on the first start, or a profile that closed while the action was
+    starting, on a loaded machine (`publish_api.LoadRequeue`) puts the job back in the queue - yellow,
+    waiting, with the live CPU / memory numbers. It starts again when the load drops, as long as it
+    takes: there is no attempt limit; Stop cancels it. Nothing was sent to Meta (`publisher.writes == 0`
+    is checked before every wait); any other failure, and every failure on an idle machine, stops as
+    before. The wait uses only local CPU and memory readings; no account is polled.
+    """
+    from src.web import publish_api
+
+    attempt = 0
+    while True:
+        try:
+            publisher.open(account_label)
+            return
+        except publish_api.LoadRequeue as rq:
+            if int(getattr(publisher, "writes", 0) or 0) > 0:
+                raise
+            attempt += 1
+            try:
+                publisher.close()           # drop the half-open tab; the profile itself is not touched
+            except Exception:  # noqa: BLE001
+                pass
+            if not _wait_out_machine_load(job_id, account_label, publisher, rq, attempt):
+                raise job_cancel.JobCancelled()
+
+
+def _wait_out_machine_load(job_id: str, account_label: str, publisher: Any, rq: Any, attempt: int) -> bool:
+    """Wait (queued, cancellable) until the load that failed the start has cleared; False - Stop pressed."""
+    from src.fb_api import warm as _warm
+
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+    except Exception:  # noqa: BLE001
+        _rt = None
+    reg = _warm.registry()
+    pid = str(getattr(publisher, "_session_profile_id", "") or "")
+    snap = dict(rq.snapshot)
+    if _rt is not None:
+        try:
+            with _jobs_lock:
+                campaign = next(iter((_jobs.get(job_id) or {}).get("campaign_names") or []), "")
+            _rt.record("job_phase", True, campaign=campaign, note="load_requeue",
+                       diag={"account": account_label, "code": rq.code, "attempt": attempt,
+                             "reasons": list(snap.get("reasons") or []), "cpu_pct": snap.get("cpu_pct"),
+                             "available_mb": snap.get("available_mb"), "need_mb": snap.get("need_mb")})
+        except Exception:  # noqa: BLE001
+            pass
+    began = time.monotonic()
+    try:
+        while True:
+            if _is_cancelled(job_id):
+                return False
+            snap = reg.load_snapshot(pid)
+            pause = float(reg.restart_wait_s(pid)) if pid else 0.0
+            waited = time.monotonic() - began
+            if waited >= _warm.LOAD_MIN_PAUSE_S and pause <= 0 and (
+                    snap.get("clear") or waited >= _warm.LOAD_MAX_WAIT_S):
+                return True
+            _show_resource_wait(job_id, account_label, {
+                "hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"),
+                "available_mb": snap.get("available_mb"), "need_mb": snap.get("need_mb"),
+                "running": snap.get("running"), "restart_wait_s": round(pause), "attempt": attempt + 1})
+            _load_sleep(2.0)
+    finally:
+        _show_resource_wait(job_id, account_label, None)
+
+
 def _show_resource_wait(job_id: str, account_label: str, view: dict[str, Any] | None) -> None:
     """ACL-2278: a running job waits for memory or the account gate - show it queued, with live numbers.
 
@@ -888,6 +962,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
                   else "waiting_account" if hold == "account_busy"
+                  else "waiting_load" if hold == "machine_busy"
                   else "waiting_memory" if (hold in ("memory_low", "below_reserve")
                                             or verdict.get("behind_memory"))
                   else "waiting_review" if hold == "review_windows"
@@ -915,6 +990,10 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "behind_memory": bool(verdict.get("behind_memory")),
         # ACL-2278: finished/kept windows of other accounts that can be closed to free memory.
         "closable_accounts": list(verdict.get("closable_accounts") or []),
+        # ACL-2283: machine busy after a failed start - live CPU share and the pause left before the next start.
+        "cpu_pct": verdict.get("cpu_pct"),
+        "restart_wait_s": verdict.get("restart_wait_s"),
+        "attempt": verdict.get("attempt"),
     }
 
 
@@ -1309,7 +1388,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     cancelled = False
     try:
         if ready and not _is_cancelled(job_id):
-            publisher.open(account_label)
+            _open_with_load_requeue(job_id, publisher, account_label)
             for draft in ready:
                 if _is_cancelled(job_id):
                     cancelled = True

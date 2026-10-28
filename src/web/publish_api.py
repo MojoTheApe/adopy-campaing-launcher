@@ -40,7 +40,7 @@ from src.fb_api.creator import (
     preflight_account,
 )
 from src.web.api_build_progress import BuildCounter
-from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
+from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, PageUnresponsive, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -230,6 +230,18 @@ class ApiPublishError(RuntimeError):
         self.code = code
 
 
+class LoadRequeue(ApiPublishError):
+    """ACL-2283: the profile did not start because the machine is loaded; nothing was sent to Meta.
+
+    The job goes back to the queue and starts again when the load clears (no attempt limit). `snapshot`
+    is the local CPU / memory reading that made the decision.
+    """
+
+    def __init__(self, message: str, code: str, snapshot: dict[str, Any]):
+        super().__init__(message, code=code)
+        self.snapshot = dict(snapshot)
+
+
 def _published_as(outcome: Outcome) -> str:
     """ACL-1902: имя в Meta, только если оно не совпадает с именем из билдера (иначе пусто)."""
     chosen = str(outcome.published_as or "")
@@ -327,6 +339,8 @@ class ApiPublisher:
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
+        #: ACL-2283: local load reading taken right before the profile start (None - unknown).
+        self._load_before: dict[str, Any] | None = None
 
     # -- совместимость с `publish_jobs` (как у RpaPublisher)
     def cancel(self) -> None:
@@ -383,6 +397,7 @@ class ApiPublisher:
             return
         if frozen_deferred:
             raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
+        self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 
         try:
@@ -458,6 +473,7 @@ class ApiPublisher:
             with opening_closed_profile():
                 managed = prepare_existing(reg, self._entry, account_label)
         except _warm.WarmError as exc:
+            self._requeue_if_closed(exc)
             raise ApiPublishError(str(exc), code=exc.code) from exc
         if not managed:
             return False
@@ -468,11 +484,13 @@ class ApiPublisher:
             return _make_graph(tab, act, writes=not dry)
 
         _release_frozen_tab_cooldown(account_label)
+        self._load_before = self._load_now()
         try:
             self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
                                        make_graph=make, ready_timeout=READY_TIMEOUT_S)
             _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
+            self._requeue_if_closed(exc)
             raise ApiPublishError(str(exc), code=exc.code) from exc
         except GraphStop as exc:
             self._halt(exc)
@@ -480,7 +498,44 @@ class ApiPublisher:
         self._finish_open(account_label, self._lease.graph)
         return True
 
+    def _requeue_if_closed(self, exc: Exception) -> None:
+        """ACL-2283: "profile closed while the action was starting" under load goes back to the queue."""
+        if getattr(exc, "code", "") == "profile_closed":
+            self._requeue_if_loaded("profile_closed", str(exc))
+
+    def _load_now(self) -> dict[str, Any] | None:
+        """Local CPU/memory reading for the load decision; None when it cannot be taken."""
+        try:
+            from src.fb_api import warm as _warm
+
+            return _warm.registry().load_snapshot(self._session_profile_id)
+        except Exception:  # noqa: BLE001 - unknown load = today's behaviour (stop)
+            return None
+
+    def _requeue_if_loaded(self, code: str, message: str) -> None:
+        """ACL-2283: raise `LoadRequeue` when a start failure belongs to machine load.
+
+        Load-related = nothing was written to Meta AND the machine was loaded before the start or is
+        loaded now (CPU high, memory short, profiles warming up). A failure on an otherwise idle machine
+        (a truly frozen tab, a profile that closed by itself) is not requeued: it stops as before.
+        """
+        if self.writes > 0:
+            return
+        after = self._load_now()
+        before = self._load_before
+        if not ((after and after.get("loaded")) or (before and before.get("loaded"))):
+            return
+        snap = dict(after if (after and after.get("loaded")) else before or {})
+        snap["reasons"] = sorted(set((after or {}).get("reasons", [])) | set((before or {}).get("reasons", [])))
+        raise LoadRequeue(message, code, snap)
+
     def _halt(self, stop: GraphStop) -> None:
+        if isinstance(stop, PageUnresponsive):
+            # ACL-2283: before the pause is started and the stop is reported.
+            self._requeue_if_loaded(
+                "page_unresponsive",
+                f"{self.account_label}: the Ads Manager tab did not answer while the machine was busy; "
+                "waiting for the load to drop. Nothing was created.")
         self.stop = stop
         _start_cooldown(self.account_label, stop)
         _tm.report_stop(stop.kind, str(stop), {"source": "publish", "code": stop.code})

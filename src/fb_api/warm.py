@@ -130,6 +130,17 @@ CLOSE_WAIT_S = 120.0
 CLOSE_POLL_S = 3.0
 SETTLE_ENV = "ACL_WARM_SETTLE_S"
 DEFAULT_SETTLE_S = 90.0
+#: ACL-2283: a start that fails while the machine is loaded (CPU at or above this share, memory short, or
+#: other profiles still warming up) is "load-related": the job goes back to the queue instead of stopping.
+LOAD_CPU_ENV = "ACL_LOAD_CPU_PCT"
+DEFAULT_LOAD_CPU_PCT = 85.0
+#: The job starts again once the CPU is below this share (hysteresis), or after the longest quiet wait.
+LOAD_RESUME_CPU_ENV = "ACL_LOAD_RESUME_CPU_PCT"
+DEFAULT_LOAD_RESUME_CPU_PCT = 70.0
+#: Pause between two starts of one profile after a load failure (no hammering of Multilogin) and the longest
+#: wait for the load to clear before the next start. There is no limit on the number of starts.
+LOAD_MIN_PAUSE_S = 15.0
+LOAD_MAX_WAIT_S = 180.0
 
 #: Состояния для экрана.
 WARM = "warm"
@@ -480,6 +491,7 @@ class WarmRegistry:
                  memory: Callable[[], Any] | None = None,
                  settings: Callable[[], Any] | None = None,
                  usage: Any = None,
+                 cpu: Callable[[], float | None] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  mono: Callable[[], float] = time.monotonic,
                  stagger: Callable[[], float] = lambda: random.uniform(STAGGER_MIN_S, STAGGER_MAX_S)):
@@ -500,6 +512,7 @@ class WarmRegistry:
         self._memory = memory
         self._settings = settings
         self._usage = usage
+        self._cpu = cpu or _default_cpu
         self._sleep = sleep
         self._mono = mono
         self._stagger = stagger
@@ -608,6 +621,42 @@ class WarmRegistry:
         """
         if self.is_warm(profile_id):
             self._forget(profile_id, stopped=False)
+
+    def load_snapshot(self, profile_id: str = "") -> dict:
+        """ACL-2283: is this machine loaded right now? Local readings only (CPU, memory, own processes).
+
+        `loaded` - CPU at or above `ACL_LOAD_CPU_PCT`, free memory below what one more profile needs, or
+        other profiles still warming up. `clear` - safe to start again (CPU below the resume share,
+        memory enough, nothing warming up). An unreadable CPU counts as not loaded: no guess, today's stop.
+        """
+        cpu = None
+        try:
+            cpu = self._cpu()
+        except Exception:  # noqa: BLE001
+            cpu = None
+        memory, need, avail = None, 0, None
+        try:
+            memory, settings, _ps = self._memory_state()
+            need = self._memory_need(settings, _ps)[0] if memory is not None else 0
+            avail = None if memory is None else int(memory.available_mb)
+        except Exception:  # noqa: BLE001
+            memory = None
+        now = self._mono()
+        settle = _env_number(SETTLE_ENV, DEFAULT_SETTLE_S, 0.0, 3600.0)
+        with self._lock:
+            warming = sorted(p for p, t in self._settling.items() if p != profile_id and now - t < settle)
+        others = [p for p in self.gate.active() if p != profile_id]
+        hi = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
+        lo = min(hi, _env_number(LOAD_RESUME_CPU_ENV, DEFAULT_LOAD_RESUME_CPU_PCT, 1.0, 100.0))
+        cpu_high = cpu is not None and cpu >= hi
+        memory_short = memory is not None and avail is not None and avail < need
+        reasons = [r for r, on in (("cpu_high", cpu_high), ("memory_low", memory_short),
+                                   ("profiles_warming_up", bool(warming))) if on]
+        return {"loaded": bool(reasons), "reasons": reasons,
+                "clear": not memory_short and not warming and (cpu is None or cpu < lo),
+                "cpu_pct": None if cpu is None else round(float(cpu), 1),
+                "available_mb": avail, "need_mb": int(need), "running": len(others),
+                "warming": len(warming)}
 
     def restart_wait_s(self, profile_id: str) -> float:
         """Сколько секунд ещё нельзя запускать профиль после его остановки (общий журнал)."""
@@ -1313,6 +1362,16 @@ def scan_local(profile_ids: list[str]) -> dict[str, tuple[str, int | None]]:
         except Exception:
             out[pid] = ("unknown", None)
     return out
+
+
+def _default_cpu() -> float | None:
+    """Machine CPU share over a short local sample; None when it cannot be read."""
+    try:
+        import psutil  # type: ignore
+
+        return float(psutil.cpu_percent(interval=0.5))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _default_tab(cdp_url: str) -> Any:
