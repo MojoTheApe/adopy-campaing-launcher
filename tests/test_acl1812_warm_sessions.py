@@ -691,7 +691,7 @@ def test_closed_profile_gives_a_clear_refusal_and_forgets_the_record(rig):
     rig.reg.session(PID).verified = False
     with pytest.raises(warm.WarmError) as ei:
         rig.checkout()
-    assert ei.value.code == "profile_closed" and "Open profiles for today" in str(ei.value)
+    assert ei.value.code == "profile_closed" and "Open profiles for today" not in str(ei.value)   # ACL-2262
     assert rig.reg.session(PID) is None and rig.reg.restart_wait_s(PID) > 170
 
 
@@ -921,7 +921,7 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
     for forbidden in ("/account-spend", "/campaign-inventory", "/campaign-commands", "/publish"):
         assert forbidden not in js, f"opening a list must not trigger {forbidden}"
     for text in ("Open profiles for today", "Close profiles", "Opened by hand"):
-        assert text in js or text in warm.HAND_MESSAGE or text == "Opened by hand"
+        assert text in js or text == "Opened by hand"
 
 
 def test_chip_texts_for_every_state_come_from_the_server(rig):
@@ -1485,7 +1485,8 @@ def test_cooldown_message_gives_the_remaining_time(tmp_path):
 
 def test_hand_message_names_the_right_button_per_backend(monkeypatch):
     monkeypatch.setenv("ACL_FB_BACKEND", "api")
-    assert sp.hand_message() == warm.HAND_MESSAGE and "Open profiles for today" in sp.hand_message()
+    # ACL-2262: on the API backend nothing depends on the button; the dashboard opens the profile itself.
+    assert sp.hand_message() == warm.HAND_MESSAGE and "Open profiles for today" not in sp.hand_message()
     monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
     assert "open profile button on this row" in sp.hand_message()
     assert "Open profiles for today" not in sp.hand_message()
