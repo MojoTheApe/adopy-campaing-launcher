@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2255 — Parallel runs follow the share of memory in use — 2026-10-28
+
+The gate that decides how many profiles may run at once no longer asks for "3.5 GB per profile + 3 GB reserve" (6.5 GB for every next profile, which capped a 31 GB laptop with 7 GB free at 2 runs although the ceiling was 5). A profile may start while at most 90% of the memory is in use (`ACL_MEMORY_MAX_USED_PCT`, default 90; at least 1 GB always stays free on small laptops). Running profiles are already in that share; only a profile that has just started and not yet taken its memory is charged by the measured size (or the estimate). The same rule is used by the queue, the account-action gate and the warm-start memory wait; the dashboard says "N% in use, a new profile starts below 90%". The ceiling default is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1255).
+
 ## ACL-2284 — A found creative with other media no longer stops the publish — 2026-10-28
 
 When the creative found for an ad (by receipt or by tag) is of the same account and identity but carries other
