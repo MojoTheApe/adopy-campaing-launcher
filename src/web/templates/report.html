@@ -6091,12 +6091,12 @@ window.cbDrawer = (function () {
     var header = document.querySelector('header.page-header');
     var rect = header && header.getBoundingClientRect();
     /* A docked drawer has its own lane beside the header. Only an overlay
-       needs to start below it; keep the stored-report status bar unobscured. */
+       needs to start below it. ACL-2260: the stored-report bar is out of the
+       flow (fixed, bottom-left, under the drawer), so the drawer no longer
+       depends on it: same position with and without the bar. */
     var laneLeft = viewport() - width() - HANDLE_W;
     var docked = isOpen() && rect && rect.right <= laneLeft + 1;
-    var bar = document.getElementById('acl-stored-bar');
-    var top = docked ? (bar ? Math.ceil(bar.getBoundingClientRect().bottom) : 0)
-                     : (rect ? Math.ceil(rect.bottom) : 0);
+    var top = docked ? 0 : (rect ? Math.ceil(rect.bottom) : 0);
     top = Math.max(0, Math.min(window.innerHeight, top));
     var value = top + 'px';
     if (root.style.getPropertyValue('--cbd-top') !== value) root.style.setProperty('--cbd-top', value);

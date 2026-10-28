@@ -443,6 +443,15 @@ def active_job_count() -> int:
         )
 
 
+def publishing_busy() -> bool:
+    """A publish job is live, or a profile window (running or kept open) holds a slot.
+
+    ACL-2260: the report must not start a rebuild of its own while this is true.
+    Cheap and non-blocking: two short locks, no snapshot of the queue decision.
+    """
+    return active_job_count() > 0 or _slots.occupied()
+
+
 def profile_in_use(profile: str, since: str = "") -> bool:
     """Строит ли робот кампании в этом профиле Multilogin (ACL-1379).
 

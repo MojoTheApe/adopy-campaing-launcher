@@ -303,3 +303,123 @@ def test_resume_of_accepted_identical_creative_stops_when_content_changed_since(
     creatives(meta)[0]["object_story_spec"]["link_data"]["message"] = "changed"
     second, _ = _run(meta, draft)
     assert second.error and not second.ad_ids
+
+
+def test_receipt_of_same_ad_with_other_content_is_stale_not_an_error(tmp_path):
+    path = tmp_path / "r.json"
+    first = recovery.Receipt(path, ACT, "ad", "digest-1")
+    first.save("123")
+    again = recovery.Receipt(path, ACT, "ad", "digest-2")
+    assert again.data is None and again.object_id == ""
+    with pytest.raises(ValueError):
+        recovery.Receipt(path, "act_999", "ad", "digest-1")
+
+
+def test_video_pairs_only_when_video_ids_are_the_only_difference():
+    params = {"object_story_spec": {"page_id": "1"},
+              "asset_feed_spec": {"videos": [{"video_id": "10"}], "bodies": [{"text": "a"}]}}
+    row = {"id": "5", "account_id": ACT.removeprefix("act_"), "object_story_spec": {"page_id": "1"},
+           "asset_feed_spec": {"videos": [{"video_id": "20"}], "bodies": [{"text": "a"}]}}
+    assert recovery.video_pairs(ACT, params, row) == [("10", "20")]
+    row["asset_feed_spec"]["bodies"] = [{"text": "other"}]
+    assert recovery.video_pairs(ACT, params, row) is None
+
+
+class _Videos:
+    def __init__(self, lengths):
+        self.lengths = lengths
+
+    #: Fields that exist on the AdVideo node; Graph answers (#100) for anything else (e.g. account_id).
+    ALLOWED = {"id", "length", "title", "description", "created_time", "updated_time"}
+
+    def get(self, path, params=None):
+        asked = set(((params or {}).get("fields") or "").split(","))
+        if not asked <= self.ALLOWED:
+            raise AssertionError(f"(#100) Tried accessing nonexisting field {sorted(asked - self.ALLOWED)}")
+        v = self.lengths[path.strip("/")]
+        if isinstance(v, Exception):
+            raise v
+        return {"length": v, "account_id": ACT.removeprefix("act_")} if not isinstance(v, dict) else v
+
+
+def _pair_case():
+    params = {"object_story_spec": {"page_id": "1"},
+              "asset_feed_spec": {"videos": [{"video_id": "10"}], "bodies": [{"text": "a"}]}}
+    row = {"id": "5", "account_id": ACT.removeprefix("act_"), "object_story_spec": {"page_id": "1"},
+           "asset_feed_spec": {"videos": [{"video_id": "20"}], "bodies": [{"text": "a"}]}}
+    return params, row
+
+
+def _same_videos(lengths, params, row):
+    me = type("Me", (), {"client": _Videos(lengths)})()
+    return cr.CampaignCreator._same_videos(me, type("P", (), {"act": ACT})(), params, row)
+
+
+def test_video_pair_with_equal_length_is_accepted():
+    params, row = _pair_case()
+    assert _same_videos({"10": 12.5, "20": 12.5}, params, row) is True
+
+
+def test_video_pair_with_other_length_is_refused():
+    params, row = _pair_case()
+    assert _same_videos({"10": 12.5, "20": 30.0}, params, row) is False
+
+
+def test_video_pair_is_refused_when_other_content_differs():
+    params, row = _pair_case()
+    row["asset_feed_spec"]["bodies"] = [{"text": "other"}]
+    assert _same_videos({"10": 12.5, "20": 12.5}, params, row) is False
+
+
+def test_unreadable_video_is_accepted_but_other_changes_are_not():
+    params, row = _pair_case()
+    assert _same_videos({"10": 12.5, "20": RuntimeError("boom")}, params, row) is True
+    assert _same_videos({"10": 12.5, "20": None}, params, row) is True
+    row["asset_feed_spec"]["videos"].append({"video_id": "21"})
+    assert _same_videos({"10": 12.5, "20": 12.5, "21": 1}, params, row) is False
+
+
+def test_several_identical_creatives_use_the_oldest(tmp_path):
+    meta = UntaggedMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    old = creatives(meta)[0]
+    twin = copy.deepcopy(old)
+    twin["id"] = str(int(old["id"]) + 1000)
+    meta.objects[twin["id"]] = twin
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        path.unlink()
+    second, _ = _run(meta, draft)
+    assert not second.error, second.error
+    assert second.creative_ids == [old["id"]] and len(creatives(meta)) == 2
+
+
+def test_old_unknown_send_receipt_stops_blocking_after_15_minutes(tmp_path):
+    import os
+    import time
+    meta = UntaggedMeta()
+    meta.fail_next["adcreatives"] = "unsent"
+    draft = _draft(tmp_path, ads=1)
+    one, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert one.error
+    two, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert two.error and not two.ad_ids          # fresh receipt still blocks
+    old = time.time() - cr.RECEIPT_UNKNOWN_S - 60
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        os.utime(path, (old, old))
+    three, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert not three.error and len(three.ad_ids) == 1
+
+
+def test_video_reads_only_use_fields_that_exist_on_the_video_node():
+    params, row = _pair_case()
+    seen = []
+    class Spy(_Videos):
+        def get(self, path, params=None):
+            seen.append(params["fields"])
+            return super().get(path, params)
+    me = type("Me", (), {"client": Spy({"10": 12.5, "20": 12.5})})()
+    assert cr.CampaignCreator._same_videos(me, type("P", (), {"act": ACT})(), params, row) is True
+    assert seen == ["length", "length"]

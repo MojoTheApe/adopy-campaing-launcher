@@ -212,6 +212,8 @@ UPLOAD_STEP_EVERY_S = 12.0
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
+#: An unanswered creative-send receipt blocks for 15 minutes; after that the full listing decides.
+RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
@@ -1615,6 +1617,24 @@ class CampaignCreator:
         out.campaign_confirmed_paused = True
         return True
 
+    def _same_videos(self, plan, params, row) -> bool:
+        """Repeat: Meta returned the earlier creative that differs only by video id (same file uploaded again).
+        Accepted unless the lengths really differ; an unreadable video is accepted too (the rest matched)."""
+        pairs = _cr.video_pairs(plan.act, params, row)
+        if not pairs:
+            return False
+        try:
+            for want_id, got_id in pairs:
+                a = self.client.get(f"/{want_id}", {"fields": "length"})
+                b = self.client.get(f"/{got_id}", {"fields": "length"})
+                la = float(a["length"]) if isinstance(a, dict) and a.get("length") else None
+                lb = float(b["length"]) if isinstance(b, dict) and b.get("length") else None
+                if la is not None and lb is not None and la != lb:
+                    return False      # different length is a different video
+        except Exception:
+            pass                      # video could not be read: everything else matched
+        return True
+
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
         """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
         row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
@@ -1686,9 +1706,11 @@ class CampaignCreator:
         stem = f"{ad.name} #{ad.index}"
         def candidates(*, fresh=False):
             rows = self._creative_candidates(plan, stem, params, fresh=fresh)
+            # Every candidate passed the full content check (_cr.matches), so they are identical: take the oldest.
+            # Several identical creatives are a trace of earlier repeats, not a reason to stop (ACL-2250).
             if len(rows) > 1:
-                raise CreationStopped("Several matching creatives exist. Review them in Ads Manager "
-                                      "before continuing.", kind="creative_ambiguous")
+                rows = sorted(rows, key=lambda r: int(r["id"]))
+                self._step(out, f"{len(rows)} identical creatives already exist; using the oldest {rows[0]['id']}")
             return str(rows[0]["id"]) if rows else None
         try:
             with _cr.transaction(plan.act, name, params) as receipt:
@@ -1699,7 +1721,7 @@ class CampaignCreator:
                     creative_id = candidates()
                     if creative_id:
                         receipt.save(creative_id)
-                    elif receipt.data:
+                    elif receipt.data and receipt.age_s() < RECEIPT_UNKNOWN_S:
                         raise CreationStopped("An earlier creative write has an unknown result. "
                                               "No new creative was sent. Reconcile the existing object first.",
                                               kind="creative_unknown")
@@ -1737,7 +1759,8 @@ class CampaignCreator:
                 # On resume the receipt (written at acceptance) carries the mark; a bare receipt does not.
                 identical_existing = bool(
                     (created or resumed_accepted) and foreign_tag and isinstance(row, dict)
-                    and str(row.get("id") or "") == creative_id and _cr.matches(plan.act, params, row))
+                    and str(row.get("id") or "") == creative_id
+                    and (_cr.matches(plan.act, params, row) or self._same_videos(plan, params, row)))
                 if identical_existing:
                     out.warnings.append("Meta returned an existing identical creative (tag of an earlier run)")
                     if created:
@@ -1751,8 +1774,8 @@ class CampaignCreator:
                         receipt.save(creative_id, accepted_identical=True)
                     return creative_id, True
                 if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
-                        or foreign_tag
-                        or not _cr.matches(plan.act, params, row)):
+                        or (foreign_tag and not identical_existing)
+                        or not (identical_existing or _cr.matches(plan.act, params, row))):
                     if label_failure:
                         raise label_failure
                     raise CreationStopped(f"Creative {creative_id} was found but its identity, account "
