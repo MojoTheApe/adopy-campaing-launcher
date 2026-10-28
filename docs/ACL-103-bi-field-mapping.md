@@ -62,16 +62,17 @@ metadata remains unknown. This is supported behavior, not evidence those columns
   money figures show `$` and the source notice reads `currency: USD (default)`. An explicit declaration
   still wins and is shown with its own code; rows that declare different currencies stay `unknown` and
   are never merged. Per-account Meta reads whose currency Meta does not report are NOT relabelled
-  (`currency unknown`, no difference calculated). Time zone and day boundary stay unknown when undeclared.
+  (`currency unknown`, no difference calculated). Time zone and day boundary: see the next bullet.
   USD in some rows plus empty in others (e.g. BI stamped USD, workbook rows empty) resolves to USD and the notice reads
   `currency: USD` without `(default)`: `currency_defaulted` is true only when NO row declares anything.
+- **Owner decision 2026-10-27 (ACL-2248):** for the BI source and the stats workbook only, rows that declare no time zone / day boundary (`BI_TIMEZONE` / `STATS_TIMEZONE` / `BI_DAY_BOUNDARY` / `STATS_DAY_BOUNDARY` / `DATE_TIMEZONE` / `DAY_BOUNDARY` empty) use `Asia/Jerusalem` and `calendar_day`. The IANA name is used, never a fixed offset (Israel switches between GMT+2 and GMT+3). The notice reads `time zone: Asia/Jerusalem (default); day boundary: calendar day (default)` and `assumed` is no longer set for them. An explicit value wins and shows without `(default)`; rows declaring different values stay `unknown`. Per-account Meta reads keep their own time zone and are still compared with the source's, so a differing account is `day_boundary_mismatch`. `timezone_defaulted` / `day_boundary_defaulted` mirror `currency_defaulted`.
 - Dates remain the delivered BI DATE/calendar labels. Daily aggregates cannot be shifted into
   another timezone without their underlying intraday data; no such shift occurs.
 - Explicit machine source-contract declarations can supply `BI_CURRENCY`, `BI_TIMEZONE` and
   `BI_DAY_BOUNDARY`. The corresponding workbook declarations are `STATS_CURRENCY`,
   `STATS_TIMEZONE` and `STATS_DAY_BOUNDARY`. `calendar_day` means the calendar day in the
   stated timezone. Set these only from authentic source metadata/contract, not from the
-  account's potentially different unit/timezone. No value is configured automatically.
+  account's potentially different unit/timezone. Without a declaration the ACL-2248 defaults apply.
 - Missing metadata is visible as unknown/incomplete in the report header, warning and API.
   The historical `BI_ASSUMPTIONS_CONFIRMED` flag cannot create facts and no longer turns a
   guessed USD/day into confirmed metadata. A new live or human approval ceremony is not needed

@@ -104,6 +104,28 @@ def _source_currency(frame: Any) -> tuple[str, bool]:
     return values.pop(), not any(declared)
 
 
+#: Часовой пояс и граница дня BI / книги статистики, если источник их не
+#: объявил (ACL-2248, решение владельца 27.10.2026). Имя IANA, а не сдвиг:
+#: Израиль переходит между GMT+2 и GMT+3.
+DEFAULT_SOURCE_TIMEZONE = "Asia/Jerusalem"
+DEFAULT_SOURCE_DAY_BOUNDARY = "calendar_day"
+_DAY_BOUNDARY_LABELS = {"calendar_day": "calendar day"}
+
+
+def _source_setting(frame: Any, key: str, default: str) -> tuple[str, bool]:
+    """(значение, подставлено ли по умолчанию). Пустая строка = значение по
+    умолчанию; разные значения по строкам дают пустое значение (смесь)."""
+    column = METADATA_COLUMNS[key]
+    if frame is None or frame.empty or column not in frame:
+        return default, True
+    clean = timezone_name if key == "timezone" else text
+    declared = [clean(v) for v in frame[column]]
+    values = {v or default for v in declared}
+    if len(values) != 1:
+        return "", False
+    return values.pop(), not any(declared)
+
+
 def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
     """Описание именно выбранных строк; архив — хранилище, а не их поставщик."""
     if frame is None:
@@ -116,15 +138,10 @@ def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict
     else:
         sources = ["workbook" if source == "excel" else "unknown"]
 
-    def uniform(key):
-        column = METADATA_COLUMNS[key]
-        clean = currency_code if key == "currency_code" else timezone_name if key == "timezone" else text
-        if frame.empty or column not in frame:
-            return ""
-        values = {clean(v) for v in frame[column]}
-        return values.pop() if len(values) == 1 and "" not in values else ""
-
-    _, zone, boundary = (uniform(k) for k in METADATA_COLUMNS)
+    # ACL-2248: часовой пояс и граница дня — как валюта: явное значение
+    # (env / колонки строк) главнее, пусто = значение по умолчанию, смесь = unknown.
+    zone, zone_defaulted = _source_setting(frame, "timezone", DEFAULT_SOURCE_TIMEZONE)
+    boundary, boundary_defaulted = _source_setting(frame, "day_boundary", DEFAULT_SOURCE_DAY_BOUNDARY)
     # ACL-2204, решение владельца 26.10.2026: BI и книга статистики без
     # объявленной валюты — доллары. Явное объявление (BI_CURRENCY /
     # STATS_CURRENCY) по-прежнему главнее; смесь разных валют по строкам
@@ -133,14 +150,19 @@ def provenance(source: str = "bi", frame: Optional[pd.DataFrame] = None) -> Dict
     name = " + ".join(SOURCE_NAMES.get(s, SOURCE_NAMES["unknown"]) for s in sources) or "No source rows"
     incomplete = not (zone and boundary)
     shown_currency = f"{currency} (default)" if currency_defaulted else (currency or "unknown")
-    note = (f"{name}; currency: {shown_currency}; time zone: {zone or 'unknown'}; "
-            f"day boundary: {boundary or 'unknown'}.")
+    shown_zone = f"{zone} (default)" if zone and zone_defaulted else (zone or "unknown")
+    shown_boundary = _DAY_BOUNDARY_LABELS.get(boundary, boundary) if boundary else "unknown"
+    if boundary and boundary_defaulted:
+        shown_boundary += " (default)"
+    note = (f"{name}; currency: {shown_currency}; time zone: {shown_zone}; "
+            f"day boundary: {shown_boundary}.")
     if incomplete:
         note += " Missing source metadata is unknown; day boundaries are not assumed to match an account."
     if not currency:
         note += " Source rows declare different currencies; money is not assumed to match an account."
     return {"source": name, "sources": sources, "currency": currency or "unknown",
-            "currency_code": currency, "currency_defaulted": currency_defaulted, "timezone": zone, "day_boundary": boundary,
+            "currency_code": currency, "currency_defaulted": currency_defaulted, "timezone": zone, "timezone_defaulted": zone_defaulted,
+            "day_boundary": boundary, "day_boundary_defaulted": boundary_defaulted,
             "assumed": incomplete, "note": note,
             "description": "the BI data" if sources == ["bi"] else
                            "the Stats workbook" if sources == ["workbook"] else

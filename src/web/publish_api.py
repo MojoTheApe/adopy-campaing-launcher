@@ -417,7 +417,12 @@ class ApiPublisher:
         from src.fb_api import warm as _warm
 
         reg = _warm.registry()
-        if not reg.is_warm(profile_id):
+        from src.fb_api.connection import prepare_existing
+        try:
+            managed = prepare_existing(reg, self._entry, account_label)
+        except _warm.WarmError as exc:
+            raise ApiPublishError(str(exc), code=exc.code) from exc
+        if not managed:
             return False
         act, dry = self.act, self.dry_run
         mode = "read" if dry else f"create:{act}"
@@ -738,6 +743,7 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     account_audit: dict[str, Any] | None = None
     error_kind = ""
     except_kind = ""
+    connection_code = ""
     try:
         results = run(account_label, drafts, results=results)
         error = ""
@@ -745,6 +751,7 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
         checked_count = len(results)
         error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
         except_kind = type(exc).__name__
+        connection_code = str(getattr(exc,"code","") or "") if isinstance(exc,_api.ApiReadError) else ""
         if isinstance(exc, _PlanReadContractError):
             # Нарушенный запрет записи — не временный отказ чтения. Нельзя
             # отдавать прежние «ok» из такой сессии или разрешать Publish.
@@ -771,4 +778,4 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
                   **({"error_kind": error_kind, "raised": except_kind} if error_kind else {})},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
-            "error_kind": error_kind, "account_audit": account_audit}
+            "error_kind": error_kind, "account_audit": account_audit, "connection_code": connection_code}

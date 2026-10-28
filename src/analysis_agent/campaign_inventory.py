@@ -646,6 +646,26 @@ def _put_result(done: Snapshot) -> None:
         rec["machine_binding"] = getattr(done, "_machine_binding", None)
         data[done.account] = rec
         _save_all(data)
+    if done.state != "failed":
+        _notify_result(done)
+
+
+# ACL-1816: слушатели «человек прочитал опись аккаунта» (удачное чтение). Rules ставит
+# здесь только задание в очередь: оценка ничего не читает у Meta.
+_RESULT_LISTENERS: list[Callable[[Snapshot], None]] = []
+
+
+def add_result_listener(fn: Callable[[Snapshot], None]) -> None:
+    if fn not in _RESULT_LISTENERS:
+        _RESULT_LISTENERS.append(fn)
+
+
+def _notify_result(done: Snapshot) -> None:
+    for fn in list(_RESULT_LISTENERS):
+        try:
+            fn(done)
+        except Exception:  # noqa: BLE001 - слушатель не должен ломать сохранение снимка
+            log.exception("Inventory listener failed")
 
 
 def put_result(done: Snapshot) -> None:

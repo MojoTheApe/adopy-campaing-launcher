@@ -16,6 +16,7 @@ import contextvars
 import functools
 import ipaddress
 import json
+import logging
 import math
 import os
 import re as _re
@@ -1833,6 +1834,14 @@ def _warm_control_paths() -> None:
 @app.on_event("startup")
 async def _warm_on_startup() -> None:
     _warm_control_paths()
+    # ACL-1816: подписки Rules на новую книгу и на чтение описи (только с бэкендом api)
+    try:
+        from src.web import campaign_commands, rules_runtime
+
+        if campaign_commands.api_enabled():
+            rules_runtime.install()
+    except Exception:  # noqa: BLE001 - Rules не должны мешать старту дешборда
+        logging.getLogger(__name__).exception("Rules could not subscribe to triggers")
     from src.analysis_agent import account_refresh, campaign_inventory
 
     if campaign_inventory.backend_ready():
@@ -6329,8 +6338,10 @@ async def publish_plan(request: Request) -> JSONResponse:
     country, account_label, slots = _parse_build_upload_form(form)
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
-    result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
-                                     country=country)
+    from src.fb_api.connection import confirmed_reopen
+    with confirmed_reopen((form.get("confirm_reopen") or "").strip() == "1"):
+        result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
+                                         country=country)
     return JSONResponse(result)
 
 
@@ -6418,6 +6429,25 @@ async def _campaign_commands_body(request: Request) -> dict:
     return body if isinstance(body, dict) else {}
 
 
+# ACL-1816: Rules - журнал оценок и «Evaluate now». Только чтение и постановка в очередь.
+@app.get("/rules/evaluations")
+async def rules_evaluations(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.list_evaluations, q.get("rule", ""), q.get("limit"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/evaluate-now")
+async def rules_evaluate_now(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(rules_api.evaluate_now, body)
+    return JSONResponse(data, status_code=code)
+
+
 def _targeting_gate() -> JSONResponse | None:
     from src.web import publish_api
 
@@ -6494,8 +6524,41 @@ async def warm_open(request: Request) -> JSONResponse:
     from src.web import warm_api
 
     body = await _campaign_commands_body(request)
-    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"))
+    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"), body.get("confirm_reopen") is True)
     return JSONResponse(data, status_code=code)
+
+
+@app.post("/connection/prepare")
+async def connection_prepare(request: Request) -> JSONResponse:
+    from src.web import warm_api
+    body = await _campaign_commands_body(request)
+    data,code = await asyncio.to_thread(warm_api.prepare_connection,str(body.get("account") or ""),body.get("confirm_reopen") is True)
+    return JSONResponse(data,status_code=code)
+
+
+@app.get("/warm/settings")
+async def connection_settings_read() -> JSONResponse:
+    from src.web import warm_api
+    from src.fb_api.connection import settings
+    refused = warm_api._guard()
+    if refused:
+        return JSONResponse(refused[0],status_code=refused[1])
+    return JSONResponse(settings())
+
+
+@app.post("/warm/settings")
+async def connection_settings_write(request: Request) -> JSONResponse:
+    from src.web import warm_api
+    from src.fb_api.connection import save_settings
+    refused = warm_api._guard()
+    if refused:
+        return JSONResponse(refused[0],status_code=refused[1])
+    body = await _campaign_commands_body(request)
+    try:
+        data = await asyncio.to_thread(save_settings,body)
+    except ValueError as exc:
+        return JSONResponse({"error":str(exc)},status_code=400)
+    return JSONResponse(data)
 
 
 @app.get("/warm/job/{job_id}")

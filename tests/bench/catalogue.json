@@ -3,6 +3,23 @@
   "harvested": "Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).",
   "steps": [
     {
+     "step": "Shared profile connection lifecycle",
+      "robot": "Read/Check/Publish preparation and WarmRegistry (ACL-2092)",
+      "layouts": [
+        {
+          "layout": "Repeated checks reuse one healthy owned tab; unresponsive preparation and transient GET have bounded recovery",
+          "seen": [
+            "anonymized owner report 2026-10-27; synthetic minimized state fixture"
+          ],
+          "fixture": "fb_api_connection_lifecycle_2026_10_27.json",
+          "fragment": null,
+          "test": "tests/test_acl2092_connection_lifecycle.py",
+          "expected": "One owned target for repeated reads; explicit leased manual restart; one tab replacement/read retry; no sent Meta write replay",
+          "status": "pass"
+        }
+      ]
+    },
+    {
       "step": "Graph creative recovery with retained metadata",
       "robot": "CampaignCreator creative receipts (ACL-2231)",
       "layouts": [

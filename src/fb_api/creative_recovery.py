@@ -100,12 +100,19 @@ class Receipt:
     def object_id(self):
         return str((self.data or {}).get("id") or "")
 
-    def save(self, object_id=""):
+    @property
+    def accepted_identical(self):
+        """ACL-2249: our own write was answered with an identical creative of an earlier run."""
+        return (self.data or {}).get("accepted_identical") is True
+
+    def save(self, object_id="", *, accepted_identical=False):
         if object_id and not re.fullmatch(r"[0-9]{1,30}", str(object_id)):
             raise ValueError("Creative id was not confirmed")
         data = {"schema": 1, "act": self.act, "identity": self.identity,
                 "fingerprint": self.digest, "state": "confirmed" if object_id else "pending",
                 "id": str(object_id)}
+        if accepted_identical and object_id:
+            data["accepted_identical"] = True
         _atomic_write(self.path, json.dumps(data, sort_keys=True).encode())
         self.data = data
 
