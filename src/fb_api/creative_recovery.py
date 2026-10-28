@@ -76,6 +76,54 @@ def matches(act, params, row):
     return _contains(want, actual)
 
 
+def _short(value):
+    text = str(value)
+    return text if len(text) <= 60 else text[:57] + "..."
+
+
+def first_diff(act, params, row):
+    """Explain a refusal: the first path where the earlier creative differs from the requested one.
+
+    Diagnostic only. It never decides which creative is accepted (that stays with matches()); values are
+    trimmed to a short form."""
+    if not isinstance(row, dict):
+        return "the creative could not be read"
+    if not re.fullmatch(r"[0-9]{1,30}", str(row.get("id") or "")):
+        return "id: unreadable"
+    if str(row.get("account_id") or "") != str(act).removeprefix("act_"):
+        return (f"account_id: expected {_short(str(act).removeprefix('act_'))!r} "
+                f"got {_short(row.get('account_id') or '')!r}")
+    actual = dict(row)
+    story = dict(actual.get("object_story_spec") or {})
+    if "instagram_user_id" not in story and actual.get("instagram_user_id"):
+        story["instagram_user_id"] = actual["instagram_user_id"]
+    actual["object_story_spec"] = story
+
+    def walk(want, got, where):
+        if _contains(want, got):
+            return ""
+        if isinstance(want, dict):
+            if not isinstance(got, dict):
+                return f"{where}: expected an object got {_short(got)!r}"
+            for key, value in want.items():
+                found = walk(value, got.get(key), f"{where}.{key}" if where else key)
+                if found:
+                    return found
+            return ""
+        if isinstance(want, list):
+            if not isinstance(got, list):
+                return f"{where}: expected a list got {_short(got)!r}"
+            if len(want) != len(got):
+                return f"{where}: expected {len(want)} items got {len(got)}"
+            for i, (x, y) in enumerate(zip(want, got)):
+                found = walk(x, y, f"{where}[{i}]")
+                if found:
+                    return found
+            return ""
+        return f"{where}: expected {_short(want)!r} got {_short('' if got is None else got)!r}"
+    return walk(material(params), actual, "") or "no content difference (the tag or id did not match)"
+
+
 def same_ad(name, stem):
     # Meta may append its date/hash suffix. Preserve the ad index identity (M2).
     return bool(re.fullmatch(re.escape(stem) +
