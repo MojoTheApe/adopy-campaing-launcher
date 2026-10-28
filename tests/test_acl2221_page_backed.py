@@ -4,6 +4,9 @@ The native "Use Facebook Page" button is an internal Ads Manager GraphQL mutatio
 POST edge is rejected on our transport, so the product only DETECTS an existing Page-backed identity
 and otherwise stops with an instruction. Every scenario here also asserts zero POSTs.
 """
+import json
+from pathlib import Path
+
 import pytest
 
 from src.fb_api import creator as cr, graph as g, instagram as ig, preflight_rules as pf
@@ -145,3 +148,11 @@ def test_a_long_numeric_page_id_returned_as_the_identity_is_refused():
     edge = ig.read_identity(Stub(lambda p: {"id": page} if p == f"/{page}" else {"data": [{"id": page}]}),
                             ACT, page)
     assert field.status == edge.status == ig.UNKNOWN and not field.ig_id and not edge.ig_id
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "ads_manager" / "fb_api_page_backed_2026_10_28.json"
+
+
+def test_the_fixture_message_is_the_one_users_see():
+    synthetic = json.loads(FIXTURE.read_text(encoding="utf-8"))["synthetic"]
+    assert synthetic["message"] == NO_IDENTITY == ig.MSG_NO_INSTAGRAM
