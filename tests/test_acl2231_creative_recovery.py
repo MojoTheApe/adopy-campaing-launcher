@@ -303,3 +303,60 @@ def test_resume_of_accepted_identical_creative_stops_when_content_changed_since(
     creatives(meta)[0]["object_story_spec"]["link_data"]["message"] = "changed"
     second, _ = _run(meta, draft)
     assert second.error and not second.ad_ids
+
+
+def test_receipt_of_same_ad_with_other_content_is_stale_not_an_error(tmp_path):
+    path = tmp_path / "r.json"
+    first = recovery.Receipt(path, ACT, "ad", "digest-1")
+    first.save("123")
+    again = recovery.Receipt(path, ACT, "ad", "digest-2")
+    assert again.data is None and again.object_id == ""
+    with pytest.raises(ValueError):
+        recovery.Receipt(path, "act_999", "ad", "digest-1")
+
+
+def test_video_pairs_only_when_video_ids_are_the_only_difference():
+    params = {"object_story_spec": {"page_id": "1"},
+              "asset_feed_spec": {"videos": [{"video_id": "10"}], "bodies": [{"text": "a"}]}}
+    row = {"id": "5", "account_id": ACT.removeprefix("act_"), "object_story_spec": {"page_id": "1"},
+           "asset_feed_spec": {"videos": [{"video_id": "20"}], "bodies": [{"text": "a"}]}}
+    assert recovery.video_pairs(ACT, params, row) == [("10", "20")]
+    row["asset_feed_spec"]["bodies"] = [{"text": "other"}]
+    assert recovery.video_pairs(ACT, params, row) is None
+
+
+class _Videos:
+    def __init__(self, lengths):
+        self.lengths = lengths
+
+    def get(self, path, params=None):
+        return {"length": self.lengths[path.strip("/")], "account_id": "1"}
+
+
+def _pair_case():
+    params = {"object_story_spec": {"page_id": "1"},
+              "asset_feed_spec": {"videos": [{"video_id": "10"}], "bodies": [{"text": "a"}]}}
+    row = {"id": "5", "account_id": ACT.removeprefix("act_"), "object_story_spec": {"page_id": "1"},
+           "asset_feed_spec": {"videos": [{"video_id": "20"}], "bodies": [{"text": "a"}]}}
+    return params, row
+
+
+def _same_videos(lengths, params, row):
+    me = type("Me", (), {"client": _Videos(lengths)})()
+    return cr.CampaignCreator._same_videos(me, type("P", (), {"act": ACT})(), params, row)
+
+
+def test_video_pair_with_equal_length_is_accepted():
+    params, row = _pair_case()
+    assert _same_videos({"10": 12.5, "20": 12.5}, params, row) is True
+
+
+def test_video_pair_with_other_length_is_refused():
+    params, row = _pair_case()
+    assert _same_videos({"10": 12.5, "20": 30.0}, params, row) is False
+
+
+def test_video_pair_is_refused_when_other_content_differs():
+    params, row = _pair_case()
+    row["asset_feed_spec"]["bodies"] = [{"text": "other"}]
+    assert _same_videos({"10": 12.5, "20": 12.5}, params, row) is False

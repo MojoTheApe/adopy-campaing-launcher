@@ -87,7 +87,13 @@ class Receipt:
         self.data = None
         if path.exists():
             self.data = json.loads(path.read_text(encoding="utf-8"))
-            if (not isinstance(self.data, dict) or self.data.get("schema") != 1
+            if (isinstance(self.data, dict) and self.data.get("schema") == 1
+                    and self.data.get("act") == act and self.data.get("identity") == identity
+                    and self.data.get("fingerprint") != digest):
+                # A repeat of the same ad with other content (new media ids, edited text) is a different
+                # creative: the earlier receipt describes another object and must not block this one.
+                self.data = None
+            elif (not isinstance(self.data, dict) or self.data.get("schema") != 1
                     or self.data.get("act") != act or self.data.get("identity") != identity
                     or self.data.get("fingerprint") != digest
                     or self.data.get("state") not in {"pending", "confirmed"}
@@ -126,3 +132,31 @@ def transaction(act, identity, params):
     path.parent.mkdir(parents=True, exist_ok=True)
     with machine_file_lock(path.with_suffix(".lock")):
         yield Receipt(path, act, identity, fingerprint(params))
+
+
+def video_pairs(act, params, row):
+    """(requested id, returned id) of videos that differ, when that is the ONLY difference; else None.
+
+    A repeated upload of the same file gives a new video id, while Meta answers an identical creative
+    write with the earlier creative that still points at the earlier id."""
+    if not isinstance(row, dict):
+        return None
+    want = material(params)
+    feed = (want.get("asset_feed_spec") or {}) if isinstance(want, dict) else {}
+    got_feed = row.get("asset_feed_spec") or {}
+    wv, gv = feed.get("videos"), got_feed.get("videos")
+    if not isinstance(wv, list) or not isinstance(gv, list) or len(wv) != len(gv) or not wv:
+        return None
+    pairs, patched = [], []
+    for w, g in zip(wv, gv):
+        if not isinstance(w, dict) or not isinstance(g, dict) or not g.get("video_id"):
+            return None
+        if str(w.get("video_id")) != str(g.get("video_id")):
+            pairs.append((str(w.get("video_id")), str(g["video_id"])))
+        patched.append(dict(w, video_id=g["video_id"]))
+    if not pairs:
+        return None
+    fixed = dict(params)
+    fixed["asset_feed_spec"] = dict(params["asset_feed_spec"], videos=[
+        dict(v, video_id=g["video_id"]) for v, g in zip(params["asset_feed_spec"]["videos"], gv)])
+    return pairs if matches(act, fixed, row) else None

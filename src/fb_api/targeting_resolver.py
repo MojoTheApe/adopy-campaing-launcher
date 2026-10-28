@@ -356,6 +356,8 @@ class TermResolver:
         #: ACL-1920: необязательные поиски, в которых Meta отказала (тип -> текст), без повторов.
         self.refused: dict[str, str] = {}
         self._ids_unverified = False
+        #: Interest ids Meta rejected as `Invalid id` (their cache entries are dropped).
+        self._bad_ids: set[str] = set()
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
     def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
@@ -439,7 +441,18 @@ class TermResolver:
             params["interest_list"] = todo
         if ids:
             params["interest_fbid_list"] = ids
-        rows = self._lookup("adinterestvalid", params, 1)
+        try:
+            rows = self._lookup("adinterestvalid", params, 1)
+        except GraphError as exc:
+            bad = self._rejected_ids(exc, ids)
+            if not bad:
+                raise
+            # A cached interest id that Meta calls "Invalid id" (e.g. 61, never a real 13+ digit id) is
+            # dropped from the confirmed cache so the term is searched again, not failing the plan check.
+            self._drop_cached_ids(bad)
+            self._bad_ids.update(bad)
+            self._ask_valid(names, [i for i in ids if i not in bad])
+            return
         if "adinterestvalid" in self.refused:
             self._ids_unverified = bool(ids)    # поиск adinterest ниже найдёт точные имена сам
             return
@@ -454,11 +467,25 @@ class TermResolver:
                 if nm:
                     self._valid[norm(nm)] = {"id": str(r["id"]), "type": "interests", "name": nm}
 
+    @staticmethod
+    def _rejected_ids(exc: Exception, asked: list[str]) -> set[str]:
+        """Ids Meta called `Invalid id` in an adinterestvalid answer; all asked ids if it names none."""
+        text = str(exc)
+        if "invalid id" not in text.casefold():
+            return set()
+        named = set(re.findall(r"(?i)invalid id[:\s#]*([0-9]+)", text)) & set(asked)
+        return named or set(asked)
+
+    def _drop_cached_ids(self, bad: set[str]) -> None:
+        for e in self.store.entries():
+            if any(p["type"] == "interests" and str(p["id"]) in bad for p in picks_of(e)):
+                self.store.remove(str(e.get("term") or ""))
+
     def _cached_interest_ids(self, terms: list[str]) -> list[str]:
         ids: list[str] = []
         for t in terms:
             for e in self.store.get_all(t):
-                ids += [p["id"] for p in picks_of(e) if p["type"] == "interests"]
+                ids += [p["id"] for p in picks_of(e) if p["type"] == "interests" and p["id"] not in self._bad_ids]
         return ids
 
     def prefetch(self, terms: list[str]) -> None:
