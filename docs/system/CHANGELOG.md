@@ -1,5 +1,34 @@
 # System history
 
+## ACL-2262 — Check plan and Publish open the account profile by themselves — 2026-10-28
+
+Check plan and Publish (and the /connection/prepare call before Publish) bring up a closed Multilogin
+profile through the existing warm path, not earlier than the first campaign. Reads, the 08/13/18 refresh
+and shut-off commands only adopt a profile that is already open; adding an account to the Builder opens
+nothing. A registered profile whose process vanished overnight or after a restart is re-adopted or reopened
+instead of failing with "profile was closed ... Open profiles for today ... about 3 minutes"; those texts
+are gone, and a profile that the previous job has just closed is waited for (bounded, local look) before it
+is started. A hung Ads Manager tab (`page_unresponsive`) gets one tab replacement per freeze episode instead
+of failing the job; if the replacement hangs too, the full 10-minute pause stands. The Publish row shows
+"Opening the profile…". `ACL_PROFILE_RESTART_COOLDOWN_S` is unchanged; "Open profiles for today" stays as
+an optional warm-up.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1262).
+
+## ACL-2221 — Instagram identity from the Facebook Page — 2026-10-28
+
+Pages without a linked Instagram now use an already existing Page-backed Instagram identity when one can be read. If the Page has none, Check plan and Publish stop before any write with a clear instruction: press "Use Facebook Page" for this Page in Ads Manager, then run Check plan again. The identity is never created automatically and a Page id is never used as an Instagram id. Facebook-only plans are unaffected.
+
+## ACL-2003 — One pre-publish check per unchanged draft — 2026-10-28
+
+The same unchanged campaigns were checked up to 10 times in a row, each time reopening the profile.
+Check plan, the audit card "Check" and Publish all now share one in-flight check per form; the server
+merges identical concurrent `/publish-plan` requests; a campaign not edited since its last successful
+check (same draft revision and slot set, under 10 minutes) is shown from the stored verdict ("Checked N min
+ago" with a "Check again" action) and Publish all uses it too. The UI now says that publishing never starts
+by itself after a check. Where the ~140 s goes: `docs/system/PLAN_CHECK_TIMING.md`. Keeping the profile
+warm after a check (ACL-2117 already does it for 10 min) is out of scope and awaits the owner decision.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1003).
+
 ## ACL-2260 — Report does not rebuild during a publish; banner no longer moves the Builder — 2026-10-28
 
 The report no longer starts a rebuild of its own (new BI revision, restart, page open) while a publish job is live or a profile window is running, waiting or kept open: it keeps the report already in memory or the saved page, which says the rebuild is waiting, and rebuilds by itself once everything is idle. Refresh is never deferred. Scheduled account reads also wait for the same condition (the window is not marked done, so the next page open retries). The OUTDATED / "from cache" bar is now out of the page flow (fixed, bottom-left, under the Builder drawer), so the header and the Builder look the same with and without it. `ACL_AUTO_REFRESH` keeps its default (on for the packaged build and port 9090, off elsewhere): it only controls scheduled account reads, not report rebuilds.
