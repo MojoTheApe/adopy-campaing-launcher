@@ -416,7 +416,7 @@ def test_two_heavy_actions_when_configured_and_memory_is_free(tmp_path):
     second.release()
 
 
-def test_second_action_waits_for_memory_and_uses_the_measured_profile_size(tmp_path):
+def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(tmp_path):
     free = [4000]
     rig = Rig(tmp_path, limit=3, memory=lambda: ps.MemoryReading(16000, free[0]),
               usage=FakeUsage(per_profile=6000))
@@ -424,13 +424,13 @@ def test_second_action_waits_for_memory_and_uses_the_measured_profile_size(tmp_p
     rig.warm_up(a)
     rig.warm_up(b)
     first = rig.checkout(a)
-    free[0] = 7000                          # хватило бы по оценке 3,5 ГБ + запас, но замер — 6 ГБ
+    free[0] = 1400                          # ACL-2255: занято 91 % из 16 ГБ (порог 90 %), а не «6 ГБ на профиль»
     got = []
     t = threading.Thread(target=lambda: got.append(rig.checkout(b)))
     t.start()
     time.sleep(0.2)
-    assert got == [], "the measured size (6 GB + reserve) was ignored"
-    free[0] = 12000
+    assert got == [], "started while more than 90% of memory was in use"
+    free[0] = 3000                          # занято 81 % — можно, хотя замер профиля 6 ГБ
     t.join(3)
     assert len(got) == 1
     got[0].release()

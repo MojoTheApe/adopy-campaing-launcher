@@ -344,21 +344,16 @@ class HeavyGate:
         limit = max(1, int(self._limit()))
         memory = self._memory()
         if n == 0:
-            # S3: и первое действие не обходит запас: ниже него ждёт, а не лезет в память.
-            if memory is not None and memory.available_mb < self._settings().reserve_mb:
+            # S3: и первое действие не обходит запас: выше допустимой доли занятой памяти ждёт, а не лезет в неё.
+            if memory is not None and memory.available_mb < self._ps.keep_free_mb(memory.total_mb, self._settings()):
                 return False, "below_reserve"
             return True, "first"
         if n >= limit:
             return False, "limit"
         if memory is None:
             return (n < min(self._ps.FALLBACK_LIMIT, limit)), "memory_unknown"
-        settings = self._settings()
-        per_mb = settings.profile_mb
-        probe = self._usage.read(sorted(self._active)) if self._usage is not None else {}
-        measured = [int(v) for v in (probe.get("per_profile") or {}).values()]
-        if probe.get("status") == "ok" and measured:
-            per_mb = max(max(measured), settings.profile_floor_mb)
-        ok = memory.available_mb >= per_mb + settings.reserve_mb
+        # ACL-2255: by the SHARE of memory in use (the running actions are already in it), not by "N GB per profile".
+        ok = memory.available_mb >= self._ps.keep_free_mb(memory.total_mb, self._settings())
         return ok, "memory_ok" if ok else "memory_low"
 
     def wait_view(self, why: str) -> dict:
@@ -371,10 +366,15 @@ class HeavyGate:
         if probe.get("status") == "ok" and measured:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
-        return {"hold": "memory_low" if low else "account_busy",
+        view = {"hold": "memory_low" if low else "account_busy",
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}
+        if memory is not None:
+            keep = self._ps.keep_free_mb(memory.total_mb, settings)
+            view.update(need_mb=int(keep), max_used_pct=settings.max_used_pct,
+                        used_pct=self._ps.used_pct(memory), total_mb=int(memory.total_mb))
+        return view
 
     def acquire(self, profile_id: str, *, wait_s: float = DEFAULT_GATE_WAIT_S,
                 on_wait: Callable[[str], None] | None = None,
@@ -1018,9 +1018,11 @@ class WarmRegistry:
                 need, growth = self._memory_need(settings, _ps)
                 if memory.available_mb >= need:
                     return ""
+                used = _ps.used_pct(memory)
                 text = (f"Not started: {memory.available_mb / 1024:.1f} GB free, "
-                        f"{need / 1024:.1f} GB needed for another profile (new profile, safety reserve"
-                        f"{' and the growth of profiles still warming up' if growth else ''}). "
+                        f"{need / 1024:.1f} GB needed for another profile (memory is {used:.0f}% used; "
+                        f"a profile starts while at most {settings.max_used_pct:.0f}% is used"
+                        f"{', counting profiles still warming up' if growth else ''}). "
                         "Close something and try again.")
                 if cancelled():
                     return "Stopped while waiting for memory. " + text if job is not None else text
@@ -1030,8 +1032,9 @@ class WarmRegistry:
                 else:
                     _show(job, {"hold": "memory_low", "available_mb": int(memory.available_mb),
                                 "need_mb": int(need), "reserve_mb": int(settings.reserve_mb),
-                                "profile_mb": int(need - growth - settings.reserve_mb),
-                                "growth_mb": int(growth)})
+                                "profile_mb": int(settings.profile_mb), "growth_mb": int(growth),
+                                "max_used_pct": settings.max_used_pct, "used_pct": used,
+                                "total_mb": int(memory.total_mb)})
                 self._sleep(2.0)
         finally:
             _show(job, None)
@@ -1051,13 +1054,13 @@ class WarmRegistry:
             probe = usage.read(warm_ids)
             if probe.get("status") == "ok":
                 measured = {k: int(v) for k, v in (probe.get("per_profile") or {}).items()}
-        profile_mb = settings.profile_mb
-        if measured:
-            profile_mb = max(max(measured.values()), settings.profile_floor_mb)
-        growth = 0
-        for p in settling:
-            growth += max(0, profile_mb - measured.get(p, 0))
-        return profile_mb + settings.reserve_mb + growth, growth
+        # ACL-2255: the share of memory in use decides (a profile may start while at most `max_used_pct` is
+        # used). A profile already measured is in that share; only one started so recently that no
+        # measurement sees it yet is charged by the estimate.
+        growth = sum(settings.profile_mb for p in settling if p not in measured)
+        memory = (self._memory or _ps.read_memory)()
+        keep = _ps.keep_free_mb(memory.total_mb, settings) if memory is not None else settings.reserve_mb
+        return keep + growth, growth
 
     def open_many(self, items: list[tuple[str, Any]], *, job_id: str = "",
                   on_result: Callable[[str, dict], None] | None = None,

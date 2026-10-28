@@ -213,6 +213,10 @@ UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
 #: An unanswered creative-send receipt blocks for 15 minutes; after that the full listing decides.
+STALE_WARNING = "An earlier creative with other media was found and not reused; a new creative was created."
+STALE_WARNING_REUSED = ("An earlier creative with other media was found and not reused; "
+                        "a matching creative was used instead.")
+ORDER_WARNING = "The creative carries the same files in another order; accepted."
 RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
@@ -1751,70 +1755,131 @@ class CampaignCreator:
                         out.creative_ids.append(creative_id)
                         receipt.save(creative_id)
                         created = True
-                if creative_id not in out.creative_ids:
-                    out.creative_ids.append(creative_id)
-                if not created:
-                    out.reused.setdefault("creatives", []).append(creative_id)
-                label_failure = None
-                if created and not self._missing_creative_tag:
-                    try:
-                        self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
-                        return creative_id, False
-                    except CreationStopped as exc:
-                        if exc.kind != "label_missing":
-                            raise
-                        label_failure = exc
-                        self._missing_creative_tag = True
-                row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
-                # ACL-2249: Meta answers a repeated write with the id of the EXISTING identical creative, which
-                # still carries the tag of an earlier run. Only for a creative written just now, and only when
-                # account, Page, form and the full requested content match, it is the ad's creative. The shared
-                # creative is never re-tagged and a creative found only by name/tag is never adopted.
-                foreign_tag = isinstance(row, dict) and any(
-                    label.startswith("acl-") and label != plan.label for label in _labels(row))
-                # On resume the receipt (written at acceptance) carries the mark; a bare receipt does not.
-                identical_existing = bool(
-                    (created or resumed_accepted) and foreign_tag and isinstance(row, dict)
-                    and str(row.get("id") or "") == creative_id
-                    and (_cr.matches(plan.act, params, row) or self._same_videos(plan, params, row)))
-                if identical_existing:
-                    out.warnings.append("Meta returned an existing identical creative (tag of an earlier run)")
-                    if created:
-                        # An existing object, not a new one: report it as reused and remember the acceptance.
-                        made = out.created.get("creatives", [])
-                        if creative_id in made:
-                            made.remove(creative_id)
-                        if not made:
-                            out.created.pop("creatives", None)
+                replaced = False
+
+                def finish(cid: str, verified: bool) -> tuple[str, bool]:
+                    # ACL-2284: the warning is added only once a replacement has passed the full content check,
+                    # and it says "new" only when the creative really is one written in this run.
+                    if replaced:
+                        out.warnings.append(STALE_WARNING if cid in out.created.get("creatives", [])
+                                            else STALE_WARNING_REUSED)
+                    return cid, verified
+
+                while True:
+                    if creative_id not in out.creative_ids and not replaced:
+                        out.creative_ids.append(creative_id)
+                    if not created:
                         out.reused.setdefault("creatives", []).append(creative_id)
-                        receipt.save(creative_id, accepted_identical=True)
-                    return creative_id, True
-                if (isinstance(row, dict) and str(row.get("id") or "") == creative_id and not foreign_tag
-                        and not _cr.matches(plan.act, params, row) and self._same_videos(plan, params, row)):
-                    # Same creative (account, Page, form and all other content), but its video is an earlier
-                    # upload of the same file: accepted. _same_videos refuses when the lengths are known and differ.
-                    out.warnings.append("The creative points at an earlier upload of the same video; "
-                                        "everything else matches, so it was accepted.")
-                    if creative_id not in out.reused.get("creatives", []):
-                        out.reused.setdefault("creatives", []).append(creative_id)
-                    return creative_id, True
-                if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
-                        or (foreign_tag and not identical_existing)
-                        or not (identical_existing or _cr.matches(plan.act, params, row))):
-                    if label_failure:
-                        raise label_failure
-                    raise CreationStopped(f"Creative {creative_id} was found but its identity, account "
-                                          "or content was not confirmed. No ad was created; check it first. "
-                                          f"First difference: {_cr.first_diff(plan.act, params, row)}.",
-                                          created=out.created, kind="creative_unverified")
-                if plan.label not in _labels(row):
-                    out.warnings.append("Meta did not return the creative ACL tag; the existing creative "
-                                        "was verified by its account, Page, form and full requested content.")
-                return creative_id, True
+                    label_failure = None
+                    # After a replacement write the tag alone proves nothing (the repeat has the same tag as the
+                    # stale creative): the creative is always read back and judged by content below.
+                    if created and not replaced and not self._missing_creative_tag:
+                        try:
+                            self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
+                            return creative_id, False
+                        except CreationStopped as exc:
+                            if exc.kind != "label_missing":
+                                raise
+                            label_failure = exc
+                            self._missing_creative_tag = True
+                    row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
+                    kind = _cr.media_diff(plan.act, params, row)
+                    content_ok = kind in ("same", "order")
+                    if kind == "order" and ORDER_WARNING not in out.warnings:
+                        out.warnings.append(ORDER_WARNING)
+                    # ACL-2249: Meta answers a repeated write with the id of the EXISTING identical creative, which
+                    # still carries the tag of an earlier run. Only for a creative written just now, and only when
+                    # account, Page, form and the full requested content match, it is the ad's creative. The shared
+                    # creative is never re-tagged and a creative found only by name/tag is never adopted.
+                    foreign_tag = isinstance(row, dict) and any(
+                        label.startswith("acl-") and label != plan.label for label in _labels(row))
+                    # On resume the receipt (written at acceptance) carries the mark; a bare receipt does not.
+                    identical_existing = bool(
+                        (created or resumed_accepted) and foreign_tag and isinstance(row, dict)
+                        and str(row.get("id") or "") == creative_id
+                        and (content_ok or self._same_videos(plan, params, row)))
+                    if identical_existing:
+                        out.warnings.append("Meta returned an existing identical creative (tag of an earlier run)")
+                        if created:
+                            # An existing object, not a new one: report it as reused and remember the acceptance.
+                            made = out.created.get("creatives", [])
+                            if creative_id in made:
+                                made.remove(creative_id)
+                            if not made:
+                                out.created.pop("creatives", None)
+                            out.reused.setdefault("creatives", []).append(creative_id)
+                            receipt.save(creative_id, accepted_identical=True)
+                        return finish(creative_id, True)
+                    if (isinstance(row, dict) and str(row.get("id") or "") == creative_id and not foreign_tag
+                            and not content_ok and self._same_videos(plan, params, row)):
+                        # Same creative (account, Page, form and all other content), but its video is an earlier
+                        # upload of the same file: accepted. _same_videos refuses when the lengths are known and differ.
+                        out.warnings.append("The creative points at an earlier upload of the same video; "
+                                            "everything else matches, so it was accepted.")
+                        if creative_id not in out.reused.get("creatives", []):
+                            out.reused.setdefault("creatives", []).append(creative_id)
+                        return finish(creative_id, True)
+                    if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
+                            or (foreign_tag and not identical_existing)
+                            or not (identical_existing or content_ok)):
+                        if (kind == "stale" and not replaced and (foreign_tag or not created)
+                                and str(row.get("id") or "") == creative_id):
+                            # ACL-2284: same account and identity, only the MEDIA differs: another file, not our
+                            # creative that failed to confirm. Never reused; the requested content gets its own.
+                            replaced = True
+                            self._step(out, "An earlier creative with other media was found; "
+                                            f"first difference: {_cr.first_diff(plan.act, params, row)}")
+                            creative_id, created = self._replace_stale_creative(
+                                out, plan, ad, ad_set, params, receipt, creative_id, candidates)
+                            if not created:
+                                return finish(creative_id, True)      # a matching creative existed elsewhere: reused
+                            continue                          # judge the new creative like any written one
+                        if label_failure:
+                            raise label_failure
+                        raise CreationStopped(f"Creative {creative_id} was found but its identity, account "
+                                              "or content was not confirmed. No ad was created; check it first. "
+                                              f"First difference: {_cr.first_diff(plan.act, params, row)}.",
+                                              created=out.created, kind="creative_unverified")
+                    if plan.label not in _labels(row):
+                        out.warnings.append("Meta did not return the creative ACL tag; the existing creative "
+                                            "was verified by its account, Page, form and full requested content.")
+                    return finish(creative_id, True)
         except (OSError, ValueError) as exc:
             raise CreationStopped("Creative recovery could not be saved or read safely. "
                                   "Do not retry until the local receipt is repaired.",
                                   created=out.created, kind="creative_receipt") from exc
+
+    def _replace_stale_creative(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan,
+                                params: dict, receipt, stale_id: str, candidates) -> tuple[str, bool]:
+        """ACL-2284: the creative found for this ad carries other media (same account and identity).
+
+        It is dropped from this run's records. A creative that matches in full and exists elsewhere in the
+        listing is preferred over writing; otherwise exactly one new creative is written (GET-verified by
+        the caller). Returns (creative id, written now)."""
+        for bucket in (out.created, out.reused):
+            ids = bucket.get("creatives", [])
+            if stale_id in ids:
+                ids.remove(stale_id)
+            if "creatives" in bucket and not ids:
+                bucket.pop("creatives")
+        if stale_id in out.creative_ids:
+            out.creative_ids.remove(stale_id)
+        other = candidates(fresh=True)
+        if other and other != stale_id:
+            receipt.save(other)
+            out.creative_ids.append(other)
+            out.reused.setdefault("creatives", []).append(other)
+            return other, False
+        self._check_cancel(out)
+        receipt.save()
+        new_id = self._write(out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives", params,
+                             lambda: candidates(fresh=True), on_ad=ad_set.instant)
+        if new_id != stale_id:
+            # Meta answering with the stale id again created nothing; the caller stops on its content.
+            out.created.setdefault("creatives", []).append(new_id)
+            out.creative_ids.append(new_id)
+            receipt.save(new_id)
+        return new_id, True
 
     # -- медиа
     def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,

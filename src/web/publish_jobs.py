@@ -985,6 +985,9 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "idle_close_s": verdict.get("idle_close_s"),
         "need_mb": verdict.get("need_mb"),
         "reserve_mb": verdict.get("reserve_mb"),
+        # ACL-2255: the rule is the share of memory in use: now / the most at which a profile may start.
+        "used_pct": verdict.get("used_pct"),
+        "max_used_pct": verdict.get("max_used_pct"),
         "running": verdict.get("running"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),

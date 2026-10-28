@@ -18090,6 +18090,11 @@ function cbMemoryWait(q) {
   var hint = '. Close a Multilogin profile you don\'t need.';
   if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  /* ACL-2255: решает доля занятой памяти, а не «ГБ на профиль». */
+  if (q.used_pct != null && q.max_used_pct != null) {
+    return 'Waiting for memory: ' + Math.round(q.used_pct) + '% in use, a new profile starts below ' + Math.round(q.max_used_pct)
+      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)' + tail + hint;
+  }
   var reserve = Number(q.reserve_mb) || 0;
   var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
   /* Разбор складывается в «needs»: остаток — профили, что ещё стартуют или растут. */
