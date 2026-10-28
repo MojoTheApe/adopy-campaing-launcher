@@ -1,5 +1,24 @@
 # System history
 
+## ACL-2279 — Show the first differing field when a repeated creative is not confirmed — 2026-10-28
+
+When a repeated creative is found but not confirmed, the stop message now ends with
+"First difference: <path>: expected '<a>' got '<b>'" (values trimmed). The new
+`creative_recovery.first_diff` only explains the refusal; which creatives are accepted
+or refused is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1279).
+
+## ACL-2278 — A job waiting for memory or the account gate stays queued — 2026-10-28
+
+A publish or Check plan job no longer fails with "Not started: 1.6 GB free, 3.9 GB needed ..." (2 min)
+or "Another account action is still running ..." (gate wait). It now stays queued (shown as queued in the
+Builder with free and needed memory) until it can start or the user presses Stop, like the existing
+`memory_low` slot queue. The message lists the finished/kept windows of other accounts, each with a
+"Close window" action (`POST /publish-jobs/kept/close`, soft Multilogin stop, refused while a run uses
+the profile). The connection-prepare request no longer waits for memory: it defers and the job opens the
+profile itself under the queue. Memory checks stay local; no account is polled. Gate sizing is a separate
+task (ACL-2255). [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1278).
+
 ## ACL-2271 — Repeat publish follow-ups: earlier video upload, partly returned creative, preparation budget — 2026-10-28
 
 Three small fixes found by live repeat-publish runs after ACL-2258:
