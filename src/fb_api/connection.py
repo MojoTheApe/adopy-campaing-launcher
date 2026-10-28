@@ -55,7 +55,7 @@ def prepare_existing(registry, entry, account):
     """Adopt a running verified profile, or open a closed one (ACL-2262) through the warm path."""
     managed = settings()["managed_sessions"]
     if registry.is_warm(entry.profile_id):
-        sess = registry.session(entry.profile_id)
+        sess = getattr(registry,"session",lambda _pid:None)(entry.profile_id)
         if not managed or sess is None or sess.owner:
             return True
         # ACL-2262: a registered profile may have been closed or restarted since (overnight, server
