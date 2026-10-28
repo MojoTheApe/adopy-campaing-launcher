@@ -764,6 +764,9 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     """
     import copy
 
+    # `confirm_reopen` is deliberately not part of the key: it only decides how a hand-opened profile is
+    # taken over, and a waiter that needs the confirmation gets `open_by_hand` back and resends it
+    # after this flight has ended (no flight is running then).
     key = _plan_flight_key(slots, account_label, country)
     with _PLAN_FLIGHTS_LOCK:
         flight = _PLAN_FLIGHTS.get(key)

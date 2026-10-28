@@ -17715,7 +17715,7 @@ window.cbPreflightGate = function (items, proceed) {
   if (!cbApiMode()) { done(); return; }
   var pending = [];
   items.forEach(function (it) {
-    var stale = it.slots.filter(function (slot) { return !cbPfFresh(slot); });
+    var stale = it.slots.filter(function (slot) { return !window.cbPfReusable(slot); });   // ACL-2003: 'Could not check' is never reused
     if (stale.length) pending.push({ form: it.form, slots: stale });
   });
   if (!pending.length) { done(); return; }
