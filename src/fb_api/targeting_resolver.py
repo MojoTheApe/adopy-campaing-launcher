@@ -470,6 +470,8 @@ class TermResolver:
     @staticmethod
     def _rejected_ids(exc: Exception, asked: list[str]) -> set[str]:
         """Asked ids that Meta itself named in an `Invalid id` answer; none named means none dropped."""
+        # GraphError scrubs digit runs of 10+ from its text, so only ids short enough to survive the scrub
+        # (never-real ones like 61) are recognised here; a long real id falls back to the old failure (safe).
         text = str(exc)
         if "invalid id" not in text.casefold():
             return set()

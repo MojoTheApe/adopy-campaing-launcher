@@ -329,7 +329,13 @@ class _Videos:
     def __init__(self, lengths):
         self.lengths = lengths
 
+    #: Fields that exist on the AdVideo node; Graph answers (#100) for anything else (e.g. account_id).
+    ALLOWED = {"id", "length", "title", "description", "created_time", "updated_time"}
+
     def get(self, path, params=None):
+        asked = set(((params or {}).get("fields") or "").split(","))
+        if not asked <= self.ALLOWED:
+            raise AssertionError(f"(#100) Tried accessing nonexisting field {sorted(asked - self.ALLOWED)}")
         v = self.lengths[path.strip("/")]
         if isinstance(v, Exception):
             raise v
@@ -405,3 +411,15 @@ def test_old_unknown_send_receipt_stops_blocking_after_15_minutes(tmp_path):
         os.utime(path, (old, old))
     three, _ = _run(meta, draft, reconcile_wait_s=0)
     assert not three.error and len(three.ad_ids) == 1
+
+
+def test_video_reads_only_use_fields_that_exist_on_the_video_node():
+    params, row = _pair_case()
+    seen = []
+    class Spy(_Videos):
+        def get(self, path, params=None):
+            seen.append(params["fields"])
+            return super().get(path, params)
+    me = type("Me", (), {"client": Spy({"10": 12.5, "20": 12.5})})()
+    assert cr.CampaignCreator._same_videos(me, type("P", (), {"act": ACT})(), params, row) is True
+    assert seen == ["length", "length"]
