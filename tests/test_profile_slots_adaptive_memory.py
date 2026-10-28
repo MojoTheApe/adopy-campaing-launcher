@@ -41,19 +41,26 @@ def test_a_run_starts_assuming_three_and_a_half_gb_per_profile():
     assert ps.DEFAULT_PROFILE_MEMORY_GB == 3.5
     s = ps.load_settings({})
     assert s.profile_mb == int(3.5 * GB)
-    d = ps.decide(1, 0, mem(6.4), s)            # 3,5 + 3 запас = 6,5 (ACL-1603)
-    assert d["allow"] is False and d["reason"] == "memory_low"
+    # ACL-2255: оценка больше не решает «хватит ли памяти» — решает доля занятой (90 %):
+    # на 32 ГБ свободными должны оставаться 3,2 ГБ. Оценка нужна только для профиля,
+    # который стартовал и ещё не занял память (`warming`).
+    d = ps.decide(1, 0, mem(3.1), s)
+    assert d["allow"] is False and d["reason"] == "below_reserve"
     assert d["profile_mb"] == int(3.5 * GB) and d["profile_mb_source"] == "estimate"
-    assert ps.decide(1, 0, mem(6.5), s)["allow"] is True
+    assert ps.decide(1, 0, mem(3.3), s)["allow"] is True
+    assert ps.decide(1, 1, mem(6.0), s)["allow"] is False, "прогревающийся профиль заряжается оценкой"
 
 
 def test_the_measured_average_replaces_the_estimate():
     s = _S()
-    d = ps.decide(1, 0, mem(4.5), s, measured_mb=int(2.4 * GB))   # 2,4 + 1,5 = 3,9
+    d = ps.decide(1, 0, mem(4.5), s, measured_mb=int(2.4 * GB))
     assert d["allow"] is True and d["profile_mb_source"] == "measured"
-    assert d["profile_mb"] == int(2.4 * GB) and d["need_mb"] == int(2.4 * GB) + s.reserve_mb
-    heavy = ps.decide(1, 0, mem(4.5), s, measured_mb=int(4.2 * GB))
+    assert d["profile_mb"] == int(2.4 * GB) and d["need_mb"] == ps.keep_free_mb(32 * GB, s)
+    # Замер тяжелее — больше заряд за прогревающийся профиль (ACL-2255: старт решает доля занятой).
+    heavy = ps.decide(1, 1, mem(5.5), s, measured_mb=int(4.2 * GB))   # 3,2 + 4,2 > 5,5
     assert heavy["allow"] is False and heavy["profile_mb"] == int(4.2 * GB)
+    light = ps.decide(1, 1, mem(5.5), s, measured_mb=int(2.0 * GB))   # 3,2 + 2,0 ≤ 5,5
+    assert light["allow"] is True
 
 
 def test_a_tiny_measurement_never_goes_below_the_floor():
@@ -207,7 +214,7 @@ def test_the_measured_profiles_let_the_next_one_start_and_low_memory_holds_it():
     time.sleep(0.15)
     assert not c.started
     hold = c.waits[-1]
-    assert hold["reason"] == "memory_low" and hold["measured_mb"] == int(2.4 * GB)   # ACL-1603: максимум, не среднее
+    assert hold["reason"] == "below_reserve" and hold["measured_mb"] == int(2.4 * GB)   # ACL-1603: максимум, не среднее
     assert hold["available_mb"] == int(2.1 * GB)
     m.available_gb = 6.0                            # закрыл — место есть
     m.now += 10                                     # замер устарел, перечитан
@@ -217,7 +224,7 @@ def test_the_measured_profiles_let_the_next_one_start_and_low_memory_holds_it():
 
 
 def test_a_failed_measurement_falls_back_to_the_estimate():
-    m = Machine(available_gb=4.9, usage=RuntimeError("access denied"))
+    m = Machine(available_gb=3.0, usage=RuntimeError("access denied"))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     m.now += 61
@@ -227,14 +234,14 @@ def test_a_failed_measurement_falls_back_to_the_estimate():
     hold = b.waits[0]
     assert hold["profile_mb_source"] == "estimate" and hold["measure"] == "failed"
     assert hold["profile_mb"] == int(3.5 * GB)
-    m.available_gb = 5.0
+    m.available_gb = 3.3                            # ACL-2255: меньше 10 % от 32 ГБ было занято → хватает
     assert _until(lambda: b.started)
     a.finish()
     b.finish()
 
 
 def test_a_profile_not_found_by_the_probe_keeps_the_estimate():
-    m = Machine(available_gb=4.0, usage={})
+    m = Machine(available_gb=3.0, usage={})
     slots = m.slots()
     a = Job(slots, "a", "P1")
     m.now += 61
@@ -320,18 +327,13 @@ def test_each_hold_decision_goes_to_telemetry(monkeypatch):
 
 # ── ревью PR #425: никогда не перегружать, без id в телеметрии ──────────
 
-def test_the_growth_of_running_profiles_is_reserved():
+def test_the_growth_of_running_profiles_is_not_reserved_by_gigabytes():
+    """ACL-2255: рост идущих профилей уже виден в доле занятой памяти, «ГБ до оценки» не прибавляем."""
     s = _S()
-    # Средняя 3,4; один профиль сейчас 2,0 — ему ещё расти на 1,4 ГБ.
     d = ps.decide(2, 0, mem(6.0), s, measured_mb=int(3.4 * GB),
                   current_mb=[int(2.0 * GB), int(3.4 * GB)])
-    assert d["growth_mb"] == int(3.4 * GB) - int(2.0 * GB)
-    assert d["need_mb"] == int(3.4 * GB) + s.reserve_mb + d["growth_mb"]
-    assert d["allow"] is False and d["reason"] == "memory_low"
-    # Без роста (все уже на средней) те же 6 ГБ пускают.
-    flat = ps.decide(2, 0, mem(6.0), s, measured_mb=int(3.4 * GB),
-                     current_mb=[int(3.4 * GB), int(3.4 * GB)])
-    assert flat["growth_mb"] == 0 and flat["allow"] is True
+    assert "growth_mb" not in d and d["need_mb"] == ps.keep_free_mb(32 * GB, s)
+    assert d["allow"] is True and d["reason"] == "memory_ok"
 
 
 def test_a_young_profile_measured_small_does_not_lower_the_estimate():
@@ -340,23 +342,16 @@ def test_a_young_profile_measured_small_does_not_lower_the_estimate():
     slots = m.slots()
     a = Job(slots, "a", "P1")
     m.now += 61                                     # прогрелся, но кампании ещё не открыл
-    b = Job(slots, "b", "P2")
-    time.sleep(0.15)
-    assert not b.started
     nxt = slots.snapshot()["next"]
     assert nxt["profile_mb"] == int(3.5 * GB), "молодой профиль опустил оценку"
-    assert nxt["growth_mb"] == int(3.5 * GB) - int(1.0 * GB)
-    assert nxt["reason"] == "memory_low"
     m.now += 300                                    # устоялся на 1,0 ГБ — теперь верим замеру
-    m.available_gb = 5.5
-    assert _until(lambda: b.started)
-    assert b.grant["decision"]["profile_mb"] == _S().profile_floor_mb
+    nxt = slots.snapshot()["next"]
+    assert nxt["profile_mb"] == _S().profile_floor_mb and nxt["measured_mb"] == int(1.0 * GB)
     a.finish()
-    b.finish()
 
 
 def test_a_shrinking_profile_keeps_its_peak():
-    m = Machine(available_gb=4.0, usage={"P1": int(3.4 * GB)})
+    m = Machine(available_gb=3.0, usage={"P1": int(3.4 * GB)})
     slots = m.slots()
     a = Job(slots, "a", "P1")
     m.now += 61

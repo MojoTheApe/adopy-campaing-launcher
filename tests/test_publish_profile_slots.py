@@ -50,22 +50,23 @@ def test_the_first_profile_waits_for_the_reserve_too():
     """ACL-1603 (ревью F2): «пол в один профиль» больше не пускает при любой памяти."""
     low = ps.decide(0, 0, mem(0.2), S)
     assert low["allow"] is False and low["reason"] == "below_reserve"
-    ok = ps.decide(0, 0, mem(3.0), S)           # 1,5 + 1,5
+    ok = ps.decide(0, 0, mem(3.0), S)           # ACL-2255: свободно ≥ 10 % от 16 ГБ
     assert ok["allow"] and ok["reason"] == "memory_ok"
 
 
 def test_another_profile_starts_only_with_room_for_it_and_the_reserve():
-    assert ps.decide(1, 0, mem(3.0), S)["allow"] is True          # 1,5 + 1,5
-    low = ps.decide(1, 0, mem(2.9), S)
-    assert low["allow"] is False and low["reason"] == "memory_low"
-    assert low["need_mb"] == 3 * GB and low["available_mb"] == int(2.9 * GB)
+    # ACL-2255: на 16 ГБ при 90 % занятых нужно держать свободными 1,6 ГБ — и всё.
+    assert ps.decide(1, 0, mem(1.7), S)["allow"] is True
+    low = ps.decide(1, 0, mem(1.5), S)
+    assert low["allow"] is False and low["reason"] == "below_reserve"
+    assert low["need_mb"] == ps.keep_free_mb(16 * GB, S) and low["available_mb"] == int(1.5 * GB)
 
 
 def test_a_profile_that_just_started_is_counted_before_it_takes_its_memory():
     """Шесть заданий в одну секунду видят одну и ту же свободную память."""
-    assert ps.decide(1, 0, mem(3.5), S)["allow"] is True
-    warming = ps.decide(1, 1, mem(3.5), S)
-    assert warming["allow"] is False and warming["need_mb"] == int(4.5 * GB)
+    assert ps.decide(1, 0, mem(3.0), S)["allow"] is True
+    warming = ps.decide(1, 1, mem(3.0), S)
+    assert warming["allow"] is False and warming["need_mb"] == ps.keep_free_mb(16 * GB, S) + OLD_PROFILE_MB
 
 
 def test_the_ceiling_holds_even_on_a_big_machine():
@@ -90,7 +91,7 @@ def test_unknown_memory_runs_two_at_most():
 
 def test_the_limit_shown_is_what_memory_allows_now():
     assert ps.decide(1, 0, mem(6.1), S)["limit"] == 4     # по памяти 1 + 3, потолок 4
-    assert ps.decide(1, 0, mem(4.5), S)["limit"] == 3     # (4,5 − 1,5) / 1,5 = 2 ещё
+    assert ps.decide(1, 0, mem(4.5), S)["limit"] == 2     # (4,5 − 1,6) / 1,5 = 1 ещё
     assert ps.decide(1, 0, mem(1.0), S)["limit"] == 1
 
 
@@ -206,16 +207,16 @@ def test_only_as_many_profiles_start_as_memory_allows_and_the_rest_wait():
     m.available_gb = 3.1                   # первый занял своё
     b = Job(slots, "b", "P2")
     assert _until(lambda: b.started)
-    m.available_gb = 1.6
+    m.available_gb = 1.5                   # занято больше 90 % (ACL-2255)
     c = Job(slots, "c", "P3")
     time.sleep(0.2)
     assert not c.started and _running(slots) == ["a", "b"]
-    assert c.waits and c.waits[0]["reason"] == "memory_low" and c.waits[0]["ahead"] == 0
+    assert c.waits and c.waits[0]["reason"] == "below_reserve" and c.waits[0]["ahead"] == 0
     # Конец задания освобождает место — третий стартует сам.
     a.finish()
     m.available_gb = 3.1
     assert _until(lambda: c.started)
-    assert c.grant["waited_s"] >= 0 and c.grant["first_hold"]["reason"] == "memory_low"
+    assert c.grant["waited_s"] >= 0 and c.grant["first_hold"]["reason"] == "below_reserve"
     b.finish(); c.finish()
 
 
@@ -343,7 +344,7 @@ def test_a_cancelled_waiting_job_leaves_the_queue_at_once():
 
 
 def test_a_just_started_profile_holds_back_the_next_until_it_has_warmed_up():
-    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB, **OLD))
+    m = Machine(available_gb=2.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB, **OLD))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")
@@ -478,9 +479,9 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     import httpx
     from src.web.app import app
 
-    machine = Machine(available_gb=5.0, settings=ps.SlotSettings())
+    machine = Machine(available_gb=1.0, settings=ps.SlotSettings())
     monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(
-        memory=lambda: mem(5.0), settings=lambda: machine.settings, tick_s=0.05,
+        memory=lambda: mem(1.0), settings=lambda: machine.settings, tick_s=0.05,
         usage=ps.ProfileUsage(lambda p: {}, background=False)))
 
     async def get():
@@ -492,5 +493,5 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["mode"] == "auto" and body["running"] == [] and body["waiting"] == []
-    assert body["next"]["reason"] == "memory_low" and body["next"]["available_mb"] == 5 * GB
+    assert body["next"]["reason"] == "below_reserve" and body["next"]["available_mb"] == 1 * GB
     assert body["settings"]["ceiling"] == ps.DEFAULT_CEILING == 2
