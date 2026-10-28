@@ -177,15 +177,39 @@ def test_malformed_next_is_not_a_completed_listing(tmp_path, paging):
     assert not any(p.endswith("/adcreatives") for p, _ in meta.posts)
 
 
-def test_same_ad_with_unreadable_content_does_not_prove_absence(tmp_path):
+def test_same_ad_with_unreadable_content_is_skipped_and_the_repeat_goes_on(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
     ad = cr.plan_from_draft(draft).ad_sets[0].ads[0]
     original = meta._get
     meta._get = lambda path, params: {"data": [{"id": "987", "name": f"{ad.name} #{ad.index} [acl-aaaaaaaaaaaa]"}]} if path.endswith("/adcreatives") else original(path, params)
     out, _ = _run(meta, draft)
-    assert out.stop_kind == "creative_unknown"
-    assert not any(p.endswith("/adcreatives") for p, _ in meta.posts)
+    # An earlier creative Meta returns only partly (and cannot be read by id either) is not a candidate.
+    assert out.stop_kind != "creative_unknown" and not out.error, out.error
+    assert any(p.endswith("/adcreatives") for p, _ in meta.posts)
+
+
+def test_partly_listed_creative_that_really_matches_is_reused_not_duplicated(tmp_path):
+    meta = UntaggedMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    made = creatives(meta)[0]
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        path.unlink()                                       # nothing remembers it: found by listing only
+    original = meta._get
+
+    def get(path, params):
+        if path.endswith("/adcreatives"):                    # the listing returns the creative only partly
+            return {"data": [{"id": made["id"], "name": made["name"]}]}
+        return original(path, params)                        # reading it by id returns everything
+    meta._get = get
+    posts_before = len(meta.posts)
+    second, _ = _run(meta, draft)
+    assert not second.error, second.error
+    assert len(creatives(meta)) == 1 and second.creative_ids == [made["id"]]
+    assert not any(p.endswith("/adcreatives") for p, _ in meta.posts[posts_before:])
 
 
 def test_anonymized_live_shape_retains_old_metadata_but_requires_same_content():

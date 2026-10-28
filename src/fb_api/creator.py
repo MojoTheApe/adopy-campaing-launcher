@@ -1693,11 +1693,27 @@ class CampaignCreator:
         same = [r for r in rows if _cr.same_ad(r.get("name"), stem)
                 and not any(label.startswith("acl-") and label != plan.label
                             for label in _labels(r))]
-        if any(str(r.get("account_id") or "") != plan.act.removeprefix("act_")
-               or not _cr.complete(params, r) for r in same):
-            raise CreationStopped("An existing creative could not be fully read. No new creative was sent.",
-                                  kind="creative_unknown")
-        return [r for r in same if _cr.matches(plan.act, params, r)]
+        # A creative of an earlier repeat that the listing returned only partly is not stopped on (that blocked
+        # the repeat of the same campaign). It is read once by id: if the full read is complete it is judged like any
+        # other row, so a creative that really exists and matches is still found and reused. Only a creative that
+        # stays unreadable (or belongs to another account) is not a candidate.
+        readable = []
+        for r in same:
+            if not (str(r.get("account_id") or "") == plan.act.removeprefix("act_") and _cr.complete(params, r)):
+                r = self._reread_creative(r)
+                if not (r and str(r.get("account_id") or "") == plan.act.removeprefix("act_")
+                        and _cr.complete(params, r)):
+                    continue
+            readable.append(r)
+        return [r for r in readable if _cr.matches(plan.act, params, r)]
+
+    def _reread_creative(self, row: dict) -> dict | None:
+        """Full read of one creative by id (GET only); None when it still cannot be read."""
+        try:
+            full = self.client.get(f"/{row['id']}", {"fields": _cr.FIELDS})
+        except Exception:
+            return None
+        return full if isinstance(full, dict) and str(full.get("id") or "") == str(row["id"]) else None
 
     def _recoverable_creative(self, out: Outcome, plan: CampaignPlan, ad: AdPlan,
                              ad_set: AdSetPlan, media: dict, name: str) -> tuple[str, bool]:
