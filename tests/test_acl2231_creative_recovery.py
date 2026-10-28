@@ -533,3 +533,76 @@ def test_first_diff_only_explains_and_values_are_trimmed():
     text = recovery.first_diff("act_9", params, row)
     assert text.startswith("object_story_spec.link_data.message: expected '") and len(text) < 160
     assert recovery.first_diff("act_9", params, row) == text
+
+
+# ---- ACL-2290: readback accepts what publish accepted --------------------------------------------------------
+
+def _content_ok(lengths, params, row):
+    me = type("Me", (), {"client": _Videos(lengths)})()
+    me._same_videos = lambda plan, p, r: cr.CampaignCreator._same_videos(me, plan, p, r)
+    return cr.CampaignCreator._creative_content_ok(me, type("P", (), {"act": ACT})(), params, row)
+
+
+def _labelled(video_id, label):
+    return {"video_id": video_id, "adlabels": [{"name": label}]}
+
+
+def test_readback_accepts_same_length_video_pair():
+    params, row = _pair_case()
+    assert _content_ok({"10": 12.5, "20": 12.5}, params, row) is True
+    assert _content_ok({"10": 12.5, "20": None}, params, row) is True
+
+
+def test_readback_refuses_video_pair_of_other_length_or_other_text():
+    params, row = _pair_case()
+    assert _content_ok({"10": 12.5, "20": 30.0}, params, row) is False
+    row["asset_feed_spec"]["bodies"] = [{"text": "other"}]
+    assert _content_ok({"10": 12.5, "20": 12.5}, params, row) is False
+
+
+def test_readback_accepts_same_labelled_files_in_another_order():
+    params, row = _pair_case()
+    params["asset_feed_spec"]["videos"] = [_labelled("10", "a"), _labelled("11", "b")]
+    row["asset_feed_spec"]["videos"] = [_labelled("11", "b"), _labelled("10", "a")]
+    assert _content_ok({}, params, row) is True
+
+
+def test_readback_refuses_other_media_cta_and_link():
+    params, row = _pair_case()
+    params["asset_feed_spec"]["videos"] = [_labelled("10", "a"), _labelled("11", "b")]
+    row["asset_feed_spec"]["videos"] = [_labelled("11", "b"), _labelled("12", "a")]
+    assert _content_ok({"10": 1, "12": 99}, params, row) is False
+    params, row = _pair_case()
+    params["asset_feed_spec"]["call_to_action_types"] = ["SIGN_UP"]
+    row["asset_feed_spec"]["call_to_action_types"] = ["LEARN_MORE"]
+    assert _content_ok({"10": 12.5, "20": 12.5}, params, row) is False
+    params, row = _pair_case()
+    params["asset_feed_spec"]["link_urls"] = [{"website_url": "https://a.example"}]
+    row["asset_feed_spec"]["link_urls"] = [{"website_url": "https://b.example"}]
+    assert _content_ok({"10": 12.5, "20": 12.5}, params, row) is False
+    assert _content_ok({}, params, {}) is False
+
+
+def test_feed_checks_treat_whitespace_only_texts_as_empty():
+    from types import SimpleNamespace as NS
+
+    def run(ad_desc, got_desc):
+        seen = []
+        ad = NS(bodies=["b"], titles=["t"], descriptions=ad_desc, cta="LEARN_MORE", kind="image",
+                vertical_path="", path="x.jpg", placements=[])
+        plan = NS(link="https://a.example", tag="t")
+        creative = {"asset_feed_spec": {"bodies": [{"text": "b"}], "titles": [{"text": "t"}],
+                                        "descriptions": [{"text": d} for d in got_desc],
+                                        "call_to_action_types": ["LEARN_MORE"],
+                                        "link_urls": [{"website_url": "https://a.example"}],
+                                        "images": [{"hash": "h"}]}}
+        me = type("Me", (), {})()
+        cr.CampaignCreator._feed_checks(me, lambda o, f, e, a: seen.append((f, e, a)), "ad", plan, ad,
+                                        creative, {}, {}, {})
+        got = [x for x in seen if x[0] == "descriptions"][0]
+        return cr._same(got[1], got[2])
+
+    assert run([], [" "]) is True
+    assert run([" "], []) is True
+    assert run([], ["x"]) is False
+    assert run(["x"], []) is False
