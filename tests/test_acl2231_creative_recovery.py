@@ -177,15 +177,39 @@ def test_malformed_next_is_not_a_completed_listing(tmp_path, paging):
     assert not any(p.endswith("/adcreatives") for p, _ in meta.posts)
 
 
-def test_same_ad_with_unreadable_content_does_not_prove_absence(tmp_path):
+def test_same_ad_with_unreadable_content_is_skipped_and_the_repeat_goes_on(tmp_path):
     meta = UntaggedMeta()
     draft = _draft(tmp_path, ads=1)
     ad = cr.plan_from_draft(draft).ad_sets[0].ads[0]
     original = meta._get
     meta._get = lambda path, params: {"data": [{"id": "987", "name": f"{ad.name} #{ad.index} [acl-aaaaaaaaaaaa]"}]} if path.endswith("/adcreatives") else original(path, params)
     out, _ = _run(meta, draft)
-    assert out.stop_kind == "creative_unknown"
-    assert not any(p.endswith("/adcreatives") for p, _ in meta.posts)
+    # An earlier creative Meta returns only partly (and cannot be read by id either) is not a candidate.
+    assert out.stop_kind != "creative_unknown" and not out.error, out.error
+    assert any(p.endswith("/adcreatives") for p, _ in meta.posts)
+
+
+def test_partly_listed_creative_that_really_matches_is_reused_not_duplicated(tmp_path):
+    meta = UntaggedMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    made = creatives(meta)[0]
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        path.unlink()                                       # nothing remembers it: found by listing only
+    original = meta._get
+
+    def get(path, params):
+        if path.endswith("/adcreatives"):                    # the listing returns the creative only partly
+            return {"data": [{"id": made["id"], "name": made["name"]}]}
+        return original(path, params)                        # reading it by id returns everything
+    meta._get = get
+    posts_before = len(meta.posts)
+    second, _ = _run(meta, draft)
+    assert not second.error, second.error
+    assert len(creatives(meta)) == 1 and second.creative_ids == [made["id"]]
+    assert not any(p.endswith("/adcreatives") for p, _ in meta.posts[posts_before:])
 
 
 def test_anonymized_live_shape_retains_old_metadata_but_requires_same_content():
@@ -423,3 +447,54 @@ def test_video_reads_only_use_fields_that_exist_on_the_video_node():
     me = type("Me", (), {"client": Spy({"10": 12.5, "20": 12.5})})()
     assert cr.CampaignCreator._same_videos(me, type("P", (), {"act": ACT})(), params, row) is True
     assert seen == ["length", "length"]
+
+
+def _feed_creatives(monkeypatch, meta, lengths):
+    """Creatives carry their video in asset_feed_spec (the shape the repeat check compares); videos answer `length`."""
+    original = cr.CampaignCreator.creative_params
+
+    def with_feed(self, *a, **k):
+        params = original(self, *a, **k)
+        params["asset_feed_spec"] = {"videos": [{"video_id": "10"}]}
+        return params
+    monkeypatch.setattr(cr.CampaignCreator, "creative_params", with_feed)
+    # The write policy only allows the shapes ACL itself sends; this test needs the feed shape in the fake account.
+    monkeypatch.setattr("tests.test_acl1761_api_create.wp.check", lambda *a, **k: None)
+    base = meta._get
+
+    def get(path, params):
+        if params.get("fields") == "length" and path.strip("/") in lengths:
+            return {"id": path.strip("/"), "length": lengths[path.strip("/")]}
+        return base(path, params)
+    meta._get = get
+
+
+def _earlier_upload(monkeypatch, tmp_path, lengths):
+    meta = UntaggedMeta()
+    _feed_creatives(monkeypatch, meta, lengths)
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"      # the creative is confirmed (receipt saved), the ad is not
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    creatives(meta)[0]["asset_feed_spec"]["videos"][0]["video_id"] = "20"   # an earlier upload of the same file
+    second, _ = _run(meta, draft)
+    return meta, second
+
+
+def test_confirmed_receipt_creative_with_earlier_video_upload_is_accepted(tmp_path, monkeypatch):
+    meta, second = _earlier_upload(monkeypatch, tmp_path, {"10": 12.5, "20": 12.5})
+    assert not second.error, second.error
+    assert len(creatives(meta)) == 1 and len(second.ad_ids) == 1       # nothing new was written
+    assert any("earlier upload of the same video" in w for w in second.warnings)
+
+
+def test_confirmed_receipt_creative_with_unreadable_video_length_is_accepted(tmp_path, monkeypatch):
+    meta, second = _earlier_upload(monkeypatch, tmp_path, {})
+    assert not second.error, second.error
+    assert len(creatives(meta)) == 1
+
+
+def test_confirmed_receipt_creative_with_other_video_length_is_not_accepted(tmp_path, monkeypatch):
+    meta, second = _earlier_upload(monkeypatch, tmp_path, {"10": 12.5, "20": 30.0})
+    assert second.error and not second.ad_ids
+    assert second.stop_kind == "creative_unverified"

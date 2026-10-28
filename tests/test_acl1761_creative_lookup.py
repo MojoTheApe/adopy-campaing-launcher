@@ -62,7 +62,7 @@ def test_creative_lookup_reads_at_most_the_page_cap(tmp_path):
     assert len([p for p, _ in meta.gets if p.endswith("/adcreatives")]) == cr.CREATIVE_LOOKUP_PAGES
 
 
-def test_same_name_with_unreadable_content_does_not_authorize_a_duplicate(tmp_path):
+def test_same_name_with_unreadable_content_is_not_a_candidate_and_is_never_adopted(tmp_path):
     meta = FakeMeta()
     d = _draft(tmp_path, ads=1)
     plan = cr.plan_from_draft(d)
@@ -70,9 +70,10 @@ def test_same_name_with_unreadable_content_does_not_authorize_a_duplicate(tmp_pa
     foreign = meta._new("creative", name=f"{ad.name} #{ad.index} [{plan.label}]",
                         object_story_spec={"page_id": "1"})
     out, _ = _run(meta, d)
-    assert out.stop_kind == "creative_unknown" and not out.ad_ids
-    assert not any(p.endswith("/adcreatives") for p, _ in meta.posts)
-    assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 1
+    # ACL-2271: a partly returned earlier creative is skipped; the ad gets its own verified creative.
+    assert out.stop_kind != "creative_unknown"
+    assert foreign not in out.creative_ids
+    assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) >= 2
 
 
 def test_an_unknown_creative_write_re_reads_the_list_not_the_cache(tmp_path):
