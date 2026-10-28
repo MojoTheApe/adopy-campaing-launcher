@@ -38,6 +38,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from contextvars import ContextVar
 import logging
 import os
@@ -59,8 +60,58 @@ from src.fb_api.telemetry import scrub
 # the preparation did not fit and the job failed with "Connection preparation time budget exhausted".
 PREPARE_BUDGET_CAP_S = 150.0
 _PREPARE_DEADLINE = ContextVar("acl_warm_prepare_deadline",default=None)
+#: ACL-2278: a publish job running in this thread. While it waits for memory or for the account-action
+#: gate it stays queued (visible, cancellable) instead of failing after a fixed time.
+_JOB_WAIT = ContextVar("acl_warm_job_wait",default=None)
+#: ACL-2278: a plain HTTP request (connection prepare) must not wait for memory: it returns at once and
+#: the job opens the profile later, under the queue.
+_DEFER_MEMORY = ContextVar("acl_warm_defer_memory",default=False)
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class JobWait:
+    """How a waiting job is shown and stopped (ACL-2278).
+
+    `cancelled()` - the user pressed Stop. `show(view)` - publish the live reason of the wait (free and
+    needed memory, hold kind); `show(None)` - the wait is over.
+    """
+    cancelled: Callable[[], bool]
+    show: Callable[[dict | None], None]
+
+
+@contextmanager
+def job_wait(cancelled: Callable[[], bool], show: Callable[[dict | None], None]):
+    """Run the code of one job in this thread with patient (queued, not failing) memory/gate waits."""
+    token = _JOB_WAIT.set(JobWait(cancelled, show))
+    try:
+        yield
+    finally:
+        _JOB_WAIT.reset(token)
+
+
+@contextmanager
+def defer_memory_wait():
+    """Inside: a memory shortage returns at once (code `memory_low`) instead of waiting."""
+    token = _DEFER_MEMORY.set(True)
+    try:
+        yield
+    finally:
+        _DEFER_MEMORY.reset(token)
+
+
+def memory_deferred(code: str) -> bool:
+    return code == "memory_low"
+
+
+def _show(hook: "JobWait | None", view: dict | None) -> None:
+    if hook is None:
+        return
+    try:
+        hook.show(view)
+    except Exception:  # noqa: BLE001 - showing the wait must never fail the job
+        log.exception("Could not show the wait of the job")
 
 RESTART_COOLDOWN_ENV = _stop_log.RESTART_COOLDOWN_ENV
 DEFAULT_RESTART_COOLDOWN_S = _stop_log.DEFAULT_RESTART_COOLDOWN_S
@@ -292,9 +343,30 @@ class HeavyGate:
         ok = memory.available_mb >= per_mb + settings.reserve_mb
         return ok, "memory_ok" if ok else "memory_low"
 
+    def wait_view(self, why: str) -> dict:
+        """Live numbers for a waiting action (ACL-2278): free memory, what a new profile needs, who runs."""
+        memory = self._memory()
+        settings = self._settings()
+        probe = self._usage.read(sorted(self._active)) if self._usage is not None and self._active else {}
+        measured = [int(v) for v in (probe.get("per_profile") or {}).values()]
+        per_mb = settings.profile_mb
+        if probe.get("status") == "ok" and measured:
+            per_mb = max(max(measured), settings.profile_floor_mb)
+        low = why in ("memory_low", "below_reserve")
+        return {"hold": "memory_low" if low else "account_busy",
+                "available_mb": None if memory is None else int(memory.available_mb),
+                "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
+                "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}
+
     def acquire(self, profile_id: str, *, wait_s: float = DEFAULT_GATE_WAIT_S,
-                on_wait: Callable[[str], None] | None = None) -> None:
-        """Ждать места. Не дождались за `wait_s` — `WarmError(code="gate_wait")`."""
+                on_wait: Callable[[str], None] | None = None,
+                cancelled: Callable[[], bool] | None = None,
+                on_tick: Callable[[str], None] | None = None) -> None:
+        """Ждать места. Не дождались за `wait_s` — `WarmError(code="gate_wait")`.
+
+        ACL-2278: `cancelled` - the caller stops waiting (`code="cancelled"`); `on_tick(why)` is called on
+        every look so the wait can show live numbers. A job passes `wait_s=inf`: it waits until it can go.
+        """
         with self._cond:
             if profile_id in self._active:
                 self._active[profile_id] += 1
@@ -302,6 +374,9 @@ class HeavyGate:
             deadline = self._clock() + wait_s
             told = ""
             while True:
+                if cancelled is not None and cancelled():
+                    raise WarmError("Stopped while waiting for the account gate. Nothing was called.",
+                                    code="cancelled")
                 ok, why = self._allowed()
                 if ok:
                     self._active[profile_id] = 1
@@ -318,6 +393,11 @@ class HeavyGate:
                     told = why
                     try:
                         on_wait(why)
+                    except Exception:
+                        pass
+                if on_tick is not None:
+                    try:
+                        on_tick(why)
                     except Exception:
                         pass
                 self._cond.wait(timeout=self._tick_s)
@@ -623,6 +703,11 @@ class WarmRegistry:
         if why:
             return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
         # S3: память под ещё один профиль с учётом роста уже запущенных и прогревающихся.
+        job = _JOB_WAIT.get()
+        if job is not None:
+            # ACL-2278: Stop of the job also stops the waits below (the caller passes no `cancelled`).
+            base_cancelled = cancelled
+            cancelled = lambda: base_cancelled() or job.cancelled()   # noqa: E731
         short = self._wait_for_memory(cancelled)
         if short:
             return _result(False, short, "memory_low")
@@ -643,8 +728,9 @@ class WarmRegistry:
             own_slot = False
         try:
             if queue is not None and not own_slot:
+                # ACL-2278: a job waits for the place as long as it takes; others keep the time limit.
                 grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
-                                      or time.monotonic() - began > START_SLOT_WAIT_S)
+                                      or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
                 if grant is None:
                     return _result(False, "Not started: not enough free memory for another profile. "
                                    "Close something and try again.", "memory_low")
@@ -783,25 +869,43 @@ class WarmRegistry:
         return memory, settings, _ps
 
     def _wait_for_memory(self, cancelled: Callable[[], bool]) -> str:
-        """Пусто — памяти хватает. Иначе текст отказа после ожидания `START_MEMORY_WAIT_S`.
+        """Пусто — памяти хватает. Иначе текст отказа.
 
         Нужно: профиль (+ запас) + недостающий рост уже запущенных профилей, которые ещё
         прогреваются (моложе `ACL_WARM_SETTLE_S`), с их ЗАМЕРЕННОЙ памятью, если замер есть.
+
+        ACL-2278: задание (publish job) не получает отказ по времени: оно стоит в очереди (жёлтое, с
+        цифрами «свободно / нужно»), пока память не появится или его не остановят. Остальные ждут
+        `START_MEMORY_WAIT_S`; запрос подготовки соединения (`defer_memory_wait`) не ждёт вовсе.
         """
+        job = _JOB_WAIT.get()
+        defer = _DEFER_MEMORY.get() and job is None
         deadline = self._mono() + START_MEMORY_WAIT_S
-        while True:
-            memory, settings, _ps = self._memory_state()
-            if memory is None:
-                return ""
-            need, growth = self._memory_need(settings, _ps)
-            if memory.available_mb >= need:
-                return ""
-            if cancelled() or self._mono() >= deadline:
-                return (f"Not started: {memory.available_mb / 1024:.1f} GB free, "
+        try:
+            while True:
+                memory, settings, _ps = self._memory_state()
+                if memory is None:
+                    return ""
+                need, growth = self._memory_need(settings, _ps)
+                if memory.available_mb >= need:
+                    return ""
+                text = (f"Not started: {memory.available_mb / 1024:.1f} GB free, "
                         f"{need / 1024:.1f} GB needed for another profile (new profile, safety reserve"
                         f"{' and the growth of profiles still warming up' if growth else ''}). "
                         "Close something and try again.")
-            self._sleep(2.0)
+                if cancelled():
+                    return "Stopped while waiting for memory. " + text if job is not None else text
+                if job is None:
+                    if defer or self._mono() >= deadline:
+                        return text
+                else:
+                    _show(job, {"hold": "memory_low", "available_mb": int(memory.available_mb),
+                                "need_mb": int(need), "reserve_mb": int(settings.reserve_mb),
+                                "profile_mb": int(need - growth - settings.reserve_mb),
+                                "growth_mb": int(growth)})
+                self._sleep(2.0)
+        finally:
+            _show(job, None)
 
     def _memory_need(self, settings: Any, _ps: Any) -> tuple[int, int]:
         now = self._mono()
@@ -919,9 +1023,20 @@ class WarmRegistry:
             sess.lock.release()
             raise WarmError("This profile was closed or restarted while waiting; the next attempt "
                             "opens it again.", "profile_closed")
+        job = _JOB_WAIT.get()
         try:
-            self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
-                              on_wait=on_wait)
+            if job is None:
+                self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
+                                  on_wait=on_wait)
+            else:
+                # ACL-2278: a job never fails for a busy gate or short memory: it stays queued until it can
+                # go, or until the user stops it. Only local memory reads; no account is touched.
+                try:
+                    self.gate.acquire(profile_id, wait_s=float("inf"), on_wait=on_wait,
+                                      cancelled=job.cancelled,
+                                      on_tick=lambda why: _show(job, self.gate.wait_view(why)))
+                finally:
+                    _show(job, None)
             try:
                 graph, state = self._prepare(sess, act, mode, make_graph, ready_timeout)
             except BaseException:

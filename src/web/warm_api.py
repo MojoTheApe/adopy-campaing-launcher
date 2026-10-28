@@ -220,24 +220,32 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
     if refused:
         return refused
     from src.fb_api.connection import prepare_existing,confirmed_reopen,may_reopen_manual,opening_closed_profile
+    from src.fb_api.warm import defer_memory_wait,memory_deferred
     from src.fb_ads_rpa.operations import profile_lock
     entry = _entry(label)
     if entry is None:
         return {"ok":False,"account":label,"code":"not_in_map","error":"Unknown account"},400
     try:
-        with profile_lock(entry.profile_id).holding(timeout=0), confirmed_reopen(confirm_reopen):
+        # ACL-2278: this request must not wait for memory (the page gives up after 45 s and the job would
+        # fail for it). A shortage is not an error here: the job queues and opens the profile itself.
+        with profile_lock(entry.profile_id).holding(timeout=0), confirmed_reopen(confirm_reopen), \
+                defer_memory_wait():
             reg = _registry()
             kind,_ = reg._scan([entry.profile_id]).get(entry.profile_id,("unknown",None))
             if kind == "no_port":
                 if not may_reopen_manual():
                     return {"ok":False,"account":label,"code":"open_by_hand"},409
                 result = reg.open_one(label,entry)
+                if not result.get("ok") and memory_deferred(result.get("code") or ""):
+                    return {"ok":True,"account":label,"code":"memory_deferred","skipped":True},200
                 return {"account":label,**result},200 if result.get("ok") else 409
             with opening_closed_profile():     # ACL-2262: /connection/prepare comes before Publish only
                 prepare_existing(reg,entry,label)
         return {"ok":True,"account":label},200
     except Exception as exc:
         from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+        if memory_deferred(getattr(exc,"code","") or ""):
+            return {"ok":True,"account":label,"code":"memory_deferred","skipped":True},200
         if isinstance(exc,ProfileLeaseError):
             # Held by a read or by the account's own job: the action queues or dedupes itself.
             return {"ok":True,"account":label,"code":"busy","skipped":True},200

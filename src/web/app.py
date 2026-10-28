@@ -6676,6 +6676,24 @@ async def publish_jobs_release_kept(request: Request) -> JSONResponse:
     return JSONResponse(got, status_code=200 if got.get("ok") else 404)
 
 
+@app.post("/publish-jobs/kept/close")
+async def publish_jobs_close_kept(request: Request) -> JSONResponse:
+    """«Close window» in a queued job's memory message (ACL-2278): close a finished window softly.
+
+    Declared before `/publish-jobs/{job_id}/…`. Runs off the event loop: the stop waits for Multilogin.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    form = await read_form(request)
+    from src.web.publish_jobs import close_kept_window
+
+    got = await run_in_threadpool(close_kept_window, str(form.get("account") or ""))
+    if got.get("ok"):
+        return JSONResponse(got)
+    status = {"not_found": 404, "busy": 409}.get(str(got.get("code")), 502)
+    return JSONResponse(got, status_code=status)
+
+
 @app.post("/publish-jobs/{job_id}/cancel")
 async def publish_jobs_cancel(job_id: str) -> JSONResponse:
     """Stop a running publish/RPA job; Multilogin window stays open."""

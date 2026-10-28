@@ -789,8 +789,13 @@ def _run_job_inner(
             with keep_display_awake(account_label), _watch_screen_lock(job_id):
                 if _fb_backend() == "api":
                     # ACL-1761: Graph API в профиле, всё на паузе.
-                    _run_api(job_id, slots, account_label=account_label, country=country,
-                             dry_run=dry_run)
+                    # ACL-2278: short memory / a busy account gate keep the job queued, not failed.
+                    from src.fb_api import warm as _warm
+
+                    with _warm.job_wait(lambda: _is_cancelled(job_id),
+                                        lambda view: _show_resource_wait(job_id, account_label, view)):
+                        _run_api(job_id, slots, account_label=account_label, country=country,
+                                 dry_run=dry_run)
                     return
                 _run_rpa(
                     job_id,
@@ -823,6 +828,53 @@ def _run_job_inner(
                 _slots.release(job_id)
 
 
+def _show_resource_wait(job_id: str, account_label: str, view: dict[str, Any] | None) -> None:
+    """ACL-2278: a running job waits for memory or the account gate - show it queued, with live numbers.
+
+    `view` None - the wait is over: the job is running again. Local data only; no account is touched.
+    """
+    closable: list[str] = []
+    # The silence watcher measures idle time from the last telemetry row: a wait is activity, not
+    # silence. Every look keeps the job "alive"; the end of the wait writes a row with its length.
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.beat()
+    except Exception:  # noqa: BLE001
+        _rt = None
+    if view is not None:
+        own = str(account_label or "").strip().lower()
+        closable = [a for a in _slots.kept_labels() if a.strip().lower() != own]
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None or job.get("abandoned"):
+            return
+        if view is None:
+            since = job.pop("resource_wait", None)
+            if since:
+                hold = str((job.pop("queue", None) or {}).get("hold") or "")
+                if job.get("status") == "queued":
+                    job["status"] = "running"
+                waited = round(time.monotonic() - float(since), 1) if since is not True else 0.0
+                campaign = next(iter(job.get("campaign_names") or []), "")
+                ended = True
+            else:
+                ended = False
+            if ended and _rt is not None:
+                try:
+                    _rt.record("job_phase", True, campaign=campaign, note="resource_wait",
+                               duration_s=waited, diag={"account": account_label, "hold": hold})
+                except Exception:  # noqa: BLE001
+                    pass
+            return
+        queue = _queue_view({"reason": view.get("hold"), **{k: v for k, v in view.items() if k != "hold"}})
+        queue["closable_accounts"] = closable
+        job["queue"] = queue
+        job["resource_wait"] = job.get("resource_wait") or time.monotonic()
+        if job.get("status") == "running":
+            job["status"] = "queued"
+
+
 def _job_ran_in_browser(job_id: str) -> bool:
     """Задание дошло до браузера (статус «running» был) — окно профиля могло остаться."""
     with _jobs_lock:
@@ -835,6 +887,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
+                  else "waiting_account" if hold == "account_busy"
                   else "waiting_memory" if (hold in ("memory_low", "below_reserve")
                                             or verdict.get("behind_memory"))
                   else "waiting_review" if hold == "review_windows"
@@ -860,6 +913,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "profile_open": bool(verdict.get("profile_open")),
         # ACL-1642: стоит за головой, которая ждёт память.
         "behind_memory": bool(verdict.get("behind_memory")),
+        # ACL-2278: finished/kept windows of other accounts that can be closed to free memory.
+        "closable_accounts": list(verdict.get("closable_accounts") or []),
     }
 
 
@@ -1618,6 +1673,36 @@ def release_kept(account_label: str) -> dict[str, Any]:
         return {"ok": True, "released": count}
     return {"ok": False, "released": 0,
             "error": f"{str(account_label).strip()} has no review window holding a slot"}
+
+
+def close_kept_window(account_label: str) -> dict[str, Any]:
+    """«Close window» in a waiting job's message (ACL-2278): softly close a finished/kept window.
+
+    Same stop as `close_profile` (Multilogin API, never kill), refused while any run uses the profile.
+    A window the queue does not know as kept is not closed from here.
+    """
+    label = str(account_label or "").strip()
+    if not label or label.lower() not in {a.strip().lower() for a in _slots.kept_labels()}:
+        return {"ok": False, "code": "not_found", "error": f"{label or 'This account'} has no finished window to close"}
+    with _jobs_lock:
+        others = [(str(j.get("account_label") or ""), j.get("status")) for j in _jobs.values()]
+    busy_msg = "A run is using this profile - wait until it finishes, then close it."
+    try:
+        profile = profile_key_for(label)
+        if any(status in _ACTIVE_STATUSES and _same_profile(other, profile) for other, status in others):
+            return {"ok": False, "code": "busy", "error": busy_msg}
+        res = _stop_idle_profile(label, profile, busy_msg=busy_msg)
+    except ProfileLeaseError as exc:
+        return {"ok": False, "code": "failed", "error": str(exc)}
+    if not res["ok"]:
+        return res
+    with _jobs_lock:
+        for j in _jobs.values():
+            if str(j.get("account_label") or "").strip().lower() == label.lower():
+                j["profile_closed"] = True
+    _slots.release_kept(label)
+    _slots.wake()
+    return {"ok": True, "message": "Closed the window"}
 
 
 def close_profile(job_id: str) -> dict[str, Any]:
