@@ -432,3 +432,21 @@ ownership. A legacy name tag alone is not ownership: missing-metadata creatives
 can still be recovered by verified identity and complete content. Ambiguity,
 incomplete discovery or unreadable receipts stop safely. Partial IDs survive
 failure, and operator guidance requires reconciliation before retrying.
+
+
+## ACL-2221 — Instagram identity of a Page without a linked Instagram (2026-10-28)
+
+Finding: the native Ads Manager button "Use Facebook Page" is an internal Ads Manager
+GraphQL mutation (document-id based, same-origin session call, Page id as the only variable),
+not a Graph REST call. The public edge `POST /{page}/page_backed_instagram_accounts` was
+rejected on our transport (Graph 100) on 2026-10-26 and 2026-10-28. We do not call the internal
+mutation and add no write path: the identity is created by the owner with the native button.
+
+Behaviour: discovery is read only. Order: linked Instagram, business-converted Instagram,
+the Page-backed field of the Page, then the Page's `page_backed_instagram_accounts` list (one
+complete GET; partial, malformed, ambiguous or failed answers stay `unknown` and stop; Graph
+error 100 on that list is read as "no identity"). An id equal to the Page id is never accepted.
+When nothing exists, Check plan blocks that Page and publication stops before any campaign,
+media or ad write with: "This Page has no Instagram identity. In Ads Manager press 'Use Facebook
+Page' for this Page, then run Check plan again." Facebook-only plans do not read or need an
+identity. The ad-account Instagram list is no longer read (it was informational only).

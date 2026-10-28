@@ -6,12 +6,13 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**29 robot steps × 127 layouts, 72 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**30 robot steps × 128 layouts, 73 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
 | Step | Layouts | pass | xfail | reference |
 | --- | --- | --- | --- | --- |
+| Instagram identity of the selected Facebook Page | 1 | 1 | 0 | 0 |
 | Shared profile connection lifecycle | 1 | 1 | 0 | 0 |
 | Graph creative recovery with retained metadata | 1 | 1 | 0 | 0 |
 | Graph creative video identity readback | 1 | 1 | 0 | 0 |
@@ -41,6 +42,14 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 | ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 | Graph read permission diagnostics (ACL-1886) | 1 | 1 | 0 | 0 |
+
+## Instagram identity of the selected Facebook Page
+
+Robot: CampaignCreator read-only identity discovery (ACL-2221)
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| No linked Instagram; Page-backed identity exists or the Page has none | anonymized owner captures 2026-10-26 and 2026-10-28 | `fb_api_page_backed_2026_10_28.json` | `tests/test_acl2221_page_backed.py` | Existing Page-backed identity is read and used; none stops Check plan and publish before any write with the Use Facebook Page instruction; Facebook-only plans unaffected; zero POSTs | pass |
 
 ## Shared profile connection lifecycle
 
