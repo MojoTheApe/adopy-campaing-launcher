@@ -1,5 +1,17 @@
 # System history
 
+## ACL-2260 — Report does not rebuild during a publish; banner no longer moves the Builder — 2026-10-28
+
+The report no longer starts a rebuild of its own (new BI revision, restart, page open) while a publish job is live or a profile window is running, waiting or kept open: it keeps the report already in memory or the saved page, which says the rebuild is waiting, and rebuilds by itself once everything is idle. Refresh is never deferred. Scheduled account reads also wait for the same condition (the window is not marked done, so the next page open retries). The OUTDATED / "from cache" bar is now out of the page flow (fixed, bottom-left, under the Builder drawer), so the header and the Builder look the same with and without it. `ACL_AUTO_REFRESH` keeps its default (on for the packaged build and port 9090, off elsewhere): it only controls scheduled account reads, not report rebuilds.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1260).
+
+## ACL-2258 — Repeat publish of the same campaign — 2026-10-28
+
+Publishing a campaign twice with the same names no longer stops. A creative receipt of the same ad with another content fingerprint is treated as stale instead of an error (unreadable or foreign-account receipts still stop). When Meta answers a creative write with the earlier tagged creative and the only difference is `asset_feed_spec.videos[].video_id`, it is accepted with a warning unless the `length` of a differing video pair really differs (read-only GET of `length` only; an unreadable video is accepted). An interest id that Meta rejects as `Invalid id` in the batch `adinterestvalid` check is dropped from the confirmed cache and the term is searched again instead of failing the plan check.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1258).
+
+Also: several identical creatives left by earlier repeats are no longer ambiguous (the oldest is used, ACL-2250); an old unknown-send creative receipt blocks only 15 minutes (`RECEIPT_UNKNOWN_S`); a re-uploaded video id is accepted even when the video cannot be read, and the pair is refused only if the lengths really differ (this relaxes the earlier rule).
+
 ## ACL-2249 — Accept the identical creative Meta returns on a repeated write — 2026-10-27
 
 When a creative is written again with the same content, Meta answers with the id of the existing identical creative, which still carries the tag of an earlier run; the run used to stop with "Meta did not keep the ACL tag". Now a creative just written whose row has an `acl-` tag of another run is accepted when `creative_recovery.matches` confirms account, Page, form and full requested content, with the warning "Meta returned an existing identical creative (tag of an earlier run)". Mismatching content or another account still stops, a creative found only by name or tag is never adopted, and the current tag is never written onto the shared creative.
