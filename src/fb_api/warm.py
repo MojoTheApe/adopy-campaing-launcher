@@ -71,6 +71,9 @@ STAGGER_MAX_S = 10.0
 START_SLOT_WAIT_S = 120.0
 #: Сколько ждём памяти под запуск следующего профиля и сколько профиль «приживается».
 START_MEMORY_WAIT_S = 120.0
+#: ACL-2262: сколько ждём, пока профиль, который только что закрывали, отпустят (и как часто смотрим).
+CLOSE_WAIT_S = 120.0
+CLOSE_POLL_S = 3.0
 SETTLE_ENV = "ACL_WARM_SETTLE_S"
 DEFAULT_SETTLE_S = 90.0
 
@@ -83,8 +86,8 @@ BY_HAND = "by_hand"
 CLOSING = "closing"
 UNKNOWN = "unknown"
 
-HAND_MESSAGE = ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
-                "then use Open profiles for today")
+HAND_MESSAGE = ("Opened in Multilogin by hand — close its window there, then run Check plan or "
+                "Publish and the dashboard opens it for automation")
 
 #: Хост и путь Ads Manager в адресе вкладки.
 _FB_HOST_SUFFIX = "facebook.com"
@@ -564,7 +567,7 @@ class WarmRegistry:
                 # Порт другой: профиль перезапустил не дешборд. Запись больше не про него.
                 self._forget(pid, stopped=False)
             return _chip(OPEN, "Open", "Open with automation, but not kept warm by the dashboard. "
-                         "Use Open profiles for today to keep it ready.")
+                         "The dashboard attaches to it when an action starts.")
         if kind == "closing":
             return _chip(CLOSING, "Closing…", "The profile window is closing; wait a minute")
         if kind == "no_port":
@@ -602,8 +605,13 @@ class WarmRegistry:
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
         if kind == "closing":
-            return _result(False, "The profile is closing; try again in a minute. Nothing was started.",
-                           "profile_closing")
+            # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
+            # released it ends in "can't lock profile". Wait (bounded, one local look every few seconds,
+            # no network) until it is gone, then start.
+            kind = self._wait_until_closed(pid, cancelled)
+            if kind != "none":
+                return _result(False, f"The {label} profile is still closing in Multilogin; nothing was "
+                               "started. Try again in a minute.", "profile_closing")
         if kind == "none" and self.session(pid) is not None:
             # B2: профиль в реестре, а процесса нет — его закрыли (человек, таймер чтения).
             # Останавливаем отсчёт от момента, когда увидели, и только потом решаем про запуск.
@@ -619,8 +627,19 @@ class WarmRegistry:
         queue = self._slot_queue()
         began = time.monotonic()
         grant = None
+        # ACL-2262: a publish job already holds its own queue slot for this profile; asking for a second
+        # one would make the job wait for itself. Only an action without a slot (Check, Add account) asks.
+        own_slot = False
         try:
-            if queue is not None:
+            from src.fb_ads_rpa.run_telemetry import current_job_id
+
+            holds = getattr(queue, "holds", None)
+            own_slot = bool(queue is not None and callable(holds) and current_job_id()
+                            and holds(current_job_id(), pid))
+        except Exception:  # noqa: BLE001
+            own_slot = False
+        try:
+            if queue is not None and not own_slot:
                 grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
                                       or time.monotonic() - began > START_SLOT_WAIT_S)
                 if grant is None:
@@ -633,10 +652,14 @@ class WarmRegistry:
                 msg = HAND_MESSAGE if code == "open_by_hand" else str(exc)
                 return _result(False, msg, code)
             except Exception as exc:  # noqa: BLE001 — MLX/сеть
+                if "lock profile" in str(exc).lower():
+                    # ACL-2262: process is gone but Multilogin still holds the profile lock. No retry loop.
+                    return _result(False, f"Multilogin still holds the {label} profile after it closed; "
+                                   "nothing was started. Try again in a minute.", "profile_locked")
                 return _result(False, f"The profile could not be started with automation: "
                                       f"{scrub(str(exc))}", "start_failed")
         finally:
-            if queue is not None and grant is not None:
+            if queue is not None and grant is not None and not own_slot:
                 queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
         started = bool(getattr(opened, "started_now", False))
         self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
@@ -648,6 +671,15 @@ class WarmRegistry:
         return _result(True, "Opened; ready for the next action." if started
                        else "Already open with automation; kept warm.",
                        "started" if started else "already_open", started=started)
+
+    def _wait_until_closed(self, pid: str, cancelled: Callable[[], bool]) -> str:
+        """Local process look every `CLOSE_POLL_S` until the profile is gone (`none`) or the wait ends."""
+        deadline = self._mono() + CLOSE_WAIT_S
+        kind = "closing"
+        while kind == "closing" and not cancelled() and self._mono() < deadline:
+            self._sleep(CLOSE_POLL_S)
+            kind = self._scan([pid]).get(pid, ("unknown", None))[0]
+        return kind
 
     def _reopen_manual(self, label: str, entry: Any, *, job_id: str, cancelled) -> dict:
         """Explicitly authorized, graceful restart under the physical profile lease."""
@@ -882,8 +914,8 @@ class WarmRegistry:
             # Пока ждали замок, сессию закрыли/забыли (Close profiles): работать не на чем.
             sess.owner = 0
             sess.lock.release()
-            raise WarmError("This profile was closed or restarted while waiting. Use Open profiles "
-                            "for today first.", "profile_closed")
+            raise WarmError("This profile was closed or restarted while waiting; the next attempt "
+                            "opens it again.", "profile_closed")
         try:
             self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
                               on_wait=on_wait)
@@ -931,8 +963,8 @@ class WarmRegistry:
         if kind == "port":
             # Порт другой: перезапуск не нами. Запись про него больше не годится.
             self._forget(sess.profile_id, stopped=False)
-            raise WarmError(f"The {sess.account} profile was restarted since it was opened. "
-                            "Use Open profiles for today to keep it warm again.", "profile_restarted")
+            raise WarmError(f"The {sess.account} profile was restarted since it was opened; "
+                            "the next attempt connects to it again.", "profile_restarted")
         if kind == "no_port":
             self._forget(sess.profile_id, stopped=False)
             raise WarmError(HAND_MESSAGE, "open_by_hand")
@@ -940,8 +972,10 @@ class WarmRegistry:
             raise WarmError(f"The {sess.account} profile is closing; try again in a minute.", "profile_closing")
         if kind == "none":
             self._forget(sess.profile_id, stopped=True)
-            raise WarmError(f"The {sess.account} profile was closed. Use Open profiles for today to start it "
-                            "again (about 3 minutes after it closed).", "profile_closed")
+            # ACL-2262: no button and no waiting text. `prepare_existing` opens a closed profile before
+            # the action; this is only the narrow race of a profile closing right after that check.
+            raise WarmError(f"The {sess.account} profile closed while the action was starting; "
+                            "the next attempt opens it again.", "profile_closed")
         raise WarmError(f"The {sess.account} profile could not be checked on this machine.", "profile_unknown")
 
     def _remaining(self, cap: float | None = None) -> float:

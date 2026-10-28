@@ -755,7 +755,7 @@ def test_the_publish_gate_blocks_on_errors_and_lists_warnings():
      "    if (false) { stop(again); return; }\n    window.CB_PF_WARN", "server errors no longer block"),
     ("function blocks(ls) { return ls.some(function (x) { return x.status === 'error'; }); }",
      "function blocks(ls) { return false; }", "blocks() never fires"),
-    ("    var stale = it.slots.filter(function (slot) { return !cbPfFresh(slot); });",
+    ("    var stale = it.slots.filter(function (slot) { return !window.cbPfReusable(slot); });   // ACL-2003: 'Could not check' is never reused",
      "    var stale = [];", "server checks are never refreshed before Publish"),
     ("  if (!tree || !tree.auditLines || !window.cbPreflight || !rules.length) { cbPfUnavailable(); return; }",
      "  if (false) { cbPfUnavailable(); return; }", "a missing tree or rule table lets Publish through"),

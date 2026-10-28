@@ -163,6 +163,35 @@ def _cooldown(account_label: str) -> tuple[float, str]:
         return 0.0, ""
 
 
+def _frozen_api(account_label: str):
+    """(module, key) of the shared cooldown, or (None, "") when it cannot be resolved."""
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.analysis_agent import account_spend_api as _api
+
+        return _api, _as._profile_key(account_label)
+    except Exception:
+        return None, ""
+
+
+def _frozen_tab_replaceable(account_label: str) -> bool:
+    """ACL-2262: the frozen-tab pause may be lifted once, right before the warm checkout replaces the tab."""
+    _api, key = _frozen_api(account_label)
+    return bool(_api is not None and _api.frozen_tab_replaceable(key))
+
+
+def _release_frozen_tab_cooldown(account_label: str) -> None:
+    _api, key = _frozen_api(account_label)
+    if _api is not None:
+        _api.release_frozen_tab_cooldown(key)
+
+
+def _note_tab_recovered(account_label: str) -> None:
+    _api, key = _frozen_api(account_label)
+    if _api is not None:
+        _api.note_tab_recovered(key)
+
+
 def _start_cooldown(account_label: str, stop: GraphStop) -> None:
     try:
         from src.analysis_agent import account_spend as _as
@@ -334,12 +363,15 @@ class ApiPublisher:
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
         left, why = _cooldown(account_label)
-        if left > 0 and why == "page_unresponsive":
-            raise ApiPublishError(
-                f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
-                f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
-                code="page_unresponsive")
-        if left > 0:
+        # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
+        frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
+        frozen_error = ApiPublishError(
+            f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
+            f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
+            code="page_unresponsive")
+        if left > 0 and why == "page_unresponsive" and not frozen_deferred:
+            raise frozen_error
+        if left > 0 and why != "page_unresponsive":
             raise ApiPublishError(
                 f"{account_label}: Meta stopped the last API call ({why}); waiting about "
                 f"{int(left // 60) + 1} min before calling again. Nothing was created.")
@@ -349,6 +381,8 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
+        if frozen_deferred:
+            raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
         from src.fb_api import mlx_session as _mlx
 
         try:
@@ -418,8 +452,11 @@ class ApiPublisher:
 
         reg = _warm.registry()
         from src.fb_api.connection import prepare_existing
+        from src.fb_api.connection import opening_closed_profile
         try:
-            managed = prepare_existing(reg, self._entry, account_label)
+            # ACL-2262: Check plan and Publish may bring up a closed profile (not earlier than the first campaign).
+            with opening_closed_profile():
+                managed = prepare_existing(reg, self._entry, account_label)
         except _warm.WarmError as exc:
             raise ApiPublishError(str(exc), code=exc.code) from exc
         if not managed:
@@ -430,9 +467,11 @@ class ApiPublisher:
         def make(tab):
             return _make_graph(tab, act, writes=not dry)
 
+        _release_frozen_tab_cooldown(account_label)
         try:
             self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
                                        make_graph=make, ready_timeout=READY_TIMEOUT_S)
+            _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
             raise ApiPublishError(str(exc), code=exc.code) from exc
         except GraphStop as exc:
@@ -724,8 +763,79 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     return results
 
 
+class _PlanFlight:
+    """Идущая проверка: ответ (или отказ) лидера получают все, кто пришёл с тем же запросом."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result: dict[str, Any] | None = None
+        self.error: BaseException | None = None
+        self.waiters = 0
+
+
+_PLAN_FLIGHTS: dict[tuple[str, str, str], _PlanFlight] = {}
+_PLAN_FLIGHTS_LOCK = threading.Lock()
+
+
+def _plan_flight_waiters() -> int:
+    """Сколько запросов сейчас ждут чужую идущую проверку (для тестов и диагностики)."""
+    with _PLAN_FLIGHTS_LOCK:
+        return sum(f.waiters for f in _PLAN_FLIGHTS.values())
+
+
+def _plan_flight_key(slots: list[dict[str, Any]], account_label: str, country: str) -> tuple[str, str, str]:
+    import json
+
+    try:
+        body = json.dumps(slots, sort_keys=True, ensure_ascii=False, default=repr)
+    except (TypeError, ValueError):
+        body = repr(slots)
+    return (str(account_label or "").strip().casefold(), str(country or "").strip().casefold(), body)
+
+
 def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
-    """Черновики билдера → план каждой кампании. Ничего не создаёт."""
+    """Черновики билдера → план каждой кампании. Ничего не создаёт.
+
+    ACL-2003: тот же аккаунт, страна и черновики, пока предыдущая такая проверка ещё идёт, не
+    открывают профиль второй раз: запрос ждёт её и получает копию её ответа. Закончилась —
+    запись снимается, и следующий запрос читает кабинет заново (свежесть вердикта решает
+    страница, сервер ничего не помнит).
+    """
+    import copy
+
+    # `confirm_reopen` is deliberately not part of the key: it only decides how a hand-opened profile is
+    # taken over, and a waiter that needs the confirmation gets `open_by_hand` back and resends it
+    # after this flight has ended (no flight is running then).
+    key = _plan_flight_key(slots, account_label, country)
+    with _PLAN_FLIGHTS_LOCK:
+        flight = _PLAN_FLIGHTS.get(key)
+        leader = flight is None
+        if leader:
+            flight = _PLAN_FLIGHTS[key] = _PlanFlight()
+        else:
+            flight.waiters += 1
+    if leader:
+        try:
+            flight.result = _check_plan_once(slots, account_label=account_label, country=country)
+            return flight.result
+        except BaseException as exc:  # noqa: BLE001 — ждущие получают тот же отказ
+            flight.error = exc
+            raise
+        finally:
+            with _PLAN_FLIGHTS_LOCK:
+                _PLAN_FLIGHTS.pop(key, None)
+            flight.done.set()
+    flight.done.wait()
+    with _PLAN_FLIGHTS_LOCK:
+        flight.waiters -= 1
+    log.info("Check plan for %s merged into the check already running", account_label)
+    if flight.error is not None:
+        raise flight.error
+    return copy.deepcopy(flight.result)
+
+
+def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+    """Одна проверка: профиль → чтение → ответ."""
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 

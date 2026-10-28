@@ -24,7 +24,7 @@ const block = slice('/* ── ACL-1819: серверные проверки pre
 const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'fb_api', 'preflight_rules.json'), 'utf8'));
 
 function world(backend, fetchReply) {
-  const log = { fetched: [], opened: [], proceeded: 0, alerts: [] };
+  const log = { fetched: [], bodies: [], opened: [], proceeded: 0, alerts: [] };
   const w = { CB_PREFLIGHT_RULES: rules, ACL_FB_BACKEND: backend, alert: (m) => log.alerts.push(m) };
   // ACL-141: страница говорит своим окном — та же запись.
   w.aclAlert = (m) => { log.alerts.push(m); return Promise.resolve(); };
@@ -32,9 +32,9 @@ function world(backend, fetchReply) {
     window: w, Object, Array, JSON, RegExp, Number, String, parseInt, isFinite, Promise, Date,
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     cbApiMode: () => backend === 'api',
-    cbPlanFormData: (form, only) => ({ only: only ? only.length : 0 }),
+    cbPlanFormData: (form, only) => ({ only: only ? only.length : 0, names: (only || []).map((x) => x._name) }),
     fetch: async (url, init) => {
-      log.fetched.push(url);
+      log.fetched.push(url); log.bodies.push(init && init.body);
       await new Promise((r) => setTimeout(r, 5));
       return { json: async () => (typeof fetchReply === 'function' ? fetchReply() : fetchReply) };
     },
@@ -234,6 +234,68 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
       assert.equal(x.log.proceeded, 0, backend + ': при сбое аудита Publish прошёл');
       assert.deepEqual(x.log.alerts, [MSG]);
     }
+  }
+
+  // 9. ACL-2003: одинаковые проверки одной формы, пока идёт первая, делят один запрос.
+  {
+    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }] };
+    const { w, log } = world('api', reply);
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    const a = w.cbPreflightRun(form, [s]);      // кнопка Check plan
+    const b = w.cbPreflightRun(form, [s]);      // карточка аудита
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });   // Publish all
+    const [ra, rb] = await Promise.all([a, b]);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(log.fetched.length, 1, 'одинаковые проверки ушли на сервер несколько раз: ' + log.fetched.length);
+    assert.equal(ra, rb, 'второй вызов получил не тот же ответ');
+    assert.equal(log.proceeded, 1, 'Publish all не дождался общей проверки');
+    assert.equal(form._pfFlight, null, 'запись о идущей проверке не снята');
+  }
+  // 10. ACL-2003: другой набор кампаний ждёт идущую проверку и проверяет только то, чего в ней не было.
+  {
+    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }, { campaign_name: 'C2', error: null, audit: [] }] };
+    const { w, log } = world('api', reply);
+    const form = {}, s1 = slotOf(form, 'C1', okInput(), 'cbs1'), s2 = slotOf(form, 'C2', okInput(), 'cbs2');
+    const a = w.cbPreflightRun(form, [s1]);
+    const b = w.cbPreflightRun(form, [s1, s2]);
+    await Promise.all([a, b]);
+    assert.equal(log.fetched.length, 2, 'ожидалось два запроса: C1, затем только C2');
+    assert.deepEqual(log.bodies[0].names, ['C1']);
+    assert.deepEqual(log.bodies[1].names, ['C2'], 'второй запрос перепроверил уже проверенную C1');
+  }
+  // 11. ACL-2003: проверка нетронутого черновика не повторяется, пока вердикт свежий; правка, смена набора и срок — повторяют.
+  {
+    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }] };
+    const { w, log } = world('api', reply);
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    assert.equal(w.cbPfReusable(s), false, 'до первой проверки вердикта нет');
+    await w.cbPreflightRun(form, [s]);
+    assert.equal(w.cbPfReusable(s), true, 'свежий вердикт не признан годным');
+    const stored = w.cbPfStoredData(form, [s]);
+    assert.equal(stored.results.length, 1);
+    assert.equal(stored.results[0].campaign_name, 'C1');
+    assert.ok(stored.stored_at > 0 && stored.stored_n === 1, 'нет отметки «из памяти»');
+    const s2 = slotOf(form, 'C2', okInput(), 'cbs2');
+    assert.equal(w.cbPfStoredData(form, [s, s2]), null, 'набор шире проверенного не должен браться из памяти');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });    // Publish all берёт сохранённый вердикт
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(log.fetched.length, 1, 'Publish all перепроверил нетронутую кампанию');
+    assert.equal(log.proceeded, 1);
+    s._rev = 'r2';                                                           // правка
+    assert.equal(w.cbPfReusable(s), false, 'после правки вердикт признан годным');
+    s._rev = 'r1';
+    form._pfAudit.byName.C1.at -= 11 * 60 * 1000;                            // вышло окно свежести
+    assert.equal(w.cbPfReusable(s), false, 'просроченный вердикт признан годным');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(log.fetched.length, 2, 'просроченный вердикт не перепроверен перед Publish');
+  }
+  // 12. ACL-2003: сбой проверки («Could not check») вердиктом не считается — его можно повторить.
+  {
+    const { w } = world('api', { error: 'busy', error_kind: 'not_checked', results: [] });
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    await w.cbPreflightRun(form, [s]);
+    assert.equal(w.cbPfReusable(s), false, 'сбой чтения выдан за вердикт');
   }
   process.stdout.write('ok');
 })().catch((e) => { process.stderr.write(String(e && e.stack || e)); process.exit(1); });
