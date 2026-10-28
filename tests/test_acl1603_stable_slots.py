@@ -122,19 +122,21 @@ def test_never_more_than_two_run_at_once_however_much_memory_there_is():
 
 # ── запас памяти ─────────────────────────────────────────────────────────
 
-def test_a_start_is_refused_when_free_memory_is_below_profile_plus_reserve():
+def test_a_start_is_refused_when_more_than_ninety_percent_of_memory_is_in_use():
+    """ACL-2255: доля занятой памяти, а не «профиль + запас в ГБ»: на 32 ГБ нужно ≥ 3,2 ГБ свободных."""
     s = ps.load_settings({})
-    low = ps.decide(1, 0, mem(6.4), s)                  # 3,5 + 3 = 6,5
-    assert low["allow"] is False and low["reason"] == "memory_low"
-    assert low["need_mb"] == int(6.5 * GB) and low["cap"] == 2 and low["reserve_mb"] == 3 * GB
-    assert ps.decide(1, 0, mem(6.5), s)["allow"] is True
+    low = ps.decide(1, 0, mem(3.1), s)                  # занято 90,3 %
+    assert low["allow"] is False and low["reason"] == "below_reserve"
+    assert low["need_mb"] == ps.keep_free_mb(32 * GB, s) and low["cap"] == 2
+    assert low["max_used_pct"] == 90.0 and low["used_pct"] > 90
+    assert ps.decide(1, 0, mem(3.3), s)["allow"] is True
 
 
 def test_the_measured_use_has_a_floor_of_three_and_a_half_gb():
     s = ps.load_settings({})
     light = ps.decide(1, 0, mem(20), s, measured_mb=2 * GB)
     assert light["profile_mb"] == int(3.5 * GB) and light["profile_mb_source"] == "measured"
-    heavy = ps.decide(1, 0, mem(6.9), s, measured_mb=4 * GB)   # 4 + 3 = 7
+    heavy = ps.decide(1, 1, mem(6.9), s, measured_mb=4 * GB)   # 3,2 + 4 (прогревающийся) > 6,9
     assert heavy["allow"] is False and heavy["profile_mb"] == 4 * GB
 
 
@@ -171,13 +173,13 @@ def test_a_memory_drop_mid_run_stops_new_starts_until_it_recovers():
 
 
 def test_a_profile_that_is_warming_up_is_counted_so_the_next_start_is_rechecked():
-    m = Machine(available_gb=9.5, settings=_settings(ceiling=3, warmup_s=90))
+    m = Machine(available_gb=6.0, settings=_settings(ceiling=3, warmup_s=90))
     slots = m.slots()
     a = Job(slots, "a", "P1")
-    b = Job(slots, "b", "P2")       # 9,5 ГБ < 3,5 (b) + 3,5 (a ещё греется) + 3 запас
+    b = Job(slots, "b", "P2")       # 6,0 ГБ < 3,2 (держим свободными) + 3,5 (a ещё греется)
     time.sleep(0.2)
     assert a.started and not b.started and b.waits[0]["warming"] == 1
-    m.now += 91                     # a прогрелся и занял свою память; 9,5 ≥ 3,5 + 3
+    m.now += 91                     # a прогрелся и занял свою память; 6,0 ≥ 3,2
     assert _until(lambda: b.started)
     a.finish()
     b.finish()
@@ -366,11 +368,11 @@ def test_the_dashboard_sees_each_accounts_state(clean_jobs, monkeypatch):
 
 def test_the_decision_for_telemetry_carries_cap_free_memory_measured_use_and_reason():
     s = ps.load_settings({})
-    d = ps.decide(1, 0, mem(5.0), s, measured_mb=4 * GB)
+    d = ps.decide(1, 0, mem(3.0), s, measured_mb=4 * GB)
     row = pj._decision_for_telemetry(d)
     for key in ("cap", "available_mb", "measured_mb", "profile_mb", "reserve_mb", "reason"):
         assert key in row, key
-    assert row["reason"] == "memory_low" and row["cap"] == 2
+    assert row["reason"] == "below_reserve" and row["cap"] == 2 and row["used_pct"] > 90
 
 
 # ── раунд 2 ревью: открытые окна и первый профиль ───────────────────────
@@ -392,10 +394,11 @@ def _mb(mb: int) -> ps.MemoryReading:
 def test_the_first_profile_waits_for_memory_too(free_mb):
     """05.10 16:27: первый профиль пускали при 2810 МБ свободных."""
     d = ps.decide(0, 0, _mb(free_mb), ps.load_settings({}))
-    assert d["allow"] is False
-    assert d["reason"] == ("below_reserve" if free_mb < 3 * GB else "memory_low")
-    assert pj._queue_view(d)["state"] == "waiting_memory"
-    assert d["need_mb"] == int(6.5 * GB)
+    assert d["allow"] is (free_mb >= ps.keep_free_mb(32 * GB, ps.load_settings({})))
+    if not d["allow"]:
+        assert d["reason"] == "below_reserve"
+        assert pj._queue_view(d)["state"] == "waiting_memory"
+    assert d["need_mb"] == ps.keep_free_mb(32 * GB, ps.load_settings({}))
 
 
 def test_the_first_profile_starts_with_profile_plus_reserve_and_waits_until_then():
@@ -404,7 +407,7 @@ def test_the_first_profile_starts_with_profile_plus_reserve_and_waits_until_then
     a = Job(slots, "a", "P1")
     time.sleep(0.15)
     assert not a.started and a.waits[0]["reason"] == "below_reserve"
-    m.available_gb = 6.5
+    m.available_gb = 3.3
     assert _until(lambda: a.started)
     a.finish()
 
@@ -612,9 +615,11 @@ def test_pruning_a_kept_window_of_the_waiting_profile_does_not_subtract_twice():
 def test_the_first_profile_wait_message_mentions_the_reserve():
     html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     assert "Waiting for memory: " in html and "GB reserve)" in html
-    d = ps.decide(0, 0, _mb(int(5.4 * GB)), ps.load_settings({}))
+    d = ps.decide(0, 0, _mb(int(3.0 * GB)), ps.load_settings({}))
     view = pj._queue_view(d)
-    assert (view["need_mb"], view["reserve_mb"], view["profile_mb"]) == (int(6.5 * GB), 3 * GB, int(3.5 * GB))
+    assert (view["need_mb"], view["reserve_mb"], view["profile_mb"]) == (ps.keep_free_mb(32 * GB, ps.load_settings({})),
+                                                                          3 * GB, int(3.5 * GB))
+    assert view["max_used_pct"] == 90.0 and view["used_pct"] > 90
 
 
 # ── раунд 4 ревью ────────────────────────────────────────────────────────
