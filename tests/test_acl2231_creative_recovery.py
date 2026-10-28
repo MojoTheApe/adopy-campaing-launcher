@@ -365,10 +365,43 @@ def test_video_pair_is_refused_when_other_content_differs():
     assert _same_videos({"10": 12.5, "20": 12.5}, params, row) is False
 
 
-def test_video_pair_is_refused_on_get_error_missing_length_other_account_or_count():
+def test_unreadable_video_is_accepted_but_other_changes_are_not():
     params, row = _pair_case()
-    assert _same_videos({"10": 12.5, "20": RuntimeError("boom")}, params, row) is False
-    assert _same_videos({"10": 12.5, "20": None}, params, row) is False
-    assert _same_videos({"10": 12.5, "20": {"length": 12.5, "account_id": "999"}}, params, row) is False
+    assert _same_videos({"10": 12.5, "20": RuntimeError("boom")}, params, row) is True
+    assert _same_videos({"10": 12.5, "20": None}, params, row) is True
     row["asset_feed_spec"]["videos"].append({"video_id": "21"})
     assert _same_videos({"10": 12.5, "20": 12.5, "21": 1}, params, row) is False
+
+
+def test_several_identical_creatives_use_the_oldest(tmp_path):
+    meta = UntaggedMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    old = creatives(meta)[0]
+    twin = copy.deepcopy(old)
+    twin["id"] = str(int(old["id"]) + 1000)
+    meta.objects[twin["id"]] = twin
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        path.unlink()
+    second, _ = _run(meta, draft)
+    assert not second.error, second.error
+    assert second.creative_ids == [old["id"]] and len(creatives(meta)) == 2
+
+
+def test_old_unknown_send_receipt_stops_blocking_after_15_minutes(tmp_path):
+    import os
+    import time
+    meta = UntaggedMeta()
+    meta.fail_next["adcreatives"] = "unsent"
+    draft = _draft(tmp_path, ads=1)
+    one, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert one.error
+    two, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert two.error and not two.ad_ids          # fresh receipt still blocks
+    old = time.time() - cr.RECEIPT_UNKNOWN_S - 60
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        os.utime(path, (old, old))
+    three, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert not three.error and len(three.ad_ids) == 1

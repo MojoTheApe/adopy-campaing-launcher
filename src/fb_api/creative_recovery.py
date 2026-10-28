@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -101,6 +102,12 @@ class Receipt:
                     or (self.data.get("state") == "confirmed" and
                         not re.fullmatch(r"[0-9]{1,30}", str(self.data.get("id") or "")))):
                 raise ValueError("Creative receipt is unreadable or belongs to a different request")
+
+    def age_s(self):
+        try:
+            return max(0.0, time.time() - self.path.stat().st_mtime)
+        except OSError:
+            return 0.0
 
     @property
     def object_id(self):

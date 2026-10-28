@@ -212,6 +212,8 @@ UPLOAD_STEP_EVERY_S = 12.0
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
+#: An unanswered creative-send receipt blocks for 15 minutes; after that the full listing decides.
+RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
@@ -1616,23 +1618,21 @@ class CampaignCreator:
         return True
 
     def _same_videos(self, plan, params, row) -> bool:
-        """Повтор: Meta вернула прежний креатив, где всё то же, кроме id видео (повторная загрузка того же файла).
-        Принимаем, если каждое видео из пары лежит в этом же кабинете и имеет ту же длительность."""
+        """Repeat: Meta returned the earlier creative that differs only by video id (same file uploaded again).
+        Accepted unless the lengths really differ; an unreadable video is accepted too (the rest matched)."""
         pairs = _cr.video_pairs(plan.act, params, row)
         if not pairs:
             return False
         try:
             for want_id, got_id in pairs:
-                a = self.client.get(f"/{want_id}", {"fields": "length,account_id"})
-                b = self.client.get(f"/{got_id}", {"fields": "length,account_id"})
-                if not isinstance(a, dict) or not isinstance(b, dict):
-                    return False
-                if any(str(v.get("account_id") or "") != str(plan.act).removeprefix("act_") for v in (a, b)):
-                    return False
-                if not a.get("length") or float(a["length"]) != float(b.get("length") or -1):
-                    return False
+                a = self.client.get(f"/{want_id}", {"fields": "length"})
+                b = self.client.get(f"/{got_id}", {"fields": "length"})
+                la = float(a["length"]) if isinstance(a, dict) and a.get("length") else None
+                lb = float(b["length"]) if isinstance(b, dict) and b.get("length") else None
+                if la is not None and lb is not None and la != lb:
+                    return False      # different length is a different video
         except Exception:
-            return False
+            pass                      # video could not be read: everything else matched
         return True
 
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
@@ -1706,9 +1706,11 @@ class CampaignCreator:
         stem = f"{ad.name} #{ad.index}"
         def candidates(*, fresh=False):
             rows = self._creative_candidates(plan, stem, params, fresh=fresh)
+            # Every candidate passed the full content check (_cr.matches), so they are identical: take the oldest.
+            # Several identical creatives are a trace of earlier repeats, not a reason to stop (ACL-2250).
             if len(rows) > 1:
-                raise CreationStopped("Several matching creatives exist. Review them in Ads Manager "
-                                      "before continuing.", kind="creative_ambiguous")
+                rows = sorted(rows, key=lambda r: int(r["id"]))
+                self._step(out, f"{len(rows)} identical creatives already exist; using the oldest {rows[0]['id']}")
             return str(rows[0]["id"]) if rows else None
         try:
             with _cr.transaction(plan.act, name, params) as receipt:
@@ -1719,7 +1721,7 @@ class CampaignCreator:
                     creative_id = candidates()
                     if creative_id:
                         receipt.save(creative_id)
-                    elif receipt.data:
+                    elif receipt.data and receipt.age_s() < RECEIPT_UNKNOWN_S:
                         raise CreationStopped("An earlier creative write has an unknown result. "
                                               "No new creative was sent. Reconcile the existing object first.",
                                               kind="creative_unknown")
