@@ -494,10 +494,12 @@ def test_confirmed_receipt_creative_with_unreadable_video_length_is_accepted(tmp
     assert len(creatives(meta)) == 1
 
 
-def test_confirmed_receipt_creative_with_other_video_length_is_not_accepted(tmp_path, monkeypatch):
+def test_confirmed_receipt_creative_with_other_video_length_is_not_reused_a_new_one_is_written(tmp_path, monkeypatch):
+    # ACL-2284: another video is another file - stale, not an error; the old creative is never reused.
     meta, second = _earlier_upload(monkeypatch, tmp_path, {"10": 12.5, "20": 30.0})
-    assert second.error and not second.ad_ids
-    assert second.stop_kind == "creative_unverified"
+    assert not second.error, second.error
+    assert len(creatives(meta)) == 2 and len(second.ad_ids) == 1
+    assert cr.STALE_WARNING in second.warnings
 
 
 @pytest.mark.parametrize("field,value,path", [
@@ -517,10 +519,11 @@ def test_unconfirmed_creative_stop_names_the_first_differing_field(tmp_path, fie
     assert f"First difference: {path}: expected " in second.error and repr(value) in second.error
 
 
-def test_unconfirmed_creative_stop_names_the_video_id_when_lengths_differ(tmp_path, monkeypatch):
-    _, second = _earlier_upload(monkeypatch, tmp_path, {"10": 12.5, "20": 30.0})
-    assert second.stop_kind == "creative_unverified"
-    assert "First difference: asset_feed_spec.videos[0].video_id: expected '10' got '20'" in second.error
+def test_first_diff_names_the_video_id_when_lengths_differ(tmp_path, monkeypatch):
+    # ACL-2284: the difference is media only, so the run no longer stops; the helper still names the field.
+    params = {"asset_feed_spec": {"videos": [{"video_id": "10"}]}}
+    row = {"id": "5", "account_id": "9", "asset_feed_spec": {"videos": [{"video_id": "20"}]}}
+    assert "asset_feed_spec.videos[0].video_id: expected '10' got '20'" in recovery.first_diff("act_9", params, row)
 
 
 def test_first_diff_only_explains_and_values_are_trimmed():
