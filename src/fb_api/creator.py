@@ -1756,13 +1756,24 @@ class CampaignCreator:
                         receipt.save(creative_id)
                         created = True
                 replaced = False
+
+                def finish(cid: str, verified: bool) -> tuple[str, bool]:
+                    # ACL-2284: the warning is added only once a replacement has passed the full content check,
+                    # and it says "new" only when the creative really is one written in this run.
+                    if replaced:
+                        out.warnings.append(STALE_WARNING if cid in out.created.get("creatives", [])
+                                            else STALE_WARNING_REUSED)
+                    return cid, verified
+
                 while True:
-                    if creative_id not in out.creative_ids:
+                    if creative_id not in out.creative_ids and not replaced:
                         out.creative_ids.append(creative_id)
                     if not created:
                         out.reused.setdefault("creatives", []).append(creative_id)
                     label_failure = None
-                    if created and not self._missing_creative_tag:
+                    # After a replacement write the tag alone proves nothing (the repeat has the same tag as the
+                    # stale creative): the creative is always read back and judged by content below.
+                    if created and not replaced and not self._missing_creative_tag:
                         try:
                             self._verify_label(out, f"The creative of ad {ad.index}", creative_id, plan.label)
                             return creative_id, False
@@ -1798,7 +1809,7 @@ class CampaignCreator:
                                 out.created.pop("creatives", None)
                             out.reused.setdefault("creatives", []).append(creative_id)
                             receipt.save(creative_id, accepted_identical=True)
-                        return creative_id, True
+                        return finish(creative_id, True)
                     if (isinstance(row, dict) and str(row.get("id") or "") == creative_id and not foreign_tag
                             and not content_ok and self._same_videos(plan, params, row)):
                         # Same creative (account, Page, form and all other content), but its video is an earlier
@@ -1807,7 +1818,7 @@ class CampaignCreator:
                                             "everything else matches, so it was accepted.")
                         if creative_id not in out.reused.get("creatives", []):
                             out.reused.setdefault("creatives", []).append(creative_id)
-                        return creative_id, True
+                        return finish(creative_id, True)
                     if (not isinstance(row, dict) or str(row.get("id") or "") != creative_id
                             or (foreign_tag and not identical_existing)
                             or not (identical_existing or content_ok)):
@@ -1821,7 +1832,7 @@ class CampaignCreator:
                             creative_id, created = self._replace_stale_creative(
                                 out, plan, ad, ad_set, params, receipt, creative_id, candidates)
                             if not created:
-                                return creative_id, True      # a matching creative existed elsewhere: reused
+                                return finish(creative_id, True)      # a matching creative existed elsewhere: reused
                             continue                          # judge the new creative like any written one
                         if label_failure:
                             raise label_failure
@@ -1832,7 +1843,7 @@ class CampaignCreator:
                     if plan.label not in _labels(row):
                         out.warnings.append("Meta did not return the creative ACL tag; the existing creative "
                                             "was verified by its account, Page, form and full requested content.")
-                    return creative_id, True
+                    return finish(creative_id, True)
         except (OSError, ValueError) as exc:
             raise CreationStopped("Creative recovery could not be saved or read safely. "
                                   "Do not retry until the local receipt is repaired.",
@@ -1855,19 +1866,19 @@ class CampaignCreator:
             out.creative_ids.remove(stale_id)
         other = candidates(fresh=True)
         if other and other != stale_id:
-            out.warnings.append(STALE_WARNING_REUSED)
             receipt.save(other)
             out.creative_ids.append(other)
             out.reused.setdefault("creatives", []).append(other)
             return other, False
-        out.warnings.append(STALE_WARNING)
         self._check_cancel(out)
         receipt.save()
         new_id = self._write(out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives", params,
                              lambda: candidates(fresh=True), on_ad=ad_set.instant)
-        out.created.setdefault("creatives", []).append(new_id)
-        out.creative_ids.append(new_id)
-        receipt.save(new_id)
+        if new_id != stale_id:
+            # Meta answering with the stale id again created nothing; the caller stops on its content.
+            out.created.setdefault("creatives", []).append(new_id)
+            out.creative_ids.append(new_id)
+            receipt.save(new_id)
         return new_id, True
 
     # -- медиа

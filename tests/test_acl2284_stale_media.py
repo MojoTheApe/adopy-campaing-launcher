@@ -250,6 +250,63 @@ def test_a_second_stale_answer_stops_instead_of_looping(tmp_path, monkeypatch):
     assert len(adcreative_posts(meta)) == 2        # the first write and exactly one replacement
 
 
+class AnswersWith(StrictMeta):
+    """The replacement creative write is answered with an existing creative id (no new object)."""
+
+    answer = None
+
+    def write(self, path, params, **kw):
+        if path.endswith("/adcreatives") and self.answer:
+            self.posts.append((path, dict(params)))
+            return {"status": 200, "body": {"id": self.answer}}
+        return super().write(path, params, **kw)
+
+
+def test_rewrite_answered_with_the_same_stale_id_and_the_current_tag_stops(tmp_path, monkeypatch):
+    # The repeat of the same campaign has the same tag as the stale creative: the tag alone proves nothing.
+    _images(monkeypatch)
+    meta = AnswersWith()
+    draft, old = _earlier(tmp_path, meta)
+    old["asset_feed_spec"]["images"][0]["hash"] = "OLDHASH"
+    assert old["adlabels"]                                          # carries the current run's tag
+    meta.answer = old["id"]
+    second, _ = _run(meta, draft)
+    assert second.stop_kind == "creative_unverified" and not second.ad_ids
+    assert "asset_feed_spec.images[0].hash" in second.error
+    assert old["id"] not in second.created.get("creatives", []) and old["id"] not in second.creative_ids
+    assert cr.STALE_WARNING not in second.warnings and cr.STALE_WARNING_REUSED not in second.warnings
+    assert len(adcreative_posts(meta)) == 2                        # the first run and exactly one replacement
+
+
+def test_rewrite_answered_with_another_matching_creative_is_accepted(tmp_path, monkeypatch):
+    _images(monkeypatch)
+    meta = AnswersWith()
+    draft, old = _earlier(tmp_path, meta)
+    twin = copy.deepcopy(old)
+    twin["id"] = str(int(old["id"]) + 1000)
+    twin["adlabels"] = [{"name": "acl-eb7048ed0b98"}]              # not a lookup candidate (another run's tag)
+    meta.objects[twin["id"]] = twin
+    old["asset_feed_spec"]["images"][0]["hash"] = "OLDHASH"
+    meta.answer = twin["id"]
+    second, _ = _run(meta, draft)
+    assert not second.error, second.error
+    assert second.creative_ids == [twin["id"]] and len(second.ad_ids) == 1
+    assert cr.STALE_WARNING not in second.warnings                 # nothing new was created
+    assert twin["id"] not in second.created.get("creatives", [])
+
+
+def test_the_new_creative_warning_appears_only_for_a_verified_new_creative(tmp_path, monkeypatch):
+    _images(monkeypatch)
+    meta = StrictMeta()
+    draft, old = _earlier(tmp_path, meta)
+    old["asset_feed_spec"]["images"][0]["hash"] = "OLDHASH"
+    second, _ = _run(meta, draft)
+    assert not second.error and cr.STALE_WARNING in second.warnings
+    new_id = second.creative_ids[0]
+    assert new_id != old["id"] and new_id in second.created["creatives"]
+    assert second.warnings.count(cr.STALE_WARNING) == 1
+
+
 def test_fake_rejects_unknown_creative_fields():
     meta = StrictMeta()
     meta.objects["5"] = {"id": "5", "_kind": "creative"}
