@@ -57,6 +57,8 @@ from src.web.cache import (
     entry_source_key,
     forget_background_error,
     get_cached_report,
+    rebuild_deferred,
+    has_entry as report_has_entry,
     peek_cached_report,
     start_background_build,
     verified_source_key,
@@ -2808,7 +2810,13 @@ async def index(
         # Only a stat on the loop; the key work (git, BI) happens in the pool
         # and only when there is something to show.
         stored = await _in_report_pool(_stored_page, inputs) if report_store.exists(inputs) else None
-        if failure is None:
+        if failure is None and rebuild_deferred() and (stored is not None or report_has_entry()):
+            # ACL-2260: a publish or a kept profile window is active - no rebuild
+            # of its own. Show the saved page (or the older report in memory)
+            # and let the page ask again; it rebuilds once things are idle.
+            if stored is not None:
+                return HTMLResponse(report_store.decorate(stored, deferred=True))
+        elif failure is None:
             _start_warm(date_from, date_to, span)
             if stored is not None:
                 return HTMLResponse(report_store.decorate(stored))
@@ -2840,7 +2848,8 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
     state = background_build_state()
     own_build = state["token"] == token
     error = state["error"] if own_build else None
-    if not ready and not state["building"] and not error:
+    deferred = not ready and not state["building"] and not error and rebuild_deferred()
+    if not ready and not state["building"] and not error and not deferred:
         _start_warm(date_from, date_to, span)
         state = background_build_state()
         own_build = state["token"] == token
@@ -2852,6 +2861,7 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
         "built_at": cache_built_at(),
         "stage": "ready" if ready else state["stage"] if own_build else None,
         "waiting": not ready and state["building"] and not own_build,
+        "deferred": deferred,
     })
 
 
