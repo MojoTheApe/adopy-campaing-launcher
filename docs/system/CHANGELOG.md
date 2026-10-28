@@ -1,5 +1,13 @@
 # System history
 
+## ACL-2271 — Repeat publish follow-ups: earlier video upload, partly returned creative, preparation budget — 2026-10-28
+
+Three small fixes found by live repeat-publish runs after ACL-2258:
+- A creative reused from a confirmed receipt that points at an earlier upload of the same video is accepted when everything else matches; it is refused only when both video lengths are known and differ.
+- An earlier creative that Meta returns only partly no longer stops the repeat with "An existing creative could not be fully read". It is read once by id: a creative that really exists and matches is still reused, and only one that stays unreadable is skipped.
+- The connection preparation budget cap is 150 s instead of 45 s, so a slow profile start on a loaded machine no longer fails with "Connection preparation time budget exhausted".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1271).
+
 ## ACL-2262 — Check plan and Publish open the account profile by themselves — 2026-10-28
 
 Check plan and Publish (and the /connection/prepare call before Publish) bring up a closed Multilogin
