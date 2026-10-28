@@ -48,13 +48,15 @@ def _open(p, width):
     p.wait_for_timeout(250)
 
 
-def test_docked_panel_starts_below_stored_banner(layout_page):
+def test_docked_panel_ignores_stored_banner(layout_page):
+    # ACL-2260: the banner is out of the flow (fixed, bottom-left, under the drawer).
     p=layout_page
     _open(p, 370)
     panel=p.locator('.cbd-panel').bounding_box()
     bar=p.locator('#acl-stored-bar').bounding_box()
     print({'panel': panel, 'banner': bar})
-    assert abs(panel['y'] - (bar['y'] + bar['height'])) <= 1
+    assert panel['y'] == 0
+    assert bar['y'] > panel['y'] + panel['height'] / 2
 
 
 @pytest.mark.parametrize('width', [320, 370, 480])
@@ -96,8 +98,7 @@ def test_reload_keeps_drafts_width_and_lane_switches(layout_page):
     assert abs(p.locator('.cbd-panel').bounding_box()['y'] - header['y'] - header['height']) <= 1
     p.set_viewport_size({'width': 1930, 'height': 990})
     p.wait_for_timeout(250)
-    bar=p.locator('#acl-stored-bar').bounding_box()
-    assert abs(p.locator('.cbd-panel').bounding_box()['y'] - bar['y'] - bar['height']) <= 1
+    assert p.locator('.cbd-panel').bounding_box()['y'] == 0
     p.evaluate("document.getElementById('acl-stored-bar').remove(); dispatchEvent(new Event('resize'))")
     p.wait_for_timeout(250)
     assert p.locator('.cbd-panel').bounding_box()['y'] == 0
