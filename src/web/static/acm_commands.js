@@ -471,6 +471,8 @@
     unresponsive: 'Ads Manager stopped answering — try again in a few minutes',
     permission: 'Multilogin refused to start this profile (permission) — another user may be signed in to the same Multilogin account',
     stale: 'Changed since the preview — review again',
+    // ACL-2272: not a failure — an automatic read found the profile closed and left it closed; the saved list stays.
+    profileClosed: 'Profile closed — not read. Showing the last list. Press Retry to open the profile and read it.',
     storage: "Not sent — this computer couldn't save the change history (disk full?)",
     historyCheck: "Change history couldn't be saved on this computer — check Ads Manager",
     unknown: 'Something went wrong — see Details'
@@ -478,10 +480,12 @@
   var OWN_TEXT_CODES = ['restart_cooldown', 'not_loopback', 'rpa_backend', 'rpa'];   // текст сервера уже человеческий (с оставшимся временем)
   var HAND_RE = /no automation port|opened (?:in multilogin |in mlx desktop )?by hand/i;
   var CLOSING_RE = /profile is closing|closing or starting/i;
+  var CLOSED_RE = /the profile is closed, so nothing was read/i;
 
   function friendly(text, code) {
     text = String(text == null ? '' : text); code = String(code || '');
     if (OWN_TEXT_CODES.indexOf(code) >= 0 && text) return text.replace(/^Not sent:\s*/, '');
+    if (code === 'profile_closed' || CLOSED_RE.test(text)) return FRIENDLY.profileClosed;
     if (code === 'open_by_hand' || code === 'no_port' || HAND_RE.test(text)) return FRIENDLY.hand;
     if (code === 'profile_closing' || CLOSING_RE.test(text)) return FRIENDLY.closing;
     if (/\b403\b/.test(text) && /permission|restricted|forbidden/i.test(text)) return FRIENDLY.permission;

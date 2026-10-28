@@ -270,3 +270,43 @@ def test_rpa_attach_only_refuses_a_closed_profile_without_a_user_action(monkeypa
     with connection.user_started_action(), sp.opening_closed_profile(sp._ReadOpen("Acc")):
         assert sp._attach_only(entry, "Acc") == "conn"
     assert started == [1]
+
+
+# ───────────────────────── what the row shows ─────────────────────────
+
+def test_profile_closed_has_its_own_visible_text_not_a_failed_one():
+    """`explain()` used to cut the long closed-profile sentence down to "Doc120" under "The last read failed"."""
+    import json
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    root = Path(__file__).resolve().parent.parent
+    js = root / "src" / "web" / "static" / "acm_commands.js"
+    script = (
+        "const fs=require('fs');const src=fs.readFileSync(%s,'utf8');const root={};"
+        r"new Function('globalThis','window',src.replace(/\(typeof window[^\n]*$/m,'(globalThis);'))(root,root);"
+        "const A=root.acmCommands;const msg=%s;"
+        "console.log(JSON.stringify({code:A.explain(msg,'bad','profile_closed'),nocode:A.explain(msg,'bad',''),"
+        "friendly:A.FRIENDLY.profileClosed}));"
+    ) % (json.dumps(str(js)), json.dumps(sp.profile_closed_message("Doc120")))
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(script)
+    try:
+        done = subprocess.run([node, fh.name], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        Path(fh.name).unlink(missing_ok=True)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
+    for key in ("code", "nocode"):
+        assert out[key]["text"] == out["friendly"], out[key]
+        assert out[key]["raw"] == sp.profile_closed_message("Doc120")       # the full sentence stays in Details
+    assert "failed" not in out["friendly"].lower() and "Retry" in out["friendly"]
+    table = (Path(__file__).resolve().parent.parent / "src" / "web" / "templates" / "_campaign_table.html").read_text(
+        encoding="utf-8")
+    assert "FRIENDLY.profileClosed" in table                                 # the row and the chip use it
