@@ -26,6 +26,7 @@ import logging
 import re
 import tempfile
 import os
+import contextvars
 import threading
 import uuid
 import time
@@ -651,7 +652,8 @@ def start_read(
                 _RUNNING.discard(key)
 
     try:
-        threading.Thread(target=run, name=f"spend:{account}", daemon=True).start()
+        # ACL-2272: the thread keeps the "user-started" flag of the button that called us.
+        threading.Thread(target=contextvars.copy_context().run, args=(run,), name=f"spend:{account}", daemon=True).start()
     except Exception:
         with _STORE_LOCK:
             _RUNNING.discard(key)
@@ -701,6 +703,23 @@ class ProfileNotAttachable(RuntimeError):
 
 #: Код отказа, когда окно так и осталось открытым руками.
 HAND_OPEN_CODE = "open_by_hand"
+
+#: ACL-2272: a read that nobody started by hand found the profile closed and did not open it.
+PROFILE_CLOSED_CODE = "profile_closed"
+
+
+def profile_closed_message(account: str) -> str:
+    """Why an automatic read left a closed profile alone (owner rule 2026-10-28)."""
+    return (f"{account}: the profile is closed, so nothing was read. The last list stays on screen. "
+            "Press Retry to open the profile and read it now.")
+
+
+def may_open_closed_profile() -> bool:
+    """True inside a user-started action (button, Retry, Check plan, Publish); never for page-load,
+    background or scheduled reads."""
+    from src.fb_api.connection import may_start_closed_profile
+
+    return may_start_closed_profile()
 
 #: Окно открыто руками (нет порта автоматизации). Текст зависит от бэкенда: на `api` есть
 #: кнопка «Open profiles for today», на `rpa` её нет — там кнопка «open profile» в строке.
@@ -1265,6 +1284,9 @@ def _attach_only(entry, account_label: str):
         # останавливаем и не поднимаем заново. «Закрыли — через 10 секунд открыли» разлогинило
         # 5414 (12.10, 08:42-08:43). Остановка и запуск — только руками человека.
         raise ProfileNotAttachable(hand_message(), code=HAND_OPEN_CODE)
+    if opening is not None and not may_open_closed_profile():
+        # ACL-2272: only a user-started action brings a closed profile up.
+        raise ProfileNotAttachable(profile_closed_message(account_label), code=PROFILE_CLOSED_CODE)
     if opening is not None:
         return _start_closed(entry, account_label, opening,
                              recheck=lambda: _attach_open(direct_cls, entry, profile_id))

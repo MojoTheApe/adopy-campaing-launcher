@@ -120,8 +120,11 @@ def read_pages(account: str, *, force: bool = False) -> dict:
         if hit is not None:
             return hit
     read = accounts.serialized_browser(key=accounts._profile_key, reading=True)(_read_in_session)
+    from src.fb_api.connection import user_started_action
     try:
-        result = read(account)
+        # ACL-2272: the Page control / Refresh pages is pressed by the person (render time uses `cached_only`).
+        with user_started_action():
+            result = read(account)
         remember_pages(account, result)
         return result
     except Exception as exc:
@@ -153,8 +156,10 @@ def validate_profile_page(account: str, *, act: str, page_id: str, page_name: st
                 raise AssertionError("Page validation must not create objects")
 
     run = accounts.serialized_browser(key=accounts._profile_key, reading=True)(check)
+    from src.fb_api.connection import user_started_action
     try:
-        run(account)
+        with user_started_action():      # ACL-2272: part of the Page choice/Publish the person started
+            run(account)
         return ""
     except Exception as exc:
         return (f"The Page {page_name or page_id!r} ({page_id}) could not be confirmed for this ad account: "

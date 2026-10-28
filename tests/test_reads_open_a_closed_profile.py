@@ -55,6 +55,14 @@ DAY = "2026-10-01"
 LOGIN = "https://www.facebook.com/login/?next=https%3A%2F%2Fadsmanager.facebook.com%2F"
 
 
+@pytest.fixture(autouse=True)
+def _user_started_read(monkeypatch):
+    """ACL-2272: these tests exercise the cold open of a closed profile, which only a user-started action may do."""
+    from src.fb_api import connection
+
+    monkeypatch.setattr(connection, "may_start_closed_profile", lambda: True)
+
+
 class _Page:
     """Вкладка чтения: переходы пишутся в мир, адрес — как скажет мир."""
 

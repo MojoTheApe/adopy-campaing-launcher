@@ -134,6 +134,9 @@ class World:
         # is exercised with a real WarmRegistry by ACL-2092, never a live MLX here.
         from src.fb_api import connection
         monkeypatch.setattr(connection, "prepare_existing", lambda *a: False)
+        # ACL-2272: these tests exercise the cold open of a closed profile, which only a user-started action may do.
+        # The automatic (page load / scheduled) behaviour is in test_acl2272_reads_never_open_closed_profile.py.
+        monkeypatch.setattr(connection, "may_start_closed_profile", lambda: True)
         self.page = RoutedPage(routes())
         self.cdp = FakeCdp(self.page)
         self.queue = FakeQueue()

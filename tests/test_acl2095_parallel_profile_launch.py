@@ -305,6 +305,9 @@ def test_stop_drops_the_cold_mark():
 # ───────────────────────── Check plan не превышает потолок ─────────────────────────
 
 def test_check_plan_for_many_accounts_never_starts_more_profiles_than_the_ceiling(monkeypatch):
+    from src.fb_api import connection as _conn
+
+    monkeypatch.setattr(_conn, "may_start_closed_profile", lambda: True)   # ACL-2272: user-started read
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as api
     from src.web import profile_slots as ps

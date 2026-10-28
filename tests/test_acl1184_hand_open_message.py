@@ -37,6 +37,14 @@ PID = str(uuid.UUID(int=1184))
 UDD = "C:/mlx/profiles/ws/folder/" + PID
 
 
+@pytest.fixture(autouse=True)
+def _user_started_read(monkeypatch):
+    """ACL-2272: these tests exercise the cold open of a closed profile, which only a user-started action may do."""
+    from src.fb_api import connection
+
+    monkeypatch.setattr(connection, "may_start_closed_profile", lambda: True)
+
+
 def _entry():
     return SimpleNamespace(profile_id=PID, folder_id="folder", multilogin_instance="A")
 
