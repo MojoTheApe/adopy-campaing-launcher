@@ -91,6 +91,11 @@ DEFAULT_PROFILE_MEMORY_GB = 3.5
 #: ACL-1603: замер профиля не ниже 3,5 ГБ, запас под ОС и чужие программы — 3 ГБ.
 DEFAULT_PROFILE_FLOOR_GB = 3.5
 DEFAULT_RESERVE_GB = 3.0
+#: ACL-2255: решение по ДОЛЕ занятой памяти, а не по «N ГБ на профиль»: новый профиль можно
+#: стартовать, пока занято не больше стольких процентов всей памяти (`ACL_MEMORY_MAX_USED_PCT`).
+DEFAULT_MAX_USED_PCT = 90.0
+#: ...но на машине с малой памятью свободного остаётся не меньше этого (МБ).
+MIN_FREE_MB = 1024
 DEFAULT_WARMUP_S = 90.0
 #: Моложе этого профиль считаем не легче оценки: кампании/редактор ещё впереди.
 DEFAULT_SETTLE_S = 300.0
@@ -143,6 +148,7 @@ class SlotSettings:
     profile_mb: int = int(DEFAULT_PROFILE_MEMORY_GB * 1024)
     profile_floor_mb: int = int(DEFAULT_PROFILE_FLOOR_GB * 1024)
     reserve_mb: int = int(DEFAULT_RESERVE_GB * 1024)
+    max_used_pct: float = DEFAULT_MAX_USED_PCT
     warmup_s: float = DEFAULT_WARMUP_S
     settle_s: float = DEFAULT_SETTLE_S
     kept_idle_close_s: float = DEFAULT_KEPT_IDLE_CLOSE_S
@@ -191,11 +197,26 @@ def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
         profile_floor_mb=int(_env_number(env, "ACL_PROFILE_MEMORY_FLOOR_GB", DEFAULT_PROFILE_FLOOR_GB,
                                          minimum=0.1) * 1024),
         reserve_mb=int(_env_number(env, "ACL_MEMORY_RESERVE_GB", DEFAULT_RESERVE_GB, minimum=0) * 1024),
+        max_used_pct=min(99.0, _env_number(env, "ACL_MEMORY_MAX_USED_PCT", DEFAULT_MAX_USED_PCT,
+                                           minimum=10)),
         warmup_s=_env_number(env, "ACL_PROFILE_WARMUP_S", DEFAULT_WARMUP_S, minimum=0),
         settle_s=_env_number(env, "ACL_PROFILE_SETTLE_S", DEFAULT_SETTLE_S, minimum=0),
         kept_idle_close_s=_env_number(env, "ACL_KEPT_IDLE_CLOSE_MIN",
                                       DEFAULT_KEPT_IDLE_CLOSE_S / 60.0, minimum=0) * 60.0,
     )
+
+
+def keep_free_mb(total_mb: int, settings: SlotSettings) -> int:
+    """ACL-2255: сколько памяти должно оставаться свободной при доле `max_used_pct` (не меньше `MIN_FREE_MB`)."""
+    share = int(max(0, int(total_mb)) * (100.0 - settings.max_used_pct) / 100.0)
+    return max(share, MIN_FREE_MB)
+
+
+def used_pct(memory: MemoryReading) -> float:
+    """Какая доля памяти занята сейчас, %."""
+    if memory.total_mb <= 0:
+        return 100.0
+    return round(100.0 * (memory.total_mb - memory.available_mb) / memory.total_mb, 1)
 
 
 def read_memory() -> MemoryReading | None:
@@ -573,9 +594,9 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         else:
             out["profile_mb_source"] = "estimate"
         out["profile_mb"] = settings.profile_mb
-    growth = sum(max(0, settings.profile_mb - int(c)) for c in (current_mb or []))
-    if settings.override is None and current_mb:
-        out["growth_mb"] = growth
+    # ACL-2255: рост идущих профилей больше не резервируем «ГБ на профиль» — их память
+    # уже в доле занятого; ждёт только то, что стартовало и ещё не заняло её (`warming`).
+    growth = 0
     if settings.override is not None:
         limit = settings.override
         out.update(limit=limit, allow=running < limit,
@@ -595,11 +616,13 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         out.update(limit=limit, allow=running < limit,
                    reason="memory_unknown" if running < limit else "memory_unknown_full")
         return out
-    need = settings.profile_mb * (1 + warming) + settings.reserve_mb + growth
-    out["need_mb"] = need
-    if memory.available_mb < settings.reserve_mb:
-        # ACL-1603: свободно меньше запаса — новый профиль не стартует, пока
-        # память не вернётся (идущие профили при этом не трогаем).
+    keep = keep_free_mb(memory.total_mb, settings)
+    need = keep + settings.profile_mb * warming
+    out.update(need_mb=need, keep_free_mb=keep, max_used_pct=settings.max_used_pct,
+               used_pct=used_pct(memory))
+    if memory.available_mb < keep:
+        # Занято больше допустимой доли — новый профиль не стартует, пока память
+        # не вернётся (идущие профили при этом не трогаем).
         out.update(limit=running, allow=False, reason="below_reserve")
         return out
     limit = _auto_limit(running, warming, memory, settings, growth)
@@ -613,8 +636,8 @@ def _auto_limit(running: int, warming: int, memory: MemoryReading | None,
     """Сколько профилей разом выходит по памяти сейчас (для показа и журнала)."""
     if memory is None:
         return max(1, min(FALLBACK_LIMIT, settings.ceiling))
-    spare = (memory.available_mb - settings.reserve_mb - settings.profile_mb * warming
-             - growth_mb)
+    spare = (memory.available_mb - keep_free_mb(memory.total_mb, settings)
+             - settings.profile_mb * warming - growth_mb)
     more = max(0, spare // settings.profile_mb) if settings.profile_mb > 0 else 0
     return int(max(1, min(settings.ceiling, running + more)))
 
