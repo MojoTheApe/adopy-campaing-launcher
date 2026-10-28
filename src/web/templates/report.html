@@ -8596,7 +8596,8 @@ window.cbTree = (function () {
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
                : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
-               : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory')
+               : q.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(q)) + cbCloseWindows(q)
+               : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory') + cbCloseWindows(q)
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -9320,6 +9321,7 @@ window.cbBuild = (function () {
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
+    if (q.hold === 'account_busy') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
     // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
     var memory = cbMemoryWait(q);
     if (memory) return { state: 'build-wait', sign: '', why: memory };
@@ -18102,6 +18104,18 @@ function cbIdleWait(q) {
   return 'waiting: ' + (names.length ? names.join(', ') + (names.length === 1 ? ' is' : ' are') : 'kept windows are')
     + ' kept open — a window that has been idle for ' + mins + ' min closes by itself to make room';
 }
+/* ACL-2278: «Close window» у каждого завершённого окна в сообщении об ожидании памяти. */
+function cbCloseWindows(q) {
+  return ((q && q.closable_accounts) || []).map(function (a) {
+    return ' <a href="#" class="cbd-q-retry" data-cb-close-kept="' + aclEscHtml(a) + '">Close window ' + aclEscHtml(a) + '</a>';
+  }).join('');
+}
+/* ACL-2278: занятые ворота действий аккаунта — задание ждёт, а не падает. */
+function cbAccountWait(q) {
+  var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  var mem = (q && q.available_mb != null) ? ' (' + gb(q.available_mb) + ' GB free)' : '';
+  return 'Waiting for another account action to finish' + mem + ' - it starts by itself, Stop cancels it';
+}
 /* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
 function cbReviewRelease(q) {
   return ((q && q.kept_accounts) || []).map(function (a) {
@@ -18115,6 +18129,14 @@ if (typeof document.addEventListener === 'function') document.addEventListener('
   var fd = new FormData();
   fd.set('account', t.getAttribute('data-cb-release-kept'));
   fetch('/publish-jobs/kept/release', { method: 'POST', body: fd }).catch(function () { /* следующий опрос покажет */ });
+});
+if (typeof document.addEventListener === 'function') document.addEventListener('click', function (ev) {   // ACL-2278
+  var t = ev.target && ev.target.closest ? ev.target.closest('[data-cb-close-kept]') : null;
+  if (!t) return;
+  ev.preventDefault();
+  var fd = new FormData();
+  fd.set('account', t.getAttribute('data-cb-close-kept'));
+  fetch('/publish-jobs/kept/close', { method: 'POST', body: fd }).catch(function () { /* следующий опрос покажет */ });
 });
 
 /* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
@@ -19287,7 +19309,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
-          : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory')
+          : queue.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(queue)) + cbCloseWindows(queue)
+          : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory') + cbCloseWindows(queue)
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
