@@ -42,6 +42,15 @@ def auto_refresh_enabled(port: int) -> bool:
         return value in {"1", "true", "yes", "on"}
     return bool(getattr(sys, "frozen", False)) or port == 9090
 
+def _publishing_busy() -> bool:
+    """A publish job is live or a profile window holds a slot (ACL-2260). No import side effects."""
+    module = sys.modules.get("src.web.publish_jobs")
+    try:
+        return bool(module is not None and module.publishing_busy())
+    except Exception:  # noqa: BLE001 - unreadable state must not stop the reads for good
+        return False
+
+
 #: Коды ошибки снимка, общие для всех аккаунтов: код → (причина, сколько секунд ждать | None).
 _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
     campaign_inventory.NEEDS_API_CODE: (
@@ -325,6 +334,10 @@ class RefreshQueue:
         window = current_window(now)
         if window is None:
             return {"sweep": "no_window", "window": None, "queued": 0}
+        if _publishing_busy():
+            # ACL-2260: reads open profiles; not while a publish runs or a window is
+            # kept open. The window is not marked done, so the next page open retries.
+            return {"sweep": "deferred_publish", "window": window, "queued": 0}
         if self._store is None or self._accounts is None:
             raise RuntimeError("Scheduled account reads require persisted dashboard settings.")
         day = now.strftime("%Y-%m-%d")

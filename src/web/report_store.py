@@ -227,10 +227,15 @@ def _prune(directory: Path) -> None:
 
 # ── The marker injected into a stored page ─────────────────────────────
 
+# ACL-2260: the bar is out of the page flow (fixed, bottom-left) and sits under
+# the Builder drawer (z-index 880). It used to be a sticky strip at the top that
+# pushed the header down; the Builder is independent of the report, so it must
+# look the same with and without the bar.
 _BAR_STYLE = (
-    "position:sticky;top:0;z-index:2147483000;display:flex;flex-wrap:wrap;gap:6px 14px;"
-    "align-items:center;padding:9px 16px;font:600 13px/1.4 system-ui,sans-serif;"
-    "border-bottom:2px solid {border};background:{bg};color:{fg};"
+    "position:fixed;left:1rem;bottom:1rem;z-index:870;display:flex;flex-wrap:wrap;gap:4px 12px;"
+    "align-items:center;box-sizing:border-box;max-width:min(40rem,calc(100vw - 2rem));"
+    "padding:8px 14px;font:600 13px/1.4 system-ui,sans-serif;border-radius:8px;"
+    "border:2px solid {border};background:{bg};color:{fg};box-shadow:0 4px 16px rgba(0,0,0,.25);"
 )
 _STYLES = {
     "cached": dict(bg="#fff4d6", fg="#5c4300", border="#d9a400"),
@@ -240,7 +245,9 @@ _STYLES = {
 _SCRIPT = """
 <script>
 (function () {
+  var DEFERRED_TEXT = __DEFERRED__;
   var note = document.getElementById('acl-stored-note');
+  var original = note.textContent;
   var timer = null;
   function stop() { if (timer) { clearInterval(timer); timer = null; } }
   function poll() {
@@ -248,6 +255,8 @@ _SCRIPT = """
       .then(function (r) { return r.json(); })
       .then(function (s) {
         if (s.ready) { stop(); window.location.reload(); }
+        else if (s.deferred) { note.textContent = DEFERRED_TEXT; }
+        else if (note.textContent === DEFERRED_TEXT) { note.textContent = original; }
         else if (s.error) {
           stop();
           note.textContent = 'Refresh failed: ' + s.error + ' This is the last saved report.';
@@ -264,6 +273,13 @@ _SCRIPT = """
 """
 
 
+#: Shown while a publish or a kept profile window is active (ACL-2260).
+DEFERRED_TEXT = (
+    "The rebuild waits while a publish or a review window is active, so profiles keep their memory. "
+    "It starts by itself when everything is idle, or press Refresh."
+)
+
+
 def _age_text(saved_at: float) -> str:
     seconds = max(0, int(time.time() - saved_at))
     if seconds < 90:
@@ -275,10 +291,12 @@ def _age_text(saved_at: float) -> str:
     return f"{round(seconds / 86400)} days ago"
 
 
-def decorate(stored: StoredPage, *, error: Optional[str] = None) -> str:
+def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool = False) -> str:
     """The stored page with a visible state bar; the stored text is untouched.
 
     ``error`` is a failed rebuild: shown in the bar, polling stops.
+    ``deferred``: the rebuild waits for the publish to finish (ACL-2260); polling
+    goes on and the page reloads once the new report is ready.
     """
     state = "outdated" if stored.outdated else "cached"
     if state == "outdated":
@@ -291,6 +309,8 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None) -> str:
     else:
         head = "From cache, refreshing…"
         text = f"Saved report from {_age_text(stored.saved_at)}. The page reloads when the new report is ready."
+    if deferred and not error:
+        text = DEFERRED_TEXT
     if error:
         text = f"Refresh failed: {error} This is the last saved report ({_age_text(stored.saved_at)})."
     style = _BAR_STYLE.format(**_STYLES[state])
@@ -305,7 +325,7 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None) -> str:
         '<style>html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
     )
     page = stored.html
-    marker = bar + frame + _SCRIPT
+    marker = bar + frame + _SCRIPT.replace("__DEFERRED__", json.dumps(DEFERRED_TEXT))
     lower = page.lower()
     body = lower.find("<body")
     end = lower.find(">", body) + 1 if body != -1 else 0

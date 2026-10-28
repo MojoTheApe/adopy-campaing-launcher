@@ -1083,6 +1083,11 @@ class ProfileSlots:
         with self._cond:
             self._cond.notify_all()
 
+    def occupied(self) -> bool:
+        """Идёт или ждёт хоть одно задание, либо открыто оставленное окно (ACL-2260)."""
+        with self._cond:
+            return bool(self._running or self._waiting)
+
     def snapshot(self) -> dict[str, Any]:
         """Что идёт, что ждёт и что решилось бы для следующего — для дешборда."""
         with self._cond:
