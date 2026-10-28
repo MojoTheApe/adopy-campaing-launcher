@@ -5,6 +5,7 @@ operation lifecycle; unknown dispatches never expire into permission to create.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -122,6 +123,86 @@ def first_diff(act, params, row):
             return ""
         return f"{where}: expected {_short(want)!r} got {_short('' if got is None else got)!r}"
     return walk(material(params), actual, "") or "no content difference (the tag or id did not match)"
+
+
+# ACL-2284: where a creative carries its media. A difference ONLY in these places means "another file",
+# not "another creative we failed to confirm".
+_MEDIA_LISTS = (("asset_feed_spec", "images"), ("asset_feed_spec", "videos"))
+_MEDIA_SCALARS = (("object_story_spec", "link_data", "image_hash"), ("object_story_spec", "video_data", "video_id"),
+                  ("object_story_spec", "video_data", "image_url"))
+
+
+def _dig(obj, path):
+    for key in path:
+        if not isinstance(obj, dict) or key not in obj:
+            return None, False
+        obj = obj[key]
+    return obj, True
+
+
+def _put(obj, path, value):
+    for key in path[:-1]:
+        obj = obj[key]
+    obj[path[-1]] = value
+
+
+def _pair(item):
+    labels = tuple(sorted(str(l.get("name")) for l in (item.get("adlabels") or []) if isinstance(l, dict)))
+    return (str(item.get("hash") or item.get("video_id") or ""), labels)
+
+
+def media_diff(act, params, row):
+    """ACL-2284: how a found creative of this account differs from the requested one.
+
+    "same"  - it matches (matches());
+    "order" - same files with the same labels, only listed in another order (main vs Stories/Reels);
+    "stale" - the ONLY difference is the media (image hash / video id): another file, not reusable;
+    "other" - anything else (foreign account, unreadable, text/CTA/link/Page/identity): the caller stops.
+    """
+    if matches(act, params, row):
+        return "same"
+    if not isinstance(row, dict) or not re.fullmatch(r"[0-9]{1,30}", str(row.get("id") or "")):
+        return "other"
+    if str(row.get("account_id") or "") != str(act).removeprefix("act_"):
+        return "other"
+    want = material(params)
+    actual = dict(row)
+    story = dict(actual.get("object_story_spec") or {})
+    if "instagram_user_id" not in story and actual.get("instagram_user_id"):
+        story["instagram_user_id"] = actual["instagram_user_id"]
+    actual["object_story_spec"] = story
+    fixed = copy.deepcopy(want)
+    same_set, touched = True, False
+    for path in _MEDIA_LISTS:
+        w, has_w = _dig(want, path)
+        g, has_g = _dig(actual, path)
+        if has_w != has_g:
+            return "other"
+        if not has_w:
+            continue
+        if not (isinstance(w, list) and isinstance(g, list) and all(isinstance(i, dict) for i in w + g)
+                and all(i.get("hash") or i.get("video_id") for i in g)):
+            return "other"
+        if sorted(_pair(i) for i in w) != sorted(_pair(i) for i in g):
+            same_set = False
+        _put(fixed, path, copy.deepcopy(g))
+        touched = True
+    for path in _MEDIA_SCALARS:
+        w, has_w = _dig(want, path)
+        g, has_g = _dig(actual, path)
+        if has_w != has_g:
+            return "other"
+        if not has_w:
+            continue
+        if not isinstance(g, str) or not g:
+            return "other"
+        if w != g:
+            same_set = False
+        _put(fixed, path, g)
+        touched = True
+    if not touched or not _contains(fixed, actual):
+        return "other"
+    return "order" if same_set else "stale"
 
 
 def same_ad(name, stem):
