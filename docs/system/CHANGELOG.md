@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2284 — A found creative with other media no longer stops the publish — 2026-10-28
+
+When the creative found for an ad (by receipt or by tag) is of the same account and identity but carries other
+media (image hash or video id not accepted by the same-length rule), it is stale: it is not reused and the
+requested content gets a new creative, with the warning "An earlier creative with other media was found and not
+reused; a new creative was created." A matching creative elsewhere in the listing is preferred over writing, and
+the same files in another order (main vs Stories/Reels) are accepted. A creative found by receipt that carries an
+earlier run's tag is handled the same way. Foreign account, other Page, unreadable creative and any text, CTA or
+link difference still stop. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1284).
+
 ## ACL-2279 — Show the first differing field when a repeated creative is not confirmed — 2026-10-28
 
 When a repeated creative is found but not confirmed, the stop message now ends with
