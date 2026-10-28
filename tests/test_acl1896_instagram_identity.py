@@ -31,8 +31,8 @@ from tests.test_acl1819_preflight import AuditMeta, _audit, _by  # noqa: E402
 
 DOC120_RESULT = ROOT / "tests" / "fixtures" / "acl1896_doc120_publish_result.json"
 IG_ID = "17841400000000001"
-NO_IG_TEXT = ("This Facebook Page has no Instagram account, and the ad is set for Instagram placements. "
-              "Connect an Instagram account to the Page, or choose Manual Facebook-only placements.")
+NO_IG_TEXT = ("This Page has no Instagram identity. In Ads Manager press 'Use Facebook Page' "
+              "for this Page, then run Check plan again.")
 
 
 def _creatives(meta):
@@ -109,7 +109,7 @@ def test_the_identity_is_read_once_per_page_and_costs_at_most_two_reads(tmp_path
     first = creator.instagram_identity(plan)
     second = creator.instagram_identity(plan)
     assert first is second and ig.READS_PER_PAGE == 2
-    assert [p for p, _ in meta.gets[before:]] == [f"/{plan.page_id}", f"/{ACT}/instagram_accounts"]
+    assert [p for p, _ in meta.gets[before:]] == [f"/{plan.page_id}", f"/{plan.page_id}/page_backed_instagram_accounts"]
 
 
 def test_without_a_settled_page_the_identity_is_not_checked(tmp_path):

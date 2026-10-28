@@ -115,7 +115,7 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or choose Manual Facebook-only placements",
+      "hint": "the ad is set for Instagram placements: in Ads Manager press 'Use Facebook Page' for this Page (or connect an Instagram account), then run Check plan again; or choose Manual Facebook-only placements",
       "id": "instagram_identity",
       "label": "Instagram account of the Page",
       "severity": "error",

@@ -1,0 +1,18 @@
+{
+  "source": "Anonymized owner captures, 2026-10-26 (Check plan) and 2026-10-28 (native button, passive recorder)",
+  "observed": {
+    "check_plan": {"campaigns": 2, "advertising_writes": 0, "blocking_rule": "instagram_identity"},
+    "page_before": {"instagram_accounts": [], "instagram_business_account": null, "page_backed_instagram_accounts": []},
+    "native_button": "one Ads Manager internal GraphQL mutation (AdsPageInstagramAccountMutation), variables: Page id only",
+    "public_edge_post": "POST /{page}/page_backed_instagram_accounts rejected on our transport (Graph 100)",
+    "page_after": "identity source PAGE_BACKED"
+  },
+  "synthetic": {
+    "page_id": "111",
+    "instagram_id": "17841400000000001",
+    "edge_empty": {"data": []},
+    "edge_existing": {"data": [{"id": "17841400000000001"}]},
+    "message": "This Page has no Instagram identity. In Ads Manager press 'Use Facebook Page' for this Page, then run Check plan again."
+  },
+  "evidence_limit": "The product never creates the identity; GET readback of an existing identity is covered by synthetic fakes only."
+}

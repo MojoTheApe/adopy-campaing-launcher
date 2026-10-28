@@ -3,6 +3,23 @@
   "harvested": "Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).",
   "steps": [
     {
+      "step": "Instagram identity of the selected Facebook Page",
+      "robot": "CampaignCreator read-only identity discovery (ACL-2221)",
+      "layouts": [
+        {
+          "layout": "No linked Instagram; Page-backed identity exists or the Page has none",
+          "seen": [
+            "anonymized owner captures 2026-10-26 and 2026-10-28"
+          ],
+          "fixture": "fb_api_page_backed_2026_10_28.json",
+          "fragment": null,
+          "test": "tests/test_acl2221_page_backed.py",
+          "expected": "Existing Page-backed identity is read and used; none stops Check plan and publish before any write with the Use Facebook Page instruction; Facebook-only plans unaffected; zero POSTs",
+          "status": "pass"
+        }
+      ]
+    },
+    {
      "step": "Shared profile connection lifecycle",
       "robot": "Read/Check/Publish preparation and WarmRegistry (ACL-2092)",
       "layouts": [

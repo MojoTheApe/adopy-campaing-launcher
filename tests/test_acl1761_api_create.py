@@ -399,6 +399,7 @@ class FakeMeta:
         #: "error" - Meta отвечает ошибкой на чтение, "ad_account_only" - у Страницы пусто, у кабинета есть.
         self.instagram = instagram
         self.instagram_id = "17841400000000001"
+        self.page_backed_reads = 0
 
     # -- служебное
     def _new(self, kind, **fields):
@@ -510,7 +511,27 @@ class FakeMeta:
                                   "message": "(#10) Application does not have permission for this action"}}
             if self.instagram == "one":
                 return {"id": parts[0], "connected_instagram_account": {"id": self.instagram_id, "username": "page_ig"}}
+            if self.instagram == "page_backed_field":      # ACL-2221: a Page-backed identity on the Page node
+                return {"id": parts[0], "connected_page_backed_instagram_account": {"id": self.instagram_id}}
+            if self.instagram == "page_id_as_instagram":
+                return {"id": parts[0], "connected_instagram_account": {"id": parts[0]}}
             return {"id": parts[0]}
+        if len(parts) == 2 and parts[1] == "page_backed_instagram_accounts":      # ACL-2221: read-only list
+            self.page_backed_reads += 1
+            mode = self.instagram
+            if mode == "edge_error_100":
+                return {"error": {"code": 100, "type": "OAuthException", "message": "(#100) Unsupported get request"}}
+            if mode == "edge_error":
+                return {"error": {"code": 2, "type": "OAuthException", "message": "(#2) Service temporarily unavailable"}}
+            if mode == "edge_partial":
+                return {"data": [{"id": self.instagram_id}], "paging": {"next": "https://example.invalid/next"}}
+            if mode == "edge_malformed":
+                return {"data": [{"id": "not-a-number"}]}
+            if mode == "edge_ambiguous":
+                return {"data": [{"id": self.instagram_id}, {"id": "17841400000000002"}]}
+            if mode == "edge_page_id":
+                return {"data": [{"id": parts[0]}]}
+            return {"data": [{"id": self.instagram_id}] if mode == "page_backed_edge" else []}
         if parts[0] == ACT:
             edge = parts[1]
             if edge == "instagram_accounts":

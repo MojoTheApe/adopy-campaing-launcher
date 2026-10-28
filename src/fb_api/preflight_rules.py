@@ -142,8 +142,8 @@ RULES: list[dict[str, Any]] = [
     _r("page_ok", "Facebook Page", ERROR, "server",
        "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
     _r("instagram_identity", "Instagram account of the Page", ERROR, "server",
-       "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, "
-       "or choose Manual Facebook-only placements"),
+       "the ad is set for Instagram placements: in Ads Manager press 'Use Facebook Page' for this Page "
+       "(or connect an Instagram account), then run Check plan again; or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
