@@ -163,6 +163,17 @@ def _cooldown(account_label: str) -> tuple[float, str]:
         return 0.0, ""
 
 
+def _release_frozen_tab_cooldown(account_label: str) -> None:
+    """ACL-2262: a hung robot tab is replaced by the warm path, so its wait does not block publish."""
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.analysis_agent import account_spend_api as _api
+
+        _api.release_frozen_tab_cooldown(_as._profile_key(account_label))
+    except Exception:
+        pass
+
+
 def _start_cooldown(account_label: str, stop: GraphStop) -> None:
     try:
         from src.analysis_agent import account_spend as _as
@@ -333,6 +344,7 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        _release_frozen_tab_cooldown(account_label)
         left, why = _cooldown(account_label)
         if left > 0 and why == "page_unresponsive":
             raise ApiPublishError(

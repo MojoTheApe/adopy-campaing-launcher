@@ -1065,6 +1065,11 @@ class ProfileSlots:
         with self._cond:
             return self._grants.get(str(profile or ""), 0)
 
+    def holds(self, job_id: str) -> bool:
+        """ACL-2262: держит ли это задание сейчас своё место (оно идёт, а не ждёт)."""
+        with self._cond:
+            return str(job_id or "") in self._running
+
     def others_on(self, profile: str, job_id: str | tuple[str, ...] = "") -> bool:
         """Держит ли место этого профиля или ждёт его кто-то, кроме `job_id` (ACL-1580)."""
         profile = str(profile or "")

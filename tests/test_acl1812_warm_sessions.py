@@ -691,7 +691,7 @@ def test_closed_profile_gives_a_clear_refusal_and_forgets_the_record(rig):
     rig.reg.session(PID).verified = False
     with pytest.raises(warm.WarmError) as ei:
         rig.checkout()
-    assert ei.value.code == "profile_closed" and "Open profiles for today" in str(ei.value)
+    assert ei.value.code == "profile_closed" and "Open profiles for today" not in str(ei.value)   # ACL-2262
     assert rig.reg.session(PID) is None and rig.reg.restart_wait_s(PID) > 170
 
 

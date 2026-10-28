@@ -260,6 +260,31 @@ def _cooldown_state(key: str) -> tuple[float, str]:
     return max(0.0, until - time.monotonic()), kind
 
 
+def release_frozen_tab_cooldown(key: str) -> bool:
+    """ACL-2262: a frozen robot tab (`page_unresponsive`) is not a reason to refuse the action.
+
+    The managed (warm) path replaces a hung tab before the action, so the 10-minute wait only made
+    publish fail on a profile left open overnight. The wait is dropped here; if the new tab hangs as
+    well, the action stops again and `_start_cooldown` re-arms it. Other causes (checkpoint, rate
+    limit, logout) keep their waits. Without managed sessions nothing is replaced, so nothing is dropped.
+    """
+    with _COOLDOWN_LOCK:
+        if _COOLDOWN.get(key, (0.0, ""))[1] != "page_unresponsive":
+            return False
+    try:
+        from src.fb_api.connection import settings
+
+        if not settings()["managed_sessions"]:
+            return False
+    except Exception:  # noqa: BLE001 — unreadable settings: keep the wait
+        return False
+    with _COOLDOWN_LOCK:
+        if _COOLDOWN.get(key, (0.0, ""))[1] == "page_unresponsive":
+            del _COOLDOWN[key]
+            return True
+    return False
+
+
 def _cooldown_left(key: str) -> float:
     return _cooldown_state(key)[0]
 
@@ -532,6 +557,7 @@ def _open_session(account: str, *, commands: bool = False):
     # The entry is immutable. A later map lookup must not move this actual
     # session's cooldown to another physical profile.
     key = physical_profile_key(profile_id)
+    release_frozen_tab_cooldown(key)
     left, why = _cooldown_state(key)
     if left > 0:
         mins = int(left // 60) + 1

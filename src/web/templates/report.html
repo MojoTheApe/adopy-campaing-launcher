@@ -18049,7 +18049,7 @@ function cbBusyError(why) {
   err.cbBusy = true;
   return err;
 }
-function cbPostPublish(fd) {
+function cbPostPublish(fd, onPrepared) {
   // Re-sending the same request must reach the server's idempotency lookup
   // even while its original job holds the profile lease.
   var key = typeof fd.get === 'function' ? fd.get('request_id') : '';
@@ -18067,6 +18067,7 @@ function cbPostPublish(fd) {
   });
   return prepare.then(function () {
   if (key) prepared[key] = true;
+  if (typeof onPrepared === 'function') onPrepared();
   var ctl = (typeof AbortController === 'function' && typeof setTimeout === 'function')
     ? new AbortController() : null;
   var timer = ctl ? setTimeout(function () { ctl.abort(); }, CB_PUBLISH_TIMEOUT_MS) : null;
@@ -18199,10 +18200,16 @@ function cbNewRun(notify) {
     track(e, 'publishing');
     if (e.panel) {
       e.panel.style.display = 'block';
-      e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
+      /* ACL-2262: the profile is opened for the account automatically; nothing to press. */
+      e.panel.innerHTML = '<div class="cb-status-title">'
+        + (window.ACL_FB_BACKEND === 'api' ? 'Opening the profile…' : 'Building the campaign (draft)…') + '</div>';
     }
     fd.set('batch', batch.id);
-    cbPostPublish(fd)
+    cbPostPublish(fd, function () {
+      if (e.panel && e.state === 'submitted' && window.CB_QUEUE === batch) {
+        e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
+      }
+    })
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
         if (data.error && data.duplicate) {

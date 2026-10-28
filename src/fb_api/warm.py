@@ -619,8 +619,18 @@ class WarmRegistry:
         queue = self._slot_queue()
         began = time.monotonic()
         grant = None
+        # ACL-2262: a publish job already holds its own queue slot for this profile; asking for a second
+        # one would make the job wait for itself. Only an action without a slot (Check, Add account) asks.
+        own_slot = False
         try:
-            if queue is not None:
+            from src.fb_ads_rpa.run_telemetry import current_job_id
+
+            holds = getattr(queue, "holds", None)
+            own_slot = bool(queue is not None and callable(holds) and current_job_id() and holds(current_job_id()))
+        except Exception:  # noqa: BLE001
+            own_slot = False
+        try:
+            if queue is not None and not own_slot:
                 grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
                                       or time.monotonic() - began > START_SLOT_WAIT_S)
                 if grant is None:
@@ -636,7 +646,7 @@ class WarmRegistry:
                 return _result(False, f"The profile could not be started with automation: "
                                       f"{scrub(str(exc))}", "start_failed")
         finally:
-            if queue is not None and grant is not None:
+            if queue is not None and grant is not None and not own_slot:
                 queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
         started = bool(getattr(opened, "started_now", False))
         self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
@@ -882,8 +892,8 @@ class WarmRegistry:
             # Пока ждали замок, сессию закрыли/забыли (Close profiles): работать не на чем.
             sess.owner = 0
             sess.lock.release()
-            raise WarmError("This profile was closed or restarted while waiting. Use Open profiles "
-                            "for today first.", "profile_closed")
+            raise WarmError("This profile was closed or restarted while waiting; the next attempt "
+                            "opens it again.", "profile_closed")
         try:
             self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
                               on_wait=on_wait)
@@ -931,8 +941,8 @@ class WarmRegistry:
         if kind == "port":
             # Порт другой: перезапуск не нами. Запись про него больше не годится.
             self._forget(sess.profile_id, stopped=False)
-            raise WarmError(f"The {sess.account} profile was restarted since it was opened. "
-                            "Use Open profiles for today to keep it warm again.", "profile_restarted")
+            raise WarmError(f"The {sess.account} profile was restarted since it was opened; "
+                            "the next attempt connects to it again.", "profile_restarted")
         if kind == "no_port":
             self._forget(sess.profile_id, stopped=False)
             raise WarmError(HAND_MESSAGE, "open_by_hand")
@@ -940,8 +950,10 @@ class WarmRegistry:
             raise WarmError(f"The {sess.account} profile is closing; try again in a minute.", "profile_closing")
         if kind == "none":
             self._forget(sess.profile_id, stopped=True)
-            raise WarmError(f"The {sess.account} profile was closed. Use Open profiles for today to start it "
-                            "again (about 3 minutes after it closed).", "profile_closed")
+            # ACL-2262: no button and no waiting text. `prepare_existing` opens a closed profile before
+            # the action; this is only the narrow race of a profile closing right after that check.
+            raise WarmError(f"The {sess.account} profile closed while the action was starting; "
+                            "the next attempt opens it again.", "profile_closed")
         raise WarmError(f"The {sess.account} profile could not be checked on this machine.", "profile_unknown")
 
     def _remaining(self, cap: float | None = None) -> float:

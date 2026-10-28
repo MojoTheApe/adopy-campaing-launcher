@@ -52,10 +52,18 @@ def confirmed_reopen(confirmed):
 
 
 def prepare_existing(registry, entry, account):
-    """Adopt an already-running verified profile; cold starts retain existing queue policy."""
+    """Adopt a running verified profile, or open a closed one (ACL-2262) through the warm path."""
+    managed = settings()["managed_sessions"]
     if registry.is_warm(entry.profile_id):
-        return True
-    if not settings()["managed_sessions"]:
+        sess = registry.session(entry.profile_id)
+        if not managed or sess is None or sess.owner:
+            return True
+        # ACL-2262: a registered profile may have been closed or restarted since (overnight, server
+        # restart). One local process look, no network: only a changed profile goes on to recovery below.
+        kind, port = registry._scan([entry.profile_id]).get(entry.profile_id,("unknown",None))
+        if kind not in ("none",) and not (kind == "port" and int(port or 0) != sess.port):
+            return True
+    if not managed:
         return False
     pid = (getattr(entry,"profile_id","") or "").strip()
     if not pid:
@@ -73,7 +81,15 @@ def prepare_existing(registry, entry, account):
             if sess.owner:
                 raise warm.WarmError("This profile is in use; it was not restarted.","busy")
             registry._forget(pid,stopped=False)
-        if kind == "port" or (kind == "no_port" and may_reopen_manual()):
+        if kind == "none" and sess is not None:
+            # ACL-2262: the registry still lists a profile whose process is gone (closed by hand, crashed,
+            # killed with the machine). Nothing may depend on the person pressing a button: forget the
+            # dead record and open the profile again through the same warm path below.
+            if sess.owner:
+                raise warm.WarmError("This profile is in use; it was not restarted.","busy")
+            registry._forget(pid,stopped=True)
+        # ACL-2262: an account the owner works with gets its profile opened here, closed or not.
+        if kind in ("port","none") or (kind == "no_port" and may_reopen_manual()):
             if not registry.has_closer():
                 from src.fb_ads_rpa.browser import stop_profile_on_request
                 registry.set_closer(stop_profile_on_request)
