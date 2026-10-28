@@ -195,3 +195,42 @@ def test_close_window_stops_the_kept_profile_and_frees_the_place(monkeypatch):
                         lambda label, profile, busy_msg, strict=False: stopped.append(profile) or {"ok": True})
     res = pj.close_kept_window("doc120")
     assert res["ok"] is True and stopped == ["profile-doc120"] and released == ["doc120"]
+
+
+def test_long_wait_does_not_fire_a_false_step_stuck(monkeypatch):
+    from src.fb_ads_rpa import run_telemetry as rt
+    from src.fb_ads_rpa import sentry_signal
+    from src.web import publish_jobs as pj
+
+    now = {"t": 1000.0}
+    monkeypatch.setattr(rt, "_clock", lambda: now["t"])
+    monkeypatch.setenv("ACL_STEP_STUCK_S", "300")
+    sent, rows = [], []
+    monkeypatch.setattr(sentry_signal, "report_step_stuck", lambda *a, **kw: sent.append(a) or "evt")
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw)))
+    job_id = "job-2278-stuck"
+    with pj._jobs_lock:
+        pj._jobs[job_id] = {"job_id": job_id, "status": "running", "account_label": "Doc124",
+                            "started_at": "t", "campaign_names": ["C"], "done_count": 0}
+    try:
+        rt.set_current_job(job_id)
+        rt._touch_job(job_id, "open_profile")
+        state = {"fired": False, "since": 900.0}
+        for _ in range(5):                       # a 10 min wait: a look every 2 minutes
+            now["t"] += 120
+            pj._show_resource_wait(job_id, "Doc124", {"hold": "memory_low", "available_mb": 1})
+        now["t"] += 100
+        pj._show_resource_wait(job_id, "Doc124", None)
+        assert pj._jobs[job_id]["status"] == "running"
+        assert pj._step_stuck_tick(job_id, state, "Doc124") is False and sent == []
+        assert [r for r in rows if r[1].get("note") == "resource_wait"], "the wait length is recorded"
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop(job_id, None)
+
+
+def test_kept_labels_skip_windows_that_are_closing():
+    q = ps.ProfileSlots()
+    q._running["j1"] = {"profile": "p1", "kept": True, "label": "Doc1", "started": 0}
+    q._running["j2"] = {"profile": "p2", "kept": True, "label": "Doc2", "started": 0, "closing": True}
+    assert q.kept_labels() == ["Doc1"]

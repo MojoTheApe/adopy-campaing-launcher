@@ -692,7 +692,7 @@ class ProfileSlots:
         """ACL-2278: accounts whose finished/kept windows still hold memory (both kinds), sorted."""
         with self._cond:
             return sorted({str(r.get("label") or "") for r in self._running.values()
-                           if r.get("kept") and r.get("label")})
+                           if r.get("kept") and not r.get("closing") and r.get("label")})
 
     def release_kept(self, label: str) -> int:
         """Снять место с оставленного окна аккаунта, не закрывая его (ACL-1603).

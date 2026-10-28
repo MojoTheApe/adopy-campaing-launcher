@@ -834,6 +834,14 @@ def _show_resource_wait(job_id: str, account_label: str, view: dict[str, Any] | 
     `view` None - the wait is over: the job is running again. Local data only; no account is touched.
     """
     closable: list[str] = []
+    # The silence watcher measures idle time from the last telemetry row: a wait is activity, not
+    # silence. Every look keeps the job "alive"; the end of the wait writes a row with its length.
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.beat()
+    except Exception:  # noqa: BLE001
+        _rt = None
     if view is not None:
         own = str(account_label or "").strip().lower()
         closable = [a for a in _slots.kept_labels() if a.strip().lower() != own]
@@ -842,15 +850,27 @@ def _show_resource_wait(job_id: str, account_label: str, view: dict[str, Any] | 
         if job is None or job.get("abandoned"):
             return
         if view is None:
-            if job.pop("resource_wait", None):
-                job.pop("queue", None)
+            since = job.pop("resource_wait", None)
+            if since:
+                hold = str((job.pop("queue", None) or {}).get("hold") or "")
                 if job.get("status") == "queued":
                     job["status"] = "running"
+                waited = round(time.monotonic() - float(since), 1) if since is not True else 0.0
+                campaign = next(iter(job.get("campaign_names") or []), "")
+                ended = True
+            else:
+                ended = False
+            if ended and _rt is not None:
+                try:
+                    _rt.record("job_phase", True, campaign=campaign, note="resource_wait",
+                               duration_s=waited, diag={"account": account_label, "hold": hold})
+                except Exception:  # noqa: BLE001
+                    pass
             return
         queue = _queue_view({"reason": view.get("hold"), **{k: v for k, v in view.items() if k != "hold"}})
         queue["closable_accounts"] = closable
         job["queue"] = queue
-        job["resource_wait"] = True
+        job["resource_wait"] = job.get("resource_wait") or time.monotonic()
         if job.get("status") == "running":
             job["status"] = "queued"
 

@@ -228,7 +228,8 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
     try:
         # ACL-2278: this request must not wait for memory (the page gives up after 45 s and the job would
         # fail for it). A shortage is not an error here: the job queues and opens the profile itself.
-        with profile_lock(entry.profile_id).holding(timeout=0), confirmed_reopen(confirm_reopen),                 defer_memory_wait():
+        with profile_lock(entry.profile_id).holding(timeout=0), confirmed_reopen(confirm_reopen), \
+                defer_memory_wait():
             reg = _registry()
             kind,_ = reg._scan([entry.profile_id]).get(entry.profile_id,("unknown",None))
             if kind == "no_port":

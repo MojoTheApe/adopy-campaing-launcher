@@ -18136,7 +18136,12 @@ if (typeof document.addEventListener === 'function') document.addEventListener('
   ev.preventDefault();
   var fd = new FormData();
   fd.set('account', t.getAttribute('data-cb-close-kept'));
-  fetch('/publish-jobs/kept/close', { method: 'POST', body: fd }).catch(function () { /* следующий опрос покажет */ });
+  fetch('/publish-jobs/kept/close', { method: 'POST', body: fd }).then(function (r) {
+    if (r.ok) return null;
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      t.textContent = (j && j.error) ? String(j.error) : 'Could not close the window';   // textContent: no markup from the reply
+    });
+  }).catch(function () { /* следующий опрос покажет */ });
 });
 
 /* Ключ одной отправки Publish (ACL-1399) — см. start_job(request_id). */
