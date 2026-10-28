@@ -1804,7 +1804,8 @@ class CampaignCreator:
                     if label_failure:
                         raise label_failure
                     raise CreationStopped(f"Creative {creative_id} was found but its identity, account "
-                                          "or content was not confirmed. No ad was created; check it first.",
+                                          "or content was not confirmed. No ad was created; check it first. "
+                                          f"First difference: {_cr.first_diff(plan.act, params, row)}.",
                                           created=out.created, kind="creative_unverified")
                 if plan.label not in _labels(row):
                     out.warnings.append("Meta did not return the creative ACL tag; the existing creative "

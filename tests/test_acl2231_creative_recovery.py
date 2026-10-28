@@ -498,3 +498,35 @@ def test_confirmed_receipt_creative_with_other_video_length_is_not_accepted(tmp_
     meta, second = _earlier_upload(monkeypatch, tmp_path, {"10": 12.5, "20": 30.0})
     assert second.error and not second.ad_ids
     assert second.stop_kind == "creative_unverified"
+
+
+@pytest.mark.parametrize("field,value,path", [
+    ("object_story_spec.link_data.message", "wrong text", "object_story_spec.link_data.message"),
+    ("object_story_spec.link_data.call_to_action.type", "SIGN_UP", "object_story_spec.link_data.call_to_action.type"),
+    ("object_story_spec.link_data.link", "https://other.invalid/x", "object_story_spec.link_data.link")])
+def test_unconfirmed_creative_stop_names_the_first_differing_field(tmp_path, field, value, path):
+    meta = UntaggedMeta()
+    draft = _draft(tmp_path, ads=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.error and len(creatives(meta)) == 1
+    creatives(meta)[0]["adlabels"] = [{"name": cr.plan_from_draft(draft).label}]
+    meta.mutate_on_read[("creative", field)] = value
+    second, _ = _run(meta, draft)
+    assert second.stop_kind == "creative_unverified"
+    assert f"First difference: {path}: expected " in second.error and repr(value) in second.error
+
+
+def test_unconfirmed_creative_stop_names_the_video_id_when_lengths_differ(tmp_path, monkeypatch):
+    _, second = _earlier_upload(monkeypatch, tmp_path, {"10": 12.5, "20": 30.0})
+    assert second.stop_kind == "creative_unverified"
+    assert "First difference: asset_feed_spec.videos[0].video_id: expected '10' got '20'" in second.error
+
+
+def test_first_diff_only_explains_and_values_are_trimmed():
+    params = {"object_story_spec": {"page_id": "1", "link_data": {"message": "x" * 200}}}
+    row = {"id": "5", "account_id": "9", "object_story_spec": {"page_id": "1", "link_data": {"message": "y"}}}
+    assert recovery.matches("act_9", params, row) is False
+    text = recovery.first_diff("act_9", params, row)
+    assert text.startswith("object_story_spec.link_data.message: expected '") and len(text) < 160
+    assert recovery.first_diff("act_9", params, row) == text
