@@ -18112,15 +18112,15 @@ function cbCloseWindows(q) {
     return ' <a href="#" class="cbd-q-retry" data-cb-close-kept="' + aclEscHtml(a) + '">Close window ' + aclEscHtml(a) + '</a>';
   }).join('');
 }
-/* ACL-2283: профиль не поднялся из-за нагрузки на машину - задание ждёт, пока она спадёт, и стартует само. */
+/* ACL-2283: профили заданий стартуют по одному; занятая машина - ждём очереди и спада нагрузки, стартуем сами. */
 function cbLoadWait(q) {
-  var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
   var parts = [];
-  if (q && q.cpu_pct != null) parts.push('CPU ' + Math.round(q.cpu_pct) + '%');
-  if (q && q.available_mb != null) parts.push(gb(q.available_mb) + ' GB free');
-  var rest = (q && Number(q.restart_wait_s) > 0) ? ', next start in ~' + Math.ceil(q.restart_wait_s / 60) + ' min' : '';
-  return 'The machine is busy and the profile did not start (' + (parts.join(', ') || 'load')
-    + rest + ') - nothing was sent to Meta, it starts again by itself, Stop cancels it';
+  if (q && q.cpu_pct != null) parts.push('CPU ' + Math.round(q.cpu_pct) + '%' + (q.cpu_level ? ' (starts below ' + Math.round(q.cpu_level) + '%)' : ''));
+  if (q && q.used_pct != null) parts.push(Math.round(q.used_pct) + '% memory in use');
+  if (q && Number(q.running) > 0) parts.push(q.running + ' other profile' + (Number(q.running) === 1 ? ' is' : 's are') + ' still starting');
+  var rest = (q && Number(q.restart_wait_s) > 0) ? ', next start in ~' + Math.ceil(q.restart_wait_s) + ' s' : '';
+  return 'Waiting for its turn to start the profile - the machine is busy (' + (parts.join(', ') || 'load')
+    + rest + '). Nothing was sent to Meta; it starts by itself, Stop cancels it';
 }
 /* ACL-2278: занятые ворота действий аккаунта — задание ждёт, а не падает. */
 function cbAccountWait(q) {

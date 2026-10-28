@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
+import contextlib
 import logging
 import os
 import random
@@ -130,17 +131,23 @@ CLOSE_WAIT_S = 120.0
 CLOSE_POLL_S = 3.0
 SETTLE_ENV = "ACL_WARM_SETTLE_S"
 DEFAULT_SETTLE_S = 90.0
-#: ACL-2283: a start that fails while the machine is loaded (CPU at or above this share, memory short, or
-#: other profiles still warming up) is "load-related": the job goes back to the queue instead of stopping.
+#: ACL-2283. "Busy" machine = CPU at or above this share, or other profiles still warming up. Used for the
+#: staggered start (the next start waits for the CPU to settle below it), for patient readiness (a tab that
+#: has not answered yet is not called unresponsive for minutes) and for the closed-while-starting fallback.
 LOAD_CPU_ENV = "ACL_LOAD_CPU_PCT"
 DEFAULT_LOAD_CPU_PCT = 85.0
-#: The job starts again once the CPU is below this share (hysteresis), or after the longest quiet wait.
-LOAD_RESUME_CPU_ENV = "ACL_LOAD_RESUME_CPU_PCT"
-DEFAULT_LOAD_RESUME_CPU_PCT = 70.0
-#: Pause between two starts of one profile after a load failure (no hammering of Multilogin) and the longest
-#: wait for the load to clear before the next start. There is no limit on the number of starts.
-LOAD_MIN_PAUSE_S = 15.0
-LOAD_MAX_WAIT_S = 180.0
+#: A: how long the CPU must stay below the level before the next profile of a job starts.
+START_CPU_SETTLE_ENV = "ACL_START_CPU_SETTLE_S"
+DEFAULT_START_CPU_SETTLE_S = 5.0
+#: A: a started profile counts as "not ready yet" until its tab answered, but not longer than this.
+START_READY_CAP_S = 300.0
+#: B: how long a tab may stay silent on a busy machine before it is called unresponsive (idle: today's limit).
+PATIENT_READY_ENV = "ACL_PATIENT_READY_S"
+DEFAULT_PATIENT_READY_S = 480.0
+#: C: growing pause between two starts of a profile that closed while starting (never hammers Multilogin).
+LOAD_BACKOFF_FIRST_S = 15.0
+LOAD_BACKOFF_CAP_S = 300.0
+_PATIENT = ContextVar("acl_warm_patient", default=None)
 
 #: Состояния для экрана.
 WARM = "warm"
@@ -523,6 +530,10 @@ class WarmRegistry:
         self._removed: set[str] = set()
         #: Когда профиль, поднятый открытием, начал прогреваться (monotonic) — резерв под рост.
         self._settling: dict[str, float] = {}
+        #: ACL-2283: profiles started by a job whose tab has not answered yet (the next start waits), and
+        #: profiles whose tab answered.
+        self._starting: dict[str, float] = {}
+        self._ready: set[str] = set()
         self._me = (os.getpid(), _my_start())
         self._load()
 
@@ -602,6 +613,8 @@ class WarmRegistry:
             sess = self._sessions.pop(profile_id, None)
             self._removed.add(profile_id)
             self._settling.pop(profile_id, None)
+            self._starting.pop(profile_id, None)
+            self._ready.discard(profile_id)
         if stopped:
             self._stops.record(profile_id)
         # Вкладку не закрываем: профиль уже ушёл (или это уже не наш экземпляр), и
@@ -623,40 +636,94 @@ class WarmRegistry:
             self._forget(profile_id, stopped=False)
 
     def load_snapshot(self, profile_id: str = "") -> dict:
-        """ACL-2283: is this machine loaded right now? Local readings only (CPU, memory, own processes).
+        """ACL-2283: is this machine busy right now? Local readings only (CPU, memory, own processes).
 
-        `loaded` - CPU at or above `ACL_LOAD_CPU_PCT`, free memory below what one more profile needs, or
-        other profiles still warming up. `clear` - safe to start again (CPU below the resume share,
-        memory enough, nothing warming up). An unreadable CPU counts as not loaded: no guess, today's stop.
+        `busy` - CPU at or above `ACL_LOAD_CPU_PCT` (default 85) or other profiles still warming up (started
+        less than `ACL_WARM_SETTLE_S` ago and whose tab has not answered). `memory_high` - memory in use
+        above `ACL_LOAD_MEM_USED_PCT` (default 90). `clear` - neither: it is safe to start. An unreadable CPU
+        counts as quiet: no guess. `warming_ids` are the other profiles; `cpu_pct` is the whole machine.
         """
         cpu = None
         try:
             cpu = self._cpu()
         except Exception:  # noqa: BLE001
             cpu = None
-        memory, need, avail = None, 0, None
+        used = cap = avail = None
+        memory_high = False
         try:
             memory, settings, _ps = self._memory_state()
-            need = self._memory_need(settings, _ps)[0] if memory is not None else 0
-            avail = None if memory is None else int(memory.available_mb)
+            # The memory rule (share in use, ACL-2255) lives in `_memory_need`: short = less free than it asks.
+            need = self._memory_need(settings, _ps)[0]
+            if memory is not None:
+                avail = int(memory.available_mb)
+                used = round(100.0 * (memory.total_mb - memory.available_mb) / memory.total_mb, 1) if memory.total_mb else None
+                memory_high = memory.available_mb < need
         except Exception:  # noqa: BLE001
-            memory = None
+            pass
+        warming = self.warming_others(profile_id)
+        others = [p for p in self.gate.active() if p != profile_id]
+        level = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
+        cpu_high = cpu is not None and cpu >= level
+        reasons = [r for r, on in (("cpu_high", cpu_high), ("profiles_warming_up", bool(warming)),
+                                   ("memory_high", memory_high)) if on]
+        return {"busy": cpu_high or bool(warming), "loaded": bool(reasons), "reasons": reasons,
+                "memory_high": memory_high, "clear": not reasons,
+                "cpu_pct": None if cpu is None else round(float(cpu), 1), "cpu_level": level,
+                "available_mb": avail, "used_pct": used,
+                "running": len(others), "warming": len(warming)}
+
+    def warming_others(self, profile_id: str = "") -> list[str]:
+        """Other profiles of ours that were started a moment ago and whose tab has not answered yet."""
         now = self._mono()
         settle = _env_number(SETTLE_ENV, DEFAULT_SETTLE_S, 0.0, 3600.0)
         with self._lock:
-            warming = sorted(p for p, t in self._settling.items() if p != profile_id and now - t < settle)
-        others = [p for p in self.gate.active() if p != profile_id]
-        hi = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
-        lo = min(hi, _env_number(LOAD_RESUME_CPU_ENV, DEFAULT_LOAD_RESUME_CPU_PCT, 1.0, 100.0))
-        cpu_high = cpu is not None and cpu >= hi
-        memory_short = memory is not None and avail is not None and avail < need
-        reasons = [r for r, on in (("cpu_high", cpu_high), ("memory_low", memory_short),
-                                   ("profiles_warming_up", bool(warming))) if on]
-        return {"loaded": bool(reasons), "reasons": reasons,
-                "clear": not memory_short and not warming and (cpu is None or cpu < lo),
-                "cpu_pct": None if cpu is None else round(float(cpu), 1),
-                "available_mb": avail, "need_mb": int(need), "running": len(others),
-                "warming": len(warming)}
+            started = {p for p, t in self._starting.items() if now - t < START_READY_CAP_S}
+            settling = {p for p, t in self._settling.items()
+                        if now - t < settle and p in self._sessions and p not in self._ready}
+            return sorted((started | settling) - {profile_id})
+
+    def mark_ready(self, profile_id: str) -> None:
+        """The tab of this profile answered: the next profile may start (staggered start, ACL-2283)."""
+        with self._lock:
+            self._starting.pop(profile_id, None)
+            self._ready.add(profile_id)
+
+    def _wait_start_turn(self, pid: str, cancelled: Callable[[], bool], job: "JobWait") -> bool:
+        """A (ACL-2283): profiles of jobs start one at a time.
+
+        Waits (queued, cancellable, live numbers) until no other started profile is still warming up and the
+        CPU has been below the level for `ACL_START_CPU_SETTLE_S`. The turn is taken atomically, so two jobs
+        cannot pass together. False - cancelled.
+        """
+        settle = _env_number(START_CPU_SETTLE_ENV, DEFAULT_START_CPU_SETTLE_S, 0.0, 600.0)
+        level = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
+        quiet_since: float | None = None
+        try:
+            while True:
+                if cancelled():
+                    return False
+                cpu = None
+                try:
+                    cpu = self._cpu()
+                except Exception:  # noqa: BLE001
+                    cpu = None
+                now = self._mono()
+                if cpu is None or cpu < level:
+                    quiet_since = now if quiet_since is None else quiet_since
+                else:
+                    quiet_since = None
+                with self._lock:
+                    now = self._mono()
+                    self._starting = {p: t for p, t in self._starting.items() if now - t < START_READY_CAP_S}
+                    others = self.warming_others(pid)
+                    if not others and quiet_since is not None and now - quiet_since >= settle:
+                        self._starting[pid] = now
+                        return True
+                _show(job, {"hold": "machine_busy", "cpu_pct": None if cpu is None else round(float(cpu), 1),
+                            "cpu_level": level, "running": len(others), "warming": len(others)})
+                self._sleep(2.0)
+        finally:
+            _show(job, None)
 
     def restart_wait_s(self, profile_id: str) -> float:
         """Сколько секунд ещё нельзя запускать профиль после его остановки (общий журнал)."""
@@ -760,6 +827,14 @@ class WarmRegistry:
         short = self._wait_for_memory(cancelled)
         if short:
             return _result(False, short, "memory_low")
+        # ACL-2283 (A): profiles of jobs start one at a time: wait for the previous start to be ready and the CPU
+        # to settle. The turn is released when this start fails, or when the tab answers (`mark_ready`).
+        took_turn = False
+        if job is not None:
+            if not self._wait_start_turn(pid, cancelled, job):
+                return _result(False, "Stopped while waiting for its turn to start the profile.", "cancelled")
+            took_turn = True
+        turn_kept = False
         slot_id = f"warm-open:{label}:{job_id or int(self._wall())}"
         queue = self._slot_queue()
         began = time.monotonic()
@@ -785,6 +860,7 @@ class WarmRegistry:
                                    "Close something and try again.", "memory_low")
             try:
                 opened = self._start_profile(pid, folder, instance)
+                turn_kept = bool(getattr(opened, "started_now", False))
             except _fb_profile.ProfileError as exc:
                 code = getattr(exc, "code", "") or "profile_error"
                 msg = HAND_MESSAGE if code == "open_by_hand" else str(exc)
@@ -797,6 +873,9 @@ class WarmRegistry:
                 return _result(False, f"The profile could not be started with automation: "
                                       f"{scrub(str(exc))}", "start_failed")
         finally:
+            if took_turn and not turn_kept:
+                with self._lock:
+                    self._starting.pop(pid, None)
             if queue is not None and grant is not None and not own_slot:
                 queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
         started = bool(getattr(opened, "started_now", False))
@@ -804,6 +883,7 @@ class WarmRegistry:
         if started:
             with self._lock:
                 self._settling[pid] = self._mono()
+                self._ready.discard(pid)
         log.info("warm: profile of %s %s (dashboard_started=%s)", label,
                  "started" if started else "was already open", started)
         return _result(True, "Opened; ready for the next action." if started
@@ -1088,6 +1168,7 @@ class WarmRegistry:
                     _show(job, None)
             try:
                 graph, state = self._prepare(sess, act, mode, make_graph, ready_timeout)
+                self.mark_ready(profile_id)       # ACL-2283: the tab answered; the next profile may start
             except BaseException:
                 self.gate.release(profile_id)
                 raise
@@ -1150,6 +1231,10 @@ class WarmRegistry:
         left = 45.0 if deadline is None else deadline-self._mono()
         if left <= 0:
             raise PageFailed("Connection preparation timed out before the action was sent")
+        if cap is not None:
+            from src.fb_api.cdp import patient_active
+            if patient_active():
+                cap *= 4.0          # ACL-2283 (B): busy machine - navigation gets a longer cap too
         return min(left,cap) if cap is not None else left
 
     def _new_tab(self, sess: WarmSession) -> Any:
@@ -1274,17 +1359,39 @@ class WarmRegistry:
     def _prepare(self, sess: WarmSession, act: str, mode: str,
                  make_graph: Callable[[Any], Any], timeout: float) -> tuple[Any, dict]:
         """An absolute shared deadline covers CDP creation, reuse and one replacement."""
-        from src.fb_api.cdp import command_budget
+        from src.fb_api.cdp import command_budget, patient_wait
         budget = min(float(timeout),PREPARE_BUDGET_CAP_S)
+        # ACL-2283 (B): busy machine (CPU at the level or other profiles warming) - a tab that has not
+        # answered yet is not called unresponsive for several minutes. Idle machine: today's limit.
+        patient_s = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
+        check = None
+        if patient_s > budget and self._busy_now(sess.profile_id):
+            budget = patient_s
+            until = self._mono()+budget
+            seen = [self._mono(), True]
+
+            def check() -> bool:
+                now = self._mono()
+                if now >= until:
+                    return False
+                if now - seen[0] >= 5.0:      # re-read the machine at most every 5 s; load gone = idle limit
+                    seen[0], seen[1] = now, self._busy_now(sess.profile_id)
+                return bool(seen[1])
         token = _PREPARE_DEADLINE.set(self._mono()+budget)
         try:
-            with command_budget(budget):
+            with command_budget(budget), patient_wait(check) if check else contextlib.nullcontext():
                 return self._prepare_owned(sess,act,mode,make_graph)
         except GraphStop:
             self._drop_tab(sess)
             raise
         finally:
             _PREPARE_DEADLINE.reset(token)
+
+    def _busy_now(self, profile_id: str) -> bool:
+        try:
+            return bool(self.load_snapshot(profile_id)["busy"])
+        except Exception:  # noqa: BLE001 - unknown = idle limit
+            return False
 
     def _prepare_owned(self,sess,act,mode,make_graph):
         self._remaining()

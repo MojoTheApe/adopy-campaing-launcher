@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import sys
 import time
 import urllib.parse
 from contextlib import contextmanager
@@ -1101,11 +1102,17 @@ class InPageGraph:
         """
         deadline = self._clock() + timeout
         loaded = False
+        silent = None
         while True:
             try:
                 got = self._eval_helper(".state()", timeout=10.0)
             except CdpTimeout:
-                raise
+                # ACL-2283 (B): on a busy machine a tab that has not answered yet is waited for.
+                from src.fb_api import cdp as _cdp
+
+                if not _cdp.patient_active():
+                    raise
+                got, silent = None, sys.exc_info()[1]
             except (PageError, CdpError):
                 got = None  # документ ещё меняется
             if isinstance(got, dict):
@@ -1116,6 +1123,8 @@ class InPageGraph:
                 break
             self._sleep(poll_s)
         if not loaded:
+            if silent is not None:
+                raise silent        # ACL-2283: patient wait over - the tab never answered
             return {"kind": "not_loaded", "has_token": False}
         try:
             got = self._eval_helper(".probe()", timeout=10.0)

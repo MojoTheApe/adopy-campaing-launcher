@@ -40,7 +40,7 @@ from src.fb_api.creator import (
     preflight_account,
 )
 from src.web.api_build_progress import BuildCounter
-from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, PageUnresponsive, normalize_act
+from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -230,6 +230,10 @@ class ApiPublishError(RuntimeError):
         self.code = code
 
 
+#: ACL-2283: pause before the sample taken after a failed start (the load often drops right after it).
+POST_FAILURE_SAMPLE_S = 3.0
+
+
 class LoadRequeue(ApiPublishError):
     """ACL-2283: the profile did not start because the machine is loaded; nothing was sent to Meta.
 
@@ -366,6 +370,7 @@ class ApiPublisher:
     def open(self, account_label: str) -> None:
         """Профиль, вкладка, токен, предпроверка кабинета. Ни одной записи."""
         self.account_label = account_label
+        self._load_before = None        # ACL-2283: a sample from an earlier attempt must not count
         entry = _resolve_entry(account_label)
         if entry is None:
             raise ApiPublishError(f"{account_label} is not in the account map")
@@ -404,8 +409,11 @@ class ApiPublisher:
             from src.fb_api import stop_log as _stop_log
 
             with _mlx.scope(account=account_label), _stop_log.cancel_scope(self.cancelled):
+                earlier = self._opened
                 self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
                                              (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
+                if earlier is not None and getattr(earlier, "started_now", False):
+                    self.inherited_profile = True      # ACL-2283: a retry attaches; the window is still ours
         except _fb_profile.ProfileError as exc:
             raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
         except Exception as exc:  # noqa: BLE001
@@ -466,6 +474,7 @@ class ApiPublisher:
         from src.fb_api import warm as _warm
 
         reg = _warm.registry()
+        self._load_before = self._load_now()      # before the profile start (ACL-2283)
         from src.fb_api.connection import prepare_existing
         from src.fb_api.connection import opening_closed_profile
         try:
@@ -484,7 +493,6 @@ class ApiPublisher:
             return _make_graph(tab, act, writes=not dry)
 
         _release_frozen_tab_cooldown(account_label)
-        self._load_before = self._load_now()
         try:
             self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
                                        make_graph=make, ready_timeout=READY_TIMEOUT_S)
@@ -499,12 +507,12 @@ class ApiPublisher:
         return True
 
     def _requeue_if_closed(self, exc: Exception) -> None:
-        """ACL-2283: "profile closed while the action was starting" under load goes back to the queue."""
+        """ACL-2283 (C, fallback): "profile closed while the action was starting" on a busy machine goes back to the queue."""
         if getattr(exc, "code", "") == "profile_closed":
-            self._requeue_if_loaded("profile_closed", str(exc))
+            self._requeue_if_busy("profile_closed", str(exc))
 
     def _load_now(self) -> dict[str, Any] | None:
-        """Local CPU/memory reading for the load decision; None when it cannot be taken."""
+        """Local CPU/memory reading for the busy decision; None when it cannot be taken."""
         try:
             from src.fb_api import warm as _warm
 
@@ -512,30 +520,31 @@ class ApiPublisher:
         except Exception:  # noqa: BLE001 - unknown load = today's behaviour (stop)
             return None
 
-    def _requeue_if_loaded(self, code: str, message: str) -> None:
-        """ACL-2283: raise `LoadRequeue` when a start failure belongs to machine load.
+    def _requeue_if_busy(self, code: str, message: str) -> None:
+        """Raise `LoadRequeue` when a start failure belongs to a busy machine and nothing was written to Meta.
 
-        Load-related = nothing was written to Meta AND the machine was loaded before the start or is
-        loaded now (CPU high, memory short, profiles warming up). A failure on an otherwise idle machine
-        (a truly frozen tab, a profile that closed by itself) is not requeued: it stops as before.
+        "Busy" = any of three local samples is loaded: before the start, at the failure, and a few seconds
+        AFTER the failure (the load often drops right after a failed start). Loaded = CPU at the level,
+        other profiles warming up, or memory in use above the limit. All samples quiet (an idle machine)
+        = a real problem: the job stops as before. There is no attempt limit; the pace is set by the
+        growing backoff of the job loop, so Multilogin is never hammered.
         """
         if self.writes > 0:
             return
-        after = self._load_now()
-        before = self._load_before
-        if not ((after and after.get("loaded")) or (before and before.get("loaded"))):
+        samples = [self._load_before, self._load_now()]
+        try:
+            self.sleep(POST_FAILURE_SAMPLE_S)
+        except Exception:  # noqa: BLE001
+            pass
+        samples.append(self._load_now())
+        loaded = [x for x in samples if x and x.get("loaded")]
+        if not loaded:
             return
-        snap = dict(after if (after and after.get("loaded")) else before or {})
-        snap["reasons"] = sorted(set((after or {}).get("reasons", [])) | set((before or {}).get("reasons", [])))
+        snap = dict(loaded[-1])
+        snap["reasons"] = sorted({r for x in loaded for r in x.get("reasons", [])})
         raise LoadRequeue(message, code, snap)
 
     def _halt(self, stop: GraphStop) -> None:
-        if isinstance(stop, PageUnresponsive):
-            # ACL-2283: before the pause is started and the stop is reported.
-            self._requeue_if_loaded(
-                "page_unresponsive",
-                f"{self.account_label}: the Ads Manager tab did not answer while the machine was busy; "
-                "waiting for the load to drop. Nothing was created.")
         self.stop = stop
         _start_cooldown(self.account_label, stop)
         _tm.report_stop(stop.kind, str(stop), {"source": "publish", "code": stop.code})

@@ -883,6 +883,9 @@ def _wait_out_machine_load(job_id: str, account_label: str, publisher: Any, rq: 
         except Exception:  # noqa: BLE001
             pass
     began = time.monotonic()
+    # ACL-2283 (C): the pause before the next start grows 15, 30, 60 ... s up to 5 min, so a profile that keeps
+    # closing right after it starts is never restarted in a tight loop (the owner's restart cooldown is 0).
+    backoff = min(_warm.LOAD_BACKOFF_CAP_S, _warm.LOAD_BACKOFF_FIRST_S * (2 ** max(0, attempt - 1)))
     try:
         while True:
             if _is_cancelled(job_id):
@@ -890,13 +893,14 @@ def _wait_out_machine_load(job_id: str, account_label: str, publisher: Any, rq: 
             snap = reg.load_snapshot(pid)
             pause = float(reg.restart_wait_s(pid)) if pid else 0.0
             waited = time.monotonic() - began
-            if waited >= _warm.LOAD_MIN_PAUSE_S and pause <= 0 and (
-                    snap.get("clear") or waited >= _warm.LOAD_MAX_WAIT_S):
+            if waited >= backoff and pause <= 0 and (
+                    snap.get("clear") or waited >= max(backoff, _warm.LOAD_BACKOFF_CAP_S)):
                 return True
             _show_resource_wait(job_id, account_label, {
-                "hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"),
-                "available_mb": snap.get("available_mb"), "need_mb": snap.get("need_mb"),
-                "running": snap.get("running"), "restart_wait_s": round(pause), "attempt": attempt + 1})
+                "hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),
+                "available_mb": snap.get("available_mb"), "used_pct": snap.get("used_pct"),
+                "running": snap.get("running"), "restart_wait_s": round(max(pause, backoff - waited)),
+                "attempt": attempt + 1})
             _load_sleep(2.0)
     finally:
         _show_resource_wait(job_id, account_label, None)
@@ -992,6 +996,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "closable_accounts": list(verdict.get("closable_accounts") or []),
         # ACL-2283: machine busy after a failed start - live CPU share and the pause left before the next start.
         "cpu_pct": verdict.get("cpu_pct"),
+        "cpu_level": verdict.get("cpu_level"),
+        "used_pct": verdict.get("used_pct"),
         "restart_wait_s": verdict.get("restart_wait_s"),
         "attempt": verdict.get("attempt"),
     }
