@@ -469,14 +469,15 @@ class TermResolver:
 
     @staticmethod
     def _rejected_ids(exc: Exception, asked: list[str]) -> set[str]:
-        """Ids Meta called `Invalid id` in an adinterestvalid answer; all asked ids if it names none."""
+        """Asked ids that Meta itself named in an `Invalid id` answer; none named means none dropped."""
         text = str(exc)
         if "invalid id" not in text.casefold():
             return set()
         named = set(re.findall(r"(?i)invalid id[:\s#]*([0-9]+)", text)) & set(asked)
-        return named or set(asked)
+        return named
 
     def _drop_cached_ids(self, bad: set[str]) -> None:
+        # store.remove(term) forgets the term with all its confirmed choice kinds (interest, behavior, ...).
         for e in self.store.entries():
             if any(p["type"] == "interests" and str(p["id"]) in bad for p in picks_of(e)):
                 self.store.remove(str(e.get("term") or ""))

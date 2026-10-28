@@ -147,13 +147,12 @@ def video_pairs(act, params, row):
     wv, gv = feed.get("videos"), got_feed.get("videos")
     if not isinstance(wv, list) or not isinstance(gv, list) or len(wv) != len(gv) or not wv:
         return None
-    pairs, patched = [], []
+    pairs = []
     for w, g in zip(wv, gv):
         if not isinstance(w, dict) or not isinstance(g, dict) or not g.get("video_id"):
             return None
         if str(w.get("video_id")) != str(g.get("video_id")):
             pairs.append((str(w.get("video_id")), str(g["video_id"])))
-        patched.append(dict(w, video_id=g["video_id"]))
     if not pairs:
         return None
     fixed = dict(params)

@@ -729,3 +729,19 @@ def test_invalid_id_that_is_not_ours_still_fails_the_check(tmp_path):
 
     with pytest.raises(g.GraphError):
         _resolver(Boom(), tmp_path).prefetch(["x"])
+
+
+def test_unnamed_invalid_id_never_wipes_confirmed_entries(tmp_path):
+    store = _store(tmp_path)
+    for i, t in enumerate(("alpha", "beta", "gamma")):
+        store.put(t, id=f"600300000000{i}", type="interests", name=t)
+
+    class Unnamed(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if (params or {}).get("interest_fbid_list"):
+                raise g.GraphError("(#100) Invalid id", code=100)
+            return super().get_all(path, params, max_pages=max_pages)
+
+    with pytest.raises(g.GraphError):
+        tr.TermResolver(Unnamed(), store).prefetch(["alpha", "beta", "gamma"])
+    assert len(store.entries()) == 3

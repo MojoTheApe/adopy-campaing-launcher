@@ -1627,6 +1627,8 @@ class CampaignCreator:
                 b = self.client.get(f"/{got_id}", {"fields": "length,account_id"})
                 if not isinstance(a, dict) or not isinstance(b, dict):
                     return False
+                if any(str(v.get("account_id") or "") != str(plan.act).removeprefix("act_") for v in (a, b)):
+                    return False
                 if not a.get("length") or float(a["length"]) != float(b.get("length") or -1):
                     return False
         except Exception:

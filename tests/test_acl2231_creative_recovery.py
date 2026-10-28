@@ -330,7 +330,10 @@ class _Videos:
         self.lengths = lengths
 
     def get(self, path, params=None):
-        return {"length": self.lengths[path.strip("/")], "account_id": "1"}
+        v = self.lengths[path.strip("/")]
+        if isinstance(v, Exception):
+            raise v
+        return {"length": v, "account_id": ACT.removeprefix("act_")} if not isinstance(v, dict) else v
 
 
 def _pair_case():
@@ -360,3 +363,12 @@ def test_video_pair_is_refused_when_other_content_differs():
     params, row = _pair_case()
     row["asset_feed_spec"]["bodies"] = [{"text": "other"}]
     assert _same_videos({"10": 12.5, "20": 12.5}, params, row) is False
+
+
+def test_video_pair_is_refused_on_get_error_missing_length_other_account_or_count():
+    params, row = _pair_case()
+    assert _same_videos({"10": 12.5, "20": RuntimeError("boom")}, params, row) is False
+    assert _same_videos({"10": 12.5, "20": None}, params, row) is False
+    assert _same_videos({"10": 12.5, "20": {"length": 12.5, "account_id": "999"}}, params, row) is False
+    row["asset_feed_spec"]["videos"].append({"video_id": "21"})
+    assert _same_videos({"10": 12.5, "20": 12.5, "21": 1}, params, row) is False
