@@ -148,33 +148,12 @@ def test_started_now_stays_sticky_when_a_retry_attaches(monkeypatch, tmp_path):
     assert pub.started_profile is True, "the window the first attempt opened is still ours"
 
 
-# ---- D: memory by share used ----
+# ---- D: memory by share used (the rule itself is ACL-2255; here: it governs the start in this flow) ----
 
 def _mem(used_pct, total=16000):
     from src.web import profile_slots as ps
 
     return ps.MemoryReading(total, int(total * (100 - used_pct) / 100))
-
-
-def test_memory_rule_is_the_share_in_use_default_90(monkeypatch):
-    from src.web import profile_slots as ps
-
-    monkeypatch.delenv(ps.MEM_USED_ENV, raising=False)
-    assert ps.memory_share_ok(_mem(86)) and ps.memory_share_ok(_mem(87)) and ps.memory_share_ok(_mem(90))
-    assert not ps.memory_share_ok(_mem(91)) and not ps.memory_share_ok(_mem(97))
-    monkeypatch.setenv(ps.MEM_USED_ENV, "80")
-    assert not ps.memory_share_ok(_mem(86))
-
-
-def test_slot_decision_allows_a_start_at_87_percent_and_waits_at_95(monkeypatch):
-    from src.web import profile_slots as ps
-
-    monkeypatch.delenv(ps.MEM_USED_ENV, raising=False)
-    st = ps.SlotSettings()
-    ok = ps.decide(1, 0, _mem(87), st)
-    assert ok["allow"] is True and ok["reason"] == "memory_ok" and ok["used_pct"] == pytest.approx(87, abs=0.1)
-    low = ps.decide(1, 0, _mem(95), st)
-    assert low["allow"] is False and low["reason"] == "memory_low" and low["max_used_pct"] == 90.0
 
 
 def test_heavy_gate_uses_the_share_too():

@@ -640,7 +640,7 @@ class WarmRegistry:
 
         `busy` - CPU at or above `ACL_LOAD_CPU_PCT` (default 85) or other profiles still warming up (started
         less than `ACL_WARM_SETTLE_S` ago and whose tab has not answered). `memory_high` - memory in use
-        above `ACL_LOAD_MEM_USED_PCT` (default 90). `clear` - neither: it is safe to start. An unreadable CPU
+        above the ACL-2255 share rule. `clear` - neither: it is safe to start. An unreadable CPU
         counts as quiet: no guess. `warming_ids` are the other profiles; `cpu_pct` is the whole machine.
         """
         cpu = None
