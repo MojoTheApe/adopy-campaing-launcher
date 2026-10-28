@@ -167,8 +167,7 @@ def test_connecting_a_new_profile_still_leaves_a_hand_opened_window_alone(reads)
 def test_the_row_texts_are_english():
     for text in (sp.HAND_OPEN_MESSAGE, sp.HAND_OPEN_MESSAGE_API):
         assert not any("Ѐ" <= ch <= "ӿ" for ch in text), text
-    assert sp.HAND_OPEN_MESSAGE_API == ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
-                                        "then use Open profiles for today")
+    assert "Open profiles for today" not in sp.HAND_OPEN_MESSAGE_API and "3 minutes" not in sp.HAND_OPEN_MESSAGE_API
     assert "open profile button" in sp.HAND_OPEN_MESSAGE, "the RPA backend has no Open profiles for today button"
 
 

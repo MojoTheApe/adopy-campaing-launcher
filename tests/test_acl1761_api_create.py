@@ -1099,10 +1099,13 @@ class _PageOverMeta:
 
 
 @pytest.mark.parametrize("dry_run", [True, False])
-def test_open_builds_a_read_only_client_and_page_for_a_dry_run(monkeypatch, dry_run):
+def test_open_builds_a_read_only_client_and_page_for_a_dry_run(monkeypatch, tmp_path, dry_run):
     from types import SimpleNamespace
 
     from src.web import publish_api
+    from tests.test_acl2262_builder_opens_profile import closed_profile_rig
+
+    closed_profile_rig(monkeypatch, tmp_path, None, "550e8400-e29b-41d4-a716-446655440000")   # ACL-2262: warm path
 
     made = []
     meta = FakeMeta()
@@ -1110,9 +1113,7 @@ def test_open_builds_a_read_only_client_and_page_for_a_dry_run(monkeypatch, dry_
         ad_account_id=ACT, profile_id="550e8400-e29b-41d4-a716-446655440000", folder_id="",
         multilogin_instance="A"))
     monkeypatch.setattr(publish_api, "_cooldown", lambda label: (0.0, ""))
-    monkeypatch.setattr(publish_api, "_open_profile", lambda *a: SimpleNamespace(
-        cdp_url="http://127.0.0.1:1", started_now=False))
-    monkeypatch.setattr(publish_api, "_open_tab", lambda url: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(publish_api, "_open_profile", lambda *a: pytest.fail("the cold path must not be used"))
 
     def make(tab, act, *, writes=True):
         made.append(writes)

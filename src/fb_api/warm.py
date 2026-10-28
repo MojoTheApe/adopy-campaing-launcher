@@ -71,6 +71,9 @@ STAGGER_MAX_S = 10.0
 START_SLOT_WAIT_S = 120.0
 #: Сколько ждём памяти под запуск следующего профиля и сколько профиль «приживается».
 START_MEMORY_WAIT_S = 120.0
+#: ACL-2262: сколько ждём, пока профиль, который только что закрывали, отпустят (и как часто смотрим).
+CLOSE_WAIT_S = 120.0
+CLOSE_POLL_S = 3.0
 SETTLE_ENV = "ACL_WARM_SETTLE_S"
 DEFAULT_SETTLE_S = 90.0
 
@@ -83,8 +86,8 @@ BY_HAND = "by_hand"
 CLOSING = "closing"
 UNKNOWN = "unknown"
 
-HAND_MESSAGE = ("Opened in Multilogin by hand — close it there, wait about 3 minutes, "
-                "then use Open profiles for today")
+HAND_MESSAGE = ("Opened in Multilogin by hand — close its window there, then run Check plan or "
+                "Publish and the dashboard opens it for automation")
 
 #: Хост и путь Ads Manager в адресе вкладки.
 _FB_HOST_SUFFIX = "facebook.com"
@@ -564,7 +567,7 @@ class WarmRegistry:
                 # Порт другой: профиль перезапустил не дешборд. Запись больше не про него.
                 self._forget(pid, stopped=False)
             return _chip(OPEN, "Open", "Open with automation, but not kept warm by the dashboard. "
-                         "Use Open profiles for today to keep it ready.")
+                         "The dashboard attaches to it when an action starts.")
         if kind == "closing":
             return _chip(CLOSING, "Closing…", "The profile window is closing; wait a minute")
         if kind == "no_port":
@@ -602,8 +605,13 @@ class WarmRegistry:
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
         if kind == "closing":
-            return _result(False, "The profile is closing; try again in a minute. Nothing was started.",
-                           "profile_closing")
+            # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
+            # released it ends in "can't lock profile". Wait (bounded, one local look every few seconds,
+            # no network) until it is gone, then start.
+            kind = self._wait_until_closed(pid, cancelled)
+            if kind != "none":
+                return _result(False, f"The {label} profile is still closing in Multilogin; nothing was "
+                               "started. Try again in a minute.", "profile_closing")
         if kind == "none" and self.session(pid) is not None:
             # B2: профиль в реестре, а процесса нет — его закрыли (человек, таймер чтения).
             # Останавливаем отсчёт от момента, когда увидели, и только потом решаем про запуск.
@@ -626,7 +634,8 @@ class WarmRegistry:
             from src.fb_ads_rpa.run_telemetry import current_job_id
 
             holds = getattr(queue, "holds", None)
-            own_slot = bool(queue is not None and callable(holds) and current_job_id() and holds(current_job_id()))
+            own_slot = bool(queue is not None and callable(holds) and current_job_id()
+                            and holds(current_job_id(), pid))
         except Exception:  # noqa: BLE001
             own_slot = False
         try:
@@ -643,6 +652,10 @@ class WarmRegistry:
                 msg = HAND_MESSAGE if code == "open_by_hand" else str(exc)
                 return _result(False, msg, code)
             except Exception as exc:  # noqa: BLE001 — MLX/сеть
+                if "lock profile" in str(exc).lower():
+                    # ACL-2262: process is gone but Multilogin still holds the profile lock. No retry loop.
+                    return _result(False, f"Multilogin still holds the {label} profile after it closed; "
+                                   "nothing was started. Try again in a minute.", "profile_locked")
                 return _result(False, f"The profile could not be started with automation: "
                                       f"{scrub(str(exc))}", "start_failed")
         finally:
@@ -658,6 +671,15 @@ class WarmRegistry:
         return _result(True, "Opened; ready for the next action." if started
                        else "Already open with automation; kept warm.",
                        "started" if started else "already_open", started=started)
+
+    def _wait_until_closed(self, pid: str, cancelled: Callable[[], bool]) -> str:
+        """Local process look every `CLOSE_POLL_S` until the profile is gone (`none`) or the wait ends."""
+        deadline = self._mono() + CLOSE_WAIT_S
+        kind = "closing"
+        while kind == "closing" and not cancelled() and self._mono() < deadline:
+            self._sleep(CLOSE_POLL_S)
+            kind = self._scan([pid]).get(pid, ("unknown", None))[0]
+        return kind
 
     def _reopen_manual(self, label: str, entry: Any, *, job_id: str, cancelled) -> dict:
         """Explicitly authorized, graceful restart under the physical profile lease."""

@@ -219,7 +219,7 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
     refused = _guard()
     if refused:
         return refused
-    from src.fb_api.connection import prepare_existing,confirmed_reopen,may_reopen_manual
+    from src.fb_api.connection import prepare_existing,confirmed_reopen,may_reopen_manual,opening_closed_profile
     from src.fb_ads_rpa.operations import profile_lock
     entry = _entry(label)
     if entry is None:
@@ -233,7 +233,8 @@ def prepare_connection(label: str, confirm_reopen: bool = False) -> tuple[dict,i
                     return {"ok":False,"account":label,"code":"open_by_hand"},409
                 result = reg.open_one(label,entry)
                 return {"account":label,**result},200 if result.get("ok") else 409
-            prepare_existing(reg,entry,label)
+            with opening_closed_profile():     # ACL-2262: /connection/prepare comes before Publish only
+                prepare_existing(reg,entry,label)
         return {"ok":True,"account":label},200
     except Exception as exc:
         from src.fb_ads_rpa.profile_lease import ProfileLeaseError

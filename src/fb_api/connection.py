@@ -51,8 +51,27 @@ def confirmed_reopen(confirmed):
         _CONFIRMED.reset(token)
 
 
+_OPEN_CLOSED = ContextVar("acl_open_closed_profile", default=False)
+
+
+@contextmanager
+def opening_closed_profile(allowed=True):
+    """ACL-2262: the caller is an action that may bring up a CLOSED profile (Check plan, Publish and
+    /connection/prepare before it). Owner rule: not earlier than the first campaign. Reads, the
+    08/13/18 refresh and shut-off commands never set this, so they only adopt an already-open profile."""
+    token = _OPEN_CLOSED.set(allowed is True)
+    try:
+        yield
+    finally:
+        _OPEN_CLOSED.reset(token)
+
+
+def may_open_closed():
+    return _OPEN_CLOSED.get()
+
+
 def prepare_existing(registry, entry, account):
-    """Adopt a running verified profile, or open a closed one (ACL-2262) through the warm path."""
+    """Adopt a running verified profile; with `opening_closed_profile()` also open a closed one (ACL-2262)."""
     managed = settings()["managed_sessions"]
     if registry.is_warm(entry.profile_id):
         sess = getattr(registry,"session",lambda _pid:None)(entry.profile_id)
@@ -82,14 +101,14 @@ def prepare_existing(registry, entry, account):
                 raise warm.WarmError("This profile is in use; it was not restarted.","busy")
             registry._forget(pid,stopped=False)
         if kind == "none" and sess is not None:
-            # ACL-2262: the registry still lists a profile whose process is gone (closed by hand, crashed,
-            # killed with the machine). Nothing may depend on the person pressing a button: forget the
-            # dead record and open the profile again through the same warm path below.
+            # The registry lists a profile whose process is gone (closed by hand, crashed, killed with the
+            # machine). The record is stale for every caller. We do not know when it closed, so no new
+            # restart wait is started from here (`stopped=False`).
             if sess.owner:
                 raise warm.WarmError("This profile is in use; it was not restarted.","busy")
-            registry._forget(pid,stopped=True)
-        # ACL-2262: an account the owner works with gets its profile opened here, closed or not.
-        if kind in ("port","none") or (kind == "no_port" and may_reopen_manual()):
+            registry._forget(pid,stopped=False)
+        opening = may_open_closed() and kind in ("none","closing")
+        if kind == "port" or opening or (kind == "no_port" and may_reopen_manual()):
             if not registry.has_closer():
                 from src.fb_ads_rpa.browser import stop_profile_on_request
                 registry.set_closer(stop_profile_on_request)

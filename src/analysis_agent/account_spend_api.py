@@ -260,29 +260,44 @@ def _cooldown_state(key: str) -> tuple[float, str]:
     return max(0.0, until - time.monotonic()), kind
 
 
-def release_frozen_tab_cooldown(key: str) -> bool:
-    """ACL-2262: a frozen robot tab (`page_unresponsive`) is not a reason to refuse the action.
+#: ACL-2262: ключи профилей, чья пауза «вкладка не отвечает» уже снималась в этом эпизоде зависания.
+_FROZEN_RELEASED: set[str] = set()
 
-    The managed (warm) path replaces a hung tab before the action, so the 10-minute wait only made
-    publish fail on a profile left open overnight. The wait is dropped here; if the new tab hangs as
-    well, the action stops again and `_start_cooldown` re-arms it. Other causes (checkpoint, rate
-    limit, logout) keep their waits. Without managed sessions nothing is replaced, so nothing is dropped.
+
+def frozen_tab_replaceable(key: str) -> bool:
+    """ACL-2262: пауза «вкладка не отвечает» может быть снята ради ОДНОЙ замены вкладки.
+
+    Только если включены managed sessions и в этом эпизоде зависания пауза ещё не снималась. Если
+    замена тоже зависла, пауза ставится заново и остаётся полной (профиль не долбим).
     """
     with _COOLDOWN_LOCK:
-        if _COOLDOWN.get(key, (0.0, ""))[1] != "page_unresponsive":
+        until, kind = _COOLDOWN.get(key, (0.0, ""))
+        if kind != "page_unresponsive" or until <= time.monotonic() or key in _FROZEN_RELEASED:
             return False
     try:
         from src.fb_api.connection import settings
 
-        if not settings()["managed_sessions"]:
-            return False
+        return bool(settings()["managed_sessions"])
     except Exception:  # noqa: BLE001 — unreadable settings: keep the wait
+        return False
+
+
+def release_frozen_tab_cooldown(key: str) -> bool:
+    """Снять паузу прямо перед тёплой выдачей вкладки (где зависшая вкладка заменяется). Один раз за эпизод."""
+    if not frozen_tab_replaceable(key):
         return False
     with _COOLDOWN_LOCK:
         if _COOLDOWN.get(key, (0.0, ""))[1] == "page_unresponsive":
             del _COOLDOWN[key]
+            _FROZEN_RELEASED.add(key)
             return True
     return False
+
+
+def note_tab_recovered(key: str) -> None:
+    """Вкладка выдана и отвечает: эпизод зависания закончен, следующий получит новую замену."""
+    with _COOLDOWN_LOCK:
+        _FROZEN_RELEASED.discard(key)
 
 
 def _cooldown_left(key: str) -> float:
@@ -471,6 +486,7 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
     def make(tab):
         return _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
 
+    release_frozen_tab_cooldown(key)
     try:
         lease = _warm_registry().checkout(
             profile_id, account=account, act=act, mode=mode, make_graph=make,
@@ -478,6 +494,7 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
             on_wait=lambda why: _as._set_wait_note(
                 account, WARM_MEMORY_NOTE if why in ("below_reserve", "memory_low", "memory_unknown")
                 else WARM_WAIT_NOTE))
+        note_tab_recovered(key)
     except _warm.WarmError as exc:
         raise ApiReadError(str(exc), code=exc.code) from exc
     except GraphStop as exc:
@@ -557,9 +574,11 @@ def _open_session(account: str, *, commands: bool = False):
     # The entry is immutable. A later map lookup must not move this actual
     # session's cooldown to another physical profile.
     key = physical_profile_key(profile_id)
-    release_frozen_tab_cooldown(key)
     left, why = _cooldown_state(key)
-    if left > 0:
+    # ACL-2262: a hung tab is replaced once per episode by the warm checkout below; the pause is lifted
+    # only right before it. If the action does not go through the warm path, the pause stands.
+    frozen_deferred = left > 0 and why == "page_unresponsive" and frozen_tab_replaceable(key)
+    if left > 0 and not frozen_deferred:
         mins = int(left // 60) + 1
         if why == "logged_out":
             raise ApiReadError(_as.logged_out_message(account), code=_as.LOGGED_OUT_CODE)
@@ -589,6 +608,10 @@ def _open_session(account: str, *, commands: bool = False):
         with _warm_session(account, act, key, profile_id, commands) as warm_sess:
             yield warm_sess
         return
+    if frozen_deferred:
+        raise ApiReadError(
+            f"The Ads Manager tab for {account} stopped answering on the last read; it is not "
+            f"reopened for about {int(left // 60) + 1} min. Nothing was called.")
 
     held = _as._ReadOpen(account)
     tab = None

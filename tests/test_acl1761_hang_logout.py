@@ -138,8 +138,9 @@ def test_browser_url_asks_the_browser_not_the_hung_page_session():
     assert PageTab(RawBrowser(info_fails=True), "T", "S").browser_url() == ""
 
 
-def _publisher_with(monkeypatch, tab, opened_log):
+def _publisher_with(monkeypatch, tab, opened_log, tmp_path):
     from src.analysis_agent import account_spend as acs
+    from tests.test_acl2262_builder_opens_profile import closed_profile_rig
     from src.analysis_agent import account_spend_api as api
     from src.web import publish_api
 
@@ -150,20 +151,19 @@ def _publisher_with(monkeypatch, tab, opened_log):
         ad_account_id="act_123456789", profile_id="550e8400-e29b-41d4-a716-446655440000",
         folder_id="", multilogin_instance="A"))
 
-    def open_profile(*a):
-        opened_log.append(a)
-        return SimpleNamespace(cdp_url="http://127.0.0.1:1", started_now=False)
-
-    monkeypatch.setattr(publish_api, "_open_profile", open_profile)
-    monkeypatch.setattr(publish_api, "_open_tab", lambda url: SimpleNamespace(close=lambda: None))
+    # ACL-2262: a closed profile is opened by Publish through the warm path (fake registry, no MLX);
+    # the checkpoint / logout / frozen-tab stops below are verified on that path.
+    closed_profile_rig(monkeypatch, tmp_path, opened_log, "550e8400-e29b-41d4-a716-446655440000")
+    monkeypatch.setattr(publish_api, "_open_profile", lambda *a: pytest.fail("the cold path must not be used"))
+    monkeypatch.setattr(publish_api, "_open_tab", lambda url: pytest.fail("no own tab on the warm path"))
     monkeypatch.setattr(publish_api, "_make_graph",
                         lambda t, act, *, writes=True: tc.InPageGraph(tab, sleep=lambda s: None))
     return publish_api
 
 
-def test_open_stops_as_logged_out_with_cooldown_and_no_graph_calls(monkeypatch):
+def test_open_stops_as_logged_out_with_cooldown_and_no_graph_calls(monkeypatch, tmp_path):
     tab, opened = HangTab(LOGIN), []
-    pa = _publisher_with(monkeypatch, tab, opened)
+    pa = _publisher_with(monkeypatch, tab, opened, tmp_path)
     pub = pa.ApiPublisher()
     with pytest.raises(pa.ApiPublishError) as ei:
         pub.open("Acc")
@@ -173,26 +173,33 @@ def test_open_stops_as_logged_out_with_cooldown_and_no_graph_calls(monkeypatch):
     assert left > 0 and why == "logged_out"
 
 
-def test_open_stops_as_checkpoint(monkeypatch):
-    pa = _publisher_with(monkeypatch, HangTab(CHECKPOINT), [])
+def test_open_stops_as_checkpoint(monkeypatch, tmp_path):
+    pa = _publisher_with(monkeypatch, HangTab(CHECKPOINT), [], tmp_path)
     with pytest.raises(pa.ApiPublishError) as ei:
         pa.ApiPublisher().open("Acc")
     assert ei.value.code == "checkpoint"
 
 
-def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch):
+def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch, tmp_path):
     opened: list = []
-    pa = _publisher_with(monkeypatch, HangTab(ADSMANAGER), opened)
+    pa = _publisher_with(monkeypatch, HangTab(ADSMANAGER), opened, tmp_path)
     with pytest.raises(pa.ApiPublishError) as ei:
         pa.ApiPublisher().open("Acc")
     assert ei.value.code == "page_unresponsive"
     left, why = pa._cooldown("Acc")
     assert why == "page_unresponsive" and 590 < left <= 600
     assert len(opened) == 1
-    with pytest.raises(pa.ApiPublishError) as ei2:     # следующий заход: профиль даже не открываем
+    # ACL-2262: the next action gets exactly ONE tab replacement for this freeze episode (the profile
+    # is already open, so it is not started again). The replacement hangs too: the full pause is armed.
+    with pytest.raises(pa.ApiPublishError) as ei2:
         pa.ApiPublisher().open("Acc")
     assert ei2.value.code == "page_unresponsive" and len(opened) == 1
-    assert "Nothing was created" in str(ei2.value)
+    left2, why2 = pa._cooldown("Acc")
+    assert why2 == "page_unresponsive" and 590 < left2 <= 600
+    with pytest.raises(pa.ApiPublishError) as ei3:     # third action: the profile is not touched at all
+        pa.ApiPublisher().open("Acc")
+    assert ei3.value.code == "page_unresponsive" and len(opened) == 1
+    assert "Nothing was created" in str(ei3.value)
 
 
 # ───────────────────────── F2: телеметрия на исключении ─────────────────────────

@@ -163,15 +163,33 @@ def _cooldown(account_label: str) -> tuple[float, str]:
         return 0.0, ""
 
 
-def _release_frozen_tab_cooldown(account_label: str) -> None:
-    """ACL-2262: a hung robot tab is replaced by the warm path, so its wait does not block publish."""
+def _frozen_api(account_label: str):
+    """(module, key) of the shared cooldown, or (None, "") when it cannot be resolved."""
     try:
         from src.analysis_agent import account_spend as _as
         from src.analysis_agent import account_spend_api as _api
 
-        _api.release_frozen_tab_cooldown(_as._profile_key(account_label))
+        return _api, _as._profile_key(account_label)
     except Exception:
-        pass
+        return None, ""
+
+
+def _frozen_tab_replaceable(account_label: str) -> bool:
+    """ACL-2262: the frozen-tab pause may be lifted once, right before the warm checkout replaces the tab."""
+    _api, key = _frozen_api(account_label)
+    return bool(_api is not None and _api.frozen_tab_replaceable(key))
+
+
+def _release_frozen_tab_cooldown(account_label: str) -> None:
+    _api, key = _frozen_api(account_label)
+    if _api is not None:
+        _api.release_frozen_tab_cooldown(key)
+
+
+def _note_tab_recovered(account_label: str) -> None:
+    _api, key = _frozen_api(account_label)
+    if _api is not None:
+        _api.note_tab_recovered(key)
 
 
 def _start_cooldown(account_label: str, stop: GraphStop) -> None:
@@ -344,14 +362,16 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
-        _release_frozen_tab_cooldown(account_label)
         left, why = _cooldown(account_label)
-        if left > 0 and why == "page_unresponsive":
-            raise ApiPublishError(
-                f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
-                f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
-                code="page_unresponsive")
-        if left > 0:
+        # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
+        frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
+        frozen_error = ApiPublishError(
+            f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
+            f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
+            code="page_unresponsive")
+        if left > 0 and why == "page_unresponsive" and not frozen_deferred:
+            raise frozen_error
+        if left > 0 and why != "page_unresponsive":
             raise ApiPublishError(
                 f"{account_label}: Meta stopped the last API call ({why}); waiting about "
                 f"{int(left // 60) + 1} min before calling again. Nothing was created.")
@@ -361,6 +381,8 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
+        if frozen_deferred:
+            raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
         from src.fb_api import mlx_session as _mlx
 
         try:
@@ -430,8 +452,11 @@ class ApiPublisher:
 
         reg = _warm.registry()
         from src.fb_api.connection import prepare_existing
+        from src.fb_api.connection import opening_closed_profile
         try:
-            managed = prepare_existing(reg, self._entry, account_label)
+            # ACL-2262: Check plan and Publish may bring up a closed profile (not earlier than the first campaign).
+            with opening_closed_profile():
+                managed = prepare_existing(reg, self._entry, account_label)
         except _warm.WarmError as exc:
             raise ApiPublishError(str(exc), code=exc.code) from exc
         if not managed:
@@ -442,9 +467,11 @@ class ApiPublisher:
         def make(tab):
             return _make_graph(tab, act, writes=not dry)
 
+        _release_frozen_tab_cooldown(account_label)
         try:
             self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
                                        make_graph=make, ready_timeout=READY_TIMEOUT_S)
+            _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
             raise ApiPublishError(str(exc), code=exc.code) from exc
         except GraphStop as exc:
