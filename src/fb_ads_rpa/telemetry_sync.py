@@ -230,9 +230,13 @@ def flow_version() -> str:
 
 
 def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> list[str]:
+    from config import token_vault
+
     diag = rec.get("diag")
     ok = rec.get("ok")
-    return [
+    # ACL-1358: last gate before the shared sheet - an older journal line may
+    # still hold the value of a token this machine has since stored.
+    return [run_telemetry._hide_configured_secrets(cell) for cell in [
         str(rec.get("ts", "")),
         label,
         machine_id,
@@ -242,9 +246,9 @@ def to_row(rec: dict[str, Any], label: str, machine_id: str, version: str) -> li
         str(rec.get("step", "")),
         "" if ok is None else ("1" if ok else "0"),
         "" if rec.get("duration_s") is None else str(rec.get("duration_s")),
-        json.dumps(diag, ensure_ascii=False)[:900] if diag else "",
+        token_vault.hide_configured_secrets_prefix(json.dumps(diag, ensure_ascii=False), 900)[0] if diag else "",
         str(rec.get("note", "")),
-    ]
+    ]]
 
 
 def pending(limit: int | None = None, *, since: int | None = None) -> tuple[list[list[str]], int]:
@@ -356,12 +360,14 @@ def config_status() -> dict[str, Any]:
 def _has_oauth_token() -> bool:
     """Local evidence only; the next explicit upload verifies remote access."""
     try:
-        token = json.loads(_local(_TOKEN_FILE).read_text(encoding="utf-8"))
+        from config import token_vault
+
+        token = json.loads(token_vault.read_secret_text(_local(_TOKEN_FILE)))
         scopes = token.get("scopes") or []
         if isinstance(scopes, str):
             scopes = scopes.split()
         return bool(token.get("refresh_token") and token.get("client_id") and token.get("client_secret") and set(_SCOPES).issubset(scopes))
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RuntimeError):
         return False
 
 
@@ -400,7 +406,11 @@ def _service_oauth(sheet_id: str):
     creds = None
     if token_file.is_file():
         try:
-            creds = Credentials.from_authorized_user_file(str(token_file), _SCOPES)
+            from config import token_vault
+
+            creds = Credentials.from_authorized_user_info(
+                json.loads(token_vault.read_secret_text(token_file)), _SCOPES
+            )
         except Exception:
             creds = None
 
@@ -417,7 +427,9 @@ def _service_oauth(sheet_id: str):
             flow = InstalledAppFlow.from_client_secrets_file(client_path, _SCOPES)
             creds = flow.run_local_server(port=0)
         token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(creds.to_json(), encoding="utf-8")
+        from config import token_vault
+
+        token_vault.write_secret_text(token_file, creds.to_json())
 
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
@@ -538,7 +550,7 @@ def upload(*, limit: int | None = 2000, dry_run: bool = False) -> dict[str, Any]
                 body={"values": rows},
             ).execute()
     except Exception as exc:  # noqa: BLE001 - reported, never raised
-        result["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        result["error"] = run_telemetry._hide_configured_secrets(f"{type(exc).__name__}: {exc}")[:300]
         return result
     # Advance the cursor only after the write is acknowledged: a failed upload
     # must be retried, not silently skipped.

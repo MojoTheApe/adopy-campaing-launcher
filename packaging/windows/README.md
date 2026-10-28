@@ -77,7 +77,8 @@ user to:
 1. enter their name as it appears in the CM column of the Stats workbook;
 2. choose the Stats workbook and the Creatives folder (default
    `Documents\ACL\Creatives`, created if missing);
-3. paste and test their Multilogin automation token.
+3. check the readiness summary. Multilogin is connected later, in the
+   dashboard (Accounts → Connect Multilogin), not in the wizard (ACL-1303).
 
 No Google Sheet link, Google access file or Upload FB workbook is asked for
 (ACL-1239): targets and ad texts come from the team library (ACL-1241), the
@@ -87,6 +88,18 @@ machine-local configuration transactionally under `%LOCALAPPDATA%\ACL` and fixes
 the production safety mode; the user never edits `.env`, CSV, JSON, or profile
 UUIDs. The Stats workbook and Creatives folder can be changed later in the
 dashboard (Accounts → This computer).
+
+### Setup guide (ACL-1175)
+
+`docs/SETUP-NEW-PC.md` is the page a campaign manager follows alone. `build.ps1`
+renders it with `setup_guide.py` into `setup-guide.html` inside the bundle; the
+installer adds **Start → Adopy Campaign Launcher → Setup guide**, offers to open
+it on its last screen, and the wizard has a **Setup guide** button on every
+step. Every update therefore ships the guide of that version.
+
+Change the guide in the same PR as the setup it describes.
+`tests/test_setup_guide.py` fails when a wizard step, system check or setup
+refusal is missing from the page.
 
 A promoted `acl-release-*` tag is published as a GitHub Release by
 `.github/workflows/release.yml`: the installer, its `.sha256` and `release.json`

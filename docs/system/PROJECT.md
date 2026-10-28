@@ -7,6 +7,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 ## Components and current behavior
 
+- `campaign_bridge/meta_rules.py` carries the sourced ACL-2125 URL, Instant Form
+  CTA and conditional placement checks through the existing API pre-upload
+  adapter. [Coverage and limitations](META_RULE_COVERAGE.md) distinguish hard
+  bounds from recommendations and unknown eligibility. No live calls are added.
+
 - `scripts/acl_ci_minutes.py`: on-demand native Actions execution accounting with
   private GET snapshot replay, using one exact released standalone canonical
   accounting artifact with ACL defaults/privacy and no workflow-engine adoption.
@@ -285,6 +290,21 @@ extra asset reads or fallback writes. This is Page/account usability evidence,
 not a full media/content/ad-review guarantee. Tests use synthetic transports and
 the actual helper offline; no live Meta or profile pilot has been performed.
 
+## ACL-1990 — Pre-flight topics and bounded read failures
+
+The builder groups its audit into seven topics, uses each topic's worst status,
+opens errors/warnings and offers Check with Meta in the card header. The check
+explains profile opening and its usual 30 s–3 min duration, shows elapsed time,
+the last checked time, edited-since-check state and Retry. Drawer-foot wording
+names the campaigns being checked. Rendering and topic toggling make no requests.
+
+Only a transient session refusal before any campaign was checked is `not_checked`
+and nonblocking. A failure during a later campaign or session teardown preserves
+the completed result objects and their server audits; unfinished campaigns after
+a partial check stay blocking. A known local draft error stays blocking even if
+the profile never opens. Inactive/unavailable accounts remain account-rule errors.
+Check plan stays read-only; no additional Graph calls or UI are introduced.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling
@@ -394,3 +414,21 @@ reuse the same campaign/ad sets. The original builder retains the ad inputs.
 Instant Forms and an explicitly unavailable Page still block, as do failed Page
 reads. The RPA path retains its existing Identity requirements. This supersedes
 the earlier requirement that every empty Page list blocks all preparation.
+
+## ACL-1907 — Language groups equal their expansion ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/907), 2026-10-14)
+
+Live finding on Doc120: readback reported ad set `languages` expected `[1002]` ("Spanish (All)") vs Meta `[7, 23]`, and a re-run stopped with "Existing ad set ... differs from the builder: languages (builder: 1002, Meta: 7, 23)". `TargetingResolver.locale()` now records, for a pick named "X (All)", the members seen in the same `adlocale` result (`locale_groups`: names equal to X or starting "X (", never hard-coded). `CampaignCreator._language_check` (used by both readback and `_existing_differences` through `_adset_checks`) treats a group id absent from Meta's list as equal to its complete known member set; a missing known member or any locale outside the group stays a mismatch. When the search listed no members, the compare is strict and the difference text adds "compared strictly: Meta's search did not list the locales it expands into". Read-only change. Preserved real test-dashboard creation and rerun results show the exact Spanish (All) contract: expected `[1002]`, complete Meta locales `[7, 23]`, and passing language readback on both campaigns. The rerun retained the same campaigns and ad sets with no new creations. The locale resolver, comparison helpers and locale-specific readback/reuse caller nodes match the tested compositions by normalized AST after the current-main refresh. Private record hashes and installation/source provenance are retained in the author handoff for independent assessment. This scoped evidence does not resolve separate video-ID findings or establish package delivery; fresh source review, applicable CI and actual delivery remain separate.
+
+
+## ACL-2231 — creative recovery ownership
+
+Creative recovery persists a machine-local pending receipt before dispatch and
+known IDs immediately after confirmation. Reconciliation requires the exact
+account, Page, form and full requested material; unknown writes never expire
+into permission to send again. Complete bounded discovery is required before a
+first creative dispatch. An explicit ACL label belonging to another campaign
+excludes that creative from orphan recovery, preserving suffixed campaign
+ownership. A legacy name tag alone is not ownership: missing-metadata creatives
+can still be recovered by verified identity and complete content. Ambiguity,
+incomplete discovery or unreadable receipts stop safely. Partial IDs survive
+failure, and operator guidance requires reconciliation before retrying.

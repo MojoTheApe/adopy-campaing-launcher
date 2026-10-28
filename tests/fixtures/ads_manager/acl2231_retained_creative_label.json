@@ -1,0 +1,58 @@
+{
+  "provenance": "Minimized, manually anonymized Graph readback shape from the 2026-10-27 retained-label failure; no private IDs, copy or media. HTML capture cutter does not apply to JSON Graph responses.",
+  "act": "act_1234567890",
+  "expected": {
+    "name": "Sample #1 [acl-aaaaaaaaaaaa]",
+    "object_story_spec": {
+      "page_id": "111",
+      "link_data": {
+        "link": "https://fb.me/",
+        "message": "Sample text",
+        "name": "Learn more",
+        "image_hash": "sample-hash",
+        "call_to_action": {
+          "type": "LEARN_MORE",
+          "value": {
+            "lead_gen_form_id": "222"
+          }
+        }
+      }
+    },
+    "contextual_multi_ads": {
+      "enroll_status": "OPT_OUT"
+    },
+    "adlabels": [
+      {
+        "name": "acl-aaaaaaaaaaaa"
+      }
+    ]
+  },
+  "actual": {
+    "id": "333",
+    "account_id": "1234567890",
+    "name": "Sample #1 [acl-bbbbbbbbbbbb] 2026-10-26-cccccccccccccccccccccccccccccccc",
+    "object_story_spec": {
+      "page_id": "111",
+      "link_data": {
+        "link": "https://fb.me/",
+        "message": "Sample text",
+        "name": "Learn more",
+        "image_hash": "sample-hash",
+        "call_to_action": {
+          "type": "LEARN_MORE",
+          "value": {
+            "lead_gen_form_id": "222"
+          }
+        }
+      }
+    },
+    "contextual_multi_ads": {
+      "enroll_status": "OPT_OUT"
+    },
+    "adlabels": [
+      {
+        "name": "acl-bbbbbbbbbbbb"
+      }
+    ]
+  }
+}

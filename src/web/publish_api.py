@@ -47,13 +47,16 @@ log = logging.getLogger(__name__)
 BACKEND_ENV = "ACL_FB_BACKEND"
 CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
-#: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
-#: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
-#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
-#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
-#: условия), поэтому запас на них +10. Свой потолок кончает только эту
+#: Потолок вызовов Graph на одну кампанию (ACL-1768): сам бюджет считается по плану
+#: (`creator.estimate_create_calls`: основа + за набор + за объявление + опросы видео +
+#: чтения форм Instant Form) и зажимается этим потолком. Он же верхняя граница для
+#: `ACL_FB_API_CREATE_MAX_CALLS`. Кампания, которой нужно больше, отклоняется заранее
+#: ("split it"), а не останавливается на полпути. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 150
+DEFAULT_CREATE_MAX_CALLS = 250
+#: Бюджет вызовов на кампанию не опускается ниже прежнего фиксированного (ревью 833, раунд 2).
+CREATE_BUDGET_FLOOR = 150
+CREATE_CALLS_FLOOR = 20
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -75,6 +78,29 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
     except ValueError:
         value = default
     return max(lo, min(hi, value))
+
+
+def create_call_budget(plan: Any) -> tuple[int, str]:
+    """(бюджет вызовов на кампанию, отказ). Бюджет - по плану, не больше потолка из окружения.
+
+    Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
+    остановка на полпути.
+    """
+    from src.fb_api.creator import estimate_create_calls, estimate_targeting_reads
+
+    # Записи кампании - не больше DEFAULT_CREATE_MAX_CALLS; сверх них бюджет несёт запас на чтения
+    # таргетинга (ACL-1771), которые идут из того же счётчика вызовов.
+    hard_max = DEFAULT_CREATE_MAX_CALLS + _tr_cap.JOB_READ_ABS_CAP
+    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, hard_max, CREATE_CALLS_FLOOR, hard_max))
+    need = estimate_create_calls(plan)
+    if need > DEFAULT_CREATE_MAX_CALLS:
+        return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
+                         "— split it. Nothing was created.")
+    # Не ниже прежних 150: малые планы не теряют запас на медленное видео. Нижний потолок в окружении -
+    # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
+    # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
+    # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
+    return min(max(need + estimate_targeting_reads(plan), CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:
@@ -226,7 +252,10 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "run_id": None,
         "campaign_id": outcome.campaign_id or None,
         "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
-        "creative_id": None,
+        # ACL-1768: все наборы кампании (adset_id - первый, как всегда).
+        "adset_ids": list(outcome.adset_ids),
+        "creative_id": outcome.creative_ids[0] if outcome.creative_ids else None,
+        "creative_ids": list(outcome.creative_ids),
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
         "error": error or None,
@@ -388,7 +417,12 @@ class ApiPublisher:
         from src.fb_api import warm as _warm
 
         reg = _warm.registry()
-        if not reg.is_warm(profile_id):
+        from src.fb_api.connection import prepare_existing
+        try:
+            managed = prepare_existing(reg, self._entry, account_label)
+        except _warm.WarmError as exc:
+            raise ApiPublishError(str(exc), code=exc.code) from exc
+        if not managed:
             return False
         act, dry = self.act, self.dry_run
         mode = "read" if dry else f"create:{act}"
@@ -435,6 +469,9 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        budget, too_big = create_call_budget(plan)
+        if too_big:
+            return result_dict(Outcome(campaign_name=name), error=too_big)
         early_notes: list[str] = []
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
@@ -463,7 +500,7 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
-        self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
+        self._client.reset_budget(budget)
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
         counter = None if self.dry_run else self._counter(plan)
@@ -632,6 +669,10 @@ PLAN_KEEP_OPEN_ENV = "ACL_PLAN_KEEP_OPEN_S"
 DEFAULT_PLAN_KEEP_OPEN_S = 600.0
 
 
+class _PlanReadContractError(AssertionError):
+    """Нарушение режима чтения: результаты этой сессии нельзя считать проверенными."""
+
+
 def plan_keep_open_s() -> float:
     try:
         value = float(str(os.environ.get(PLAN_KEEP_OPEN_ENV, "") or DEFAULT_PLAN_KEEP_OPEN_S).replace(",", "."))
@@ -640,14 +681,18 @@ def plan_keep_open_s() -> float:
     return max(0.0, min(3600.0, value))
 
 
-def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:
+def _plan_in_read_session(account_label: str, drafts: list[Any], *,
+                          results: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     from src.analysis_agent import account_spend_api as _api
 
-    results: list[dict[str, Any]] = []
+    # ACL-1990: готовые вердикты принадлежат вызывающему коду и переживают
+    # отказ следующей кампании, выхода из сессии и освобождения замка.
+    if results is None:
+        results = []
     with _api._session(account_label) as sess:
         client = sess.client
         if client.allow_writes:
-            raise AssertionError("the read session must not be able to write")
+            raise _PlanReadContractError("the read session must not be able to write")
         client.reset_budget(PLAN_PREFLIGHT_MAX_CALLS)
         pub = ApiPublisher(dry_run=True)
         pub.act, pub.account_label, pub._client = sess.act, account_label, client
@@ -664,7 +709,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
                 continue
             results.append(pub.publish_draft(draft))
         if client.writes:
-            raise AssertionError("Check plan must not write")
+            raise _PlanReadContractError("Check plan must not write")
         # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
         # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
         # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку
@@ -688,22 +733,49 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     try:
         drafts = build_drafts(slots, account_label=account_label, country=country)
     except Exception as exc:  # noqa: BLE001
-        return {"account": account_label, "results": [], "dry_run": True,
+        return {"account": account_label, "results": [], "dry_run": True, "error_kind": "plan",
                 "error": f"Failed to build campaign drafts: {_tm.scrub(str(exc))}"}
     if not drafts:
-        return {"account": account_label, "results": [], "dry_run": True, "error": "No campaigns to check."}
+        return {"account": account_label, "results": [], "dry_run": True, "error_kind": "plan",
+                "error": "No campaigns to check."}
     run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
+    results: list[dict[str, Any]] = []
     account_audit: dict[str, Any] | None = None
+    error_kind = ""
+    except_kind = ""
+    connection_code = ""
     try:
-        results = run(account_label, drafts)
+        results = run(account_label, drafts, results=results)
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
-        results = []
+        checked_count = len(results)
         error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
-        if isinstance(exc, ApiPublishError) and exc.code == "account":
+        except_kind = type(exc).__name__
+        connection_code = str(getattr(exc,"code","") or "") if isinstance(exc,_api.ApiReadError) else ""
+        if isinstance(exc, _PlanReadContractError):
+            # Нарушенный запрет записи — не временный отказ чтения. Нельзя
+            # отдавать прежние «ok» из такой сессии или разрешать Publish.
+            results.clear()
+            checked_count = 0
+            error_kind = "plan"
+        elif isinstance(exc, ApiPublishError) and exc.code == "account":
             # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
             account_audit = {"rule": "account_active", "status": "error", "detail": error, "ads": []}
-    _record("api_plan_check", not error, diag={"campaigns": len(drafts), "results": len(results)},
+            error_kind = "account"
+        else:
+            # Только отказ ДО первой проверки не блокирует. После частичного
+            # ответа неизвестные кампании блокируются; готовые строки не стираются.
+            error_kind = "plan" if checked_count else "not_checked"
+        # Ошибки уже построенного локального черновика известны даже тогда,
+        # когда профиль не открылся. Они не становятся разрешением на Publish.
+        for draft in drafts[checked_count:]:
+            if draft.errors:
+                out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
+                out.error, out.stop_kind = "; ".join(draft.errors), "plan"
+                results.append(dry_run_result(out))
+    _record("api_plan_check", not error,
+            diag={"campaigns": len(drafts), "results": len(results),
+                  **({"error_kind": error_kind, "raised": except_kind} if error_kind else {})},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
-            "account_audit": account_audit}
+            "error_kind": error_kind, "account_audit": account_audit, "connection_code": connection_code}

@@ -34,6 +34,11 @@ try {
         --channel-output (Join-Path $BuildRoot "acl-update-channel.json")
     Assert-LastExitCode "Build manifest generation"
 
+    python packaging/windows/setup_guide.py `
+        --output (Join-Path $BuildRoot "setup-guide.html") `
+        --version $Version
+    Assert-LastExitCode "Setup guide rendering"
+
     $env:ACL_BUILD_MANIFEST = $ManifestPath
     python -m PyInstaller `
         --noconfirm `

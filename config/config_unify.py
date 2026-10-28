@@ -29,7 +29,7 @@ from config import paths
 log = logging.getLogger("acl.config_dir")
 
 # Disposable or machine-specific trees: never merged between folders.
-SKIP_DIRS = frozenset({"runtimes", "logs", "updates", "diagnostics", "backups", "__pycache__"})
+SKIP_DIRS = frozenset({"runtimes", "logs", "updates", "diagnostics", "backups", "protected-backup", "__pycache__"})
 SKIP_SUFFIXES = (".lock", ".tmp", ".pid")
 ENV_NAME = ".env"
 # Same-instant writes on different filesystems differ by rounding.

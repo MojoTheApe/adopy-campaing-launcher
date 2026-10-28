@@ -15,7 +15,9 @@ state. Single-user, sub-second renders, low blast radius.
 """
 from __future__ import annotations
 
+import logging
 import os
+import sys
 import threading
 from itertools import count
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -109,6 +111,30 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
     return peek_cached_report(my_cm) is not None
 
 
+def rebuild_deferred() -> bool:
+    """ACL-2260: a publish job or a kept profile window is active.
+
+    A rebuild of the report parses a 70k-row workbook and takes memory the
+    profiles need ("not enough free memory for another profile"), so nothing
+    starts one by itself while this is true. Refresh (force_rebuild) is the
+    person's own choice and is never deferred. If the publish module was never
+    loaded there cannot be a job: no import, no side effects.
+    """
+    module = sys.modules.get("src.web.publish_jobs")
+    if module is None:
+        return False
+    try:
+        return bool(module.publishing_busy())
+    except Exception:  # noqa: BLE001 - an unreadable state must not block the page
+        return False
+
+
+def has_entry(my_cm: Optional[str] = None) -> bool:
+    """Some report (possibly of an older source) is in memory for this manager."""
+    entry = _CACHE["entry"]
+    return entry is not None and entry[1].get(_cm_key(my_cm)) is not None
+
+
 def get_cached_report(
     *, force_rebuild: bool = False, my_cm: Optional[str] = None,
     progress: Callable[[str], None] | None = None,
@@ -136,6 +162,12 @@ def get_cached_report(
         hit = _warm_hit(expected_key, cm_key)
         if hit is not None:
             return hit
+        # ACL-2260: the source moved (new BI revision / workbook), but a publish
+        # is running: keep serving the report already in memory. Only when there
+        # is none at all the build must run - there is nothing to show instead.
+        if rebuild_deferred() and has_entry(cm_key):
+            entry = _CACHE["entry"]
+            return entry[1][cm_key], entry[2], entry[3]
 
     requested = _BUILDS_STARTED[0]
     with _BUILD_LOCK:
@@ -192,7 +224,30 @@ def _build_locked(expected_key, cm_key: str, *, progress=None):
     _CACHE["key"] = expected_key
     # Читатели без замка видят только этот кортеж — он заменяется целиком.
     _CACHE["entry"] = (expected_key, reports, df, warnings)
+    if new_book:
+        _notify_new_workbook(expected_key)
     return report, df, warnings
+
+
+_log = logging.getLogger(__name__)
+
+# ACL-1816: слушатели «собрана новая книга BI» (ключ кэша сменился). Rules ставит
+# здесь только задание в очередь; пересборка отчёта другого менеджера по той же
+# книге слушателей не будит.
+_BUILD_LISTENERS: List[Callable[[Any], None]] = []
+
+
+def add_build_listener(fn: Callable[[Any], None]) -> None:
+    if fn not in _BUILD_LISTENERS:
+        _BUILD_LISTENERS.append(fn)
+
+
+def _notify_new_workbook(key: Any) -> None:
+    for fn in list(_BUILD_LISTENERS):
+        try:
+            fn(key)
+        except Exception:  # noqa: BLE001 - слушатель не должен ломать сборку отчёта
+            _log.exception("Workbook listener failed")
 
 
 # ── Фоновая сборка (ACL-1399) ──────────────────────────────────────────
@@ -270,6 +325,37 @@ def forget_background_error() -> Optional[str]:
     with _WARM_LOCK:
         error, _WARM["error"] = _WARM["error"], None
         return error
+
+
+def entry_source_key():
+    """Source key of the report now in memory (what the last build was made from)."""
+    entry = _CACHE["entry"]
+    return entry[0] if entry is not None else None
+
+
+def verified_source_key(timeout: float = 4.0):
+    """Current source key, asking BI for its revision if it is not known yet.
+
+    ACL-2207: after a restart the revision is unknown, and a stored page can
+    only be called current once it has been compared with it. The question goes
+    to BI in a helper thread so an unreachable server costs `timeout` seconds,
+    not the connect timeout; if it stays unknown the key is None, which the
+    caller must treat as "not verified". Never call on the event loop.
+    """
+    try:
+        if bi_stats.bi_enabled() and bi_stats.known_revision() is None:
+            worker = threading.Thread(
+                target=bi_stats.refresh_revision, name="acl-bi-revision-once", daemon=True
+            )
+            worker.start()
+            worker.join(timeout)
+        key = _current_key(_resolve_excel_path(None))
+    except Exception:  # noqa: BLE001 — no workbook path / BI settings: not verified
+        return None
+    # BI answered "unavailable": the revision is a placeholder, not a version.
+    if bi_stats.bi_enabled() and bi_stats.known_revision() in (None, "unavailable"):
+        return None
+    return key
 
 
 def cache_built_at() -> Optional[str]:

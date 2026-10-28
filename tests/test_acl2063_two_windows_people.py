@@ -104,7 +104,7 @@ if ($p.operation -eq 'create') {
     if (!$instance) { throw 'No actual task instance was started' }
     Phase 'receipt.begin'
     $output.instance = [string]$instance.InstanceGuid
-    $output.instance_state = [int]$instance.State
+    # ACL-2233: the unused State getter can block; child readiness is proved below.
     Phase 'receipt.end'
 } elseif ($p.operation -eq 'status') {
     Phase 'status.task.begin'

@@ -87,7 +87,8 @@ def test_denied_search_reaches_the_public_plan_result(tmp_path, monkeypatch, no_
     out, meta, opened = _check(tmp_path, monkeypatch, "/search")
     res = _assert_read_only(out, meta, opened, no_network)
     assert meta.denied and set(meta.denied) == {"/search"}
-    assert res["error"] == "Meta refused: " + _CATALOG_10  # ACL-1805: the catalog text; the raw line stays in problems[].raw
+    # ACL-1805: the catalog text; the raw line stays in problems[].raw. ACL-1920 adds the refused search's name.
+    assert res["error"] == "Meta refused: " + _CATALOG_10 + " (search: adgeolocation)"
     assert res["problems"][0]["raw"].endswith("operation=search, search_type=adgeolocation]")
     audit = {row["rule"]: row for row in res["audit"]}
     assert audit["country_resolves"]["status"] == "unknown"
@@ -95,7 +96,9 @@ def test_denied_search_reaches_the_public_plan_result(tmp_path, monkeypatch, no_
         "Meta did not answer: " + _DENIED + "operation=search, search_type=adgeolocation]")
     assert audit["language_resolves"]["detail"] == (
         "Meta did not answer: " + _DENIED + "operation=search, search_type=adlocale]")
-    assert audit["interests_resolve"]["detail"] == "Meta did not answer: " + _DENIED + "operation=search]"
+    # ACL-1920: adinterestvalid is optional (skipped), so the refusal that fails the check is adinterest's.
+    assert audit["interests_resolve"]["detail"] == (
+        "Meta did not answer: " + _DENIED + "operation=search, search_type=adinterest]")
     assert not any(p.endswith("/campaigns") for p, _ in meta.gets)
 
 

@@ -12,6 +12,17 @@ from src.campaign_bridge.dashboard_publisher import slots_to_publish_jobs
 from src.web import publish_preflight as pf
 
 
+@pytest.fixture(autouse=True)
+def _unbind_job_thread_after_each_test():
+    """`_run_rpa` binds the calling thread to a job id (job_cancel); tests call it in the
+    test thread, so drop the binding afterwards. A leaked binding makes later tests on the
+    same worker (pacing, per-job teach) see the thread as a job thread."""
+    from src.fb_ads_rpa import job_cancel
+
+    yield
+    job_cancel.unbind()
+
+
 def _job(**kw):
     base = dict(objective="OUTCOME_LEADS", optimization_goal="OFFSITE_CONVERSIONS",
                 billing_event="IMPRESSIONS", bid_strategy="LOWEST_COST_WITHOUT_CAP",

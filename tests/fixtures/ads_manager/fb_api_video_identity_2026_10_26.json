@@ -1,0 +1,24 @@
+{
+  "context": "Sanitized 2026-10-26 live creation readback: uploaded videos are referenced by different per-ad video IDs; content-title fingerprints and placement bindings match. No account, campaign, Page, URL, token or original ID retained.",
+  "tag": "offline-capture",
+  "slots": [
+    {
+      "slot": "main",
+      "uploaded_id": "710001",
+      "creative_video_id": "720001",
+      "file_bytes": "synthetic-main-video"
+    },
+    {
+      "slot": "vertical",
+      "uploaded_id": "710002",
+      "creative_video_id": "720002",
+      "file_bytes": "synthetic-vertical-video"
+    }
+  ],
+  "expected": {
+    "equivalent_content": "pass",
+    "wrong_content": "fail",
+    "missing_title": "fail",
+    "wrong_placement": "fail"
+  }
+}

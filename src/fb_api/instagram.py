@@ -34,8 +34,7 @@ IG_ID_RE = re.compile(r"^[0-9]{5,25}$")
 FOUND, NONE, UNKNOWN = "found", "none", "unknown"
 
 MSG_NO_INSTAGRAM = ("This Facebook Page has no Instagram account, and the ad is set for Instagram placements. "
-                    "Connect an Instagram account to the Page, or wait for manual placements (ACL-1772) "
-                    "to publish Facebook-only.")
+                    "Connect an Instagram account to the Page, or choose Manual Facebook-only placements.")
 MSG_UNKNOWN = ("Meta did not confirm an Instagram account for this Facebook Page ({why}), and the ad is set "
                "for Instagram placements. Check the plan again; nothing was created.")
 

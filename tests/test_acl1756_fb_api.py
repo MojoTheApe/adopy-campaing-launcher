@@ -391,8 +391,10 @@ def test_in_page_graph_accepts_plain_read_params():
     assert page.specs[0]["params"]["date_preset"] == "last_7d"
 
 
-def test_no_profile_stop_anywhere_in_the_pilot():
+def test_no_profile_stop_in_transport_or_read_only_pilot():
     for path in [*(ROOT / "src" / "fb_api").glob("*.py"), ROOT / "scripts" / "fb_api_pilot.py"]:
+        if path.name == "connection.py":
+            continue  # Explicitly authorized, leased lifecycle; covered by ACL-2092.
         src = path.read_text(encoding="utf-8")
         assert "stop_profile" not in src and "terminate" not in src.lower(), path.name
 
@@ -466,14 +468,11 @@ def test_190_with_checkpoint_subcode_stops_without_reload(subcode):
     assert tr.reacquires == 0 and len(tr.requests) == 1
 
 
-def test_network_failure_stops_without_a_second_call():
+def test_network_failure_retries_one_read_on_a_healthy_page():
     tr = FakeTransport([{"error": "network"}, OK])
     c, _ = _client(tr)
-    with pytest.raises(g.PageFailed):
-        c.get("/me")
-    with pytest.raises(g.PageFailed):
-        c.get("/me")
-    assert len(tr.requests) == 1
+    assert c.get("/me") == OK["body"]
+    assert len(tr.requests) == 2 and c.writes == 0
 
 
 def test_190_when_reload_lands_on_checkpoint_stops():
@@ -1098,7 +1097,7 @@ def _tab_with_stuck_socket(other_tabs, list_pages):
 
     class StuckCdp(FakeCdp):
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets":
+            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):
                 raise CdpTimeout("Target.getTargets: the browser did not answer within 10 s")
             return super().call(method, params, session_id=session_id, timeout=timeout)
 
@@ -1225,7 +1224,7 @@ def test_close_falls_back_to_http_when_the_socket_times_out():
 
     class StuckCdp(FakeCdp):
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets":  # сокет завис на закрытии
+            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):  # сокет завис на закрытии
                 raise CdpTimeout("Target.getTargets: the browser did not answer within 10 s")
             return super().call(method, params, session_id=session_id, timeout=timeout)
 
@@ -1251,7 +1250,7 @@ def test_close_catches_keyboard_interrupt_and_still_tries_http():
 
     class InterruptingCdp(FakeCdp):
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets":
+            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):
                 raise KeyboardInterrupt()
             return super().call(method, params, session_id=session_id, timeout=timeout)
 

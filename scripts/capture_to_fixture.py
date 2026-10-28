@@ -161,6 +161,14 @@ class Scrubber:
         return "example.com"
 
     def __call__(self, text: str) -> str:
+        # ACL-1358: the values of this machine's own tokens go first, whatever
+        # shape they have; the patterns below only know a few token formats.
+        try:
+            from config import token_vault
+
+            text = token_vault.hide_configured_secrets(text, "TOKEN_REDACTED")
+        except Exception:
+            pass
         for real, synthetic in sorted(self.pairs, key=lambda p: -len(p[0])):
             if real:
                 text = text.replace(real, synthetic)

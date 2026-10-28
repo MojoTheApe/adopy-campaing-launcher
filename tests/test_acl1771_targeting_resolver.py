@@ -702,3 +702,46 @@ def test_search_cache_prunes_expired_entries_on_store():
     now[0] = 11
     cache.put("a", ("fresh",), [])
     assert len(cache._rows) == 1
+
+
+def test_a_cached_id_meta_calls_invalid_is_dropped_and_the_term_is_searched_again(tmp_path):
+    store = _store(tmp_path)
+    store.put("swing trading", id="61", type="interests", name="Swing trading")
+
+    class RejectsShortId(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if "61" in (params or {}).get("interest_fbid_list", []):
+                self.log.append((params["type"], 1, dict(params)))
+                raise g.GraphError("(#100) Invalid id: 61", code=100)
+            return super().get_all(path, params, max_pages=max_pages)
+
+    c = RejectsShortId(valid={"swing trading": ("Swing trading", "6003012345678")})
+    spec = cr.TargetingResolver(c, store).interests([["Swing trading"]])
+    assert spec == [{"interests": [{"id": "6003012345678", "name": "Swing trading"}]}]
+    assert store.get_all("swing trading") == [], "the rejected cache entry is gone"
+    assert all("61" not in p.get("interest_fbid_list", []) for t, _, p in c.log[1:])
+
+
+def test_invalid_id_that_is_not_ours_still_fails_the_check(tmp_path):
+    class Boom(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            raise g.GraphError("(#100) Invalid parameter", code=100)
+
+    with pytest.raises(g.GraphError):
+        _resolver(Boom(), tmp_path).prefetch(["x"])
+
+
+def test_unnamed_invalid_id_never_wipes_confirmed_entries(tmp_path):
+    store = _store(tmp_path)
+    for i, t in enumerate(("alpha", "beta", "gamma")):
+        store.put(t, id=f"600300000000{i}", type="interests", name=t)
+
+    class Unnamed(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if (params or {}).get("interest_fbid_list"):
+                raise g.GraphError("(#100) Invalid id", code=100)
+            return super().get_all(path, params, max_pages=max_pages)
+
+    with pytest.raises(g.GraphError):
+        tr.TermResolver(Unnamed(), store).prefetch(["alpha", "beta", "gamma"])
+    assert len(store.entries()) == 3

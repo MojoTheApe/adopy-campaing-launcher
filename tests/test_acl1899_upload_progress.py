@@ -375,7 +375,8 @@ def test_several_videos_run_out_of_budget_during_readback_and_stop_safely(tmp_pa
     first.creative_type, first.creative_filename, first.creative_path = "Video", clip.name, str(clip)
     out = creator.run(cr.plan_from_draft(draft))
     assert out.stop_kind == "unknown"
-    assert "readback failed" in out.error and "publish again" in out.error
+    assert "readback failed" in out.error and "reconcile the existing object" in out.error
+    assert "publish again" not in out.error
     assert client.unreconciled is not None
 
 

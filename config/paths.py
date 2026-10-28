@@ -13,6 +13,7 @@ import os
 import random
 import re
 import shutil
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -556,28 +557,43 @@ def update_machine_env(values: dict[str, str]) -> str:
         if not _ENV_KEY.fullmatch(key):
             raise ValueError(f"invalid environment key: {key!r}")
 
+    from config import token_vault
+
     target = Path(get_machine_env_path())
     if not target.exists():
         migrate_legacy_env(create_from_example=True)
-    lines = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
-    pending = dict(values)
-    out: list[str] = []
-    for line in lines:
-        match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
-        key = match.group(1) if match else None
-        if key in values:
-            if key in pending:
-                out.append(_dotenv_line(key, pending.pop(key)))
-            # Remove obsolete duplicate assignments for this updated key: dotenv
-            # uses the last value, so a later old token would survive Disconnect.
-        else:
-            out.append(line)
-    if pending and out and out[-1].strip():
-        out.append("")
-    out.extend(_dotenv_line(key, value) for key, value in pending.items())
-    _atomic_write(target, ("\n".join(out).rstrip() + "\n").encode("utf-8"))
+
+    def stored(key: str, value: str) -> str:
+        # ACL-1358: automation tokens go to disk in Windows protected form; the
+        # process environment below still gets the plain value.
+        if token_vault.is_secret_env_key(key):
+            return token_vault.encode_env_value(value)
+        return value
+
+    with machine_file_lock(target.with_name(".env.lock")):
+        lines = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
+        pending = dict(values)
+        out: list[str] = []
+        for line in lines:
+            match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
+            key = match.group(1) if match else None
+            if key in values:
+                if key in pending:
+                    out.append(_dotenv_line(key, stored(key, pending.pop(key))))
+                # Remove obsolete duplicate assignments for this updated key: dotenv
+                # uses the last value, so a later old token would survive Disconnect.
+            else:
+                out.append(line)
+        if pending and out and out[-1].strip():
+            out.append("")
+        out.extend(_dotenv_line(key, stored(key, value)) for key, value in pending.items())
+        _atomic_write(target, ("\n".join(out).rstrip() + "\n").encode("utf-8"))
     for key, value in values.items():
         os.environ[key] = value
+    try:
+        token_vault.reset_secret_cache()  # a new token must be hidden by value at once
+    except Exception:
+        pass
     return str(target)
 
 
@@ -705,6 +721,157 @@ def migrate_legacy_google_oauth() -> list[str]:
     return notes
 
 
+def protect_machine_secrets() -> list[str]:
+    """ACL-1358: move plain tokens into Windows protected storage, once.
+
+    Covers the Multilogin automation tokens in the machine ``.env`` and the
+    Google token files. Each file is backed up (encrypted) and verified before
+    the plain text is replaced; a failure leaves the file as it was. Does
+    nothing where DPAPI is unavailable (non-Windows).
+    """
+    from config import token_vault
+
+    if not token_vault.available():
+        return []
+    config_dir = Path(get_local_config_dir())
+    notes: list[str] = []
+    env_path = Path(get_machine_env_path())
+    if env_path.is_file():
+        try:
+            with machine_file_lock(env_path.with_name(".env.lock")):
+                note = token_vault.migrate_env_file(env_path, config_dir)
+        except Exception as exc:
+            note = f".env: could not move tokens to protected storage ({type(exc).__name__})"
+        if note:
+            notes.append(note)
+    token_files = {Path(get_google_oauth_token_path())}
+    token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
+    for path in sorted(token_files):
+        try:
+            with machine_file_lock(config_dir / token_vault.TOKEN_LOCK_NAME):
+                note = token_vault.migrate_file(path, config_dir)
+        except Exception as exc:
+            note = f"{path.name}: could not move to protected storage ({type(exc).__name__}); left as it was"
+        if note:
+            notes.append(note)
+    token_vault.reset_secret_cache()
+    return notes
+
+
+def unprotect_machine_secrets(*, from_backup: bool = False) -> list[str]:
+    """ACL-1358 rollback: write the protected tokens back as plain text.
+
+    For the same Windows user only (DPAPI). Meant to run before going back to
+    a version older than ACL-1358, which cannot read ``dpapi:v1:`` values or
+    ``ACLDPAPI1`` files. A live file that cannot be opened is restored from the
+    newest encrypted backup in ``protected-backup/``; ``from_backup`` forces
+    that for every file. The next start of a current version protects the
+    tokens again.
+    """
+    from config import token_vault
+
+    if not token_vault.available():
+        return []
+    config_dir = Path(get_local_config_dir())
+    notes: list[str] = []
+    env_path = Path(get_machine_env_path())
+    if env_path.is_file() or from_backup:
+        try:
+            with machine_file_lock(env_path.with_name(".env.lock")):
+                note = token_vault.unprotect_env_file(env_path, config_dir, from_backup=from_backup)
+        except Exception as exc:
+            note = f".env: could not restore tokens ({type(exc).__name__})"
+        if note:
+            notes.append(note)
+    token_files = {Path(get_google_oauth_token_path())}
+    token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
+    for path in sorted(token_files):
+        try:
+            with machine_file_lock(config_dir / token_vault.TOKEN_LOCK_NAME):
+                note = token_vault.unprotect_file(path, config_dir, from_backup=from_backup)
+        except Exception as exc:
+            note = f"{path.name}: could not restore ({type(exc).__name__}); left as it was"
+        if note:
+            notes.append(note)
+    token_vault.reset_secret_cache()
+    return notes
+
+
+DEFER_PROTECTION_ENV = "ACL_DEFER_TOKEN_PROTECTION"
+
+
+def protection_deferred() -> bool:
+    return (os.environ.get(DEFER_PROTECTION_ENV) or "").strip() == "1"
+
+
+def health_url_for(host: str, port: int) -> str:
+    """Loopback URL of the dashboard's /health; a wildcard bind host is not connectable."""
+    host = (host or "").strip()
+    if host in ("", "0.0.0.0"):
+        host = "127.0.0.1"
+    elif host in ("::", "[::]"):
+        host = "[::1]"
+    elif ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{port}/health"
+
+
+def protect_secrets_when_healthy(
+    health_url: str,
+    *,
+    expected_version=lambda: "",
+    settle_s: float = 15.0,
+    timeout_s: float = 900.0,
+    poll_s: float = 2.0,
+    fetch=None,
+    sleep=time.sleep,
+    clock=time.monotonic,
+) -> list[str] | None:
+    """ACL-1358: protect the tokens only after this version has proven healthy.
+
+    "Healthy" is the updater's own acceptance (packaging/windows/updater.py
+    ``_is_acl``): ``/health`` says ``app == "ACL"``, ``ok is True`` and the
+    version of this very process, non-empty. A bare 200 is not enough: a build
+    that answers without (or with another) version is rolled back by the
+    updater after its start timeout, and the old version cannot read protected
+    tokens. After that, ``settle_s`` passes, then the tokens are protected and
+    the deferral is lifted. Returns the notes, or None if it never became
+    healthy. Never raises.
+    """
+    def default_fetch(url: str):
+        import urllib.request
+
+        with urllib.request.urlopen(url, timeout=3) as response:  # noqa: S310 - loopback health URL
+            return json.loads(response.read().decode("utf-8"))
+
+    probe = fetch or default_fetch
+
+    def accepted() -> bool:
+        answer = probe(health_url)
+        if not isinstance(answer, dict):
+            return False
+        version = answer.get("version")
+        return (answer.get("app") == "ACL" and answer.get("ok") is True
+                and isinstance(version, str) and bool(version) and version == expected_version())
+
+    deadline = clock() + timeout_s
+    while clock() < deadline:
+        try:
+            if accepted():
+                break
+        except Exception:
+            pass
+        sleep(poll_s)
+    else:
+        return None
+    sleep(settle_s)
+    os.environ.pop(DEFER_PROTECTION_ENV, None)
+    try:
+        return protect_machine_secrets()
+    except Exception:
+        return []
+
+
 def ensure_machine_config() -> list[str]:
     """Idempotent install/upgrade provisioning, migration before examples."""
     Path(get_local_config_dir()).mkdir(parents=True, exist_ok=True)
@@ -719,6 +886,7 @@ def ensure_machine_config() -> list[str]:
     if status_note:
         notes.append(status_note)
     notes.extend(migrate_legacy_google_oauth())
+    notes.extend(protect_machine_secrets())
     local_map = Path(get_local_config_dir()) / "ad_account_map.csv"
     if not local_map.exists() and Path(AD_ACCOUNT_MAP_EXAMPLE).is_file():
         _atomic_copy(AD_ACCOUNT_MAP_EXAMPLE, local_map)
@@ -756,6 +924,19 @@ DEFAULT_TELEMETRY_SHEET_ID = "1M0FYL0EnxWFtTsCmKvFwJwuV0l2jWyvHmxfQdwcH6bs"
 
 def load_env() -> list[str]:
     """Load the machine's settings. Returns the files actually loaded."""
+    # ACL-1358: the packaged app (ACL.exe -> launcher -> serve.py) never runs
+    # ensure_machine_config, so plain tokens would stay plain on installer
+    # based machines. Every start comes through here: protect them first.
+    # Idempotent and cheap once done; a failure leaves the files as they were.
+    # serve.py defers it (ACL_DEFER_TOKEN_PROTECTION) until this version has
+    # answered /health: an update that fails before that point is rolled back by
+    # the updater to the previous version, which cannot read protected tokens.
+    if not protection_deferred():
+        try:
+            for note in protect_machine_secrets():
+                print(f"[config] {note}", file=sys.stderr)
+        except Exception:
+            pass
     try:
         from dotenv import load_dotenv
     except Exception:
@@ -773,6 +954,17 @@ def load_env() -> list[str]:
     # it needs no change there to start reporting.
     if not (os.environ.get("GSHEET_TELEMETRY_ID") or "").strip():
         os.environ["GSHEET_TELEMETRY_ID"] = DEFAULT_TELEMETRY_SHEET_ID
+    # ACL-1358: tokens stored in protected form become plain only in this
+    # process's environment. One that cannot be opened (another Windows user,
+    # damaged value) is dropped so the app asks to reconnect.
+    try:
+        from config import token_vault
+
+        for key in token_vault.decrypt_environment():
+            print(f"[config] {key} is stored for another Windows user or is damaged; "
+                  "connect Multilogin again", file=sys.stderr)
+    except Exception:
+        pass
     return loaded
 
 

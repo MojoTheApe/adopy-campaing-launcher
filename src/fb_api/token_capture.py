@@ -770,7 +770,8 @@ _HELPER_JS = r"""
     const credMode = spec.credentials === undefined ? 'captured' : spec.credentials;
     if (['captured', 'public'].indexOf(hostMode) < 0) return { error: 'bad_option' };
     if (['captured', 'include', 'omit'].indexOf(credMode) < 0) return { error: 'bad_option' };
-    scanFast(); scanHtml();
+    scanFast();
+    if (!token) scanHtml();
     if (!token) return { error: 'no_token', state: state() };
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
     const useHost = hostMode === 'public' ? 'graph.facebook.com' : host;
@@ -786,15 +787,26 @@ _HELPER_JS = r"""
     // Один запрос, без повтора; перенаправления не идём (`redirect: 'error'`):
     // ответ — только сам Graph. `fetch` отдельного мира — родной, мимо обёрток
     // страницы.
-    let resp = null;
+    let resp = null, text = '', timer = null;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const expired = {};
+    const limit = Math.max(1, Math.min(30000, Number(spec.timeout_ms) || 15000));
+    const deadline = new Promise((resolve) => {
+      timer = setTimeout(() => { resolve(expired); if (controller) controller.abort(); }, limit);
+    });
     try {
-      resp = await fetch(url, { method: 'GET', credentials: cred, mode: 'cors',
-                                cache: 'no-store', redirect: 'error' });
+      resp = await Promise.race([fetch(url, { method: 'GET', credentials: cred, mode: 'cors',
+                         cache: 'no-store', redirect: 'error',
+                         ...(controller ? {signal: controller.signal} : {}) }), deadline]);
+      if (resp === expired) return {error: 'network_timeout', endpoint: endpoint};
+      text = await Promise.race([resp.text(), deadline]);
+      if (text === expired) return {error: 'network_timeout', endpoint: endpoint};
     } catch (e) {
       return { error: 'network', state: state(), endpoint: endpoint };
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+      if (controller) controller.abort();
     }
-    let text = '';
-    try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
     text = clean(text);
     let body;
     try { body = JSON.parse(text); } catch (e) { body = { non_json: text.slice(0, 300) }; }
@@ -1144,6 +1156,9 @@ class InPageGraph:
             raise ValueError(f"read-only: parameter {bad[0]!r} is not allowed")
         spec = {"method": method, "path": path, "params": params or {},
                 "host": self.graph_host, "credentials": self.credentials}
+        # Bounded read: the in-page deadline aborts fetch/body before the CDP deadline.
+        timeout = min(float(timeout), 15.0)
+        spec["timeout_ms"] = max(1, int(timeout * 1000))
         # Сначала готовим мир (повторы без обращения к Meta)…
         self._ready_for_call()
         ctx = self._ensure()
@@ -1152,7 +1167,7 @@ class InPageGraph:
         # результат неизвестен и НЕ повторяется (ревью r9-1): это стоп.
         try:
             with self._timeouts_as_stops():
-                got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+                got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout + 5.0))
         except GraphStop:
             raise
         except CdpTimeout:

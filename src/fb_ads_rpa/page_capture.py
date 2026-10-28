@@ -58,7 +58,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from config.paths import get_runtime_workspace
-from src.fb_ads_rpa.run_telemetry import scrub
+from src.fb_ads_rpa.run_telemetry import hide_secrets_deep, scrub
 
 #: Куда складывать. Рядом со скриншотами, но своей папкой: у снимков страниц
 #: своя жизнь — их прикладывают к разбору и по ним строят стенд.
@@ -187,10 +187,15 @@ def scrub_html(html: str) -> tuple[str, bool]:
     будет отброшен, незачем. Второй проход после вычистки — потому что
     `<hidden>` и `<email>` бывают длиннее того, что заменили.
     """
-    text, truncated = _cut(html or "")
+    from config import token_vault
+
+    # A known token may straddle the byte cut. Exact matching alone sees a
+    # bounded character overlap before either cut; general regexes remain capped.
+    text, truncated = token_vault.hide_configured_secrets_prefix(html or "", MAX_HTML_BYTES)
+    text, byte_cut = _cut(text)
     text = _EMAIL.sub("<email>", scrub(text))
     text, again = _cut(text)
-    return text, truncated or again
+    return text, truncated or byte_cut or again
 
 
 def prune(keep: int = KEEP_RUNS) -> int:
@@ -335,7 +340,7 @@ def capture(
                     "run_id": run_id,
                     "campaign": campaign,
                     "url": url,
-                    "diag": diag or {},
+                    "diag": hide_secrets_deep(diag or {}),  # ACL-1358
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "html_bytes": body_bytes,
                     # Обрезанная разметка, поданная как полная, — это селектор,

@@ -551,7 +551,15 @@ def _open_session(account: str, *, commands: bool = False):
 
     # ACL-1812: профиль, который человек держит «тёплым» (Open profiles for today),
     # работает через реестр: одна вкладка робота на все действия, без перезагрузки.
-    if profile_id and _warm_registry().is_warm(profile_id):
+    from src.fb_api.connection import prepare_existing
+    try:
+        managed = profile_id and prepare_existing(_warm_registry(), entry, account)
+    except Exception as exc:
+        from src.fb_api.warm import WarmError
+        if isinstance(exc, WarmError):
+            raise ApiReadError(str(exc), code=exc.code) from exc
+        raise
+    if managed:
         with _warm_session(account, act, key, profile_id, commands) as warm_sess:
             yield warm_sess
         return

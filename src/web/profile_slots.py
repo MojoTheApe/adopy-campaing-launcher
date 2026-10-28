@@ -1065,17 +1065,23 @@ class ProfileSlots:
         with self._cond:
             return self._grants.get(str(profile or ""), 0)
 
-    def others_on(self, profile: str, job_id: str = "") -> bool:
+    def others_on(self, profile: str, job_id: str | tuple[str, ...] = "") -> bool:
         """Держит ли место этого профиля или ждёт его кто-то, кроме `job_id` (ACL-1580)."""
         profile = str(profile or "")
+        excluded = {job_id} if isinstance(job_id,str) else set(job_id)
         with self._cond:
-            return any(j != job_id and r["profile"] == profile and not r.get("kept")
+            return any(j not in excluded and r["profile"] == profile and not r.get("kept")
                        for j, r in [*self._running.items(), *self._waiting.items()])
 
     def wake(self) -> None:
         """Перепроверить сейчас (отмена ждущего задания)."""
         with self._cond:
             self._cond.notify_all()
+
+    def occupied(self) -> bool:
+        """Идёт или ждёт хоть одно задание, либо открыто оставленное окно (ACL-2260)."""
+        with self._cond:
+            return bool(self._running or self._waiting)
 
     def snapshot(self) -> dict[str, Any]:
         """Что идёт, что ждёт и что решилось бы для следующего — для дешборда."""

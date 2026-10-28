@@ -400,6 +400,21 @@
    "url": "https://developers.facebook.com/blog/post/2025/10/08/introducing-limited-spend-on-excluded-placements-in-marketing-api/",
    "title": "Limited spend on excluded placements",
    "category": "announcements"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/marketing-api/reference/ad-creative/",
+   "title": "Ad Creative (documented URL maximum)",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/guides/lead-ads/create",
+   "title": "Lead Ads / create (Instant Form CTA restrictions)",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-campaign-group",
+   "title": "Campaign (conditional placement restrictions)",
+   "category": "reference"
   }
  ]
 }

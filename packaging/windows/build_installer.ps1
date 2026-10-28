@@ -21,6 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw "Installer isolation check failed." }
 $RequiredFiles = @(
     (Join-Path $BundleDirectory "ACL.exe"),
     (Join-Path $BundleDirectory "ACLConsole.exe"),
+    (Join-Path $BundleDirectory "_internal/setup-guide.html"),
     $CurrentManifest,
     $InstallerScript
 )

@@ -171,6 +171,8 @@ class _Cdp:
 
     def call(self, method, params=None, *, session_id="", timeout=10.0):
         self.timeouts.append((method, timeout))
+        if method == "Target.getTargets":
+            return {"targetInfos": [{"targetId": "existing", "type": "page"}]}
         if method == "Target.createTarget":
             return {"targetId": "T"}
         if method == "Target.attachToTarget":

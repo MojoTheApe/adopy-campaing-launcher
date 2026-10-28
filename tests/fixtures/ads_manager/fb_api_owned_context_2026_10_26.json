@@ -1,0 +1,14 @@
+{
+  "source": "Anonymized owner-observed native UI and Check plan differential, 2026-10-26",
+  "automatic_navigation_error": "net::ERR_SSL_PROTOCOL_ERROR",
+  "native_existing_tab": "same clean Ads Manager URL loaded",
+  "live_context_identity": "not captured; context hypothesis requires live verification",
+  "synthetic_target_infos": [
+    {
+      "targetId": "human",
+      "type": "page",
+      "browserContextId": "profile-context"
+    }
+  ],
+  "synthetic_expected_context": "profile-context"
+}
