@@ -8190,7 +8190,10 @@ window.cbTree = (function () {
       text = '<strong>Could not check:</strong> ' + aclEscHtml(hit.error);
       label = 'Retry';
     } else {
-      text = '<strong>Checked with Meta</strong> at ' + aclEscHtml(new Date(hit.at).toLocaleTimeString());
+      var ago = window.cbPfAgo ? window.cbPfAgo(hit.at).replace(/^Checked /, '') : '';
+      var expired = Date.now() - hit.at >= (window.CB_PF_FRESH_MS || 0);
+      text = '<strong>Checked with Meta</strong> ' + aclEscHtml(ago) + ' (' + aclEscHtml(new Date(hit.at).toLocaleTimeString())
+        + '). ' + (expired ? 'Too old to reuse: Publish will check again.' : 'Not edited since: Publish uses this result.');
       label = 'Check again';
     }
     return '<div class="cbd-pf-meta' + cls + '"><span class="cbd-pf-when" aria-live="polite">' + text + '</span>'
@@ -17524,6 +17527,7 @@ function cbPfStore(form, data, revs) {
       error: r ? (r.error || '') : ((data && data.error) || 'This campaign was not checked'),
       errorKind: kind,
       accountAudit: (data && data.account_audit) || null,
+      result: r || null,                 // ACL-2003: строка ответа целиком — чтобы показать вердикт без нового чтения
       rev: revs[name], at: now
     };
   });
@@ -17575,31 +17579,76 @@ window.cbConnectionPlanFetch = function (fd) {
   });
 };
 
+/* ACL-2003: как долго сохранённый вердикт годится без нового чтения кабинета. Правка черновика,
+ * другой набор кампаний или конец окна — проверка идёт заново; кнопка «Check again» — всегда заново. */
+window.CB_PF_FRESH_MS = 10 * 60 * 1000;
+
+function cbPfHit(slot) {
+  var form = slot && slot.closest ? slot.closest('form') : null, a = form && form._pfAudit;
+  return (a && a.byName[cbPfName(slot)]) || null;
+}
+
+/* Свежи ли серверные вердикты кампании: есть, ревизия та же и окно не вышло. */
+function cbPfFresh(slot) {
+  var hit = cbPfHit(slot);
+  return !!(hit && hit.rev === window.cbPfRev(slot) && Date.now() - hit.at < window.CB_PF_FRESH_MS);
+}
+
+/* Вердикт можно показать без нового чтения: свежий и это настоящий ответ кабинета, а не сбой чтения. */
+window.cbPfReusable = function (slot) {
+  var hit = cbPfHit(slot);
+  return cbPfFresh(slot) && hit.errorKind !== 'not_checked';
+};
+
+/* Ответ в том же виде, что у /publish-plan, из сохранённых вердиктов; null, если хоть одна кампания не годится. */
+window.cbPfStoredData = function (form, slots) {
+  if (!slots.length || !slots.every(window.cbPfReusable)) return null;
+  var out = { results: [], error: '', error_kind: '', account_audit: null, stored_n: slots.length, stored_at: Infinity };
+  slots.forEach(function (slot) {
+    var hit = cbPfHit(slot);
+    out.stored_at = Math.min(out.stored_at, hit.at);
+    if (hit.result) out.results.push(hit.result);
+    else if (!out.error) { out.error = hit.error || ''; out.error_kind = hit.errorKind || ''; }
+    if (hit.accountAudit && !out.account_audit) out.account_audit = hit.accountAudit;
+  });
+  return out;
+};
+
+/* ACL-2003: одна идущая проверка на форму (`form._pfFlight`). Те же кампании в той же ревизии — тот же
+ * запрос (Check plan, «Check» на карточке и Publish all не открывают профиль каждый свой раз); другой
+ * набор ждёт идущую и проверяет только то, чего в ней не было. */
 window.cbPreflightRun = function (form, slots) {
   var list = slots && slots.length ? slots : Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
   var revs = Object.create(null);
   list.forEach(function (slot) { revs[cbPfName(slot)] = window.cbPfRev(slot); });
+  var flight = form._pfFlight;
+  if (flight) {
+    var same = Object.keys(revs).every(function (name) { return flight.revs[name] === revs[name]; });
+    if (same) return flight.promise;
+    return flight.promise.then(function () {
+      var rest = list.filter(function (slot) { return !window.cbPfReusable(slot); });
+      if (!rest.length) return window.cbPfStoredData(form, list) || {};
+      return window.cbPreflightRun(form, rest);
+    });
+  }
   var fd = cbPlanFormData(form, slots && slots.length ? list : null);
   form._pfBusy = true;
   form._pfStarted = Date.now();          // ACL-1990: карточка считает, сколько идёт проверка
   cbPfRefresh();
   cbPfTick();
   var silent = { error: 'The dashboard did not answer', error_kind: 'not_checked' };
-  return window.cbConnectionPlanFetch(fd)
+  var promise = window.cbConnectionPlanFetch(fd)
     .catch(function () { return silent; })
     .then(function (data) {
       cbPfStore(form, data || {}, revs);
       form._pfBusy = false;
+      form._pfFlight = null;
       cbPfRefresh();
       return data;
     });
+  form._pfFlight = { revs: revs, promise: promise };
+  return promise;
 };
-
-/* Свежи ли серверные вердикты кампании: есть и ревизия та же. */
-function cbPfFresh(slot) {
-  var form = slot.closest('form'), a = form && form._pfAudit, hit = a && a.byName[cbPfName(slot)];
-  return !!(hit && hit.rev === window.cbPfRev(slot));
-}
 
 /* Предупреждения (не блокируют) — в окно подтверждения. Читается один раз. */
 window.cbPreflightWarnHtml = function () {
@@ -17673,7 +17722,7 @@ window.cbPreflightGate = function (items, proceed) {
   if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
   window.CB_PF_RUNNING = true;
   var btn = document.querySelector('.cbd-publish-all');
-  if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing…'; }
+  if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing… Publishing starts only after you confirm in the next window.'; }
   var jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
   Promise.all(jobs).then(function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); done(); },
     function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); });
@@ -17746,10 +17795,23 @@ function cbTargetingHtml(items) {
   return rows ? '<div class="cbd-plan-targeting" style="margin:0.2rem 0">' + rows + '</div>' : '';
 }
 
+/* ACL-2003: «Checked 4 min ago». */
+window.cbPfAgo = cbPfAgo;
+function cbPfAgo(at) {
+  var mins = Math.floor(Math.max(0, Date.now() - at) / 60000);
+  return 'Checked ' + (mins < 1 ? 'less than a minute' : mins + ' min') + ' ago';
+}
+
 /* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
 function cbPlanHtml(data) {
   var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
     + aclEscHtml((data && data.account) || '?') + '</strong> — nothing was created</div>';
+  if (data && data.stored_at) {
+    // ACL-2003: вердикт взят из памяти страницы — кабинет заново не читался.
+    h += '<div class="cbd-plan-head cbd-plan-stored">' + aclEscHtml(cbPfAgo(data.stored_at))
+      + ' · ' + aclEscHtml(String(data.stored_n || 0)) + ' campaign(s) not edited since — shown from the last check, '
+      + 'the account was not read again. <button type="button" class="cbd-add" data-act="recheck-plan">Check again</button></div>';
+  }
   if (data && data.error) {
     h += '<div class="cbd-plan-err" style="color:var(--bad)">' + aclEscHtml(data.error) + '</div>';
   }
@@ -17844,6 +17906,12 @@ function cbPlanBindFrame(out) {
       }).catch(function () { b.disabled = false; });
       return;
     }
+    if (act === 'recheck-plan') {
+      ev.stopPropagation();
+      var again = out._cbPlanArgs;
+      if (again) window.cbCheckPlan(again.picked, out, again.btn, true);
+      return;
+    }
     if (act === 'close-plan') {
       ev.stopPropagation();
       out.hidden = true;
@@ -17859,9 +17927,10 @@ function cbPlanBindFrame(out) {
   });
 }
 
-window.cbCheckPlan = function (picked, out, btn) {
+window.cbCheckPlan = function (picked, out, btn, force) {
   if (!out) return;
   cbPlanBindFrame(out);
+  out._cbPlanArgs = { picked: picked, btn: btn };
   var only = picked && picked.length ? picked : null;
   var forms = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
@@ -17873,7 +17942,7 @@ window.cbCheckPlan = function (picked, out, btn) {
   out.hidden = false;
   if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
   out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Opening the Multilogin profile and checking the plan'
-    + ' through the Graph API (usually 30 s – 3 min per account); nothing is written…</div>');
+    + ' through the Graph API (usually 30 s – 3 min per account); nothing is written. Publishing never starts by itself after a check.</div>');
   // ACL-1990: на кнопке — сколько идёт проверка; refreshTicks перерисовывает подпись.
   window.CB_PLAN_STARTED = Date.now();
   var tick = setInterval(function () {
@@ -17910,11 +17979,27 @@ window.cbCheckPlan = function (picked, out, btn) {
       .catch(function () {});
   }, 2000);
   forms.forEach(function (x, i) {
+    // ACL-2003: кампании, которые не правили после проверки (и окно свежести не вышло), не читаются
+    // заново — вердикт берётся с формы; «Check again» (force) читает всё.
+    var all = x.only || Array.prototype.slice.call(x.form.querySelectorAll('.cb-slot'));
+    var kept = (!force && typeof window.cbPfReusable === 'function') ? all.filter(window.cbPfReusable) : [];
+    var todo = kept.length ? all.filter(function (slot) { return kept.indexOf(slot) === -1; }) : x.only;
+    var stored = kept.length ? window.cbPfStoredData(x.form, kept) : null;
     // ACL-1819: тот же запрос кладёт вердикты в карточку pre-flight audit (cbPreflightRun).
-    (window.cbPreflightRun ? window.cbPreflightRun(x.form, x.only)
-      : window.cbConnectionPlanFetch(cbPlanFormData(x.form, x.only)))
+    var job = stored && !todo.length ? Promise.resolve(null)
+      : (window.cbPreflightRun ? window.cbPreflightRun(x.form, todo)
+        : window.cbConnectionPlanFetch(cbPlanFormData(x.form, todo)));
+    job
       .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
       .then(function (data) {
+        data = data || {};
+        if (stored) {
+          data.results = (data.results || []).concat(stored.results);
+          data.stored_at = stored.stored_at;
+          data.stored_n = stored.stored_n;
+          if (!data.error && stored.error) { data.error = stored.error; data.error_kind = stored.error_kind; }
+          if (!data.account_audit && stored.account_audit) data.account_audit = stored.account_audit;
+        }
         if (!data.account) data.account = cbFormTitle(x.form);
         // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
         if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);

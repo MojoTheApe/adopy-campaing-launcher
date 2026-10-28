@@ -724,8 +724,76 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     return results
 
 
+class _PlanFlight:
+    """Идущая проверка: ответ (или отказ) лидера получают все, кто пришёл с тем же запросом."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result: dict[str, Any] | None = None
+        self.error: BaseException | None = None
+        self.waiters = 0
+
+
+_PLAN_FLIGHTS: dict[tuple[str, str, str], _PlanFlight] = {}
+_PLAN_FLIGHTS_LOCK = threading.Lock()
+
+
+def _plan_flight_waiters() -> int:
+    """Сколько запросов сейчас ждут чужую идущую проверку (для тестов и диагностики)."""
+    with _PLAN_FLIGHTS_LOCK:
+        return sum(f.waiters for f in _PLAN_FLIGHTS.values())
+
+
+def _plan_flight_key(slots: list[dict[str, Any]], account_label: str, country: str) -> tuple[str, str, str]:
+    import json
+
+    try:
+        body = json.dumps(slots, sort_keys=True, ensure_ascii=False, default=repr)
+    except (TypeError, ValueError):
+        body = repr(slots)
+    return (str(account_label or "").strip().casefold(), str(country or "").strip().casefold(), body)
+
+
 def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
-    """Черновики билдера → план каждой кампании. Ничего не создаёт."""
+    """Черновики билдера → план каждой кампании. Ничего не создаёт.
+
+    ACL-2003: тот же аккаунт, страна и черновики, пока предыдущая такая проверка ещё идёт, не
+    открывают профиль второй раз: запрос ждёт её и получает копию её ответа. Закончилась —
+    запись снимается, и следующий запрос читает кабинет заново (свежесть вердикта решает
+    страница, сервер ничего не помнит).
+    """
+    import copy
+
+    key = _plan_flight_key(slots, account_label, country)
+    with _PLAN_FLIGHTS_LOCK:
+        flight = _PLAN_FLIGHTS.get(key)
+        leader = flight is None
+        if leader:
+            flight = _PLAN_FLIGHTS[key] = _PlanFlight()
+        else:
+            flight.waiters += 1
+    if leader:
+        try:
+            flight.result = _check_plan_once(slots, account_label=account_label, country=country)
+            return flight.result
+        except BaseException as exc:  # noqa: BLE001 — ждущие получают тот же отказ
+            flight.error = exc
+            raise
+        finally:
+            with _PLAN_FLIGHTS_LOCK:
+                _PLAN_FLIGHTS.pop(key, None)
+            flight.done.set()
+    flight.done.wait()
+    with _PLAN_FLIGHTS_LOCK:
+        flight.waiters -= 1
+    log.info("Check plan for %s merged into the check already running", account_label)
+    if flight.error is not None:
+        raise flight.error
+    return copy.deepcopy(flight.result)
+
+
+def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+    """Одна проверка: профиль → чтение → ответ."""
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 

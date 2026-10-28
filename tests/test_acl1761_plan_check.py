@@ -525,3 +525,224 @@ def test_mode_helpers_live_inside_the_slice_the_builder_harnesses_load():
     for name in ("function cbApiMode()", "function cbPublishTarget()", "function cbPublishMode()"):
         assert name in sliced, name
         assert text.count(name) == 1, name
+
+
+# ───────────── ACL-2003: одинаковые одновременные проверки сливаются в одну ─────────────
+
+def _flight_setup(monkeypatch, gate, runs):
+    """check_plan без реального профиля: настоящий _check_plan_once заменён заглушкой."""
+    from src.web import publish_api
+
+    def once(slots, *, account_label, country):
+        runs.append((account_label, country, list(slots)))
+        gate.wait(5)
+        return {"account": account_label, "results": [{"campaign_name": "C1"}], "dry_run": True, "error": ""}
+
+    monkeypatch.setattr(publish_api, "_check_plan_once", once)
+    return publish_api
+
+
+def _fly(publish_api, slots, label="Acc", country="MX"):
+    import threading
+
+    box = {}
+
+    def go():
+        box["out"] = publish_api.check_plan(slots, account_label=label, country=country)
+
+    t = threading.Thread(target=go)
+    t.start()
+    return t, box
+
+
+def _wait_for(cond, timeout=3.0):
+    import time
+
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if cond():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_identical_concurrent_checks_read_the_account_once(monkeypatch):
+    import threading
+
+    gate, runs = threading.Event(), []
+    api = _flight_setup(monkeypatch, gate, runs)
+    t1, b1 = _fly(api, [{"name": "C1", "budget": "20"}])
+    assert _wait_for(lambda: len(runs) == 1)
+    t2, b2 = _fly(api, [{"budget": "20", "name": "C1"}], label="Acc")      # те же данные, другой порядок ключей
+    t3, b3 = _fly(api, [{"name": "C1", "budget": "20"}])
+    assert _wait_for(lambda: api._plan_flight_waiters() == 2)
+    gate.set()
+    for t in (t1, t2, t3):
+        t.join(5)
+    assert len(runs) == 1, "одинаковые запросы открыли профиль несколько раз"
+    assert b1["out"] == b2["out"] == b3["out"]
+    assert b1["out"] is not b2["out"], "ответ нельзя делить по ссылке: потребитель может его менять"
+
+
+def test_a_different_account_country_or_draft_is_not_merged(monkeypatch):
+    import threading
+
+    gate, runs = threading.Event(), []
+    api = _flight_setup(monkeypatch, gate, runs)
+    ts = [_fly(api, [{"name": "C1"}])[0]]
+    assert _wait_for(lambda: len(runs) == 1)
+    ts.append(_fly(api, [{"name": "C2"}])[0])
+    ts.append(_fly(api, [{"name": "C1"}], country="BR")[0])
+    ts.append(_fly(api, [{"name": "C1"}], label="Other")[0])
+    assert _wait_for(lambda: len(runs) == 4)
+    gate.set()
+    for t in ts:
+        t.join(5)
+    assert len(runs) == 4
+
+
+def test_a_finished_check_is_not_cached_by_the_server(monkeypatch):
+    import threading
+
+    gate, runs = threading.Event(), []
+    gate.set()
+    api = _flight_setup(monkeypatch, gate, runs)
+    api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
+    api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
+    assert len(runs) == 2, "после ответа повтор обязан читать кабинет заново (кэш решает страница)"
+    assert api._plan_flight_waiters() == 0
+
+
+def test_a_failed_leader_reaches_the_waiters_and_frees_the_key(monkeypatch):
+    import threading
+
+    from src.web import publish_api as api
+
+    gate, calls = threading.Event(), []
+
+    def once(slots, *, account_label, country):
+        calls.append(1)
+        gate.wait(5)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(api, "_check_plan_once", once)
+    errs = []
+
+    def go():
+        try:
+            api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
+        except RuntimeError as exc:
+            errs.append(str(exc))
+
+    ts = [threading.Thread(target=go) for _ in range(2)]
+    ts[0].start()
+    assert _wait_for(lambda: len(calls) == 1)
+    ts[1].start()
+    assert _wait_for(lambda: api._plan_flight_waiters() == 1)
+    gate.set()
+    for t in ts:
+        t.join(5)
+    assert errs == ["boom", "boom"] and len(calls) == 1
+    gate.set()
+    monkeypatch.setattr(api, "_check_plan_once", lambda *a, **k: {"ok": 1})
+    assert api.check_plan([{"name": "C1"}], account_label="Acc", country="MX") == {"ok": 1}
+
+
+# ───────────── ACL-2003: Check plan не читает кабинет заново для нетронутых кампаний ─────────────
+
+_STORED_NODE = r"""
+ESCAPER
+function cbSlotTitle(slot) { return slot.title; }
+function cbFormTitle(form) { return form.title; }
+function cbFormAccount(form) { return form.title; }
+function cbPickedIn(form, picked) { return picked.filter((s) => form.slots.indexOf(s) !== -1); }
+function cbFormDataSkipping(form, skip) { const b = new RealFD(); b.set('camp_count', '1'); b.set('skip', Object.keys(skip).join(',')); return { body: b }; }
+const RealFD = FormData;
+globalThis.FormData = function () { return new RealFD(); };   // поддельная форма — пустой FormData
+const fetched = [];
+globalThis.fetch = async (url, init) => {
+  fetched.push({ url: url, skip: init.body.get('skip') });
+  await new Promise((r) => setTimeout(r, 5));
+  return { json: async () => ({ account: 'Test', error: '', results: REPLY }) };
+};
+const rev = { A: 'a1', B: 'b1' };
+function mkSlot(name) {
+  return { title: name, dataset: { idx: '0' }, closest: () => form,
+    querySelector: (sel) => sel === '.cb-name-hidden' ? { value: name } : null };
+}
+const slotA = mkSlot('MX Leads 1'), slotB = mkSlot('MX Leads 2');
+const fields = { camp_count: '2', camp_0_name: 'MX Leads 1', camp_1_name: 'MX Leads 2' };
+const form = { title: 'Test', slots: [slotA, slotB],
+  querySelector: (sel) => { const m = /name="([^"]+)"/.exec(sel); return m && m[1] in fields ? { value: fields[m[1]] } : null; },
+  querySelectorAll: (sel) => sel === '.cb-slot' ? form.slots : [] };
+globalThis.document = { querySelectorAll: (sel) => sel === 'form.open-account-form' ? [form] : (sel === 'form' ? [form] : []) };
+globalThis.window = globalThis;
+window.cbPfRev = (slot) => rev[slot.title === 'MX Leads 1' ? 'A' : 'B'];
+JS
+function makeOut() {
+  const listeners = [];
+  return { hidden: true, innerHTML: '', listeners: listeners, addEventListener: (t, fn) => listeners.push(fn),
+           querySelector: () => null };
+}
+function button(act) {
+  const attrs = { 'data-act': act };
+  return { getAttribute: (k) => attrs[k], closest: function () { return this; } };
+}
+const tick = () => new Promise((r) => setTimeout(r, 40));
+(async () => {
+  const out = {};
+  const box = makeOut(), btn = { disabled: false };
+  window.cbCheckPlan(null, box, btn);                       // 1: первая проверка читает кабинет
+  await tick();
+  out.first = fetched.length;
+  out.firstHtml = box.innerHTML;
+  window.cbCheckPlan(null, box, btn);                       // 2: ничего не правили — из памяти
+  await tick();
+  out.second = fetched.length;
+  out.secondHtml = box.innerHTML;
+  out.btnFree = btn.disabled === false;
+  rev.B = 'b2';                                             // 3: правка одной кампании — читается только она
+  window.cbCheckPlan(null, box, btn);
+  await tick();
+  out.third = fetched.length;
+  out.thirdSkip = fetched[fetched.length - 1].skip;
+  out.thirdHtml = box.innerHTML;
+  box.listeners[0]({ target: button('recheck-plan'), stopPropagation: () => {} });   // 4: «Check again» — всё заново
+  await tick();
+  out.fourth = fetched.length;
+  out.fourthSkip = fetched[fetched.length - 1].skip;
+  out.fourthStored = box.innerHTML.indexOf('cbd-plan-stored') !== -1;
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+def test_check_plan_shows_the_stored_verdict_of_unedited_campaigns_and_reads_only_the_rest():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    reply = [{"campaign_name": "MX Leads 1", "dry_run": True, "success": True, "error": None, "warnings": [], "plan": {}},
+             {"campaign_name": "MX Leads 2", "dry_run": True, "success": True, "error": None, "warnings": [], "plan": {}}]
+    js = _template_js("function cbPfRefresh() {", "/* Имя карточки для подтверждения. */")
+    escaper = _template_js("function aclEscHtml(value) {", "  </script>")
+    script = (_STORED_NODE.replace("REPLY", json.dumps(reply)).replace("ESCAPER\n", escaper + "\n", 1)
+              .replace("JS\n", js + "\n", 1))
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(script)
+        path = fh.name
+    try:
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)
+    assert out["first"] == 1 and "cbd-plan-stored" not in out["firstHtml"]
+    assert out["second"] == 1, "нетронутые кампании прочитаны заново"
+    assert "cbd-plan-stored" in out["secondHtml"] and "Checked less than a minute ago" in out["secondHtml"]
+    assert 'data-act="recheck-plan"' in out["secondHtml"] and out["btnFree"] is True
+    assert "MX Leads 1" in out["secondHtml"] and "MX Leads 2" in out["secondHtml"]
+    assert out["third"] == 2, "после правки кабинет не читался"
+    assert out["thirdSkip"] == "0", "прочитана и нетронутая кампания: должна быть пропущена только первая (индекс 0)"
+    assert "cbd-plan-stored" in out["thirdHtml"], "нетронутая кампания не показана из памяти"
+    assert out["fourth"] == 3 and out["fourthSkip"] is None, "Check again обязан прочитать всё заново"
+    assert out["fourthStored"] is False
