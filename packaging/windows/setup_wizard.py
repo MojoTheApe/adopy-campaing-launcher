@@ -156,6 +156,9 @@ def build_bi_setup(*, campaign_manager_name: str,
         name, tuple(AccountAssignment(account_name=alias) for alias in sorted(aliases, key=str.casefold)))
 
 
+CONNECTION_FILE_LABEL = "Team connection file"
+
+
 def connect_with_google(config_directory: str | Path, *, sign_in: Callable | None = None,
                         checks: Callable | None = None) -> list[ReadinessCheck]:
     """Sign in with the employee's Google account, save the team connection settings
@@ -171,8 +174,8 @@ def connect_with_google(config_directory: str | Path, *, sign_in: Callable | Non
         try:
             (sign_in or cs.sign_in)()
         except cs.SettingsError as exc:
-            return [ReadinessCheck("Team connection file", False, str(exc))]
-        return [ReadinessCheck(c["name"], bool(c["ok"]), c["line"]) for c in (checks or cs.check_all)()]
+            return [ReadinessCheck(CONNECTION_FILE_LABEL, False, str(exc))]
+        return [ReadinessCheck(c["name"], bool(c["ok"]), c["line"]) for c in (checks or cs.check_connections)()]
     finally:
         if previous is None:
             os.environ.pop("ACL_CONFIG_DIR", None)
@@ -542,12 +545,32 @@ class SetupWizard:
                           fg="#17663a" if line.ok else "#9b1c1c").pack(fill="x", pady=2)
 
     def _sign_in(self) -> None:
+        """Sign-in runs off the Tk thread (it waits for the browser); the window stays alive."""
+        import threading
+
+        if getattr(self, "_signing_in", False):
+            return
+        self._signing_in = True
         self.status.set("Waiting for the Google sign-in in your browser...")
-        self.root.update_idletasks()
-        self.connection_lines = connect_with_google(self.config_directory)
-        self.bi_connected = any(line.ok and line.label == "BI" for line in self.connection_lines)
+
+        def work() -> None:
+            try:
+                lines = connect_with_google(self.config_directory)
+            except Exception:
+                lines = [ReadinessCheck(CONNECTION_FILE_LABEL, False, "Sign-in was not finished. Try again.")]
+            self.root.after(0, lambda: self._sign_in_done(lines))
+
+        threading.Thread(target=work, name="acl-wizard-sign-in", daemon=True).start()
+
+    def _sign_in_done(self, lines: list) -> None:
+        self._signing_in = False
+        self.connection_lines = lines
+        self.bi_connected = any(line.ok and line.label == "BI" for line in lines)
         self.status.set("")
-        self._paint_connections()
+        try:
+            self._paint_connections()
+        except Exception:
+            pass  # the step was left while signing in
 
     def _identity(self) -> None:
         self._text("Enter your name exactly as it is written in the CM column of the Stats workbook "

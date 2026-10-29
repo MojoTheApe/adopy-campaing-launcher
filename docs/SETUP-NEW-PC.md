@@ -21,10 +21,13 @@ something else, look in **If something goes wrong** at the end before asking.
 If Evgeni gives you a Multilogin automation token instead, get it through the
 password manager, never by chat or email.
 
-You no longer need `Upload FB.xlsx`, a Google Sheet link, `oauth_client.json`,
-or a GitHub account. Shared targets and ad texts require support to configure
-the team's private library on this computer. Until that is done, the library
-is local to this computer; finishing this wizard does not enable sharing.
+You no longer need `Upload FB.xlsx`, a Google Sheet link or a GitHub account.
+The installer already contains the Google sign-in client; you do not copy
+`oauth_client.json` yourself. Shared targets and ad texts, and the BI numbers,
+come with your Adopy Google account: your team lead shares the ACL connection
+file with it, and you press **Sign in with Google** in the setup window
+(Step 2, *Connections*). Nobody sends you a key. If you skip it, the library is
+local to this computer until you do it later in the dashboard (**Connections**).
 
 ---
 
@@ -56,29 +59,35 @@ window opens next to it.
 
 The setup window opens by itself the first time. Its title bar says
 **Adopy Campaign Manager Setup**, and the top of the window shows the step name
-and *Step N of 6*. Nothing is published during setup, and no campaign is touched.
+and *Step N of 7*. Nothing is published during setup, and no campaign is touched.
 
 1. **Welcome.** Shows the version. Click **Next**.
 2. **System check.** ACL checks four things for you: *Windows x64*, *Writable
    ACL data folder*, *Free disk space* and *Local dashboard port*.
    **You should see:** four green ✓ lines. Click **Next**.
    A red ✕ line has its reason next to it; see the table below.
-3. **Your name.** Type it exactly as in the CM column. ACL finds your ad accounts
-   in the workbook by this name. Click **Next**.
-4. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
+3. **Connections.** Click **Sign in with Google** and sign in with your Adopy
+   account in the browser. ACL reads the team connection file and shows one line
+   each: *Team library: connected (N targets, M texts)* and *BI: connected (last
+   data date …)*. Click **Next**. You may skip this step and do it later in the
+   dashboard (**Connections**). A red line gives its reason; see the table below.
+4. **Your name.** Type it exactly as in the CM column (or as BI knows you). ACL
+   finds your ad accounts by this name. Click **Next**.
+5. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
    and looks for your name. If it cannot, a red line appears at the bottom of
    the window and you stay on this step.
    - **Stats workbook:** pick your Excel file with **Browse…**. If ACL finds it in
      the usual place, it is already filled in (shown in green); change it only if
      you were sent a different file. It is the Excel report your team lead keeps;
-     ACL does not create or download it.
+     ACL does not create or download it. When BI is connected the workbook is
+     optional and your accounts come from BI.
    - **Creatives folder:** it is already filled in as `Documents\ACL\Creatives`,
      and ACL creates the folder. Keep it, or pick another folder.
-5. **Readiness.** **You should see:** green ✓ next to *Runtime*, *Your accounts*,
+6. **Readiness.** **You should see:** green ✓ next to *Runtime*, *Your accounts*,
    *Local files* and *Safety mode*, and a line *Found N account(s) for this
    campaign manager*. Check that N is the number of accounts you work with.
    Click **Finish**.
-6. **Finish.** **You should see:** *Adopy Campaign Manager is ready on this
+7. **Finish.** **You should see:** *Adopy Campaign Manager is ready on this
    computer* in green. Click **Close**. The dashboard opens in your browser.
 
 You can run setup again at any time from **Start → Adopy Campaign Launcher →
@@ -164,6 +173,13 @@ The messages in the middle column are what ACL shows, word for word.
 | System check | ✕ *Free disk space* | ACL needs at least 500 MB free. Free up space, click **Back**, then **Next** to check again. |
 | System check | ✕ *Local dashboard port*, *ports 9090-9109 are all used by other applications* | Rare: another program is holding every port ACL may use. Close other programs that serve web pages, then click **Back** and **Next**. A busy port 9090 alone is not an error: ACL then uses the next free port and shows a ✓ *port … is available*. |
 | System check | *Resolve failed system checks: …* after **Next** | One of the lines above is ✕. Fix it as this table says for that line. |
+| Connections | *No access to the ACL connection file. Ask your team lead to share it with your Adopy Google account.* | Tell your team lead your Adopy email so they share the file with you, then press **Sign in with Google** again. |
+| Connections | *Google sign-in is not set up on this computer (oauth_client.json is missing). Ask your team lead for it.* | This build has no Google sign-in client. Tell Evgeni; you need a newer installer. |
+| Connections | *Sign-in was not finished. Try again.* | The browser sign-in was closed or took too long. Press **Sign in with Google** again. |
+| Connections | *The team connection file is not configured in this build.* or *The ACL connection file has no connection tab.* | Tell Evgeni: the connection file is not set up yet. |
+| Connections | *Team library: …* or *BI: could not connect (…)* | The file was read but that connection does not work. Tell Evgeni and send the reason shown. |
+| Local files | *BI is connected, but the account list could not be read from it.* | Try again, or pick the Stats workbook instead. |
+| Local files | *BI has no accounts for “your name”.* | Your name does not match what BI knows. Click **Back**, check the spelling, or pick the Stats workbook your team lead sent you. |
 | Your name | *Enter your name exactly as it appears in the Stats workbook.* | The name field is empty. Type your name. |
 | Your name | *Replace the example campaign manager name with your own name.* | Type your own name, not the example. |
 | Your name | *Campaign manager name is too long.* | Type only your name, as in the CM column. |

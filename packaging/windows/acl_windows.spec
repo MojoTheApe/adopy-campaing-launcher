@@ -33,6 +33,7 @@ datas = [
     (str(PROJECT_ROOT / "config" / "analysis_reading_rules.json"), "config"),
     (str(PROJECT_ROOT / "config" / "benchmarks.json"), "config"),
     (str(PROJECT_ROOT / "config" / "bi_cm_map.json"), "config"),
+    (str(PROJECT_ROOT / "config" / "connection_file.json"), "config"),
     (str(PROJECT_ROOT / "config" / "content_plan_week.example.json"), "config"),
     (str(PROJECT_ROOT / "config" / "knowledge_base.json"), "config"),
     (str(PROJECT_ROOT / "config" / "rpa_forbidden_zones.yaml"), "config"),
@@ -47,6 +48,19 @@ datas = [
     (str(MANIFEST_PATH.with_name("acl-update-channel.json")), "."),
     (str(SETUP_GUIDE_PATH), "."),
 ] + playwright_datas
+
+# ACL-2306: the Google OAuth desktop client (never committed; CI writes it from a secret).
+# Bundled only when the file exists at build time; lands in config/ where
+# config.paths.get_google_oauth_client_path() finds it after the machine-local copy.
+OAUTH_CLIENT_FILE = Path(
+    os.environ.get("ACL_OAUTH_CLIENT_FILE")
+    or str(PROJECT_ROOT / "packaging" / "windows" / ".build" / "oauth_client.json")
+)
+if OAUTH_CLIENT_FILE.is_file():
+    datas.append((str(OAUTH_CLIENT_FILE), "config"))
+else:
+    print(f"WARNING: {OAUTH_CLIENT_FILE} not found - this build has no Google sign-in client; "
+          "buyers cannot use 'Sign in with Google' (set ACL_OAUTH_CLIENT_FILE or the ACL_OAUTH_CLIENT_JSON CI secret).")
 
 # Uvicorn chooses its event loop, HTTP implementation and lifespan handler at
 # runtime. PyInstaller cannot infer those string-based imports statically.

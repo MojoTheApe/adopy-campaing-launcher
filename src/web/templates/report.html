@@ -20633,6 +20633,16 @@ window.aclTeamLibrary = (function () {
     run('/api/connections/check', 'Checking…');
   }
   window.aclConnections = { open: connections };
+  // ACL-2306: say where the numbers come from when BI is not connected (no silent fallback).
+  fetch('/api/connections', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j || !j.ok || !j.source_line || j.bi.configured) return;
+    var head = document.querySelector('.page-header');
+    if (!head || document.getElementById('source-line')) return;
+    var span = document.createElement('span');
+    span.id = 'source-line'; span.className = 'source-line'; span.textContent = j.source_line;
+    span.style.cssText = 'color:var(--muted);font-size:var(--adopy-text-sm);margin-left:.8rem';
+    head.appendChild(span);
+  }).catch(function () {});
   return { open: dialog, decorate: decorate };
 })();
 

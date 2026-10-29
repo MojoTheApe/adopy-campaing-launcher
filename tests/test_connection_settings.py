@@ -27,7 +27,7 @@ ROWS = [
     ["BI_MYSQL_PASSWORD", FAKE_PASSWORD],
     ["SOMETHING_ELSE", "ignored"],
 ]
-ENV_KEYS = list(cs.ALLOWED_KEYS) + ["ACL_CONFIG_DIR", "ACL_CONNECTION_SHEET_ID", "FB_STATS_SOURCE"]
+ENV_KEYS = list(cs.ALLOWED_KEYS) + ["MULTILOGIN_AUTOMATION_TOKEN_A", "MULTILOGIN_AUTOMATION_TOKEN_B", "ACL_CONFIG_DIR", "ACL_CONNECTION_SHEET_ID", "FB_STATS_SOURCE"]
 
 
 class FakeHttpError(Exception):
@@ -48,6 +48,9 @@ class FakeService:
 
     def get(self, **kw):
         self.kw = kw
+        return self
+
+    def clear(self, **kw):
         return self
 
     def update(self, **kw):
@@ -330,6 +333,131 @@ class WizardTests(Base):
         out.mkdir()
         apply_machine_configuration(config, out, stats_workbook="", creatives_directory=str(out))
         self.assertNotIn("FB_STATS_EXCEL", (out / ".env").read_text(encoding="utf-8"))
+
+
+class SecurityTests(Base):
+    def test_line_separators_and_non_ascii_are_rejected_nothing_written(self):
+        before = self.env_text()
+        for bad in ("p\u2028HTTPS_PROXY=http://evil:8080", "p\x85X=1", "p\u2029X=1", "p\x7fX", "p\x0bX", "p\u0416"):
+            for key in ("BI_MYSQL_USER", "BI_MYSQL_PASSWORD", "BI_MYSQL_HOST"):
+                rows = [["ACL_LIBRARY_TOKEN", FAKE_TOKEN], ["BI_MYSQL_HOST", "bi.example.invalid"],
+                        ["BI_MYSQL_USER", "fake_user"], ["BI_MYSQL_PASSWORD", FAKE_PASSWORD]]
+                for row in rows:
+                    if row[0] == key:
+                        row[1] = bad
+                with self.assertRaises(cs.SettingsError):
+                    cs.sign_in(service=FakeService(rows))
+        self.assertEqual(self.env_text(), before)
+
+    def test_reviewer_payload_does_not_create_keys_after_a_rewrite(self):
+        from config import paths
+        from dotenv import dotenv_values
+
+        with self.assertRaises(cs.SettingsError):
+            cs.apply({"ACL_LIBRARY_TOKEN": FAKE_TOKEN, "BI_MYSQL_HOST": "h.example.invalid", "BI_MYSQL_USER": "u",
+                      "BI_MYSQL_PASSWORD": "p\u2028HTTPS_PROXY=http://evil:8080"})
+        cs.apply(dict((r[0], r[1]) for r in ROWS))
+        paths.update_machine_env({"MY_CM_NAME": "Someone"})
+        values = dotenv_values(Path(self.tmp.name) / ".env")
+        self.assertNotIn("HTTPS_PROXY", values)
+        self.assertEqual(values["BI_MYSQL_PASSWORD"], FAKE_PASSWORD)
+
+    def test_env_writer_refuses_line_separators_but_keeps_cyrillic(self):
+        from config import paths
+        from dotenv import dotenv_values
+
+        for bad in ("a\u2028b", "a\x85b", "a\u2029b", "a\nb"):
+            with self.assertRaises(ValueError):
+                paths.update_machine_env({"MY_CM_NAME": bad})
+        paths.update_machine_env({"MY_CM_NAME": "\u0416\u0435\u043d\u044f"})
+        self.assertEqual(dotenv_values(Path(self.tmp.name) / ".env")["MY_CM_NAME"], "\u0416\u0435\u043d\u044f")
+
+    def test_library_repo_rejects_dot_dot(self):
+        for bad in ("../..", "a/../b", ".x/y", "owner/.."):
+            with self.assertRaises(cs.SettingsError):
+                cs.validate({"ACL_LIBRARY_REPO": bad, "ACL_LIBRARY_TOKEN": FAKE_TOKEN})
+        self.assertEqual(cs.validate({"ACL_LIBRARY_REPO": "Org/acl-lib"})["ACL_LIBRARY_REPO"], "Org/acl-lib")
+
+
+class PublishSafetyTests(Base):
+    def setUp(self):
+        super().setUp()
+        os.environ["ACL_LIBRARY_TOKEN"] = FAKE_TOKEN
+
+    def test_refuses_the_telemetry_or_accounts_sheet(self):
+        from config import paths
+        from src.analysis_agent import gsheet_accounts as ga
+
+        for other in (paths.DEFAULT_TELEMETRY_SHEET_ID, ga.DEFAULT_ACCOUNTS_SHEET_ID):
+            os.environ["ACL_CONNECTION_SHEET_ID"] = other
+            svc = FakeService([])
+            with self.assertRaises(cs.SettingsError):
+                cs.publish(svc)
+            self.assertIsNone(svc.updated)
+
+    def test_requires_existing_tab_and_clears_old_rows(self):
+        with self.assertRaises(cs.SettingsError) as ctx:
+            cs.publish(FakeService(error=FakeHttpError(400)))
+        self.assertIn("no connection tab", str(ctx.exception))
+        calls = []
+
+        class Svc(FakeService):
+            def clear(self, **kw):
+                calls.append("clear")
+                return self
+
+            def update(self, **kw):
+                calls.append("update")
+                return super().update(**kw)
+
+        cs.publish(Svc([]))
+        self.assertEqual(calls, ["clear", "update"])
+
+
+class StatusTests(Base):
+    def test_multilogin_line_and_source_line(self):
+        self.assertFalse(cs.check_multilogin()["ok"])
+        os.environ["MULTILOGIN_AUTOMATION_TOKEN_A"] = "fake"
+        try:
+            self.assertTrue(cs.check_multilogin()["ok"])
+        finally:
+            os.environ.pop("MULTILOGIN_AUTOMATION_TOKEN_A")
+        st = cs.status()
+        self.assertEqual(st["source_line"], "Source: Stats workbook (BI not connected)")
+        self.assertIn("Multilogin", [c["name"] for c in cs.check_all()])
+        self.assertNotIn("Multilogin", [c["name"] for c in cs.check_connections()])
+
+    def test_sign_in_timeout_reaches_the_oauth_flow(self):
+        from src.analysis_agent import gsheet_accounts as ga
+
+        client = Path(self.tmp.name) / "oauth_client.json"
+        client.write_text("{}", encoding="utf-8")
+        seen = {}
+
+        def fake(path, token, timeout_seconds=None):
+            seen["t"] = timeout_seconds
+            raise RuntimeError("timed out")
+
+        with mock.patch.object(ga, "_build_sheets_service_oauth", fake),                 mock.patch.object(cs.paths, "get_google_oauth_client_path", return_value=str(client)):
+            with self.assertRaises(cs.SettingsError) as ctx:
+                cs.sign_in()
+        self.assertEqual(seen["t"], cs.SIGN_IN_TIMEOUT_SECONDS)
+        self.assertEqual(str(ctx.exception), "Sign-in was not finished. Try again.")
+
+
+class BundleTests(unittest.TestCase):
+    def test_oauth_client_is_never_in_git_and_only_optionally_bundled(self):
+        import subprocess
+
+        tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.splitlines()
+        self.assertFalse([t for t in tracked if t.endswith("oauth_client.json")])
+        ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("oauth_client.json", ignore)
+        spec = (PACKAGING / "acl_windows.spec").read_text(encoding="utf-8")
+        self.assertIn("ACL_OAUTH_CLIENT_FILE", spec)
+        self.assertIn("OAUTH_CLIENT_FILE.is_file()", spec)
+        self.assertIn("WARNING", spec)
+        self.assertIn('"connection_file.json"', spec)
 
 
 if __name__ == "__main__":

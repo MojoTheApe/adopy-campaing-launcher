@@ -40,7 +40,7 @@ BI_OPTIONAL_KEYS = ("BI_STATS_ALL_CMS", "BI_TIMEZONE", "BI_DAY_BOUNDARY", "BI_CU
 ALLOWED_KEYS = LIBRARY_KEYS + BI_KEYS + BI_OPTIONAL_KEYS
 
 _TOKEN_SHAPE = re.compile(r"[A-Za-z0-9_\-]{20,255}")
-_REPO_SHAPE = re.compile(r"[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+")
+_REPO_SHAPE = re.compile(r"[A-Za-z0-9_\-][A-Za-z0-9_.\-]*/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*")
 _HOST_SHAPE = re.compile(r"[A-Za-z0-9.\-]{1,253}")
 _NAME_SHAPE = re.compile(r"[A-Za-z0-9_.\-]{1,64}")
 _SIMPLE = re.compile(r"[A-Za-z0-9_.:+\- /]{1,64}")
@@ -74,13 +74,14 @@ def tab_name() -> str:
 
 def _validate_one(key: str, value: str) -> str:
     value = (value or "").strip()
-    if not value or any(ord(ch) < 32 for ch in value):
+    # Printable ASCII only: line separators such as U+2028/U+0085 would split a .env line.
+    if not value or any(not 0x20 <= ord(ch) <= 0x7E for ch in value):
         raise SettingsError(f"The team connection file has an empty or malformed {key}.")
     ok = True
     if key == "ACL_LIBRARY_TOKEN":
         ok = bool(_TOKEN_SHAPE.fullmatch(value))
     elif key == "ACL_LIBRARY_REPO":
-        ok = bool(_REPO_SHAPE.fullmatch(value))
+        ok = bool(_REPO_SHAPE.fullmatch(value)) and ".." not in value
     elif key == "BI_MYSQL_HOST":
         ok = bool(_HOST_SHAPE.fullmatch(value))
     elif key == "BI_MYSQL_PORT":
@@ -118,6 +119,7 @@ def validate(values: dict) -> dict:
 
 # -- reading the sheet -------------------------------------------------------
 
+SIGN_IN_TIMEOUT_SECONDS = 180
 _READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
@@ -160,9 +162,12 @@ def _service(interactive: bool):
     if not client.is_file():
         raise SettingsError("Google sign-in is not set up on this computer (oauth_client.json is missing). "
                             "Ask your team lead for it.")
-    service = ga._build_sheets_service_oauth(str(client), str(token))
+    try:
+        service = ga._build_sheets_service_oauth(str(client), str(token), timeout_seconds=SIGN_IN_TIMEOUT_SECONDS)
+    except Exception:
+        service = None
     if service is None:
-        raise SettingsError("Google sign-in could not be completed. Try again.")
+        raise SettingsError("Sign-in was not finished. Try again.")
     return service
 
 
@@ -287,8 +292,21 @@ def check_bi() -> dict:
             "line": f"BI: connected (last data date {str(last)[:10] if last else 'unknown'})"}
 
 
-def check_all() -> list:
+def check_multilogin() -> dict:
+    """Local only (no network): is an automation token saved here? Connected in Accounts."""
+    on = any((os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{slot}") or "").strip() for slot in "AB")
+    return {"name": "Multilogin", "ok": on, "configured": on,
+            "line": "Multilogin: connected" if on else "Multilogin: not connected (press Connect Multilogin on the Accounts screen)"}
+
+
+def check_connections() -> list:
+    """The two connections the team file provides; one read each."""
     return [check_library(), check_bi()]
+
+
+def check_all() -> list:
+    """Dashboard Connections: library, BI, Multilogin."""
+    return check_connections() + [check_multilogin()]
 
 
 def bi_accounts_for_manager(name: str) -> list:
@@ -319,7 +337,10 @@ def status() -> dict:
 
     token = (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip()
     bi = bi_stats.bi_enabled()
+    multilogin = any((os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{slot}") or "").strip() for slot in "AB")
     return {
+        "multilogin": {"configured": multilogin, "masked": "********" if multilogin else ""},
+        "source_line": "Source: BI" if bi else "Source: Stats workbook (BI not connected)",
         "file_configured": bool(sheet_id()),
         "signed_in": has_google_token(),
         "library": {"configured": bool(token), "masked": "********" if token else ""},
@@ -348,6 +369,22 @@ def shareable_report() -> dict:
     return {"library": lib, "bi": bi, "notes": notes, "can_publish": lib or bi}
 
 
+def _other_sheet_ids() -> set:
+    """Ids of the company-wide telemetry and accounts sheets: never a publish target."""
+    ids = set()
+    try:
+        ids.add(paths.DEFAULT_TELEMETRY_SHEET_ID)
+        ids.add((os.environ.get("GSHEET_TELEMETRY_ID") or "").strip())
+        from src.analysis_agent import gsheet_accounts as ga
+
+        ids.add(ga.DEFAULT_ACCOUNTS_SHEET_ID)
+        ids.add((os.environ.get("GSHEET_ACCOUNTS_ID") or "").strip())
+    except Exception:
+        pass
+    ids.discard("")
+    return ids
+
+
 def publish(service=None) -> dict:
     """Write the effective values into the team sheet (lead only; needs edit access)."""
     report = shareable_report()
@@ -362,13 +399,24 @@ def publish(service=None) -> dict:
     sid = sheet_id()
     if not sid:
         raise SettingsError("The team connection file is not configured in this build.")
+    if sid in _other_sheet_ids():
+        raise SettingsError("The team connection file id is the same as another team sheet. "
+                            "Nothing was published.")
     if service is None:
         from src.fb_ads_rpa import telemetry_sync as ts
 
         service = ts._service_oauth(sid)  # write-scope user token, separate from the read token
+    tab = tab_name()
     try:
+        service.spreadsheets().values().get(spreadsheetId=sid, range=f"'{tab}'!A1").execute()
+    except Exception as exc:  # noqa: BLE001
+        if _http_status(exc) == 400:
+            raise SettingsError("The ACL connection file has no connection tab. Nothing was published.") from None
+        raise SettingsError("Could not open the ACL connection file. You need edit access to it.") from None
+    try:
+        service.spreadsheets().values().clear(spreadsheetId=sid, range=f"'{tab}'!A:B", body={}).execute()
         service.spreadsheets().values().update(
-            spreadsheetId=sid, range=f"'{tab_name()}'!A1", valueInputOption="RAW",
+            spreadsheetId=sid, range=f"'{tab}'!A1", valueInputOption="RAW",
             body={"values": [[k, v] for k, v in sorted(have.items())]}).execute()
     except Exception:
         raise SettingsError("Could not write the ACL connection file. You need edit access to it.") from None
