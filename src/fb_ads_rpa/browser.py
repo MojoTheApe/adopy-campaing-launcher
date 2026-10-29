@@ -2550,6 +2550,13 @@ class MultiloginAttachOnlyProvider:
                     _tell_job("Profile was locked in Multilogin, released; starting it again")
                     time.sleep(1)
                     continue
+                if cant_lock and _start_held_elsewhere(msg):
+                    # ACL-2300: профиль занят на другой машине / другим пользователем — освобождать нельзя.
+                    raise RuntimeError(
+                        f"{account_label}: the profile is held by another machine or user in Multilogin. "
+                        "Click \"Locked\" on the profile in MLX Desktop (open it once there), "
+                        "then try again."
+                    ) from exc
                 if lock_conflict and not allow_restart:
                     # ACL-1184: тот же отказ «открыт руками», что и в `open`, — не голый
                     # RuntimeError: дешборд показывает по нему `hand_message()`.

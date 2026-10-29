@@ -20,11 +20,12 @@ sys.path.insert(0, str(ROOT))
 from src.fb_ads_rpa import browser as br  # noqa: E402
 from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
 from src.meta_campaign_agent.multilogin_launcher import (  # noqa: E402
+    MultiloginLauncher as _RealLauncher,
     MultiloginLauncherError,
     StartedProfile,
 )
 
-PROFILE = "550e8400-e29b-41d4-a716-446655440122"
+PROFILE = "550e8400-e29b-41d4-a716-446655440000"
 CANT_LOCK = "Start profile failed HTTP 500: can't lock profile"
 
 
@@ -128,3 +129,77 @@ def test_multilogin_status_unknown_or_running_means_no_release(world):
         with pytest.raises(pt.ProfileStop):
             _start()
         assert world.fake.unlocks == 0
+
+
+# --- the real launcher method against the documented /profile/statuses shape -------------------
+
+def _real_launcher(monkeypatch, reply):
+    import src.meta_campaign_agent.multilogin_launcher as lm
+
+    calls = []
+
+    def get(url, headers=None, timeout=None, **kw):
+        calls.append(url)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(lm.requests, "get", get)
+    cfg = SimpleNamespace(launcher_base_v1="http://l/api/v1", launcher_base_v2="http://l/api/v2",
+                          automation_token="t")
+    launcher = _RealLauncher(cfg)
+    launcher._calls = calls
+    return launcher
+
+
+class _Http:
+    def __init__(self, status, payload=None):
+        self.status_code = status
+        self._p = payload
+        self.text = ""
+
+    def json(self):
+        if self._p is None:
+            raise ValueError("no json")
+        return self._p
+
+
+def test_statuses_lists_active_profiles_including_stopping(monkeypatch):
+    other = "other-profile"
+    body = {"data": {"states": {PROFILE: {"profile_id": PROFILE, "status": "browser_stopping"},
+                                other: {"status": "browser_running"}}}}
+    ln = _real_launcher(monkeypatch, _Http(200, body))
+    assert ln.running_profile_ids() == {PROFILE, other}
+    assert ln._calls == ["http://l/api/v1/profile/statuses"]
+
+
+def test_statuses_without_the_profile_means_not_running(monkeypatch):
+    ln = _real_launcher(monkeypatch, _Http(200, {"data": {"states": {}}}))
+    assert ln.running_profile_ids() == set()
+
+
+@pytest.mark.parametrize("reply", [_Http(401, {"status": {}}), _Http(404), _Http(200, {"data": {"states": "x"}}),
+                                   _Http(200, ["bad"]), ConnectionError("down")])
+def test_statuses_unknown_is_none(monkeypatch, reply):
+    assert _real_launcher(monkeypatch, reply).running_profile_ids() is None
+
+
+def test_real_launcher_end_to_end_releases_on_empty_statuses(world, monkeypatch):
+    import src.meta_campaign_agent.multilogin_launcher as lm
+
+    ln = _real_launcher(monkeypatch, _Http(200, {"data": {"states": {}}}))
+    ln.start_profile = _Launcher([CANT_LOCK]).start_profile
+    released = []
+    ln.release_stale_lock = lambda pid, folder_id=None: released.append(pid)
+    world.fake = ln
+    assert _start().port == "58906"
+    assert released == [PROFILE]
+
+
+def test_held_on_another_machine_says_click_locked(world):
+    world.fake = _Launcher(["Start profile failed HTTP 500: can't lock profile, in use by another device"])
+    with pytest.raises(RuntimeError) as err:
+        _start()
+    assert "Locked" in str(err.value) and world.fake.unlocks == 0
+
+

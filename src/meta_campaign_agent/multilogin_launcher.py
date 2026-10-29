@@ -193,29 +193,35 @@ class MultiloginLauncher:
         return None
 
     def running_profile_ids(self) -> set[str] | None:
-        """Ids of profiles Multilogin itself reports as running, or None when it cannot say (ACL-2300).
+        """Ids of profiles Multilogin itself lists as active, or None when it cannot say (ACL-2300).
 
-        Same read-only launcher list as `_get_running_profile_port`. None means "unknown": the
-        caller must not treat it as "not running".
+        Read-only `GET /api/v1/profile/statuses` (`data.states`, keyed by profile id), the same
+        documented call `mlx_profiles.running_profiles_from_launcher` reads. That one returns an
+        empty list on any failure, so it cannot tell "nothing runs" from "unknown"; this one can.
+        A profile present with ANY status, "stopping" included, counts as active. None (non-200,
+        bad shape, exception) means unknown: the caller must not treat it as "not running".
+        The old `/profile/running` addresses are 404 on launcher 12.16.3 and are not used.
         """
-        for endpoint in [
-            f"{self.config.launcher_base_v2}/profile/running",
-            f"{self.config.launcher_base_v1}/profile/running",
-            f"{self.config.launcher_base_v2}/profiles/running",
-        ]:
-            try:
-                r = requests.get(endpoint, headers=self._headers(), timeout=10)
-                if r.status_code != 200:
-                    continue
-                items = r.json()
-                if isinstance(items, dict):
-                    items = items.get("data") or []
-                if not isinstance(items, list):
-                    continue
-                return {str(i.get("profile_id") or i.get("id") or "") for i in items if isinstance(i, dict)}
-            except Exception:
-                continue
-        return None
+        try:
+            r = requests.get(f"{self.config.launcher_base_v1}/profile/statuses",
+                             headers=self._headers(), timeout=10)
+            if r.status_code != 200:
+                return None
+            body = r.json()
+            data = body.get("data") if isinstance(body, dict) else None
+            states = data.get("states") if isinstance(data, dict) else None
+        except Exception:
+            return None
+        if states is None:
+            states = {} if isinstance(data, dict) and "states" not in data else None
+        if not isinstance(states, dict):
+            return None
+        ids: set[str] = set()
+        for key, state in states.items():
+            ids.add(str(key))
+            if isinstance(state, dict) and isinstance(state.get("profile_id"), str):
+                ids.add(state["profile_id"])
+        return ids
 
     def release_stale_lock(self, profile_id: str, folder_id: str | None = None) -> None:
         """Release the lock Multilogin X keeps on a profile that was stopped by hand (ACL-2300).
