@@ -65,8 +65,10 @@ def read_forms(account_label: str, selected_page: str | None = None) -> dict[str
     started = time.monotonic()
     run = _as.serialized_browser(key=_as._profile_key, reading=True)(
         lambda account: _read_in_session(account, selected_page))
+    from src.fb_api.connection import user_started_action
     try:
-        out = run(account_label)
+        with user_started_action():      # ACL-2272: "only by the person's press" (see /api/page-forms)
+            out = run(account_label)
         error = ""
     except Exception as exc:  # noqa: BLE001 - отказ профиля/страницы: текстом человеку
         error = _api._failure(account_label, exc)[0]

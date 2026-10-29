@@ -81,3 +81,22 @@ directories. They exercise independent spawned processes and process termination
 they neither drive live profiles nor complete the separate live Windows pilot
 ACL-1187. Source review, combined batch/stage verification and delivered releases
 remain separate workflow steps.
+
+## Who may start a closed profile — ACL-2272
+
+Owner rule (2026-10-28): a closed Multilogin profile is opened only by Check plan, Publish and actions the
+person starts, and not earlier than the first campaign. Page load, background and scheduled reads
+(page-open refresh, 08/13/18 sweeps, row-expand "attention" refresh) only use a profile that is **already
+open**; for a closed one they stop at once with code `profile_closed` ("the profile is closed, so nothing was
+read"), take no memory slot, start nothing and send nothing to Meta.
+
+The gate is a context flag, `connection.user_started_action()` (`connection.may_start_closed_profile()`;
+`opening_closed_profile()` of ACL-2262 counts too). It guards the cold read path
+(`account_spend_api._open_gated`, RPA `account_spend._attach_only`); the warm path (ACL-2262) keeps its own
+`opening_closed_profile()`. Only the entry points that a button reaches set it: Read spend / countries /
+campaign read, Retry and the refresh after a command (`campaign_inventory.USER_TRIGGERS`), shut-off, campaign
+commands, Check plan, Page/forms reads. A new automatic reader must not set it.
+
+On the dashboard a closed profile is a failed row attempt, not a new state: the last saved list stays on screen
+with the row note "profile is closed ... Press Retry", Retry (the person's action) opens the profile and reads.
+`recently_failed` keeps the automatic refresh from asking again within an hour, and there is no timer.

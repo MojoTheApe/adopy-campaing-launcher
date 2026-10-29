@@ -230,6 +230,11 @@ def get_draft_status_path() -> str:
     return os.path.join(get_local_config_dir(), "draft_status.json")
 
 
+def get_publish_history_path() -> str:
+    """ACL-2292: one JSON line per finished publish job, survives a dashboard restart."""
+    return os.path.join(get_local_config_dir(), "publish_history.jsonl")
+
+
 def get_google_oauth_client_path() -> str:
     """OAuth client JSON used by the dashboard and telemetry consent flows.
 

@@ -56,9 +56,10 @@ _OPEN_CLOSED = ContextVar("acl_open_closed_profile", default=False)
 
 @contextmanager
 def opening_closed_profile(allowed=True):
-    """ACL-2262: the caller is an action that may bring up a CLOSED profile (Check plan, Publish and
-    /connection/prepare before it). Owner rule: not earlier than the first campaign. Reads, the
-    08/13/18 refresh and shut-off commands never set this, so they only adopt an already-open profile."""
+    """ACL-2262: the caller is an action that may bring up a CLOSED profile on the WARM path (Check plan, Publish
+    and /connection/prepare before it). Owner rule: not earlier than the first campaign. Without it the warm
+    path only adopts an already-open profile. The cold read path (`_open_gated`) has its own gate,
+    `user_started_action()` (ACL-2272); the warm flag alone did not cover it."""
     token = _OPEN_CLOSED.set(allowed is True)
     try:
         yield
@@ -70,8 +71,29 @@ def may_open_closed():
     return _OPEN_CLOSED.get()
 
 
+_USER_ACTION = ContextVar("acl_user_started_action", default=False)
+
+
+@contextmanager
+def user_started_action(allowed=True):
+    """ACL-2272: the caller is an action the person started (a read/Retry/shut-off button, a campaign
+    command, Check plan, Publish). Only then may a read bring up a CLOSED profile on the cold path
+    (`_open_gated`, RPA `_attach_only`). Page load, background and 08/13/18 reads never set it, so they
+    only use a profile that is already open or report "profile closed, nothing read"."""
+    token = _USER_ACTION.set(allowed is True)
+    try:
+        yield
+    finally:
+        _USER_ACTION.reset(token)
+
+
+def may_start_closed_profile():
+    """True inside a user-started action; `opening_closed_profile()` (Check plan/Publish/prepare) counts too."""
+    return _USER_ACTION.get() or _OPEN_CLOSED.get()
+
+
 def prepare_existing(registry, entry, account):
-    """Adopt a running verified profile; with `opening_closed_profile()` also open a closed one (ACL-2262)."""
+    """Adopt a running verified profile; with `opening_closed_profile()` also open a closed one (ACL-2262, warm path)."""
     managed = settings()["managed_sessions"]
     if registry.is_warm(entry.profile_id):
         sess = getattr(registry,"session",lambda _pid:None)(entry.profile_id)

@@ -749,14 +749,20 @@
      тёплых сессий) состояние профиля с «Open profile». Полоса аккаунта внутри таблицы кампаний убрана. */
   function decorate(account, h) {
     var sum = S.summaries[account] || {state: 'idle'}, att = sum.attempt, ag = age(sum, S.fetchedAt[account]);
-    var row = S.refreshRows && S.refreshRows[account] || {}, text, bad = false;
+    var row = S.refreshRows && S.refreshRows[account] || {}, text, bad = false, closed = false;
     var pending = !!S.running[account];
     if (pending) text = 'updating';
-    else if (row.state === 'failed' || att && att.state === 'failed') { text = 'list failed — ' + noteFrom(row.error || att && att.error || 'Read failed', 'bad').text; bad = true; }
+    else if (row.state === 'failed' || att && att.state === 'failed') {
+      var failText = row.error || att && att.error || 'Read failed', A0 = window.acmCommands;
+      // ACL-2272: a closed profile that an automatic read left alone is not a failed list: the saved list stays, Retry opens it.
+      closed = !!(A0 && A0.FRIENDLY && noteFrom(failText, 'bad', att && att.code).text === A0.FRIENDLY.profileClosed);
+      if (closed) text = (sum.finished_at ? 'list ' + sum.finished_at.slice(11, 16) : 'list not read') + ' — profile closed, not refreshed';
+      else { text = 'list failed — ' + noteFrom(failText, 'bad').text; bad = true; }
+    }
     else text = sum.finished_at ? 'list ' + sum.finished_at.slice(11, 16) : 'list not read';
     if (h.snap) { h.snap.textContent = text; h.snap.title = row.error || att && att.error || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
     if (h.readBtn) {
-      h.readBtn.hidden = (!bad && !S.uncertain[account]) || S.readsAvailable === false;
+      h.readBtn.hidden = (!bad && !closed && !S.uncertain[account]) || S.readsAvailable === false;
       h.readBtn.disabled = pending || S.readsAvailable === false;
       h.readBtn.textContent = 'Retry';
       h.readBtn.title = row.error || att && att.error || 'Retry the account structure read';
@@ -803,7 +809,10 @@
     }
     if (S.running[a.account]) return msg('', 'Reading campaigns for ' + esc(a.account) + '… (one profile at a time)', span);
     if (S.treeErr[a.account]) return one('acct:' + a.account + ':tree', 'bad', 'Could not load the saved inventory', S.treeErr[a.account], '');
-    if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
+    var closedA0 = window.acmCommands, closedNote = att && att.state === 'failed' && closedA0 && closedA0.FRIENDLY
+      && noteFrom(att.error || '', 'bad', att.code).text === closedA0.FRIENDLY.profileClosed;
+    if (closedNote) out += rowMsg('acct:' + a.account + ':read', {text: closedA0.FRIENDLY.profileClosed, raw: att.error, tone: 'warn'}, span);
+    else if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
       sum.state !== 'idle' ? ' — showing the earlier snapshot below' : '');
     if (S.warmMsg[a.account]) out += rowMsg('acct:' + a.account + ':open', S.warmMsg[a.account], span);
     if (sum.state === 'idle') return out || msg('', 'No saved list yet. Expand this account to request its structure; dates only change workbook numbers.', span);

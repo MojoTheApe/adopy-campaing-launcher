@@ -403,6 +403,9 @@ def test_start_closed_waits_for_the_sync_then_goes_on(world, monkeypatch):
 
 
 def test_open_gated_waits_for_the_sync_before_it_queues(world, monkeypatch):
+    from src.fb_api import connection as _conn
+
+    monkeypatch.setattr(_conn, "may_start_closed_profile", lambda: True)   # ACL-2272: user-started read
     from src.analysis_agent import account_spend_api as api
 
     notes = []
