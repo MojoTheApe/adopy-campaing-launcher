@@ -1053,6 +1053,7 @@ class InPageGraph:
     #: ACL-2299 (B): set by the warm lease (`warm.TabPatience`): how a tab frozen in the middle of a job is treated.
     patience: Any = None
     _patience_depth = 0
+    _read_sent = False
 
     #: ACL-2299: a GET whose answer may already have been asked for is resent at most this many times per call.
     MAX_READ_RESENDS = 2
@@ -1073,10 +1074,14 @@ class InPageGraph:
         self._patience_depth += 1
         try:
             while True:
-                runs += 1
+                self._read_sent = False
                 try:
                     result = op()
                 except PageUnresponsive as stop:
+                    # only a run that got as far as sending the GET is a resend; waiting for a tab that was
+                    # not ready yet (nothing sent) is limited by the budget alone
+                    if self._read_sent:
+                        runs += 1
                     if max_runs is not None and runs >= max_runs:
                         if episode is not None:
                             episode.finish(stop)
@@ -1234,6 +1239,7 @@ class InPageGraph:
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         # …потом Graph-вызов РОВНО ОДИН раз. Любая ошибка после отправки —
         # результат неизвестен и НЕ повторяется (ревью r9-1): это стоп.
+        self._read_sent = True
         try:
             with self._timeouts_as_stops():
                 got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout + 5.0))

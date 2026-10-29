@@ -89,6 +89,7 @@ def test_resends_of_a_read_are_capped(tmp_path):
 
     def read_once(spec, timeout):
         runs.append(1)
+        graph._read_sent = True
         raise PageUnresponsive("silent after the send")
 
     with pytest.raises(PageUnresponsive):
@@ -106,6 +107,7 @@ def test_network_timeout_then_freeze_then_recovery_stays_within_the_shared_budge
     def read_once(spec, timeout):
         step = next(seq)
         if step == "freeze":
+            graph._read_sent = True
             raise PageUnresponsive("silent")
         return {"error": "network_timeout"} if step == "net" else {"data": []}
 
@@ -308,3 +310,82 @@ def test_check_plan_tries_one_replacement_tab_after_the_wait(monkeypatch):
     monkeypatch.setattr(_as, "serialized_browser", lambda **kw: (lambda fn: always))
     out = publish_api._check_plan_once([{}], account_label="A", country="US")
     assert len(calls) == 2 and out["error"], "one replacement only, then the failure is reported"
+
+
+# ---- combined with ACL-2301 (real GraphClient network retries over the real InPageGraph.request) ----
+
+def test_worst_case_with_the_2301_network_retries_stays_within_one_budget_plus_the_backoff(tmp_path):
+    from src.fb_api import graph as g
+
+    rig = _rig(tmp_path, 96.0)
+    graph = _graph(rig, writes=False, freeze_until=0.0)
+    graph.state = lambda: {"kind": "ads_manager", "has_token": True}
+    graph.graph_host, graph.credentials, graph.name = "captured", "include", "h"
+    graph._connection_stop = None
+    script = iter(["net", "freeze", "net", "freeze", "freeze"])
+    runs = []
+
+    def read_once(spec, timeout):
+        runs.append(rig.now[0])
+        step = next(script, "freeze")
+        if step == "freeze":
+            graph._read_sent = True
+            raise PageUnresponsive("silent")
+        return {"error": "network_timeout"}
+
+    graph._read_once = read_once
+    client = g.GraphClient(graph, min_interval_s=0, sleep=rig._sleep_fake)
+    start = rig.now[0]
+    with pytest.raises((PageUnresponsive, g.PageFailed)):
+        client.get("/123", {"fields": "id"})
+    total = rig.now[0] - start
+    print("WORST_CASE_S", total)
+    assert total <= 480.0 + sum(g.NETWORK_BACKOFF_S) + 20.0, total
+    assert len(runs) <= 4 * (1 + InPageGraph.MAX_READ_RESENDS), "bounded resends"
+    assert graph.patience.spent_s <= 480.0
+
+
+def test_recovery_after_a_network_timeout_and_a_freeze_continues(tmp_path):
+    from src.fb_api import graph as g
+
+    rig = _rig(tmp_path, 96.0)
+    graph = _graph(rig, writes=False, freeze_until=0.0)
+    graph.graph_host, graph.credentials, graph.name = "captured", "include", "h"
+    graph._connection_stop = None
+    graph.state = lambda: {"kind": "ads_manager", "has_token": True}
+    script = iter(["net", "freeze", "freeze", "ok"])
+
+    def read_once(spec, timeout):
+        step = next(script)
+        if step == "freeze":
+            graph._read_sent = True
+            raise PageUnresponsive("silent")
+        return {"error": "network_timeout"} if step == "net" else {"status": 200, "body": {"id": "123"}}
+
+    graph._read_once = read_once
+    client = g.GraphClient(graph, min_interval_s=0, sleep=rig._sleep_fake)
+    assert client.get("/123", {"fields": "id"}) == {"id": "123"}
+    assert rig.now[0] - 1_800_000_000.0 < 480.0
+
+
+def test_worst_case_of_a_tab_that_never_comes_back_before_the_send_is_one_budget(tmp_path):
+    from src.fb_api import graph as g
+
+    rig = _rig(tmp_path, 96.0)
+    graph = _graph(rig, writes=False, freeze_until=0.0)
+    graph.graph_host, graph.credentials, graph.name = "captured", "include", "h"
+    graph._connection_stop = None
+    graph.state = lambda: {"kind": "ads_manager", "has_token": True}
+
+    def read_once(spec, timeout):
+        raise PageUnresponsive("not ready, nothing sent")
+
+    graph._read_once = read_once
+    client = g.GraphClient(graph, min_interval_s=0, sleep=rig._sleep_fake)
+    start = rig.now[0]
+    with pytest.raises(PageUnresponsive):
+        client.get("/123")
+    total = rig.now[0] - start
+    print("WORST_CASE_PRESEND_S", total)
+    assert 480.0 <= total < 495.0
+    assert graph.patience.spent_s >= 480.0
