@@ -19,6 +19,11 @@ import pytest
 
 paths = importlib.import_module("config.paths")
 
+VALID = '{"installed": {"client_id": "fake-1.apps.example"}}'
+VALID_WEB = '{"web": {"client_id": "fake-2.apps.example"}}'
+OTHER_VALID = '{"installed": {"client_id": "fake-local.apps.example"}}'
+INVALID = ["", "   ", "not json", "[]", "{}", '{"installed": {}}', '{"installed": {"client_id": ""}}']
+
 
 @pytest.fixture()
 def local_dir(tmp_path, monkeypatch):
@@ -263,7 +268,7 @@ def test_legacy_google_oauth_files_move_out_of_checkout(local_dir, tmp_path, mon
     checkout = tmp_path / "checkout"
     legacy_config = checkout / "config"
     legacy_config.mkdir(parents=True)
-    (legacy_config / "oauth_client.json").write_text('{"installed": {}}', encoding="utf-8")
+    (legacy_config / "oauth_client.json").write_text(VALID, encoding="utf-8")
     (legacy_config / "token_accounts.json").write_text('{"token": "fake"}', encoding="utf-8")
     monkeypatch.setattr(paths, "PROJECT_ROOT", checkout)
 
@@ -273,3 +278,95 @@ def test_legacy_google_oauth_files_move_out_of_checkout(local_dir, tmp_path, mon
     assert (local_dir / "oauth_client.json").read_bytes() == (legacy_config / "oauth_client.json").read_bytes()
     assert (local_dir / "token_accounts.json").read_bytes() == (legacy_config / "token_accounts.json").read_bytes()
     assert paths.migrate_legacy_google_oauth() == []
+
+
+def _oauth_setup(local_dir, tmp_path, monkeypatch):
+    local_dir.mkdir(parents=True, exist_ok=True)
+    checkout = tmp_path / "checkout"
+    (checkout / "config").mkdir(parents=True)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", checkout)
+    monkeypatch.delenv("GSHEET_OAUTH_CLIENT", raising=False)
+    return checkout / "config" / "oauth_client.json", local_dir / "oauth_client.json"
+
+
+def test_oauth_validity_rules(tmp_path):
+    f = tmp_path / "c.json"
+    assert not paths.is_valid_google_oauth_client(f)  # missing
+    for text in INVALID:
+        f.write_text(text, encoding="utf-8")
+        assert not paths.is_valid_google_oauth_client(f), text
+    for text in (VALID, VALID_WEB):
+        f.write_text(text, encoding="utf-8")
+        assert paths.is_valid_google_oauth_client(f)
+
+
+@pytest.mark.parametrize("text", INVALID)
+def test_invalid_local_or_bundled_client_counts_as_absent(local_dir, tmp_path, monkeypatch, text):
+    bundled, local = _oauth_setup(local_dir, tmp_path, monkeypatch)
+    local.write_text(text, encoding="utf-8")
+    bundled.write_text(text, encoding="utf-8")
+    assert paths.get_google_oauth_client_path() == str(local)
+    assert not paths.is_valid_google_oauth_client(paths.get_google_oauth_client_path())
+    bundled.write_text(VALID, encoding="utf-8")
+    assert paths.get_google_oauth_client_path() == str(bundled)  # valid bundled beats invalid local
+    local.write_text(VALID, encoding="utf-8")
+    assert paths.get_google_oauth_client_path() == str(local)
+
+
+@pytest.mark.parametrize("text", INVALID)
+def test_migration_never_copies_an_invalid_client(local_dir, tmp_path, monkeypatch, text):
+    bundled, local = _oauth_setup(local_dir, tmp_path, monkeypatch)
+    bundled.write_text(text, encoding="utf-8")
+    assert paths.migrate_legacy_google_oauth() == []
+    assert not local.exists()
+
+
+@pytest.mark.parametrize("text", INVALID)
+def test_valid_bundled_client_repairs_an_invalid_local_one(local_dir, tmp_path, monkeypatch, text):
+    bundled, local = _oauth_setup(local_dir, tmp_path, monkeypatch)
+    bundled.write_text(VALID, encoding="utf-8")
+    local.write_text(text, encoding="utf-8")
+    notes = paths.migrate_legacy_google_oauth()
+    assert len(notes) == 1
+    assert local.read_text(encoding="utf-8") == VALID
+
+
+def test_valid_local_client_is_never_overwritten(local_dir, tmp_path, monkeypatch):
+    bundled, local = _oauth_setup(local_dir, tmp_path, monkeypatch)
+    bundled.write_text(VALID, encoding="utf-8")
+    local.write_text(OTHER_VALID, encoding="utf-8")
+    assert paths.migrate_legacy_google_oauth() == []
+    assert local.read_text(encoding="utf-8") == OTHER_VALID
+    assert paths.get_google_oauth_client_path() == str(local)
+
+
+def test_spec_bundles_the_oauth_client_only_when_valid(tmp_path):
+    from pathlib import Path as _P
+
+    root = _P(__file__).resolve().parent.parent
+    spec = (root / "packaging/windows/acl_windows.spec").read_text(encoding="utf-8")
+    start = spec.index("OAUTH_CLIENT_FILE = Path(")
+    block = spec[start:spec.index("# Uvicorn chooses")]
+    client = tmp_path / "oauth_client.json"
+
+    def run(text):
+        if text is None:
+            client.unlink(missing_ok=True)
+        else:
+            client.write_text(text, encoding="utf-8")
+        ns = {"os": __import__("os"), "Path": _P, "PROJECT_ROOT": root, "datas": []}
+        import os as _os
+        old = _os.environ.get("ACL_OAUTH_CLIENT_FILE")
+        _os.environ["ACL_OAUTH_CLIENT_FILE"] = str(client)
+        try:
+            exec(block, ns)
+        finally:
+            if old is None:
+                _os.environ.pop("ACL_OAUTH_CLIENT_FILE", None)
+            else:
+                _os.environ["ACL_OAUTH_CLIENT_FILE"] = old
+        return ns["datas"]
+
+    assert run(VALID) == [(str(client), "config")]
+    for text in (None, *INVALID):
+        assert run(text) == [], text

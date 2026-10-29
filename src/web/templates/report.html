@@ -8622,6 +8622,7 @@ window.cbTree = (function () {
         + ' (' + lost.length + ' account' + (lost.length === 1 ? '' : 's') + ' not sent) '
         + '<button type="button" class="cbd-q-retry" data-cb-stop-retry="1">Retry</button></div>');
     }
+    if (window.aclDoneNotify && !p.done) lines.push('<div class="cbd-q-line">' + window.aclDoneNotify.controlHtml() + '</div>');
     box.innerHTML = lines.join('');
     var stopRetry = box.querySelector('[data-cb-stop-retry]');
     if (stopRetry) stopRetry.addEventListener('click', function () {
@@ -17879,9 +17880,202 @@ function cbPlanHtml(data) {
   return h + '</div>';
 }
 
+/* ACL-2314 begin */
+/* Сигнал о конце Check plan / Publish, пока вкладка спрятана за другими окнами.
+ * Фабрика берёт окружение снаружи (окно, документ, Notification, хранилище), чтобы
+ * её можно было гонять в node. Разрешение на уведомления спрашивается ТОЛЬКО из
+ * click по видимой кнопке (enable), на загрузке страницы — никогда. Отказ или
+ * отсутствие API — тихий откат на значок во вкладке. В тексте уведомления только
+ * счётчики: ни id, ни токенов, ни названий. */
+function aclDoneNotifierFactory(env) {
+  var KEY = 'acl_done_notify';
+  var win = env.win, doc = env.doc;
+  var badged = null;      // {kind, ok}: что показано в заголовке/значке сейчас
+  var prefix = null, links = [];   // links: [{el, href, type}] — все <link rel=icon>
+  var waitSeen = {};               // ключи эпизодов «ждёт руки менеджера», о которых уже сказано
+
+  function prefs() {
+    try {
+      var raw = env.storage() && env.storage().getItem(KEY);
+      var p = raw ? JSON.parse(raw) : {};
+      return { on: p.on === true, sound: p.sound === true };
+    } catch (e) { return { on: false, sound: false }; }
+  }
+  function save(p) {
+    try { env.storage().setItem(KEY, JSON.stringify({ on: !!p.on, sound: !!p.sound })); } catch (e) { /* без хранилища — на сессию */ }
+  }
+  function perm() {
+    try { return env.Notification && typeof env.Notification.permission === 'string' ? env.Notification.permission : 'unsupported'; }
+    catch (e) { return 'unsupported'; }
+  }
+  function away() {
+    try { return doc.visibilityState === 'hidden' || (typeof doc.hasFocus === 'function' && !doc.hasFocus()); }
+    catch (e) { return false; }
+  }
+
+  function iconFor(ok) {
+    var fill = ok ? '#16a34a' : '#dc2626';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#1f2937"/>'
+      + '<circle cx="23" cy="9" r="8" fill="' + fill + '" stroke="#fff" stroke-width="2"/></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
+  function setBadge(kind, ok) {
+    try {
+      if (!badged) {
+        links = [];
+        var all = doc.querySelectorAll ? doc.querySelectorAll('link[rel~="icon"]') : [];
+        for (var i = 0; i < all.length; i++) links.push({ el: all[i], href: all[i].getAttribute('href'), type: all[i].getAttribute('type') });
+      } else if (prefix && String(doc.title).indexOf(prefix) === 0) {
+        doc.title = String(doc.title).slice(prefix.length);
+      }
+      badged = { kind: kind, ok: ok };
+      prefix = (ok ? '✓ Ready to publish' : '⚠ Needs attention') + ' — ';
+      doc.title = prefix + doc.title;
+      // Chrome берёт SVG-ссылку, а не /favicon.ico: подменяем все, а не одну.
+      links.forEach(function (l) { l.el.setAttribute('href', iconFor(ok)); l.el.setAttribute('type', 'image/svg+xml'); });
+    } catch (e) { /* значок — удобство */ }
+  }
+  function clearBadge() {
+    if (!badged) return;
+    badged = null;
+    try {
+      // Текущий заголовок без нашего префикса: страница могла сменить его сама.
+      if (prefix && String(doc.title).indexOf(prefix) === 0) doc.title = String(doc.title).slice(prefix.length);
+      links.forEach(function (l) {
+        if (l.href != null) l.el.setAttribute('href', l.href);
+        if (l.type != null) l.el.setAttribute('type', l.type); else l.el.removeAttribute('type');
+      });
+    } catch (e) { /* ничего */ }
+    prefix = null; links = [];
+  }
+  function beep() {
+    try {
+      var AC = win.AudioContext || win.webkitAudioContext;
+      if (!AC) return;
+      var c = new AC(), o = c.createOscillator(), g = c.createGain();
+      o.connect(g); g.connect(c.destination);
+      g.gain.value = 0.08; o.frequency.value = 880;
+      o.start(); o.stop(c.currentTime + 0.25);
+    } catch (e) { /* без звука */ }
+  }
+
+  function text(kind, ok, bad, total) {
+    if (kind === 'check') {
+      return 'Check finished: ' + (bad ? ok + ' ready, ' + bad + ' need attention' : ok + ' account' + (ok === 1 ? '' : 's') + ' ready');
+    }
+    if (kind === 'wait') return 'A job is waiting for your action';
+    return 'Publish finished: ' + ok + ' of ' + total + ' campaign' + (total === 1 ? '' : 's') + ' published';
+  }
+
+  function notify(kind, title, ok, open) {
+    setBadge(kind, ok);
+    var p = prefs();
+    if (p.on && perm() === 'granted') {
+      try {
+        var n = new env.Notification(title, { tag: 'acl-done-' + kind });
+        n.onclick = function () {
+          try { win.focus(); } catch (e) { /* ничего */ }
+          try { n.close(); } catch (e) { /* ничего */ }
+          clearBadge();
+          try { if (open) open(); } catch (e) { /* ничего */ }
+        };
+      } catch (e) { /* уведомление не создалось — остаётся значок */ }
+      if (p.sound) beep();
+    }
+  }
+
+  /* kind: 'check' | 'publish'. check: ok/bad — аккаунты; publish: ok из total — кампании. */
+  function finished(kind, ok, bad, open, total) {
+    ok = Math.max(0, parseInt(ok, 10) || 0);
+    bad = Math.max(0, parseInt(bad, 10) || 0);
+    total = Math.max(ok, parseInt(total, 10) || 0);
+    if (!away()) return false;          // человек смотрит на страницу: сигнал не нужен
+    notify(kind, text(kind, ok, bad, total), kind === 'check' ? bad === 0 : ok === total && total > 0, open);
+    return true;
+  }
+
+  /* Задание ждёт руки менеджера: один раз на эпизод ожидания (key), только когда вкладка спрятана. */
+  function waiting(key, open) {
+    key = String(key);
+    if (waitSeen[key]) return false;
+    if (!away()) return false;
+    waitSeen[key] = true;
+    notify('wait', text('wait'), false, open);
+    return true;
+  }
+  /* Ожидание кончилось — следующее ожидание с тем же ключом снова даст сигнал. */
+  function waitingEnded(key) { delete waitSeen[String(key)]; }
+
+  function seen() { if (!away()) clearBadge(); }
+  if (doc && typeof doc.addEventListener === 'function') doc.addEventListener('visibilitychange', seen);
+  if (win && typeof win.addEventListener === 'function') win.addEventListener('focus', seen);
+
+  /* Видимая кнопка: единственное место, где спрашивается разрешение. */
+  function enable() {
+    var p = prefs();
+    if (p.on) { p.on = false; save(p); return Promise.resolve('off'); }
+    if (perm() === 'unsupported') return Promise.resolve('unsupported');
+    if (perm() === 'denied') return Promise.resolve('denied');
+    var ask;
+    try { ask = perm() === 'granted' ? Promise.resolve('granted') : Promise.resolve(env.Notification.requestPermission()); }
+    catch (e) { return Promise.resolve('unsupported'); }
+    return ask.then(function (r) {
+      if (r === 'granted') { p.on = true; save(p); return 'on'; }
+      return 'denied';
+    }, function () { return 'denied'; });
+  }
+  function setSound(v) { var p = prefs(); p.sound = !!v; save(p); }
+
+  function controlHtml() {
+    var p = prefs(), pm = perm();
+    var label = pm === 'unsupported' ? 'Notifications are not available in this browser — the tab title will show it'
+      : pm === 'denied' ? 'Notifications are blocked in the browser — the tab title will show it'
+      : (p.on && pm === 'granted') ? 'Notifications on — turn off' : 'Notify me when done';
+    var dis = (pm === 'unsupported' || pm === 'denied') ? ' disabled' : '';
+    return '<span class="acl-done-notify">'
+      + '<button type="button" class="cbd-add" data-acl-notify="enable"' + dis + '>' + label + '</button> '
+      + '<label class="acl-done-sound"><input type="checkbox" data-acl-notify="sound"' + (p.sound ? ' checked' : '') + '> Sound</label></span>';
+  }
+
+  return { finished: finished, waiting: waiting, waitingEnded: waitingEnded, enable: enable, setSound: setSound, controlHtml: controlHtml,
+           prefs: prefs, clearBadge: clearBadge, text: text, KEY: KEY };
+}
+/* Инертно там, где нет окна/документа/addEventListener (node-обвязки тестов гоняют страницу с урезанным document). */
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+  try {
+    window.aclDoneNotify = aclDoneNotifierFactory({
+      win: window, doc: document,
+      Notification: typeof Notification === 'undefined' ? null : Notification,
+      storage: function () { try { return window.localStorage; } catch (e) { return null; } }
+    });
+    document.addEventListener('click', function (ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest('[data-acl-notify]') : null;
+      if (!t) return;
+      var api = window.aclDoneNotify;
+      if (t.getAttribute('data-acl-notify') === 'sound') { api.setSound(t.checked); return; }
+      ev.stopPropagation();
+      api.enable().then(function () {
+        document.querySelectorAll('.acl-done-notify').forEach(function (n) { n.outerHTML = api.controlHtml(); });
+      });
+    });
+  } catch (e) { /* без уведомлений страница работает как раньше */ }
+}
+/* ACL-2314 end */
+
+/* ACL-2314: сколько аккаунтов проверено чисто (ok) и сколько просят внимания (bad). */
+function cbPlanTally(datas) {
+  var ok = 0, bad = 0;
+  (datas || []).forEach(function (d) {
+    var broken = !!(d && d.error) || ((d && d.results) || []).some(function (r) { return r && r.error; });
+    if (broken) bad += 1; else ok += 1;
+  });
+  return { ok: ok, bad: bad };
+}
+
 /* Рамка плана: полоса с «Hide/Show» и «Close plan ×», тело прокручивается само. */
 function cbPlanFrame(inner) {
   return '<div class="cbd-plan-bar"><span>Plan (no writes)</span><span>'
+    + (window.aclDoneNotify ? window.aclDoneNotify.controlHtml() + ' ' : '')
     + '<button type="button" class="cbd-add cbd-plan-fold" data-act="fold-plan" aria-expanded="true">Hide</button> '
     + '<button type="button" class="cbd-add cbd-plan-close" data-act="close-plan" aria-label="Close plan"'
     + ' title="Close plan">Close plan ×</button></span></div>'
@@ -17955,6 +18149,7 @@ window.cbCheckPlan = function (picked, out, btn, force) {
   }, 1000);
   if (btn) btn.disabled = true;
   var parts = new Array(forms.length);
+  var planDatas = [];     // ACL-2314: ответы по аккаунтам — для счётчиков в уведомлении
   var left = forms.length;
   var pending = forms.map(function (x) {
     return typeof cbFormAccount === 'function' ? cbFormAccount(x.form) : cbFormTitle(x.form);
@@ -18008,6 +18203,7 @@ window.cbCheckPlan = function (picked, out, btn, force) {
         // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
         if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);
         parts[i] = cbPlanHtml(data);
+        planDatas.push(data);
         pending[i] = '';
         left -= 1;
         if (!left) {
@@ -18018,6 +18214,14 @@ window.cbCheckPlan = function (picked, out, btn, force) {
           if (btn) btn.disabled = false;
         }
         render();
+        // ACL-2314: проверка кончилась, а вкладка спрятана — уведомление и значок.
+        if (!left && window.aclDoneNotify) {
+          var chk = cbPlanTally(planDatas);
+          window.aclDoneNotify.finished('check', chk.ok, chk.bad, function () {
+            out.hidden = false;
+            if (out.scrollIntoView) out.scrollIntoView({ block: 'nearest' });
+          });
+        }
       });
   });
 };
@@ -18257,6 +18461,15 @@ function cbNewRun(notify) {
     if (settled >= entries.length) {
       batch.active = false;
       send({ done: true, at: entries.length });
+      // ACL-2314: сборка кончилась, а вкладка спрятана — уведомление и значок.
+      if (window.aclDoneNotify) {
+        var campTotal = 0, campOk = 0;
+        entries.forEach(function (x) { campTotal += x.campTotal || 0; campOk += x.campOk || 0; });
+        window.aclDoneNotify.finished('publish', campOk, campTotal - campOk, function () {
+          var q = document.querySelector('.cbd-queue');
+          if (q && q.scrollIntoView) q.scrollIntoView({ block: 'nearest' });
+        }, campTotal);
+      }
     }
   }
 
@@ -18288,6 +18501,9 @@ function cbNewRun(notify) {
         settle(e, { account: e.label, state: 'bad', why: 'Stopped by user' });
         return;
       }
+      // ACL-2314: кампании этого задания — для итога «X of Y campaigns published».
+      e.campTotal = Math.max(e.campTotal || 0, (job.results || []).length);
+      e.campOk = (job.results || []).filter(function (r) { return r.publishable === true; }).length;
       var ok = !(job.errors || []).length && (job.results || []).length
         && (job.results || []).every(function (r) { return r.publishable === true; });
       settle(e, { account: e.label, state: ok ? 'ok' : 'bad', skipped: skipped,
@@ -18321,6 +18537,7 @@ function cbNewRun(notify) {
     }
     // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
     var sentNames = cbSentCampaignNames(fd);
+    e.campTotal = sentNames.length;   // ACL-2314
     post(e, fd, skipped, sentNames);
   }
 
@@ -19387,7 +19604,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       var warningOnly = r.publishable === true
                         && !!(r.warnings && r.warnings.length);
       var manual = r.success && r.manual_required && r.manual_required.length && !(r.blocking_failures || []).length;
-      var icon = manual ? '⚠️' : (!r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
+      var icon = manual ? '⚠️' : (!r.success ? (r.not_started ? '⏸️' : '❌') : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
       html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
@@ -19408,7 +19625,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         // stays in the alarm colour.
         var errStyle = (r.success && !blocked)
           ? ' style="color:var(--ok);border-color:var(--ok)"'
-          : '';
+          : (r.not_started ? ' style="color:var(--warn);border-color:var(--warn)"' : '');   // ACL-2299: not started, not failed
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
       if (r.blocking_failures && r.blocking_failures.length) {
@@ -19543,6 +19760,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         }
         if (job.status !== 'done' && job.status !== 'cancelled') {
           _renderTeachBanner(job.teach);
+          // ACL-2314: задание ждёт клика менеджера — один сигнал на эпизод, пока вкладка спрятана.
+          if (window.aclDoneNotify) {
+            if (job.teach && job.teach.waiting) {
+              window.aclDoneNotify.waiting('job:' + jobId, function () {
+                var b = document.getElementById(_teachBannerId());
+                if (b && b.scrollIntoView) b.scrollIntoView({ block: 'center' });
+                else if (statusPanel && statusPanel.scrollIntoView) statusPanel.scrollIntoView({ block: 'center' });
+              });
+            } else window.aclDoneNotify.waitingEnded('job:' + jobId);
+          }
           // Poll faster while cancelling so Stop feels responsive.
           setTimeout(poll, job.status === 'cancelling' ? 600 : 2000);
         } else {

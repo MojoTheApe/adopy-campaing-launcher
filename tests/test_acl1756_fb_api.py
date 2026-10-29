@@ -1249,13 +1249,16 @@ def test_close_catches_keyboard_interrupt_and_still_tries_http():
     page = FakePage([])
 
     class InterruptingCdp(FakeCdp):
+        armed = False       # ACL-2299: open() itself lists targets (tab clean-up); interrupt only during close()
+
         def call(self, method, params=None, *, session_id="", timeout=5.0):
-            if method == "Target.getTargets" and any(m == "Target.createTarget" for m, _, _ in self.sent):
+            if self.armed and method == "Target.getTargets":
                 raise KeyboardInterrupt()
             return super().call(method, params, session_id=session_id, timeout=timeout)
 
     cdp = InterruptingCdp(page, other_tabs=1)
     tab = PageTab.open("http://127.0.0.1:9321", connect=lambda u, timeout: cdp)
+    cdp.armed = True
     tried = {"closed": None}
     tab._http = staticmethod(lambda host, port, path, *, timeout=10.0:
                              [{"type": "page", "id": "T-mine"}, {"type": "page", "id": "T-0"}]

@@ -56,10 +56,15 @@ OAUTH_CLIENT_FILE = Path(
     os.environ.get("ACL_OAUTH_CLIENT_FILE")
     or str(PROJECT_ROOT / "packaging" / "windows" / ".build" / "oauth_client.json")
 )
-if OAUTH_CLIENT_FILE.is_file():
+# ACL-2319: an empty/invalid file (release 1315) must not be bundled.
+import sys
+sys.path.insert(0, str(PROJECT_ROOT))
+from config.paths import is_valid_google_oauth_client
+
+if OAUTH_CLIENT_FILE.is_file() and is_valid_google_oauth_client(OAUTH_CLIENT_FILE):
     datas.append((str(OAUTH_CLIENT_FILE), "config"))
 else:
-    print(f"WARNING: {OAUTH_CLIENT_FILE} not found - this build has no Google sign-in client; "
+    print(f"WARNING: {OAUTH_CLIENT_FILE} not found or invalid (empty / no client_id) - this build has no Google sign-in client; "
           "buyers cannot use 'Sign in with Google' (set ACL_OAUTH_CLIENT_FILE or the ACL_OAUTH_CLIENT_JSON CI secret).")
 
 # Uvicorn chooses its event loop, HTTP implementation and lifespan handler at

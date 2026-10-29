@@ -148,6 +148,24 @@ DEFAULT_PATIENT_READY_S = 480.0
 LOAD_BACKOFF_FIRST_S = 15.0
 LOAD_BACKOFF_CAP_S = 300.0
 _PATIENT = ContextVar("acl_warm_patient", default=None)
+#: ACL-2299 (B): how often a tab that froze in the middle of a job is looked at again while the machine is busy.
+MIDJOB_POLL_S = 5.0
+#: ACL-2299 (C): Check plan writes nothing, so its silent tab can always be waited for (busy machine or not).
+_READ_PATIENT = ContextVar("acl_warm_read_patient", default=False)
+#: ACL-2299 (C): a Check plan read on an IDLE machine waits only this long (a freeze there is real); then one
+#: ACL-2262 replacement tab. The full patient limit is for a busy machine.
+READ_IDLE_WAIT_ENV = "ACL_READ_IDLE_WAIT_S"
+DEFAULT_READ_IDLE_WAIT_S = 75.0
+
+
+@contextmanager
+def read_patience():
+    """Inside: a READ-ONLY graph waits for a silent tab up to the patient limit even on an idle machine."""
+    token = _READ_PATIENT.set(True)
+    try:
+        yield
+    finally:
+        _READ_PATIENT.reset(token)
 
 #: Состояния для экрана.
 WARM = "warm"
@@ -474,6 +492,10 @@ class Lease:
         self.state = state
         self.tab = session.tab
         self._released = False
+        try:
+            graph.patience = registry.patience_for(session)       # ACL-2299 (B): a mid-job freeze is waited for
+        except Exception:  # noqa: BLE001 - fakes without attributes
+            pass
 
     def release(self, stop: BaseException | None = None) -> None:
         """Вкладка остаётся открытой. `stop` — чем кончилось действие (LoggedOut и т. п.)."""
@@ -575,6 +597,18 @@ class WarmRegistry:
                     profiles.pop(pid, None)
 
         self._store.update(mutate)
+
+    def known_targets(self) -> set:
+        """ACL-2299: target ids of the robot tabs of this process and of this instance's warm store. The store is per
+        instance: protection from the other server on the machine is the `attached` filter of the tab clean-up."""
+        ids = {str(sess.target_id) for sess in list(self._sessions.values()) if sess.target_id}
+        try:
+            for rec in (self._store.load().get("profiles") or {}).values():
+                if isinstance(rec, dict) and rec.get("target_id"):
+                    ids.add(str(rec["target_id"]))
+        except Exception:  # noqa: BLE001
+            pass
+        return ids
 
     def has_closer(self) -> bool:
         return self._close_window is not None
@@ -1388,27 +1422,78 @@ class WarmRegistry:
         # answered yet is not called unresponsive for several minutes. Idle machine: today's limit.
         patient_s = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
         check = None
-        if patient_s > budget and self._busy_now(sess.profile_id):
-            budget = patient_s
-            until = self._mono()+budget
-            seen = [self._mono(), True]
-
-            def check() -> bool:
-                now = self._mono()
-                if now >= until:
-                    return False
-                if now - seen[0] >= 5.0:      # re-read the machine at most every 5 s; load gone = idle limit
-                    seen[0], seen[1] = now, self._busy_now(sess.profile_id)
-                return bool(seen[1])
+        limit, quiet = self._patience_limit(sess.profile_id, patient_s, reads=self._reads_may_wait(mode))
+        if limit > budget:
+            # ACL-2299 (C): a read-only action (Check plan) waits on any machine - the full limit when busy,
+            # a short one when idle; a write only on a busy one.
+            check = self.patience_check(sess.profile_id, limit, always=quiet)
+            if check is not None:
+                budget = limit
         token = _PREPARE_DEADLINE.set(self._mono()+budget)
         try:
             with command_budget(budget), patient_wait(check) if check else contextlib.nullcontext():
                 return self._prepare_owned(sess,act,mode,make_graph)
-        except GraphStop:
+        except GraphStop as stop:
+            self.annotate_stop(stop, sess)       # ACL-2299: CPU / memory / page_count go into the stop row
             self._drop_tab(sess)
             raise
         finally:
             _PREPARE_DEADLINE.reset(token)
+
+    def _patience_limit(self, profile_id: str, full_s: float, *, reads: bool) -> tuple[float, bool]:
+        """`(seconds to wait for a silent tab, load-independent)`: busy machine - the full limit; an idle machine
+        - nothing, except a read-only Check plan, which gets the short `ACL_READ_IDLE_WAIT_S` (0 - none)."""
+        if self._busy_now(profile_id):
+            return full_s, False
+        if reads:
+            return min(full_s, _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)), True
+        return 0.0, False
+
+    @staticmethod
+    def _reads_may_wait(mode: str) -> bool:
+        return bool(_READ_PATIENT.get()) and mode == "read"
+
+    def patience_check(self, profile_id: str, limit_s: float, *, always: bool = False) -> Callable[[], bool] | None:
+        """ACL-2283 (B) / ACL-2299: `check()` says "keep waiting for the silent tab"; None - the machine is idle.
+
+        One helper for readiness at the start and for a freeze in the middle of a job: busy machine (the
+        same CPU reading and level as the staggered start) waits up to `limit_s`; the load is re-read at
+        most every 5 s and a quiet machine ends the wait. `always` (read-only action) ignores the load.
+        """
+        if not always and not self._busy_now(profile_id):
+            return None
+        until = self._mono()+limit_s
+        seen = [self._mono(), True]
+
+        def check() -> bool:
+            now = self._mono()
+            if now >= until:
+                return False
+            if always:
+                return True
+            if now - seen[0] >= 5.0:      # re-read the machine at most every 5 s; load gone = idle limit
+                seen[0], seen[1] = now, self._busy_now(profile_id)
+            return bool(seen[1])
+        return check
+
+    def annotate_stop(self, stop: BaseException, sess: "WarmSession | None" = None, **extra: Any) -> dict:
+        """ACL-2299: local readings (CPU %, memory %, page_count) on a stop, for its telemetry row. Never raises."""
+        try:
+            snap = self.load_snapshot(getattr(sess, "profile_id", ""))
+            tab = getattr(sess, "tab", None)
+            load = {"cpu_pct": snap.get("cpu_pct"), "memory_pct": snap.get("used_pct"),
+                    "busy": bool(snap.get("busy")),
+                    "page_count_before": getattr(tab, "page_count_before", None),
+                    "page_count_after": getattr(tab, "page_count_after", None),
+                    "closed_restored_tabs": getattr(tab, "closed_restored", 0), **extra}
+            prior = getattr(stop, "tab_load", None)
+            stop.tab_load = {**(prior if isinstance(prior, dict) else {}), **load}
+        except Exception:  # noqa: BLE001 - a missing reading must not hide the stop
+            pass
+        return getattr(stop, "tab_load", {})
+
+    def patience_for(self, sess: "WarmSession") -> "TabPatience":
+        return TabPatience(self, sess)
 
     def _busy_now(self, profile_id: str) -> bool:
         try:
@@ -1435,6 +1520,101 @@ class WarmRegistry:
             self._remaining()
             sess.verified = False
             return self._fresh(sess,act,mode,make_graph,self._remaining())
+
+
+class PatientEpisode:
+    """ACL-2299 (B): one wait for a tab that stopped answering in the middle of a job."""
+
+    def __init__(self, owner: "TabPatience", check: Callable[[], bool], stop: BaseException):
+        self._owner = owner
+        self._check = check
+        self.stop = stop
+        self.began = owner.registry._mono()
+        self._job = _JOB_WAIT.get()
+        self._charged = False
+
+    @property
+    def waited_s(self) -> float:
+        return round(self._owner.registry._mono()-self.began, 1)
+
+    def wait(self, sleep: Callable[[float], None]) -> bool:
+        """True - look again after a pause; False - the user stopped the job, the load is gone or the limit passed."""
+        try:
+            if self._job is not None and self._job.cancelled():
+                return False
+            if not self._check():
+                return False
+        except Exception:  # noqa: BLE001
+            return False
+        # ACL-2278: a wait is activity, not silence - beat the watcher so `step_stuck` stays quiet.
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+            _rt.beat()
+        except Exception:  # noqa: BLE001
+            pass
+        snap = self._owner.snapshot()
+        _show(self._job, {"hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),
+                          "running": snap.get("running"), "warming": snap.get("warming")})
+        sleep(MIDJOB_POLL_S)
+        return True
+
+    def settle(self) -> None:
+        """Leave the wait without a verdict (another exception): charge the time, clear the display."""
+        _show(self._job, None)
+        if not self._charged:
+            self._charged = True
+            self._owner.charge(self.waited_s)
+
+    def finish(self, stop: BaseException | None) -> None:
+        """The wait is over: the tab answered (`stop` None) or the limit passed (`stop` is raised by the caller)."""
+        _show(self._job, None)
+        waited = self.waited_s
+        if not self._charged:
+            self._charged = True
+            self._owner.charge(waited)
+        if stop is not None:
+            self._owner.registry.annotate_stop(stop, self._owner.sess, waited_s=waited, waited_patiently=True)
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+            _rt.record("job_phase", stop is None, note="tab_patience", duration_s=waited,
+                       diag={"account": self._owner.sess.account, "recovered": stop is None})
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class TabPatience:
+    """ACL-2299 (B): given to the graph of a lease; decides how a tab frozen MID-JOB is treated.
+
+    Busy machine (same CPU reading as ACL-2283 B): wait up to the patient limit, then the caller retries
+    (read) or goes on to its own reconcile (write: nothing was resent by the wait). Idle machine: no wait,
+    the ACL-2262 pause applies as before. A Check plan read waits on any machine.
+    """
+
+    def __init__(self, registry: "WarmRegistry", sess: "WarmSession"):
+        self.registry = registry
+        self.sess = sess
+        self.spent_s = 0.0          # seconds waited so far by this lease (one budget for all its episodes)
+
+    def snapshot(self) -> dict:
+        try:
+            return self.registry.load_snapshot(self.sess.profile_id)
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def begin(self, stop: BaseException, *, writes: bool) -> "PatientEpisode | None":
+        """Start a wait, or None (idle machine / budget spent): the caller raises the stop. All episodes of
+        one lease draw from ONE budget (`ACL_PATIENT_READY_S`), so retries never multiply the wait."""
+        full = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
+        left = full - self.spent_s
+        limit, quiet = self.registry._patience_limit(self.sess.profile_id, left, reads=bool(_READ_PATIENT.get()) and not writes)
+        check = self.registry.patience_check(self.sess.profile_id, limit, always=quiet) if limit > 0 else None
+        if check is None:
+            self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))
+            return None
+        return PatientEpisode(self, check, stop)
+
+    def charge(self, seconds: float) -> None:
+        self.spent_s += max(0.0, float(seconds))
 
 
 # ───────────────────────── подставляемые части ─────────────────────────

@@ -845,6 +845,86 @@ def _load_sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: list[Any]) -> None:
+    """Campaigns one by one; `pending` keeps the ones not finished (the caller marks them if the job ends early).
+
+    ACL-2299 (B2): a tab that stayed silent past the patient wait on a busy machine, with nothing written for
+    the current campaign, gets the ACL-2262 replacement tab once; if that one freezes too, the job goes back
+    to the queue (yellow, the same wait and backoff as ACL-2283) and starts again with the campaigns that are
+    left - no attempt limit while the machine is busy, Stop cancels. After a write nothing is replaced or
+    resent: the stop stays (the reconcile / "Publish again" path of the caller).
+    """
+    replaced = False
+    requeues = 0
+    while pending:
+        if _is_cancelled(job_id):
+            raise job_cancel.JobCancelled()
+        draft = pending[0]
+        before = int(getattr(publisher, "writes", 0) or 0)
+        stop_before = getattr(publisher, "stop", None)
+        try:
+            res = publisher.publish_draft(draft)
+        except BaseException:
+            pending.pop(0)          # it may have written: never reported as "not started"
+            raise
+        frozen = getattr(publisher, "frozen_before_write", None)
+        # only a stop that came up DURING this campaign counts (an older one just makes it "not started")
+        if frozen is None or getattr(publisher, "stop", None) is stop_before or not frozen(before):
+            _append_result(job_id, res)
+            pending.pop(0)
+            replaced = False
+            continue
+        if not replaced:
+            replaced = True
+            load = publisher.drop_frozen_tab()
+            _record_tab_requeue(job_id, account_label, "replace_tab", load, 0)
+            _open_with_load_requeue(job_id, publisher, account_label)      # ACL-2262: a fresh tab
+            continue
+        from src.web import publish_api
+
+        requeues += 1
+        load = publisher.drop_frozen_tab(clear_pause=True)
+        snap = {"reasons": ["tab_silent_busy"], "cpu_pct": load.get("cpu_pct"),
+                "used_pct": load.get("memory_pct")}
+        rq = publish_api.LoadRequeue("the Ads Manager tab did not answer; the job waits for the machine",
+                                     "page_unresponsive", snap)
+        _record_tab_requeue(job_id, account_label, "requeue", load, requeues)
+        if not _wait_out_machine_load(job_id, account_label, publisher, rq, requeues):
+            raise job_cancel.JobCancelled()
+        replaced = False
+        _open_with_load_requeue(job_id, publisher, account_label)
+
+
+def _record_tab_requeue(job_id: str, account_label: str, note: str, load: dict[str, Any], attempt: int) -> None:
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record("job_phase", True, note=f"tab_{note}", diag={
+            "account": account_label, "attempt": attempt, "cpu_pct": load.get("cpu_pct"),
+            "memory_pct": load.get("memory_pct"), "page_count_after": load.get("page_count_after")})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _mark_not_started(job_id: str, pending: list[Any], *, cancelled: bool) -> None:
+    """ACL-2299 (B2): campaigns the job never began (it stopped earlier) are listed as "not started", not failed."""
+    if cancelled or not pending:
+        return
+    from src.web import publish_api
+
+    with _jobs_lock:
+        job = _jobs.get(job_id) or {}
+        have = {str(r.get("campaign_name") or "") for r in (job.get("results") or [])}
+    for draft in list(pending):
+        name = str(getattr(draft, "name", "") or "")
+        if name in have:
+            continue
+        _append_result(job_id, publish_api.result_dict(
+            publish_api.Outcome(campaign_name=name), not_started=True,
+            error="Not started: the job stopped before this campaign. Nothing was created for it."))
+    pending.clear()
+
+
 def _open_with_load_requeue(job_id: str, publisher: Any, account_label: str) -> None:
     """ACL-2283: open the profile; a start that failed because the machine is loaded is tried again.
 
@@ -1410,15 +1490,11 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             ready.append(draft)
 
     cancelled = False
+    pending: list[Any] = list(ready)
     try:
         if ready and not _is_cancelled(job_id):
             _open_with_load_requeue(job_id, publisher, account_label)
-            for draft in ready:
-                if _is_cancelled(job_id):
-                    cancelled = True
-                    _add_error(job_id, "Stopped by the user")
-                    break
-                _append_result(job_id, publisher.publish_draft(draft))
+            _publish_pending(job_id, publisher, account_label, pending)
     except job_cancel.JobCancelled:
         cancelled = True
         _add_error(job_id, "Stopped by the user")
@@ -1437,6 +1513,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     finally:
         job_cancel.unbind()
         cancelled = cancelled or _is_cancelled(job_id)
+        _mark_not_started(job_id, pending, cancelled=cancelled)
         clean = not cancelled and _job_is_clean(job_id)
         # ACL-1784: окно на проверку нужно, только если запись была и сверка её
         # не подтвердила. Ничего не записали (план, предпроверка, стоп до первой

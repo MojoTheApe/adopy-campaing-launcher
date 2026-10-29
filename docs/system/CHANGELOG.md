@@ -1,5 +1,36 @@
 # System history
 
+## ACL-2319 — Empty Google sign-in client is never bundled, copied or preferred — 2026-10-29
+
+An `oauth_client.json` now counts only if it is JSON with `installed.client_id` or `web.client_id`.
+The installer spec skips an invalid file, the migration copies only a valid one and lets a valid bundled
+file replace an invalid local copy (machines that ran release 1315 repair themselves on the next update),
+and a valid local copy is never overwritten. Sign-in with an invalid client says "Google sign-in is not set up on this computer".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1319).
+
+## ACL-2314 — Desktop notification when Check plan or Publish finishes — 2026-10-29
+
+When the dashboard tab is hidden or the window is not focused, the end of Check plan and of a Publish run now sets a badge on the tab title and favicon ("Ready to publish" / "Needs attention") and, if the manager pressed "Notify me when done", shows a Windows notification ("Check finished: N accounts ready" or "N ready, M need attention"; "Publish finished: X of Y campaigns published"; "A job is waiting for your action", once per waiting episode). Clicking it focuses the tab and shows the result. Permission is asked only from that button, never on page load; if it is denied or the API is missing, only the tab badge is used. Optional sound is off by default. The preference is stored per viewer in localStorage. All icon links are swapped (Chrome uses the SVG). The text carries counts only.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1314).
+
+## ACL-2312 — Load the Google OAuth client in Windows release builds — 2026-10-29
+
+The release workflow writes the Google desktop OAuth client from the
+`ACL_OAUTH_CLIENT_JSON` Actions secret into the temporary packaging directory
+after setup tests and before the onedir build. Automatic delivery forwards the
+same optional secret to the reusable publisher. The JSON contents are never
+committed. Packager support and Google sign-in are supplied separately by
+ACL-2306 (PR #1307); this change does not publish a release.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1312).
+
+## ACL-2299 — Tabs that freeze under load: restored tabs closed, busy-machine waits — 2026-10-29
+
+At every robot tab open (a fresh start, attaching to a profile the owner opened, and every replacement tab) the Ads Manager tabs the profile restored are closed, before the first Graph call. Only Ads Manager pages of the profile's own browser context are closed; the tab we drive, any page with a debugger attached, any tab driven by this process or listed in the warm store (the other server on this machine) and every non-Ads-Manager tab are kept. The browser always keeps at least one page besides the one we drive: nothing is closed when there is only one other page, and at most all-but-one of the others are (a lone restored page closed on the live run made the browser exit). An owner's own Ads Manager tab with unsaved edits is the one remaining risk. `page_count` before/after, closed, `skipped_attached` and `skipped_owned` are logged in `fb_api_tab_context`.
+
+A tab that stops answering in the middle of a job while the machine is busy (same CPU reading as ACL-2283 B) is waited for instead of stopping at once, from ONE budget per lease (`ACL_PATIENT_READY_S`, 480 s); a read is asked again (at most twice), a write only waits before it is sent and is never resent. If nothing was written for the current campaign and the wait ran out, the ACL-2262 replacement tab is used once, then the job goes back to the queue (yellow, no attempt limit) with the campaigns that are left. Campaigns a stopped job never began show "Not started", not failed. On an idle machine the ACL-2262 stop and pause stay. Check plan, which writes nothing, waits the short `ACL_READ_IDLE_WAIT_S` (75 s) on an idle machine and the full budget on a busy one, then tries one replacement tab. Waits beat the silence watcher (no `step_stuck`). Stop rows carry CPU %, memory % and page counts.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1299).
+
 ## ACL-2306 — Connect the team library and BI with Google sign-in — 2026-10-29
 
 The library token and BI credentials live in one private Google Sheet shared by the team lead. Setup and the dashboard (Connections) get "Sign in with Google": the dashboard reads the sheet as the employee, saves the values only in the machine settings, and shows one check line each for the team library and BI. Machines re-read the sheet at start, so rotating a value means editing the sheet. Unsharing the sheet only stops the next refresh: to cut a person off, unshare the sheet AND rotate the library token and BI password (a machine keeps the last values it saved). The Google sign-in client is bundled from a CI secret, never from git. With BI connected the Stats workbook is optional and accounts come from BI. The lead can publish the values the running dashboard loaded, with a clear message when nothing is there to share. Nothing is forwarded by hand and no secret is shown, logged or built in.
