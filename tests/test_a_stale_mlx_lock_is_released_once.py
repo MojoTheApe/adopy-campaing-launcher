@@ -85,7 +85,7 @@ def test_locked_and_not_running_is_released_then_started(world):
     started = _start()
     assert started.port == "58906"
     assert (world.fake.unlocks, world.fake.starts, world.fake.stops) == (1, 2, 0)
-    assert world.telemetry == [{"ok": True, "note": "released"}]
+    assert world.telemetry == [{"ok": True, "note": "stopped"}]
     assert any("released" in t for t in world.told)
 
 
