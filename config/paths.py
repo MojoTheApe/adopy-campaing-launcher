@@ -235,21 +235,41 @@ def get_publish_history_path() -> str:
     return os.path.join(get_local_config_dir(), "publish_history.jsonl")
 
 
+def is_valid_google_oauth_client(path) -> bool:
+    """ACL-2319: True only for a file that parses as JSON with a client id.
+
+    An empty or broken file (release 1315 shipped an empty one) counts as absent.
+    """
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    for key in ("installed", "web"):
+        section = payload.get(key)
+        if isinstance(section, dict) and str(section.get("client_id") or "").strip():
+            return True
+    return False
+
+
 def get_google_oauth_client_path() -> str:
     """OAuth client JSON used by the dashboard and telemetry consent flows.
 
     New installs keep it with machine configuration. Existing installs may
     still have the ignored legacy file inside ``config/``; it remains a
     read-only fallback until the migration copies it out of the checkout.
+    ACL-2319: an invalid or empty file is skipped, so a valid bundled copy
+    wins over a broken machine-local one.
     """
     explicit = os.environ.get("GSHEET_OAUTH_CLIENT", "").strip()
     if explicit:
         return explicit if os.path.isabs(explicit) else str(PROJECT_ROOT / explicit)
     local = os.path.join(get_local_config_dir(), "oauth_client.json")
-    if os.path.isfile(local):
+    if is_valid_google_oauth_client(local):
         return local
     legacy = str(PROJECT_ROOT / "config" / "oauth_client.json")
-    return legacy if os.path.isfile(legacy) else local
+    return legacy if is_valid_google_oauth_client(legacy) else local
 
 
 def get_google_oauth_token_path() -> str:
@@ -722,7 +742,16 @@ def migrate_legacy_google_oauth() -> list[str]:
         ),
     )
     for source, destination, label in pairs:
-        if destination.exists() or not source.is_file() or source.resolve() == destination.resolve():
+        if not source.is_file() or source.resolve() == destination.resolve():
+            continue
+        if label == "OAuth client":
+            # ACL-2319: copy only a valid client; a valid one replaces an invalid local copy,
+            # a valid local copy is never overwritten.
+            if not is_valid_google_oauth_client(source) or (
+                destination.exists() and is_valid_google_oauth_client(destination)
+            ):
+                continue
+        elif destination.exists():
             continue
         try:
             _atomic_copy(source, destination)
