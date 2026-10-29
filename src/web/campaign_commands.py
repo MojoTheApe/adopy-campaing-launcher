@@ -172,6 +172,9 @@ def open_session(account: str, commands: bool):
     from src.analysis_agent import account_spend_api as _api
     from src.fb_ads_rpa.operations import browser_operation, profile_lock
 
+    from src.fb_api.connection import user_started_action
+
+    # ACL-2272: preview/execute are started by the person, so they may bring up a closed profile.
     with browser_operation.reading(), profile_lock(_as._profile_key(account)):
-        with _api._session(account, commands=commands) as sess:
+        with user_started_action(), _api._session(account, commands=commands) as sess:
             yield sess

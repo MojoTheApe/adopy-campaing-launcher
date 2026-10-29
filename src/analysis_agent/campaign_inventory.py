@@ -31,6 +31,7 @@ import hashlib
 import logging
 import os
 import tempfile
+import contextvars
 import threading
 import time
 from collections import Counter
@@ -969,6 +970,10 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     return snap
 
 
+#: Refresh triggers that come from a button the person pressed (the others are automatic).
+USER_TRIGGERS = frozenset({"retry", "action"})
+
+
 def _run_read(account: str, *, trigger: str, baseline=None, persist: bool = True) -> Snapshot:
     """Синхронное чтение только структуры (ACL-2063): без Insights, без периода.
 
@@ -991,7 +996,12 @@ def _run_read(account: str, *, trigger: str, baseline=None, persist: bool = True
                          or summary(cached).get("revision") != baseline)):
                 account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
                 return cached
-            done = read_via_api(account, structure_only=True, trigger=trigger)
+            # ACL-2272: only Retry and the refresh after a command are the person's own; page-open,
+            # 08/13/18 and row-expand ("attention") reads leave a closed profile closed.
+            from src.fb_api.connection import user_started_action
+
+            with user_started_action(trigger.split(":")[0] in USER_TRIGGERS):
+                done = read_via_api(account, structure_only=True, trigger=trigger)
     except Exception as exc:  # noqa: BLE001
         done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
     done.started_at = started_at
@@ -1160,7 +1170,7 @@ def start_read(account: str, date_from: str, date_to: str = "", *,
                 _RUNNING.discard(account)
 
     try:
-        threading.Thread(target=run, name=f"inventory:{account}", daemon=True).start()
+        threading.Thread(target=contextvars.copy_context().run, args=(run,), name=f"inventory:{account}", daemon=True).start()
     except Exception:
         with _LOCK:
             _RUNNING.discard(account)

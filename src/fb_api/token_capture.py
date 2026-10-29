@@ -1197,6 +1197,9 @@ class InPageGraph:
 
     #: Размер куска файла, который кладётся в помощник за один вызов CDP.
     STAGE_CHUNK = 768 * 1024
+    #: ACL-2000: срок одного куска складывания файла в страницу при записи (раньше 30 с: на медленной
+    #: вкладке «browser did not answer within 35 s» останавливал загрузку на 91/251 МБ).
+    STAGE_CALL_S = 90.0
 
     def _stage_once(self, ctx: int, data: bytes, timeout: float) -> str:
         """Один проход складывания файла в помощник. Устаревший мир — исключение."""
@@ -1286,7 +1289,7 @@ class InPageGraph:
             if not isinstance(data, (bytes, bytearray)):
                 raise ValueError("file content must be bytes")
             try:
-                ctx, stage_id = self.stage_file(bytes(data))
+                ctx, stage_id = self.stage_file(bytes(data), timeout=self.STAGE_CALL_S)
             except (PageError, CdpError) as exc:
                 # Ничего не отправлено: отказ страницы до записи.
                 return {"error": "no_file", "why": str(exc)[:120]}

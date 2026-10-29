@@ -42,6 +42,15 @@ from tests.test_reads_open_a_closed_profile import (  # noqa: E402,F401
 
 # ── какие исходы держат окно ───────────────────────────────────────────────
 
+
+@pytest.fixture(autouse=True)
+def _user_started_read(monkeypatch):
+    """ACL-2272: these tests exercise the cold open of a closed profile, which only a user-started action may do."""
+    from src.fb_api import connection
+
+    monkeypatch.setattr(connection, "may_start_closed_profile", lambda: True)
+
+
 @pytest.mark.parametrize("reason, kind", [
     (g.LoggedOut("x"), "logged_out"),
     (g.Checkpoint("x"), "checkpoint"),

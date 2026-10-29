@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import contextvars
 import threading
 from datetime import date, timedelta
 from decimal import Decimal
@@ -254,7 +255,7 @@ def start_split(
                 _RUNNING.discard(key)
 
     try:
-        threading.Thread(target=run, name=f"split:{account}", daemon=True).start()
+        threading.Thread(target=contextvars.copy_context().run, args=(run,), name=f"split:{account}", daemon=True).start()
     except Exception:
         with _LOCK:
             _RUNNING.discard(key)
