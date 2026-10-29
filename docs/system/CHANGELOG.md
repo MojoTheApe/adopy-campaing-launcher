@@ -1,5 +1,38 @@
 # System history
 
+## ACL-2292 — Publish run history that survives a restart — 2026-10-29
+
+When a publish job ends (done, failed or cancelled) the dashboard appends one JSON line to `publish_history.jsonl` in the ACL config dir: job id, account, times, build, and per campaign the name, verdict, campaign / ad set / ad / creative ids, warnings, blocking failures, error and steps. Tokens, cookies, passwords and URL query strings are removed before writing. `/publish-jobs/<id>` reads this file when the job is no longer in memory, and a new "Recent runs" button in the header lists the last 50 runs. The file rotates at 20 MB and keeps 3 old files.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1292).
+
+## ACL-2290 — Readback accepts what publish accepted — 2026-10-29
+
+The post-publish readback of a creative (`verified_content`) now uses the same acceptance as publish: an earlier upload of the same video (equal or unreadable length, ACL-2271) and the same labelled files in another order (ACL-2284) are verified. Whitespace-only primary texts, headlines and descriptions (Meta returns `[' ']` for none) count as empty on both sides. Any other difference is still a mismatch.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1290).
+
+## ACL-2000 — Graph API video upload: compress first, resume a slow chunk — 2026-10-29
+
+Heavy videos (over 45 MB) are re-encoded with the same ffmpeg compressor and cached copy as the RPA path
+(`creative_compress.ensure_uploadable`) before the in-profile Graph API upload; the cached copy is
+deterministic per source, so repeats upload the same bytes and find the video already in the ad account.
+No ffmpeg or a failed encode uploads the original with a warning. A chunk that the page does not answer
+(`no_file: ... did not answer`) is retried from the same offset in the same upload session, up to 3 times
+with 10/20/40 s pauses, with job activity beats; the page staging call now waits 90 s instead of 30 s.
+After the last attempt the job stops with the original message. Dry run never encodes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1000).
+
+## ACL-2272 — Reads never open a closed profile — 2026-10-28
+
+Correction to ACL-2262: "reads ... only adopt a profile that is already open" was true for the warm path only.
+The older cold read path (`_open_gated`, ACL-1580/1603) still started a closed profile for every read, so the
+page-open refresh (ACL-2260), the 08/13/18 sweeps and the row-expand refresh could open every dashboard account.
+Now page load, background and scheduled reads use only a profile that is already open; for a closed one the row
+shows "the profile is closed, so nothing was read" with the last saved list kept and Retry offered, and nothing is
+started, queued for memory, or sent to Meta. Actions the person starts still open the profile: Read spend /
+countries / campaign read, Retry, shut-off, campaign commands, Page and forms reads, Check plan and Publish
+(Check plan keeps the window `plan_keep_open_s()` as before).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1272).
+
 ## ACL-2255 — Parallel runs follow the share of memory in use — 2026-10-28
 
 The gate that decides how many profiles may run at once no longer asks for "3.5 GB per profile + 3 GB reserve" (6.5 GB for every next profile, which capped a 31 GB laptop with 7 GB free at 2 runs although the ceiling was 5). A profile may start while at most 90% of the memory is in use (`ACL_MEMORY_MAX_USED_PCT`, default 90; at least 1 GB always stays free on small laptops). Running profiles are already in that share; only a profile that has just started and not yet taken its memory is charged by the measured size (or the estimate). The same rule is used by the queue, the account-action gate and the warm-start memory wait; the dashboard says "N% in use, a new profile starts below 90%". The ceiling default is unchanged.
