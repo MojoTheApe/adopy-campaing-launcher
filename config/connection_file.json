@@ -1,0 +1,5 @@
+{
+  "_comment": "ACL-2306: id of the private Google Sheet that holds the team connection settings. The id is not a secret; access is controlled by the sheet's sharing. Override per machine with ACL_CONNECTION_SHEET_ID. Empty = not configured yet.",
+  "sheet_id": "",
+  "tab": "connection"
+}
