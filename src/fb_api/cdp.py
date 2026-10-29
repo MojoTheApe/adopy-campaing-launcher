@@ -189,6 +189,16 @@ def _profile_context(cdp: Any, timeout: float) -> tuple[str, int]:
     return context, len(pages)
 
 
+def is_ads_manager_url(url: str) -> bool:
+    """ACL-2299: an Ads Manager page (facebook.com host, /adsmanager path). Nothing else is ever closed."""
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    return (host == "facebook.com" or host.endswith(".facebook.com"))         and (parts.path or "").lower().startswith("/adsmanager")
+
+
 class PageTab:
     """Одна своя вкладка в браузере профиля."""
 
@@ -305,6 +315,8 @@ class PageTab:
             tab.call("Page.enable", timeout=call_s)
             timings["enable_s"] = time.monotonic() - began
             tab.throttle = tab.keep_active(timeout=call_s)
+            # ACL-2299 (A): restored Ads Manager tabs of the profile load at once and freeze the tab we drive.
+            tab.close_restored_ads_manager_tabs(context, timeout=call_s)
             return tab
         except BaseException:
             if target_id:
@@ -331,6 +343,46 @@ class PageTab:
         pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
         if len(pages) > 1:
             cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=call_s)
+
+    #: ACL-2299: the profile's other pages before / after the clean-up and how many were closed (None - not run).
+    page_count_before: int | None = None
+    page_count_after: int | None = None
+    closed_restored: int = 0
+
+    def close_restored_ads_manager_tabs(self, context: str, *, timeout: float = CALL_S) -> int:
+        """ACL-2299 (A): close the Ads Manager tabs the profile restored at its start; keep ours.
+
+        Only pages of this profile's browser context whose address is an Ads Manager page and that are not
+        the tab we drive are closed. Any other page (the owner's mail, a doc, a store, an unknown or still
+        blank page) is never touched. The browser answers `Target.closeTarget` even when a renderer is
+        frozen. Any failure leaves the tabs as they are: the tab opens either way. The page counts before
+        and after are logged in `fb_api_tab_context` and kept on the tab for the stop rows.
+        """
+        try:
+            infos = (self._cdp.call("Target.getTargets", timeout=timeout) or {}).get("targetInfos") or []
+            pages = [t for t in infos if isinstance(t, dict) and t.get("type") == "page"
+                     and not t.get("subtype") and t.get("targetId") != self.target_id
+                     and str(t.get("browserContextId") or "") == (context or "")]
+        except Exception:  # noqa: BLE001 - the clean-up never fails the open
+            return 0
+        closed = 0
+        for row in pages:
+            if not is_ads_manager_url(str(row.get("url") or "")):
+                continue
+            try:
+                self._cdp.call("Target.closeTarget", {"targetId": str(row.get("targetId") or "")}, timeout=timeout)
+                closed += 1
+            except Exception:  # noqa: BLE001
+                continue
+        self.page_count_before, self.page_count_after, self.closed_restored = len(pages), len(pages) - closed, closed
+        try:
+            from src.fb_api import launch as _launch
+            _launch._record({"event": "fb_api_tab_context", "ok": True, "phase": "after_restored_cleanup",
+                             "page_count_before": len(pages), "page_count_after": len(pages) - closed,
+                             "closed_ads_manager": closed})
+        except Exception:  # noqa: BLE001
+            pass
+        return closed
 
     def browser_url(self, timeout: float = TARGET_INFO_S) -> str:
         """URL нашей цели от БРАУЗЕРНОГО процесса (`Target.getTargetInfo`, без sessionId).

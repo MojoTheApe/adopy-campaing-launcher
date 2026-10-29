@@ -637,7 +637,8 @@ class ApiPublisher:
                 "cdp_timeout" if isinstance(exc, TimeoutError) else type(exc).__name__)
             _record("api_create_campaign", False, campaign=name,
                     duration_s=round(time.monotonic() - began, 1),
-                    diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind})
+                    diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind,
+                          **_tab_load(exc)})
             _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
                         "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
                         "writes": self._client.writes, "stop": kind, "raised": type(exc).__name__})
@@ -658,7 +659,8 @@ class ApiPublisher:
                 duration_s=round(time.monotonic() - began, 1),
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
-                      "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
+                      "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
                     "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
                     "created": res["created"], "reused": res["reused"],
@@ -784,6 +786,12 @@ def plan_keep_open_s() -> float:
     return max(0.0, min(3600.0, value))
 
 
+def _tab_load(stop: BaseException | None) -> dict[str, Any]:
+    """ACL-2299: CPU %, memory %, page_count (before/after the tab clean-up) and the patient wait of a tab stop."""
+    load = getattr(stop, "tab_load", None)
+    return dict(load) if isinstance(load, dict) else {}
+
+
 def _plan_in_read_session(account_label: str, drafts: list[Any], *,
                           results: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     from src.analysis_agent import account_spend_api as _api
@@ -793,10 +801,12 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     if results is None:
         results = []
     from src.fb_api.connection import user_started_action
+    from src.fb_api.warm import read_patience
 
     # ACL-2272: Check plan is pressed by the person: an allowed path that may start a closed profile
     # (and keeps it `plan_keep_open_s()` for the Publish that usually follows).
-    with user_started_action(), _api._session(account_label) as sess:
+    # ACL-2299 (C): nothing is written here, so a silent tab is waited for / the read asked again, not failed.
+    with user_started_action(), read_patience(), _api._session(account_label) as sess:
         client = sess.client
         if client.allow_writes:
             raise _PlanReadContractError("the read session must not be able to write")
@@ -922,10 +932,12 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
     error_kind = ""
     except_kind = ""
     connection_code = ""
+    stop_seen: BaseException | None = None
     try:
         results = run(account_label, drafts, results=results)
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
+        stop_seen = exc
         checked_count = len(results)
         error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
         except_kind = type(exc).__name__
@@ -953,7 +965,8 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
                 results.append(dry_run_result(out))
     _record("api_plan_check", not error,
             diag={"campaigns": len(drafts), "results": len(results),
-                  **({"error_kind": error_kind, "raised": except_kind} if error_kind else {})},
+                  **({"error_kind": error_kind, "raised": except_kind} if error_kind else {}),
+                  **_tab_load(stop_seen)},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
             "error_kind": error_kind, "account_audit": account_audit, "connection_code": connection_code}

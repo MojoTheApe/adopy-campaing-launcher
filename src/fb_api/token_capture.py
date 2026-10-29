@@ -1050,10 +1050,51 @@ class InPageGraph:
         self._connection_stop = stop
         return stop
 
+    #: ACL-2299 (B): set by the warm lease (`warm.TabPatience`): how a tab frozen in the middle of a job is treated.
+    patience: Any = None
+    _patience_depth = 0
+
+    def _patiently(self, op: Callable[[], Any]) -> Any:
+        """Run `op`; if the tab stops answering and the machine is busy (or this is a read-only Check plan), wait
+        and run it again until it answers or the patient limit passes. Idle machine: the stop is raised at once.
+
+        Only used for steps where nothing of THIS call has reached Meta (readiness, a read): a write that
+        was already sent is never run again here - its unknown result is reconciled by the caller as before.
+        Nested uses share the outermost wait, so the limit is never doubled.
+        """
+        patience = self.patience
+        if patience is None or self._patience_depth:
+            return op()
+        episode = None
+        self._patience_depth += 1
+        try:
+            while True:
+                try:
+                    result = op()
+                except PageUnresponsive as stop:
+                    if episode is None:
+                        episode = patience.begin(stop, writes=bool(self.allow_writes))
+                        if episode is None:
+                            raise
+                    if not episode.wait(self._sleep):
+                        episode.finish(stop)
+                        raise
+                    continue
+                if episode is not None:
+                    episode.finish(None)
+                return result
+        finally:
+            self._patience_depth -= 1
+
     def _ready_for_call(self, *, timeout: float = 10.0) -> None:
         """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
 
-        Повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
+        ACL-2299: тихая вкладка на занятой машине ждётся (`_patiently`); ничего к Meta не уходит.
+        """
+        self._patiently(lambda: self._ready_once(timeout=timeout))
+
+    def _ready_once(self, *, timeout: float = 10.0) -> None:
+        """Один заход: повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
         подтверждает, что контекст отвечает (иначе `_eval_helper` его пересоздаст).
         """
         try:
@@ -1168,6 +1209,11 @@ class InPageGraph:
         # Bounded read: the in-page deadline aborts fetch/body before the CDP deadline.
         timeout = min(float(timeout), 15.0)
         spec["timeout_ms"] = max(1, int(timeout * 1000))
+        # ACL-2299: a GET changes nothing in Meta, so a silent tab (busy machine / Check plan) is waited for and
+        # the read is simply asked again; the wait is bounded and ends with the same stop as before.
+        return self._patiently(lambda: self._read_once(spec, timeout))
+
+    def _read_once(self, spec: dict, timeout: float) -> dict:
         # Сначала готовим мир (повторы без обращения к Meta)…
         self._ready_for_call()
         ctx = self._ensure()
