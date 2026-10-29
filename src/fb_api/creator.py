@@ -1421,8 +1421,12 @@ class CampaignCreator:
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
                on_ad: bool = False, children_active: bool = False, form_page: str = "",
-               upload: tuple[int, str] | None = None) -> str:
+               upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
+
+        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`) и сверка дважды не нашла
+        объект, запись без файла отправляется ОДИН раз повторно. Записи с файлом и ответы Meta
+        вроде 5xx/кода 1-2 по-прежнему только сверяются и стоп.
 
         `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
         с показом процента и Stop; неизвестный результат сверяется несколько раз.
@@ -1486,10 +1490,30 @@ class CampaignCreator:
                                           "in the ad account yet. Meta may still be processing the "
                                           "upload: wait a few minutes before publishing again.",
                                           created=out.created, kind="cancelled") from exc
-                raise CreationStopped(
-                    f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
-                    "Nothing else was written; reconcile the existing object before a re-run.",
-                    created=out.created, kind="unknown") from exc
+                if exc.reason and not files and not upload and not _resent:
+                    # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
+                    self._beat()
+                    if self.reconcile_wait_s > 0:
+                        self.sleep(self.reconcile_wait_s)
+                    self._beat()
+                    try:
+                        found = find()
+                    except (GraphStop, GraphError) as rexc:
+                        raise CreationStopped(
+                            f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
+                            "Nothing else was written; reconcile the existing object in Ads Manager before retrying.",
+                            created=out.created, kind="unknown") from rexc
+                    if not found:
+                        self.client.reconciled(path)
+                        self._step(out, f"{what}: not found by readback after {exc.reason} - sending once more")
+                        return self._write(out, what, path, params, find, files=files, filename=filename,
+                                           id_of=id_of, on_ad=on_ad, children_active=children_active,
+                                           form_page=form_page, upload=upload, _resent=True)
+                else:
+                    raise CreationStopped(
+                        f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
+                        "Nothing else was written; reconcile the existing object before a re-run.",
+                        created=out.created, kind="unknown") from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
