@@ -189,6 +189,16 @@ def _profile_context(cdp: Any, timeout: float) -> tuple[str, int]:
     return context, len(pages)
 
 
+def is_ads_manager_url(url: str) -> bool:
+    """ACL-2299: an Ads Manager page (facebook.com host, /adsmanager path). Nothing else is ever closed."""
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    return (host == "facebook.com" or host.endswith(".facebook.com"))         and (parts.path or "").lower().startswith("/adsmanager")
+
+
 class PageTab:
     """Одна своя вкладка в браузере профиля."""
 
@@ -198,6 +208,7 @@ class PageTab:
         self.target_id = target_id
         self.session_id = session_id
         self.closed = False
+        PageTab._LIVE.add(target_id)          # ACL-2299: never closed by another tab's clean-up in this process
         self._recovery_attempted = False
         self._navigation_url = ""
         #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
@@ -305,6 +316,8 @@ class PageTab:
             tab.call("Page.enable", timeout=call_s)
             timings["enable_s"] = time.monotonic() - began
             tab.throttle = tab.keep_active(timeout=call_s)
+            # ACL-2299 (A): restored Ads Manager tabs of the profile load at once and freeze the tab we drive.
+            tab.close_restored_ads_manager_tabs(context, timeout=call_s)
             return tab
         except BaseException:
             if target_id:
@@ -331,6 +344,72 @@ class PageTab:
         pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
         if len(pages) > 1:
             cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=call_s)
+
+    #: ACL-2299: target ids of the tabs this process drives (opened by `PageTab`, not yet closed).
+    _LIVE: set = set()
+    #: ACL-2299: the profile's other pages before / after the clean-up and how many were closed (None - not run).
+    page_count_before: int | None = None
+    page_count_after: int | None = None
+    closed_restored: int = 0
+    skipped_attached: int = 0
+    skipped_owned: int = 0
+
+    def close_restored_ads_manager_tabs(self, context: str, *, timeout: float = CALL_S) -> int:
+        """ACL-2299 (A): close the Ads Manager tabs the profile restored at its start; keep ours.
+
+        Only pages of this profile's browser context whose address is an Ads Manager page and that are not
+        the tab we drive are closed. Any other page (the owner's mail, a doc, a store, an unknown or still
+        blank page) is never touched. The browser answers `Target.closeTarget` even when a renderer is
+        frozen. Any failure leaves the tabs as they are: the tab opens either way. The page counts before
+        and after are logged in `fb_api_tab_context` and kept on the tab for the stop rows.
+        """
+        try:
+            infos = (self._cdp.call("Target.getTargets", timeout=timeout) or {}).get("targetInfos") or []
+            pages = [t for t in infos if isinstance(t, dict) and t.get("type") == "page"
+                     and not t.get("subtype") and t.get("targetId") != self.target_id
+                     and str(t.get("browserContextId") or "") == (context or "")]
+        except Exception:  # noqa: BLE001 - the clean-up never fails the open
+            return 0
+        owned = set(PageTab._LIVE)
+        try:
+            from src.fb_api import warm as _warm
+            owned |= _warm.registry().known_targets()      # tabs of the warm store (this and the other server)
+        except Exception:  # noqa: BLE001
+            pass
+        closed = skipped_attached = skipped_owned = 0
+        # The browser must keep at least one page besides the one we drive (a lone restored page that was
+        # closed made Chrome/Mimic exit on the live 9095 run): nothing is closed when there is only one other
+        # page, and at most `len(pages) - 1` of the others are ever closed, so one of them always stays.
+        may_close = max(0, len(pages) - 1)
+        kept_last = 0
+        for row in pages:
+            if not is_ads_manager_url(str(row.get("url") or "")):
+                continue
+            if closed >= may_close:
+                kept_last += 1
+                continue
+            if row.get("attached") is True:
+                skipped_attached += 1          # someone has a debugger on it: it is being driven, leave it
+                continue
+            if str(row.get("targetId") or "") in owned:
+                skipped_owned += 1             # a tab ACL itself drives (another job, the other server)
+                continue
+            try:
+                self._cdp.call("Target.closeTarget", {"targetId": str(row.get("targetId") or "")}, timeout=timeout)
+                closed += 1
+            except Exception:  # noqa: BLE001
+                continue
+        self.page_count_before, self.page_count_after, self.closed_restored = len(pages), len(pages) - closed, closed
+        self.skipped_attached, self.skipped_owned = skipped_attached, skipped_owned
+        try:
+            from src.fb_api import launch as _launch
+            _launch._record({"event": "fb_api_tab_context", "ok": True, "phase": "after_restored_cleanup",
+                             "page_count_before": len(pages), "page_count_after": len(pages) - closed,
+                             "closed_ads_manager": closed, "skipped_attached": skipped_attached,
+                             "skipped_owned": skipped_owned, "kept_last_page": kept_last})
+        except Exception:  # noqa: BLE001
+            pass
+        return closed
 
     def browser_url(self, timeout: float = TARGET_INFO_S) -> str:
         """URL нашей цели от БРАУЗЕРНОГО процесса (`Target.getTargetInfo`, без sessionId).
@@ -569,6 +648,7 @@ class PageTab:
         if self.closed:
             return
         self.closed = True
+        PageTab._LIVE.discard(self.target_id)
         try:
             ok = self._close_over_socket()
         except KeyboardInterrupt:
