@@ -161,3 +161,57 @@ def test_unknown_result_without_network_error_is_never_resent(tmp_path):
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
     assert out.error and out.stop_kind == "unknown"
     assert len(_edges(meta, "campaigns")) == 1
+
+
+def _run_with_sleeps(meta, draft, sleeps, **kw):
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=200)
+    from src.fb_api import creator as cr
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=sleeps.append, **kw)
+    return creator.run(cr.plan_from_draft(draft))
+
+
+def test_wait_before_the_resend_is_four_times_the_reconcile_wait(tmp_path):
+    meta = NetMeta()
+    meta.fail_next["campaigns"] = "net_unsent"
+    sleeps = []
+    out = _run_with_sleeps(meta, _draft(tmp_path, ads=1), sleeps, reconcile_wait_s=5.0)
+    assert not out.error, out.error
+    # first readback after 5 s, second after 20 s, then the single resend
+    assert sleeps[:2] == [5.0, 20.0]
+
+
+@pytest.mark.parametrize("video", [False, True])
+def test_upload_with_a_network_timeout_is_never_resent(tmp_path, video):
+    meta = NetMeta()
+    edge = "advideos" if video else "adimages"
+    meta.fail_next[edge] = "net_unsent"
+    out, _ = _run(meta, _draft(tmp_path, ads=1, video=video), reconcile_wait_s=0)
+    assert out.error and out.stop_kind == "unknown"
+    assert len(_edges(meta, edge)) == 1
+
+
+# -- the final stop message ---------------------------------------------------------------------
+def test_stop_on_ad_3_names_what_stays_in_meta_and_the_next_campaign_is_not_started(tmp_path, monkeypatch):
+    from src.analysis_agent import account_spend_api as api
+    from src.fb_api import telemetry as tm
+    from tests.test_acl1761_api_create import _publisher
+
+    class Dying(FakeMeta):
+        def request(self, method, path, params=None):
+            if len([o for o in self.objects.values() if o["_kind"] == "ad"]) >= 2:
+                return {"error": "network_timeout"}
+            return super().request(method, path, params)
+
+    monkeypatch.setattr(api, "_COOLDOWN", {})
+    monkeypatch.setattr(tm, "report_stop", lambda *a, **k: "")
+    monkeypatch.setattr(tm, "record", lambda *a, **k: None)
+    pub = _publisher(Dying())
+    first = pub.publish_draft(_draft(tmp_path, ads=3))
+    err = first["error"]
+    assert "the page could not call Graph API (network_timeout)" in err or "network_timeout" in err
+    assert '"Publish again" reuses it' in err and "Not created: ad 3." in err
+    assert first["created"].get("ads") == 2 and first["campaign_id"]
+    second = pub.publish_draft(_draft(tmp_path, ads=1))
+    assert second["error"].startswith("Not started: Graph API stopped earlier")
+    assert not second["success"] and not second["created"]

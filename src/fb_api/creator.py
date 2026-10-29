@@ -1494,7 +1494,8 @@ class CampaignCreator:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
-                        self.sleep(self.reconcile_wait_s)
+                        # About 20 s: a slow proxy may deliver the first request late (a duplicate is the costly failure).
+                        self.sleep(self.reconcile_wait_s * 4)
                     self._beat()
                     try:
                         found = find()
@@ -2460,6 +2461,7 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Not written: {exc}", "blocked"
         except GraphStop as exc:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.error += self._left_in_meta(plan, out)
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
@@ -2467,6 +2469,22 @@ class CampaignCreator:
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
+
+    @staticmethod
+    def _left_in_meta(plan: CampaignPlan, out: Outcome) -> str:
+        """ACL-2301: what a Graph stop left in Meta and what was not reached (English only).
+
+        Empty when nothing was created. The ads of the plan without an entry in `ad_media` were
+        not created; the next campaigns of the job are reported "Not started" by the publisher.
+        """
+        if not out.campaign_id:
+            return ""
+        todo = [ad for s_ in plan.ad_sets for ad in s_.ads if ad.index not in out.ad_media]
+        text = (" What was already created stays in Meta (campaign PAUSED); \"Publish again\" reuses it "
+                "and does not create duplicates.")
+        if todo:
+            text += " Not created: " + ", ".join(f"ad {ad.index}" for ad in todo) + "."
+        return text
 
     def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
         """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
