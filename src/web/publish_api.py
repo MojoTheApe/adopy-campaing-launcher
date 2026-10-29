@@ -230,6 +230,22 @@ class ApiPublishError(RuntimeError):
         self.code = code
 
 
+#: ACL-2283: pause before the sample taken after a failed start (the load often drops right after it).
+POST_FAILURE_SAMPLE_S = 3.0
+
+
+class LoadRequeue(ApiPublishError):
+    """ACL-2283: the profile did not start because the machine is loaded; nothing was sent to Meta.
+
+    The job goes back to the queue and starts again when the load clears (no attempt limit). `snapshot`
+    is the local CPU / memory reading that made the decision.
+    """
+
+    def __init__(self, message: str, code: str, snapshot: dict[str, Any]):
+        super().__init__(message, code=code)
+        self.snapshot = dict(snapshot)
+
+
 def _published_as(outcome: Outcome) -> str:
     """ACL-1902: имя в Meta, только если оно не совпадает с именем из билдера (иначе пусто)."""
     chosen = str(outcome.published_as or "")
@@ -327,6 +343,8 @@ class ApiPublisher:
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
+        #: ACL-2283: local load reading taken right before the profile start (None - unknown).
+        self._load_before: dict[str, Any] | None = None
 
     # -- совместимость с `publish_jobs` (как у RpaPublisher)
     def cancel(self) -> None:
@@ -352,6 +370,7 @@ class ApiPublisher:
     def open(self, account_label: str) -> None:
         """Профиль, вкладка, токен, предпроверка кабинета. Ни одной записи."""
         self.account_label = account_label
+        self._load_before = None        # ACL-2283: a sample from an earlier attempt must not count
         entry = _resolve_entry(account_label)
         if entry is None:
             raise ApiPublishError(f"{account_label} is not in the account map")
@@ -383,14 +402,18 @@ class ApiPublisher:
             return
         if frozen_deferred:
             raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
+        self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 
         try:
             from src.fb_api import stop_log as _stop_log
 
             with _mlx.scope(account=account_label), _stop_log.cancel_scope(self.cancelled):
+                earlier = self._opened
                 self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
                                              (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
+                if earlier is not None and getattr(earlier, "started_now", False):
+                    self.inherited_profile = True      # ACL-2283: a retry attaches; the window is still ours
         except _fb_profile.ProfileError as exc:
             raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
         except Exception as exc:  # noqa: BLE001
@@ -451,6 +474,7 @@ class ApiPublisher:
         from src.fb_api import warm as _warm
 
         reg = _warm.registry()
+        self._load_before = self._load_now()      # before the profile start (ACL-2283)
         from src.fb_api.connection import prepare_existing
         from src.fb_api.connection import opening_closed_profile
         try:
@@ -458,6 +482,7 @@ class ApiPublisher:
             with opening_closed_profile():
                 managed = prepare_existing(reg, self._entry, account_label)
         except _warm.WarmError as exc:
+            self._requeue_if_closed(exc)
             raise ApiPublishError(str(exc), code=exc.code) from exc
         if not managed:
             return False
@@ -473,12 +498,51 @@ class ApiPublisher:
                                        make_graph=make, ready_timeout=READY_TIMEOUT_S)
             _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
+            self._requeue_if_closed(exc)
             raise ApiPublishError(str(exc), code=exc.code) from exc
         except GraphStop as exc:
             self._halt(exc)
         self.progress("profile attached (warm)")
         self._finish_open(account_label, self._lease.graph)
         return True
+
+    def _requeue_if_closed(self, exc: Exception) -> None:
+        """ACL-2283 (C, fallback): "profile closed while the action was starting" on a busy machine goes back to the queue."""
+        if getattr(exc, "code", "") == "profile_closed":
+            self._requeue_if_busy("profile_closed", str(exc))
+
+    def _load_now(self) -> dict[str, Any] | None:
+        """Local CPU/memory reading for the busy decision; None when it cannot be taken."""
+        try:
+            from src.fb_api import warm as _warm
+
+            return _warm.registry().load_snapshot(self._session_profile_id)
+        except Exception:  # noqa: BLE001 - unknown load = today's behaviour (stop)
+            return None
+
+    def _requeue_if_busy(self, code: str, message: str) -> None:
+        """Raise `LoadRequeue` when a start failure belongs to a busy machine and nothing was written to Meta.
+
+        "Busy" = any of three local samples is loaded: before the start, at the failure, and a few seconds
+        AFTER the failure (the load often drops right after a failed start). Loaded = CPU at the level,
+        other profiles warming up, or memory in use above the limit. All samples quiet (an idle machine)
+        = a real problem: the job stops as before. There is no attempt limit; the pace is set by the
+        growing backoff of the job loop, so Multilogin is never hammered.
+        """
+        if self.writes > 0:
+            return
+        samples = [self._load_before, self._load_now()]
+        try:
+            self.sleep(POST_FAILURE_SAMPLE_S)
+        except Exception:  # noqa: BLE001
+            pass
+        samples.append(self._load_now())
+        loaded = [x for x in samples if x and x.get("loaded")]
+        if not loaded:
+            return
+        snap = dict(loaded[-1])
+        snap["reasons"] = sorted({r for x in loaded for r in x.get("reasons", [])})
+        raise LoadRequeue(message, code, snap)
 
     def _halt(self, stop: GraphStop) -> None:
         self.stop = stop

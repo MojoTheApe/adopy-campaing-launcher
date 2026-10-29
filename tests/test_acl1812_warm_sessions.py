@@ -120,7 +120,7 @@ class Rig:
         self.reg = warm.WarmRegistry(
             store=self.store, wall=lambda: self.now[0], scan=self._scan, tab_factory=self._tab,
             start_profile=self._start, close_window=self._stop, slot_queue=lambda: FakeQueue(self),
-            gate=self.gate, sleep=self.sleeps.append, stagger=lambda: 7.0, stops=self.stops,
+            gate=self.gate, sleep=self._sleep_fake, cpu=lambda: 10.0, stagger=lambda: 7.0, stops=self.stops,
             pid_alive=lambda pid, created: pid in self.alive_pids,
             pending_close=lambda pid: self.pending.pop(pid, None),
             pending_restore=lambda pid, prev: self.pending.setdefault(pid, prev),
@@ -128,6 +128,11 @@ class Rig:
             settings=lambda: ps.SlotSettings(),
             usage=reg_usage if reg_usage is not None else FakeUsage(),
             mono=lambda: self.now[0] - 1_800_000_000.0)
+
+    def _sleep_fake(self, secs):
+        # ACL-2283: waits for a start turn / CPU settling look at the clock, so a sleep moves it.
+        self.sleeps.append(secs)
+        self.now[0] += secs
 
     def _scan(self, ids):
         return {pid: self.scan_result.get(pid, ("none", None)) for pid in ids}
