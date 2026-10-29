@@ -31,6 +31,12 @@ def machine(tmp_path, monkeypatch):
     from config import paths
 
     monkeypatch.setattr(paths, "get_machine_env_path", lambda: str(env_file))
+    # ACL-2318: the token is stored sealed; a reversible stand-in keeps this OS-independent.
+    from config import token_vault
+
+    monkeypatch.setattr(token_vault, "available", lambda: True)
+    monkeypatch.setattr(token_vault, "protect_bytes", lambda b: b"SEAL" + bytes(x ^ 0x5A for x in b))
+    monkeypatch.setattr(token_vault, "unprotect_bytes", lambda b: bytes(x ^ 0x5A for x in b[4:]))
     for name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
         monkeypatch.setenv(name, "")
     tl.use_backend(None)
@@ -97,11 +103,13 @@ def test_connect_saves_the_token_to_machine_settings_only(fake_lib, machine, cap
     caplog.set_level(logging.DEBUG)
     out = tlc.connect(TOKEN)
     assert out["ok"] and out["seeded"]
-    assert f"ACL_LIBRARY_TOKEN={TOKEN}" in machine.read_text(encoding="utf-8") or TOKEN in machine.read_text(encoding="utf-8")
+    assert TOKEN not in machine.read_text(encoding="utf-8")        # ACL-2318: sealed, not clear text
+    assert "dpapi:v1:" in machine.read_text(encoding="utf-8")
     assert TOKEN not in json.dumps(out)
     assert TOKEN not in caplog.text
     from dotenv import dotenv_values
-    assert dotenv_values(machine)["ACL_LIBRARY_TOKEN"] == TOKEN       # файл читается обратно
+    from config import token_vault
+    assert token_vault.decode_env_value(dotenv_values(machine)["ACL_LIBRARY_TOKEN"]) == TOKEN       # читается обратно
     assert fake_lib.calls["check"] == [("MojoTheApe/acl-lib", "main")]
     assert tlc.state()["connected"] is True and TOKEN not in json.dumps(tlc.state())
 
@@ -377,7 +385,8 @@ def test_reconnect_replaces_every_existing_machine_token_assignment(fake_lib, ma
     tlc.connect(TOKEN)
 
     saved = dotenv_values(machine)
-    assert saved["ACL_LIBRARY_TOKEN"] == TOKEN
+    from config import token_vault
+    assert token_vault.decode_env_value(saved["ACL_LIBRARY_TOKEN"]) == TOKEN
     assert saved["KEEP_SETTING"] == "retain this"
     assert older not in machine.read_text(encoding="utf-8")
 

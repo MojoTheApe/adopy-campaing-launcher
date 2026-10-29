@@ -71,6 +71,13 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         os.environ["ACL_CONFIG_DIR"] = self.tmp.name
         os.environ["ACL_CONNECTION_SHEET_ID"] = "sheet-id-not-secret"
+        # ACL-2318: without Windows protected storage the values stay clear text (the
+        # documented fallback); the vault path has its own test below.
+        from config import token_vault
+
+        patcher = mock.patch.object(token_vault, "available", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         (Path(self.tmp.name) / ".env").write_text("MY_CM_NAME=Test\n", encoding="utf-8")
 
     def tearDown(self):
@@ -96,6 +103,23 @@ class ReadAndApplyTests(Base):
         self.assertEqual(os.environ["BI_MYSQL_USER"], "fake_user")
         # nothing was written inside the checkout
         self.assertFalse((ROOT / ".env").exists() and FAKE_TOKEN in (ROOT / ".env").read_text(errors="ignore"))
+
+    def test_sign_in_stores_library_token_and_bi_password_in_the_vault(self):
+        from config import token_vault
+
+        def fake_encode(plain):
+            return "dpapi:v1:" + plain[::-1].encode().hex()
+
+        with mock.patch.object(token_vault, "available", return_value=True),                 mock.patch.object(token_vault, "encode_env_value", side_effect=fake_encode):
+            cs.sign_in(service=FakeService(ROWS))
+        text = self.env_text()
+        self.assertNotIn(FAKE_TOKEN, text)
+        self.assertNotIn(FAKE_PASSWORD, text)
+        self.assertEqual(text.count("dpapi:v1:"), 2)
+        self.assertIn("bi.example.invalid", text)  # the host is not a secret
+        # the running process keeps the plain values for the readers
+        self.assertEqual(os.environ["ACL_LIBRARY_TOKEN"], FAKE_TOKEN)
+        self.assertEqual(os.environ["BI_MYSQL_PASSWORD"], FAKE_PASSWORD)
 
     def test_no_access_is_clear_and_writes_nothing(self):
         before = self.env_text()
