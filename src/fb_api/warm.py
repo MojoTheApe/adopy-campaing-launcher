@@ -135,7 +135,8 @@ DEFAULT_SETTLE_S = 90.0
 #: staggered start (the next start waits for the CPU to settle below it), for patient readiness (a tab that
 #: has not answered yet is not called unresponsive for minutes) and for the closed-while-starting fallback.
 LOAD_CPU_ENV = "ACL_LOAD_CPU_PCT"
-DEFAULT_LOAD_CPU_PCT = 85.0
+#: ACL-2316: 70, not 85. Live freezes of 2026-10-29 happened at 59 %, 74 % and 76 % CPU; at 85 none of them counted as busy.
+DEFAULT_LOAD_CPU_PCT = 70.0
 #: A: how long the CPU must stay below the level before the next profile of a job starts.
 START_CPU_SETTLE_ENV = "ACL_START_CPU_SETTLE_S"
 DEFAULT_START_CPU_SETTLE_S = 5.0
@@ -156,6 +157,11 @@ _READ_PATIENT = ContextVar("acl_warm_read_patient", default=False)
 #: ACL-2262 replacement tab. The full patient limit is for a busy machine.
 READ_IDLE_WAIT_ENV = "ACL_READ_IDLE_WAIT_S"
 DEFAULT_READ_IDLE_WAIT_S = 75.0
+
+
+def read_patience_active() -> bool:
+    """ACL-2316: True inside `read_patience()` (a Check plan: nothing is written)."""
+    return bool(_READ_PATIENT.get())
 
 
 @contextmanager
@@ -1440,13 +1446,19 @@ class WarmRegistry:
         finally:
             _PREPARE_DEADLINE.reset(token)
 
-    def _patience_limit(self, profile_id: str, full_s: float, *, reads: bool) -> tuple[float, bool]:
+    def _patience_limit(self, profile_id: str, full_s: float, *, reads: bool,
+                        idle_left_s: float | None = None) -> tuple[float, bool]:
         """`(seconds to wait for a silent tab, load-independent)`: busy machine - the full limit; an idle machine
-        - nothing, except a read-only Check plan, which gets the short `ACL_READ_IDLE_WAIT_S` (0 - none)."""
+        - nothing, except a read-only Check plan (and, ACL-2316, a step of a publish job where nothing was
+        sent yet), which gets the short `ACL_READ_IDLE_WAIT_S` (0 - none). `idle_left_s` is what is left
+        of that short wait for the lease, so repeated freezes never add up to more than one."""
         if self._busy_now(profile_id):
             return full_s, False
         if reads:
-            return min(full_s, _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)), True
+            idle = _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)
+            if idle_left_s is not None:
+                idle = min(idle, max(0.0, idle_left_s))
+            return min(full_s, idle), True
         return 0.0, False
 
     @staticmethod
@@ -1606,7 +1618,12 @@ class TabPatience:
         one lease draw from ONE budget (`ACL_PATIENT_READY_S`), so retries never multiply the wait."""
         full = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
         left = full - self.spent_s
-        limit, quiet = self.registry._patience_limit(self.sess.profile_id, left, reads=bool(_READ_PATIENT.get()) and not writes)
+        # ACL-2316: a tab frozen mid-job waits the short idle wait on ANY machine - a Check plan read and a publish
+        # step alike. `begin` is only reached for steps where nothing of this call was sent (see `_patiently`).
+        idle_cap = _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)
+        limit, quiet = self.registry._patience_limit(self.sess.profile_id, left,
+                                                     reads=bool(writes) or bool(_READ_PATIENT.get()),
+                                                     idle_left_s=idle_cap - self.spent_s)
         check = self.registry.patience_check(self.sess.profile_id, limit, always=quiet) if limit > 0 else None
         if check is None:
             self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))

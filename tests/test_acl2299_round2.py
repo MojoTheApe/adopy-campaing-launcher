@@ -193,7 +193,8 @@ class _Pub:
             if step == "write_then_freeze":
                 self._writes += 1
             self.stop = PageUnresponsive("silent")
-            self.stop.tab_load = {"waited_patiently": step != "idle_freeze", "cpu_pct": 95.0}
+            self.stop.tab_load = {"waited_patiently": step != "idle_freeze", "cpu_pct": 95.0,
+                                 "busy": step != "idle_freeze"}
             return res(self.api.Outcome(campaign_name=name), error="stopped (page_unresponsive)")
         if step == "stopped":
             return res(self.api.Outcome(campaign_name=name), not_started=True,
