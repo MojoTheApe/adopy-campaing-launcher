@@ -114,7 +114,7 @@ jobs:
       - name: Test setup
         run: python -m unittest discover -s packaging/windows/tests -p "test_*.py" -v
 
-            - name: Write Google OAuth client (not committed)
+      - name: Write Google OAuth client (not committed)
         shell: pwsh
         env:
           ACL_OAUTH_CLIENT_JSON: ${{ secrets.ACL_OAUTH_CLIENT_JSON }}
