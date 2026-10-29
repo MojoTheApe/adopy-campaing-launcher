@@ -65,6 +65,29 @@ class PageError(CdpError):
     """Скрипт во вкладке бросил исключение или вернул не то."""
 
 
+
+
+#: Сетевые коды прокси/TLS на первой навигации (ACL-2321).
+PROXY_NET_ERRORS = ("ERR_SSL_PROTOCOL_ERROR", "ERR_PROXY_CONNECTION_FAILED",
+                    "ERR_TUNNEL_CONNECTION_FAILED", "ERR_TIMED_OUT")
+PROXY_NOT_CONNECTED_MESSAGE = ("The profile's proxy did not connect (SSL error). "
+                               "Check the proxy of this profile in Multilogin, then try again. "
+                               "Nothing was sent to Meta.")
+_PAUSE_BEAT_S = 5.0
+
+
+def proxy_network_error_code(text: str) -> str:
+    """Код из списка прокси/TLS-ошибок, если он есть в тексте; иначе пустая строка."""
+    upper = str(text or "").upper()
+    for code in PROXY_NET_ERRORS:
+        if code in upper:
+            return code
+    return ""
+
+
+class ProxyNotConnectedError(PageError):
+    """Прокси профиля не соединился даже после повтора; в Meta ничего не отправлялось."""
+
 class CdpTimeout(CdpError, TimeoutError):
     """Браузер не ответил на вызов CDP в срок; в тексте — метод и срок."""
 
@@ -215,6 +238,7 @@ class PageTab:
         self.throttle: dict = {}
         #: Первая навигация после нашего холодного старта ещё впереди (ACL-2095 п. 5/7).
         self._first_nav_cold = False
+        self._first_nav_done = False
         self._sleep: Callable[[float], None] = time.sleep
 
     @classmethod
@@ -557,11 +581,62 @@ class PageTab:
         return (got.get("result") or {}).get("value")
 
     def navigate(self, url: str, *, timeout: float = 30.0) -> None:
+        if self._first_nav_done:
+            self._navigate_body(url, timeout)
+            return
+        self._first_nav_done = True
+        try:
+            self._navigate_body(url, timeout)
+        except PageError as exc:
+            code = proxy_network_error_code(str(exc))
+            if not code:
+                raise
+            self._retry_first_navigation(url, timeout, code)
+
+    def _navigate_body(self, url: str, timeout: float) -> None:
         if self._first_nav_cold:
             self._first_nav_cold = False
             self._navigate_after_cold_start(url, timeout)
             return
         self._navigate_once(url, timeout)
+
+    def _retry_first_navigation(self, url: str, timeout: float, code: str) -> None:
+        """ACL-2321: прокси/TLS-сбой на САМОЙ ПЕРВОЙ навигации вкладки.
+
+        Ничего ещё не ушло в Meta (запись возможна только после загрузки страницы),
+        поэтому один повтор через `PROXY_NET_RETRY_S` безопасен. Профиль не
+        перезапускаем и прокси не трогаем. Задание живо для сторожа тишины:
+        пауза режется на куски с `run_telemetry.beat()`. В телеметрию — только код
+        ошибки и исход, без адреса прокси.
+        """
+        from src.fb_api import launch as _launch
+
+        self._pause(_launch.PROXY_NET_RETRY_S)
+        try:
+            self._navigate_once(url, timeout)
+        except PageError as again:
+            _launch._record({"event": "fb_api_first_nav_proxy_error", "code": code,
+                             "retried": True, "outcome": "failed",
+                             "retry_code": proxy_network_error_code(str(again)) or "other"})
+            if proxy_network_error_code(str(again)):
+                raise ProxyNotConnectedError(PROXY_NOT_CONNECTED_MESSAGE) from None
+            raise
+        _launch._record({"event": "fb_api_first_nav_proxy_error", "code": code,
+                         "retried": True, "outcome": "recovered"})
+
+    def _pause(self, seconds: float) -> None:
+        """Пауза кусками по `_PAUSE_BEAT_S`, между ними задание отмечается живым."""
+        left = float(seconds)
+        while left > 0:
+            step = min(_PAUSE_BEAT_S, left)
+            self._sleep(step)
+            left -= step
+            try:
+                from src.fb_ads_rpa import run_telemetry as _rt
+
+                _rt.beat()
+            except Exception:
+                pass
 
     def _navigate_once(self, url: str, timeout: float) -> None:
         got = self.call("Page.navigate", {"url": url}, timeout=timeout)
