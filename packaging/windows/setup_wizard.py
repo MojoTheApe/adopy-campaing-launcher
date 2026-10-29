@@ -546,11 +546,13 @@ class SetupWizard:
 
     def _sign_in(self) -> None:
         """Sign-in runs off the Tk thread (it waits for the browser); the window stays alive."""
+        import queue
         import threading
 
         if getattr(self, "_signing_in", False):
             return
         self._signing_in = True
+        results: "queue.Queue" = queue.Queue()
         self.status.set("Waiting for the Google sign-in in your browser...")
 
         def work() -> None:
@@ -558,9 +560,18 @@ class SetupWizard:
                 lines = connect_with_google(self.config_directory)
             except Exception:
                 lines = [ReadinessCheck(CONNECTION_FILE_LABEL, False, "Sign-in was not finished. Try again.")]
-            self.root.after(0, lambda: self._sign_in_done(lines))
+            results.put(lines)  # Tk is only touched from the main thread, via the poll below
+
+        def poll() -> None:
+            try:
+                lines = results.get_nowait()
+            except queue.Empty:
+                self.root.after(200, poll)
+                return
+            self._sign_in_done(lines)
 
         threading.Thread(target=work, name="acl-wizard-sign-in", daemon=True).start()
+        self.root.after(200, poll)
 
     def _sign_in_done(self, lines: list) -> None:
         self._signing_in = False
