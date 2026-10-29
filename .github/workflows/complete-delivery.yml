@@ -119,6 +119,7 @@ jobs:
     secrets:
       ACL_RELEASES_TOKEN: ${{ secrets.ACL_RELEASES_TOKEN }}
       ACL_RELEASE_SIGNING_KEY: ${{ secrets.ACL_RELEASE_SIGNING_KEY }}
+      ACL_OAUTH_CLIENT_JSON: ${{ secrets.ACL_OAUTH_CLIENT_JSON }}
       ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
 
   verify:
