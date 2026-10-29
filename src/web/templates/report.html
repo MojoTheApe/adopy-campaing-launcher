@@ -8597,6 +8597,7 @@ window.cbTree = (function () {
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
                : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
                : q.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(q)) + cbCloseWindows(q)
+               : q.state === 'waiting_load' ? 'queued — ' + aclEscHtml(cbLoadWait(q))
                : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory') + cbCloseWindows(q)
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
@@ -9322,6 +9323,7 @@ window.cbBuild = (function () {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
     if (q.hold === 'account_busy') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
+    if (q.hold === 'machine_busy') return { state: 'build-wait', sign: '', why: cbLoadWait(q) };
     // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
     var memory = cbMemoryWait(q);
     if (memory) return { state: 'build-wait', sign: '', why: memory };
@@ -18115,6 +18117,16 @@ function cbCloseWindows(q) {
     return ' <a href="#" class="cbd-q-retry" data-cb-close-kept="' + aclEscHtml(a) + '">Close window ' + aclEscHtml(a) + '</a>';
   }).join('');
 }
+/* ACL-2283: профили заданий стартуют по одному; занятая машина - ждём очереди и спада нагрузки, стартуем сами. */
+function cbLoadWait(q) {
+  var parts = [];
+  if (q && q.cpu_pct != null) parts.push('CPU ' + Math.round(q.cpu_pct) + '%' + (q.cpu_level ? ' (starts below ' + Math.round(q.cpu_level) + '%)' : ''));
+  if (q && q.used_pct != null) parts.push(Math.round(q.used_pct) + '% memory in use');
+  if (q && Number(q.running) > 0) parts.push(q.running + ' other profile' + (Number(q.running) === 1 ? ' is' : 's are') + ' still starting');
+  var rest = (q && Number(q.restart_wait_s) > 0) ? ', next start in ~' + Math.ceil(q.restart_wait_s) + ' s' : '';
+  return 'Waiting for its turn to start the profile - the machine is busy (' + (parts.join(', ') || 'load')
+    + rest + '). Nothing was sent to Meta; it starts by itself, Stop cancels it';
+}
 /* ACL-2278: занятые ворота действий аккаунта — задание ждёт, а не падает. */
 function cbAccountWait(q) {
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
@@ -19320,6 +19332,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
           : queue.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(queue)) + cbCloseWindows(queue)
+          : queue.state === 'waiting_load' ? 'queued — ' + aclEscHtml(cbLoadWait(queue))
           : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory') + cbCloseWindows(queue)
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))

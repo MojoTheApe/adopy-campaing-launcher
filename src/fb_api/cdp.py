@@ -98,6 +98,31 @@ def _budget_timeout(timeout):
     return min(timeout,left)
 
 
+#: ACL-2283 (B): while set, a tab that has not answered yet is waited for (the callable says whether the
+#: machine is still busy and the patient deadline has not passed); unset = today's short limits.
+_PATIENT_CHECK = ContextVar("acl_connection_patient_check", default=None)
+
+
+@contextmanager
+def patient_wait(check):
+    token = _PATIENT_CHECK.set(check)
+    try:
+        yield
+    finally:
+        _PATIENT_CHECK.reset(token)
+
+
+def patient_active() -> bool:
+    """True when a silent tab should still be waited for (busy machine, patient deadline not reached)."""
+    check = _PATIENT_CHECK.get()
+    if check is None:
+        return False
+    try:
+        return bool(check())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 @contextmanager
 def command_budget(seconds):
     previous = _COMMAND_DEADLINE.get()
