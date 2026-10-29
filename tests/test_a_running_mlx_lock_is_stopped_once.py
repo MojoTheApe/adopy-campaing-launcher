@@ -120,3 +120,22 @@ def test_unknown_status_is_not_touched_and_says_click_locked(world, status):
     assert stop.value.code == pt.OPEN_BY_HAND
     assert "Locked" in str(stop.value)
     assert world.ev == ["start"]
+
+
+def test_a_robot_profile_that_is_stopping_keeps_the_old_stop_and_start_loop(world):
+    """restart_unresponsive on a robot profile: MLX says browser_stopping right after our own stop."""
+    world.status = "browser_stopping"
+    br._mark_robot_profile(PROFILE, "C:/mlx/p")
+    entry = SimpleNamespace(profile_id=PROFILE, folder_id="f-1", multilogin_instance="A")
+    conn = world.prov.restart_unresponsive(entry, "Facebook_Doc122")
+    assert conn.page == "reopened-page"
+    assert world.ev == ["stop", "start", "stop", "start", "connect"]
+    assert world.telemetry == []
+
+
+@pytest.mark.parametrize("status", ["browser_running", "locked"])
+def test_a_robot_profile_is_never_turned_into_open_by_hand(world, status):
+    world.status = status
+    br._mark_robot_profile(PROFILE, "C:/mlx/p")
+    assert _open(world).page == "reopened-page"
+    assert "stop" in world.ev

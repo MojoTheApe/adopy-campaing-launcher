@@ -2535,7 +2535,10 @@ class MultiloginAttachOnlyProvider:
                         mlx_state = self._launcher.profile_run_state(profile_id)
                     except Exception:
                         mlx_state = None
-                    if mlx_state not in ("stopped", "running") and allow_restart:
+                    # Профиль, который робот поднимал сам, идёт старым путём (стоп и повторный
+                    # запуск ниже): MLX часто отвечает browser_stopping сразу после нашей остановки.
+                    hand_case = allow_restart and not _robot_profile(profile_id, udd)
+                    if mlx_state not in ("stopped", "running") and hand_case:
                         # ACL-2300: статус Multilogin неизвестен — профиль не трогаем.
                         # Деталь не «mlx_lock», поэтому `open` его не переоткрывает.
                         _record_lock_release(profile_id, ok=False, note="status_unknown")
@@ -2543,7 +2546,7 @@ class MultiloginAttachOnlyProvider:
                             profile_id, account_label,
                             MLX_LOCK_STATUS_UNKNOWN + '; if no window is open, click "Locked" on the '
                             "profile in MLX Desktop and try again") from exc
-                    if mlx_state == "running" and allow_restart:
+                    if mlx_state == "running" and hand_case:
                         # ACL-2300 (решение владельца 29.10): MLX видит профиль запущенным —
                         # один раз мягко останавливаем и поднимаем заново путём ACL-1388
                         # (`open` ловит эту остановку); здесь своей остановки и цикла нет.
