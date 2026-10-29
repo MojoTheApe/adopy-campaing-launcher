@@ -240,7 +240,7 @@ _SCRUB = (
 #: Текст ошибки драйвера содержит их дословно («Can't connect to MySQL server
 #: on '<host>'», «Access denied for user '<user>'@…»), и по имени ключа их не
 #: найти, поэтому прячем сами настроенные значения.
-_BI_ENV_NAMES = ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD")
+_BI_ENV_NAMES = ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD", "ACL_LIBRARY_TOKEN")  # ACL-2306: library token too
 
 
 def _hide_configured_bi(text: str) -> str:

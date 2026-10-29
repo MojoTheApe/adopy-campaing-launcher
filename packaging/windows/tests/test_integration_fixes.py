@@ -80,7 +80,7 @@ class WizardTests(unittest.TestCase):
         """Без разобранной книги статистики «Готово» писать нечего: мастер
         обязан отправить человека назад, а не создать полупустую настройку."""
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.step=4;w.configuration=None
+        w.step=5;w.configuration=None
         with mock.patch.object(wizard,'apply_machine_configuration') as apply_mock:
             with self.assertRaises(wizard.WizardValidationError): w._validate_step()
             apply_mock.assert_not_called()
@@ -92,8 +92,8 @@ class WizardTests(unittest.TestCase):
         починить это там будет нечем: токены Multilogin выдаёт только тому,
         кто вошёл, и гасит предыдущий при следующем входе (24.09)."""
         w=wizard.SetupWizard.__new__(wizard.SetupWizard)
-        w.step=4;w.configuration=configuration()
-        w.stats_path=SimpleNamespace(get=lambda:'stats.xlsx');w.creatives_path=SimpleNamespace(get=lambda:'creatives')
+        w.step=5;w.configuration=configuration()
+        w.bi_connected=False;w.stats_path=SimpleNamespace(get=lambda:'stats.xlsx');w.creatives_path=SimpleNamespace(get=lambda:'creatives')
         w.config_directory=Path('cfg');w.version_text='ACL 1.2.3'
         with mock.patch.object(wizard,'apply_machine_configuration') as apply_mock, mock.patch.object(wizard,'write_ready_state') as ready:
             w._validate_step()

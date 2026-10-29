@@ -170,10 +170,11 @@ def apply_machine_configuration(
         # ACL-1447: тем же именем подписаны события Sentry (тег `manager`);
         # в настройках дешборда меняется отдельно от MY_CM_NAME.
         "ACL_MACHINE_LABEL": configuration.campaign_manager_name,
-        "FB_STATS_EXCEL": str(Path(stats_workbook)),
         "FB_CREATIVES_ROOT": str(Path(creatives_directory)),
         **SAFETY_ENV,
     }
+    if (stats_workbook or "").strip():  # ACL-2306: optional when BI is connected
+        env_values["FB_STATS_EXCEL"] = str(Path(stats_workbook))
     _replace_transaction({
         env_path: merge_env(existing_env, env_values).encode("utf-8"),
         map_path: _account_map_bytes(configuration, existing_map),

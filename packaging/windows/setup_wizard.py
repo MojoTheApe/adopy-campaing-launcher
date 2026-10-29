@@ -77,8 +77,11 @@ def default_stats_workbook() -> str:
         return ""
 
 
-def validate_stats_workbook(path: str) -> str:
+def validate_stats_workbook(path: str, *, optional: bool = False) -> str:
+    """With ``optional`` (BI is connected) an empty choice is fine and returns ''."""
     if not (path or "").strip():
+        if optional:
+            return ""
         raise WizardValidationError("No Stats workbook chosen. " + STATS_WORKBOOK_HELP)
     try:
         return _validate_stats_workbook(path)
@@ -131,6 +134,53 @@ def validate_campaign_manager_name(value: str) -> str:
     if any(marker in name.casefold() for marker in ("campaign manager name", "your name", "example")):
         raise WizardValidationError("Replace the example campaign manager name with your own name.")
     return name
+
+
+def build_bi_setup(*, campaign_manager_name: str,
+                   accounts_for: Callable[[str], list[str]] | None = None) -> MachineConfiguration:
+    """ACL-2306: the manager's accounts come from BI when the Stats workbook is not used."""
+    name = validate_campaign_manager_name(campaign_manager_name)
+    if accounts_for is None:
+        from src.analysis_agent.connection_settings import bi_accounts_for_manager as accounts_for
+    try:
+        aliases = list(accounts_for(name))
+    except Exception as exc:
+        raise WizardValidationError(
+            "BI is connected, but the account list could not be read from it. Try again, "
+            "or choose the Stats workbook instead.") from exc
+    if not aliases:
+        raise WizardValidationError(
+            f"BI has no accounts for “{name}”. Check the spelling of your name, or choose the "
+            "Stats workbook your team lead sent you.")
+    return MachineConfiguration(
+        name, tuple(AccountAssignment(account_name=alias) for alias in sorted(aliases, key=str.casefold)))
+
+
+CONNECTION_FILE_LABEL = "Team connection file"
+
+
+def connect_with_google(config_directory: str | Path, *, sign_in: Callable | None = None,
+                        checks: Callable | None = None) -> list[ReadinessCheck]:
+    """Sign in with the employee's Google account, save the team connection settings
+    on this machine only (never the checkout), then run one check per connection.
+
+    Returns one line per connection. Nothing is saved when sign-in or the file fails.
+    """
+    from src.analysis_agent import connection_settings as cs
+
+    previous = os.environ.get("ACL_CONFIG_DIR")
+    os.environ["ACL_CONFIG_DIR"] = str(config_directory)
+    try:
+        try:
+            (sign_in or cs.sign_in)()
+        except cs.SettingsError as exc:
+            return [ReadinessCheck(CONNECTION_FILE_LABEL, False, str(exc))]
+        return [ReadinessCheck(c["name"], bool(c["ok"]), c["line"]) for c in (checks or cs.check_connections)()]
+    finally:
+        if previous is None:
+            os.environ.pop("ACL_CONFIG_DIR", None)
+        else:
+            os.environ["ACL_CONFIG_DIR"] = previous
 
 
 def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> MachineConfiguration:
@@ -343,6 +393,7 @@ class SetupWizard:
     STEPS = (
         "Welcome",
         "System check",
+        "Connections",
         "Your name",
         "Local files",
         "Readiness",
@@ -367,6 +418,8 @@ class SetupWizard:
         self.creatives_path = tk.StringVar(
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.status = tk.StringVar()
+        self.connection_lines: list[ReadinessCheck] = []
+        self.bi_connected = False
 
         root.title("Adopy Campaign Manager Setup")
         # 590 точек в высоту резали низ окна вместе с кнопкой «Next», и
@@ -446,6 +499,7 @@ class SetupWizard:
         renderers: tuple[Callable[[], None], ...] = (
             self._welcome,
             self._system,
+            self._connections,
             self._identity,
             self._files,
             self._readiness,
@@ -473,8 +527,65 @@ class SetupWizard:
                 color="#17663a" if check.ok else "#9b1c1c",
             )
 
+    def _connections(self) -> None:
+        self._text("Sign in with your Adopy Google account. ACL reads the team connection file your team lead "
+                   "shared with you and connects the team library and BI. No key is typed or pasted.")
+        self._text("You can skip this step and connect later in the dashboard (Connections).")
+        self.tk.Button(self.body, text="Sign in with Google", command=self._sign_in).pack(anchor="w", pady=(0, 12))
+        self.connection_box = self.tk.Frame(self.body)
+        self.connection_box.pack(fill="x")
+        self._paint_connections()
+
+    def _paint_connections(self) -> None:
+        for child in self.connection_box.winfo_children():
+            child.destroy()
+        for line in self.connection_lines:
+            self.tk.Label(self.connection_box, text=f"{'✓' if line.ok else '✕'}  {line.detail}", anchor="w",
+                          justify="left", wraplength=700,
+                          fg="#17663a" if line.ok else "#9b1c1c").pack(fill="x", pady=2)
+
+    def _sign_in(self) -> None:
+        """Sign-in runs off the Tk thread (it waits for the browser); the window stays alive."""
+        import queue
+        import threading
+
+        if getattr(self, "_signing_in", False):
+            return
+        self._signing_in = True
+        results: "queue.Queue" = queue.Queue()
+        self.status.set("Waiting for the Google sign-in in your browser...")
+
+        def work() -> None:
+            try:
+                lines = connect_with_google(self.config_directory)
+            except Exception:
+                lines = [ReadinessCheck(CONNECTION_FILE_LABEL, False, "Sign-in was not finished. Try again.")]
+            results.put(lines)  # Tk is only touched from the main thread, via the poll below
+
+        def poll() -> None:
+            try:
+                lines = results.get_nowait()
+            except queue.Empty:
+                self.root.after(200, poll)
+                return
+            self._sign_in_done(lines)
+
+        threading.Thread(target=work, name="acl-wizard-sign-in", daemon=True).start()
+        self.root.after(200, poll)
+
+    def _sign_in_done(self, lines: list) -> None:
+        self._signing_in = False
+        self.connection_lines = lines
+        self.bi_connected = any(line.ok and line.label == "BI" for line in lines)
+        self.status.set("")
+        try:
+            self._paint_connections()
+        except Exception:
+            pass  # the step was left while signing in
+
     def _identity(self) -> None:
-        self._text("Enter your name exactly as it is written in the CM column of the Stats workbook.")
+        self._text("Enter your name exactly as it is written in the CM column of the Stats workbook "
+                   "(or as BI knows you).")
         self.tk.Label(self.body, text="Your name", anchor="w").pack(fill="x")
         self.tk.Entry(self.body, textvariable=self.campaign_manager_name).pack(fill="x", pady=(2, 12))
         self._text("ACL finds your ad accounts in the workbook by this name.")
@@ -502,11 +613,14 @@ class SetupWizard:
 
     def _files(self) -> None:
         self._text("Use the file pickers; no path needs to be typed or edited.")
+        if self.bi_connected:
+            self._text("BI is connected, so the Stats workbook is optional: your accounts come from BI. "
+                       "Choose a workbook only as a fallback.", color="#17663a")
         self._text(STATS_WORKBOOK_HELP)
         if self.stats_path.get() and default_stats_workbook() == self.stats_path.get():
             self._text("A workbook was found in the usual place and is filled in below. "
                        "Change it only if you were sent a different file.", color="#17663a")
-        self._path_row("Stats workbook (Excel)", self.stats_path)
+        self._path_row("Stats workbook (Excel)" + (" - optional" if self.bi_connected else ""), self.stats_path)
         self._path_row("Creatives folder", self.creatives_path, directory=True)
         self._text("Put your videos and images into the Creatives folder. ACL creates it if it does not exist yet. "
                    "Both paths can be changed later in the dashboard.")
@@ -515,7 +629,7 @@ class SetupWizard:
         checks = [
             ("Runtime", all(check.ok for check in getattr(self, "system_checks", []))),
             ("Your accounts", self.configuration is not None),
-            ("Local files", bool(self.stats_path.get() and self.creatives_path.get())),
+            ("Local files", bool((self.stats_path.get() or self.bi_connected) and self.creatives_path.get())),
             ("Safety mode", True),
         ]
         self._text("The launcher will open only when every required group is ready.")
@@ -558,16 +672,19 @@ class SetupWizard:
             failed = [check.label for check in self.system_checks if not check.ok]
             if failed:
                 raise WizardValidationError("Resolve failed system checks: " + ", ".join(failed))
-        elif self.step == 2:
-            self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
         elif self.step == 3:
-            self.stats_path.set(validate_stats_workbook(self.stats_path.get()))
-            self.creatives_path.set(validate_creatives_directory(self.creatives_path.get(), create=True))
-            self.configuration = build_manual_setup(
-                campaign_manager_name=self.campaign_manager_name.get(),
-                stats_workbook=self.stats_path.get(),
-            )
+            self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
         elif self.step == 4:
+            self.stats_path.set(validate_stats_workbook(self.stats_path.get(), optional=self.bi_connected))
+            self.creatives_path.set(validate_creatives_directory(self.creatives_path.get(), create=True))
+            if self.bi_connected:
+                self.configuration = build_bi_setup(campaign_manager_name=self.campaign_manager_name.get())
+            else:
+                self.configuration = build_manual_setup(
+                    campaign_manager_name=self.campaign_manager_name.get(),
+                    stats_workbook=self.stats_path.get(),
+                )
+        elif self.step == 5:
             if not self.configuration:
                 raise WizardValidationError("Go back and confirm your name and the Stats workbook.")
             apply_machine_configuration(

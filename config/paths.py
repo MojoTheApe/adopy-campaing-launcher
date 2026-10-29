@@ -553,6 +553,12 @@ def _dotenv_line(key: str, value: str) -> str:
     # containing spaces, #, quotes or backslashes unambiguous.
     import json
 
+    # Readers use str.splitlines(), which also splits on U+2028/U+2029/U+0085 and the
+    # C0 separators: such a value would start a new .env line on the next rewrite
+    # (ACL-2306 review B1). ensure_ascii=True would not help: python-dotenv does not
+    # decode \uXXXX, so every Cyrillic name or path would be corrupted. Refuse instead.
+    if len(f"x{value}x".splitlines()) > 1:
+        raise ValueError(f"the value of {key} contains a line separator")
     return f"{key}={json.dumps(value, ensure_ascii=False)}"
 
 
