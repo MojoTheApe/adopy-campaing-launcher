@@ -2336,6 +2336,38 @@ def _start_still_held(exc: BaseException) -> bool:
         "can't lock", "cant lock", "cannot lock"))
 
 
+def _start_held_elsewhere(msg: str) -> bool:
+    """MLX says another machine/user holds the profile (ACL-2300): not ours to unlock."""
+    return any(mark in msg for mark in ("another device", "other device", "another machine",
+                                        "another user", "different user", "in use by"))
+
+
+def _mlx_says_not_running(launcher: Any, profile_id: str) -> bool:
+    """Multilogin itself lists the profile as not running (ACL-2300).
+
+    An unanswered or unknown status is NOT "not running": a window opened by hand whose process
+    the local scan cannot see must never be stopped (ACL-1320).
+    """
+    try:
+        running = launcher.running_profile_ids()
+    except Exception:
+        return False
+    return running is not None and profile_id not in running
+
+
+def _record_lock_release(profile_id: str, *, ok: bool, note: str, error: str = "") -> None:
+    """Telemetry line for the release of a stale Multilogin lock (ACL-2300)."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        diag = {"profile": str(profile_id)[:8]}
+        if error:
+            diag["error"] = error[:160]
+        rt.record("profile_lock_released", ok, note=note, diag=diag)
+    except Exception:
+        pass
+
+
 def _stop_clock() -> float:
     """Часы для длительности мягкой остановки (тесты подменяют)."""
     return time.monotonic()
@@ -2462,6 +2494,7 @@ class MultiloginAttachOnlyProvider:
         ml = get_multilogin_instance(entry.multilogin_instance)
         self._launcher = MultiloginLauncher(ml)
         last_exc: MultiloginLauncherError | None = None
+        unlock_tried = False
         for attempt in range(3):
             try:
                 started = self._launcher.start_profile(
@@ -2489,6 +2522,34 @@ class MultiloginAttachOnlyProvider:
                     or "already running" in msg
                     or "profile_already_running" in msg
                 )
+                # ACL-2300: «can't lock» у профиля, которого на этой машине нет, — это замок
+                # Multilogin после ручной остановки («Locked» в MLX Desktop). Один раз
+                # снимаем его через API Multilogin и пробуем запуск ещё раз.
+                cant_lock = ("can't lock" in msg or "cant lock" in msg or "cannot lock" in msg)
+                if (cant_lock and not self._direct.profile_is_running(udd, profile_id)
+                        and not _start_held_elsewhere(msg)
+                        and _mlx_says_not_running(self._launcher, profile_id)):
+                    if unlock_tried:
+                        _record_lock_release(profile_id, ok=False, note="still_locked")
+                        raise RuntimeError(
+                            f"{account_label}: the profile is still locked in Multilogin after the lock "
+                            "was released once. Open the profile once in MLX Desktop (click \"Locked\"), "
+                            "then try again."
+                        ) from exc
+                    unlock_tried = True
+                    try:
+                        self._launcher.release_stale_lock(profile_id, folder_id=folder_id)
+                    except MultiloginLauncherError as unlock_exc:
+                        _record_lock_release(profile_id, ok=False, note="unlock_failed", error=str(unlock_exc))
+                        raise RuntimeError(
+                            f"{account_label}: the profile is locked in Multilogin and Multilogin could not "
+                            f"release it ({unlock_exc}). Open the profile once in MLX Desktop "
+                            "(click \"Locked\"), then try again."
+                        ) from unlock_exc
+                    _record_lock_release(profile_id, ok=True, note="released")
+                    _tell_job("Profile was locked in Multilogin, released; starting it again")
+                    time.sleep(1)
+                    continue
                 if lock_conflict and not allow_restart:
                     # ACL-1184: тот же отказ «открыт руками», что и в `open`, — не голый
                     # RuntimeError: дешборд показывает по нему `hand_message()`.

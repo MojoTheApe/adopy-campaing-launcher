@@ -192,6 +192,46 @@ class MultiloginLauncher:
                 continue
         return None
 
+    def running_profile_ids(self) -> set[str] | None:
+        """Ids of profiles Multilogin itself reports as running, or None when it cannot say (ACL-2300).
+
+        Same read-only launcher list as `_get_running_profile_port`. None means "unknown": the
+        caller must not treat it as "not running".
+        """
+        for endpoint in [
+            f"{self.config.launcher_base_v2}/profile/running",
+            f"{self.config.launcher_base_v1}/profile/running",
+            f"{self.config.launcher_base_v2}/profiles/running",
+        ]:
+            try:
+                r = requests.get(endpoint, headers=self._headers(), timeout=10)
+                if r.status_code != 200:
+                    continue
+                items = r.json()
+                if isinstance(items, dict):
+                    items = items.get("data") or []
+                if not isinstance(items, list):
+                    continue
+                return {str(i.get("profile_id") or i.get("id") or "") for i in items if isinstance(i, dict)}
+            except Exception:
+                continue
+        return None
+
+    def release_stale_lock(self, profile_id: str, folder_id: str | None = None) -> None:
+        """Release the lock Multilogin X keeps on a profile that was stopped by hand (ACL-2300).
+
+        After a manual Stop, MLX Desktop shows the profile as "Locked" until someone clicks it,
+        and a start answers HTTP 500 "can't lock profile". The only documented launcher call that
+        releases a profile is the stop call of Multilogin's own Postman collection
+        (`GET /api/v1/profile/stop/p/{profile_id}`, see `stop_profile`); there is no separate
+        documented unlock address, and none is invented here. A profile that is not running
+        answers "already stopped", which `stop_profile` treats as done.
+
+        The caller must have checked that the profile is NOT running on this machine.
+        Raises MultiloginLauncherError when the launcher refuses.
+        """
+        self.stop_profile(profile_id, folder_id=folder_id)
+
     def stop_profile(self, profile_id: str, folder_id: str | None = None) -> None:
         """Stop a running MLX profile through the launcher.
 
