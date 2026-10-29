@@ -56,9 +56,13 @@ def test_proxy_error_at_first_navigation_retries_once_then_stops_with_proxy_mess
     tab, cdp, events, beats, slept = _tab([f"net::{code}"] * 2, monkeypatch)
     with pytest.raises(cdp_mod.ProxyNotConnectedError) as info:
         tab.navigate(FB)
-    assert str(info.value) == cdp_mod.PROXY_NOT_CONNECTED_MESSAGE
+    assert str(info.value) == cdp_mod.proxy_not_connected_message(f"ERR_{code[4:]}")
     assert "Check the proxy of this profile in Multilogin" in str(info.value)
-    assert "Nothing was sent to Meta" in str(info.value)
+    assert "Nothing was sent by this attempt." in str(info.value)
+    if code == "ERR_SSL_PROTOCOL_ERROR":
+        assert "(SSL error)" in str(info.value)
+    else:
+        assert f"(network error {code})" in str(info.value) and "SSL" not in str(info.value)
     assert cdp.urls == [FB, FB]
     assert sum(slept) == launch.PROXY_NET_RETRY_S
     assert events == [{"event": "fb_api_first_nav_proxy_error", "code": code, "retried": True,
@@ -103,3 +107,38 @@ def test_no_proxy_address_in_telemetry_or_message(monkeypatch):
     blob = repr(events) + str(info.value)
     assert PROXY_ADDR not in blob and "http" not in repr(events)
     assert set(events[0]) == {"event", "code", "retried", "outcome", "retry_code"}
+
+
+def test_read_failure_shows_the_plain_proxy_message():
+    from src.analysis_agent import account_spend_api as api
+
+    msg = cdp_mod.proxy_not_connected_message("ERR_TIMED_OUT")
+    assert api._failure("acc", cdp_mod.ProxyNotConnectedError(msg)) == (msg, "")
+
+
+def test_retry_pause_is_capped_by_the_warm_prepare_budget(monkeypatch):
+    from src.fb_api import warm
+
+    tab, cdp, events, beats, slept = _tab([SSL, ""], monkeypatch)
+    monkeypatch.setattr(cdp_mod.time, "monotonic", lambda: 1000.0)
+    token = warm._PREPARE_DEADLINE.set(1000.0 + 25.0)     # left 25 s, reserve 15 s -> 10 s pause
+    try:
+        tab.navigate(FB)
+    finally:
+        warm._PREPARE_DEADLINE.reset(token)
+    assert sum(slept) == 25.0 - cdp_mod._RETRY_NAV_RESERVE_S
+    assert cdp.urls == [FB, FB]
+
+
+def test_no_budget_left_means_no_pause_but_still_the_proxy_message(monkeypatch):
+    from src.fb_api import warm
+
+    tab, cdp, events, beats, slept = _tab([SSL, SSL], monkeypatch)
+    monkeypatch.setattr(cdp_mod.time, "monotonic", lambda: 1000.0)
+    token = warm._PREPARE_DEADLINE.set(1005.0)
+    try:
+        with pytest.raises(cdp_mod.ProxyNotConnectedError):
+            tab.navigate(FB)
+    finally:
+        warm._PREPARE_DEADLINE.reset(token)
+    assert slept == []

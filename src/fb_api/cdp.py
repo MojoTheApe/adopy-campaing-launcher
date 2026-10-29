@@ -70,9 +70,18 @@ class PageError(CdpError):
 #: Сетевые коды прокси/TLS на первой навигации (ACL-2321).
 PROXY_NET_ERRORS = ("ERR_SSL_PROTOCOL_ERROR", "ERR_PROXY_CONNECTION_FAILED",
                     "ERR_TUNNEL_CONNECTION_FAILED", "ERR_TIMED_OUT")
-PROXY_NOT_CONNECTED_MESSAGE = ("The profile's proxy did not connect (SSL error). "
-                               "Check the proxy of this profile in Multilogin, then try again. "
-                               "Nothing was sent to Meta.")
+_PROXY_ADVICE = ("Check the proxy of this profile in Multilogin, then try again. "
+                 "Nothing was sent by this attempt.")
+#: Резерв бюджета подготовки на саму повторную навигацию (пауза не съедает его целиком).
+_RETRY_NAV_RESERVE_S = 15.0
+
+
+def proxy_not_connected_message(code: str) -> str:
+    """Текст человеку: SSL — «(SSL error)», остальные коды — нейтрально, с самим кодом."""
+    what = "SSL error" if code == "ERR_SSL_PROTOCOL_ERROR" else f"network error {code}"
+    return f"The profile's proxy did not connect ({what}). {_PROXY_ADVICE}"
+
+
 _PAUSE_BEAT_S = 5.0
 
 
@@ -611,7 +620,7 @@ class PageTab:
         """
         from src.fb_api import launch as _launch
 
-        self._pause(_launch.PROXY_NET_RETRY_S)
+        self._pause(self._capped_retry_pause(_launch.PROXY_NET_RETRY_S))
         try:
             self._navigate_once(url, timeout)
         except PageError as again:
@@ -619,10 +628,25 @@ class PageTab:
                              "retried": True, "outcome": "failed",
                              "retry_code": proxy_network_error_code(str(again)) or "other"})
             if proxy_network_error_code(str(again)):
-                raise ProxyNotConnectedError(PROXY_NOT_CONNECTED_MESSAGE) from None
+                raise ProxyNotConnectedError(
+                    proxy_not_connected_message(proxy_network_error_code(str(again)))) from None
             raise
         _launch._record({"event": "fb_api_first_nav_proxy_error", "code": code,
                          "retried": True, "outcome": "recovered"})
+
+    @staticmethod
+    def _capped_retry_pause(seconds: float) -> float:
+        """Пауза не больше остатка бюджета подготовки (warm) минус запас на саму навигацию."""
+        try:
+            from src.fb_api import warm as _warm
+
+            deadline = _warm._PREPARE_DEADLINE.get()
+        except Exception:
+            deadline = None
+        if deadline is None:
+            return seconds
+        left = deadline - time.monotonic() - _RETRY_NAV_RESERVE_S
+        return max(0.0, min(seconds, left))
 
     def _pause(self, seconds: float) -> None:
         """Пауза кусками по `_PAUSE_BEAT_S`, между ними задание отмечается живым."""
