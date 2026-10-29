@@ -599,7 +599,8 @@ class WarmRegistry:
         self._store.update(mutate)
 
     def known_targets(self) -> set:
-        """ACL-2299: target ids of the robot tabs of this process and of the warm store (the other server too)."""
+        """ACL-2299: target ids of the robot tabs of this process and of this instance's warm store. The store is per
+        instance: protection from the other server on the machine is the `attached` filter of the tab clean-up."""
         ids = {str(sess.target_id) for sess in list(self._sessions.values()) if sess.target_id}
         try:
             for rec in (self._store.load().get("profiles") or {}).values():
