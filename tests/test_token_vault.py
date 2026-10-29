@@ -231,3 +231,40 @@ def test_without_dpapi_library_token_stays_as_before(machine, monkeypatch):
     paths.update_machine_env({"ACL_LIBRARY_TOKEN": LIB_TOKEN})
     assert LIB_TOKEN in (machine / ".env").read_text(encoding="utf-8")
     assert paths.protect_machine_secrets() == []
+
+
+def test_hand_written_escape_is_not_sealed_as_a_different_value(machine, fake_dpapi, monkeypatch):
+    r"""ACL-2318 review: dotenv reads "a\"b\c" as a"b\c; our own parser must not change it."""
+    from dotenv import dotenv_values
+
+    _clear_team_env(monkeypatch)
+    line = r'BI_MYSQL_PASSWORD="a\"b\c"'
+    (machine / ".env").write_text(f"KEEP_ME=1\n{line}\nACL_LIBRARY_TOKEN={LIB_TOKEN}\n", encoding="utf-8")
+    expected = dotenv_values(machine / ".env")["BI_MYSQL_PASSWORD"]
+    notes = paths.protect_machine_secrets()
+    text = (machine / ".env").read_text(encoding="utf-8")
+    assert line in text                       # left as the user wrote it, not sealed wrongly
+    assert LIB_TOKEN not in text              # the other secret is still moved
+    assert any("left in clear text" in n and "BI_MYSQL_PASSWORD" in n for n in notes)
+    assert expected not in "".join(notes)
+    paths.load_env()
+    assert os.environ["BI_MYSQL_PASSWORD"] == expected
+
+
+def test_restore_from_backup_reads_values_like_the_app(machine, fake_dpapi, monkeypatch):
+    from dotenv import dotenv_values
+
+    _clear_team_env(monkeypatch)
+    (machine / ".env").write_text(r'BI_MYSQL_PASSWORD="p\q\"r"' + "\n", encoding="utf-8")
+    expected = dotenv_values(machine / ".env")["BI_MYSQL_PASSWORD"]
+    # a backup of the original, as an older migration would have left it
+    token_vault._backup((machine / ".env").read_bytes(), ".env", machine)
+    (machine / ".env").write_text("OTHER=1\n", encoding="utf-8")
+    token_vault.unprotect_env_file(machine / ".env", machine, from_backup=True)
+    assert dotenv_values(machine / ".env")["BI_MYSQL_PASSWORD"] == expected
+
+
+def test_bi_password_of_three_characters_is_hidden_by_the_vault_scrubber(machine, fake_dpapi, monkeypatch):
+    _clear_team_env(monkeypatch)
+    paths.update_machine_env({"BI_MYSQL_PASSWORD": "xQ7"})
+    assert "xQ7" not in token_vault.hide_configured_secrets("pw=xQ7")

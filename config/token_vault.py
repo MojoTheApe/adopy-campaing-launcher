@@ -263,13 +263,23 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
         return None
     try:
         original = target.read_bytes()
+        from dotenv import dotenv_values
+
         lines = original.decode("utf-8").splitlines()
+        # The app reads this file through python-dotenv (load_env). The value that goes
+        # into the vault must be exactly what dotenv gives; our own parser disagrees on
+        # some escapes in double quotes (ACL-2318 review), and such a line stays as it is.
+        reference = dotenv_values(target)
         out: list[str] = []
         changed = 0
+        skipped: list[str] = []
         for line in lines:
             m = _ENV_LINE.match(line)
             if m and is_secret_env_key(m.group(2)):
                 plain = _unquote(m.group(4))
+                if plain and not is_protected_value(plain) and plain != reference.get(m.group(2)):
+                    skipped.append(m.group(2))
+                    plain = ""
                 if plain and not is_protected_value(plain):
                     sealed = encode_env_value(plain)
                     if decode_env_value(sealed) != plain:
@@ -277,11 +287,15 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
                     line = f"{m.group(1)}{m.group(2)}{m.group(3)}{json.dumps(sealed)}"
                     changed += 1
             out.append(line)
+        left = ""
+        if skipped:
+            left = (f"; {len(skipped)} value(s) left in clear text because they are written in a form "
+                    f"the app reads differently ({', '.join(sorted(set(skipped)))}): re-enter them in Settings")
         if not changed:
-            return None
+            return f".env: nothing moved to protected storage{left}" if skipped else None
         _backup(original, backup_key(target, config_dir), Path(config_dir))
         _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
-        return f".env: {changed} secret value(s) moved to protected storage (encrypted backup kept)"
+        return f".env: {changed} secret value(s) moved to protected storage (encrypted backup kept){left}"
     except Exception as exc:
         return f".env: could not move tokens to protected storage ({type(exc).__name__}); left as it was"
 
@@ -352,13 +366,13 @@ def _env_tokens_from_backup(target: Path, config_dir: str | Path) -> str | None:
     backup = _newest_backup_bytes(backup_key(target, config_dir), Path(config_dir))
     if backup is None:
         return None
-    wanted: dict[str, str] = {}
-    for line in backup.decode("utf-8", "replace").splitlines():
-        m = _ENV_LINE.match(line)
-        if m and is_secret_env_key(m.group(2)):
-            value = _unquote(m.group(4))
-            if value:
-                wanted[m.group(2)] = value
+    import io
+
+    from dotenv import dotenv_values
+
+    # Same reader as load_env, so a backed-up value comes back exactly as the app saw it.
+    parsed = dotenv_values(stream=io.StringIO(backup.decode("utf-8", "replace")))
+    wanted = {k: v for k, v in parsed.items() if is_secret_env_key(k) and v}
     if not wanted:
         return None
     current = target.read_bytes().decode("utf-8").splitlines() if target.is_file() else []
@@ -466,7 +480,8 @@ def _collect_secret_values() -> set[str]:
                         value = decode_env_value(value)
                     except VaultError:
                         continue
-                if len(value) >= 8:
+                # BI password: 3 like run_telemetry._hide_configured_bi; others 8.
+                if len(value) >= (3 if key == "BI_MYSQL_PASSWORD" else 8):
                     values.add(value)
     except Exception:
         pass
