@@ -294,6 +294,15 @@ def release_frozen_tab_cooldown(key: str) -> bool:
     return False
 
 
+def clear_frozen_tab_cooldown(key: str) -> None:
+    """ACL-2299: a job that waits in the queue after its replacement tab froze too starts again on its own
+    backoff; the 10-minute frozen-tab pause would only add a second, blind wait. Never used for a plain stop."""
+    with _COOLDOWN_LOCK:
+        if _COOLDOWN.get(key, (0.0, ""))[1] == "page_unresponsive":
+            del _COOLDOWN[key]
+        _FROZEN_RELEASED.discard(key)
+
+
 def note_tab_recovered(key: str) -> None:
     """Вкладка выдана и отвечает: эпизод зависания закончен, следующий получит новую замену."""
     with _COOLDOWN_LOCK:

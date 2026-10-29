@@ -207,7 +207,9 @@ def _build_sheets_service(
     if not oauth_file.is_absolute():
         oauth_file = _PROJ_ROOT / oauth_file
 
-    if oauth_file.is_file():
+    from config.paths import is_valid_google_oauth_client
+
+    if is_valid_google_oauth_client(oauth_file):
         print("[gsheet_accounts] Auth mode: OAuth2 (user account)", file=sys.stderr)
         return _build_sheets_service_oauth(str(oauth_file), token_path)
 
