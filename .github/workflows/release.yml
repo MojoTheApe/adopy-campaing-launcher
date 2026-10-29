@@ -25,6 +25,8 @@ on:
         required: false
       ACL_UPDATE_TOKEN:
         required: false
+      ACL_OAUTH_CLIENT_JSON:
+        required: false
   push:
     tags:
       - "acl-release-*"
@@ -121,6 +123,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force packaging/windows/.build | Out-Null
           Set-Content -Path packaging/windows/.build/oauth_client.json -Value $env:ACL_OAUTH_CLIENT_JSON -Encoding utf8
+
       - name: Build onedir bundle
         shell: pwsh
         env:
