@@ -94,7 +94,7 @@ def test_corrupt_settings_cannot_authorize_a_manual_restart(tmp_path):
 
 
 @pytest.mark.parametrize("kind",["network_timeout","network"])
-def test_repeated_network_failure_has_only_one_retry(kind):
+def test_repeated_network_failure_stops_after_three_retries(kind):
     from src.fb_api.graph import GraphClient,PageFailed
     class Transport:
         def __init__(self): self.reads=0
@@ -102,7 +102,7 @@ def test_repeated_network_failure_has_only_one_retry(kind):
         def state(self): return {"kind":"ads_manager","has_token":True}
     transport=Transport();client=GraphClient(transport,min_interval_s=0,sleep=lambda _:None)
     with pytest.raises(PageFailed): client.get('/123')
-    assert transport.reads==2 and client.calls==2 and client.writes==0
+    assert transport.reads==4 and client.calls==4 and client.writes==0
 
 
 @pytest.mark.parametrize("kind",["login","checkpoint","unknown"])
