@@ -48,6 +48,7 @@ from src.campaign_bridge.dashboard_publisher import preview_jobs
 from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
+from src.fb_api.connection import user_started_action
 from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
@@ -4358,7 +4359,8 @@ async def account_spend_read(request: Request) -> JSONResponse:
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     try:
-        reading = account_spend.start_read(account, date_from, date_to)
+        with user_started_action():      # ACL-2272: this button is the person's own press
+            reading = account_spend.start_read(account, date_from, date_to)
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not start or save the reading. Check disk space and retry."}, status_code=503)
     # Нужно ли после этого спрашивать кабинет про страны, отвечает опрос
@@ -4429,7 +4431,8 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     try:
-        split = country_split.start_split(account, date_from, date_to)
+        with user_started_action():      # ACL-2272: the person's own press
+            split = country_split.start_split(account, date_from, date_to)
     except Exception:
         return JSONResponse(
             {"ok": False, "error": "Could not start or save the country reading. "
@@ -5021,7 +5024,8 @@ async def campaign_inventory_read(request: Request) -> JSONResponse:
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     try:
-        job = ci.start_read(account, date_from, date_to)
+        with user_started_action():      # ACL-2272: the person's own press
+            job = ci.start_read(account, date_from, date_to)
     except ci.NeedsApiBackend:
         return JSONResponse({"ok": False, "code": ci.NEEDS_API_CODE, "error": ci.NEEDS_API_MESSAGE},
                             status_code=409)

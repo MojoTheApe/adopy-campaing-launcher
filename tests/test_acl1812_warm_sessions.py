@@ -1004,6 +1004,9 @@ def test_open_profile_itself_refuses_a_start_inside_the_cooldown(monkeypatch, tm
 
 def test_read_on_a_just_closed_profile_is_refused_before_the_memory_queue(monkeypatch, tmp_path):
     """B1: «Close profiles» → сразу «Read campaigns» не поднимает профиль заново."""
+    from src.fb_api import connection as _conn
+
+    monkeypatch.setattr(_conn, "may_start_closed_profile", lambda: True)   # ACL-2272: user-started read
     rig = Rig(tmp_path)
     rig.warm_up()
     monkeypatch.setattr(warm, "_REGISTRY", rig.reg)

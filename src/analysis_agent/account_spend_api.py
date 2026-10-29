@@ -394,6 +394,10 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
     shared = False
     gated = False
     kind, _port = _probe_local(profile_id)
+    if kind in ("none", "closing") and not _as.may_open_closed_profile():
+        # ACL-2272 (owner rule 2026-10-28): page load, background and scheduled reads only use a profile that
+        # is already open. A closed one is left alone: nothing started, no slot taken, nothing read.
+        raise ApiReadError(_as.profile_closed_message(account), code=_as.PROFILE_CLOSED_CODE)
     if kind == "none":
         # ACL-1812 (ревью #813, B1): закрыли недавно — не поднимаем, и в очередь за местом не встаём.
         from src.fb_api import stop_log as _stop_log
@@ -1219,5 +1223,9 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
         out.error = "turning off an ad requires its campaign"
     if out.error:
         return _record_api_turn_off(out)
-    return _turn_off_locked(account, level, oid, parent_id=parent, expected_name=expected_name,
-                            requester=who, profile_busy=profile_busy)
+    from src.fb_api.connection import user_started_action
+
+    # ACL-2272: the person pressed the shut-off button, so this action may bring up a closed profile.
+    with user_started_action():
+        return _turn_off_locked(account, level, oid, parent_id=parent, expected_name=expected_name,
+                                requester=who, profile_busy=profile_busy)

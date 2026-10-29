@@ -728,7 +728,11 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     # отказ следующей кампании, выхода из сессии и освобождения замка.
     if results is None:
         results = []
-    with _api._session(account_label) as sess:
+    from src.fb_api.connection import user_started_action
+
+    # ACL-2272: Check plan is pressed by the person: an allowed path that may start a closed profile
+    # (and keeps it `plan_keep_open_s()` for the Publish that usually follows).
+    with user_started_action(), _api._session(account_label) as sess:
         client = sess.client
         if client.allow_writes:
             raise _PlanReadContractError("the read session must not be able to write")
