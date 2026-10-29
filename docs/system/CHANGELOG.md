@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2306 — Connect the team library and BI with Google sign-in — 2026-10-29
+
+The library token and BI credentials live in one private Google Sheet shared by the team lead. Setup and the dashboard (Connections) get "Sign in with Google": the dashboard reads the sheet as the employee, saves the values only in the machine settings, and shows one check line each for the team library and BI. Machines re-read the sheet at start, so rotating a value means editing the sheet. Unsharing the sheet only stops the next refresh: to cut a person off, unshare the sheet AND rotate the library token and BI password (a machine keeps the last values it saved). The Google sign-in client is bundled from a CI secret, never from git. With BI connected the Stats workbook is optional and accounts come from BI. The lead can publish the values the running dashboard loaded, with a clear message when nothing is there to share. Nothing is forwarded by hand and no secret is shown, logged or built in.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1306).
+
 ## ACL-2301 — A Graph read timeout no longer stops a half-built campaign — 2026-10-29
 
 A Graph read that fails with `network`/`network_timeout` is now retried per call (3 attempts, 5/10/20 s backoff, job kept alive for the silence watcher, `graph_retry` rows in telemetry) instead of once per Graph session, so one early blip in a long video job no longer uses up the only retry. A session-wide cap of 30 retries remains. A write whose reply was lost to a network timeout is checked by readback twice; if the object exists it is used, if not the write (without a file) is sent once more. Media uploads and unclear Meta replies (5xx, codes 1/2, non-JSON) still only reconcile and stop. Other errors are unchanged.
