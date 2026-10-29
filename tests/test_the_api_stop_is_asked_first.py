@@ -152,6 +152,9 @@ class _Launcher:
 
         return StartedProfile(profile_id=profile_id, folder_id=folder_id, port="58906")
 
+    def profile_run_state(self, profile_id):
+        return "running"  # ACL-2300: never ask the machine's real launcher in a test
+
     def stop_profile(self, profile_id, folder_id=None):
         self.stops += 1
         if not self.stop_ok:

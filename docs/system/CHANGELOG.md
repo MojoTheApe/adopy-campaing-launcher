@@ -1,5 +1,44 @@
 # System history
 
+## ACL-2318 — Library token and BI password in the Windows vault — 2026-10-29
+
+`ACL_LIBRARY_TOKEN` and `BI_MYSQL_PASSWORD` now go through `config.token_vault` (Windows DPAPI, current user) exactly like the Multilogin automation tokens: the machine `%LOCALAPPDATA%\ACL\.env` holds `dpapi:v1:...` instead of clear text, `load_env` opens the value into the process environment (so team library and BI readers are unchanged), and the connection-sheet sign-in and the manual fields write through `update_machine_env` into the vault. An older install with clear-text values is migrated once on the next start (encrypted backup kept, verified before replacing) and the .env keeps no clear-text copy. The values are also hidden by the existing log/telemetry/support-bundle scrubbers. Where DPAPI is absent (Linux/macOS/CI) the old clear-text behaviour stays. A line the app reads differently from the migration parser (for example a hand-written double-quoted password with a backslash escape) is left in clear text with a note instead of being sealed as a different value. A manual rollback to any build older than ACL-2318 first needs `scripts/acl_migrate_config.py --unprotect` (older builds do not open these two keys). The in-app updater is covered by `ACL_DEFER_TOKEN_PROTECTION`, and builds with ACL-2306 heal themselves through `refresh_on_start`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1318).
+
+## ACL-2316 — A silent tab is waited for below the busy line, then one replacement tab — 2026-10-29
+
+Live runs at 59-76 % CPU (below the old 85 % busy line) still stopped with `page_unresponsive`. Now, on ANY machine:
+- Check plan (the open/read path of account_spend, outside the warm registry too): a silent tab is waited for up to `ACL_READ_IDLE_WAIT_S` (75 s) when the machine is idle, or the ACL-2299 patient budget when busy; then ONE replacement tab; a second freeze stops with the same message and keeps the window open as before.
+- Publish: a tab that stops answering before a call was sent waits the same 75 s on an idle machine. Nothing written for the current campaign: one ACL-2262 replacement tab, then the job goes on. A write already sent is reconciled first (ACL-2301) and never resent or replaced. If the replacement tab freezes too on a machine that is not busy, the stop and the ACL-2262 pause stand (no queue wait).
+- The idle waits of one lease never add up to more than 75 s. Waits beat the silence watcher (no `step_stuck`). Stop rows log `cpu_pct`, `memory_pct`, `busy`, `page_count_*` and `waited_s`, including `spend_profile_kept_for_problem`.
+- `ACL_LOAD_CPU_PCT` default 85 -> 70: the three freezes of 2026-10-29 were at 59, 74 and 76 %; 70 puts two of them under the long busy wait and the staggered start, the 59 % one is covered by the 75 s idle wait. Override with the env variable.
+
+Bound on the wait: idle machine 75 s per lease (plus the 75 s open wait of the same attempt), at most two leases (original + one replacement), so about 5 min; busy machine as ACL-2299 (`ACL_PATIENT_READY_S`, 480 s per lease).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1316).
+
+## ACL-2311 — Publish button in Connections, and Connections on the cached page — 2026-10-29
+
+The Connections dialog has a new "Publish my connection settings" button for the
+team lead. It asks for confirmation, calls the existing publish endpoint and lists
+one line per connection (team library, BI) plus plain-words notes such as "This
+computer has no BI connection to share"; errors like "no connection tab" and "no
+edit access" are shown as they are. The publish guards are unchanged.
+
+The dialog code moved from `report.html` to `src/web/static/connections.js`. The
+saved page that is shown right after a restart (up to about 15 minutes while the
+report rebuilds) now gets a Connections button in its state bar and loads that
+script, which always belongs to the current build, so Connections works before
+the rebuild finishes. The loading screen without a saved page is not changed.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1311).
+
+## ACL-2300 — Release a stale Multilogin lock before starting a profile — 2026-10-29
+
+After the owner stopped a profile by hand, Multilogin X showed it as "Locked" and our start failed with "HTTP 500: can't lock profile". When a start answers "can't lock", no browser process of the profile runs on this machine and Multilogin (`GET /api/v1/profile/statuses`) reports the profile as stopped (status "stopped" or absent; running-like or unknown statuses never release), the robot now releases the lock once through the launcher's documented stop call and starts the profile once more, inside Multilogin only. If the release fails or the profile is still locked, the run stops with a message asking to open the profile once in MLX Desktop (click "Locked"). A profile running here keeps the "opened by hand" rules; other start errors are unchanged. The release is written to telemetry (`profile_lock_released`) and shown as a step.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1300).
+
+Owner decision 2026-10-29: when Multilogin lists the locked profile as browser_running, the robot stops it once through the launcher stop and starts it again (the existing soft stop and reopen path), then ends with a message if it is still refused. An unknown status is never touched: the message asks to click "Locked" in MLX Desktop. Telemetry `profile_lock_released` carries the reason (`stopped` or `browser_running`). The live "Locked" check moved to ACL-2323.
+
 ## ACL-2319 — Empty Google sign-in client is never bundled, copied or preferred — 2026-10-29
 
 An `oauth_client.json` now counts only if it is JSON with `installed.client_id` or `web.client_id`.

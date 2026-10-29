@@ -1085,7 +1085,7 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
         log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
-def _keep_for_problem(opened: _ReadOpen, problem: str) -> None:
+def _keep_for_problem(opened: _ReadOpen, problem: str, stop: Any = None) -> None:
     """ACL-2091: проблема аккаунта — окно, поднятое чтением, остаётся открытым.
 
     Место в очереди держится как окно «на проверку» (`review`, как у Publish с
@@ -1099,9 +1099,12 @@ def _keep_for_problem(opened: _ReadOpen, problem: str) -> None:
         except Exception:
             log.exception("Could not mark the kept window of %s", opened.account)
     log.info("%s: %s — the profile the read started stays open", opened.account, problem)
+    # ACL-2316: the stop row carries cpu_pct, memory_pct, busy, page_count and waited_s of a frozen tab
+    load = getattr(stop, "tab_load", None)
     _record("spend_profile_kept_for_problem", True, 0.0,
             {"account": opened.account, "problem": problem,
-             "held_s": round(time.monotonic() - opened.started_mono, 1)})
+             "held_s": round(time.monotonic() - opened.started_mono, 1),
+             **(load if isinstance(load, dict) else {})})
     opened.started = False
 
 
@@ -1120,7 +1123,7 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         return
     kind = keep_open_problem(problem)
     if kind:
-        _keep_for_problem(opened, kind)
+        _keep_for_problem(opened, kind, problem)
         return
     if keep_for_next and convenience and opened.slot_id:
         # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
