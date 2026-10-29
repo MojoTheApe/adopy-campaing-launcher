@@ -105,6 +105,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _record_history(job_id: str) -> None:
+    """ACL-2292: append the ended job to publish_history.jsonl; never breaks the run."""
+    try:
+        from src.web import publish_history
+
+        snap = get_job(job_id)
+        if snap is not None:
+            publish_history.record_job(snap)
+    except Exception:
+        logging.getLogger(__name__).warning("ACL-2292: publish history was not written", exc_info=True)
+
+
 def _abandoned(job_id: str) -> bool:
     """Задание брошено по сроку Stop: его поток больше ничего не пишет (ACL-1614).
 
@@ -326,6 +338,7 @@ def _abandon_job(job_id: str) -> bool:
         _slots.release(job_id)
     _slots.wake()
     _persist_job(snapshot, state="stopped")
+    _record_history(job_id)
     # Замок профиля НЕ трогаем (решение по ревью PR #622, вариант (b)): зависший
     # поток, возможно, ещё держит браузер, и два робота на одном браузере
     # недопустимы. Задания того же профиля ждут, пока поток не выйдет сам
@@ -972,6 +985,7 @@ def _fatal(job_id: str, msg: str) -> None:
         _jobs[job_id]["finished_at"] = _now_iso()
         snapshot = _status_snapshot_locked(_jobs[job_id])
     _persist_job(snapshot)
+    _record_history(job_id)
 
 
 def _result_is_publishable(result: dict[str, Any]) -> bool:
@@ -1089,6 +1103,7 @@ def _finish(job_id: str, *, cancelled: bool = False) -> None:
         _active_publishers.pop(job_id, None)
         snapshot = _status_snapshot_locked(_jobs[job_id])
     _persist_job(snapshot, state="stopped" if cancelled else "")
+    _record_history(job_id)
 
 
 def _run_rpa(

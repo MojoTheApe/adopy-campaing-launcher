@@ -6589,6 +6589,16 @@ async def warm_close(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.get("/publish-history")
+async def publish_history_recent(limit: int = 50) -> JSONResponse:
+    """ACL-2292: the last finished publish jobs (newest first), read from disk."""
+    from starlette.concurrency import run_in_threadpool
+
+    from src.web.publish_history import recent
+
+    return JSONResponse({"runs": await run_in_threadpool(recent, limit)})
+
+
 @app.get("/publish-jobs/slots")
 async def publish_jobs_slots() -> JSONResponse:
     """Сколько профилей публикуют разом и почему (ACL-1321).
@@ -6726,6 +6736,11 @@ async def publish_jobs_close_profile(job_id: str) -> JSONResponse:
 async def publish_jobs_status(job_id: str) -> JSONResponse:
     """Poll publish job progress. Returns status + results so far."""
     job = get_job(job_id)
+    if job is None:
+        # ACL-2292: a finished job from before a restart is read from publish_history.jsonl.
+        from src.web.publish_history import find_job
+
+        job = find_job(job_id)
     if job is None:
         return JSONResponse({"error": "Job not found."}, status_code=404)
     return JSONResponse(job)
