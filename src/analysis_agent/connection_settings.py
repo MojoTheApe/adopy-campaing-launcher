@@ -159,9 +159,9 @@ def _service(interactive: bool):
     from src.analysis_agent import gsheet_accounts as ga
 
     client = Path(paths.get_google_oauth_client_path())
-    if not client.is_file():
-        raise SettingsError("Google sign-in is not set up on this computer (oauth_client.json is missing). "
-                            "Ask your team lead for it.")
+    if not paths.is_valid_google_oauth_client(client):
+        raise SettingsError("Google sign-in is not set up on this computer (oauth_client.json is missing or "
+                            "empty). Ask your team lead for it, or update ACL to the latest version.")
     try:
         service = ga._build_sheets_service_oauth(str(client), str(token), timeout_seconds=SIGN_IN_TIMEOUT_SECONDS)
     except Exception:
