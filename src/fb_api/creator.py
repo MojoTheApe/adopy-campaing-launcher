@@ -1664,6 +1664,16 @@ class CampaignCreator:
             pass                      # video could not be read: everything else matched
         return True
 
+    def _creative_content_ok(self, plan, params, row) -> bool:
+        """ACL-2290: readback judges a creative by the acceptance rules used at publish time: an exact match,
+        the same labelled files in another order (ACL-2284), or an earlier upload of the same video (ACL-2271).
+        Any other difference stays a mismatch."""
+        if not row:
+            return False
+        return bool(_cr.matches(plan.act, params, row)
+                    or _cr.media_diff(plan.act, params, row) == "order"
+                    or self._same_videos(plan, params, row))
+
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
         """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
         row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
@@ -3186,9 +3196,13 @@ class CampaignCreator:
         def texts(key: str) -> list[str]:
             return [str(x.get("text") or "") for x in (fs.get(key) or []) if isinstance(x, dict)]
 
-        check(aobj, "primary_texts", list(ad.bodies), texts("bodies"))
-        check(aobj, "headlines", list(ad.titles), texts("titles"))
-        check(aobj, "descriptions", list(ad.descriptions), texts("descriptions"))
+        def nonblank(values: list[str]) -> list[str]:
+            # ACL-2290: Meta returns [' '] for "none"; whitespace-only values count as empty on both sides.
+            return [v for v in values if str(v).strip()]
+
+        check(aobj, "primary_texts", nonblank(list(ad.bodies)), nonblank(texts("bodies")))
+        check(aobj, "headlines", nonblank(list(ad.titles)), nonblank(texts("titles")))
+        check(aobj, "descriptions", nonblank(list(ad.descriptions)), nonblank(texts("descriptions")))
         ctas = fs.get("call_to_action_types") or [""]
         check(aobj, "call_to_action", ad.cta, ctas[0] if isinstance(ctas, list) and ctas else "")
         links = fs.get("link_urls") or [{}]
@@ -3322,8 +3336,10 @@ class CampaignCreator:
                 if rec.get("creative_content_verified"):
                     cid = str(creative.get("id") or "")
                     row = creative if cid and cid == str(rec.get("creative_id")) else {}
+                    # ACL-2290: same acceptance as at publish time (same file in another order, an earlier
+                    # upload of the same video with equal/unreadable length); anything else stays a mismatch.
                     check(aobj + " creative", "verified_content", True,
-                          _cr.matches(plan.act, rec["creative_content_verified"], row))
+                          self._creative_content_ok(plan, rec["creative_content_verified"], row))
                 elif rec.get("reused") and plan.label not in _labels(creative):
                     # Existing ad is inside our verified campaign/ad set. Its exact
                     # creative reference + account and the field checks below prove
