@@ -1050,10 +1050,70 @@ class InPageGraph:
         self._connection_stop = stop
         return stop
 
+    #: ACL-2299 (B): set by the warm lease (`warm.TabPatience`): how a tab frozen in the middle of a job is treated.
+    patience: Any = None
+    _patience_depth = 0
+    _read_sent = False
+
+    #: ACL-2299: a GET whose answer may already have been asked for is resent at most this many times per call.
+    MAX_READ_RESENDS = 2
+
+    def _patiently(self, op: Callable[[], Any], *, max_runs: int | None = None) -> Any:
+        """Run `op`; if the tab stops answering and the machine is busy (or this is a read-only Check plan), wait
+        and run it again until it answers or the patient limit passes. Idle machine: the stop is raised at once.
+
+        Only used for steps where nothing of THIS call has reached Meta (readiness, a read): a write that
+        was already sent is never run again here - its unknown result is reconciled by the caller as before.
+        Nested uses share the outermost wait, so the limit is never doubled.
+        """
+        patience = self.patience
+        if patience is None or self._patience_depth:
+            return op()
+        episode = None
+        runs = 0
+        self._patience_depth += 1
+        try:
+            while True:
+                self._read_sent = False
+                try:
+                    result = op()
+                except PageUnresponsive as stop:
+                    # only a run that got as far as sending the GET is a resend; waiting for a tab that was
+                    # not ready yet (nothing sent) is limited by the budget alone
+                    if self._read_sent:
+                        runs += 1
+                    if max_runs is not None and runs >= max_runs:
+                        if episode is not None:
+                            episode.finish(stop)
+                        else:
+                            patience.begin(stop, writes=bool(self.allow_writes))      # readings only
+                        raise
+                    if episode is None:
+                        episode = patience.begin(stop, writes=bool(self.allow_writes))
+                        if episode is None:
+                            raise
+                    if not episode.wait(self._sleep):
+                        episode.finish(stop)
+                        raise
+                    continue
+                if episode is not None:
+                    episode.finish(None)
+                    episode = None
+                return result
+        finally:
+            self._patience_depth -= 1
+            if episode is not None:
+                episode.settle()          # any other exit: the time already waited still counts in the budget
+
     def _ready_for_call(self, *, timeout: float = 10.0) -> None:
         """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
 
-        Повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
+        ACL-2299: тихая вкладка на занятой машине ждётся (`_patiently`); ничего к Meta не уходит.
+        """
+        self._patiently(lambda: self._ready_once(timeout=timeout))
+
+    def _ready_once(self, *, timeout: float = 10.0) -> None:
+        """Один заход: повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
         подтверждает, что контекст отвечает (иначе `_eval_helper` его пересоздаст).
         """
         try:
@@ -1168,12 +1228,18 @@ class InPageGraph:
         # Bounded read: the in-page deadline aborts fetch/body before the CDP deadline.
         timeout = min(float(timeout), 15.0)
         spec["timeout_ms"] = max(1, int(timeout * 1000))
+        # ACL-2299: a GET changes nothing in Meta, so a silent tab (busy machine / Check plan) is waited for and
+        # the read is simply asked again; the wait is bounded and ends with the same stop as before.
+        return self._patiently(lambda: self._read_once(spec, timeout), max_runs=1 + self.MAX_READ_RESENDS)
+
+    def _read_once(self, spec: dict, timeout: float) -> dict:
         # Сначала готовим мир (повторы без обращения к Meta)…
         self._ready_for_call()
         ctx = self._ensure()
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         # …потом Graph-вызов РОВНО ОДИН раз. Любая ошибка после отправки —
         # результат неизвестен и НЕ повторяется (ревью r9-1): это стоп.
+        self._read_sent = True
         try:
             with self._timeouts_as_stops():
                 got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout + 5.0))
