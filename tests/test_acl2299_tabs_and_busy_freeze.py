@@ -34,12 +34,12 @@ def test_restored_ads_manager_tabs_are_closed_before_the_first_call_and_ours_is_
     browser = Browser(pages, expected="profile")
     tab = _open(browser)
     try:
-        assert sorted(browser.closed_targets) == ["r1", "r2", "r3", "r4"]
+        assert sorted(browser.closed_targets) == ["r1", "r2", "r3"], "one restored page always stays"
         assert "owned" not in browser.closed_targets, "the tab we drive is never closed"
-        assert (tab.page_count_before, tab.page_count_after, tab.closed_restored) == (4, 0, 4)
+        assert (tab.page_count_before, tab.page_count_after, tab.closed_restored) == (4, 1, 3)
         ctx = [e for e in events if e.get("event") == "fb_api_tab_context"]
         assert ctx[0]["page_count"] == 4
-        assert ctx[-1]["page_count_before"] == 4 and ctx[-1]["page_count_after"] == 0
+        assert ctx[-1]["page_count_before"] == 4 and ctx[-1]["page_count_after"] == 1
     finally:
         tab.close()
 

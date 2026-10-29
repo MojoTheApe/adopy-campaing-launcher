@@ -377,8 +377,16 @@ class PageTab:
         except Exception:  # noqa: BLE001
             pass
         closed = skipped_attached = skipped_owned = 0
+        # The browser must keep at least one page besides the one we drive (a lone restored page that was
+        # closed made Chrome/Mimic exit on the live 9095 run): nothing is closed when there is only one other
+        # page, and at most `len(pages) - 1` of the others are ever closed, so one of them always stays.
+        may_close = max(0, len(pages) - 1)
+        kept_last = 0
         for row in pages:
             if not is_ads_manager_url(str(row.get("url") or "")):
+                continue
+            if closed >= may_close:
+                kept_last += 1
                 continue
             if row.get("attached") is True:
                 skipped_attached += 1          # someone has a debugger on it: it is being driven, leave it
@@ -398,7 +406,7 @@ class PageTab:
             _launch._record({"event": "fb_api_tab_context", "ok": True, "phase": "after_restored_cleanup",
                              "page_count_before": len(pages), "page_count_after": len(pages) - closed,
                              "closed_ads_manager": closed, "skipped_attached": skipped_attached,
-                             "skipped_owned": skipped_owned})
+                             "skipped_owned": skipped_owned, "kept_last_page": kept_last})
         except Exception:  # noqa: BLE001
             pass
         return closed

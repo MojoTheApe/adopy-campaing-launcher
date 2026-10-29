@@ -389,3 +389,49 @@ def test_worst_case_of_a_tab_that_never_comes_back_before_the_send_is_one_budget
     print("WORST_CASE_PRESEND_S", total)
     assert 480.0 <= total < 495.0
     assert graph.patience.spent_s >= 480.0
+
+
+# ---- live defect on 9095 zzf: the cleanup closed the ONLY page and the browser exited ----
+
+def test_the_only_other_page_is_never_closed_even_if_it_is_a_restored_ads_manager_page():
+    browser = Browser([_row("only", AM)], expected="profile")
+    tab = _open(browser)
+    try:
+        assert browser.closed_targets == []
+        assert (tab.page_count_before, tab.page_count_after, tab.closed_restored) == (1, 1, 0)
+    finally:
+        tab.close()
+
+
+def test_two_restored_pages_close_exactly_one_and_keep_one():
+    browser = Browser([_row("r1", AM), _row("r2", AM)], expected="profile")
+    tab = _open(browser)
+    try:
+        assert len(browser.closed_targets) == 1 and tab.page_count_after == 1
+        assert "owned" not in browser.closed_targets
+    finally:
+        tab.close()
+
+
+def test_our_tab_plus_restored_pages_closes_restored_and_keeps_ours_and_one_page(monkeypatch):
+    from src.fb_api import launch
+    events = []
+    monkeypatch.setattr(launch, "_record", events.append)
+    browser = Browser([_row("r1", AM), _row("r2", AM), _row("r3", AM)], expected="profile")
+    tab = _open(browser)
+    try:
+        assert len(browser.closed_targets) == 2 and "owned" not in browser.closed_targets
+        done = [e for e in events if e.get("phase") == "after_restored_cleanup"][0]
+        assert done["kept_last_page"] == 1 and done["page_count_after"] == 1
+    finally:
+        tab.close()
+
+
+def test_the_browser_never_ends_without_a_page_besides_ours_when_it_had_one():
+    pages = [_row("mail", "https://mail.example.com/"), _row("r1", AM)]
+    browser = Browser(pages, expected="profile")
+    tab = _open(browser)
+    try:
+        assert browser.closed_targets == ["r1"], "a non-Ads-Manager page stays, so the restored one may go"
+    finally:
+        tab.close()
