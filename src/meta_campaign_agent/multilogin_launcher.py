@@ -16,6 +16,13 @@ _STOP_PRIMARY_TRIES = 3
 _STOP_RETRY_PAUSE_S = 2.0
 
 
+#: ACL-2300: `status` values of /profile/statuses. Anything else is "unknown" -> no lock release.
+#: Adjust here once the live strings for a hand-opened and a "Locked" profile are captured.
+MLX_RUNNING_STATUSES = frozenset({"running", "starting", "stopping", "browser_running",
+                                  "browser_starting", "browser_stopping"})
+MLX_STOPPED_STATUSES = frozenset({"stopped"})
+
+
 def _reply_message(r: Any) -> str:
     try:
         body = r.json()
@@ -192,15 +199,15 @@ class MultiloginLauncher:
                 continue
         return None
 
-    def running_profile_ids(self) -> set[str] | None:
-        """Ids of profiles Multilogin itself lists as active, or None when it cannot say (ACL-2300).
+    def profile_run_state(self, profile_id: str) -> str | None:
+        """What Multilogin says about one profile: "running", "stopped" or None (unknown) (ACL-2300).
 
-        Read-only `GET /api/v1/profile/statuses` (`data.states`, keyed by profile id), the same
-        documented call `mlx_profiles.running_profiles_from_launcher` reads. That one returns an
-        empty list on any failure, so it cannot tell "nothing runs" from "unknown"; this one can.
-        A profile present with ANY status, "stopping" included, counts as active. None (non-200,
-        bad shape, exception) means unknown: the caller must not treat it as "not running".
-        The old `/profile/running` addresses are 404 on launcher 12.16.3 and are not used.
+        Read-only `GET /api/v1/profile/statuses` (`data.states`, keyed by profile id). On the real
+        launcher `states` also lists profiles that are NOT running, with status "stopped", so the
+        decision is made from the `status` value, never from presence alone. A profile absent from
+        `states` is "stopped". Non-200, a bad shape (no `data.states` dict), an exception, or a
+        status that is neither in MLX_RUNNING_STATUSES nor in MLX_STOPPED_STATUSES (empty or
+        non-string included) is None: the caller must not release the lock then.
         """
         try:
             r = requests.get(f"{self.config.launcher_base_v1}/profile/statuses",
@@ -212,16 +219,25 @@ class MultiloginLauncher:
             states = data.get("states") if isinstance(data, dict) else None
         except Exception:
             return None
-        if states is None:
-            states = {} if isinstance(data, dict) and "states" not in data else None
         if not isinstance(states, dict):
             return None
-        ids: set[str] = set()
-        for key, state in states.items():
-            ids.add(str(key))
-            if isinstance(state, dict) and isinstance(state.get("profile_id"), str):
-                ids.add(state["profile_id"])
-        return ids
+        entry = states.get(profile_id)
+        if entry is None:
+            for key, value in states.items():
+                if isinstance(value, dict) and value.get("profile_id") == profile_id:
+                    entry = value
+                    break
+        if entry is None:
+            return "stopped"
+        status = entry.get("status") if isinstance(entry, dict) else None
+        if not isinstance(status, str):
+            return None
+        status = status.strip().lower()
+        if status in MLX_RUNNING_STATUSES:
+            return "running"
+        if status in MLX_STOPPED_STATUSES:
+            return "stopped"
+        return None
 
     def release_stale_lock(self, profile_id: str, folder_id: str | None = None) -> None:
         """Release the lock Multilogin X keeps on a profile that was stopped by hand (ACL-2300).

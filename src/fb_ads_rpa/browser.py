@@ -2339,20 +2339,19 @@ def _start_still_held(exc: BaseException) -> bool:
 def _start_held_elsewhere(msg: str) -> bool:
     """MLX says another machine/user holds the profile (ACL-2300): not ours to unlock."""
     return any(mark in msg for mark in ("another device", "other device", "another machine",
-                                        "another user", "different user", "in use by"))
+                                        "another user", "different user"))
 
 
 def _mlx_says_not_running(launcher: Any, profile_id: str) -> bool:
-    """Multilogin itself lists the profile as not running (ACL-2300).
+    """Multilogin itself says the profile is stopped (ACL-2300).
 
-    An unanswered or unknown status is NOT "not running": a window opened by hand whose process
+    An unanswered or unknown status is NOT "stopped": a window opened by hand whose process
     the local scan cannot see must never be stopped (ACL-1320).
     """
     try:
-        running = launcher.running_profile_ids()
+        return launcher.profile_run_state(profile_id) == "stopped"
     except Exception:
         return False
-    return running is not None and profile_id not in running
 
 
 def _record_lock_release(profile_id: str, *, ok: bool, note: str, error: str = "") -> None:

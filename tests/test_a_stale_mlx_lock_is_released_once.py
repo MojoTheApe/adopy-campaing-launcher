@@ -30,8 +30,8 @@ CANT_LOCK = "Start profile failed HTTP 500: can't lock profile"
 
 
 class _Launcher:
-    def __init__(self, start_errors, unlock_error=None, mlx_running=()):
-        self.mlx_running = None if mlx_running is None else set(mlx_running)
+    def __init__(self, start_errors, unlock_error=None, mlx_state="stopped"):
+        self.mlx_state = mlx_state
         self.start_errors = list(start_errors)
         self.unlock_error = unlock_error
         self.starts = 0
@@ -44,8 +44,8 @@ class _Launcher:
             raise MultiloginLauncherError(self.start_errors.pop(0))
         return StartedProfile(profile_id=profile_id, folder_id=folder_id, port="58906")
 
-    def running_profile_ids(self):
-        return self.mlx_running
+    def profile_run_state(self, profile_id):
+        return self.mlx_state
 
     def release_stale_lock(self, profile_id, folder_id=None):
         self.unlocks += 1
@@ -124,8 +124,8 @@ def test_other_http_500_errors_are_unchanged(world):
 
 
 def test_multilogin_status_unknown_or_running_means_no_release(world):
-    for mlx_running in (None, {PROFILE}):
-        world.fake = _Launcher([CANT_LOCK], mlx_running=mlx_running)
+    for mlx_state in (None, "running"):
+        world.fake = _Launcher([CANT_LOCK], mlx_state=mlx_state)
         with pytest.raises(pt.ProfileStop):
             _start()
         assert world.fake.unlocks == 0
@@ -164,36 +164,51 @@ class _Http:
         return self._p
 
 
-def test_statuses_lists_active_profiles_including_stopping(monkeypatch):
-    other = "other-profile"
-    body = {"data": {"states": {PROFILE: {"profile_id": PROFILE, "status": "browser_stopping"},
-                                other: {"status": "browser_running"}}}}
-    ln = _real_launcher(monkeypatch, _Http(200, body))
-    assert ln.running_profile_ids() == {PROFILE, other}
+def _states(status, key=PROFILE):
+    return _Http(200, {"data": {"states": {key: {"profile_id": key, "status": status}}}})
+
+
+@pytest.mark.parametrize("status", ["running", "starting", "stopping", "browser_running", "browser_stopping"])
+def test_running_like_statuses_mean_running(monkeypatch, status):
+    ln = _real_launcher(monkeypatch, _states(status))
+    assert ln.profile_run_state(PROFILE) == "running"
     assert ln._calls == ["http://l/api/v1/profile/statuses"]
 
 
-def test_statuses_without_the_profile_means_not_running(monkeypatch):
-    ln = _real_launcher(monkeypatch, _Http(200, {"data": {"states": {}}}))
-    assert ln.running_profile_ids() == set()
+def test_stopped_entry_and_absent_profile_mean_stopped(monkeypatch):
+    assert _real_launcher(monkeypatch, _states("stopped")).profile_run_state(PROFILE) == "stopped"
+    assert _real_launcher(monkeypatch, _states("running", key="other-profile")).profile_run_state(PROFILE) == "stopped"
+    assert _real_launcher(monkeypatch, _Http(200, {"data": {"states": {}}})).profile_run_state(PROFILE) == "stopped"
 
 
-@pytest.mark.parametrize("reply", [_Http(401, {"status": {}}), _Http(404), _Http(200, {"data": {"states": "x"}}),
-                                   _Http(200, ["bad"]), ConnectionError("down")])
-def test_statuses_unknown_is_none(monkeypatch, reply):
-    assert _real_launcher(monkeypatch, reply).running_profile_ids() is None
+@pytest.mark.parametrize("reply", [_states("locked"), _states(""), _states(None), _states(5),
+                                   _Http(401, {"status": {}}), _Http(404), _Http(200, {"data": {"states": "x"}}),
+                                   _Http(200, {"data": {}}), _Http(200, {}), _Http(200, ["bad"]),
+                                   ConnectionError("down")])
+def test_anything_else_is_unknown(monkeypatch, reply):
+    assert _real_launcher(monkeypatch, reply).profile_run_state(PROFILE) is None
 
 
-def test_real_launcher_end_to_end_releases_on_empty_statuses(world, monkeypatch):
-    import src.meta_campaign_agent.multilogin_launcher as lm
-
-    ln = _real_launcher(monkeypatch, _Http(200, {"data": {"states": {}}}))
+def test_real_launcher_end_to_end_releases_on_a_stopped_entry(world, monkeypatch):
+    ln = _real_launcher(monkeypatch, _states("stopped"))
     ln.start_profile = _Launcher([CANT_LOCK]).start_profile
     released = []
     ln.release_stale_lock = lambda pid, folder_id=None: released.append(pid)
     world.fake = ln
     assert _start().port == "58906"
     assert released == [PROFILE]
+
+
+@pytest.mark.parametrize("status", ["browser_stopping", "locked"])
+def test_real_launcher_end_to_end_no_release_when_running_or_unknown(world, monkeypatch, status):
+    ln = _real_launcher(monkeypatch, _states(status))
+    ln.start_profile = _Launcher([CANT_LOCK]).start_profile
+    released = []
+    ln.release_stale_lock = lambda pid, folder_id=None: released.append(pid)
+    world.fake = ln
+    with pytest.raises(pt.ProfileStop):
+        _start()
+    assert released == []
 
 
 def test_held_on_another_machine_says_click_locked(world):
