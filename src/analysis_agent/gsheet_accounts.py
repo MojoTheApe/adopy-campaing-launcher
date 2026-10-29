@@ -81,7 +81,7 @@ _SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 # ── Google Sheets helpers ──────────────────────────────────────────────────────
 
-def _build_sheets_service_oauth(oauth_client_path: str, token_path: str):
+def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout_seconds: Optional[int] = None):
     """Create Google Sheets API service via OAuth2 user login.
 
     First run: opens browser so the user logs in with their Google account.
@@ -141,7 +141,7 @@ def _build_sheets_service_oauth(oauth_client_path: str, token_path: str):
                 file=sys.stderr,
             )
             flow = InstalledAppFlow.from_client_secrets_file(str(client_path), _SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=0, timeout_seconds=timeout_seconds)
 
         # Save token for future runs
         token_file.parent.mkdir(parents=True, exist_ok=True)
