@@ -431,7 +431,7 @@ class StatusTests(Base):
         from src.analysis_agent import gsheet_accounts as ga
 
         client = Path(self.tmp.name) / "oauth_client.json"
-        client.write_text("{}", encoding="utf-8")
+        client.write_text('{"installed": {"client_id": "fake-id.apps.example"}}', encoding="utf-8")
         seen = {}
 
         def fake(path, token, timeout_seconds=None):
@@ -443,6 +443,19 @@ class StatusTests(Base):
                 cs.sign_in()
         self.assertEqual(seen["t"], cs.SIGN_IN_TIMEOUT_SECONDS)
         self.assertEqual(str(ctx.exception), "Sign-in was not finished. Try again.")
+
+    def test_invalid_client_gives_a_clear_message_without_starting_sign_in(self):
+        from src.analysis_agent import gsheet_accounts as ga
+
+        for content in ("", "not json", "{}"):
+            client = Path(self.tmp.name) / "oauth_client.json"
+            client.write_text(content, encoding="utf-8")
+            fake = mock.Mock()
+            with mock.patch.object(ga, "_build_sheets_service_oauth", fake),                     mock.patch.object(cs.paths, "get_google_oauth_client_path", return_value=str(client)):
+                with self.assertRaises(cs.SettingsError) as ctx:
+                    cs.sign_in()
+            self.assertIn("Google sign-in is not set up on this computer", str(ctx.exception))
+            fake.assert_not_called()
 
 
 class BundleTests(unittest.TestCase):
