@@ -18007,8 +18007,8 @@ function aclDoneNotifierFactory(env) {
   function waitingEnded(key) { delete waitSeen[String(key)]; }
 
   function seen() { if (!away()) clearBadge(); }
-  if (doc.addEventListener) doc.addEventListener('visibilitychange', seen);
-  if (win.addEventListener) win.addEventListener('focus', seen);
+  if (doc && typeof doc.addEventListener === 'function') doc.addEventListener('visibilitychange', seen);
+  if (win && typeof win.addEventListener === 'function') win.addEventListener('focus', seen);
 
   /* Видимая кнопка: единственное место, где спрашивается разрешение. */
   function enable() {
@@ -18040,21 +18040,26 @@ function aclDoneNotifierFactory(env) {
   return { finished: finished, waiting: waiting, waitingEnded: waitingEnded, enable: enable, setSound: setSound, controlHtml: controlHtml,
            prefs: prefs, clearBadge: clearBadge, text: text, KEY: KEY };
 }
-window.aclDoneNotify = aclDoneNotifierFactory({
-  win: window, doc: document,
-  Notification: typeof Notification === 'undefined' ? null : Notification,
-  storage: function () { try { return window.localStorage; } catch (e) { return null; } }
-});
-document.addEventListener('click', function (ev) {
-  var t = ev.target && ev.target.closest ? ev.target.closest('[data-acl-notify]') : null;
-  if (!t) return;
-  var api = window.aclDoneNotify;
-  if (t.getAttribute('data-acl-notify') === 'sound') { api.setSound(t.checked); return; }
-  ev.stopPropagation();
-  api.enable().then(function () {
-    document.querySelectorAll('.acl-done-notify').forEach(function (n) { n.outerHTML = api.controlHtml(); });
-  });
-});
+/* Инертно там, где нет окна/документа/addEventListener (node-обвязки тестов гоняют страницу с урезанным document). */
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+  try {
+    window.aclDoneNotify = aclDoneNotifierFactory({
+      win: window, doc: document,
+      Notification: typeof Notification === 'undefined' ? null : Notification,
+      storage: function () { try { return window.localStorage; } catch (e) { return null; } }
+    });
+    document.addEventListener('click', function (ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest('[data-acl-notify]') : null;
+      if (!t) return;
+      var api = window.aclDoneNotify;
+      if (t.getAttribute('data-acl-notify') === 'sound') { api.setSound(t.checked); return; }
+      ev.stopPropagation();
+      api.enable().then(function () {
+        document.querySelectorAll('.acl-done-notify').forEach(function (n) { n.outerHTML = api.controlHtml(); });
+      });
+    });
+  } catch (e) { /* без уведомлений страница работает как раньше */ }
+}
 /* ACL-2314 end */
 
 /* ACL-2314: сколько аккаунтов проверено чисто (ok) и сколько просят внимания (bad). */
