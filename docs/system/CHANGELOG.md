@@ -1,5 +1,14 @@
 # System history
 
+## ACL-2283 — Staggered profile starts, patient readiness and memory by share — 2026-10-28
+
+Starting several accounts at once on a loaded machine no longer stops jobs with page_unresponsive or "profile closed while the action was starting".
+- Staggered start: profiles of jobs start one at a time. The next start waits (job queued, yellow, live CPU / memory numbers) until the previous profile's tab answered and the CPU has been below `ACL_LOAD_CPU_PCT` (85) for `ACL_START_CPU_SETTLE_S` (5 s). No attempt limit; Stop cancels.
+- Patient readiness: on a busy machine (CPU at the level or other profiles still warming up) a tab that has not answered yet is waited for up to `ACL_PATIENT_READY_S` (480 s) instead of the short limit. On an idle machine today's limit and the ACL-2262 frozen-tab rule stay.
+- Memory by share used (checked again right before the start, after the start turn is obtained; over the line gives the turn back and waits queued): the start gate of this flow follows the ACL-2255 rule (a profile starts while up to `ACL_MEMORY_MAX_USED_PCT`, default 90, percent of memory is in use); a job that waits for memory stays queued with live numbers.
+- Fallback: "profile closed while the action was starting" with nothing sent to Meta goes back to the queue when any local sample (before the start, at the failure, a few seconds after) shows a busy machine; the pause before the next start grows 15 s, 30 s, 60 s ... up to 5 min. A failure on an idle machine or after a write to Meta still stops.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1283).
+
 ## ACL-2292 — Publish run history that survives a restart — 2026-10-29
 
 When a publish job ends (done, failed or cancelled) the dashboard appends one JSON line to `publish_history.jsonl` in the ACL config dir: job id, account, times, build, and per campaign the name, verdict, campaign / ad set / ad / creative ids, warnings, blocking failures, error and steps. Tokens, cookies, passwords and URL query strings are removed before writing. `/publish-jobs/<id>` reads this file when the job is no longer in memory, and a new "Recent runs" button in the header lists the last 50 runs. The file rotates at 20 MB and keeps 3 old files.
