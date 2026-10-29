@@ -14724,10 +14724,23 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return d.innerHTML;
   }
 
+  // Слоты скрытых стран и свёрнутого билдера не рисуем: каждое <video> тянуло
+  // файл с сервера уже при загрузке страницы, десятки таких запросов занимали
+  // все соединения браузера, и раскрытие CM Comparison ждало ~24 с. Скрытый
+  // слот откладывается и дорисовывается, когда его показали (cbpFlushHidden).
+  var _cbpHiddenSlots = new Set();
+  function cbpFlushHidden() {
+    _cbpHiddenSlots.forEach(function(s) {
+      if (!document.contains(s)) { _cbpHiddenSlots.delete(s); return; }
+      if (s.getClientRects().length) { _cbpHiddenSlots.delete(s); cbRenderPreviews(s); }
+    });
+  }
+
   function cbRenderPreviews(slot) {
     cbMarkMissingCreatives();
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
+    if (!slot.getClientRects().length) { _cbpHiddenSlots.add(slot); return; }
     var cards = [];
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
       var fileHidden = row.querySelector('input[type="hidden"][name$="_creative_file"]');
@@ -14756,7 +14769,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
           story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
         }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
-          media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
+          media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="none" muted controls></video>';
         } else {
           media = '<img class="cbp-media" src="' + cbpEsc(url) + '" loading="lazy" alt="">';
         }
@@ -14843,8 +14856,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (e.target.closest && (e.target.closest('.sidebar-link') || e.target.closest('.sidebar-country-btn')
         || e.target.closest('.cb-acc-row'))) {
       setTimeout(cbpAlignAll, 120);
+      setTimeout(cbpFlushHidden, 150);
     }
   });
+  // Свёрнутый <details> билдера раскрыли — слоты внутри стали видимыми.
+  document.addEventListener('toggle', function(e) {
+    if (e.target && e.target.open) setTimeout(cbpFlushHidden, 0);
+  }, true);
+  window.addEventListener('hashchange', function() { setTimeout(cbpFlushHidden, 150); });
 
   function cbpRenderAll() {
     document.querySelectorAll('.cb-slot').forEach(cbRenderPreviews);
