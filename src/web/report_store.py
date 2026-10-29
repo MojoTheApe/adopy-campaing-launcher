@@ -319,7 +319,13 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
         f'role="status" style="{style}">'
         f'<span style="letter-spacing:.04em">{html_lib.escape(head)}</span>'
         f'<span id="acl-stored-note" style="font-weight:400">{html_lib.escape(text)}</span>'
+        # ACL-2311: the saved page is from the previous build and may not have the
+        # Connections button; the dialog code comes from /static (always current).
+        '<button type="button" id="acl-stored-connections" '
+        'style="font:600 12px system-ui,sans-serif;padding:2px 10px;cursor:pointer" '
+        'onclick="if(window.aclConnections){window.aclConnections.open()}">Connections</button>'
         "</div>"
+        '<script src="/static/connections.js"></script>'
     )
     frame = (
         '<style>html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
