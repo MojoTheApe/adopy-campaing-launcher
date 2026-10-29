@@ -853,6 +853,10 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
     to the queue (yellow, the same wait and backoff as ACL-2283) and starts again with the campaigns that are
     left - no attempt limit while the machine is busy, Stop cancels. After a write nothing is replaced or
     resent: the stop stays (the reconcile / "Publish again" path of the caller).
+
+    ACL-2316: the tab also waits the short `ACL_READ_IDLE_WAIT_S` (75 s) on a machine that is not busy; the
+    same one replacement follows, but if it freezes too on a non-busy machine the stop and the ACL-2262 pause
+    stand (no requeue).
     """
     replaced = False
     requeues = 0
@@ -882,6 +886,13 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
             continue
         from src.web import publish_api
 
+        if not publish_api._tab_load(getattr(publisher, "stop", None)).get("busy"):
+            # ACL-2316: the replacement tab froze too on a machine that is NOT busy: no queue wait. The stop
+            # stands and the ACL-2262 full pause applies; the campaigns left are shown as "not started".
+            _append_result(job_id, res)
+            pending.pop(0)
+            replaced = False
+            continue
         requeues += 1
         load = publisher.drop_frozen_tab(clear_pause=True)
         snap = {"reasons": ["tab_silent_busy"], "cpu_pct": load.get("cpu_pct"),

@@ -20821,45 +20821,8 @@ window.aclTeamLibrary = (function () {
       retry.onclick = dialog; statusEl.appendChild(retry);
     }
   }
-  // ACL-2306: Connections (Library / BI). Values are never shown; only green/red lines.
-  function connections() {
-    var old = document.getElementById('cx-box'); if (old) old.remove();
-    var box = document.createElement('div');
-    box.id = 'cx-box'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Connections');
-    box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999';
-    box.innerHTML = '<div style="background:var(--bg-elev,#fff);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:1.1rem 1.2rem;width:min(32rem,92vw)">'
-      + '<h3 style="margin:0 0 .5rem">Connections</h3>'
-      + '<p style="margin:0 0 .7rem;color:var(--muted);font-size:var(--adopy-text-sm)">Sign in with your Adopy Google account. ACL reads the team connection file shared with you and saves the settings on this computer only. Nothing is shown or pasted.</p>'
-      + '<ul id="cx-lines" style="list-style:none;padding:0;margin:0 0 .6rem"></ul>'
-      + '<p id="cx-msg" role="status" style="min-height:1.4em;margin:.4rem 0"></p>'
-      + '<div style="display:flex;gap:.5rem;justify-content:flex-end">'
-      + '<button type="button" id="cx-close" class="amap-btn">Close</button>'
-      + '<button type="button" id="cx-check" class="amap-btn">Check</button>'
-      + '<button type="button" id="cx-go" class="amap-btn primary">Sign in with Google</button></div></div>';
-    document.body.appendChild(box);
-    var lines = box.querySelector('#cx-lines'), msg = box.querySelector('#cx-msg');
-    function paint(checks) {
-      lines.innerHTML = '';
-      (checks || []).forEach(function (c) {
-        var li = document.createElement('li');
-        li.style.color = c.ok ? 'var(--good)' : 'var(--danger)';
-        li.textContent = (c.ok ? '✓ ' : '✕ ') + c.line;
-        lines.appendChild(li);
-      });
-    }
-    function say(t, bad) { msg.style.color = bad ? 'var(--danger)' : 'var(--muted)'; msg.textContent = t || ''; }
-    function run(url, busyText) {
-      say(busyText); 
-      post(url).then(function (j) {
-        if (j && j.ok) { say(''); paint(j.checks); } else { say((j && j.error) || 'Could not reach the team connection file.', true); }
-      }).catch(function () { say('Could not reach the dashboard.', true); });
-    }
-    box.querySelector('#cx-close').onclick = function () { box.remove(); };
-    box.querySelector('#cx-go').onclick = function () { run('/api/connections/sign-in', 'Waiting for Google sign-in in your browser…'); };
-    box.querySelector('#cx-check').onclick = function () { run('/api/connections/check', 'Checking…'); };
-    run('/api/connections/check', 'Checking…');
-  }
-  window.aclConnections = { open: connections };
+  // ACL-2306/2311: the Connections dialog lives in /static/connections.js (current build even on a cached page).
+  function connections() { if (window.aclConnections) window.aclConnections.open(); }
   // ACL-2306: say where the numbers come from when BI is not connected (no silent fallback).
   fetch('/api/connections', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
     if (!j || !j.ok || !j.source_line || j.bi.configured) return;
@@ -22200,5 +22163,6 @@ window.cwWorkbench = (function () {
 <script src="/static/account_pages.js"></script>
 <script src="/static/warm_sessions.js"></script>
 <script src="/static/recent_runs.js"></script>
+<script src="/static/connections.js"></script>
 </body>
 </html>

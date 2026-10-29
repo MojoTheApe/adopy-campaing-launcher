@@ -53,6 +53,7 @@ from src.fb_api.graph import (
     GraphStop,
     LoggedOut,
     PageFailed,
+    PageUnresponsive,
     PolicyBlocked,
     RateLimited,
     WritesBlocked,
@@ -369,6 +370,14 @@ def _open_profile(profile_id: str, folder_id: str, instance: str):
     return _fb_profile.open_profile(profile_id, folder_id, instance)
 
 
+@dataclass
+class _LegacyLease:
+    """ACL-2316: the little a `TabPatience` needs from a lease, for a session that is not in the warm registry."""
+    profile_id: str
+    account: str
+    tab: Any = None
+
+
 def _open_tab(cdp_url: str):
     from src.fb_api.cdp import PageTab
 
@@ -650,11 +659,42 @@ def _open_session(account: str, *, commands: bool = False):
         tab = _open_tab(opened.cdp_url)
         graph = _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
         graph.install()
+        # ACL-2316: a Check plan (nothing is written) waits for a silent tab on ANY machine, then takes ONE
+        # replacement tab; a second freeze stops as before. Other readers keep today's behaviour.
+        from src.fb_api import warm as _warm
+
+        patient = _warm.read_patience_active()
+        shim = _LegacyLease(profile_id=profile_id, account=account, tab=tab)
+        if patient:
+            graph.patience = _warm_registry().patience_for(shim)
         try:
-            graph.navigate(act, timeout=60.0)
-            state = graph.wait_ready(timeout=READY_TIMEOUT_S)
+            try:
+                graph.navigate(act, timeout=60.0)
+                state = graph.wait_ready(timeout=READY_TIMEOUT_S) if not patient else                     graph._patiently(lambda: graph.wait_ready(timeout=READY_TIMEOUT_S))
+            except PageUnresponsive as first:
+                if not patient:
+                    raise
+                _warm_registry().annotate_stop(first, shim)
+                log.info("%s: the tab stayed silent after the wait; one replacement tab (ACL-2316)", account)
+                try:
+                    tab.close()
+                except Exception:
+                    log.exception("Could not close the silent tab of %s", account)
+                tab = _open_tab(opened.cdp_url)
+                shim.tab = tab
+                graph = _make_graph(tab)
+                graph.install()
+                graph.navigate(act, timeout=60.0)
+                state = graph.wait_ready(timeout=READY_TIMEOUT_S)
         except GraphStop as exc:
             # Вкладка не ответила, браузер назвал причину (ACL-1761 F1): охлаждение и стоп.
+            if patient:
+                try:
+                    prior = getattr(exc, "tab_load", None)
+                    if not prior:
+                        _warm_registry().annotate_stop(exc, shim)
+                except Exception:
+                    pass
             _start_cooldown(key, exc)
             raise
         page_stop: GraphStop | None = None

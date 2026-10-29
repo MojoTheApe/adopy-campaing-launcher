@@ -121,12 +121,13 @@ def test_busy_cpu_does_not_wait_longer_than_the_patient_limit(tmp_path, monkeypa
     assert load["cpu_pct"] == 96.0 and load["waited_s"] >= 120.0 and load["busy"] is True
 
 
-def test_idle_machine_keeps_the_2262_stop_with_no_wait(tmp_path):
+def test_idle_machine_waits_only_the_short_limit_then_keeps_the_2262_stop(tmp_path):
+    # ACL-2316: was "no wait on an idle machine"; a publish tab now waits ACL_READ_IDLE_WAIT_S (75 s) first
     rig = _rig(tmp_path, 12.0)
     graph = _graph(rig, writes=True, freeze_until=300.0)
     with pytest.raises(PageUnresponsive) as stop:
         graph._ready_for_call()
-    assert graph.calls == 1 and rig.now[0] == 1_800_000_000.0, "no waiting on an idle machine"
+    assert graph.calls > 1 and 75.0 <= rig.now[0] - 1_800_000_000.0 < 90.0
     assert stop.value.tab_load["cpu_pct"] == 12.0 and stop.value.tab_load["busy"] is False
 
 
@@ -178,7 +179,7 @@ def test_nested_waits_share_one_limit(tmp_path, monkeypatch):
     assert rig.now[0] - 1_800_000_000.0 < 90.0, "60 s limit, not 120 s"
 
 
-def test_check_plan_read_waits_a_short_time_on_an_idle_machine_but_a_write_does_not(tmp_path):
+def test_check_plan_read_and_a_publish_step_wait_a_short_time_on_an_idle_machine(tmp_path):
     rig = _rig(tmp_path, 12.0)
     graph = _graph(rig, writes=False, freeze_until=60.0)
     with warm.read_patience():
@@ -196,7 +197,7 @@ def test_check_plan_read_waits_a_short_time_on_an_idle_machine_but_a_write_does_
     graph = _graph(rig, writes=True, freeze_until=200.0)
     with warm.read_patience(), pytest.raises(PageUnresponsive):
         graph._ready_for_call()
-    assert graph.calls == 1
+    assert 75.0 <= rig.now[0] - 1_800_000_000.0 < 90.0      # ACL-2316: a publish step waits the same short limit
 
     rig = _rig(tmp_path / "r", 12.0)
     graph = _graph(rig, writes=False, freeze_until=200.0)

@@ -2323,6 +2323,9 @@ class ReopenCancelled(RuntimeError):
 #: ACL-1184: `where` отказа запуска без перезапуска, когда Multilogin держит профиль.
 MLX_LOCK_NO_RESTART = "mlx_lock_no_restart"
 
+#: ACL-2300: `where` отказа «can't lock», когда статус Multilogin неизвестен (профиль не трогаем).
+MLX_LOCK_STATUS_UNKNOWN = "mlx_lock_status_unknown"
+
 
 def _start_still_held(exc: BaseException) -> bool:
     """Запуск отказан, потому что Multilogin ещё держит профиль (ACL-1606)."""
@@ -2334,6 +2337,37 @@ def _start_still_held(exc: BaseException) -> bool:
     return any(mark in msg for mark in (
         "already running", "profile_already_running", "browser process is running",
         "can't lock", "cant lock", "cannot lock"))
+
+
+def _start_held_elsewhere(msg: str) -> bool:
+    """MLX says another machine/user holds the profile (ACL-2300): not ours to unlock."""
+    return any(mark in msg for mark in ("another device", "other device", "another machine",
+                                        "another user", "different user"))
+
+
+def _mlx_says_not_running(launcher: Any, profile_id: str) -> bool:
+    """Multilogin itself says the profile is stopped (ACL-2300).
+
+    An unanswered or unknown status is NOT "stopped": a window opened by hand whose process
+    the local scan cannot see must never be stopped (ACL-1320).
+    """
+    try:
+        return launcher.profile_run_state(profile_id) == "stopped"
+    except Exception:
+        return False
+
+
+def _record_lock_release(profile_id: str, *, ok: bool, note: str, error: str = "") -> None:
+    """Telemetry line for the release of a stale Multilogin lock (ACL-2300)."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as rt
+
+        diag = {"profile": str(profile_id)[:8], "reason": note}
+        if error:
+            diag["error"] = error[:160]
+        rt.record("profile_lock_released", ok, note=note, diag=diag)
+    except Exception:
+        pass
 
 
 def _stop_clock() -> float:
@@ -2462,6 +2496,7 @@ class MultiloginAttachOnlyProvider:
         ml = get_multilogin_instance(entry.multilogin_instance)
         self._launcher = MultiloginLauncher(ml)
         last_exc: MultiloginLauncherError | None = None
+        unlock_tried = False
         for attempt in range(3):
             try:
                 started = self._launcher.start_profile(
@@ -2489,6 +2524,64 @@ class MultiloginAttachOnlyProvider:
                     or "already running" in msg
                     or "profile_already_running" in msg
                 )
+                # ACL-2300: «can't lock» у профиля, которого на этой машине нет, — это замок
+                # Multilogin после ручной остановки («Locked» в MLX Desktop). Один раз
+                # снимаем его через API Multilogin и пробуем запуск ещё раз.
+                cant_lock = ("can't lock" in msg or "cant lock" in msg or "cannot lock" in msg)
+                mlx_state = None
+                if (cant_lock and not self._direct.profile_is_running(udd, profile_id)
+                        and not _start_held_elsewhere(msg)):
+                    try:
+                        mlx_state = self._launcher.profile_run_state(profile_id)
+                    except Exception:
+                        mlx_state = None
+                    # Профиль, который робот поднимал сам, идёт старым путём (стоп и повторный
+                    # запуск ниже): MLX часто отвечает browser_stopping сразу после нашей остановки.
+                    hand_case = allow_restart and not _robot_profile(profile_id, udd)
+                    if mlx_state not in ("stopped", "running") and hand_case:
+                        # ACL-2300: статус Multilogin неизвестен — профиль не трогаем.
+                        # Деталь не «mlx_lock», поэтому `open` его не переоткрывает.
+                        _record_lock_release(profile_id, ok=False, note="status_unknown")
+                        raise _open_by_hand(
+                            profile_id, account_label,
+                            MLX_LOCK_STATUS_UNKNOWN + '; if no window is open, click "Locked" on the '
+                            "profile in MLX Desktop and try again") from exc
+                    if mlx_state == "running" and hand_case:
+                        # ACL-2300 (решение владельца 29.10): MLX видит профиль запущенным —
+                        # один раз мягко останавливаем и поднимаем заново путём ACL-1388
+                        # (`open` ловит эту остановку); здесь своей остановки и цикла нет.
+                        running_stop = _open_by_hand(profile_id, account_label, "mlx_lock")
+                        running_stop.lock_state = "browser_running"
+                        raise running_stop from exc
+                if mlx_state == "stopped":
+                    if unlock_tried:
+                        _record_lock_release(profile_id, ok=False, note="still_locked")
+                        raise RuntimeError(
+                            f"{account_label}: the profile is still locked in Multilogin after the lock "
+                            "was released once. Open the profile once in MLX Desktop (click \"Locked\"), "
+                            "then try again."
+                        ) from exc
+                    unlock_tried = True
+                    try:
+                        self._launcher.release_stale_lock(profile_id, folder_id=folder_id)
+                    except MultiloginLauncherError as unlock_exc:
+                        _record_lock_release(profile_id, ok=False, note="unlock_failed", error=str(unlock_exc))
+                        raise RuntimeError(
+                            f"{account_label}: the profile is locked in Multilogin and Multilogin could not "
+                            f"release it ({unlock_exc}). Open the profile once in MLX Desktop "
+                            "(click \"Locked\"), then try again."
+                        ) from unlock_exc
+                    _record_lock_release(profile_id, ok=True, note="stopped")
+                    _tell_job("Profile was locked in Multilogin, released; starting it again")
+                    time.sleep(1)
+                    continue
+                if cant_lock and _start_held_elsewhere(msg):
+                    # ACL-2300: профиль занят на другой машине / другим пользователем — освобождать нельзя.
+                    raise RuntimeError(
+                        f"{account_label}: the profile is held by another machine or user in Multilogin. "
+                        "Click \"Locked\" on the profile in MLX Desktop (open it once there), "
+                        "then try again."
+                    ) from exc
                 if lock_conflict and not allow_restart:
                     # ACL-1184: тот же отказ «открыт руками», что и в `open`, — не голый
                     # RuntimeError: дешборд показывает по нему `hand_message()`.
@@ -2640,8 +2733,16 @@ class MultiloginAttachOnlyProvider:
                 # Процесса не видно, а MLX держит профиль — тоже окно руками.
                 if (reopen_by_hand and stop.code == profile_trouble.OPEN_BY_HAND
                         and stop.detail == "mlx_lock"):
-                    return self._reopen_hand_opened(entry, account_label, profile_id, udd, "mlx_lock",
-                                                    on_reopen=on_hand_reopen)
+                    try:
+                        conn = self._reopen_hand_opened(entry, account_label, profile_id, udd, "mlx_lock",
+                                                        on_reopen=on_hand_reopen)
+                    except Exception:
+                        if getattr(stop, "lock_state", ""):
+                            _record_lock_release(profile_id, ok=False, note=stop.lock_state)
+                        raise
+                    if getattr(stop, "lock_state", ""):
+                        _record_lock_release(profile_id, ok=True, note=stop.lock_state)
+                    return conn
                 raise
             return self._connect_started(started, profile_id)
         # Ревью PR #323 (F7): робот сам остановил не отвечавший профиль — не
