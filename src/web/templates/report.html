@@ -19387,7 +19387,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       var warningOnly = r.publishable === true
                         && !!(r.warnings && r.warnings.length);
       var manual = r.success && r.manual_required && r.manual_required.length && !(r.blocking_failures || []).length;
-      var icon = manual ? '⚠️' : (!r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
+      var icon = manual ? '⚠️' : (!r.success ? (r.not_started ? '⏸️' : '❌') : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
       html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
@@ -19408,7 +19408,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         // stays in the alarm colour.
         var errStyle = (r.success && !blocked)
           ? ' style="color:var(--ok);border-color:var(--ok)"'
-          : '';
+          : (r.not_started ? ' style="color:var(--warn);border-color:var(--warn)"' : '');   // ACL-2299: not started, not failed
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
       if (r.blocking_failures && r.blocking_failures.length) {

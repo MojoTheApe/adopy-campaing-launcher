@@ -271,7 +271,7 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
     }
 
 
-def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
+def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False) -> dict[str, Any]:
     """Итог кампании в виде, который рисует панель задания (как `to_job_dict`)."""
     created = bool(outcome.campaign_id)
     error = error or outcome.error
@@ -304,6 +304,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
         "error": error or None,
+        #: ACL-2299: the campaign was never begun (an earlier stop) - the panel shows it as waiting, not failed.
+        "not_started": bool(not_started),
         "steps_completed": list(outcome.steps),
         "screenshots": [],
         "readback": outcome.readback,
@@ -361,7 +363,39 @@ class ApiPublisher:
     @property
     def writes(self) -> int:
         """Сколько записей ушло в Meta за задание, включая с неизвестным итогом (ACL-1784)."""
-        return int(getattr(self._client, "writes", 0) or 0) if self._client is not None else 0
+        now = int(getattr(self._client, "writes", 0) or 0) if self._client is not None else 0
+        return self._writes_base + now
+
+    #: ACL-2299: writes of clients replaced by a fresh tab earlier in the same job (the count never goes down).
+    _writes_base = 0
+
+    def frozen_before_write(self, writes_before: int) -> bool:
+        """ACL-2299 (B2): the tab outlasted the patient wait (busy machine) and NOTHING was written for the
+        campaign that just ran, nor is any earlier write unreconciled: it is safe to replace the tab (ACL-2262)
+        and, if that fails too, to put the remaining campaigns back in the queue."""
+        stop = self.stop
+        load = getattr(stop, "tab_load", None)
+        return bool(isinstance(stop, _PageUnresponsive) and isinstance(load, dict) and load.get("waited_patiently")
+                    and self.writes == writes_before and not self.blocked
+                    and (self._client is None or self._client.unreconciled is None))
+
+    def drop_frozen_tab(self, *, clear_pause: bool = False) -> dict[str, Any]:
+        """ACL-2299 (B2): release the frozen tab (the warm lease drops it) so the next `open` brings a fresh one.
+
+        Returns the readings of the stop. `clear_pause` also lifts the frozen-tab pause: only for a job that
+        waits in the queue (its own backoff paces the next start), never for a plain stop.
+        """
+        load = _tab_load(self.stop)
+        if self._client is not None:
+            self._writes_base += int(getattr(self._client, "writes", 0) or 0)
+            self._client = None
+        self.close()
+        self.stop = None
+        if clear_pause:
+            _api, key = _frozen_api(self.account_label)
+            if _api is not None:
+                _api.clear_frozen_tab_cooldown(key)
+        return load
 
     def build_drafts(self, slots, *, account_label: str, country: str, **_ignored) -> list[Any]:
         return build_drafts(slots, account_label=account_label, country=country)
@@ -556,11 +590,11 @@ class ApiPublisher:
         began = time.monotonic()
         name = str(getattr(draft, "name", "") or "")
         if self.stop is not None:
-            return result_dict(Outcome(campaign_name=name),
-                               error=f"Not started: Graph API stopped earlier ({self.stop.kind})")
+            return result_dict(Outcome(campaign_name=name), not_started=True,
+                               error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
             # Ревью M4: пока прошлая неизвестная запись не сверена, новых нет.
-            return result_dict(Outcome(campaign_name=name), error=(
+            return result_dict(Outcome(campaign_name=name), not_started=True, error=(
                 "Not started: an earlier write in this run has an unknown result "
                 f"({self.blocked or 'not reconciled'}). Check Ads Manager, then publish again "
                 "(a re-run does not duplicate)."))
@@ -786,6 +820,9 @@ def plan_keep_open_s() -> float:
     return max(0.0, min(3600.0, value))
 
 
+from src.fb_api.graph import PageUnresponsive as _PageUnresponsive  # noqa: E402
+
+
 def _tab_load(stop: BaseException | None) -> dict[str, Any]:
     """ACL-2299: CPU %, memory %, page_count (before/after the tab clean-up) and the patient wait of a tab stop."""
     load = getattr(stop, "tab_load", None)
@@ -934,7 +971,15 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
     connection_code = ""
     stop_seen: BaseException | None = None
     try:
-        results = run(account_label, drafts, results=results)
+        try:
+            results = run(account_label, drafts, results=results)
+        except _PageUnresponsive as first:
+            # ACL-2299 (C): a read changes nothing, so after the wait ONE replacement tab (ACL-2262 lifts the
+            # frozen-tab pause once per episode) is tried before Check plan gives up.
+            stop_seen = first
+            results.clear()
+            results = run(account_label, drafts, results=results)
+            stop_seen = None
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
         stop_seen = exc

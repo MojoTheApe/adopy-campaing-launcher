@@ -178,12 +178,19 @@ def test_nested_waits_share_one_limit(tmp_path, monkeypatch):
     assert rig.now[0] - 1_800_000_000.0 < 90.0, "60 s limit, not 120 s"
 
 
-def test_check_plan_read_waits_even_on_an_idle_machine_but_a_write_does_not(tmp_path):
+def test_check_plan_read_waits_a_short_time_on_an_idle_machine_but_a_write_does_not(tmp_path):
     rig = _rig(tmp_path, 12.0)
-    graph = _graph(rig, writes=False, freeze_until=200.0)
+    graph = _graph(rig, writes=False, freeze_until=60.0)
     with warm.read_patience():
         graph._ready_for_call()
-    assert rig.now[0] - 1_800_000_000.0 >= 200.0
+    assert 60.0 <= rig.now[0] - 1_800_000_000.0 < 75.0
+
+    # B4: a real freeze on an idle machine is not waited for 8 minutes: the short limit, then the stop
+    rig = _rig(tmp_path / "long", 12.0)
+    graph = _graph(rig, writes=False, freeze_until=10_000.0)
+    with warm.read_patience(), pytest.raises(PageUnresponsive):
+        graph._ready_for_call()
+    assert 75.0 <= rig.now[0] - 1_800_000_000.0 < 90.0
 
     rig = _rig(tmp_path / "w", 12.0)
     graph = _graph(rig, writes=True, freeze_until=200.0)
@@ -197,11 +204,11 @@ def test_check_plan_read_waits_even_on_an_idle_machine_but_a_write_does_not(tmp_
         graph._ready_for_call()
 
 
-def test_check_plan_checkout_prepare_is_patient_on_an_idle_machine(tmp_path):
+def test_check_plan_prepare_on_an_idle_machine_keeps_todays_short_limit(tmp_path):
     from src.fb_api import cdp
     from tests.test_acl1812_warm_sessions import ACT
 
-    for read_flag, expect in ((True, True), (False, False)):
+    for read_flag, expect in ((True, False), (False, False)):
         rig = _rig(tmp_path / str(read_flag), 12.0)
         rig.warm_up()
         seen = {}

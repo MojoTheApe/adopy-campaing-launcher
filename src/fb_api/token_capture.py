@@ -1054,7 +1054,10 @@ class InPageGraph:
     patience: Any = None
     _patience_depth = 0
 
-    def _patiently(self, op: Callable[[], Any]) -> Any:
+    #: ACL-2299: a GET whose answer may already have been asked for is resent at most this many times per call.
+    MAX_READ_RESENDS = 2
+
+    def _patiently(self, op: Callable[[], Any], *, max_runs: int | None = None) -> Any:
         """Run `op`; if the tab stops answering and the machine is busy (or this is a read-only Check plan), wait
         and run it again until it answers or the patient limit passes. Idle machine: the stop is raised at once.
 
@@ -1066,12 +1069,20 @@ class InPageGraph:
         if patience is None or self._patience_depth:
             return op()
         episode = None
+        runs = 0
         self._patience_depth += 1
         try:
             while True:
+                runs += 1
                 try:
                     result = op()
                 except PageUnresponsive as stop:
+                    if max_runs is not None and runs >= max_runs:
+                        if episode is not None:
+                            episode.finish(stop)
+                        else:
+                            patience.begin(stop, writes=bool(self.allow_writes))      # readings only
+                        raise
                     if episode is None:
                         episode = patience.begin(stop, writes=bool(self.allow_writes))
                         if episode is None:
@@ -1082,9 +1093,12 @@ class InPageGraph:
                     continue
                 if episode is not None:
                     episode.finish(None)
+                    episode = None
                 return result
         finally:
             self._patience_depth -= 1
+            if episode is not None:
+                episode.settle()          # any other exit: the time already waited still counts in the budget
 
     def _ready_for_call(self, *, timeout: float = 10.0) -> None:
         """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
@@ -1211,7 +1225,7 @@ class InPageGraph:
         spec["timeout_ms"] = max(1, int(timeout * 1000))
         # ACL-2299: a GET changes nothing in Meta, so a silent tab (busy machine / Check plan) is waited for and
         # the read is simply asked again; the wait is bounded and ends with the same stop as before.
-        return self._patiently(lambda: self._read_once(spec, timeout))
+        return self._patiently(lambda: self._read_once(spec, timeout), max_runs=1 + self.MAX_READ_RESENDS)
 
     def _read_once(self, spec: dict, timeout: float) -> dict:
         # Сначала готовим мир (повторы без обращения к Meta)…

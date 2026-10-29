@@ -152,6 +152,10 @@ _PATIENT = ContextVar("acl_warm_patient", default=None)
 MIDJOB_POLL_S = 5.0
 #: ACL-2299 (C): Check plan writes nothing, so its silent tab can always be waited for (busy machine or not).
 _READ_PATIENT = ContextVar("acl_warm_read_patient", default=False)
+#: ACL-2299 (C): a Check plan read on an IDLE machine waits only this long (a freeze there is real); then one
+#: ACL-2262 replacement tab. The full patient limit is for a busy machine.
+READ_IDLE_WAIT_ENV = "ACL_READ_IDLE_WAIT_S"
+DEFAULT_READ_IDLE_WAIT_S = 75.0
 
 
 @contextmanager
@@ -593,6 +597,17 @@ class WarmRegistry:
                     profiles.pop(pid, None)
 
         self._store.update(mutate)
+
+    def known_targets(self) -> set:
+        """ACL-2299: target ids of the robot tabs of this process and of the warm store (the other server too)."""
+        ids = {str(sess.target_id) for sess in list(self._sessions.values()) if sess.target_id}
+        try:
+            for rec in (self._store.load().get("profiles") or {}).values():
+                if isinstance(rec, dict) and rec.get("target_id"):
+                    ids.add(str(rec["target_id"]))
+        except Exception:  # noqa: BLE001
+            pass
+        return ids
 
     def has_closer(self) -> bool:
         return self._close_window is not None
@@ -1406,11 +1421,13 @@ class WarmRegistry:
         # answered yet is not called unresponsive for several minutes. Idle machine: today's limit.
         patient_s = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
         check = None
-        if patient_s > budget:
-            # ACL-2299 (C): a read-only action (Check plan) waits on any machine; a write only on a busy one.
-            check = self.patience_check(sess.profile_id, patient_s, always=self._reads_may_wait(mode))
+        limit, quiet = self._patience_limit(sess.profile_id, patient_s, reads=self._reads_may_wait(mode))
+        if limit > budget:
+            # ACL-2299 (C): a read-only action (Check plan) waits on any machine - the full limit when busy,
+            # a short one when idle; a write only on a busy one.
+            check = self.patience_check(sess.profile_id, limit, always=quiet)
             if check is not None:
-                budget = patient_s
+                budget = limit
         token = _PREPARE_DEADLINE.set(self._mono()+budget)
         try:
             with command_budget(budget), patient_wait(check) if check else contextlib.nullcontext():
@@ -1421,6 +1438,15 @@ class WarmRegistry:
             raise
         finally:
             _PREPARE_DEADLINE.reset(token)
+
+    def _patience_limit(self, profile_id: str, full_s: float, *, reads: bool) -> tuple[float, bool]:
+        """`(seconds to wait for a silent tab, load-independent)`: busy machine - the full limit; an idle machine
+        - nothing, except a read-only Check plan, which gets the short `ACL_READ_IDLE_WAIT_S` (0 - none)."""
+        if self._busy_now(profile_id):
+            return full_s, False
+        if reads:
+            return min(full_s, _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)), True
+        return 0.0, False
 
     @staticmethod
     def _reads_may_wait(mode: str) -> bool:
@@ -1504,6 +1530,7 @@ class PatientEpisode:
         self.stop = stop
         self.began = owner.registry._mono()
         self._job = _JOB_WAIT.get()
+        self._charged = False
 
     @property
     def waited_s(self) -> float:
@@ -1530,10 +1557,20 @@ class PatientEpisode:
         sleep(MIDJOB_POLL_S)
         return True
 
+    def settle(self) -> None:
+        """Leave the wait without a verdict (another exception): charge the time, clear the display."""
+        _show(self._job, None)
+        if not self._charged:
+            self._charged = True
+            self._owner.charge(self.waited_s)
+
     def finish(self, stop: BaseException | None) -> None:
         """The wait is over: the tab answered (`stop` None) or the limit passed (`stop` is raised by the caller)."""
         _show(self._job, None)
         waited = self.waited_s
+        if not self._charged:
+            self._charged = True
+            self._owner.charge(waited)
         if stop is not None:
             self._owner.registry.annotate_stop(stop, self._owner.sess, waited_s=waited, waited_patiently=True)
         try:
@@ -1555,6 +1592,7 @@ class TabPatience:
     def __init__(self, registry: "WarmRegistry", sess: "WarmSession"):
         self.registry = registry
         self.sess = sess
+        self.spent_s = 0.0          # seconds waited so far by this lease (one budget for all its episodes)
 
     def snapshot(self) -> dict:
         try:
@@ -1563,14 +1601,19 @@ class TabPatience:
             return {}
 
     def begin(self, stop: BaseException, *, writes: bool) -> "PatientEpisode | None":
-        limit = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
-        check = (self.registry.patience_check(self.sess.profile_id, limit,
-                                              always=bool(_READ_PATIENT.get()) and not writes)
-                 if limit > 0 else None)
+        """Start a wait, or None (idle machine / budget spent): the caller raises the stop. All episodes of
+        one lease draw from ONE budget (`ACL_PATIENT_READY_S`), so retries never multiply the wait."""
+        full = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0)
+        left = full - self.spent_s
+        limit, quiet = self.registry._patience_limit(self.sess.profile_id, left, reads=bool(_READ_PATIENT.get()) and not writes)
+        check = self.registry.patience_check(self.sess.profile_id, limit, always=quiet) if limit > 0 else None
         if check is None:
-            self.registry.annotate_stop(stop, self.sess, waited_s=0.0)      # idle: the stop row still has the readings
+            self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))
             return None
         return PatientEpisode(self, check, stop)
+
+    def charge(self, seconds: float) -> None:
+        self.spent_s += max(0.0, float(seconds))
 
 
 # ───────────────────────── подставляемые части ─────────────────────────

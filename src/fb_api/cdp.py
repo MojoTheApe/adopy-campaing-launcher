@@ -208,6 +208,7 @@ class PageTab:
         self.target_id = target_id
         self.session_id = session_id
         self.closed = False
+        PageTab._LIVE.add(target_id)          # ACL-2299: never closed by another tab's clean-up in this process
         self._recovery_attempted = False
         self._navigation_url = ""
         #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
@@ -344,10 +345,14 @@ class PageTab:
         if len(pages) > 1:
             cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=call_s)
 
+    #: ACL-2299: target ids of the tabs this process drives (opened by `PageTab`, not yet closed).
+    _LIVE: set = set()
     #: ACL-2299: the profile's other pages before / after the clean-up and how many were closed (None - not run).
     page_count_before: int | None = None
     page_count_after: int | None = None
     closed_restored: int = 0
+    skipped_attached: int = 0
+    skipped_owned: int = 0
 
     def close_restored_ads_manager_tabs(self, context: str, *, timeout: float = CALL_S) -> int:
         """ACL-2299 (A): close the Ads Manager tabs the profile restored at its start; keep ours.
@@ -365,9 +370,21 @@ class PageTab:
                      and str(t.get("browserContextId") or "") == (context or "")]
         except Exception:  # noqa: BLE001 - the clean-up never fails the open
             return 0
-        closed = 0
+        owned = set(PageTab._LIVE)
+        try:
+            from src.fb_api import warm as _warm
+            owned |= _warm.registry().known_targets()      # tabs of the warm store (this and the other server)
+        except Exception:  # noqa: BLE001
+            pass
+        closed = skipped_attached = skipped_owned = 0
         for row in pages:
             if not is_ads_manager_url(str(row.get("url") or "")):
+                continue
+            if row.get("attached") is True:
+                skipped_attached += 1          # someone has a debugger on it: it is being driven, leave it
+                continue
+            if str(row.get("targetId") or "") in owned:
+                skipped_owned += 1             # a tab ACL itself drives (another job, the other server)
                 continue
             try:
                 self._cdp.call("Target.closeTarget", {"targetId": str(row.get("targetId") or "")}, timeout=timeout)
@@ -375,11 +392,13 @@ class PageTab:
             except Exception:  # noqa: BLE001
                 continue
         self.page_count_before, self.page_count_after, self.closed_restored = len(pages), len(pages) - closed, closed
+        self.skipped_attached, self.skipped_owned = skipped_attached, skipped_owned
         try:
             from src.fb_api import launch as _launch
             _launch._record({"event": "fb_api_tab_context", "ok": True, "phase": "after_restored_cleanup",
                              "page_count_before": len(pages), "page_count_after": len(pages) - closed,
-                             "closed_ads_manager": closed})
+                             "closed_ads_manager": closed, "skipped_attached": skipped_attached,
+                             "skipped_owned": skipped_owned})
         except Exception:  # noqa: BLE001
             pass
         return closed
@@ -621,6 +640,7 @@ class PageTab:
         if self.closed:
             return
         self.closed = True
+        PageTab._LIVE.discard(self.target_id)
         try:
             ok = self._close_over_socket()
         except KeyboardInterrupt:
