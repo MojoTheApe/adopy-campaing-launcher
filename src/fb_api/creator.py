@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -45,7 +46,7 @@ from src.fb_api import write_policy as _wpol
 
 from src.fb_api import creative_recovery as _cr
 from src.fb_api import pages as _pg
-from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -208,6 +209,11 @@ UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
 UPLOAD_PROGRESS_EVERY_S = 1.0
 #: Как часто (с) загрузка кусками пишет шаг «uploaded X/Y MB», чтобы панель не краснила её как зависшую (ACL-1998).
 UPLOAD_STEP_EVERY_S = 12.0
+#: ACL-2000: кусок, который страница не успела принять (`no_file: ... did not answer`), повторяется с тем же
+#: смещением и той же сессией: до 3 раз, паузы 10/20/40 с. Дальше - стоп с прежним сообщением.
+CHUNK_RETRY_BACKOFF_S = (10.0, 20.0, 40.0)
+#: Пауза режется на доли, чтобы Stop и сторож тишины слышали жизнь задания.
+CHUNK_RETRY_SLICE_S = 5.0
 #: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
@@ -1308,8 +1314,11 @@ class CampaignCreator:
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-                 live_progress: Callable[[str], None] = lambda _s: None):
+                 live_progress: Callable[[str], None] = lambda _s: None,
+                 compress_video: Callable[[str], Any] | None = None):
         self.client = client
+        #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
+        self.compress_video = compress_video
         self.facts = facts
         self.resolver = resolver
         self.cancelled = cancelled
@@ -1365,6 +1374,22 @@ class CampaignCreator:
     def _step(self, out: Outcome, text: str) -> None:
         out.steps.append(text)
         self.progress(text)
+
+    @staticmethod
+    def _beat() -> None:
+        """ACL-2000: задание живо без новой строки (сторож тишины)."""
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            run_telemetry.beat()
+        except Exception:  # noqa: BLE001 - сердцебиение не должно ронять загрузку
+            pass
+
+    @staticmethod
+    def _page_timeout(exc: BaseException) -> bool:
+        """Страница не приняла кусок вовремя: файл не лёг в неё, к Meta ничего не ушло."""
+        text = str(exc)
+        return "(no_file" in text and ("did not answer" in text or "timed out" in text)
 
     def _check_cancel(self, out: Outcome) -> None:
         if self.cancelled():
@@ -1981,8 +2006,9 @@ class CampaignCreator:
         offset, end = self._offsets(started, size, 0, what)
         self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
-        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
+        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4 + 3 * (-(-size // VIDEO_CHUNK_MAX))
         failures = 0
+        stalls = 0
         # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
         # Шаг «uploaded X/Y MB» - не чаще раза в UPLOAD_STEP_EVERY_S секунд, но не реже каждых 10% файла.
         mb_total = max(size // (1024 * 1024), 1)
@@ -2007,6 +2033,23 @@ class CampaignCreator:
                 failures += 1
                 self.client.reconciled(path)
                 continue
+            except PageFailed as exc:
+                # ACL-2000: страница не успела принять кусок (CDP-таймаут при складывании). Ничего не
+                # отправлено - повторяем тот же кусок с последнего подтверждённого смещения в той же сессии.
+                if not self._page_timeout(exc) or stalls >= len(CHUNK_RETRY_BACKOFF_S)                         or not self.client.resume_after_unsent(exc):
+                    raise
+                wait = CHUNK_RETRY_BACKOFF_S[stalls]
+                stalls += 1
+                self._step(out, f"{who}: the page did not answer at {offset // (1024 * 1024)}/{mb_total} MB; "
+                                f"retrying the same chunk in {wait:.0f}s (attempt {stalls}/{len(CHUNK_RETRY_BACKOFF_S)})")
+                waited = 0.0
+                while waited < wait:
+                    step = min(CHUNK_RETRY_SLICE_S, wait - waited)
+                    self.sleep(step)
+                    waited += step
+                    self._beat()
+                    self._check_cancel(out)
+                continue
             except GraphError as exc:
                 # Meta отказала: назвала нужное смещение - продолжаем с него (не с нуля), иначе стоп.
                 d = exc.details or {}
@@ -2017,6 +2060,8 @@ class CampaignCreator:
                 self._step(out, f"{who}: resuming the upload from offset {offset}")
                 continue
             failures = 0
+            stalls = 0
+            self._beat()
             offset, end = self._offsets(body, size, offset, what)
             now = self.clock()
             if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
@@ -2389,6 +2434,39 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
+    def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
+        """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
+
+        Возвращает путь файла, который уйдёт в Meta. Нет ffmpeg / сжатие не вышло - исходник и
+        предупреждение (не стоп). Копия в кэше детерминирована, поэтому повтор шлёт те же байты и
+        находит уже загруженное видео по названию (md5 отправленных байт).
+        """
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        limit = _cc.DEFAULT_LIMIT_MB
+        raw = os.environ.get("ACL_VIDEO_COMPRESS_ABOVE_MB", "").strip()
+        try:
+            if raw and float(raw) > 0:
+                limit = float(raw)
+        except ValueError:
+            pass
+        fn = self.compress_video or (lambda p: _cc.ensure_uploadable(p, limit_mb=limit))
+        try:
+            prepared = fn(path)
+        except Exception as exc:  # noqa: BLE001 - сжатие не должно останавливать задание
+            if type(exc).__name__ == "JobCancelled":
+                raise
+            out.warnings.append(f"{who}: video compression failed ({type(exc).__name__}); uploading the original")
+            return path
+        if getattr(prepared, "compressed", False):
+            self._step(out, f"{who}: video compressed {prepared.original_mb:.0f} MB -> {prepared.sent_mb:.1f} MB")
+            return prepared.path
+        if prepared.original_mb > limit:
+            out.warnings.append(f"{who}: the video is {prepared.original_mb:.0f} MB and was not compressed "
+                                f"({prepared.reason or 'unknown reason'}); uploading the original, "
+                                "which can take a long time")
+        return path
+
     def load_media(self, path: str, kind: str) -> "bytes | LargeFile":
         """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
         if kind == "video":
@@ -2458,7 +2536,9 @@ class CampaignCreator:
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
-                    data = self.load_media(ad.path, ad.kind)
+                    src = (self._video_for_upload(out, ad.path, f"ad {ad.index}")
+                           if writing and ad.kind == "video" else ad.path)
+                    data = self.load_media(src, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
@@ -2468,7 +2548,9 @@ class CampaignCreator:
                 files[ad.path] = data
                 if ad.vertical_path:
                     try:
-                        vdata = self.load_media(ad.vertical_path, ad.vertical_kind)
+                        vsrc = (self._video_for_upload(out, ad.vertical_path, f"ad {ad.index} Stories / Reels")
+                                if writing and ad.vertical_kind == "video" else ad.vertical_path)
+                        vdata = self.load_media(vsrc, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})") from exc
                     vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES

@@ -320,6 +320,17 @@ class GraphClient:
         self.stopped = exc
         return exc
 
+    def resume_after_unsent(self, exc: GraphStop) -> bool:
+        """ACL-2000: снять стоп, поставленный отказом ДО отправки (`no_file`: файл не лёг в страницу).
+
+        К Meta ничего не ушло, поэтому тот же кусок можно отправить снова. Любой другой стоп
+        (логин, checkpoint, лимит) снимать нельзя - возвращает False.
+        """
+        if self.stopped is exc and isinstance(exc, PageFailed) and "(no_file" in str(exc):
+            self.stopped = None
+            return True
+        return False
+
     def _pace(self) -> None:
         if self._last_call is None:
             return
