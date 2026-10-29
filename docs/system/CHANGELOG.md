@@ -1,5 +1,12 @@
 # System history
 
+## ACL-2301 — A Graph read timeout no longer stops a half-built campaign — 2026-10-29
+
+A Graph read that fails with `network`/`network_timeout` is now retried per call (3 attempts, 5/10/20 s backoff, job kept alive for the silence watcher, `graph_retry` rows in telemetry) instead of once per Graph session, so one early blip in a long video job no longer uses up the only retry. A session-wide cap of 30 retries remains. A write whose reply was lost to a network timeout is checked by readback twice; if the object exists it is used, if not the write (without a file) is sent once more. Media uploads and unclear Meta replies (5xx, codes 1/2, non-JSON) still only reconcile and stop. Other errors are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1301).
+
+When a Graph stop still happens after the campaign was created, the message now says what stays in Meta ("Publish again" reuses it, no duplicates) and lists the ads not reached as "Not created"; the next campaigns of the job already show "Not started". The wait before a write resend is about 20 s. Not changed: `timeout_ms` stays 15 s (30 s cap) because there is no slow-proxy data yet; revisit after `graph_retry` rows show it.
+
 ## ACL-2283 — Staggered profile starts, patient readiness and memory by share — 2026-10-28
 
 Starting several accounts at once on a loaded machine no longer stops jobs with page_unresponsive or "profile closed while the action was starting".
