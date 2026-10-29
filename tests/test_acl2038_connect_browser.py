@@ -74,7 +74,7 @@ def test_masked_connect_retry_cancel_and_disconnect_from_both_library_views(brow
     try:
         page.goto("http://acl.test/")
         expect(page.get_by_role("button", name="Connect team library", exact=True)).to_have_count(2)
-        page.get_by_role("region", name="Ad titles").get_by_role("button").click()
+        page.get_by_role("region", name="Ad titles").get_by_role("button", name="Connect team library", exact=True).click()
         token = page.get_by_label("Library token", exact=True)
         token.fill(TOKEN)
         token.press("Escape")
@@ -82,7 +82,7 @@ def test_masked_connect_retry_cancel_and_disconnect_from_both_library_views(brow
         assert not requests
 
         page.evaluate(click_recorder._INJECT_JS)
-        page.get_by_role("region", name="Targeting").get_by_role("button").click()
+        page.get_by_role("region", name="Targeting").get_by_role("button", name="Connect team library", exact=True).click()
         dialog = page.get_by_role("dialog", name="Connect team library")
         assert page.evaluate("getComputedStyle(document.documentElement).colorScheme") == theme
         assert "sans-serif" in page.evaluate("getComputedStyle(document.body).fontFamily")

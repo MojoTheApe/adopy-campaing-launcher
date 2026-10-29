@@ -1845,6 +1845,13 @@ async def _warm_on_startup() -> None:
             rules_runtime.install()
     except Exception:  # noqa: BLE001 - Rules не должны мешать старту дешборда
         logging.getLogger(__name__).exception("Rules could not subscribe to triggers")
+    # ACL-2306: pick up rotated team connection settings (silent, no sign-in popups).
+    def _refresh_connections() -> None:
+        from src.analysis_agent import connection_settings
+
+        connection_settings.refresh_on_start()
+
+    threading.Thread(target=_refresh_connections, name="acl-connection-refresh", daemon=True).start()
     from src.analysis_agent import account_refresh, campaign_inventory
 
     if campaign_inventory.backend_ready():
@@ -3701,6 +3708,60 @@ async def api_team_library_disconnect() -> JSONResponse:
     except tlc.ConnectError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/connections")
+def api_connections_state() -> JSONResponse:
+    """ACL-2306: Connections status (Library / BI). Booleans and masks only, never values."""
+    from src.analysis_agent import connection_settings as cs
+
+    return JSONResponse({"ok": True, **cs.status()})
+
+
+@app.post("/api/connections/sign-in")
+async def api_connections_sign_in() -> JSONResponse:
+    """Sign in with the employee's own Google account, read the team connection
+    sheet, save the values to the machine settings, then run one check per connection."""
+    from src.analysis_agent import connection_settings as cs
+
+    try:
+        applied = await asyncio.to_thread(cs.sign_in)
+    except cs.SettingsError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not sign in. Try again."}, status_code=500)
+    checks = await asyncio.to_thread(cs.check_all)
+    return JSONResponse({"ok": True, "updated": applied["updated"], "checks": checks})
+
+
+@app.post("/api/connections/check")
+async def api_connections_check() -> JSONResponse:
+    """One read per connection; a green or red line each."""
+    from src.analysis_agent import connection_settings as cs
+
+    return JSONResponse({"ok": True, "checks": await asyncio.to_thread(cs.check_all)})
+
+
+@app.get("/api/connections/shareable")
+def api_connections_shareable() -> JSONResponse:
+    """Lead: what this running dashboard could publish to the team file (no values)."""
+    from src.analysis_agent import connection_settings as cs
+
+    return JSONResponse({"ok": True, **cs.shareable_report()})
+
+
+@app.post("/api/connections/publish")
+async def api_connections_publish() -> JSONResponse:
+    """Lead: publish the values the RUNNING dashboard loaded to the team connection file."""
+    from src.analysis_agent import connection_settings as cs
+
+    try:
+        result = await asyncio.to_thread(cs.publish)
+    except cs.SettingsError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not publish. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, **result})
 
 
 @app.get("/api/targeting-profiles")

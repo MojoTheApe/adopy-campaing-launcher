@@ -126,7 +126,7 @@ def test_the_wizard_never_asks_about_multilogin():
     assert "\"Multilogin\"," not in source, "Multilogin снова стоит в списке шагов"
 
 
-def test_setup_is_six_steps_and_the_screens_match_them():
+def test_setup_is_seven_steps_and_the_screens_match_them():
     """Список шагов и список рисовальщиков — две половины одного; разъехавшись,
     они показывают человеку не тот экран, и молча.
 
@@ -139,12 +139,12 @@ def test_setup_is_six_steps_and_the_screens_match_them():
     import setup_wizard as wizard
 
     assert wizard.SetupWizard.STEPS == (
-        "Welcome", "System check", "Your name", "Local files", "Readiness", "Finish")
+        "Welcome", "System check", "Connections", "Your name", "Local files", "Readiness", "Finish")
     source = (ROOT / "packaging" / "windows" / "setup_wizard.py").read_text(encoding="utf-8")
     block = source[source.index("renderers: tuple["):]
     block = block[:block.index(")\n")]
     assert re.findall(r"self\.(_\w+),", block) == [
-        "_welcome", "_system", "_identity", "_files", "_readiness", "_finish"]
+        "_welcome", "_system", "_connections", "_identity", "_files", "_readiness", "_finish"]
 
 
 def test_the_installer_never_writes_a_multilogin_token():
