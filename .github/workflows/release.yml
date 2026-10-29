@@ -114,6 +114,13 @@ jobs:
       - name: Test setup
         run: python -m unittest discover -s packaging/windows/tests -p "test_*.py" -v
 
+      - name: Write Google OAuth client (not committed)
+        shell: pwsh
+        env:
+          ACL_OAUTH_CLIENT_JSON: ${{ secrets.ACL_OAUTH_CLIENT_JSON }}
+        run: |
+          New-Item -ItemType Directory -Force packaging/windows/.build | Out-Null
+          Set-Content -Path packaging/windows/.build/oauth_client.json -Value $env:ACL_OAUTH_CLIENT_JSON -Encoding utf8
       - name: Build onedir bundle
         shell: pwsh
         env:
