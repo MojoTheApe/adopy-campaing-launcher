@@ -1,16 +1,22 @@
 """Machine secrets in Windows protected storage (DPAPI, current user) - ACL-1358.
 
 What is protected:
-  * ``MULTILOGIN_AUTOMATION_TOKEN_*`` lines of the machine ``.env`` - the value
-    becomes ``dpapi:v1:<base64>``; the process environment still holds the
-    plain value after ``load_env`` so no reader has to change.
+  * ``MULTILOGIN_AUTOMATION_TOKEN_*``, ``ACL_LIBRARY_TOKEN`` (team library) and
+    ``BI_MYSQL_PASSWORD`` (BI statistics) lines of the machine ``.env`` - the
+    value becomes ``dpapi:v1:<base64>``; the process environment still holds the
+    plain value after ``load_env`` so no reader has to change (ACL-2318).
+    A clear-text value of an older install is moved once by ``load_env`` ->
+    ``protect_machine_secrets``; the connection-sheet sign-in and the manual
+    fields write through ``update_machine_env`` and so land protected at once.
   * Google token files (``token_accounts.json``, ``token_telemetry.json``) -
     same path, content becomes ``ACLDPAPI1\\n`` + ciphertext.
 
 DPAPI binds the ciphertext to the Windows user: another account or a copied
 file cannot decrypt it, and a support bundle or backup of the folder carries no
 usable secret. On a machine without DPAPI (tests, Linux, macOS) everything
-falls back to the old plain-text behaviour, so nothing is lost there.
+falls back to the old plain-text behaviour, so nothing is lost there: the
+library token and BI password stay plain in the machine ``.env`` on those
+systems (they are still never logged and the UI stays masked).
 
 Migration is one-way but safe: the original bytes are first saved as an
 encrypted backup, the protected result is decrypted again and compared, and
@@ -34,7 +40,7 @@ from pathlib import Path
 
 ENV_PREFIX = "dpapi:v1:"
 FILE_MAGIC = b"ACLDPAPI1\n"
-SECRET_ENV_KEY = re.compile(r"^MULTILOGIN_AUTOMATION_TOKEN_[A-Z0-9]+$")
+SECRET_ENV_KEY = re.compile(r"^(?:MULTILOGIN_AUTOMATION_TOKEN_[A-Z0-9]+|ACL_LIBRARY_TOKEN|BI_MYSQL_PASSWORD)$")
 TOKEN_FILES = ("token_accounts.json", "token_telemetry.json")
 BACKUP_DIR_NAME = "protected-backup"
 TOKEN_LOCK_NAME = ".tokens.lock"
@@ -247,7 +253,7 @@ def _unquote(raw: str) -> str:
 
 
 def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None:
-    """Replace plain MULTILOGIN_AUTOMATION_TOKEN_* values in .env by protected ones."""
+    """Replace plain secret values (Multilogin tokens, library token, BI password) in .env by protected ones."""
     import json
 
     from config.paths import _atomic_write
@@ -257,13 +263,23 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
         return None
     try:
         original = target.read_bytes()
+        from dotenv import dotenv_values
+
         lines = original.decode("utf-8").splitlines()
+        # The app reads this file through python-dotenv (load_env). The value that goes
+        # into the vault must be exactly what dotenv gives; our own parser disagrees on
+        # some escapes in double quotes (ACL-2318 review), and such a line stays as it is.
+        reference = dotenv_values(target)
         out: list[str] = []
         changed = 0
+        skipped: list[str] = []
         for line in lines:
             m = _ENV_LINE.match(line)
             if m and is_secret_env_key(m.group(2)):
                 plain = _unquote(m.group(4))
+                if plain and not is_protected_value(plain) and plain != reference.get(m.group(2)):
+                    skipped.append(m.group(2))
+                    plain = ""
                 if plain and not is_protected_value(plain):
                     sealed = encode_env_value(plain)
                     if decode_env_value(sealed) != plain:
@@ -271,11 +287,15 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
                     line = f"{m.group(1)}{m.group(2)}{m.group(3)}{json.dumps(sealed)}"
                     changed += 1
             out.append(line)
+        left = ""
+        if skipped:
+            left = (f"; {len(skipped)} value(s) left in clear text because they are written in a form "
+                    f"the app reads differently ({', '.join(sorted(set(skipped)))}): re-enter them in Settings")
         if not changed:
-            return None
+            return f".env: nothing moved to protected storage{left}" if skipped else None
         _backup(original, backup_key(target, config_dir), Path(config_dir))
         _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
-        return f".env: {changed} Multilogin token(s) moved to protected storage (encrypted backup kept)"
+        return f".env: {changed} secret value(s) moved to protected storage (encrypted backup kept){left}"
     except Exception as exc:
         return f".env: could not move tokens to protected storage ({type(exc).__name__}); left as it was"
 
@@ -346,13 +366,13 @@ def _env_tokens_from_backup(target: Path, config_dir: str | Path) -> str | None:
     backup = _newest_backup_bytes(backup_key(target, config_dir), Path(config_dir))
     if backup is None:
         return None
-    wanted: dict[str, str] = {}
-    for line in backup.decode("utf-8", "replace").splitlines():
-        m = _ENV_LINE.match(line)
-        if m and is_secret_env_key(m.group(2)):
-            value = _unquote(m.group(4))
-            if value:
-                wanted[m.group(2)] = value
+    import io
+
+    from dotenv import dotenv_values
+
+    # Same reader as load_env, so a backed-up value comes back exactly as the app saw it.
+    parsed = dotenv_values(stream=io.StringIO(backup.decode("utf-8", "replace")))
+    wanted = {k: v for k, v in parsed.items() if is_secret_env_key(k) and v}
     if not wanted:
         return None
     current = target.read_bytes().decode("utf-8").splitlines() if target.is_file() else []
@@ -364,7 +384,7 @@ def _env_tokens_from_backup(target: Path, config_dir: str | Path) -> str | None:
         out.append(line)
     out.extend(_dotenv_line(key, value) for key, value in wanted.items())
     _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
-    return f".env: {len(wanted)} Multilogin token(s) restored from the encrypted backup (other settings kept)"
+    return f".env: {len(wanted)} secret value(s) restored from the encrypted backup (other settings kept)"
 
 
 def unprotect_env_file(env_path: str | Path, config_dir: str | Path, *, from_backup: bool = False) -> str | None:
@@ -402,7 +422,7 @@ def unprotect_env_file(env_path: str | Path, config_dir: str | Path, *, from_bac
         if not changed:
             return None
         _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))
-        note = f".env: {changed} Multilogin token(s) restored to plain text"
+        note = f".env: {changed} secret value(s) restored to plain text"
         if unreadable:
             note += f"; {unreadable} could not be opened and stay protected"
         return note
@@ -460,7 +480,8 @@ def _collect_secret_values() -> set[str]:
                         value = decode_env_value(value)
                     except VaultError:
                         continue
-                if len(value) >= 8:
+                # BI password: 3 like run_telemetry._hide_configured_bi; others 8.
+                if len(value) >= (3 if key == "BI_MYSQL_PASSWORD" else 8):
                     values.add(value)
     except Exception:
         pass
@@ -491,7 +512,8 @@ def _secrets_snapshot() -> tuple[frozenset[str], tuple[str, ...]]:
 def configured_secret_values() -> set[str]:
     """Plain values of this machine's tokens, for scrubbers that must hide them.
 
-    Multilogin automation tokens from the process environment and the secrets
+    Multilogin automation tokens, the team library token and the BI password
+    from the process environment and the secrets
     in the Google token files. Never raises, never logs; a value shorter than
     8 characters is ignored so a placeholder cannot blank ordinary text. The
     answer is cached for a few seconds: scrubbers call this per string, and the

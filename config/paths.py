@@ -764,7 +764,7 @@ def migrate_legacy_google_oauth() -> list[str]:
 def protect_machine_secrets() -> list[str]:
     """ACL-1358: move plain tokens into Windows protected storage, once.
 
-    Covers the Multilogin automation tokens in the machine ``.env`` and the
+    Covers the Multilogin automation tokens, ACL_LIBRARY_TOKEN and BI_MYSQL_PASSWORD (ACL-2318) in the machine ``.env`` and the
     Google token files. Each file is backed up (encrypted) and verified before
     the plain text is replaced; a failure leaves the file as it was. Does
     nothing where DPAPI is unavailable (non-Windows).
@@ -1002,7 +1002,7 @@ def load_env() -> list[str]:
 
         for key in token_vault.decrypt_environment():
             print(f"[config] {key} is stored for another Windows user or is damaged; "
-                  "connect Multilogin again", file=sys.stderr)
+                  "connect it again", file=sys.stderr)
     except Exception:
         pass
     return loaded
