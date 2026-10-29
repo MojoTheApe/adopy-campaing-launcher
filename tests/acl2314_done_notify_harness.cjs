@@ -9,16 +9,16 @@ const code = html.slice(s, e);
 function world(opts) {
   opts = opts || {};
   const w = { asked: 0, shown: [], store: {}, docListeners: {}, winListeners: {}, beeps: 0, focused: 0 };
-  const iconAttrs = { href: '/favicon.ico?v=acm', type: 'image/x-icon' };
-  const iconLink = {
-    getAttribute: (k) => iconAttrs[k], setAttribute: (k, v) => { iconAttrs[k] = v; }, removeAttribute: (k) => { delete iconAttrs[k]; },
-  };
+  const mk = (a) => ({ a, getAttribute: (k) => a[k], setAttribute: (k, v) => { a[k] = v; }, removeAttribute: (k) => { delete a[k]; } });
+  // В шаблоне две ссылки: Chrome берёт SVG, поэтому подменять надо обе.
+  const iconAttrs = { href: '/favicon.ico?v=acm', sizes: '32x32' };
+  const svgAttrs = { href: '/static/logo.svg', type: 'image/svg+xml' };
+  const iconLinks = [mk(iconAttrs), mk(svgAttrs)];
   const clickHandlers = [];
   const doc = {
     visibilityState: opts.hidden ? 'hidden' : 'visible', title: 'ACL Dashboard',
     hasFocus: () => !opts.hidden,
-    querySelector: (q) => (/rel~="icon"/.test(q) ? iconLink : null),
-    querySelectorAll: () => [],
+    querySelectorAll: (q) => (/rel~="icon"/.test(q) ? iconLinks : []),
     addEventListener: (n, f) => { if (n === 'click') clickHandlers.push(f); else w.docListeners[n] = f; },
   };
   function N(title, o) { this.title = title; this.o = o; this.closed = false; w.shown.push(this); }
@@ -43,7 +43,7 @@ function world(opts) {
   const sandbox = { window: win, document: doc, Promise, JSON, Math, parseInt, encodeURIComponent, console };
   if (opts.perm !== 'none') sandbox.Notification = N;
   vm.runInNewContext(code, sandbox);
-  w.api = win.aclDoneNotify; w.doc = doc; w.icon = iconAttrs; w.click = clickHandlers[0];
+  w.api = win.aclDoneNotify; w.doc = doc; w.icon = iconAttrs; w.svg = svgAttrs; w.click = clickHandlers[0];
   return w;
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -69,36 +69,42 @@ const btn = (kind, extra) => ({ target: { closest: () => Object.assign({ getAttr
   let clicked = 0;
   assert.equal(w.api.finished('check', 3, 1, () => { clicked += 1; }), true);
   assert.equal(w.shown.length, 1);
-  assert.equal(w.shown[0].title, 'Check finished: 3 ok, 1 problem');
+  assert.equal(w.shown[0].title, 'Check finished: 3 ready, 1 need attention');
   assert.equal(w.beeps, 0, 'звук играл без включения');
   assert.ok(w.doc.title.startsWith('⚠ Needs attention'), w.doc.title);
   assert.ok(w.icon.href.startsWith('data:image/svg+xml'), 'значок не подменён');
+  assert.ok(w.svg.href.startsWith('data:image/svg+xml'), 'SVG-ссылка (её берёт Chrome) не подменена');
   // Клик по уведомлению: фокус вкладки, показ результата, значок снят.
   w.shown[0].onclick();
   assert.equal(w.focused, 1); assert.equal(clicked, 1); assert.ok(w.shown[0].closed);
   assert.equal(w.doc.title, 'ACL Dashboard'); assert.equal(w.icon.href, '/favicon.ico?v=acm');
+  assert.equal(w.svg.href, '/static/logo.svg'); assert.equal(w.svg.type, 'image/svg+xml'); assert.equal(w.icon.type, undefined);
 
   // 4. Значок ставится и без разрешения и снимается, когда вкладку снова видно.
   w = world({ hidden: true });
-  w.api.finished('publish', 2, 0);
+  w.api.finished('publish', 2, 0, null, 2);
   assert.ok(w.doc.title.startsWith('✓ Ready to publish'), w.doc.title);
+  w.doc.title = 'Renamed by page';   // страница сменила заголовок сама
+  w.doc.title = '✓ Ready to publish — Renamed by page';
   assert.equal(w.shown.length, 0, 'уведомление без разрешения/включения');
   w.doc.visibilityState = 'visible'; w.doc.hasFocus = () => true;
   w.docListeners.visibilitychange();
-  assert.equal(w.doc.title, 'ACL Dashboard'); assert.equal(w.icon.href, '/favicon.ico?v=acm');
+  assert.equal(w.doc.title, 'Renamed by page', 'заголовок восстановлен по текущему, а не по сохранённому');
+  assert.equal(w.icon.href, '/favicon.ico?v=acm'); assert.equal(w.svg.href, '/static/logo.svg');
 
   // 5. Звук играет только если включён.
   w = world({ hidden: true, perm: 'granted' });
   w.store.acl_done_notify = JSON.stringify({ on: true, sound: true });
-  w.api.finished('publish', 1, 0);
+  w.api.finished('publish', 1, 0, null, 1);
   assert.equal(w.beeps, 1);
 
   // 6. Текст без идентификаторов: только счётчики.
-  const t = w.api.text('publish', 4, 2);
-  assert.equal(t, 'Publish finished: 4 ok, 2 problems');
+  const t = w.api.text('publish', 4, 2, 6);
+  assert.equal(t, 'Publish finished: 4 of 6 campaigns published');
+  assert.equal(w.api.text('check', 3, 0), 'Check finished: 3 accounts ready');
   assert.ok(!/\d{6,}|act_|token|http/i.test(t), t);
   w.api.finished('publish', 'act_123456789', 'EAAB-token');   // мусор вместо счётчиков -> нули
-  assert.equal(w.shown[w.shown.length - 1].title, 'Publish finished: 0 ok, 0 problems');
+  assert.equal(w.shown[w.shown.length - 1].title, 'Publish finished: 0 of 0 campaigns published');
 
   // 7. Кнопка: разрешение спрашивается из клика, не раньше; согласие сохраняется.
   w = world({ hidden: false, perm: 'default', answer: 'granted' });
@@ -138,5 +144,22 @@ const btn = (kind, extra) => ({ target: { closest: () => Object.assign({ getAttr
     assert.doesNotThrow(() => w.api.setSound(true));
     assert.doesNotThrow(() => w.api.finished('check', 1, 0));
   }
+  // 11. Задание ждёт руки менеджера: один раз на эпизод, только при спрятанной вкладке, клик открывает задание.
+  w = world({ hidden: false, perm: 'granted' });
+  w.store.acl_done_notify = JSON.stringify({ on: true });
+  assert.equal(w.api.waiting('job:1'), false); assert.equal(w.shown.length, 0, 'ожидание при видимой вкладке');
+  w = world({ hidden: true, perm: 'granted' });
+  w.store.acl_done_notify = JSON.stringify({ on: true });
+  let opened = 0;
+  assert.equal(w.api.waiting('job:1', () => { opened += 1; }), true);
+  assert.equal(w.api.waiting('job:1'), false, 'повтор в том же эпизоде');
+  assert.equal(w.shown.length, 1);
+  assert.equal(w.shown[0].title, 'A job is waiting for your action');
+  assert.ok(!/job:|\d/.test(w.shown[0].title));
+  w.shown[0].onclick();
+  assert.equal(opened, 1); assert.equal(w.focused, 1);
+  w.api.waitingEnded('job:1');
+  assert.equal(w.api.waiting('job:1'), true, 'новый эпизод — новый сигнал');
+  assert.equal(w.shown.length, 2);
   console.log('ok');
 })().catch((err) => { console.error(err); process.exit(1); });

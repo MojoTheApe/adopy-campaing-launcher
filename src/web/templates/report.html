@@ -17891,7 +17891,8 @@ function aclDoneNotifierFactory(env) {
   var KEY = 'acl_done_notify';
   var win = env.win, doc = env.doc;
   var badged = null;      // {kind, ok}: что показано в заголовке/значке сейчас
-  var origTitle = null, origIcon = null, iconLink = null;
+  var prefix = null, links = [];   // links: [{el, href, type}] — все <link rel=icon>
+  var waitSeen = {};               // ключи эпизодов «ждёт руки менеджера», о которых уже сказано
 
   function prefs() {
     try {
@@ -17921,22 +17922,31 @@ function aclDoneNotifierFactory(env) {
   function setBadge(kind, ok) {
     try {
       if (!badged) {
-        origTitle = doc.title;
-        iconLink = doc.querySelector && doc.querySelector('link[rel~="icon"]');
-        origIcon = iconLink ? iconLink.getAttribute('href') : null;
+        links = [];
+        var all = doc.querySelectorAll ? doc.querySelectorAll('link[rel~="icon"]') : [];
+        for (var i = 0; i < all.length; i++) links.push({ el: all[i], href: all[i].getAttribute('href'), type: all[i].getAttribute('type') });
+      } else if (prefix && String(doc.title).indexOf(prefix) === 0) {
+        doc.title = String(doc.title).slice(prefix.length);
       }
       badged = { kind: kind, ok: ok };
-      doc.title = (ok ? '✓ Ready to publish' : '⚠ Needs attention') + ' — ' + (origTitle || '');
-      if (iconLink) { iconLink.setAttribute('href', iconFor(ok)); iconLink.removeAttribute('type'); }
+      prefix = (ok ? '✓ Ready to publish' : '⚠ Needs attention') + ' — ';
+      doc.title = prefix + doc.title;
+      // Chrome берёт SVG-ссылку, а не /favicon.ico: подменяем все, а не одну.
+      links.forEach(function (l) { l.el.setAttribute('href', iconFor(ok)); l.el.setAttribute('type', 'image/svg+xml'); });
     } catch (e) { /* значок — удобство */ }
   }
   function clearBadge() {
     if (!badged) return;
     badged = null;
     try {
-      doc.title = origTitle;
-      if (iconLink && origIcon != null) iconLink.setAttribute('href', origIcon);
+      // Текущий заголовок без нашего префикса: страница могла сменить его сама.
+      if (prefix && String(doc.title).indexOf(prefix) === 0) doc.title = String(doc.title).slice(prefix.length);
+      links.forEach(function (l) {
+        if (l.href != null) l.el.setAttribute('href', l.href);
+        if (l.type != null) l.el.setAttribute('type', l.type); else l.el.removeAttribute('type');
+      });
     } catch (e) { /* ничего */ }
+    prefix = null; links = [];
   }
   function beep() {
     try {
@@ -17949,20 +17959,20 @@ function aclDoneNotifierFactory(env) {
     } catch (e) { /* без звука */ }
   }
 
-  function text(kind, ok, bad) {
-    return (kind === 'check' ? 'Check finished: ' : 'Publish finished: ') + ok + ' ok, ' + bad + ' problem' + (bad === 1 ? '' : 's');
+  function text(kind, ok, bad, total) {
+    if (kind === 'check') {
+      return 'Check finished: ' + (bad ? ok + ' ready, ' + bad + ' need attention' : ok + ' account' + (ok === 1 ? '' : 's') + ' ready');
+    }
+    if (kind === 'wait') return 'A job is waiting for your action';
+    return 'Publish finished: ' + ok + ' of ' + total + ' campaign' + (total === 1 ? '' : 's') + ' published';
   }
 
-  /* kind: 'check' | 'publish'; ok/bad — счётчики; open — что показать по клику. */
-  function finished(kind, ok, bad, open) {
-    ok = Math.max(0, parseInt(ok, 10) || 0);
-    bad = Math.max(0, parseInt(bad, 10) || 0);
-    if (!away()) return false;          // человек смотрит на страницу: сигнал не нужен
-    setBadge(kind, bad === 0);
+  function notify(kind, title, ok, open) {
+    setBadge(kind, ok);
     var p = prefs();
     if (p.on && perm() === 'granted') {
       try {
-        var n = new env.Notification(text(kind, ok, bad), { tag: 'acl-done-' + kind });
+        var n = new env.Notification(title, { tag: 'acl-done-' + kind });
         n.onclick = function () {
           try { win.focus(); } catch (e) { /* ничего */ }
           try { n.close(); } catch (e) { /* ничего */ }
@@ -17972,8 +17982,29 @@ function aclDoneNotifierFactory(env) {
       } catch (e) { /* уведомление не создалось — остаётся значок */ }
       if (p.sound) beep();
     }
+  }
+
+  /* kind: 'check' | 'publish'. check: ok/bad — аккаунты; publish: ok из total — кампании. */
+  function finished(kind, ok, bad, open, total) {
+    ok = Math.max(0, parseInt(ok, 10) || 0);
+    bad = Math.max(0, parseInt(bad, 10) || 0);
+    total = Math.max(ok, parseInt(total, 10) || 0);
+    if (!away()) return false;          // человек смотрит на страницу: сигнал не нужен
+    notify(kind, text(kind, ok, bad, total), kind === 'check' ? bad === 0 : ok === total && total > 0, open);
     return true;
   }
+
+  /* Задание ждёт руки менеджера: один раз на эпизод ожидания (key), только когда вкладка спрятана. */
+  function waiting(key, open) {
+    key = String(key);
+    if (waitSeen[key]) return false;
+    if (!away()) return false;
+    waitSeen[key] = true;
+    notify('wait', text('wait'), false, open);
+    return true;
+  }
+  /* Ожидание кончилось — следующее ожидание с тем же ключом снова даст сигнал. */
+  function waitingEnded(key) { delete waitSeen[String(key)]; }
 
   function seen() { if (!away()) clearBadge(); }
   if (doc.addEventListener) doc.addEventListener('visibilitychange', seen);
@@ -18006,7 +18037,7 @@ function aclDoneNotifierFactory(env) {
       + '<label class="acl-done-sound"><input type="checkbox" data-acl-notify="sound"' + (p.sound ? ' checked' : '') + '> Sound</label></span>';
   }
 
-  return { finished: finished, enable: enable, setSound: setSound, controlHtml: controlHtml,
+  return { finished: finished, waiting: waiting, waitingEnded: waitingEnded, enable: enable, setSound: setSound, controlHtml: controlHtml,
            prefs: prefs, clearBadge: clearBadge, text: text, KEY: KEY };
 }
 window.aclDoneNotify = aclDoneNotifierFactory({
@@ -18026,12 +18057,12 @@ document.addEventListener('click', function (ev) {
 });
 /* ACL-2314 end */
 
-/* ACL-2314: сколько кампаний проверено чисто и сколько с проблемами (ошибка аккаунта — одна проблема). */
+/* ACL-2314: сколько аккаунтов проверено чисто (ok) и сколько просят внимания (bad). */
 function cbPlanTally(datas) {
   var ok = 0, bad = 0;
   (datas || []).forEach(function (d) {
-    if (d && d.error) bad += 1;
-    ((d && d.results) || []).forEach(function (r) { if (r && r.error) bad += 1; else ok += 1; });
+    var broken = !!(d && d.error) || ((d && d.results) || []).some(function (r) { return r && r.error; });
+    if (broken) bad += 1; else ok += 1;
   });
   return { ok: ok, bad: bad };
 }
@@ -18427,12 +18458,12 @@ function cbNewRun(notify) {
       send({ done: true, at: entries.length });
       // ACL-2314: сборка кончилась, а вкладка спрятана — уведомление и значок.
       if (window.aclDoneNotify) {
-        var okN = report.filter(function (r) { return r.state === 'ok'; }).length;
-        var badN = report.filter(function (r) { return r.state !== 'ok' && r.state !== 'dup'; }).length;
-        window.aclDoneNotify.finished('publish', okN, badN, function () {
+        var campTotal = 0, campOk = 0;
+        entries.forEach(function (x) { campTotal += x.campTotal || 0; campOk += x.campOk || 0; });
+        window.aclDoneNotify.finished('publish', campOk, campTotal - campOk, function () {
           var q = document.querySelector('.cbd-queue');
           if (q && q.scrollIntoView) q.scrollIntoView({ block: 'nearest' });
-        });
+        }, campTotal);
       }
     }
   }
@@ -18465,6 +18496,9 @@ function cbNewRun(notify) {
         settle(e, { account: e.label, state: 'bad', why: 'Stopped by user' });
         return;
       }
+      // ACL-2314: кампании этого задания — для итога «X of Y campaigns published».
+      e.campTotal = Math.max(e.campTotal || 0, (job.results || []).length);
+      e.campOk = (job.results || []).filter(function (r) { return r.publishable === true; }).length;
       var ok = !(job.errors || []).length && (job.results || []).length
         && (job.results || []).every(function (r) { return r.publishable === true; });
       settle(e, { account: e.label, state: ok ? 'ok' : 'bad', skipped: skipped,
@@ -18498,6 +18532,7 @@ function cbNewRun(notify) {
     }
     // Кампании, ушедшие в задание: у их строк в ящике встанет точка сборки.
     var sentNames = cbSentCampaignNames(fd);
+    e.campTotal = sentNames.length;   // ACL-2314
     post(e, fd, skipped, sentNames);
   }
 
@@ -19720,6 +19755,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         }
         if (job.status !== 'done' && job.status !== 'cancelled') {
           _renderTeachBanner(job.teach);
+          // ACL-2314: задание ждёт клика менеджера — один сигнал на эпизод, пока вкладка спрятана.
+          if (window.aclDoneNotify) {
+            if (job.teach && job.teach.waiting) {
+              window.aclDoneNotify.waiting('job:' + jobId, function () {
+                var b = document.getElementById(_teachBannerId());
+                if (b && b.scrollIntoView) b.scrollIntoView({ block: 'center' });
+                else if (statusPanel && statusPanel.scrollIntoView) statusPanel.scrollIntoView({ block: 'center' });
+              });
+            } else window.aclDoneNotify.waitingEnded('job:' + jobId);
+          }
           // Poll faster while cancelling so Stop feels responsive.
           setTimeout(poll, job.status === 'cancelling' ? 600 : 2000);
         } else {

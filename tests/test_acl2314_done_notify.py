@@ -31,6 +31,7 @@ def test_hooks_are_wired_and_nothing_asks_on_load():
     html = TPL.read_text(encoding="utf-8")
     assert "aclDoneNotify.finished('check'" in html
     assert "aclDoneNotify.finished('publish'" in html
+    assert "aclDoneNotify.waiting('job:'" in html
     # requestPermission встречается только в обработчике кнопки (внутри enable).
     assert len(re.findall(r"requestPermission\(", html)) == 1
     block = html[html.index("/* ACL-2314 begin */"):html.index("/* ACL-2314 end */")]
