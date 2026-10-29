@@ -188,6 +188,102 @@ def test_profile_start_goes_at_87_percent_and_waits_at_95(tmp_path):
     assert shown and shown[0]["used_pct"] == pytest.approx(95, abs=0.1) and shown[0]["max_used_pct"] == 90.0
 
 
+def _turn_wait_rig(tmp_path, start_pct, rise_pct):
+    """Another profile warms up (holds the turn); memory moves to `rise_pct` during the turn wait."""
+    mem = [_mem(start_pct)]
+    rig = Rig(tmp_path, reg_memory=lambda: mem[0])
+    rig.reg._starting[PID] = rig.reg._mono()
+    base = rig.reg._sleep
+    at_start = []
+    state = {"freed": False}
+
+    def sleeping(secs):
+        base(secs)
+        if len(rig.sleeps) == 2:
+            mem[0] = _mem(rise_pct)
+        if len(rig.sleeps) == 4:
+            rig.reg.mark_ready(PID)                      # the warming profile answered: the turn frees
+        if len(rig.sleeps) == 20:
+            mem[0] = _mem(80)                            # memory frees much later
+            state["freed"] = True
+
+    rig.reg._sleep = sleeping
+    real = rig.reg._start_profile
+
+    def start(p, f, i):
+        m = mem[0]
+        at_start.append((round(100 * (m.total_mb - m.available_mb) / m.total_mb), state["freed"]))
+        return real(p, f, i)
+
+    rig.reg._start_profile = start
+    return rig, at_start
+
+
+def test_memory_is_rechecked_after_the_turn_wait(tmp_path):
+    """87% at admission, 95% during the turn wait: the profile starts only after memory frees."""
+    rig, at_start = _turn_wait_rig(tmp_path, 87, 95)
+    views = []
+    with warm.job_wait(lambda: len(rig.sleeps) > 80, views.append):
+        res = rig.reg.open_one("B", _entry(B))
+    assert res["ok"] and len(at_start) == 1
+    pct, freed = at_start[0]
+    assert freed and pct <= 80, "started while memory was over the line"
+    assert any(v and v.get("hold") == "memory_low" for v in views), "the wait was shown queued with numbers"
+    assert B not in rig.reg._starting or rig.reg._starting[B] > 0
+
+
+def test_turn_is_given_back_while_waiting_for_memory(tmp_path):
+    rig, at_start = _turn_wait_rig(tmp_path, 87, 95)
+    seen = []
+    base = rig.reg._sleep
+
+    def spying(secs):
+        base(secs)
+        if 8 <= len(rig.sleeps) <= 10:
+            seen.append(B in rig.reg._starting)
+
+    rig.reg._sleep = spying
+    with warm.job_wait(lambda: len(rig.sleeps) > 80, lambda v: None):
+        rig.reg.open_one("B", _entry(B))
+    assert seen and not any(seen), "a job waiting for memory must not hold the start turn"
+
+
+def test_cancel_while_waiting_for_memory_after_the_turn(tmp_path):
+    rig, at_start = _turn_wait_rig(tmp_path, 87, 95)
+    with warm.job_wait(lambda: len(rig.sleeps) >= 12, lambda v: None):
+        res = rig.reg.open_one("B", _entry(B))
+    assert res["ok"] is False and not at_start and B not in rig.reg._starting
+
+
+def test_memory_boundary_inside_the_turn_flow(tmp_path):
+    for pct, starts in ((86, True), (88, True), (90, True), (91, False), (95, False)):
+        rig = Rig(tmp_path / str(pct), reg_memory=lambda pct=pct: _mem(pct))
+        with warm.job_wait(lambda rig=rig: len(rig.sleeps) > 8, lambda v: None):
+            res = rig.reg.open_one("B", _entry(B))
+        assert bool(rig.started) is starts, (pct, res)
+
+
+def test_a_failed_prepare_gives_the_start_turn_back(tmp_path):
+    rig = Rig(tmp_path)
+    rig.warm_up()
+    rig.reg._starting[PID] = rig.reg._mono()
+    real_make = rig.make
+
+    def make(tab):
+        graph = real_make(tab)
+
+        def wait_ready(timeout=90.0):
+            raise PageUnresponsive("frozen")
+
+        graph.wait_ready = wait_ready
+        return graph
+
+    rig.make = make
+    with pytest.raises(PageUnresponsive):
+        rig.checkout()
+    assert PID not in rig.reg._starting
+
+
 # ---- A: staggered start ----
 
 def test_next_profile_waits_for_the_previous_one_to_be_ready(tmp_path):

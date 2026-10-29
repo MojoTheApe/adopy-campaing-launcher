@@ -824,16 +824,26 @@ class WarmRegistry:
             # ACL-2278: Stop of the job also stops the waits below (the caller passes no `cancelled`).
             base_cancelled = cancelled
             cancelled = lambda: base_cancelled() or job.cancelled()   # noqa: E731
-        short = self._wait_for_memory(cancelled)
-        if short:
-            return _result(False, short, "memory_low")
         # ACL-2283 (A): profiles of jobs start one at a time: wait for the previous start to be ready and the CPU
         # to settle. The turn is released when this start fails, or when the tab answers (`mark_ready`).
+        # The turn wait can take minutes while the warming profiles grow, so memory is checked AGAIN once the
+        # turn is ours and right before the start; over the line -> give the turn back and wait for memory
+        # (queued, cancellable, live numbers), then take a turn again.
         took_turn = False
-        if job is not None:
+        while True:
+            short = self._wait_for_memory(cancelled)
+            if short:
+                return _result(False, short, "memory_low")
+            if job is None:
+                break
             if not self._wait_start_turn(pid, cancelled, job):
                 return _result(False, "Stopped while waiting for its turn to start the profile.", "cancelled")
             took_turn = True
+            if self._memory_fits_now():
+                break
+            with self._lock:
+                self._starting.pop(pid, None)
+            took_turn = False
         turn_kept = False
         slot_id = f"warm-open:{label}:{job_id or int(self._wall())}"
         queue = self._slot_queue()
@@ -1039,6 +1049,14 @@ class WarmRegistry:
         finally:
             _show(job, None)
 
+    def _memory_fits_now(self) -> bool:
+        """One look, no waiting: is there room for one more profile by the ACL-2255 rule?"""
+        memory, settings, _ps = self._memory_state()
+        if memory is None:
+            return True
+        need, _growth = self._memory_need(settings, _ps)
+        return memory.available_mb >= need
+
     def _memory_need(self, settings: Any, _ps: Any) -> tuple[int, int]:
         now = self._mono()
         settle = _env_number(SETTLE_ENV, DEFAULT_SETTLE_S, 0.0, 3600.0)
@@ -1174,6 +1192,8 @@ class WarmRegistry:
                 self.mark_ready(profile_id)       # ACL-2283: the tab answered; the next profile may start
             except BaseException:
                 self.gate.release(profile_id)
+                with self._lock:
+                    self._starting.pop(profile_id, None)    # ACL-2283: a failed prepare gives the turn back
                 raise
         except BaseException:
             sess.owner = 0
