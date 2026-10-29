@@ -8622,6 +8622,7 @@ window.cbTree = (function () {
         + ' (' + lost.length + ' account' + (lost.length === 1 ? '' : 's') + ' not sent) '
         + '<button type="button" class="cbd-q-retry" data-cb-stop-retry="1">Retry</button></div>');
     }
+    if (window.aclDoneNotify && !p.done) lines.push('<div class="cbd-q-line">' + window.aclDoneNotify.controlHtml() + '</div>');
     box.innerHTML = lines.join('');
     var stopRetry = box.querySelector('[data-cb-stop-retry]');
     if (stopRetry) stopRetry.addEventListener('click', function () {
@@ -17879,9 +17880,166 @@ function cbPlanHtml(data) {
   return h + '</div>';
 }
 
+/* ACL-2314 begin */
+/* Сигнал о конце Check plan / Publish, пока вкладка спрятана за другими окнами.
+ * Фабрика берёт окружение снаружи (окно, документ, Notification, хранилище), чтобы
+ * её можно было гонять в node. Разрешение на уведомления спрашивается ТОЛЬКО из
+ * click по видимой кнопке (enable), на загрузке страницы — никогда. Отказ или
+ * отсутствие API — тихий откат на значок во вкладке. В тексте уведомления только
+ * счётчики: ни id, ни токенов, ни названий. */
+function aclDoneNotifierFactory(env) {
+  var KEY = 'acl_done_notify';
+  var win = env.win, doc = env.doc;
+  var badged = null;      // {kind, ok}: что показано в заголовке/значке сейчас
+  var origTitle = null, origIcon = null, iconLink = null;
+
+  function prefs() {
+    try {
+      var raw = env.storage() && env.storage().getItem(KEY);
+      var p = raw ? JSON.parse(raw) : {};
+      return { on: p.on === true, sound: p.sound === true };
+    } catch (e) { return { on: false, sound: false }; }
+  }
+  function save(p) {
+    try { env.storage().setItem(KEY, JSON.stringify({ on: !!p.on, sound: !!p.sound })); } catch (e) { /* без хранилища — на сессию */ }
+  }
+  function perm() {
+    try { return env.Notification && typeof env.Notification.permission === 'string' ? env.Notification.permission : 'unsupported'; }
+    catch (e) { return 'unsupported'; }
+  }
+  function away() {
+    try { return doc.visibilityState === 'hidden' || (typeof doc.hasFocus === 'function' && !doc.hasFocus()); }
+    catch (e) { return false; }
+  }
+
+  function iconFor(ok) {
+    var fill = ok ? '#16a34a' : '#dc2626';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#1f2937"/>'
+      + '<circle cx="23" cy="9" r="8" fill="' + fill + '" stroke="#fff" stroke-width="2"/></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
+  function setBadge(kind, ok) {
+    try {
+      if (!badged) {
+        origTitle = doc.title;
+        iconLink = doc.querySelector && doc.querySelector('link[rel~="icon"]');
+        origIcon = iconLink ? iconLink.getAttribute('href') : null;
+      }
+      badged = { kind: kind, ok: ok };
+      doc.title = (ok ? '✓ Ready to publish' : '⚠ Needs attention') + ' — ' + (origTitle || '');
+      if (iconLink) { iconLink.setAttribute('href', iconFor(ok)); iconLink.removeAttribute('type'); }
+    } catch (e) { /* значок — удобство */ }
+  }
+  function clearBadge() {
+    if (!badged) return;
+    badged = null;
+    try {
+      doc.title = origTitle;
+      if (iconLink && origIcon != null) iconLink.setAttribute('href', origIcon);
+    } catch (e) { /* ничего */ }
+  }
+  function beep() {
+    try {
+      var AC = win.AudioContext || win.webkitAudioContext;
+      if (!AC) return;
+      var c = new AC(), o = c.createOscillator(), g = c.createGain();
+      o.connect(g); g.connect(c.destination);
+      g.gain.value = 0.08; o.frequency.value = 880;
+      o.start(); o.stop(c.currentTime + 0.25);
+    } catch (e) { /* без звука */ }
+  }
+
+  function text(kind, ok, bad) {
+    return (kind === 'check' ? 'Check finished: ' : 'Publish finished: ') + ok + ' ok, ' + bad + ' problem' + (bad === 1 ? '' : 's');
+  }
+
+  /* kind: 'check' | 'publish'; ok/bad — счётчики; open — что показать по клику. */
+  function finished(kind, ok, bad, open) {
+    ok = Math.max(0, parseInt(ok, 10) || 0);
+    bad = Math.max(0, parseInt(bad, 10) || 0);
+    if (!away()) return false;          // человек смотрит на страницу: сигнал не нужен
+    setBadge(kind, bad === 0);
+    var p = prefs();
+    if (p.on && perm() === 'granted') {
+      try {
+        var n = new env.Notification(text(kind, ok, bad), { tag: 'acl-done-' + kind });
+        n.onclick = function () {
+          try { win.focus(); } catch (e) { /* ничего */ }
+          try { n.close(); } catch (e) { /* ничего */ }
+          clearBadge();
+          try { if (open) open(); } catch (e) { /* ничего */ }
+        };
+      } catch (e) { /* уведомление не создалось — остаётся значок */ }
+      if (p.sound) beep();
+    }
+    return true;
+  }
+
+  function seen() { if (!away()) clearBadge(); }
+  if (doc.addEventListener) doc.addEventListener('visibilitychange', seen);
+  if (win.addEventListener) win.addEventListener('focus', seen);
+
+  /* Видимая кнопка: единственное место, где спрашивается разрешение. */
+  function enable() {
+    var p = prefs();
+    if (p.on) { p.on = false; save(p); return Promise.resolve('off'); }
+    if (perm() === 'unsupported') return Promise.resolve('unsupported');
+    if (perm() === 'denied') return Promise.resolve('denied');
+    var ask;
+    try { ask = perm() === 'granted' ? Promise.resolve('granted') : Promise.resolve(env.Notification.requestPermission()); }
+    catch (e) { return Promise.resolve('unsupported'); }
+    return ask.then(function (r) {
+      if (r === 'granted') { p.on = true; save(p); return 'on'; }
+      return 'denied';
+    }, function () { return 'denied'; });
+  }
+  function setSound(v) { var p = prefs(); p.sound = !!v; save(p); }
+
+  function controlHtml() {
+    var p = prefs(), pm = perm();
+    var label = pm === 'unsupported' ? 'Notifications are not available in this browser — the tab title will show it'
+      : pm === 'denied' ? 'Notifications are blocked in the browser — the tab title will show it'
+      : (p.on && pm === 'granted') ? 'Notifications on — turn off' : 'Notify me when done';
+    var dis = (pm === 'unsupported' || pm === 'denied') ? ' disabled' : '';
+    return '<span class="acl-done-notify">'
+      + '<button type="button" class="cbd-add" data-acl-notify="enable"' + dis + '>' + label + '</button> '
+      + '<label class="acl-done-sound"><input type="checkbox" data-acl-notify="sound"' + (p.sound ? ' checked' : '') + '> Sound</label></span>';
+  }
+
+  return { finished: finished, enable: enable, setSound: setSound, controlHtml: controlHtml,
+           prefs: prefs, clearBadge: clearBadge, text: text, KEY: KEY };
+}
+window.aclDoneNotify = aclDoneNotifierFactory({
+  win: window, doc: document,
+  Notification: typeof Notification === 'undefined' ? null : Notification,
+  storage: function () { try { return window.localStorage; } catch (e) { return null; } }
+});
+document.addEventListener('click', function (ev) {
+  var t = ev.target && ev.target.closest ? ev.target.closest('[data-acl-notify]') : null;
+  if (!t) return;
+  var api = window.aclDoneNotify;
+  if (t.getAttribute('data-acl-notify') === 'sound') { api.setSound(t.checked); return; }
+  ev.stopPropagation();
+  api.enable().then(function () {
+    document.querySelectorAll('.acl-done-notify').forEach(function (n) { n.outerHTML = api.controlHtml(); });
+  });
+});
+/* ACL-2314 end */
+
+/* ACL-2314: сколько кампаний проверено чисто и сколько с проблемами (ошибка аккаунта — одна проблема). */
+function cbPlanTally(datas) {
+  var ok = 0, bad = 0;
+  (datas || []).forEach(function (d) {
+    if (d && d.error) bad += 1;
+    ((d && d.results) || []).forEach(function (r) { if (r && r.error) bad += 1; else ok += 1; });
+  });
+  return { ok: ok, bad: bad };
+}
+
 /* Рамка плана: полоса с «Hide/Show» и «Close plan ×», тело прокручивается само. */
 function cbPlanFrame(inner) {
   return '<div class="cbd-plan-bar"><span>Plan (no writes)</span><span>'
+    + (window.aclDoneNotify ? window.aclDoneNotify.controlHtml() + ' ' : '')
     + '<button type="button" class="cbd-add cbd-plan-fold" data-act="fold-plan" aria-expanded="true">Hide</button> '
     + '<button type="button" class="cbd-add cbd-plan-close" data-act="close-plan" aria-label="Close plan"'
     + ' title="Close plan">Close plan ×</button></span></div>'
@@ -17955,6 +18113,7 @@ window.cbCheckPlan = function (picked, out, btn, force) {
   }, 1000);
   if (btn) btn.disabled = true;
   var parts = new Array(forms.length);
+  var planDatas = [];     // ACL-2314: ответы по аккаунтам — для счётчиков в уведомлении
   var left = forms.length;
   var pending = forms.map(function (x) {
     return typeof cbFormAccount === 'function' ? cbFormAccount(x.form) : cbFormTitle(x.form);
@@ -18008,6 +18167,7 @@ window.cbCheckPlan = function (picked, out, btn, force) {
         // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
         if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);
         parts[i] = cbPlanHtml(data);
+        planDatas.push(data);
         pending[i] = '';
         left -= 1;
         if (!left) {
@@ -18018,6 +18178,14 @@ window.cbCheckPlan = function (picked, out, btn, force) {
           if (btn) btn.disabled = false;
         }
         render();
+        // ACL-2314: проверка кончилась, а вкладка спрятана — уведомление и значок.
+        if (!left && window.aclDoneNotify) {
+          var chk = cbPlanTally(planDatas);
+          window.aclDoneNotify.finished('check', chk.ok, chk.bad, function () {
+            out.hidden = false;
+            if (out.scrollIntoView) out.scrollIntoView({ block: 'nearest' });
+          });
+        }
       });
   });
 };
@@ -18257,6 +18425,15 @@ function cbNewRun(notify) {
     if (settled >= entries.length) {
       batch.active = false;
       send({ done: true, at: entries.length });
+      // ACL-2314: сборка кончилась, а вкладка спрятана — уведомление и значок.
+      if (window.aclDoneNotify) {
+        var okN = report.filter(function (r) { return r.state === 'ok'; }).length;
+        var badN = report.filter(function (r) { return r.state !== 'ok' && r.state !== 'dup'; }).length;
+        window.aclDoneNotify.finished('publish', okN, badN, function () {
+          var q = document.querySelector('.cbd-queue');
+          if (q && q.scrollIntoView) q.scrollIntoView({ block: 'nearest' });
+        });
+      }
     }
   }
 
