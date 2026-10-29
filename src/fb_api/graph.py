@@ -39,6 +39,12 @@ BLOCK_CODES = {1404078, 2859015, 1404163}
 #: Manager не поможет, только лишний заход в кабинет — стоп сразу (ревью O3).
 CHECKPOINT_SUBCODES = {459, 464}
 
+#: ACL-2301: сетевой сбой ЧТЕНИЯ повторяется на каждом вызове отдельно: 3 попытки с паузами 5/10/20 с.
+NETWORK_BACKOFF_S = (5.0, 10.0, 20.0)
+#: Пауза режется на куски, между которыми задание подаёт признак жизни (сторож тишины, ACL-2278).
+BACKOFF_SLICE_S = 5.0
+#: Предохранитель на всю сессию: не расходуется одним редким сбоем, но не даёт крутиться бесконечно.
+NETWORK_RETRIES_PER_SESSION = 30
 SLOW_PCT = 50.0
 STOP_PCT = 80.0
 
@@ -182,9 +188,12 @@ class WriteUnknown(RuntimeError):
     клиент не делает НИ ОДНОЙ новой записи; чтения разрешены — ими и сверяют.
     """
 
-    def __init__(self, message: str, *, path: str = ""):
+    def __init__(self, message: str, *, path: str = "", reason: str = ""):
         super().__init__(scrub(message))
         self.path = path
+        #: ACL-2301: `network`/`network_timeout` - ответа не было, запись могла и не дойти;
+        #: пусто - Meta ответила чем-то неясным (5xx, код 1/2, не-JSON): её запись повторять нельзя.
+        self.reason = reason
 
 
 class WritesBlocked(RuntimeError):
@@ -292,6 +301,8 @@ class GraphClient:
         #: Путь записи с неизвестным результатом; пока не `None`, записей нет.
         self.unreconciled: str | None = None
         self.writes = 0
+        #: ACL-2301: сколько сетевых повторов чтения было за сессию (потолок-предохранитель).
+        self.network_retries = 0
 
     def reset_budget(self, max_calls: int) -> None:
         """Новый потолок вызовов (на одну кампанию).
@@ -352,8 +363,40 @@ class GraphClient:
             raise self._stop(LoggedOut("the profile is logged out of Facebook"))
         return state
 
+    # -- повтор чтения (ACL-2301)
+    @staticmethod
+    def _note_retry(path: str, attempt: int, error: str, wait_s: float) -> None:
+        """Строка `graph_retry` в телеметрии: какой вид пути, какая попытка, какая ошибка."""
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            kind = re.sub(r"\d+", "<id>", str(path).split("?")[0])[:80]
+            run_telemetry.record("graph_retry", None, diag={
+                "path_kind": scrub(kind), "attempt": attempt, "error": error, "wait_s": wait_s})
+        except Exception:  # noqa: BLE001 - телеметрия не должна ломать вызов
+            pass
+
+    def _backoff(self, seconds: float) -> None:
+        """Пауза между повторами кусками: задание подаёт признак жизни, сторож тишины молчит."""
+        left = float(seconds)
+        while left > 0:
+            self._beat()
+            step = min(BACKOFF_SLICE_S, left)
+            self._sleep(step)
+            left -= step
+        self._beat()
+
+    @staticmethod
+    def _beat() -> None:
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            run_telemetry.beat()
+        except Exception:  # noqa: BLE001
+            pass
+
     # -- один вызов
-    def get(self, path: str, params: dict | None = None) -> dict:
+    def get(self, path: str, params: dict | None = None, *, _net_attempt: int = 0) -> dict:
         if self.stopped is not None:
             raise self.stopped
         if self.calls >= self.max_calls:
@@ -373,11 +416,16 @@ class GraphClient:
                 self._check_page()
                 return self._token_dead(path, params, None, None)
             if err in {"network", "network_timeout"}:
+                # ACL-2301: чтение безопасно повторить; бюджет повторов - на КАЖДЫЙ вызов, а не один на сессию.
                 state = self._check_page()
                 if (state.get("kind") == "ads_manager" and state.get("has_token") is True
-                        and not getattr(self, "_connection_retry_used", False)):
-                    self._connection_retry_used = True
-                    return self.get(path, params)
+                        and _net_attempt < len(NETWORK_BACKOFF_S)
+                        and self.network_retries < NETWORK_RETRIES_PER_SESSION):
+                    wait = NETWORK_BACKOFF_S[_net_attempt]
+                    self.network_retries += 1
+                    self._note_retry(path, _net_attempt + 1, err, wait)
+                    self._backoff(wait)
+                    return self.get(path, params, _net_attempt=_net_attempt + 1)
             raise self._stop(PageFailed(f"the page could not call Graph API ({err})"))
 
         usage = usage_from_headers(reply.get("headers"))
@@ -538,7 +586,8 @@ class GraphClient:
                 self._check_page()
                 raise self._stop(LoggedOut("no session token in the page; the write was not sent"))
             self.unreconciled = path
-            raise WriteUnknown(f"the write result is unknown ({err})", path=path)
+            raise WriteUnknown(f"the write result is unknown ({err})", path=path,
+                               reason=err if err in {"network", "network_timeout"} else "")
 
         body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
         status = reply.get("status")
