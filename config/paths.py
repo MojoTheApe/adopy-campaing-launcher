@@ -81,6 +81,8 @@ def get_local_config_dir() -> str:
     base = get_real_local_appdata()
     if base:  # Windows — every buyer machine today
         return os.path.join(base, "ACL")
+    if sys.platform == "darwin":  # macOS: где Finder и установщик ищут данные программ
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "ACL")
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
