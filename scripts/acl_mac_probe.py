@@ -2,12 +2,18 @@
 
 Запуск: .venv/bin/python scripts/acl_mac_probe.py
 
-Отчёт безопасно вставлять в чат: домашний путь, имя пользователя, имена томов
-/Volumes, UUID (id профилей) и значения флагов заменяются заглушками; это делает
-как точечная чистка, так и финальный проход по каждой строке отчёта. Читаются
-только имена каталогов в <home>/deps и список процессов; из окружения берётся
-один MLX_HOME (через scrub_path). Сеть, запуск и остановка процессов не
-используются. Проектные модули не импортируются: хватает venv с psutil.
+Что гарантируется в отчёте: домашний путь -> ~; имена после /Users, /home и
+/Volumes (без учёта регистра, повторные слэши допустимы) -> заглушки; UUID и
+32-значные hex-id -> <id>; имя пользователя (если оно >= 4 символов и не слово
+из раскладки Multilogin) вырезается из любой строки без учёта регистра, в том
+числе приклеенное к другим символам; из аргументов процессов остаются только
+имена известных флагов Chromium, всё остальное -> <arg>.
+НЕ гарантируется: пользовательский MLX_HOME вне путей /Users, /home, /Volumes и
+домашнего каталога остаётся в отчёте как есть. Перед вставкой в чат владелец
+должен просмотреть отчёт глазами. Читаются только имена каталогов в
+<home>/deps и список процессов; MLX_HOME берётся только из окружения процесса
+(.env не читается). Сеть, запуск и остановка процессов не используются.
+Проектные модули не импортируются: хватает venv с psutil.
 """
 from __future__ import annotations
 
@@ -26,42 +32,51 @@ _MLX_CANDIDATES = (
 )
 _PROC_MARKERS = ("mimic", "chrome", "chromium", "mlx", "multilogin")
 _PROC_ATTRS = ["name", "exe", "cmdline"]
-# Без якоря: /System/Volumes/Data/Users/<имя> и /private/Users/<имя> тоже.
-_USER_DIR = re.compile(r"(/Users|/home)/[^/]+")
+# Без якоря, без учёта регистра, повторные слэши допустимы.
+_USER_DIR = re.compile(r"(/+(?:Users|home))/+[^/]+", re.I)
 # /System/Volumes/Data — системный том, имя не секрет; остальные тома скрываем.
-_VOLUME = re.compile(r"(?<!/System)/Volumes/[^/]+")
-_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-_FLAG_NAME = re.compile(r"^--?[A-Za-z][A-Za-z0-9-]*$")
+_VOLUME = re.compile(r"(?<!/System)/+Volumes/+[^/]+", re.I)
+_UUID = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    r"|(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])"
+)
+# Единственные флаги, имена которых попадают в отчёт; остальное -> <arg>.
+KNOWN_FLAGS = frozenset({
+    "--user-data-dir", "--remote-debugging-port", "--remote-debugging-pipe",
+    "--proxy-server", "--client-session-id", "--profile-directory",
+    "--load-extension", "--type", "--headless", "--no-sandbox", "--lang", "--app",
+})
+# Слова раскладки: имя пользователя, совпавшее с ними, не вырезаем (иначе отчёт нечитаем).
+_USER_STOPLIST = frozenset({
+    "mlx", "chrome", "mimic", "multilogin", "contents", "macos", "library",
+    "applications", "deps", "users", "app", "id", "home",
+})
+
+
+def _scrub_users_volumes(p: str) -> str:
+    p = _USER_DIR.sub(lambda m: re.sub("/+", "/", m.group(1)) + "/<user>", p)
+    return _VOLUME.sub("/Volumes/<volume>", p)
 
 
 def scrub_path(path: str | None, home: str) -> str | None:
-    """Путь с ~ вместо home; чужие /Users/<имя> и /home/<имя> без имени."""
+    """Путь с ~ вместо home; чужие /Users/<имя>, /home/<имя>, /Volumes/<том> скрыты."""
     if path is None:
         return None
     norm_home = home.rstrip("/\\")
     p = path
     if norm_home and (p.rstrip("/") == norm_home or p.startswith(norm_home + "/")):
         rest = p[len(norm_home):].rstrip("/")
-        return "~" + rest
-    p = _USER_DIR.sub(lambda m: m.group(1) + "/<user>", p)
-    return _VOLUME.sub("/Volumes/<volume>", p)
+        return "~" + _scrub_users_volumes(rest)
+    return _scrub_users_volumes(p)
 
 
 def scrub_args(args: list[str] | None) -> list[str]:
-    """Имена флагов остаются; значения флагов и позиционные аргументы скрыты.
-
-    Флагом считается только токен вида -x / --long-name; всё остальное
-    (-javaagent:/путь, --token:abc, -1.2.3.4:80) печатается как <arg>.
-    """
+    """Печатается только имя известного флага (KNOWN_FLAGS); всё остальное -> <arg>."""
     out = []
     for a in args or []:
-        if a.startswith("-") and a != "-":
-            name, eq, _ = a.partition("=")
-            name = _UUID.sub("<id>", name)
-            if not _FLAG_NAME.match(name):
-                out.append("<arg>")
-            else:
-                out.append(name + "=<hidden>" if eq else name)
+        name, eq, _ = a.partition("=")
+        if name in KNOWN_FLAGS:
+            out.append(name + "=<hidden>" if eq else name)
         else:
             out.append("<arg>")
     return out
@@ -138,8 +153,8 @@ def _final_pass(obj, user):
     """Последний проход по КАЖДОЙ строке отчёта: UUID и литерал имени пользователя."""
     if isinstance(obj, str):
         obj = _UUID.sub("<id>", obj)
-        if user:
-            obj = re.sub(r"(?<![A-Za-z0-9])" + re.escape(user) + r"(?![A-Za-z0-9])", "<user>", obj)
+        if user and len(user) >= 4 and user.lower() not in _USER_STOPLIST:
+            obj = re.sub(re.escape(user), "<user>", obj, flags=re.I)
         return obj
     if isinstance(obj, list):
         return [_final_pass(x, user) for x in obj]

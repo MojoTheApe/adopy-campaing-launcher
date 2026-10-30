@@ -6,6 +6,7 @@
 #   - checks Git and Python 3.11+ (offers Homebrew for Python)
 #   - downloads ACL into ~/Documents/ACL at the promoted release
 #   - runs install_acl.sh, which checks the machine and opens the dashboard
+#     only when the check passes (a clean Mac stops at a [FAIL] list first)
 #
 # Main way to start it: in Terminal run  bash "Install ACL.command"
 # If you double-click and macOS refuses ("unidentified developer"): System
@@ -126,14 +127,15 @@ for tag in $(git -C "$CHECKOUT" tag --points-at "$SHA" --list 'acl-release-*'); 
 done
 [ -n "$RELEASE_TAG" ] || fail "Production has no annotated ACL release tag with a successful CI run. Nothing will be installed from an unverified commit."
 
+# The promoted release may predate Mac support: check BEFORE touching the tree,
+# so nothing is checked out or moved and the user gets a plain message.
+for mac_script in install_acl.sh start_dashboard.sh scripts/install_dashboard_shortcut.sh; do
+    git -C "$CHECKOUT" cat-file -e "$SHA:$mac_script" 2>/dev/null \
+        || fail "The current production release does not support macOS yet (missing $mac_script). Nothing was installed. Ask Evgeni for a Mac-ready release."
+done
+
 echo "Installing release $RELEASE_TAG ($SHA)"
 git -C "$CHECKOUT" checkout --quiet --detach "$SHA" || fail "Could not check out the release."
-
-# The promoted release may predate Mac support: say so plainly instead of
-# failing later with a raw "No such file" from exec.
-for mac_script in install_acl.sh start_dashboard.sh scripts/install_dashboard_shortcut.sh; do
-    [ -f "$CHECKOUT/$mac_script" ]         || fail "The current production release does not support macOS yet (missing $mac_script). Nothing was installed. Ask Evgeni for a Mac-ready release."
-done
 
 if [ "$FRESH" = "1" ]; then
     mkdir -p "$(dirname "$TARGET")"
