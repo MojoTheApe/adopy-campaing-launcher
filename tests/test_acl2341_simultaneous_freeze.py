@@ -185,3 +185,25 @@ def test_a_tab_that_answered_does_not_make_a_later_lone_freeze_a_shared_stall(tm
     rig.now[0] += 7.0
     rig.reg.note_freeze(PID)
     assert not rig.reg.shared_stall(PID)
+
+
+def test_a_freeze_that_cleared_does_not_use_up_the_patience_of_the_next_one(tmp_path):
+    # live Doc120: an earlier long wait (shown as resource_wait machine_busy) left the next freeze 21 s
+    rig = _rig(tmp_path, 90.0)
+    graph = _graph(rig, writes=True, freeze_until=200.0)
+    graph._ready_for_call()                          # waits ~200 s and recovers
+    assert graph.patience.idle_spent_s == 0.0
+    graph._ready_once = _freezing_until(rig, graph, rig.now[0] - T0 + 10_000.0)
+    rig.reg._cpu = lambda: 10.0
+    start = rig.now[0]
+    with pytest.raises(PageUnresponsive) as stop:
+        graph._ready_for_call()
+    assert rig.now[0] - start >= 75.0 and stop.value.tab_load["waited_s"] >= 75.0
+
+
+def _freezing_until(rig, graph, until_s):
+    def ready_once(timeout=10.0):
+        graph.calls += 1
+        if rig.now[0] - T0 < until_s:
+            raise PageUnresponsive("the Ads Manager tab stopped answering")
+    return ready_once

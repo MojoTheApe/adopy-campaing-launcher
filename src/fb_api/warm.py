@@ -1651,7 +1651,10 @@ class PatientEpisode:
         waited = self.waited_s
         if not self._charged:
             self._charged = True
-            self._owner.charge(waited)
+            # ACL-2341: a freeze that cleared still draws from the lease budget (one budget, ACL-2299), but not
+            # from the short idle wait: that wait is per unresolved freeze, so an earlier long wait that
+            # recovered (a `resource_wait` row for the owner) cannot leave the next freeze 21 s.
+            self._owner.charge(waited, resolved=stop is None)
         if stop is None:
             self._owner.registry.note_answer(self._owner.sess.profile_id)
         else:
@@ -1679,6 +1682,7 @@ class TabPatience:
     def __init__(self, registry: "WarmRegistry", sess: "WarmSession"):
         self.registry = registry
         self.sess = sess
+        self.idle_spent_s = 0.0     # ACL-2341: the part of it that the short idle wait counts (unresolved waits only)
         self.spent_s = 0.0          # seconds waited so far by this lease (one budget for all its episodes)
 
     def snapshot(self) -> dict:
@@ -1703,19 +1707,22 @@ class TabPatience:
         self.registry.note_freeze(pid)
         limit, quiet = self.registry._patience_limit(pid, left,
                                                      reads=True,
-                                                     idle_left_s=idle_cap - self.spent_s)
+                                                     idle_left_s=idle_cap - self.idle_spent_s)
         shared = self.registry.shared_stall(pid)
         if shared and left > 0:
             limit, quiet = left, True        # a machine/network stall: the full limit, whatever the load reads
-        check = (self.registry.patience_check(pid, limit, always=quiet, min_s=min(left, idle_cap - self.spent_s))
+        check = (self.registry.patience_check(pid, limit, always=quiet, min_s=min(left, idle_cap - self.idle_spent_s))
                  if limit > 0 else None)
         if check is None:
             self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))
             return None
         return PatientEpisode(self, check, stop, shared=shared)
 
-    def charge(self, seconds: float) -> None:
-        self.spent_s += max(0.0, float(seconds))
+    def charge(self, seconds: float, *, resolved: bool = False) -> None:
+        seconds = max(0.0, float(seconds))
+        self.spent_s += seconds
+        if not resolved:
+            self.idle_spent_s += seconds
 
 
 # ───────────────────────── подставляемые части ─────────────────────────
