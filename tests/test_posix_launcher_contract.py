@@ -155,7 +155,7 @@ def test_machine_folder_on_macos(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 
 
 def test_tag_check_avoids_gnu_only_regex() -> None:
-    assert r"\bsuccess\b" not in _text("Install ACL.command")
+    assert r"\bsuccess\b" not in _text("Install ACL.command")  # linux-ok: regex word boundary in a shell script, not a Windows path
     assert "grep -Eiwq success" in _text("Install ACL.command")
 
 
