@@ -163,6 +163,18 @@ _READ_PATIENT = ContextVar("acl_warm_read_patient", default=False)
 #: ACL-2262 replacement tab. The full patient limit is for a busy machine.
 READ_IDLE_WAIT_ENV = "ACL_READ_IDLE_WAIT_S"
 DEFAULT_READ_IDLE_WAIT_S = 75.0
+#: ACL-2341: a CPU/memory reading flickers around the busy line, so a machine that was busy this recently still counts as
+#: busy when a freeze decides how long to wait (the 11:27 live stop read 80 % CPU but waited 0 s).
+BUSY_STICKY_S = 60.0
+#: ACL-2341: a wait on a busy machine ends only after the load has read quiet for this long.
+QUIET_ENDS_WAIT_S = 10.0
+#: ACL-2341: a lease this young has just opened its profile; its first call waits like any other freeze.
+FRESH_SESSION_S = 120.0
+#: ACL-2341: two profiles that freeze within this many seconds of each other are one machine/network stall.
+SHARED_STALL_WINDOW_S = 15.0
+SHARED_STALL_TEXT = ("The computer or network was overloaded - all accounts paused together and none of them "
+                     "answered in time. Nothing was created after this point; start the job again when the "
+                     "machine is quieter.")
 
 
 def read_patience_active() -> bool:
@@ -568,6 +580,10 @@ class WarmRegistry:
         #: profiles whose tab answered.
         self._starting: dict[str, float] = {}
         self._ready: set[str] = set()
+        #: ACL-2341: when the machine last read busy, when each profile last froze mid-job, when a frozen tab last answered.
+        self._busy_seen: float | None = None
+        self._freezes: dict[str, float] = {}
+        self._answered_at: float | None = None
         self._me = (os.getpid(), _my_start())
         self._load()
 
@@ -1465,7 +1481,7 @@ class WarmRegistry:
         - nothing, except a read-only Check plan (and, ACL-2316, a step of a publish job where nothing was
         sent yet), which gets the short `ACL_READ_IDLE_WAIT_S` (0 - none). `idle_left_s` is what is left
         of that short wait for the lease, so repeated freezes never add up to more than one."""
-        if self._busy_now(profile_id):
+        if self._busy_now(profile_id, sticky=True):
             return full_s, False
         if reads:
             idle = _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)
@@ -1485,10 +1501,11 @@ class WarmRegistry:
         same CPU reading and level as the staggered start) waits up to `limit_s`; the load is re-read at
         most every 5 s and a quiet machine ends the wait. `always` (read-only action) ignores the load.
         """
-        if not always and not self._busy_now(profile_id):
+        if not always and not self._busy_now(profile_id, sticky=True):
             return None
         until = self._mono()+limit_s
         seen = [self._mono(), True]
+        busy_at = [self._mono()]
 
         def check() -> bool:
             now = self._mono()
@@ -1497,7 +1514,11 @@ class WarmRegistry:
             if always:
                 return True
             if now - seen[0] >= 5.0:      # re-read the machine at most every 5 s; load gone = idle limit
-                seen[0], seen[1] = now, self._busy_now(profile_id)
+                seen[0] = now
+                if self._busy_now(profile_id):
+                    busy_at[0] = now
+                # ACL-2341: one quiet reading is a flicker; the load is gone after a quiet spell
+                seen[1] = now - busy_at[0] < QUIET_ENDS_WAIT_S
             return bool(seen[1])
         return check
 
@@ -1520,11 +1541,36 @@ class WarmRegistry:
     def patience_for(self, sess: "WarmSession") -> "TabPatience":
         return TabPatience(self, sess)
 
-    def _busy_now(self, profile_id: str) -> bool:
+    def _busy_now(self, profile_id: str, *, sticky: bool = False) -> bool:
+        """`sticky` (the start of a wait): busy memory counts too, and a machine busy within `BUSY_STICKY_S` still does."""
         try:
-            return bool(self.load_snapshot(profile_id)["busy"])
+            snap = self.load_snapshot(profile_id)
+            now = self._mono()
+            if snap["busy"] or (sticky and snap.get("memory_high")):
+                self._busy_seen = now
+                return True
+            return bool(sticky and self._busy_seen is not None and now - self._busy_seen < BUSY_STICKY_S)
         except Exception:  # noqa: BLE001 - unknown = idle limit
             return False
+
+    # -- ACL-2341: one stall of the machine/network shows as several tabs freezing together
+    def note_freeze(self, profile_id: str) -> None:
+        with self._lock:
+            self._freezes[profile_id] = self._mono()
+
+    def note_answer(self) -> None:
+        with self._lock:
+            self._answered_at = self._mono()
+
+    def shared_stall(self, profile_id: str) -> bool:
+        """True when another profile froze within `SHARED_STALL_WINDOW_S` of this one and no tab answered since."""
+        with self._lock:
+            mine = self._freezes.get(profile_id)
+            if mine is None:
+                return False
+            return any(p != profile_id and abs(mine - t) <= SHARED_STALL_WINDOW_S
+                       and not (self._answered_at is not None and self._answered_at >= max(t, mine))
+                       for p, t in self._freezes.items())
 
     def _prepare_owned(self,sess,act,mode,make_graph):
         self._remaining()
@@ -1550,10 +1596,11 @@ class WarmRegistry:
 class PatientEpisode:
     """ACL-2299 (B): one wait for a tab that stopped answering in the middle of a job."""
 
-    def __init__(self, owner: "TabPatience", check: Callable[[], bool], stop: BaseException):
+    def __init__(self, owner: "TabPatience", check: Callable[[], bool], stop: BaseException, *, shared: bool = False):
         self._owner = owner
         self._check = check
         self.stop = stop
+        self.shared = shared            # ACL-2341: several tabs froze together - a machine/network stall
         self.began = owner.registry._mono()
         self._job = _JOB_WAIT.get()
         self._charged = False
@@ -1567,6 +1614,13 @@ class PatientEpisode:
         try:
             if self._job is not None and self._job.cancelled():
                 return False
+            reg = self._owner.registry
+            if not self.shared and reg.shared_stall(self._owner.sess.profile_id):
+                # a second tab froze while this one waited: from now on it is one stall, wait out the full budget
+                self.shared = True
+                left = _env_number(PATIENT_READY_ENV, DEFAULT_PATIENT_READY_S, 0.0, 3600.0) - self._owner.spent_s
+                self._check = reg.patience_check(self._owner.sess.profile_id, max(0.0, left - self.waited_s),
+                                                 always=True) or self._check
             if not self._check():
                 return False
         except Exception:  # noqa: BLE001
@@ -1578,7 +1632,8 @@ class PatientEpisode:
         except Exception:  # noqa: BLE001
             pass
         snap = self._owner.snapshot()
-        _show(self._job, {"hold": "machine_busy", "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),
+        _show(self._job, {"hold": "machine_stalled" if self.shared else "machine_busy",
+                          "cpu_pct": snap.get("cpu_pct"), "cpu_level": snap.get("cpu_level"),
                           "running": snap.get("running"), "warming": snap.get("warming")})
         sleep(MIDJOB_POLL_S)
         return True
@@ -1597,8 +1652,14 @@ class PatientEpisode:
         if not self._charged:
             self._charged = True
             self._owner.charge(waited)
-        if stop is not None:
+        if stop is None:
+            self._owner.registry.note_answer()
+        else:
             self._owner.registry.annotate_stop(stop, self._owner.sess, waited_s=waited, waited_patiently=True)
+            if self.shared or self._owner.registry.shared_stall(self._owner.sess.profile_id):
+                # ACL-2341: owner-facing text - the whole machine stalled, not one account's Ads Manager
+                stop.args = (SHARED_STALL_TEXT,)
+                stop.tab_load = {**getattr(stop, "tab_load", {}), "shared_stall": True}
         try:
             from src.fb_ads_rpa import run_telemetry as _rt
             _rt.record("job_phase", stop is None, note="tab_patience", duration_s=waited,
@@ -1634,14 +1695,27 @@ class TabPatience:
         # ACL-2316: a tab frozen mid-job waits the short idle wait on ANY machine - a Check plan read and a publish
         # step alike. `begin` is only reached for steps where nothing of this call was sent (see `_patiently`).
         idle_cap = _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)
-        limit, quiet = self.registry._patience_limit(self.sess.profile_id, left,
-                                                     reads=bool(writes) or bool(_READ_PATIENT.get()),
+        pid = self.sess.profile_id
+        # ACL-2341: the first call after the profile opened (a lease of any kind) is waited for like a read.
+        young = self._young()
+        self.registry.note_freeze(pid)
+        limit, quiet = self.registry._patience_limit(pid, left,
+                                                     reads=bool(writes) or bool(_READ_PATIENT.get()) or young,
                                                      idle_left_s=idle_cap - self.spent_s)
-        check = self.registry.patience_check(self.sess.profile_id, limit, always=quiet) if limit > 0 else None
+        shared = self.registry.shared_stall(pid)
+        if shared and left > 0:
+            limit, quiet = left, True        # a machine/network stall: the full limit, whatever the load reads
+        check = self.registry.patience_check(pid, limit, always=quiet) if limit > 0 else None
         if check is None:
             self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))
             return None
-        return PatientEpisode(self, check, stop)
+        return PatientEpisode(self, check, stop, shared=shared)
+
+    def _young(self) -> bool:
+        try:
+            return self.registry._wall() - float(self.sess.started_at) < FRESH_SESSION_S
+        except Exception:  # noqa: BLE001
+            return False
 
     def charge(self, seconds: float) -> None:
         self.spent_s += max(0.0, float(seconds))

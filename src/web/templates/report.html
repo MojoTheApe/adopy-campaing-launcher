@@ -9325,6 +9325,10 @@ window.cbBuild = (function () {
     }
     if (q.hold === 'account_busy') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
     if (q.hold === 'machine_busy') return { state: 'build-wait', sign: '', why: cbLoadWait(q) };
+    if (q.hold === 'machine_stalled') {
+      return { state: 'build-wait', sign: '',
+               why: 'The computer or network is overloaded - all accounts are paused together and continue when a tab answers. Stop cancels it' };
+    }
     // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
     var memory = cbMemoryWait(q);
     if (memory) return { state: 'build-wait', sign: '', why: memory };
