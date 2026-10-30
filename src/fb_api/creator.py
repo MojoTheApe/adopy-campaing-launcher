@@ -1299,9 +1299,11 @@ class NameChoice:
         return bool(self.skipped)
 
 
-#: ACL-2338: an unknown write result with one of these reasons had no answer at all: after two empty readbacks
-#: it is sent once more (a file upload never is). `context_stale`/`page_closed` only name the cause.
-RESEND_REASONS = frozenset({"network", "network_timeout", "cdp_timeout"})
+#: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
+#: page aborts its own request at a deadline, so `network_timeout` means the first request is finished): after two empty
+#: readbacks it is sent once more (a file upload never is). `cdp_timeout` (a tab frozen for the whole CDP wait: a queued
+#: POST may still start later), `context_stale` and `page_closed` only name the cause and stop.
+RESEND_REASONS = frozenset({"network", "network_timeout"})
 
 
 class CampaignCreator:
@@ -1379,7 +1381,7 @@ class CampaignCreator:
     def _note_unknown_write(self, what: str, exc: WriteUnknown, began: float, *, first: bool,
                             second: bool | None = None, outcome: str = "") -> None:
         """ACL-2338: one `api_create_step` row for an in-page write timeout: reason, wait, both readbacks, CPU, tabs."""
-        if exc.reason != "cdp_timeout":
+        if not exc.reason:
             return
         try:
             from src.fb_ads_rpa import run_telemetry
@@ -1515,7 +1517,7 @@ class CampaignCreator:
                     f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                     "Nothing else was written; reconcile the existing object in Ads Manager before retrying.", created=out.created, kind="unknown") from rexc
             first_found = bool(found)
-            if first_found and exc.reason == "cdp_timeout":
+            if first_found:
                 self._note_unknown_write(what, exc, began, first=True)
             if not found:
                 if stopped:
@@ -1547,6 +1549,7 @@ class CampaignCreator:
                                            id_of=id_of, on_ad=on_ad, children_active=children_active,
                                            form_page=form_page, upload=upload, _resent=True)
                 else:
+                    self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",

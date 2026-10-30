@@ -12,15 +12,19 @@ CDP = {"error": "call_unknown", "reason": "cdp_timeout"}
 
 
 class CdpMeta(FakeMeta):
-    """`cdp_lost`: created, the in-page call never returned. `cdp_unsent`: not created, same timeout."""
+    """`cdp_*`: the in-page call never returned (tab frozen). `page_*`: the page aborted its own POST at the
+    deadline and answered network_timeout. `*_lost`: the ad was created; `*_unsent`: it was not."""
+
+    REPLIES = {"cdp": dict(CDP), "page": {"error": "network_timeout"}}
 
     def write(self, path, params, files=None, filename="", **kw):
         edge = path.rsplit("/", 1)[1]
         mode = self.fail_next.get(edge)
-        if mode in ("cdp_lost", "cdp_unsent"):
-            self.fail_next[edge] = "lost" if mode == "cdp_lost" else "unsent"
+        if mode in ("cdp_lost", "cdp_unsent", "page_lost", "page_unsent"):
+            who, what = mode.split("_")
+            self.fail_next[edge] = what
             super().write(path, params, files=files, filename=filename, **kw)
-            return dict(CDP)
+            return dict(self.REPLIES[who])
         return super().write(path, params, files=files, filename=filename, **kw)
 
 
@@ -28,18 +32,19 @@ def _edges(meta, edge):
     return [p for p, _ in meta.posts if p.endswith("/" + edge)]
 
 
-def test_cdp_timeout_with_both_readbacks_empty_resends_exactly_once(tmp_path):
+def test_page_timeout_with_both_readbacks_empty_resends_exactly_once(tmp_path):
     meta = CdpMeta()
-    meta.fail_next["ads"] = "cdp_unsent"
+    meta.fail_next["ads"] = "page_unsent"
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
     assert not out.error, out.error
     assert len(_edges(meta, "ads")) == 2
     assert len([o for o in meta.objects.values() if o["_kind"] == "ad"]) == 1
 
 
-def test_cdp_timeout_where_the_ad_exists_is_not_resent(tmp_path):
+@pytest.mark.parametrize("mode", ["cdp_lost", "page_lost"])
+def test_timeout_where_the_ad_exists_is_not_resent(tmp_path, mode):
     meta = CdpMeta()
-    meta.fail_next["ads"] = "cdp_lost"
+    meta.fail_next["ads"] = mode
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
     assert not out.error, out.error
     assert len(_edges(meta, "ads")) == 1
@@ -47,7 +52,7 @@ def test_cdp_timeout_where_the_ad_exists_is_not_resent(tmp_path):
 
 def test_ad_appearing_only_for_the_second_readback_is_not_resent(tmp_path):
     meta = CdpMeta()
-    meta.fail_next["ads"] = "cdp_lost"
+    meta.fail_next["ads"] = "page_lost"
     hidden = {"n": 0}
     real_get = meta.request
 
@@ -123,7 +128,8 @@ def test_no_file_post_is_aborted_in_the_page_before_the_cdp_wait_ends():
     assert 0 < spec["post_timeout_ms"] < 120_000      # the page gives up (and aborts) first
 
 
-def test_first_post_that_lands_late_is_aborted_in_the_page_before_any_readback():
+@pytest.mark.parametrize("body_hangs", [False, True])
+def test_first_post_that_lands_late_is_aborted_in_the_page_before_any_readback(body_hangs):
     """The page helper itself: a hanging POST fetch is aborted at its deadline and answers network_timeout."""
     import json, shutil, subprocess, tempfile
     from pathlib import Path
@@ -136,6 +142,8 @@ def test_first_post_that_lands_late_is_aborted_in_the_page_before_any_readback()
     script = r"""
 const calls = [];
 const fakeFetch = (url, init) => { calls.push({ aborted: () => init.signal && init.signal.aborted, init });
+  if (BODY_HANGS) return Promise.resolve({ status: 200, headers: { get: () => null },
+    text: () => new Promise(() => {}) });
   return new Promise((res, rej) => { if (init.signal) init.signal.addEventListener('abort', () => rej(new Error('aborted'))); }); };
 const loc = { href: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1',
               hostname: 'adsmanager.facebook.com', pathname: '/adsmanager/manage/campaigns' };
@@ -152,7 +160,7 @@ new Function('globalThis','location','document','performance','fetch','URL','URL
 """
     act = "act_1234567890"
     res = f"https://graph.facebook.com/v22.0/{act}/campaigns?fields=name&access_token={TOKEN}"
-    src = (script.replace("RES", json.dumps(res)).replace("ACT", json.dumps(act)).replace("NAME", json.dumps("__n"))
+    src = (script.replace("BODY_HANGS", "true" if body_hangs else "false").replace("RES", json.dumps(res)).replace("ACT", json.dumps(act)).replace("NAME", json.dumps("__n"))
            .replace("HELPER", json.dumps(tc.helper_source("__n", wp.policy_for_page(act)))))
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(src)
@@ -178,14 +186,36 @@ def test_write_unknown_carries_the_in_page_reason(tmp_path):
     assert caught.value.reason == "context_stale"
 
 
-def test_telemetry_row_carries_reason_waits_and_both_readbacks(tmp_path, monkeypatch):
+def test_cdp_timeout_stops_after_exactly_one_post_and_leaves_a_row(tmp_path, monkeypatch):
     rows = []
     monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw.get("diag") or {})))
     meta = CdpMeta()
     meta.fail_next["ads"] = "cdp_unsent"
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
-    assert not out.error, out.error
+    assert out.error and out.stop_kind == "unknown"
+    assert len(_edges(meta, "ads")) == 1
     row = [d for s, d in rows if s == "api_create_step" and d.get("reason") == "cdp_timeout"]
+    assert len(row) == 1 and row[0]["outcome"] == "stop_not_found"
+    assert {"waited_s", "readback_1", "cpu_pct", "page_count"} <= set(row[0])
+
+
+def test_telemetry_row_carries_reason_waits_and_both_readbacks(tmp_path, monkeypatch):
+    rows = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, kw.get("diag") or {})))
+    meta = CdpMeta()
+    meta.fail_next["ads"] = "page_unsent"
+    out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
+    assert not out.error, out.error
+    assert len(_edges(meta, "ads")) == 2
+    row = [d for s, d in rows if s == "api_create_step" and d.get("reason") == "network_timeout"]
     assert len(row) == 1
     assert row[0]["outcome"] == "resend" and row[0]["readback_1"] is False and row[0]["readback_2"] is False
     assert {"waited_s", "cpu_pct", "page_count"} <= set(row[0])
+
+
+def test_post_deadline_has_a_floor_and_stays_under_the_cdp_wait():
+    from src.fb_api import token_capture as tc
+
+    assert tc.InPageGraph.post_deadline_ms(120.0) == 102_000
+    assert tc.InPageGraph.post_deadline_ms(30.0) == 20_000
+    assert tc.InPageGraph.post_deadline_ms(1.0) == 5_000          # floor: a short wait never aborts a healthy write

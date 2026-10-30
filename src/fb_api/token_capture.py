@@ -1397,7 +1397,7 @@ class InPageGraph:
             spec["expect"] = {"bytes": len(data), "sha256": hashlib.sha256(bytes(data)).hexdigest()}
         else:
             # ACL-2338: the page aborts the POST itself before the CDP wait ends (see `post_timeout_ms` in the helper).
-            spec["post_timeout_ms"] = int(max(0.5, min(timeout - 10.0, timeout * 0.85)) * 1000)
+            spec["post_timeout_ms"] = self.post_deadline_ms(timeout)
             self._ready_for_call()
             ctx = self._ensure()
         if files:
@@ -1413,6 +1413,14 @@ class InPageGraph:
         except (PageError, CdpError):
             return {"error": "call_unknown", "reason": "page_closed"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    #: ACL-2338: floor of the in-page POST deadline, so a short `timeout` never aborts a healthy write.
+    POST_DEADLINE_MIN_S = 5.0
+
+    @classmethod
+    def post_deadline_ms(cls, timeout: float) -> int:
+        """In-page deadline of a no-file POST: about 85 % of the CDP wait, 10 s before it, never below the floor."""
+        return int(max(cls.POST_DEADLINE_MIN_S, min(timeout - 10.0, timeout * 0.85)) * 1000)
 
     def tab_load(self) -> dict:
         """ACL-2338: CPU % and page_count of the profile for a telemetry row. Never raises; {} when unknown."""
