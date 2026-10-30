@@ -2,3 +2,4 @@
 
 Важно: `emit()` никогда не бросает исключение и не ходит в сеть.
 """
+from src.acl_event_log.writer import emit  # noqa: F401
