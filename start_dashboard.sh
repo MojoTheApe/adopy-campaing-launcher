@@ -204,6 +204,8 @@ echo "Starting server on port $PORT..."
 export ACL_SUPERVISED=1
 "$PY" serve.py --port "$PORT" &
 SERVER_PID=$!
+# Не даём Маку заснуть, пока сервер жив (caffeinate выходит вместе с ним).
+command -v caffeinate >/dev/null 2>&1 && caffeinate -i -w "$SERVER_PID" &
 # Closing this window / Ctrl+C stops the server too.
 trap 'kill "$SERVER_PID" 2>/dev/null; exit 0' INT TERM HUP
 
