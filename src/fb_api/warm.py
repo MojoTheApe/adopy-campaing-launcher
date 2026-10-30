@@ -168,8 +168,6 @@ DEFAULT_READ_IDLE_WAIT_S = 75.0
 BUSY_STICKY_S = 60.0
 #: ACL-2341: a wait on a busy machine ends only after the load has read quiet for this long.
 QUIET_ENDS_WAIT_S = 10.0
-#: ACL-2341: a lease this young has just opened its profile; its first call waits like any other freeze.
-FRESH_SESSION_S = 120.0
 #: ACL-2341: two profiles that freeze within this many seconds of each other are one machine/network stall.
 SHARED_STALL_WINDOW_S = 15.0
 SHARED_STALL_TEXT = ("The computer or network was overloaded - all accounts paused together and none of them "
@@ -1696,11 +1694,13 @@ class TabPatience:
         # step alike. `begin` is only reached for steps where nothing of this call was sent (see `_patiently`).
         idle_cap = _env_number(READ_IDLE_WAIT_ENV, DEFAULT_READ_IDLE_WAIT_S, 0.0, 600.0)
         pid = self.sess.profile_id
-        # ACL-2341: the first call after the profile opened (a lease of any kind) is waited for like a read.
-        young = self._young()
+        # ACL-2341: `begin` is only reached where nothing of this call was sent (see `_patiently`), so a silent tab is
+        # waited for the short idle wait on any machine - a read-only graph (Check plan dry run), a publish step, and
+        # the first call after the profile opened alike. A Check plan stopped after ~30 s with no tab_patience row
+        # because a quiet machine with `writes=False` got no wait.
         self.registry.note_freeze(pid)
         limit, quiet = self.registry._patience_limit(pid, left,
-                                                     reads=bool(writes) or bool(_READ_PATIENT.get()) or young,
+                                                     reads=True,
                                                      idle_left_s=idle_cap - self.spent_s)
         shared = self.registry.shared_stall(pid)
         if shared and left > 0:
@@ -1710,12 +1710,6 @@ class TabPatience:
             self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))
             return None
         return PatientEpisode(self, check, stop, shared=shared)
-
-    def _young(self) -> bool:
-        try:
-            return self.registry._wall() - float(self.sess.started_at) < FRESH_SESSION_S
-        except Exception:  # noqa: BLE001
-            return False
 
     def charge(self, seconds: float) -> None:
         self.spent_s += max(0.0, float(seconds))
