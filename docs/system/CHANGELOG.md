@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2321 — Proxy or TLS error at the first navigation is retried once — 2026-10-29
+
+A proxy or TLS network error (ERR_SSL_PROTOCOL_ERROR, ERR_PROXY_CONNECTION_FAILED, ERR_TUNNEL_CONNECTION_FAILED, ERR_TIMED_OUT) at the first navigation of a tab is retried once after about 30 s; the job stays alive for the silence watcher during the pause. If it fails again the job stops with "The profile's proxy did not connect (SSL error for ERR_SSL_PROTOCOL_ERROR, otherwise network error <code>). Check the proxy of this profile in Multilogin, then try again. Nothing was sent by this attempt." Later navigations and writes are never retried. Telemetry records only the error code and the retry outcome, never the proxy address.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1321).
+
 ## ACL-2318 — Library token and BI password in the Windows vault — 2026-10-29
 
 `ACL_LIBRARY_TOKEN` and `BI_MYSQL_PASSWORD` now go through `config.token_vault` (Windows DPAPI, current user) exactly like the Multilogin automation tokens: the machine `%LOCALAPPDATA%\ACL\.env` holds `dpapi:v1:...` instead of clear text, `load_env` opens the value into the process environment (so team library and BI readers are unchanged), and the connection-sheet sign-in and the manual fields write through `update_machine_env` into the vault. An older install with clear-text values is migrated once on the next start (encrypted backup kept, verified before replacing) and the .env keeps no clear-text copy. The values are also hidden by the existing log/telemetry/support-bundle scrubbers. Where DPAPI is absent (Linux/macOS/CI) the old clear-text behaviour stays. A line the app reads differently from the migration parser (for example a hand-written double-quoted password with a backslash escape) is left in clear text with a note instead of being sealed as a different value. A manual rollback to any build older than ACL-2318 first needs `scripts/acl_migrate_config.py --unprotect` (older builds do not open these two keys). The in-app updater is covered by `ACL_DEFER_TOKEN_PROTECTION`, and builds with ACL-2306 heal themselves through `refresh_on_start`.

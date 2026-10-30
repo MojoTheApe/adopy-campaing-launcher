@@ -753,6 +753,10 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
 
     if isinstance(exc, ProfileLeaseError):   # ACL-1853: отказ замка профиля уже написан словами
         return str(exc), ""
+    from src.fb_api.cdp import ProxyNotConnectedError
+
+    if isinstance(exc, ProxyNotConnectedError):   # ACL-2321: текст уже написан словами
+        return str(exc), ""
     if isinstance(exc, LoggedOut):
         return _as.logged_out_message(account), _as.LOGGED_OUT_CODE
     if isinstance(exc, Checkpoint):
