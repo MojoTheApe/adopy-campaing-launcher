@@ -1,13 +1,17 @@
 # ACL — Setup on a Mac
 
-Apple Silicon or Intel Mac. About 15 minutes. Windows: see
+About 15 minutes. Windows: see
 [SETUP-NEW-PC.md](SETUP-NEW-PC.md).
 
-> **Status.** The dashboard (statistics, accounts, campaign builder, updates)
-> is ported. Everything that talks to Multilogin goes through its local
-> launcher API, which is the same on macOS. Not ported: anything that drives
-> the Mimic `chrome.exe` directly, or reads Windows window titles — see
+> **Status.** The dashboard statistics are ported. Connecting accounts,
+> opening Multilogin profiles and building campaigns are **not expected to
+> work on a Mac** until the Mac acceptance run: they find browser processes
+> by Windows names (`chrome.exe`) and read Windows window titles — see
 > *Known limits* at the bottom.
+
+> **Caution.** If `~/Documents` or `~/Desktop` is synced by iCloud, macOS can
+> evict files from `.venv` or `.git` and ACL will break at random. Turn off
+> iCloud sync for those folders, or keep ACL outside them.
 
 ---
 
@@ -43,7 +47,12 @@ Files and Folders** → enable Terminal.
 
 It checks Git and Python 3.11+ (offering Homebrew's Python if missing), downloads
 ACL into `~/Documents/ACL` at the promoted release, creates a Desktop shortcut,
-installs ACL into its own `.venv`, checks the machine and opens the dashboard.
+installs ACL into its own `.venv` and checks the machine.
+
+On a clean Mac the check **will print a `[FAIL]` list** (no CM name, workbooks, OAuth file or
+account map yet) and the installer stops there. That is expected on the first run: the
+Desktop shortcut is already created, and Step 4 opens the dashboard regardless. After Step 2,
+run the installer again to get a clean check.
 
 - **Git missing:** macOS opens the *Command Line Tools* installer. Finish it, then run the file again.
 - **GitHub sign-in:** use the company account. If it asks for a password in Terminal, that is a
@@ -69,7 +78,12 @@ Creatives          (the folder)
 open "$HOME/Library/Application Support/ACL"
 ```
 
-**C.** Open `.env` in that folder and set one line:
+**C.** Open `.env` in that folder (Finder hides files starting with a dot, so use Terminal)
+and set one line:
+
+```bash
+open -e "$HOME/Library/Application Support/ACL/.env"
+```
 
 ```
 MY_CM_NAME=Your Name Exactly As In The Workbook
@@ -98,9 +112,12 @@ Double-click **Adopy Campaign Manager** on the Desktop (or run `bash ~/Documents
 Keep the Terminal window open — closing it stops ACL. The browser opens
 `http://127.0.0.1:9090`. The first load takes a minute or two.
 
-## Step 5 — Connect your accounts
+## Step 5 — Connect your accounts (not expected to work on a Mac yet)
 
 Dashboard → **Accounts** → pick your open Multilogin profile for each account.
+The picker finds profiles by scanning browser processes the way Windows does, so on a Mac it
+may show nothing. That is a known limit until the Mac acceptance run; do not treat it as a
+broken install.
 
 ---
 
@@ -128,9 +145,9 @@ Nothing updates on its own.
 
 ## Known limits (macOS)
 
-- **Account picker names.** On Windows the picker also reads Multilogin window titles; on a Mac
-  it relies on Multilogin's launcher API only, so a name can show as an id when the API does not
-  return it.
+- **Account picker.** It scans running processes for `chrome` / `chrome.exe` and, on Windows,
+  reads Multilogin window titles. On a Mac the process names differ and there are no such
+  titles, so the picker may list nothing or show ids instead of names.
 - **Opening profiles on Mac** is verified only after the Mac acceptance run.
 - **Not verified on a real Mac yet.** The first install on a Mac is a test run: have Evgeni watching,
   and send the whole Terminal output if anything fails.

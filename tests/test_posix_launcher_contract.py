@@ -173,4 +173,13 @@ def test_mac_guide_is_honest() -> None:
     assert "macOS 13+" not in guide
     assert "does not use it" not in guide
     assert "Open Anyway" in guide
+    assert "goes through its local launcher API" not in guide
+    assert "launcher API only" not in guide
+    assert "Apple Silicon or Intel" not in guide
+    assert "campaign builder, updates) is ported" not in guide
     assert "Privacy & Security" in guide
+
+
+def test_one_file_installer_checks_mac_scripts_exist() -> None:
+    installer = _text("Install ACL.command")
+    assert 'install_acl.sh' in installer.split("git -C \"$CHECKOUT\" checkout --quiet --detach")[1].split("mv \"$CHECKOUT\"")[0]

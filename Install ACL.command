@@ -129,6 +129,12 @@ done
 echo "Installing release $RELEASE_TAG ($SHA)"
 git -C "$CHECKOUT" checkout --quiet --detach "$SHA" || fail "Could not check out the release."
 
+# The promoted release may predate Mac support: say so plainly instead of
+# failing later with a raw "No such file" from exec.
+for mac_script in install_acl.sh start_dashboard.sh scripts/install_dashboard_shortcut.sh; do
+    [ -f "$CHECKOUT/$mac_script" ]         || fail "The current production release does not support macOS yet (missing $mac_script). Nothing was installed. Ask Evgeni for a Mac-ready release."
+done
+
 if [ "$FRESH" = "1" ]; then
     mkdir -p "$(dirname "$TARGET")"
     mv "$CHECKOUT" "$TARGET" || fail "Could not move the download into $TARGET."
