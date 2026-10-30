@@ -28,6 +28,10 @@ class _Pub:
         self.auto_resumed = False
         self.owner_stop = False
         self.published = []
+        self.open_error = None
+
+    def frozen_before_write(self, before):
+        return publish_api.ApiPublisher.frozen_before_write(self, before)
 
     writes = property(lambda self: self._writes)
 
@@ -36,6 +40,8 @@ class _Pub:
 
     def open(self, label):
         self.opens += 1
+        if self.open_error is not None:
+            raise self.open_error
 
     def close(self, **kw):
         self.closes += 1
@@ -57,6 +63,14 @@ class _Pub:
         if step == "ok":
             return publish_api.result_dict(out)
         kind, _, extra = step.partition("+")
+        if kind == "raise":
+            self.stop = PageUnresponsive("tab")
+            self._writes += 1
+            raise self.stop
+        if kind == "frozen":            # silent past the patient wait, nothing written, machine not busy
+            self.stop = PageUnresponsive("tab")
+            self.stop.tab_load = {"waited_patiently": True, "busy": False}
+            return publish_api.result_dict(out, error="stopped (page_unresponsive)")
         self.stop = {"unresponsive": PageUnresponsive, "failed": PageFailed, "login": LoggedOut,
                      "checkpoint": Checkpoint}[kind]("tab")
         if extra == "write":
@@ -218,3 +232,60 @@ def test_with_used_memory_over_75_percent_a_new_profile_waits(used, allowed):
     if not allowed:
         assert verdict["reason"] == "below_reserve" and verdict["max_used_pct"] == 75.0
         assert pj._queue_view(verdict)["state"] == "waiting_memory"
+
+
+# ---- review round: the risky branches ----
+
+def test_a_stop_raised_out_of_the_campaign_resumes_too(rig):
+    pub = _Pub(["raise", "ok", "ok"])
+    pj._publish_pending(JOB, pub, "B97", _drafts("A", "B"))
+    assert pub.published == ["A", "A", "B"] and pub.opens == 1 and _names() == ["A", "B"]
+
+
+def test_a_tab_that_froze_twice_replaces_first_and_only_then_resumes(rig):
+    pub = _Pub(["frozen", "frozen", "ok"])
+    pj._publish_pending(JOB, pub, "B97", _drafts("A"))
+    # replacement tab (open 1), then the resume (open 2): the ACL-2299 replacement still runs first
+    assert pub.dropped == [False, True] and pub.opens == 2 and rig.closed == ["p-B97"]
+    assert _names() == ["A"] and pub.published == ["A", "A", "A"]
+
+
+def test_a_job_that_already_took_its_resume_never_takes_another(rig):
+    pj._jobs[JOB]["auto_resumed"] = True
+    pub = _Pub(["unresponsive"])
+    pj._publish_pending(JOB, pub, "B97", _drafts("A"))
+    assert pub.opens == 0 and rig.closed == [] and _row(rig)["refused_reason"] == "already_resumed"
+
+
+def test_a_failed_reopen_reports_what_the_first_attempt_wrote(rig):
+    pub = _Pub(["unresponsive+write"])
+    pub.open_error = publish_api.ApiPublishError("profile did not open")
+    pending = _drafts("A", "B")
+    with pytest.raises(publish_api.ApiPublishError):
+        pj._publish_pending(JOB, pub, "B97", pending)
+    res = pj._jobs[JOB]["results"]
+    assert [r["campaign_name"] for r in res] == ["A"] and "page_unresponsive" in res[0]["error"]
+    assert [d.name for d in pending] == ["B"], "only the campaign that was never started is left"
+    assert _row(rig)["refused_reason"] == "reopen_failed" and _row(rig)["resumed"] is False
+    pj._mark_not_started(JOB, pending, cancelled=False)
+    assert "Nothing was created" not in pj._jobs[JOB]["results"][0]["error"]
+
+
+def test_a_failed_reopen_after_a_raised_stop_does_not_lose_the_campaign(rig):
+    pub = _Pub(["raise"])
+    pub.open_error = publish_api.ApiPublishError("profile did not open")
+    pending = _drafts("A")
+    with pytest.raises(publish_api.ApiPublishError):
+        pj._publish_pending(JOB, pub, "B97", pending)
+    assert pending == [], "the campaign is not reported as not started"
+
+
+def test_the_real_memory_check_decides_the_wait(rig, monkeypatch):
+    monkeypatch.undo()          # the real _memory_admits, then only what the test needs
+    total = 32 * 1024
+    readings = [ps.MemoryReading(total, int(total * 0.20)), ps.MemoryReading(total, int(total * 0.40))]
+    monkeypatch.setattr(ps, "read_memory", lambda: readings.pop(0) if len(readings) > 1 else readings[0])
+    ok, used = pj._memory_admits()
+    assert ok is False and used == pytest.approx(80, abs=0.1)
+    ok, used = pj._memory_admits()
+    assert ok is True and used == pytest.approx(60, abs=0.1)

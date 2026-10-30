@@ -873,7 +873,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
             # ACL-2345: a tab stop raised out of the campaign gets the one automatic resume too.
             if (not resumed and getattr(publisher, "stop", None) is exc
                     and not isinstance(exc, job_cancel.JobCancelled)
-                    and _auto_resume(job_id, publisher, account_label, None, before)):
+                    and _auto_resume(job_id, publisher, account_label, None, before, pending)):
                 resumed = True
                 replaced = False
                 continue
@@ -884,7 +884,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
         # only a stop that came up DURING this campaign counts (an older one just makes it "not started")
         if frozen is None or now_stop is stop_before or not frozen(before):
             if now_stop is not None and now_stop is not stop_before and not resumed and _auto_resume(
-                    job_id, publisher, account_label, res, before):
+                    job_id, publisher, account_label, res, before, pending):
                 resumed = True      # ACL-2345: the same campaign runs again; what exists is reused
                 replaced = False
                 continue
@@ -903,7 +903,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
         if not publish_api._tab_load(getattr(publisher, "stop", None)).get("busy"):
             # ACL-2316: the replacement tab froze too on a machine that is NOT busy: no queue wait. The stop
             # stands and the ACL-2262 full pause applies; the campaigns left are shown as "not started".
-            if not resumed and _auto_resume(job_id, publisher, account_label, res, before):
+            if not resumed and _auto_resume(job_id, publisher, account_label, res, before, pending):
                 resumed = True      # ACL-2345
                 replaced = False
                 continue
@@ -944,7 +944,8 @@ def _memory_admits() -> tuple[bool, float | None]:
     return memory.available_mb >= keep, round(_ps.used_pct(memory), 1)
 
 
-def _auto_resume(job_id: str, publisher: Any, account_label: str, res: dict[str, Any] | None, before: int) -> bool:
+def _auto_resume(job_id: str, publisher: Any, account_label: str, res: dict[str, Any] | None, before: int,
+                 pending: list[Any] | None = None) -> bool:
     """ACL-2345: a publish that stopped on a dead tab (`page_unresponsive` / `page_failed`) closes its profile, waits
     until memory admits a new one and runs the same campaign again - once per job. True - the caller runs it again.
 
@@ -1032,7 +1033,19 @@ def _auto_resume(job_id: str, publisher: Any, account_label: str, res: dict[str,
     diag["resumed"] = True
     diag["refused_reason"] = None
     _row()
-    _open_with_load_requeue(job_id, publisher, account_label)
+    try:
+        _open_with_load_requeue(job_id, publisher, account_label)
+    except BaseException:
+        # The reopen failed (or Stop came): the first attempt may have written. Report what it did instead of
+        # letting `_mark_not_started` say "Nothing was created", then let the failure go on.
+        diag["resumed"] = False
+        diag["refused_reason"] = "reopen_failed"
+        _row()
+        if res is not None:
+            _append_result(job_id, res)
+        if pending:
+            pending.pop(0)
+        raise
     return True
 
 
