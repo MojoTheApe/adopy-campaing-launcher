@@ -145,7 +145,7 @@ def check_form_parser() -> None:
             MISSING,
             "Dashboard form parser",
             "python-multipart is not installed",
-            "Run install_acl.bat again (or pip install -r requirements.txt).",
+            "Run " + ("install_acl.sh" if os.name != "nt" else "install_acl.bat") + " again (or pip install -r requirements.txt).",
         )
 
 

@@ -40,7 +40,7 @@ fi
 
 # One source of truth for the machine folder: the same function the dashboard
 # uses, so ACL_CONFIG_DIR and the macOS default agree with it.
-CONFIG_DIR="$("$BOOTSTRAP_PY" -c "from config.paths import get_local_config_dir; print(get_local_config_dir())" 2>/dev/null)"
+CONFIG_DIR="$("$BOOTSTRAP_PY" -c "from config.paths import get_local_config_dir; print(get_local_config_dir())" 2>/dev/null | tail -n 1)"
 if [ -z "$CONFIG_DIR" ]; then
     echo "ERROR: could not resolve ACL's machine folder. Run ./install_acl.sh."
     pause_exit 1
