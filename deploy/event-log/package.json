@@ -1,0 +1,9 @@
+{
+  "name": "acl-event-log",
+  "private": true,
+  "type": "module",
+  "description": "ACL shared action log: ingest Worker (batches -> R2) (ACL-2347). No dependencies.",
+  "scripts": {
+    "test": "node --test --test-reporter=tap worker.test.js"
+  }
+}
