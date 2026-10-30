@@ -117,6 +117,47 @@ def _record_history(job_id: str) -> None:
         logging.getLogger(__name__).warning("ACL-2292: publish history was not written", exc_info=True)
 
 
+_FINISH_LOGGED: set[str] = set()
+
+
+def _log_event(event_type: str, job_id: str, payload: dict[str, Any], *,
+               account: str | None = None, campaign: str | None = None) -> None:
+    """ACL-2347: событие в общий журнал; сбой журнала никогда не меняет ход задания."""
+    try:
+        from src.acl_event_log import emit
+
+        emit(event_type, payload, job_id=job_id, account=account, campaign=campaign)
+    except Exception:
+        pass
+
+
+def _log_job_finished(job_id: str) -> None:
+    """`job.finished` ровно один раз на задание (его зовут три места завершения)."""
+    try:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is None or job_id in _FINISH_LOGGED:
+                return
+            if len(_FINISH_LOGGED) > 2000:
+                _FINISH_LOGGED.clear()
+            _FINISH_LOGGED.add(job_id)
+            created, started, finished = job.get("created_at"), job.get("started_at"), job.get("finished_at")
+            payload = {
+                "status": job.get("status"), "cancelled": job.get("status") == "cancelled",
+                "created_at": created, "started_at": started, "finished_at": finished,
+                "duration_s": None,
+            }
+            account = job.get("account_label")
+        try:
+            begin = datetime.fromisoformat(started or created)
+            payload["duration_s"] = round((datetime.fromisoformat(finished) - begin).total_seconds(), 1)
+        except Exception:
+            pass
+        _log_event("job.finished", job_id, payload, account=account)
+    except Exception:
+        pass
+
+
 def _abandoned(job_id: str) -> bool:
     """Задание брошено по сроку Stop: его поток больше ничего не пишет (ACL-1614).
 
@@ -210,6 +251,18 @@ def create_job(
         with _jobs_lock:
             _jobs.pop(job_id)
         raise RuntimeError(error)
+    try:
+        from src.acl_event_log.clean import plan_hash
+        from src.acl_event_log.events import slots_brief
+
+        _log_event("job.created", job_id, {
+            "plan_revision": snapshot.get("plan_revision"), "plan_hash": plan_hash(country, slots),
+            "total": total if total is not None else len(slots), "country": country,
+            "dry_run": dry_run, "fb_backend": _fb_backend(),
+            "campaign_names": list(campaign_names or []), "slots_brief": slots_brief(slots),
+        }, account=account_label)
+    except Exception:
+        pass
     return job_id
 
 
@@ -339,6 +392,7 @@ def _abandon_job(job_id: str) -> bool:
     _slots.wake()
     _persist_job(snapshot, state="stopped")
     _record_history(job_id)
+    _log_job_finished(job_id)
     # Замок профиля НЕ трогаем (решение по ревью PR #622, вариант (b)): зависший
     # поток, возможно, ещё держит браузер, и два робота на одном браузере
     # недопустимы. Задания того же профиля ждут, пока поток не выйдет сам
@@ -1135,7 +1189,17 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
         _jobs[job_id]["results"].append(res)
         _jobs[job_id]["done_count"] += 1
         snapshot = _status_snapshot_locked(_jobs[job_id])
+        api_job = _jobs[job_id].get("fb_backend") == "api"
+        account = _jobs[job_id].get("account_label")
     _persist_job(snapshot, state="running")
+    if api_job:
+        try:
+            from src.acl_event_log.events import result_payload
+
+            _log_event("publish.result", job_id, result_payload(res), account=account,
+                       campaign=res.get("campaign_name"))
+        except Exception:
+            pass
 
 
 def _mlx_text(job_id: str, msg: str) -> str:
@@ -1162,6 +1226,7 @@ def _fatal(job_id: str, msg: str) -> None:
         snapshot = _status_snapshot_locked(_jobs[job_id])
     _persist_job(snapshot)
     _record_history(job_id)
+    _log_job_finished(job_id)
 
 
 def _result_is_publishable(result: dict[str, Any]) -> bool:
@@ -1280,6 +1345,7 @@ def _finish(job_id: str, *, cancelled: bool = False) -> None:
         snapshot = _status_snapshot_locked(_jobs[job_id])
     _persist_job(snapshot, state="stopped" if cancelled else "")
     _record_history(job_id)
+    _log_job_finished(job_id)
 
 
 def _run_rpa(
@@ -1460,6 +1526,10 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
                 job["units"] = {**(job.get("units") or {}), str(name): dict(view)}
 
     # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
+    with _jobs_lock:
+        _job0 = _jobs.get(job_id) or {}
+        _started = {"slot_wait_s": _job0.get("slot_wait_s"), "started_ahead": _job0.get("started_ahead")}
+    _log_event("job.started", job_id, _started, account=account_label)
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
     publisher.units = units
     with _jobs_lock:

@@ -821,9 +821,11 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     row = next((r for r in mine if str(r.get("account_id") or r.get("id", "")).removeprefix("act_") == digits),
                None)
     if row is None:
+        _log_account_state(act, None)
         raise PlanError("This profile has no access to the ad account from the account map "
                         "(not in /me/adaccounts). Nothing was created.")
     if str(row.get("account_status")) != "1":
+        _log_account_state(act, row)
         raise PlanError(f"The ad account is not active (account_status {row.get('account_status')}). "
                         "Nothing was created.")
     acc = client.account(act)
@@ -857,7 +859,19 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
 
     facts.profile_loader = load_profile
     _pg.record_counts(merged, where="creator", started=started)
+    _log_account_state(act, row, acc, facts)
     return facts
+
+
+def _log_account_state(act: str, row: dict | None, acc: dict | None = None, facts=None) -> None:
+    """Состояние кабинета в общий журнал (ACL-2347); новых запросов к Meta нет, сбой молчит."""
+    try:
+        from src.acl_event_log import emit
+        from src.acl_event_log.events import account_payload
+
+        emit("account.state", account_payload(act, row, acc, facts), account=act)
+    except Exception:
+        pass
 
 
 def _apply_pages(facts: AccountFacts, merged: "_pg.MergedPages") -> None:
@@ -3167,6 +3181,7 @@ class CampaignCreator:
                     continue
                 data = files[ad.path]
                 rec: dict[str, Any] = {}
+                rec["file_md5"] = _md5(data)  # ACL-2347: хэш уже считается для имён, второго чтения нет
                 if ad.kind == "video":
                     vid, thumb = self._video(out, plan, ad, data)
                     media = {"video_id": vid, "thumb": thumb}
