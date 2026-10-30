@@ -1377,7 +1377,7 @@ class CampaignCreator:
 
     # -- служебное
     def _note_unknown_write(self, what: str, exc: WriteUnknown, began: float, *, first: bool,
-                            second: bool | None = None) -> None:
+                            second: bool | None = None, outcome: str = "") -> None:
         """ACL-2338: one `api_create_step` row for an in-page write timeout: reason, wait, both readbacks, CPU, tabs."""
         if exc.reason != "cdp_timeout":
             return
@@ -1386,10 +1386,11 @@ class CampaignCreator:
 
             load_of = getattr(getattr(self.client, "transport", None), "tab_load", None)
             load = load_of() if callable(load_of) else {}
-            if first:
-                outcome = "found_first_readback"
-            else:
-                outcome = "found_second_readback" if second else "resend"
+            if not outcome:
+                if first:
+                    outcome = "found_first_readback"
+                else:
+                    outcome = "found_second_readback" if second else "resend"
             run_telemetry.record("api_create_step", True, diag={
                 "step": f"{what}: unknown write result", "reason": exc.reason,
                 "waited_s": round(max(0.0, self.clock() - began), 1),
@@ -1509,6 +1510,7 @@ class CampaignCreator:
                     if found:
                         break
             except (GraphStop, GraphError) as rexc:
+                self._note_unknown_write(what, exc, began, first=True, outcome=f"stop_readback_failed:{rexc.__class__.__name__}")
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                     "Nothing else was written; reconcile the existing object in Ads Manager before retrying.", created=out.created, kind="unknown") from rexc
@@ -1531,6 +1533,8 @@ class CampaignCreator:
                     try:
                         found = find()
                     except (GraphStop, GraphError) as rexc:
+                        self._note_unknown_write(what, exc, began, first=False,
+                                                 outcome=f"stop_readback_failed:{rexc.__class__.__name__}")
                         raise CreationStopped(
                             f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                             "Nothing else was written; reconcile the existing object in Ads Manager before retrying.",

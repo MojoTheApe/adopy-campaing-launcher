@@ -736,15 +736,40 @@ _HELPER_JS = r"""
       resp = { status: got.status };
       text = got.text;
     } else {
+      // ACL-2338: a write without a file has its own deadline, shorter than the CDP one (`post_timeout_ms`).
+      // At the deadline the request is ABORTED in the page, so the first POST is finished (cancelled) before
+      // Python reads back and, if nothing is there, sends once more; the answer is `network_timeout`.
+      const limitMs = Number(spec.post_timeout_ms) || 0;
+      const controller = limitMs > 0 && typeof AbortController === 'function' ? new AbortController() : null;
+      const expired = {};
+      let timer = null;
+      const deadline = limitMs > 0 ? new Promise((resolve) => {
+        timer = setTimeout(() => { resolve(expired); if (controller) controller.abort(); }, limitMs);
+      }) : null;
+      const within = (p) => deadline ? Promise.race([p, deadline]) : p;
       try {
-        resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
-                                  cache: 'no-store', redirect: 'error' });
-      } catch (e) {
+        try {
+          resp = await within(fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
+                                           cache: 'no-store', redirect: 'error',
+                                           ...(controller ? { signal: controller.signal } : {}) }));
+          if (resp === expired) return { error: 'network_timeout', endpoint: endpoint };
+        } catch (e) {
+          if (want) unstage(files[want]);
+          if (controller && controller.signal.aborted) return { error: 'network_timeout', endpoint: endpoint };
+          return { error: 'network', state: state(), endpoint: endpoint };
+        }
         if (want) unstage(files[want]);
-        return { error: 'network', state: state(), endpoint: endpoint };
+        try {
+          text = await within(resp.text());
+          if (text === expired) return { error: 'network_timeout', endpoint: endpoint };
+        } catch (e) {
+          if (controller && controller.signal.aborted) return { error: 'network_timeout', endpoint: endpoint };
+          return { error: 'network', status: resp.status };
+        }
+      } finally {
+        if (timer !== null) clearTimeout(timer);
+        if (controller) controller.abort();
       }
-      if (want) unstage(files[want]);
-      try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
     }
     text = clean(text);
     let parsed;
@@ -1371,6 +1396,8 @@ class InPageGraph:
             spec["files"] = {field_name: stage_id}
             spec["expect"] = {"bytes": len(data), "sha256": hashlib.sha256(bytes(data)).hexdigest()}
         else:
+            # ACL-2338: the page aborts the POST itself before the CDP wait ends (see `post_timeout_ms` in the helper).
+            spec["post_timeout_ms"] = int(max(0.5, min(timeout - 10.0, timeout * 0.85)) * 1000)
             self._ready_for_call()
             ctx = self._ensure()
         if files:
