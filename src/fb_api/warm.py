@@ -140,6 +140,12 @@ DEFAULT_LOAD_CPU_PCT = 70.0
 #: A: how long the CPU must stay below the level before the next profile of a job starts.
 START_CPU_SETTLE_ENV = "ACL_START_CPU_SETTLE_S"
 DEFAULT_START_CPU_SETTLE_S = 5.0
+#: ACL-2328: the CPU part of the start wait is capped. After this many seconds a start goes ahead even if the CPU
+#: never settled below `ACL_LOAD_CPU_PCT` (a machine that idles at 70-85 % must not hold starts forever).
+#: Only the CPU condition is waived: the ACL-2255 memory gate is checked outside this wait and is never bypassed,
+#: and profiles that are still warming up keep the turn (they are bounded by `START_READY_CAP_S`).
+START_MAX_HOLD_ENV = "ACL_START_MAX_HOLD_S"
+DEFAULT_START_MAX_HOLD_S = 180.0
 #: A: a started profile counts as "not ready yet" until its tab answered, but not longer than this.
 START_READY_CAP_S = 300.0
 #: B: how long a tab may stay silent on a busy machine before it is called unresponsive (idle: today's limit).
@@ -734,8 +740,13 @@ class WarmRegistry:
         Waits (queued, cancellable, live numbers) until no other started profile is still warming up and the
         CPU has been below the level for `ACL_START_CPU_SETTLE_S`. The turn is taken atomically, so two jobs
         cannot pass together. False - cancelled.
+
+        ACL-2328: the CPU condition holds for at most `ACL_START_MAX_HOLD_S` (default 180 s); then the start
+        goes ahead on a busy CPU. Memory (ACL-2255) is not part of this wait and is never waived by the cap.
         """
         settle = _env_number(START_CPU_SETTLE_ENV, DEFAULT_START_CPU_SETTLE_S, 0.0, 600.0)
+        max_hold = _env_number(START_MAX_HOLD_ENV, DEFAULT_START_MAX_HOLD_S, 0.0, 3600.0)
+        began = self._mono()
         level = _env_number(LOAD_CPU_ENV, DEFAULT_LOAD_CPU_PCT, 1.0, 100.0)
         quiet_since: float | None = None
         try:
@@ -756,11 +767,13 @@ class WarmRegistry:
                     now = self._mono()
                     self._starting = {p: t for p, t in self._starting.items() if now - t < START_READY_CAP_S}
                     others = self.warming_others(pid)
-                    if not others and quiet_since is not None and now - quiet_since >= settle:
+                    cpu_ok = (quiet_since is not None and now - quiet_since >= settle) or now - began >= max_hold
+                    if not others and cpu_ok:
                         self._starting[pid] = now
                         return True
                 _show(job, {"hold": "machine_busy", "cpu_pct": None if cpu is None else round(float(cpu), 1),
-                            "cpu_level": level, "running": len(others), "warming": len(others)})
+                            "cpu_level": level, "running": len(others), "warming": len(others),
+                            "max_hold_s": max_hold})
                 self._sleep(2.0)
         finally:
             _show(job, None)
