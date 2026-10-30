@@ -119,7 +119,7 @@ def test_processes_filter_scrub_and_skip_errors():
     rep = probe.collect_processes(procs, home="/Users/me")
     assert [r["name"] for r in rep] == ["Mimic", "chrome"]
     assert rep[0]["exe"] == "~/mlx/deps/Mimic.app/Contents/MacOS/Mimic"
-    assert rep[0]["args"] == ["<arg>", "--user-data-dir=<hidden>", "--x", "<arg>"]
+    assert rep[0]["args"] == ["<arg>", "--user-data-dir=<hidden>", "<arg>", "<arg>"]
     assert rep[1]["exe"] is None and rep[1]["args"] == []
     assert "/Users/me" not in json.dumps(rep)
 
@@ -147,19 +147,24 @@ _UUID = "123e4567-e89b-12d3-a456-426614174000"
         "--token:abc",
         "-1.2.3.4:80",
         "--bad/name=1",
+        "-pSECRETTOKEN",
+        "-usuper-secret-token",
+        "-Uzorbaq",
+        "--user-zorbaq-pass-hunter2",
+        "--socks5-127-0-0-1-1080",
+        "-p123e4567e89b12d3a456426614174000",
+        "-p" + _UUID,
+        "--unknown-flag=secret",
     ],
 )
-def test_scrub_args_unsafe_flag_shapes_are_masked(arg):
+def test_scrub_args_unknown_tokens_are_masked(arg):
     assert probe.scrub_args([arg]) == ["<arg>"]
 
 
-def test_scrub_args_uuid_glued_to_flag_is_masked():
-    out = probe.scrub_args(["-p" + _UUID, "--profile-" + _UUID + "=x"])
-    assert _UUID not in json.dumps(out)
-
-
-def test_scrub_args_safe_flags_survive():
-    assert probe.scrub_args(["-v", "--no-sandbox", "--a-b1=zz"]) == ["-v", "--no-sandbox", "--a-b1=<hidden>"]
+@pytest.mark.parametrize("flag", sorted(probe.KNOWN_FLAGS))
+def test_scrub_args_known_flags_survive(flag):
+    assert probe.scrub_args([flag]) == [flag]
+    assert probe.scrub_args([flag + "=v"]) == [flag + "=<hidden>"]
 
 
 @pytest.mark.parametrize(
@@ -168,6 +173,9 @@ def test_scrub_args_safe_flags_survive():
         ("/System/Volumes/Data/Users/zorbaq/x", "/System/Volumes/Data/Users/<user>/x"),
         ("/private/Users/zorbaq/x", "/private/Users/<user>/x"),
         ("/Volumes/SecretDisk/mlx", "/Volumes/<volume>/mlx"),
+        ("/Users//other/x", "/Users/<user>/x"),
+        ("/volumes/Secret/x", "/Volumes/<volume>/x"),
+        ("/USERS/Other/x", "/USERS/<user>/x"),
     ],
 )
 def test_scrub_path_unanchored_users_and_volumes(path, expected):
@@ -194,3 +202,24 @@ def test_report_has_no_sentinels_anywhere(tmp_path):
     # раскладка deps подписана корнем (нужна Задаче 4)
     assert rep["deps"][0]["root"] == "~/mlx"
     assert rep["deps"][0]["executables"]
+
+
+def test_scrub_path_under_home_still_hides_volumes_in_rest():
+    assert probe.scrub_path("/Users/me/Volumes/Secret/x", home="/Users/me") == "~/Volumes/<volume>/x"
+
+
+def test_user_name_pass_is_case_insensitive_and_glued(tmp_path):
+    home = tmp_path / "zorbaq"
+    home.mkdir()
+    procs = [_FakeProc(n, "/opt/xzorbaq/mlx/ZORBAQ-backup/Mimic", [])
+             for n in ("zorbaq2-chrome", "ZORBAQ-backup", "Zorbaq-chrome")]
+    blob = json.dumps(probe.build_report(str(home), {}, procs), ensure_ascii=False).lower()
+    assert "zorbaq" not in blob
+
+
+def test_short_or_layout_user_name_is_not_redacted(tmp_path):
+    for name in ("bob", "mlx", "chrome"):
+        home = tmp_path / name
+        home.mkdir(exist_ok=True)
+        rep = probe.build_report(str(home), {}, [_FakeProc("chrome", None, [])])
+        assert rep["processes"][0]["name"] == "chrome"

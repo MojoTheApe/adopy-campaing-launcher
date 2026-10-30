@@ -181,5 +181,12 @@ def test_mac_guide_is_honest() -> None:
 
 
 def test_one_file_installer_checks_mac_scripts_exist() -> None:
-    installer = _text("Install ACL.command")
-    assert 'install_acl.sh' in installer.split("git -C \"$CHECKOUT\" checkout --quiet --detach")[1].split("mv \"$CHECKOUT\"")[0]
+    lines = _text("Install ACL.command").splitlines()
+    text = "\n".join(ln for ln in lines if not ln.lstrip().startswith("#"))
+    check = text.index('cat-file -e "$SHA:$mac_script"')
+    # проверка идёт до checkout и до переноса, и за ней стоит fail
+    assert check < text.index("checkout --quiet --detach")
+    assert check < text.index('mv "$CHECKOUT"')
+    tail = text[check:check + 400]
+    assert "|| fail" in tail and "does not support macOS" in tail
+    assert "]         ||" not in text
