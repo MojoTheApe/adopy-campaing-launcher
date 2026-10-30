@@ -152,3 +152,25 @@ def test_machine_folder_on_macos(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert folder == tmp_path / "Library" / "Application Support" / "ACL"
     # Outside the checkout, as everywhere else.
     assert _ROOT not in folder.parents
+
+
+def test_tag_check_avoids_gnu_only_regex() -> None:
+    assert r"\bsuccess\b" not in _text("Install ACL.command")
+    assert "grep -Eiwq success" in _text("Install ACL.command")
+
+
+@pytest.mark.parametrize("name", ["start_dashboard.sh", "install_acl.sh"])
+def test_config_dir_capture_takes_the_last_line(name: str) -> None:
+    assert "print(get_local_config_dir())\" 2>/dev/null | tail -n 1" in _text(name)
+
+
+def test_doctor_names_the_installer_of_this_os() -> None:
+    assert '"install_acl.sh" if os.name != "nt" else "install_acl.bat"' in _text("scripts/acl_doctor.py")
+
+
+def test_mac_guide_is_honest() -> None:
+    guide = _text("docs/SETUP-MAC.md")
+    assert "macOS 13+" not in guide
+    assert "does not use it" not in guide
+    assert "Open Anyway" in guide
+    assert "Privacy & Security" in guide

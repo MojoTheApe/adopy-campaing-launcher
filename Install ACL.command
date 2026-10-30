@@ -7,8 +7,9 @@
 #   - downloads ACL into ~/Documents/ACL at the promoted release
 #   - runs install_acl.sh, which checks the machine and opens the dashboard
 #
-# If macOS refuses to open it ("unidentified developer"): right-click the file,
-# Open, Open. Or run it from Terminal:  bash "Install ACL.command"
+# Main way to start it: in Terminal run  bash "Install ACL.command"
+# If you double-click and macOS refuses ("unidentified developer"): System
+# Settings -> Privacy & Security -> Open Anyway.
 # Safe to run again: an existing installation is updated, never re-downloaded.
 
 REPO_NAME="MojoTheApe/adopy-campaing-launcher"
@@ -119,7 +120,7 @@ for tag in $(git -C "$CHECKOUT" tag --points-at "$SHA" --list 'acl-release-*'); 
     annotation="$(git -C "$CHECKOUT" cat-file -p "$tag")"
     echo "$annotation" | grep -q "^object $SHA\$" || continue
     echo "$annotation" | grep -Eiq "https://github\.com/${REPO_NAME}/actions/runs/[0-9]+" || continue
-    echo "$annotation" | grep -Eiq '\bsuccess\b' || continue
+    echo "$annotation" | grep -Eiwq success || continue
     RELEASE_TAG="$tag"
     break
 done

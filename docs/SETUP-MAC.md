@@ -1,6 +1,6 @@
 # ACL — Setup on a Mac
 
-macOS 13+ (Apple Silicon or Intel). About 15 minutes. Windows: see
+Apple Silicon or Intel Mac. About 15 minutes. Windows: see
 [SETUP-NEW-PC.md](SETUP-NEW-PC.md).
 
 > **Status.** The dashboard (statistics, accounts, campaign builder, updates)
@@ -27,14 +27,19 @@ Get the token and the OAuth file through the password manager — never by chat 
 
 ## Step 1 — Run one file
 
-Ask Evgeni for **`Install ACL.command`** and run it.
-
-Double-click may be refused (*"cannot be opened because it is from an unidentified
-developer"*). Either right-click the file → **Open** → **Open**, or in Terminal:
+Ask Evgeni for **`Install ACL.command`** and run it from Terminal (the main way):
 
 ```bash
 bash "$HOME/Downloads/Install ACL.command"
 ```
+
+If you double-click it instead and macOS refuses (*"cannot be opened because it is from an
+unidentified developer"*): open **System Settings → Privacy & Security**, scroll down and press
+**Open Anyway** next to the file name.
+
+If macOS asks whether Terminal may access your Desktop or Documents, press **Allow** — otherwise
+ACL cannot see your work files. To fix it later: **System Settings → Privacy & Security →
+Files and Folders** → enable Terminal.
 
 It checks Git and Python 3.11+ (offering Homebrew's Python if missing), downloads
 ACL into `~/Documents/ACL` at the promoted release, creates a Desktop shortcut,
@@ -115,7 +120,7 @@ Nothing updates on its own.
 
 | Problem | Fix |
 |---|---|
-| `Install ACL.command` will not open | Right-click → Open, or `bash "Install ACL.command"` |
+| `Install ACL.command` will not open | Run `bash "Install ACL.command"` |
 | `python3: command not found` / too old | `brew install python@3.12`, open a new Terminal window |
 | Doctor: Multilogin profiles missing | Open each profile once in Multilogin for Mac. If its folder is not `~/mlx`, set `MLX_HOME` in `.env` |
 | Port 9090 is busy | Close the other ACL window (`lsof -nP -iTCP:9090 -sTCP:LISTEN` shows what holds it) |
@@ -126,8 +131,6 @@ Nothing updates on its own.
 - **Account picker names.** On Windows the picker also reads Multilogin window titles; on a Mac
   it relies on Multilogin's launcher API only, so a name can show as an id when the API does not
   return it.
-- **Direct Mimic launch / recorded-flow RPA** (`src/fb_ads_rpa/browser.py`) looks for
-  `mimic_*/chrome.exe` and kills processes by Windows paths. It is **not supported on Mac**.
-  Campaign creation through the API inside an open profile does not use it.
+- **Opening profiles on Mac** is verified only after the Mac acceptance run.
 - **Not verified on a real Mac yet.** The first install on a Mac is a test run: have Evgeni watching,
   and send the whole Terminal output if anything fails.

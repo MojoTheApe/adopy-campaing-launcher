@@ -74,7 +74,8 @@ echo "Dependencies OK."
 # ------------------------------------------------- Machine-local config dir
 # Deliberately OUTSIDE this folder: re-cloning or moving the checkout must
 # never take a buyer's accounts and tokens with it.
-CONFIG_DIR="$("$PY" -c "from config.paths import get_local_config_dir; print(get_local_config_dir())")"
+CONFIG_DIR="$("$PY" -c "from config.paths import get_local_config_dir; print(get_local_config_dir())" 2>/dev/null | tail -n 1)"
+[ -n "$CONFIG_DIR" ] || fail "could not resolve ACL's machine folder."
 echo
 echo "Machine config: $CONFIG_DIR"
 
