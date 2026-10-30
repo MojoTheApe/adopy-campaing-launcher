@@ -144,7 +144,7 @@ def test_a_post_that_times_out_on_a_busy_machine_is_sent_once_with_no_wait_after
         got = graph.write("/act_123456789/campaigns", {"name": "x", "status": "PAUSED", "objective": "OUTCOME_LEADS"})
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"stub too thin for write(): {exc!r}")
-    assert got == {"error": "call_unknown"} and len(sent) == 1 and slept == []
+    assert got == {"error": "call_unknown", "reason": "cdp_timeout"} and len(sent) == 1 and slept == []
 
 
 # ---- B2: between campaigns ----

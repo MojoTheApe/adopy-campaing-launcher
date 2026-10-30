@@ -736,15 +736,40 @@ _HELPER_JS = r"""
       resp = { status: got.status };
       text = got.text;
     } else {
+      // ACL-2338: a write without a file has its own deadline, shorter than the CDP one (`post_timeout_ms`).
+      // At the deadline the request is ABORTED in the page, so the first POST is finished (cancelled) before
+      // Python reads back and, if nothing is there, sends once more; the answer is `network_timeout`.
+      const limitMs = Number(spec.post_timeout_ms) || 0;
+      const controller = limitMs > 0 && typeof AbortController === 'function' ? new AbortController() : null;
+      const expired = {};
+      let timer = null;
+      const deadline = limitMs > 0 ? new Promise((resolve) => {
+        timer = setTimeout(() => { resolve(expired); if (controller) controller.abort(); }, limitMs);
+      }) : null;
+      const within = (p) => deadline ? Promise.race([p, deadline]) : p;
       try {
-        resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
-                                  cache: 'no-store', redirect: 'error' });
-      } catch (e) {
+        try {
+          resp = await within(fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
+                                           cache: 'no-store', redirect: 'error',
+                                           ...(controller ? { signal: controller.signal } : {}) }));
+          if (resp === expired) return { error: 'network_timeout', endpoint: endpoint };
+        } catch (e) {
+          if (want) unstage(files[want]);
+          if (controller && controller.signal.aborted) return { error: 'network_timeout', endpoint: endpoint };
+          return { error: 'network', state: state(), endpoint: endpoint };
+        }
         if (want) unstage(files[want]);
-        return { error: 'network', state: state(), endpoint: endpoint };
+        try {
+          text = await within(resp.text());
+          if (text === expired) return { error: 'network_timeout', endpoint: endpoint };
+        } catch (e) {
+          if (controller && controller.signal.aborted) return { error: 'network_timeout', endpoint: endpoint };
+          return { error: 'network', status: resp.status };
+        }
+      } finally {
+        if (timer !== null) clearTimeout(timer);
+        if (controller) controller.abort();
       }
-      if (want) unstage(files[want]);
-      try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
     }
     text = clean(text);
     let parsed;
@@ -1371,6 +1396,8 @@ class InPageGraph:
             spec["files"] = {field_name: stage_id}
             spec["expect"] = {"bytes": len(data), "sha256": hashlib.sha256(bytes(data)).hexdigest()}
         else:
+            # ACL-2338: the page aborts the POST itself before the CDP wait ends (see `post_timeout_ms` in the helper).
+            spec["post_timeout_ms"] = self.post_deadline_ms(timeout)
             self._ready_for_call()
             ctx = self._ensure()
         if files:
@@ -1378,10 +1405,36 @@ class InPageGraph:
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         try:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
-        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
-            # Запрос мог уйти: результат неизвестен, повтора нет — сверка чтением.
-            return {"error": "call_unknown"}
+        except (CdpTimeout, TimeoutError):
+            # ACL-2338: вызов в странице не вернулся за срок - как сетевой таймаут: запрос мог уйти или нет.
+            return {"error": "call_unknown", "reason": "cdp_timeout"}
+        except StaleContextError:
+            return {"error": "call_unknown", "reason": "context_stale"}
+        except (PageError, CdpError):
+            return {"error": "call_unknown", "reason": "page_closed"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    #: ACL-2338: floor of the in-page POST deadline, so a short `timeout` never aborts a healthy write.
+    POST_DEADLINE_MIN_S = 5.0
+
+    @classmethod
+    def post_deadline_ms(cls, timeout: float) -> int:
+        """In-page deadline of a no-file POST: about 85 % of the CDP wait, 10 s before it, never below the floor."""
+        return int(max(cls.POST_DEADLINE_MIN_S, min(timeout - 10.0, timeout * 0.85)) * 1000)
+
+    def tab_load(self) -> dict:
+        """ACL-2338: CPU % and page_count of the profile for a telemetry row. Never raises; {} when unknown."""
+        try:
+            patience = self.patience
+            if patience is None:
+                return {}
+            from types import SimpleNamespace
+
+            stub = SimpleNamespace()
+            load = patience.registry.annotate_stop(stub, patience.sess)
+            return {"cpu_pct": load.get("cpu_pct"), "page_count": load.get("page_count_after")}
+        except Exception:  # noqa: BLE001
+            return {}
 
     #: Как часто спрашивать у помощника прогресс отправки файла (ACL-1899).
     UPLOAD_POLL_S = 1.0
