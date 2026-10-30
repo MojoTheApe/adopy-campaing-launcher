@@ -132,5 +132,65 @@ def test_main_prints_json_and_returns_zero(capsys, monkeypatch, tmp_path):
     rep = json.loads(capsys.readouterr().out)
     assert set(rep) == {"mlx_homes", "deps", "processes"}
     assert rep["mlx_homes"]["found"] == []
-    assert rep["deps"] == {"names": [], "executables": []}
+    assert rep["deps"] == []
     assert isinstance(rep["processes"], list)
+
+
+_UUID = "123e4567-e89b-12d3-a456-426614174000"
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        "-javaagent:/Users/me/mlx/a.jar",
+        "-Xbootclasspath/a:/Users/me/x",
+        "--token:abc",
+        "-1.2.3.4:80",
+        "--bad/name=1",
+    ],
+)
+def test_scrub_args_unsafe_flag_shapes_are_masked(arg):
+    assert probe.scrub_args([arg]) == ["<arg>"]
+
+
+def test_scrub_args_uuid_glued_to_flag_is_masked():
+    out = probe.scrub_args(["-p" + _UUID, "--profile-" + _UUID + "=x"])
+    assert _UUID not in json.dumps(out)
+
+
+def test_scrub_args_safe_flags_survive():
+    assert probe.scrub_args(["-v", "--no-sandbox", "--a-b1=zz"]) == ["-v", "--no-sandbox", "--a-b1=<hidden>"]
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("/System/Volumes/Data/Users/zorbaq/x", "/System/Volumes/Data/Users/<user>/x"),
+        ("/private/Users/zorbaq/x", "/private/Users/<user>/x"),
+        ("/Volumes/SecretDisk/mlx", "/Volumes/<volume>/mlx"),
+    ],
+)
+def test_scrub_path_unanchored_users_and_volumes(path, expected):
+    assert probe.scrub_path(path, home="/Users/me") == expected
+
+
+def test_report_has_no_sentinels_anywhere(tmp_path):
+    home = tmp_path / "zorbaq"
+    deps = home / "mlx" / "deps"
+    (deps / ("zorbaq-" + _UUID) / "1.0" / "Mimic.app" / "Contents" / "MacOS").mkdir(parents=True)
+    (deps / ("zorbaq-" + _UUID) / "1.0" / "Mimic.app" / "Contents" / "MacOS" / "Mimic").write_text("x")
+    procs = [
+        _FakeProc(
+            "zorbaq-" + _UUID,
+            "/System/Volumes/Data/Users/zorbaq/mlx/profiles/" + _UUID + "/Mimic",
+            ["Mimic", "-javaagent:/Users/zorbaq/a.jar", "-p" + _UUID, "--user-data-dir=/Volumes/SecretDisk/x"],
+        )
+    ]
+    env = {"MLX_HOME": "/Volumes/SecretDisk/" + _UUID}
+    rep = probe.build_report(str(home), env, procs)
+    blob = json.dumps(rep)
+    for sentinel in ("zorbaq", _UUID, "SecretDisk"):
+        assert sentinel not in blob, sentinel
+    # раскладка deps подписана корнем (нужна Задаче 4)
+    assert rep["deps"][0]["root"] == "~/mlx"
+    assert rep["deps"][0]["executables"]
