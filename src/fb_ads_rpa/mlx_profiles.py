@@ -133,10 +133,12 @@ def _window_titles_by_pid() -> dict[int, str]:
     ctypes rather than pywin32: no dependency to add for a few lines, and this
     runs on the operator's own machine only.
     """
+    titles: dict[int, str] = {}
+    if os.name != "nt":  # окна читаются через user32; на macOS имён нет, пикер покажет id
+        return titles
     import ctypes
     from ctypes import wintypes
 
-    titles: dict[int, str] = {}
     try:
         user32 = ctypes.windll.user32
     except Exception:
