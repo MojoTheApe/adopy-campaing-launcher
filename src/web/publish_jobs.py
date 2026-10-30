@@ -154,6 +154,12 @@ def _log_job_finished(job_id: str) -> None:
         except Exception:
             pass
         _log_event("job.finished", job_id, payload, account=account)
+        try:
+            from src.acl_event_log import wake_shipper
+
+            wake_shipper()   # отправку делает фоновый поток, задание её не ждёт
+        except Exception:
+            pass
     except Exception:
         pass
 
