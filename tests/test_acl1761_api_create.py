@@ -208,11 +208,13 @@ def test_the_page_helper_gets_the_same_policy():
     assert json.dumps(ACT) in src and '"paused_required"' in src
 
 
-@pytest.mark.parametrize("exc", [CdpTimeout("x"), tc.PageError("y"), tc.CdpError("z")])
-def test_a_failure_after_sending_is_unknown_and_sent_once(exc):
+@pytest.mark.parametrize("exc, reason", [
+    (CdpTimeout("x"), "cdp_timeout"), (tc.PageError("y"), "page_closed"), (tc.CdpError("z"), "page_closed")])
+def test_a_failure_after_sending_is_unknown_and_sent_once(exc, reason):
+    # ACL-2338: the reply names why the answer is missing (only `cdp_timeout` earns a resend)
     tab = StubTab(call_exc=exc)
     t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
-    assert t.write(f"/{ACT}/campaigns", _camp()) == {"error": "call_unknown"}
+    assert t.write(f"/{ACT}/campaigns", _camp()) == {"error": "call_unknown", "reason": reason}
     assert len(tab.calls()) == 1
 
 

@@ -1299,6 +1299,13 @@ class NameChoice:
         return bool(self.skipped)
 
 
+#: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
+#: page aborts its own request at a deadline, so `network_timeout` means the first request is finished): after two empty
+#: readbacks it is sent once more (a file upload never is). `cdp_timeout` (a tab frozen for the whole CDP wait: a queued
+#: POST may still start later), `context_stale` and `page_closed` only name the cause and stop.
+RESEND_REASONS = frozenset({"network", "network_timeout"})
+
+
 class CampaignCreator:
     """Создать одну кампанию по плану — идемпотентно, PAUSED, со сверкой."""
 
@@ -1371,6 +1378,29 @@ class CampaignCreator:
         return {**story, _ig.IG_KEY: self._ig_id} if self._ig_id else story
 
     # -- служебное
+    def _note_unknown_write(self, what: str, exc: WriteUnknown, began: float, *, first: bool,
+                            second: bool | None = None, outcome: str = "") -> None:
+        """ACL-2338: one `api_create_step` row for an in-page write timeout: reason, wait, both readbacks, CPU, tabs."""
+        if not exc.reason:
+            return
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            load_of = getattr(getattr(self.client, "transport", None), "tab_load", None)
+            load = load_of() if callable(load_of) else {}
+            if not outcome:
+                if first:
+                    outcome = "found_first_readback"
+                else:
+                    outcome = "found_second_readback" if second else "resend"
+            run_telemetry.record("api_create_step", True, diag={
+                "step": f"{what}: unknown write result", "reason": exc.reason,
+                "waited_s": round(max(0.0, self.clock() - began), 1),
+                "readback_1": first, "readback_2": None if first else bool(second),
+                "outcome": outcome, "cpu_pct": load.get("cpu_pct"), "page_count": load.get("page_count")})
+        except Exception:  # noqa: BLE001 - telemetry must not break a write
+            pass
+
     def _step(self, out: Outcome, text: str) -> None:
         out.steps.append(text)
         self.progress(text)
@@ -1424,7 +1454,7 @@ class CampaignCreator:
                upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
-        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`) и сверка дважды не нашла
+        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
         объект, запись без файла отправляется ОДИН раз повторно. Записи с файлом и ответы Meta
         вроде 5xx/кода 1-2 по-прежнему только сверяются и стоп.
 
@@ -1450,6 +1480,7 @@ class CampaignCreator:
         except WriteUnknown as exc:
             # `WritesBlocked` сюда не попадает: та запись не уходила (ревью M4).
             stopped = bool(upload) and self.cancelled()
+            began = self.clock()
             self._step(out, f"{what}: result unknown — reconciling by readback")
             # Файл мог долететь позже: несколько чтений с растущими паузами (≈ 2 мин).
             # После Stop загрузка оборвана — одно чтение без ожидания.
@@ -1481,16 +1512,20 @@ class CampaignCreator:
                     if found:
                         break
             except (GraphStop, GraphError) as rexc:
+                self._note_unknown_write(what, exc, began, first=True, outcome=f"stop_readback_failed:{rexc.__class__.__name__}")
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                     "Nothing else was written; reconcile the existing object in Ads Manager before retrying.", created=out.created, kind="unknown") from rexc
+            first_found = bool(found)
+            if first_found:
+                self._note_unknown_write(what, exc, began, first=True)
             if not found:
                 if stopped:
                     raise CreationStopped("Stopped by the user during the upload; nothing was found "
                                           "in the ad account yet. Meta may still be processing the "
                                           "upload: wait a few minutes before publishing again.",
                                           created=out.created, kind="cancelled") from exc
-                if exc.reason and not files and not upload and not _resent:
+                if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
@@ -1500,10 +1535,13 @@ class CampaignCreator:
                     try:
                         found = find()
                     except (GraphStop, GraphError) as rexc:
+                        self._note_unknown_write(what, exc, began, first=False,
+                                                 outcome=f"stop_readback_failed:{rexc.__class__.__name__}")
                         raise CreationStopped(
                             f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                             "Nothing else was written; reconcile the existing object in Ads Manager before retrying.",
                             created=out.created, kind="unknown") from rexc
+                    self._note_unknown_write(what, exc, began, first=False, second=bool(found))
                     if not found:
                         self.client.reconciled(path)
                         self._step(out, f"{what}: not found by readback after {exc.reason} - sending once more")
@@ -1511,6 +1549,7 @@ class CampaignCreator:
                                            id_of=id_of, on_ad=on_ad, children_active=children_active,
                                            form_page=form_page, upload=upload, _resent=True)
                 else:
+                    self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
