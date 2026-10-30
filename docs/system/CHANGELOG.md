@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2328 — Staggered profile start no longer held indefinitely by 70-85% CPU — 2026-10-30
+
+The ACL-2283 staggered start waits for the CPU to settle below `ACL_LOAD_CPU_PCT`, which ACL-2316 lowered to 70,
+and that wait had no upper bound. The CPU part of the wait is now capped by `ACL_START_MAX_HOLD_S` (default 180 s):
+after it the next profile starts even on a busy CPU. Only the CPU condition is waived: the ACL-2255 memory gate
+(more than 90% memory used) is checked outside this wait and still holds the start, profiles still warming up keep
+the turn, Stop still cancels, and the waiting job keeps its live CPU/memory numbers and silence-watcher beats.
+The tab patience of ACL-2299/2316 still uses `ACL_LOAD_CPU_PCT` (70).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1328).
+
 ## ACL-2321 — Proxy or TLS error at the first navigation is retried once — 2026-10-29
 
 A proxy or TLS network error (ERR_SSL_PROTOCOL_ERROR, ERR_PROXY_CONNECTION_FAILED, ERR_TUNNEL_CONNECTION_FAILED, ERR_TIMED_OUT) at the first navigation of a tab is retried once after about 30 s; the job stays alive for the silence watcher during the pause. If it fails again the job stops with "The profile's proxy did not connect (SSL error for ERR_SSL_PROTOCOL_ERROR, otherwise network error <code>). Check the proxy of this profile in Multilogin, then try again. Nothing was sent by this attempt." Later navigations and writes are never retried. Telemetry records only the error code and the retry outcome, never the proxy address.
