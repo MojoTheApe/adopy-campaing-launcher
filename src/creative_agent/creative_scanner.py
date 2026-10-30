@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -104,6 +105,11 @@ def scan_input_dir(input_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
     return results
 
 
+def _nfc_lower(text: str) -> str:
+    # macOS хранит имена в NFD, запрос приходит в NFC (на Windows тождество).
+    return unicodedata.normalize("NFC", text).strip().lower()
+
+
 def find_creative_file(name: str, search_dir: Optional[Path] = None) -> Optional[Path]:
     """Search recursively for a creative file by stem name (case-insensitive).
 
@@ -115,7 +121,7 @@ def find_creative_file(name: str, search_dir: Optional[Path] = None) -> Optional
         return None
 
     # Normalise: strip path separators and extension from the query
-    name_clean = Path(name).stem.strip().lower()
+    name_clean = _nfc_lower(Path(name).stem)
     if not name_clean:
         return None
 
@@ -124,7 +130,7 @@ def find_creative_file(name: str, search_dir: Optional[Path] = None) -> Optional
             continue
         if f.suffix.lower() not in SUPPORTED_EXTS:
             continue
-        if f.stem.strip().lower() == name_clean:
+        if _nfc_lower(f.stem) == name_clean:
             return f
 
     # Partial match fallback: query is a substring of the filename
@@ -133,7 +139,7 @@ def find_creative_file(name: str, search_dir: Optional[Path] = None) -> Optional
             continue
         if f.suffix.lower() not in SUPPORTED_EXTS:
             continue
-        if name_clean in f.stem.strip().lower():
+        if name_clean in _nfc_lower(f.stem):
             return f
 
     return None

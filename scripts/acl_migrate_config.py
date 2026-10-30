@@ -89,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             get_env_files,
             migrate_legacy_account_map,
             migrate_legacy_env,
+            harden_machine_dir,
             protect_machine_secrets,
         )
 
@@ -108,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         if not notes:
             print(f"  config: account map — {get_ad_account_map_path()}")
             print(f"  config: settings — {(get_env_files() or ['not found'])[0]}")
+        harden_machine_dir()
     except Exception as exc:
         print(f"  config: could not check the account map ({type(exc).__name__}: {exc})")
         return 1
