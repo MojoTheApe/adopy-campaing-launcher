@@ -979,13 +979,14 @@ class InPageGraph:
         try:
             yield
         except CdpTimeout as exc:
-            if self._context_replaced():
-                # ACL-2341: the tab answers in a new world - Ads Manager reloaded itself and the old context id
-                # was stale. Not a freeze: callers re-attach (the retry boundary of `_eval_helper` / `_read_once`).
-                raise StaleContextError(f"the page document was replaced ({exc})") from exc
             stop = self._timeout_stop(exc)
             if stop is None:
                 raise
+            # ACL-2341: a login/checkpoint tab is never probed. Otherwise: does the tab answer in a new world? Then
+            # Ads Manager reloaded itself and the old context id was stale - not a freeze; callers re-attach
+            # (the retry boundary of `_eval_helper` / `_read_once` / `_ensure`).
+            if isinstance(stop, PageUnresponsive) and self._context_replaced():
+                raise StaleContextError(f"the page document was replaced ({exc})") from exc
             raise stop from exc
 
     #: ACL-2341: how many timeouts in a row may be explained as "the document was replaced" before it is a freeze.
@@ -1039,6 +1040,18 @@ class InPageGraph:
         self._injected = False
 
     def _ensure(self) -> int:
+        for attempt in (0, 1):
+            try:
+                return self._ensure_once()
+            except StaleContextError as exc:
+                # ACL-2341: injection timed out but a fresh world answers - the document was replaced; once more
+                self._reset_world()
+                if attempt:
+                    raise PageUnresponsive("the Ads Manager tab kept replacing its page and did not settle; "
+                                           "nothing more was sent") from exc
+        raise CdpError("isolated world creation failed")  # недостижимо
+
+    def _ensure_once(self) -> int:
         with self._timeouts_as_stops():
             if self._ctx is None:
                 self._ctx = self.tab.create_isolated_world(self.world_name)
