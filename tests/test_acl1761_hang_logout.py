@@ -425,7 +425,8 @@ def test_a_post_or_upload_timeout_stays_call_unknown_then_write_unknown(url, kin
         path, files, params = f"/{ACT}/adimages", {"filename": b"0123456789"}, {}
     else:
         path, files, params = f"/{ACT}/advideos", {"source": b"0123456789"}, {"title": "t"}
-    assert transport.write(path, params, files=files, filename="a.bin") == {"error": "call_unknown"}
+    expected = {"error": "call_unknown", "reason": "cdp_timeout"} if kind == "json" else {"error": "call_unknown"}   # ACL-2338
+    assert transport.write(path, params, files=files, filename="a.bin") == expected
     assert tab.asked == 0                              # POST не классифицируется как зависание вкладки
     with pytest.raises(g.WriteUnknown):
         client.post(path, params, files=files, filename="a.bin")

@@ -184,7 +184,7 @@ def test_writes_without_files_keep_the_short_timeout():
     assert ("call", 120.0) in tab.timeouts and "startCall" not in tab.names
     slow = JobTab(call_exc=CdpTimeout("slow"))
     t2, _ = _transport(slow)
-    assert t2.write(f"/{ACT}/campaigns", _camp(), timeout=1.0) == {"error": "call_unknown"}
+    assert t2.write(f"/{ACT}/campaigns", _camp(), timeout=1.0) == {"error": "call_unknown", "reason": "cdp_timeout"}
     assert ("call", 1.0) in slow.timeouts
 
 

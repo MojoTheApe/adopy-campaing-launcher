@@ -192,6 +192,8 @@ class WriteUnknown(RuntimeError):
         super().__init__(scrub(message))
         self.path = path
         #: ACL-2301: `network`/`network_timeout` - ответа не было, запись могла и не дойти;
+        #: ACL-2338: `cdp_timeout` - то же для вызова в странице; `context_stale`/`page_closed` - причина,
+        #: но не повод для повтора;
         #: пусто - Meta ответила чем-то неясным (5xx, код 1/2, не-JSON): её запись повторять нельзя.
         self.reason = reason
 
@@ -213,6 +215,8 @@ class WritesBlocked(RuntimeError):
 #: ошибка», «сервис временно недоступен», 5xx.
 UNKNOWN_RESULT_CODES = {1, 2}
 #: Отказы помощника страницы ДО отправки: к Meta ничего не ушло.
+#: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
+_UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
 _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", "retired",
              "bad_path", "forbidden_param"}
 
@@ -586,8 +590,13 @@ class GraphClient:
                 self._check_page()
                 raise self._stop(LoggedOut("no session token in the page; the write was not sent"))
             self.unreconciled = path
-            raise WriteUnknown(f"the write result is unknown ({err})", path=path,
-                               reason=err if err in {"network", "network_timeout"} else "")
+            why_unknown = ""
+            if err in {"network", "network_timeout"}:
+                why_unknown = err
+            elif err == "call_unknown" and isinstance(reply, dict) and reply.get("reason") in _UNKNOWN_REASONS:
+                why_unknown = str(reply["reason"])
+            raise WriteUnknown(f"the write result is unknown ({why_unknown or err})", path=path,
+                               reason=why_unknown)
 
         body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
         status = reply.get("status")

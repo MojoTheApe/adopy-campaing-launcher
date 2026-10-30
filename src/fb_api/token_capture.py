@@ -1378,10 +1378,28 @@ class InPageGraph:
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         try:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
-        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
-            # Запрос мог уйти: результат неизвестен, повтора нет — сверка чтением.
-            return {"error": "call_unknown"}
+        except (CdpTimeout, TimeoutError):
+            # ACL-2338: вызов в странице не вернулся за срок - как сетевой таймаут: запрос мог уйти или нет.
+            return {"error": "call_unknown", "reason": "cdp_timeout"}
+        except StaleContextError:
+            return {"error": "call_unknown", "reason": "context_stale"}
+        except (PageError, CdpError):
+            return {"error": "call_unknown", "reason": "page_closed"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    def tab_load(self) -> dict:
+        """ACL-2338: CPU % and page_count of the profile for a telemetry row. Never raises; {} when unknown."""
+        try:
+            patience = self.patience
+            if patience is None:
+                return {}
+            from types import SimpleNamespace
+
+            stub = SimpleNamespace()
+            load = patience.registry.annotate_stop(stub, patience.sess)
+            return {"cpu_pct": load.get("cpu_pct"), "page_count": load.get("page_count_after")}
+        except Exception:  # noqa: BLE001
+            return {}
 
     #: Как часто спрашивать у помощника прогресс отправки файла (ACL-1899).
     UPLOAD_POLL_S = 1.0
