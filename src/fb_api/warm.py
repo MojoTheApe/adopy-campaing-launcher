@@ -171,8 +171,7 @@ QUIET_ENDS_WAIT_S = 10.0
 #: ACL-2341: two profiles that freeze within this many seconds of each other are one machine/network stall.
 SHARED_STALL_WINDOW_S = 15.0
 SHARED_STALL_TEXT = ("The computer or network was overloaded - all accounts paused together and none of them "
-                     "answered in time. Nothing was created after this point; start the job again when the "
-                     "machine is quieter.")
+                     "answered in time. Nothing more was sent; start the job again when the machine is quieter.")
 
 
 def read_patience_active() -> bool:
@@ -581,7 +580,6 @@ class WarmRegistry:
         #: ACL-2341: when the machine last read busy, when each profile last froze mid-job, when a frozen tab last answered.
         self._busy_seen: float | None = None
         self._freezes: dict[str, float] = {}
-        self._answered_at: float | None = None
         self._me = (os.getpid(), _my_start())
         self._load()
 
@@ -1492,24 +1490,27 @@ class WarmRegistry:
     def _reads_may_wait(mode: str) -> bool:
         return bool(_READ_PATIENT.get()) and mode == "read"
 
-    def patience_check(self, profile_id: str, limit_s: float, *, always: bool = False) -> Callable[[], bool] | None:
+    def patience_check(self, profile_id: str, limit_s: float, *, always: bool = False,
+                       min_s: float = 0.0) -> Callable[[], bool] | None:
         """ACL-2283 (B) / ACL-2299: `check()` says "keep waiting for the silent tab"; None - the machine is idle.
 
         One helper for readiness at the start and for a freeze in the middle of a job: busy machine (the
         same CPU reading and level as the staggered start) waits up to `limit_s`; the load is re-read at
         most every 5 s and a quiet machine ends the wait. `always` (read-only action) ignores the load.
+        ACL-2341: `min_s` - a quiet machine never ends the wait before this (the idle wait of the same call).
         """
         if not always and not self._busy_now(profile_id, sticky=True):
             return None
         until = self._mono()+limit_s
         seen = [self._mono(), True]
         busy_at = [self._mono()]
+        floor = self._mono()+min(limit_s, max(0.0, min_s))
 
         def check() -> bool:
             now = self._mono()
             if now >= until:
                 return False
-            if always:
+            if always or now < floor:
                 return True
             if now - seen[0] >= 5.0:      # re-read the machine at most every 5 s; load gone = idle limit
                 seen[0] = now
@@ -1544,10 +1545,11 @@ class WarmRegistry:
         try:
             snap = self.load_snapshot(profile_id)
             now = self._mono()
-            if snap["busy"] or (sticky and snap.get("memory_high")):
-                self._busy_seen = now
-                return True
-            return bool(sticky and self._busy_seen is not None and now - self._busy_seen < BUSY_STICKY_S)
+            with self._lock:
+                if snap["busy"] or (sticky and snap.get("memory_high")):
+                    self._busy_seen = now
+                    return True
+                return bool(sticky and self._busy_seen is not None and now - self._busy_seen < BUSY_STICKY_S)
         except Exception:  # noqa: BLE001 - unknown = idle limit
             return False
 
@@ -1556,18 +1558,18 @@ class WarmRegistry:
         with self._lock:
             self._freezes[profile_id] = self._mono()
 
-    def note_answer(self) -> None:
+    def note_answer(self, profile_id: str) -> None:
+        """This profile's tab answered: it is no longer part of a stall."""
         with self._lock:
-            self._answered_at = self._mono()
+            self._freezes.pop(profile_id, None)
 
     def shared_stall(self, profile_id: str) -> bool:
-        """True when another profile froze within `SHARED_STALL_WINDOW_S` of this one and no tab answered since."""
+        """True when another profile that is still frozen froze within `SHARED_STALL_WINDOW_S` of this one."""
         with self._lock:
             mine = self._freezes.get(profile_id)
             if mine is None:
                 return False
             return any(p != profile_id and abs(mine - t) <= SHARED_STALL_WINDOW_S
-                       and not (self._answered_at is not None and self._answered_at >= max(t, mine))
                        for p, t in self._freezes.items())
 
     def _prepare_owned(self,sess,act,mode,make_graph):
@@ -1651,10 +1653,10 @@ class PatientEpisode:
             self._charged = True
             self._owner.charge(waited)
         if stop is None:
-            self._owner.registry.note_answer()
+            self._owner.registry.note_answer(self._owner.sess.profile_id)
         else:
             self._owner.registry.annotate_stop(stop, self._owner.sess, waited_s=waited, waited_patiently=True)
-            if self.shared or self._owner.registry.shared_stall(self._owner.sess.profile_id):
+            if self._owner.registry.shared_stall(self._owner.sess.profile_id):
                 # ACL-2341: owner-facing text - the whole machine stalled, not one account's Ads Manager
                 stop.args = (SHARED_STALL_TEXT,)
                 stop.tab_load = {**getattr(stop, "tab_load", {}), "shared_stall": True}
@@ -1705,7 +1707,8 @@ class TabPatience:
         shared = self.registry.shared_stall(pid)
         if shared and left > 0:
             limit, quiet = left, True        # a machine/network stall: the full limit, whatever the load reads
-        check = self.registry.patience_check(pid, limit, always=quiet) if limit > 0 else None
+        check = (self.registry.patience_check(pid, limit, always=quiet, min_s=min(left, idle_cap - self.spent_s))
+                 if limit > 0 else None)
         if check is None:
             self.registry.annotate_stop(stop, self.sess, waited_s=0.0, patience_spent_s=round(self.spent_s, 1))
             return None

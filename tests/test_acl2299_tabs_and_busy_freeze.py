@@ -146,7 +146,8 @@ def test_the_wait_ends_when_the_load_is_gone(tmp_path):
     graph._sleep = sleep
     with pytest.raises(PageUnresponsive):
         graph._ready_for_call()
-    assert 40.0 <= rig.now[0] - 1_800_000_000.0 < 60.0
+    # ACL-2341: the load is gone at 40 s, but a wait never ends before the 75 s idle wait of the same call
+    assert 75.0 <= rig.now[0] - 1_800_000_000.0 < 90.0
 
 
 def test_a_read_that_timed_out_is_asked_again_on_a_busy_machine(tmp_path):

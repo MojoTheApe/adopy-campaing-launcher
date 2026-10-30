@@ -151,3 +151,37 @@ def test_a_tab_that_stays_silent_in_a_fresh_world_too_is_still_unresponsive():
     g = _live_graph(tab)
     with pytest.raises(PageUnresponsive):
         g._read_once({"method": "GET", "path": "x"}, 5.0)
+
+
+# ---- review fixes ----
+
+def test_a_recently_busy_but_quiet_machine_still_waits_the_full_idle_wait(tmp_path):
+    # the busy path must never end before the 75 s idle wait of the same call (ACL-2316)
+    rig = _rig(tmp_path, 90.0)
+    graph = _graph(rig, writes=True, freeze_until=60.0)
+    rig.reg._busy_now(PID)                           # a busy reading ...
+    rig.reg._cpu = lambda: 10.0                      # ... then quiet at the freeze
+    rig.now[0] += 30.0
+    start = rig.now[0]
+    graph._ready_for_call()                          # frozen until 60 s on the clock: recovers
+    assert rig.now[0] - T0 >= 60.0 and graph.calls > 3
+    graph2 = _graph(_rig(tmp_path / "b", 90.0), writes=True, freeze_until=10_000.0)
+    rig2 = graph2.patience.registry
+    rig2._busy_now(PID)
+    rig2._cpu = lambda: 10.0
+    t0 = rig2._mono()
+    with pytest.raises(PageUnresponsive) as stop:
+        graph2._ready_for_call()
+    assert stop.value.tab_load["waited_s"] >= 75.0 and rig2._mono() - t0 >= 75.0
+    assert start > T0
+
+
+def test_a_tab_that_answered_does_not_make_a_later_lone_freeze_a_shared_stall(tmp_path):
+    rig = _rig(tmp_path, 12.0)
+    _graph(rig, writes=True, freeze_until=0.0)
+    rig.reg.note_freeze("A")
+    rig.now[0] += 3.0
+    rig.reg.note_answer("A")
+    rig.now[0] += 7.0
+    rig.reg.note_freeze(PID)
+    assert not rig.reg.shared_stall(PID)
