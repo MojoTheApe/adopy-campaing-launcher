@@ -859,6 +859,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
     stand (no requeue).
     """
     replaced = False
+    resumed = False         # ACL-2345: one automatic resume per job
     requeues = 0
     while pending:
         if _is_cancelled(job_id):
@@ -868,12 +869,25 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
         stop_before = getattr(publisher, "stop", None)
         try:
             res = publisher.publish_draft(draft)
-        except BaseException:
+        except BaseException as exc:
+            # ACL-2345: a tab stop raised out of the campaign gets the one automatic resume too.
+            if (not resumed and getattr(publisher, "stop", None) is exc
+                    and not isinstance(exc, job_cancel.JobCancelled)
+                    and _auto_resume(job_id, publisher, account_label, None, before)):
+                resumed = True
+                replaced = False
+                continue
             pending.pop(0)          # it may have written: never reported as "not started"
             raise
         frozen = getattr(publisher, "frozen_before_write", None)
+        now_stop = getattr(publisher, "stop", None)
         # only a stop that came up DURING this campaign counts (an older one just makes it "not started")
-        if frozen is None or getattr(publisher, "stop", None) is stop_before or not frozen(before):
+        if frozen is None or now_stop is stop_before or not frozen(before):
+            if now_stop is not None and now_stop is not stop_before and not resumed and _auto_resume(
+                    job_id, publisher, account_label, res, before):
+                resumed = True      # ACL-2345: the same campaign runs again; what exists is reused
+                replaced = False
+                continue
             _append_result(job_id, res)
             pending.pop(0)
             replaced = False
@@ -889,6 +903,10 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
         if not publish_api._tab_load(getattr(publisher, "stop", None)).get("busy"):
             # ACL-2316: the replacement tab froze too on a machine that is NOT busy: no queue wait. The stop
             # stands and the ACL-2262 full pause applies; the campaigns left are shown as "not started".
+            if not resumed and _auto_resume(job_id, publisher, account_label, res, before):
+                resumed = True      # ACL-2345
+                replaced = False
+                continue
             _append_result(job_id, res)
             pending.pop(0)
             replaced = False
@@ -904,6 +922,118 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
             raise job_cancel.JobCancelled()
         replaced = False
         _open_with_load_requeue(job_id, publisher, account_label)
+
+
+AUTO_RESUME_WAIT_ENV = "ACL_AUTO_RESUME_WAIT_S"
+AUTO_RESUME_WAIT_S = 600.0
+AUTO_RESUME_TEXT = "Paused: the computer is short of memory, will continue by itself"
+
+
+def _auto_resume_wait_s() -> float:
+    return _env_seconds(AUTO_RESUME_WAIT_ENV, AUTO_RESUME_WAIT_S)
+
+
+def _memory_admits() -> tuple[bool, float | None]:
+    """ACL-2345: would the memory admission check (`ACL_MEMORY_MAX_USED_PCT`) start a profile now? Local reading only."""
+    from src.web import profile_slots as _ps
+
+    memory = _ps.read_memory()
+    if memory is None:
+        return True, None
+    keep = _ps.keep_free_mb(memory.total_mb, _ps.load_settings())
+    return memory.available_mb >= keep, round(_ps.used_pct(memory), 1)
+
+
+def _auto_resume(job_id: str, publisher: Any, account_label: str, res: dict[str, Any] | None, before: int) -> bool:
+    """ACL-2345: a publish that stopped on a dead tab (`page_unresponsive` / `page_failed`) closes its profile, waits
+    until memory admits a new one and runs the same campaign again - once per job. True - the caller runs it again.
+
+    Never for an unknown write, a login / checkpoint / account-level stop, a readback mismatch or an owner Stop (the
+    publisher decides, `auto_resume_refusal`). Nothing is resent: the rerun reuses what exists. A refusal or a wait
+    that ran out leaves the stop exactly as it was, so the job ends with its normal stop text.
+    """
+    refusal_of = getattr(publisher, "auto_resume_refusal", None)
+    if refusal_of is None:
+        return False
+    stop = getattr(publisher, "stop", None)
+    kind = str(getattr(stop, "kind", "") or "")
+    load = dict(getattr(stop, "tab_load", None) or {})
+    try:
+        refusal = str(refusal_of(before, res) or "")
+    except Exception:  # noqa: BLE001
+        refusal = "check_failed"
+    if not refusal and _is_cancelled(job_id):
+        refusal = "owner_stop"
+    began = time.monotonic()
+    diag: dict[str, Any] = {"account": account_label, "stop": kind, "waited_s": 0.0,
+                            "memory_pct": load.get("memory_pct"), "cpu_pct": load.get("cpu_pct"),
+                            "resumed": False, "refused_reason": refusal or None}
+
+    def _row() -> None:
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            diag["waited_s"] = round(time.monotonic() - began, 1)
+            with _jobs_lock:
+                campaign = next(iter((_jobs.get(job_id) or {}).get("campaign_names") or []), "")
+            _rt.record("job_phase", True, campaign=campaign, note="auto_resume", diag=dict(diag))
+        except Exception:  # noqa: BLE001
+            pass
+
+    if refusal:
+        _row()
+        return False
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        refused = job is None or bool(job.get("auto_resumed"))
+        if not refused:
+            job["auto_resumed"] = True      # claimed before anything is closed: a second stop never resumes
+    if refused:
+        diag["refused_reason"] = "already_resumed"
+        _row()
+        return False
+    ok = False
+    try:
+        publisher.close()                    # our tab; the stop stays on the publisher until the rerun starts
+        closed = _stop_idle_profile(account_label, profile_key_for(account_label), strict=True,
+                                    busy_msg="A run is using this profile.")
+        if not closed.get("ok"):
+            diag["refused_reason"] = "close_failed"
+            return False
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["profile_closed"] = True
+        limit = _auto_resume_wait_s()
+        while True:
+            if _is_cancelled(job_id) or publisher.cancelled():
+                diag["refused_reason"] = "owner_stop"
+                return False
+            admits, used = _memory_admits()
+            if used is not None:
+                diag["memory_pct"] = used
+            if admits:
+                break
+            if time.monotonic() - began >= limit:
+                diag["refused_reason"] = "wait_timeout"
+                return False
+            _show_resource_wait(job_id, account_label, {"hold": "auto_resume", "used_pct": used,
+                                                         "max_used_pct": None})
+            _load_sleep(2.0)
+        ok = True
+    finally:
+        _show_resource_wait(job_id, account_label, None)
+        if not ok:
+            _row()
+    publisher.drop_frozen_tab(clear_pause=True)     # stop cleared; the next `open` brings a fresh profile and tab
+    publisher.auto_resumed = True
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["profile_closed"] = False
+    diag["resumed"] = True
+    diag["refused_reason"] = None
+    _row()
+    _open_with_load_requeue(job_id, publisher, account_label)
+    return True
 
 
 def _record_tab_requeue(job_id: str, account_label: str, note: str, load: dict[str, Any], attempt: int) -> None:
@@ -1071,7 +1201,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "state": ("waiting_profile" if hold == "profile"
                   else "waiting_account" if hold == "account_busy"
                   else "waiting_load" if hold == "machine_busy"
-                  else "waiting_memory" if (hold in ("memory_low", "below_reserve")
+                  else "waiting_memory" if (hold in ("memory_low", "below_reserve", "auto_resume")
                                             or verdict.get("behind_memory"))
                   else "waiting_review" if hold == "review_windows"
                   else "waiting_idle" if hold == "idle_windows"

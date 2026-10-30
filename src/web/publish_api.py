@@ -366,6 +366,9 @@ class ApiPublisher:
         now = int(getattr(self._client, "writes", 0) or 0) if self._client is not None else 0
         return self._writes_base + now
 
+    #: ACL-2345: this job already took its one automatic resume (the final campaign row says so).
+    auto_resumed = False
+
     #: ACL-2299: writes of clients replaced by a fresh tab earlier in the same job (the count never goes down).
     _writes_base = 0
 
@@ -396,6 +399,31 @@ class ApiPublisher:
             if _api is not None:
                 _api.clear_frozen_tab_cooldown(key)
         return load
+
+    #: ACL-2345: stops that an automatic resume may follow (the tab died; the account itself is fine).
+    RESUMABLE_STOPS = ("page_unresponsive", "page_failed")
+
+    def auto_resume_refusal(self, writes_before: int, res: dict[str, Any] | None = None) -> str:
+        """ACL-2345: "" when the stop that just came up may be followed by ONE automatic resume, else why not.
+
+        Only a tab stop (`page_unresponsive` / `page_failed`) with a reconciled state resumes: no unknown write,
+        no readback mismatch on what was written, no owner Stop. A `page_failed` also needs proof that no write
+        was in flight when the tab died - nothing was sent for the campaign that just ran; otherwise it counts
+        as unknown. Nothing is ever resent: the rerun reuses what exists (the reuse-by-tag path).
+        """
+        stop = self.stop
+        kind = str(getattr(stop, "kind", "") or "")
+        if self.cancelled():
+            return "owner_stop"
+        if kind not in self.RESUMABLE_STOPS:
+            return f"stop_{kind or 'none'}"
+        if self.blocked or (self._client is not None and self._client.unreconciled is not None):
+            return "write_unknown"
+        if any("readback mismatch" in str(x) for x in ((res or {}).get("blocking_failures") or [])):
+            return "mismatches"
+        if kind == "page_failed" and self.writes != writes_before:
+            return "write_may_be_in_flight"
+        return ""
 
     def build_drafts(self, slots, *, account_label: str, country: str, **_ignored) -> list[Any]:
         return build_drafts(slots, account_label=account_label, country=country)
@@ -672,6 +700,7 @@ class ApiPublisher:
             _record("api_create_campaign", False, campaign=name,
                     duration_s=round(time.monotonic() - began, 1),
                     diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind,
+                          **({"auto_resumed": True} if self.auto_resumed else {}),
                           **_tab_load(exc)})
             _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
                         "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
@@ -694,6 +723,7 @@ class ApiPublisher:
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
                     "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
