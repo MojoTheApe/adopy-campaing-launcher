@@ -1852,6 +1852,13 @@ async def _warm_on_startup() -> None:
         connection_settings.refresh_on_start()
 
     threading.Thread(target=_refresh_connections, name="acl-connection-refresh", daemon=True).start()
+    # ACL-2347: фоновая отправка общего журнала действий (молчит без адреса и токена).
+    try:
+        from src.acl_event_log import start_shipper
+
+        start_shipper()
+    except Exception:  # noqa: BLE001 - журнал не должен мешать старту дешборда
+        logging.getLogger(__name__).debug("Event log shipper did not start", exc_info=True)
     from src.analysis_agent import account_refresh, campaign_inventory
 
     if campaign_inventory.backend_ready():

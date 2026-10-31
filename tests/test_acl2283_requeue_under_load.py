@@ -16,6 +16,13 @@ KEY = "k-" + PID
 B = "b" * 8 + "-0000-4000-8000-000000000000"
 
 
+def _s90(**kw):
+    """ACL-2345: the product default is 75 %; these tests were written for the 90 % limit and pin it."""
+    from src.web import profile_slots as _ps
+    return _ps.SlotSettings(**{"max_used_pct": 90.0, **kw})
+
+
+
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "0")
@@ -160,7 +167,7 @@ def test_heavy_gate_uses_the_share_too():
     from src.web import profile_slots as ps
 
     mem = [_mem(87)]
-    gate = warm.HeavyGate(limit=lambda: 3, memory=lambda: mem[0], settings=lambda: ps.SlotSettings(),
+    gate = warm.HeavyGate(limit=lambda: 3, memory=lambda: mem[0], settings=lambda: _s90(),
                           usage=None, tick_s=0.01)
     gate.acquire("a")
     gate.acquire("b", wait_s=0.2)                       # 87% in use: the second action goes

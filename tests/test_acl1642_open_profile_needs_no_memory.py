@@ -47,7 +47,7 @@ class Machine:
         self.now = 1000.0
         self.open = set(open_profiles)
         self.checked: list[list[str]] = []
-        self.settings = dataclasses.replace(ps.load_settings({}), **{"warmup_s": 0, **settings})
+        self.settings = dataclasses.replace(ps.load_settings({}), **{"warmup_s": 0, "max_used_pct": 90.0, **settings})
 
     def _check(self, profiles):
         self.checked.append(list(profiles))

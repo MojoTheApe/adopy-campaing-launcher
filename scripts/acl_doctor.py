@@ -231,6 +231,26 @@ def check_telemetry() -> None:
     )
 
 
+def check_event_log() -> None:
+    """Optional, never required: the shared action log works without being configured."""
+    try:
+        from src.acl_event_log import shipper
+        st = shipper.status()
+    except Exception as exc:
+        report(WARN, "Event log", f"unavailable: {exc}")
+        return
+    size_kb = st["outbox_bytes"] // 1024
+    last = st["last_ship_at"] or "never"
+    if st["configured"]:
+        report(OK, "Event log", f"{size_kb} KB waiting, last sent: {last}")
+    else:
+        report(
+            OK,
+            "Event log",
+            f"not configured yet — events are kept locally ({size_kb} KB), nothing is sent",
+        )
+
+
 def check_env_location() -> None:
     """Production installs must keep their settings outside the checkout."""
     files = get_env_files()
@@ -382,6 +402,7 @@ def main() -> int:
     )
     check_google_client()
     check_telemetry()
+    check_event_log()
 
     print()
     if _failed:
