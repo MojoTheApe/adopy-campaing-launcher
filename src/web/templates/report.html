@@ -18293,6 +18293,8 @@ function cbMemoryWait(q) {
   q = q || {};
   var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
   var tail = ahead ? ' (' + ahead + ' ahead)' : '';
+  /* ACL-2345: the tab died, the job closed its profile and continues by itself once memory admits a new one. */
+  if (q.hold === 'auto_resume') return 'Paused: the computer is short of memory, will continue by itself';
   if (q.behind_memory) return 'Waiting behind a job that waits for memory' + tail;
   if (q.hold !== 'memory_low' && q.hold !== 'below_reserve') return null;
   var hint = '. Close a Multilogin profile you don\'t need.';
