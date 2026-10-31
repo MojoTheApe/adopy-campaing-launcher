@@ -679,6 +679,7 @@ class ApiPublisher:
         if counter is not None:
             self._report_units(name, counter)
 
+        spec = self._log_spec(plan, name)
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
                                   live_progress=lambda text: self.progress(f"{name}: {text}"))
@@ -705,6 +706,7 @@ class ApiPublisher:
             _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
                         "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
                         "writes": self._client.writes, "stop": kind, "raised": type(exc).__name__})
+            self._log_stats(name, spec, began, raised=type(exc).__name__)
             if isinstance(exc, GraphStop):
                 self.stop = exc
                 _start_cooldown(self.account_label, exc)
@@ -729,7 +731,35 @@ class ApiPublisher:
                     "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
                     "created": res["created"], "reused": res["reused"],
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
+        self._log_stats(name, spec, began, outcome=outcome, plan=plan)
         return res
+
+    def _log_spec(self, plan: Any, name: str) -> dict:
+        """ACL-2347: полный план в общий журнал перед созданием; пробный запуск ничего не пишет."""
+        if self.dry_run:
+            return {}
+        try:
+            from src.acl_event_log import emit
+            from src.acl_event_log.events import spec_payload
+
+            spec = spec_payload(plan, self._facts)
+            emit("publish.spec", spec, account=self.account_label, campaign=name)
+            return spec
+        except Exception:  # noqa: BLE001 — журнал не должен ронять публикацию
+            return {}
+
+    def _log_stats(self, name: str, spec: dict, began: float, *, outcome: Any = None,
+                   plan: Any = None, raised: str | None = None) -> None:
+        try:
+            from src.acl_event_log import emit
+            from src.acl_event_log.events import stats_payload
+
+            emit("publish.stats", stats_payload(
+                name, spec.get("spec_hash", ""), outcome=outcome, plan=plan, began=began,
+                calls=self._client.calls, writes=self._client.writes, raised=raised),
+                account=self.account_label, campaign=name)
+        except Exception:  # noqa: BLE001
+            pass
 
     @staticmethod
     def _counter(plan: Any) -> BuildCounter | None:
@@ -961,7 +991,7 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
             flight.waiters += 1
     if leader:
         try:
-            flight.result = _check_plan_once(slots, account_label=account_label, country=country)
+            flight.result = _check_plan_logged(slots, account_label=account_label, country=country)
             return flight.result
         except BaseException as exc:  # noqa: BLE001 — ждущие получают тот же отказ
             flight.error = exc
@@ -977,6 +1007,23 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     if flight.error is not None:
         raise flight.error
     return copy.deepcopy(flight.result)
+
+
+def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+    """`_check_plan_once` + событие `plan.checked` в общий журнал (ACL-2347), и на ранних выходах."""
+    began = time.monotonic()
+    result = _check_plan_once(slots, account_label=account_label, country=country)
+    try:
+        from src.acl_event_log import emit
+        from src.acl_event_log.clean import plan_hash
+        from src.acl_event_log.events import check_payload
+
+        emit("plan.checked", check_payload(
+            result, plan_hash_value=plan_hash(country, slots), duration_s=time.monotonic() - began),
+            account=account_label)
+    except Exception:  # noqa: BLE001 — журнал не должен менять ответ проверки
+        pass
+    return result
 
 
 def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:

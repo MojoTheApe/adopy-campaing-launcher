@@ -798,6 +798,18 @@ def record(
                        _why_of(note, diag) if ok is not True else "")
     except Exception:
         pass
+    # ACL-2347: зеркало в общий журнал; только шаги API-пути и тайминги.
+    try:
+        from src.acl_event_log import emit
+        from src.acl_event_log.events import RAW_RUN_PREFIXES, RAW_RUN_STEPS
+
+        if step.startswith(RAW_RUN_PREFIXES) or step in RAW_RUN_STEPS:
+            emit("raw.run", {
+                "step": step, "ok": ok, "campaign": campaign,
+                "duration_s": duration_s, "diag": scrub_diag(diag) if diag else None,
+            })
+    except Exception:
+        pass
 
 
 #: Последний отказ каждого шага в каждом прогоне: (run_id, step) -> {why, diag}.

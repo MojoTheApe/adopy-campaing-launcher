@@ -1,0 +1,19 @@
+# Worker общего журнала действий ACL (ACL-2347).
+# Владелец: заменить заглушки ниже на свои значения (см. README.md), затем `wrangler deploy`.
+name = "acl-event-log"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+LIBRARY_REPO = "MojoTheApe/acl-lib"
+
+[[r2_buckets]]
+binding = "EVENTS"
+bucket_name = "acl-event-log"
+
+[[kv_namespaces]]
+binding = "AUTH"
+# Подставить id, который напечатает `wrangler kv namespace create AUTH`.
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Секрет READ_KEY задаётся командой `wrangler secret put READ_KEY`, в файл его не писать.

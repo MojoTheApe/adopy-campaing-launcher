@@ -35,3 +35,12 @@ and packaging unittest suite; see repository/WORKFLOW.md and CI. Record OS/Pytho
 exact commit, passes/skips/failures and unavailable checks. A mock or macOS run does
 not establish Windows installation or real Multilogin behavior. Use the existing
 Windows workflows for those applicable checks; the manual pilot remains explicit.
+
+Shared action log (ACL-2347): `src/acl_event_log/` writes events (`emit()`, never raises, never
+touches the network) to `<machine config dir>/event_outbox/`, one file per process; a daemon
+thread ships batches to the Worker in `deploy/event-log/` (R2). Turn it off with
+`ACL_EVENT_LOG=0`; it is also silent under pytest unless a test calls
+`use_outbox_for_tests()`. The ordinary `scrub` would erase campaign ids, so events go through
+`acl_event_log.clean`. The owner reads it with `scripts/acl_log_pull.py` and
+`scripts/acl_log_report.py`; the owner, not the code, deploys the Worker and sets `DEFAULT_URL`.
+Add new events through `events.py` builders and keep every hook in a `try/except`.
