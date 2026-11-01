@@ -396,7 +396,8 @@ class HeavyGate:
         if probe.get("status") == "ok" and measured:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
-        view = {"hold": "memory_low" if low else "account_busy",
+        # `hold` - что показывает дешборд; `why` - настоящая причина шлюза (например, `limit`).
+        view = {"hold": "memory_low" if low else "account_busy", "why": why,
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}

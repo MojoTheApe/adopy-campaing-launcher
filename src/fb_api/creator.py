@@ -1430,6 +1430,38 @@ class CampaignCreator:
             pass
 
     @staticmethod
+    def _waiting(what: str) -> None:
+        """Отметка для сторожа тишины: поток ждёт `what`, а не завис."""
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            run_telemetry.set_waiting(what)
+        except Exception:  # noqa: BLE001 - отметка не должна ронять загрузку
+            pass
+
+    def _video_row(self, plan: CampaignPlan, who: str, data: "bytes | LargeFile", mode: str, began: float,
+                   error: Exception | None = None) -> None:
+        """Строка телеметрии на видео: размер, md5 и время (`mode`: found / whole / chunked).
+
+        По md5 видно, грузится ли один и тот же файл снова. Содержимого файла и токена здесь нет.
+        """
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            # Шаг `api_create_step`: другие имена шагов панель прогресса не знает.
+            diag: dict[str, Any] = {"source": "api", "step": f"{who}: video upload timing",
+                                    "metric": "video_upload", "mode": mode, "bytes": len(data),
+                                    "md5": _md5(data)[:12],
+                                    "upload_s": round(float(self.clock() - began), 1)}
+            if error is not None:
+                details = getattr(error, "details", None) or {}
+                diag.update(error=type(error).__name__, kind=getattr(error, "kind", ""),
+                            http_status=details.get("http_status"), fbtrace_id=details.get("fbtrace_id"))
+            run_telemetry.record("api_create_step", error is None, campaign=plan.name, diag=diag)
+        except Exception:  # noqa: BLE001 - телеметрия не должна ронять загрузку
+            pass
+
+    @staticmethod
     def _page_timeout(exc: BaseException) -> bool:
         """Страница не приняла кусок вовремя: файл не лёг в неё, к Meta ничего не ушло."""
         text = str(exc)
@@ -2036,19 +2068,31 @@ class CampaignCreator:
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
             return str(hit["id"]) if hit else None
 
+        began = self.clock()
         vid = find()
         if vid:
             self._step(out, f"{who}: video already in the ad account")
-        elif isinstance(data, LargeFile):
-            vid = self._video_chunked(out, plan, data, title, find, who)
-            out.created.setdefault("videos", []).append(vid)
-            self._step(out, f"{who}: video uploaded")
+            self._video_row(plan, who, data, "found", began)
         else:
-            vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
-                              {"name": title, "title": title}, find, files={"source": data},
-                              filename=Path(path).name, upload=(ad.index, f"{role.strip()} video".strip()))
+            mode = "chunked" if isinstance(data, LargeFile) else "whole"
+            began = self.clock()
+            self._waiting("video_upload")
+            try:
+                if mode == "chunked":
+                    vid = self._video_chunked(out, plan, data, title, find, who)
+                else:
+                    vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
+                                      {"name": title, "title": title}, find, files={"source": data},
+                                      filename=Path(path).name,
+                                      upload=(ad.index, f"{role.strip()} video".strip()))
+            except Exception as exc:
+                self._video_row(plan, who, data, mode, began, exc)
+                raise
+            finally:
+                self._waiting("")
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"{who}: video uploaded")
+            self._video_row(plan, who, data, mode, began)
         return vid, self._wait_video(out, ad, vid, who=who)
 
     # -- загрузка большого видео кусками (ACL-1891)

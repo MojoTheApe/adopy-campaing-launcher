@@ -1093,28 +1093,48 @@ def _show_resource_wait(job_id: str, account_label: str, view: dict[str, Any] | 
             return
         if view is None:
             since = job.pop("resource_wait", None)
+            spans = job.pop("resource_holds", [])
             if since:
                 hold = str((job.pop("queue", None) or {}).get("hold") or "")
                 if job.get("status") == "queued":
                     job["status"] = "running"
                 waited = round(time.monotonic() - float(since), 1) if since is not True else 0.0
                 campaign = next(iter(job.get("campaign_names") or []), "")
+                # Причина могла смениться за ожидание: сколько секунд длилась каждая.
+                ends = [at for _why, at in spans[1:]] + [time.monotonic()]
+                holds = [{"why": why, "s": round(end - at, 1)} for (why, at), end in zip(spans, ends)]
                 ended = True
             else:
                 ended = False
             if ended and _rt is not None:
                 try:
                     _rt.record("job_phase", True, campaign=campaign, note="resource_wait",
-                               duration_s=waited, diag={"account": account_label, "hold": hold})
+                               duration_s=waited,
+                               diag={"account": account_label, "hold": hold, "holds": holds})
                 except Exception:  # noqa: BLE001
                     pass
             return
         queue = _queue_view({"reason": view.get("hold"), **{k: v for k, v in view.items() if k != "hold"}})
         queue["closable_accounts"] = closable
         job["queue"] = queue
+        started = not job.get("resource_wait")
         job["resource_wait"] = job.get("resource_wait") or time.monotonic()
+        why = str(view.get("why") or view.get("hold") or "")
+        spans = job.setdefault("resource_holds", [])
+        if not spans or spans[-1][0] != why:
+            spans.append([why, time.monotonic()])
         if job.get("status") == "running":
             job["status"] = "queued"
+        if started and _rt is not None:
+            # Начало пишется сразу: ожидание, оборванное сбоем, иначе не оставило бы следа.
+            try:
+                _rt.record("job_phase", True, campaign=next(iter(job.get("campaign_names") or []), ""),
+                           note="resource_hold_start",
+                           diag={"account": account_label, "hold": view.get("hold"), "why": why,
+                                 "used_pct": view.get("used_pct"), "available_mb": view.get("available_mb"),
+                                 "running": view.get("running")})
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _job_ran_in_browser(job_id: str) -> bool:
@@ -1722,6 +1742,10 @@ def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> 
     campaign = names[done] if done < len(names) else ""
     step = step or "job_start"
     diag: dict[str, Any] = {"last_step": step, "idle_s": round(idle, 1)}
+    # Поток ждёт внешнюю операцию (загрузку видео): это ожидание, а не зависшая вкладка.
+    waiting = _rt.waiting_on(job_id)
+    if waiting:
+        diag.update(waiting_on=waiting[0], waiting_s=round(_rt.clock() - waiting[1], 1))
     # ACL-1702: стек потока задания — какой именно вызов держит его.
     job_thread = state.get("job_thread")
     if job_thread is not None:
@@ -1741,8 +1765,8 @@ def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> 
     try:
         from src.fb_ads_rpa import sentry_signal
 
-        sentry_signal.report_step_stuck(step, idle, job=job_id, account=account_label,
-                                        campaign=campaign)
+        sentry_signal.report_step_stuck(waiting[0] if waiting else step, idle, job=job_id,
+                                        account=account_label, campaign=campaign)
     except Exception:
         pass
     return True

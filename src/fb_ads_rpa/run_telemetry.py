@@ -658,6 +658,8 @@ _LAST_BY_JOB: dict[str, tuple[float, str]] = {}
 #: ACL-1702: задание → номер его прогона (сторож пишет из своего потока, где
 #: номера прогона нет: он в ContextVar потока задания).
 _RUN_BY_JOB: dict[str, str] = {}
+#: Задание → (чего ждёт, с какого момента): сторож читает это из своего потока.
+_WAITING_BY_JOB: dict[str, tuple[str, float]] = {}
 #: ACL-1702: строки сторожа задания — тишину задания они не сбрасывают.
 WATCHER_STEPS = frozenset({"step_stuck", "tab_unblocked", "tab_unblock_skipped"})
 _ABANDONED: set[str] = set()
@@ -693,6 +695,25 @@ def forget_job(job_id: str) -> None:
     with _JOBS_LOCK:
         _LAST_BY_JOB.pop(str(job_id), None)
         _RUN_BY_JOB.pop(str(job_id), None)
+        _WAITING_BY_JOB.pop(str(job_id), None)
+
+
+def set_waiting(what: str) -> None:
+    """Задание ждёт внешнюю операцию (`what`); пустая строка снимает отметку."""
+    job = current_job_id()
+    if not job:
+        return
+    with _JOBS_LOCK:
+        if what:
+            _WAITING_BY_JOB[job] = (what, _clock())
+        else:
+            _WAITING_BY_JOB.pop(job, None)
+
+
+def waiting_on(job_id: str) -> tuple[str, float] | None:
+    """(что ждёт задание, с какого момента по `clock()`) — или None."""
+    with _JOBS_LOCK:
+        return _WAITING_BY_JOB.get(str(job_id))
 
 
 def beat() -> None:
