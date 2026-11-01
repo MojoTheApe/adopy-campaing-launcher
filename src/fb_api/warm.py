@@ -910,6 +910,7 @@ class WarmRegistry:
                 self._starting.pop(pid, None)
             took_turn = False
         turn_kept = False
+        held = start_ok = False
         slot_id = f"warm-open:{label}:{job_id or int(self._wall())}"
         queue = self._slot_queue()
         began = time.monotonic()
@@ -934,7 +935,19 @@ class WarmRegistry:
                     return _result(False, "Not started: not enough free memory for another profile. "
                                    "Close something and try again.", "memory_low")
             try:
+                # ACL-1862: запуск — под замком физического профиля, без ожидания (чтение/задание другого
+                # процесса держит его минутами; «Open profiles» не должен вставать за ним). Реентерантно для
+                # `prepare_existing`/`prepare_connection`, которые уже держат замок. Отпускаем после `register`.
+                from src.fb_ads_rpa.profile_lease import ProfileLeaseError, profile_lock
+                try:
+                    if not profile_lock(pid).acquire(blocking=False):
+                        raise ProfileLeaseError("This profile is busy in another ACM operation; try again after it finishes.")
+                except ProfileLeaseError as exc:
+                    _lease_refused("open", label)
+                    return _result(False, f"{exc} Nothing was started.", "profile_lease")
+                held = True
                 opened = self._start_profile(pid, folder, instance)
+                start_ok = True
                 turn_kept = bool(getattr(opened, "started_now", False))
             except _fb_profile.ProfileError as exc:
                 code = getattr(exc, "code", "") or "profile_error"
@@ -953,8 +966,13 @@ class WarmRegistry:
                     self._starting.pop(pid, None)
             if queue is not None and grant is not None and not own_slot:
                 queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
+            if held and not start_ok:
+                profile_lock(pid).release()
         started = bool(getattr(opened, "started_now", False))
-        self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
+        try:
+            self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
+        finally:
+            profile_lock(pid).release()
         if started:
             with self._lock:
                 self._settling[pid] = self._mono()
@@ -1200,16 +1218,25 @@ class WarmRegistry:
             return _result(False, "Not closed: an action is running on this profile. Try again when it ends.",
                            "busy")
         try:
+            # ACL-1862: и чтение/задание другого процесса (или другого окна дешборда) — тоже «идёт».
+            # Замок физического профиля без ожидания; держим его всю остановку, чтобы запуск в другом
+            # процессе дождался её конца.
+            from src.fb_ads_rpa.profile_lease import ProfileLeaseError, profile_lock
             try:
-                if self._close_window is None:
-                    return _result(False, "Closing profiles is not available here.", "no_closer")
-                self._close_window(entry, label)   # мягкая остановка MLX, без kill
-            except Exception as exc:  # noqa: BLE001
-                # Профиль мог закрыться, хотя вызов упал: пауза перед запуском всё равно нужна.
-                self._stops.record(pid)
-                return _result(False, f"Multilogin did not close the profile: {scrub(str(exc))}. "
-                                      "The window stays open.", "stop_failed")
-            self._forget(pid, stopped=True)
+                with profile_lock(pid).holding(timeout=0):
+                    try:
+                        if self._close_window is None:
+                            return _result(False, "Closing profiles is not available here.", "no_closer")
+                        self._close_window(entry, label)   # мягкая остановка MLX, без kill
+                    except Exception as exc:  # noqa: BLE001
+                        # Профиль мог закрыться, хотя вызов упал: пауза перед запуском всё равно нужна.
+                        self._stops.record(pid)
+                        return _result(False, f"Multilogin did not close the profile: {scrub(str(exc))}. "
+                                              "The window stays open.", "stop_failed")
+                    self._forget(pid, stopped=True)
+            except ProfileLeaseError as exc:
+                _lease_refused("close", label)
+                return _result(False, f"Not closed: {exc} The window stays open.", "busy")
         finally:
             sess.lock.release()
         log.info("warm: profile of %s closed on request", label)
@@ -1230,6 +1257,13 @@ class WarmRegistry:
             raise WarmError(refusal, "profile_no_proxy")
         if sess.owner == threading.get_ident():
             raise WarmError("This profile's tab is already in use by this action.", "nested")
+        # ACL-1862: тёплая вкладка — не право действовать. Вызывающий поток обязан держать замок
+        # физического профиля (чтение, задание, команда); берём не сами: `Lease.release` может прийти
+        # из другого потока (отмена), а файловый замок привязан к потоку.
+        if not _caller_holds_lease(profile_id):
+            _lease_refused("checkout", account)
+            raise WarmError("This profile is not held by this action; nothing was changed. "
+                            "Try again.", "profile_lease")
         sess.lock.acquire()
         sess.owner = threading.get_ident()
         if self.session(profile_id) is not sess:
@@ -1745,6 +1779,26 @@ def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
     except profile_trouble.ProfileStop as stop:
         return profile_trouble.message(stop.code) or str(stop)
     return ""
+
+
+def _caller_holds_lease(profile_id: str) -> bool:
+    """ACL-1862: держит ли ЭТОТ поток замок физического профиля (не UUID в карте = нет)."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError, profile_lock
+
+    try:
+        return profile_lock(profile_id).held_by_current_thread()
+    except ProfileLeaseError:
+        return False
+
+
+def _lease_refused(path: str, label: str) -> None:
+    """ACL-1862: отказ из-за замка профиля — одна строка телеметрии, без id и токенов."""
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record("profile_lease_refused", False, diag={"path": path, "account": label})
+    except Exception:  # noqa: BLE001 - телеметрия не должна менять ответ
+        pass
 
 
 def _result(ok: bool, message: str, code: str, **extra: Any) -> dict:
