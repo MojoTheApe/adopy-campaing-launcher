@@ -23,10 +23,12 @@ from typing import Any, Callable
 from src.acl_event_log import writer
 
 #: Адрес Worker. Пусто, пока владелец не развернул Worker; можно задать `ACL_EVENT_LOG_URL`.
-DEFAULT_URL = ""
+DEFAULT_URL = "https://acl-event-log.adopy-acl.workers.dev"
 
+USER_AGENT = "acl-event-log/1"
 BATCH_MAX_BYTES = 512 * 1024
-CYCLE_S = 900
+#: Раз в час: бесплатный KV Cloudflare пускает 1000 записей в сутки на все машины.
+CYCLE_S = 3600
 JITTER = 0.2
 FIRST_DELAY_S = (60, 300)
 MAX_BACKOFF_S = 3600
@@ -55,7 +57,8 @@ def configured() -> bool:
 
 
 def _http_post(url: str, body: bytes, headers: dict) -> int:
-    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    # Без своего User-Agent Cloudflare режет запрос подписью Python-urllib (403, код 1010).
+    req = urllib.request.Request(url, data=body, headers={"User-Agent": USER_AGENT, **headers}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return int(resp.status)
