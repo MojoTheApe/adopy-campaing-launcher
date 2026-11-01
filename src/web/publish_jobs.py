@@ -232,6 +232,8 @@ def create_job(
             "activate": activate,
             "dry_run": dry_run,
             "hand_off": hand_off,
+            #: ACL-1856: the page's submit key; the durable operation journal binds it to the plan revision.
+            "request_id": request_id,
             "backend": "rpa" if use_rpa_publish() else "api",
             # ACL-1761: чем создаются кампании — роботом или Graph API (PAUSED).
             "fb_backend": _fb_backend(),
@@ -1682,6 +1684,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
     publisher.units = units
     with _jobs_lock:
+        publisher.request_id = str((_jobs.get(job_id) or {}).get("request_id") or "")
         # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
         # решаем так же, как окно, поднятое этим заданием.
         publisher.inherited_profile = bool((_jobs.get(job_id) or {}).get("reused_kept"))
@@ -2271,7 +2274,7 @@ def start_job(
                     if known in _jobs:
                         return known
             job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
-                                activate=activate, dry_run=dry_run, hand_off=hand_off)
+                                activate=activate, dry_run=dry_run, hand_off=hand_off, request_id=request_id)
             with _request_lock:
                 while len(_request_jobs) >= _REQUEST_KEYS_MAX:
                     _request_jobs.pop(next(iter(_request_jobs)))
@@ -2296,6 +2299,7 @@ def _start_job(
     activate: bool,
     dry_run: bool,
     hand_off: bool,
+    request_id: str = "",
 ) -> str:
     if activate:
         raise ValueError("ACM is draft-only: live activation is disabled")
