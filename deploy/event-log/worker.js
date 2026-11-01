@@ -4,7 +4,9 @@
 // GET  /v1/list     — владелец: список ключей объектов (READ_KEY).
 // GET  /v1/object   — владелец: тело одного объекта (READ_KEY).
 //
-// Привязки: R2 `EVENTS`, KV `AUTH`. Секрет: `READ_KEY`. Переменная: `LIBRARY_REPO`.
+// Привязка: KV `AUTH` (бесплатный тариф, карта не нужна): записи о токенах под `tok:`,
+// пачки под `v1/`. Секрет: `READ_KEY`. Переменная: `LIBRARY_REPO`.
+// Лимит бесплатного KV: 1000 записей в сутки, поэтому машины отправляют пачки раз в час.
 // Тело пачки Worker не распаковывает и не разбирает (экономит лимит CPU); единственная
 // граница чистки — клиент, аудит делает скрипт владельца. Токены не логируются.
 
@@ -89,9 +91,15 @@ async function handleBatch(request, env) {
 
   const day = new Date().toISOString().slice(0, 10);
   const key = `v1/dt=${day}/machine=${machine}/${batch}.ndjson.gz`;
-  // null = объект уже есть (повтор пачки): это тоже успех.
-  const stored = await env.EVENTS.put(key, body, { onlyIf: { etagDoesNotMatch: "*" } });
-  return json({ ok: true, duplicate: stored === null });
+  // Пачка уже есть (повтор): это тоже успех, объект не перезаписывается и запись не тратится.
+  try {
+    if ((await env.AUTH.get(key, { type: "arrayBuffer" })) !== null) return json({ ok: true, duplicate: true });
+    await env.AUTH.put(key, body);
+  } catch (_) {
+    // Исчерпан суточный лимит записей или сбой KV: машина повторит позже, события лежат в её ящике.
+    return json({ error: "storage unavailable" }, 503);
+  }
+  return json({ ok: true, duplicate: false });
 }
 
 async function readerAllowed(request, env) {
@@ -103,17 +111,17 @@ async function handleList(request, env, url) {
   const prefix = url.searchParams.get("prefix") || "v1/";
   if (!prefix.startsWith("v1/")) return json({ error: "bad prefix" }, 400);
   const cursor = url.searchParams.get("cursor") || undefined;
-  const page = await env.EVENTS.list({ prefix, cursor, limit: 1000 });
-  return json({ keys: page.objects.map((o) => o.key), cursor: page.truncated ? page.cursor : null });
+  const page = await env.AUTH.list({ prefix, cursor, limit: 1000 });
+  return json({ keys: page.keys.map((k) => k.name), cursor: page.list_complete ? null : page.cursor });
 }
 
 async function handleObject(request, env, url) {
   if (!(await readerAllowed(request, env))) return json({ error: "unauthorized" }, 401);
   const key = url.searchParams.get("key") || "";
   if (!key.startsWith("v1/")) return json({ error: "bad key" }, 400);
-  const obj = await env.EVENTS.get(key);
-  if (!obj) return json({ error: "not found" }, 404);
-  return new Response(await obj.arrayBuffer(), { headers: { "content-type": "application/octet-stream" } });
+  const body = await env.AUTH.get(key, { type: "arrayBuffer" });
+  if (!body) return json({ error: "not found" }, 404);
+  return new Response(body, { headers: { "content-type": "application/octet-stream" } });
 }
 
 export default {
