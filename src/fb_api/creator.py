@@ -43,6 +43,7 @@ from src.fb_api import forms as _forms
 from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
+from src.fb_api import operation_journal as _oj
 
 from src.fb_api import creative_recovery as _cr
 from src.fb_api import pages as _pg
@@ -1292,6 +1293,8 @@ class Outcome:
     manual_required: list[str] = field(default_factory=list)
     #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
     campaign_confirmed_paused: bool = False
+    #: ACL-1856: durable progress of this operation (stages, partial ids, next action); empty without a journal.
+    operation: dict = field(default_factory=dict)
 
     @property
     def mismatches(self) -> list[dict]:
@@ -1336,8 +1339,11 @@ class CampaignCreator:
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None,
-                 compress_video: Callable[[str], Any] | None = None):
+                 compress_video: Callable[[str], Any] | None = None,
+                 journal: "_oj.OperationJournal | None" = None):
         self.client = client
+        #: ACL-1856: durable record of what was sent and confirmed (None - as before, nothing is saved).
+        self.journal = journal
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
         self.facts = facts
@@ -1462,7 +1468,7 @@ class CampaignCreator:
             self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
         return show
 
-    def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
+    def _write_inner(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
                on_ad: bool = False, children_active: bool = False, form_page: str = "",
                upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
@@ -1559,7 +1565,7 @@ class CampaignCreator:
                     if not found:
                         self.client.reconciled(path)
                         self._step(out, f"{what}: not found by readback after {exc.reason} - sending once more")
-                        return self._write(out, what, path, params, find, files=files, filename=filename,
+                        return self._write_inner(out, what, path, params, find, files=files, filename=filename,
                                            id_of=id_of, on_ad=on_ad, children_active=children_active,
                                            form_page=form_page, upload=upload, _resent=True)
                 else:
@@ -1582,6 +1588,153 @@ class CampaignCreator:
             self.client.reconciled(path)
             return str(found)
         return str(got)
+
+    #: ACL-1856: Graph edge -> kind of the journal stage.
+    _STAGE_KINDS = {"campaigns": "campaign", "adsets": "adset", "ads": "ad", "adcreatives": "creative",
+                    "adimages": "image", "advideos": "video"}
+
+    def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
+               *, files: dict | None = None, **kw: Any) -> str:
+        """ACL-1856: `_write_inner` plus the durable record: intent BEFORE the send, id after the answer.
+
+        No journal - exactly the old behaviour. A stage left `sent`/`unknown` by an earlier run is looked up
+        before anything is sent again; a failed save before the send blocks the send.
+        """
+        j = self.journal
+        if j is None:
+            return self._write_inner(out, what, path, params, find, files=files, **kw)
+        kind = self._STAGE_KINDS.get(path.rsplit("/", 1)[-1], "write")
+        md5 = _md5(next(iter(files.values()))) if files else ""
+        key = f"{what} [{md5[:10]}]" if md5 else what
+        name = str(params.get("name") or params.get("title") or "")
+        adopted = self._adopt_pending(out, key, what, find, kind, name, md5)
+        if adopted:
+            return adopted
+        try:
+            j.sent(key, kind, content_md5=md5)
+        except _oj.JournalError as exc:
+            self._journal_telemetry("journal_save_failed", what)
+            raise CreationStopped(str(exc), created=out.created, kind="journal") from exc
+        try:
+            got = self._write_inner(out, what, path, params, find, files=files, **kw)
+        except CreationStopped as exc:
+            (j.cancel if exc.kind == "cancelled" else j.unknown)(key, str(exc))
+            raise
+        except WritesBlocked:
+            j.unsent(key)
+            raise
+        except GraphError as exc:
+            j.reject(key, str(exc))
+            raise
+        except (GraphStop, WriteUnknown) as exc:
+            j.unknown(key, str(exc))
+            raise
+        if not j.confirm(key, got, name=name, content_md5=md5):
+            out.warnings.append(f"Progress of {what} could not be saved on this computer; "
+                                "the object exists and a new run will find it.")
+        return got
+
+    def _adopt_pending(self, out: Outcome, key: str, what: str, find: Callable[[], str | None],
+                       kind: str, name: str, md5: str) -> str:
+        """A stage that an earlier run sent without a confirmed answer: look it up, never send blindly again."""
+        j = self.journal
+        if j is None or not j.is_pending(key):
+            return ""
+        self._step(out, f"{what}: an earlier attempt has no confirmed result - looking it up")
+        if self.reconcile_wait_s > 0:
+            self.sleep(self.reconcile_wait_s)
+        try:
+            found = find()
+        except (GraphStop, GraphError) as exc:
+            raise CreationStopped(
+                f"{what}: an earlier attempt has no confirmed result and the lookup failed ({exc}). "
+                "Nothing was sent; publish again in a few minutes.", created=out.created, kind="unknown") from exc
+        if found:
+            j.confirm(key, str(found), name=name, content_md5=md5)
+            self._journal_telemetry("unknown_adopted", what)
+            self._step(out, f"{what}: found from an earlier attempt")
+            return str(found)
+        hold = j.pending_hold(key)
+        if hold > 0:
+            raise CreationStopped(
+                f"{what}: an earlier attempt was sent and nothing is visible yet - Meta may still be processing it. "
+                f"Wait about {max(1, round(hold / 60))} minute(s), then publish again. Nothing was sent now.",
+                created=out.created, kind="unknown")
+        return ""
+
+    @staticmethod
+    def _journal_telemetry(step: str, what: str, **diag: Any) -> None:
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            run_telemetry.record("api_create_step", True, diag={"step": f"{what}: {step}", "journal": step, **diag})
+        except Exception:  # noqa: BLE001 - telemetry must not break a write
+            pass
+
+    def _verify_resume(self, plan: CampaignPlan, out: Outcome, existing: dict | None) -> None:
+        """ACL-1856: before any write, read back everything the journal says was created. Mismatch - stop.
+
+        The journal only says WHAT to verify; Meta says what is true. A few list reads whatever the size.
+        """
+        j = self.journal
+        saved = j.confirmed() if j is not None else {}
+        if not saved:
+            return
+        problems: list[str] = []
+        camp = next((v for v in saved.values() if v.get("kind") == "campaign"), None)
+        cid = str(camp["object_id"]) if camp else ""
+        sets: dict[str, dict] = {}
+        ads: dict[str, dict] = {}
+        if cid:
+            if not existing or str(existing.get("id")) != cid:
+                problems.append(f"Campaign {cid} was recorded as created but it is not the campaign found by name now")
+            else:
+                row = self.client.get(f"/{cid}", {"fields": "id,name,status,account_id"})
+                acct = str(row.get("account_id") or "")
+                if acct and acct != normalize_act(plan.act).removeprefix("act_"):
+                    problems.append(f"Campaign {cid} belongs to another ad account")
+                if str(row.get("status") or "PAUSED").upper() != "PAUSED":
+                    problems.append(f"Campaign {cid} is not PAUSED any more")
+                sets = {str(r["id"]): r for r in self._children(cid, "adsets", "id,name")}
+                ads = {str(r["id"]): r for r in self._children(cid, "ads", "id,name")}
+        creatives: dict[str, dict] | None = None
+        for key, st in saved.items():
+            kind, oid = st.get("kind"), str(st["object_id"])
+            if kind == "adset" and cid:
+                row = sets.get(oid)
+            elif kind == "ad" and cid:
+                row = ads.get(oid)
+            elif kind == "creative":
+                if creatives is None:
+                    creatives = {str(r["id"]): r for r in self._creative_listing(plan)}
+                row = creatives.get(oid)
+            else:
+                continue       # media is verified where it is reused (by content), forms by their own check
+            if row is None:
+                problems.append(f"{key} ({oid}) was recorded as created but Meta no longer lists it")
+            elif st.get("name") and str(row.get("name") or "").strip() != st["name"].strip():
+                problems.append(f"{key} ({oid}) was renamed in Meta")
+        self._journal_telemetry("resume_verify", "resume", ok=not problems, checked=len(saved),
+                                mismatches=len(problems))
+        if problems:
+            ids = ", ".join(sorted(str(v["object_id"]) for v in saved.values()))
+            raise CreationStopped(
+                "Cannot continue safely: " + "; ".join(problems[:4]) + f". Already created: {ids}. "
+                "Fix or remove the changed object in Ads Manager, then publish again. Nothing was written now.",
+                created=out.created, kind="resume_mismatch")
+
+    def _media_recorded_missing(self, out: Outcome, what: str, kind: str, md5: str) -> None:
+        """Journal says this media was uploaded and confirmed, the lookup by content finds nothing: stop."""
+        j = self.journal
+        if j is None:
+            return
+        for key, st in j.confirmed().items():
+            if st.get("kind") == kind and st.get("content_md5", "")[:10] == md5[:10] and key.startswith(what):
+                raise CreationStopped(
+                    f"{what}: recorded as uploaded ({st['object_id']}) but Meta does not show it for this file now. "
+                    "It may have been removed or processing failed. Nothing was uploaded again; "
+                    "check the ad account media library, then publish again.",
+                    created=out.created, kind="resume_mismatch")
 
     # -- поиск существующего
     def _find_campaign(self, plan: CampaignPlan, *, after_unknown: bool = False) -> dict | None:
@@ -2009,6 +2162,7 @@ class CampaignCreator:
         if find():
             self._step(out, f"{who}: image already in the ad account")
             return md5
+        self._media_recorded_missing(out, f"{who}: image upload", "image", md5)
         def hash_of(body: dict) -> str | None:
             images = body.get("images") if isinstance(body, dict) else None
             for v in (images or {}).values():
@@ -2037,10 +2191,12 @@ class CampaignCreator:
             return str(hit["id"]) if hit else None
 
         vid = find()
+        if not vid:
+            self._media_recorded_missing(out, f"{who}: video upload", "video", _md5(data))
         if vid:
             self._step(out, f"{who}: video already in the ad account")
         elif isinstance(data, LargeFile):
-            vid = self._video_chunked(out, plan, data, title, find, who)
+            vid = self._journaled_chunked(out, plan, data, title, find, who)
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"{who}: video uploaded")
         else:
@@ -2050,6 +2206,31 @@ class CampaignCreator:
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"{who}: video uploaded")
         return vid, self._wait_video(out, ad, vid, who=who)
+
+    def _journaled_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                           find: Callable[[], str | None], who: str) -> str:
+        """ACL-1856: the chunked upload bypasses `_write`, so its journal stage is kept here."""
+        j = self.journal
+        if j is None:
+            return self._video_chunked(out, plan, big, title, find, who)
+        md5 = _md5(big)
+        what = f"{who}: video upload"
+        key = f"{what} [{md5[:10]}]"
+        adopted = self._adopt_pending(out, key, what, find, "video", title, md5)
+        if adopted:
+            return adopted
+        try:
+            j.sent(key, "video", content_md5=md5)
+        except _oj.JournalError as exc:
+            self._journal_telemetry("journal_save_failed", what)
+            raise CreationStopped(str(exc), created=out.created, kind="journal") from exc
+        try:
+            vid = self._video_chunked(out, plan, big, title, find, who)
+        except CreationStopped as exc:
+            (j.cancel if exc.kind == "cancelled" else j.unknown)(key, str(exc))
+            raise
+        j.confirm(key, vid, name=title, content_md5=md5)
+        return vid
 
     # -- загрузка большого видео кусками (ACL-1891)
     @staticmethod
@@ -2521,7 +2702,23 @@ class CampaignCreator:
             out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
+        except BaseException:
+            self._close_journal(out)       # an unexpected exception: the confirmed ids stay saved as "partial"
+            raise
+        self._close_journal(out)
         return out
+
+    def _close_journal(self, out: Outcome) -> None:
+        """ACL-1856: the operation state and the manager's view (partial ids, next action) after a run."""
+        j = self.journal
+        if j is None:
+            return
+        if out.error or out.stop_kind:
+            state = "cancelled" if out.stop_kind == "cancelled" else "partial" if j.confirmed() else "failed"
+        else:
+            state = "complete"
+        j.finish(state)
+        out.operation = j.view()
 
     @staticmethod
     def _left_in_meta(plan: CampaignPlan, out: Outcome) -> str:
@@ -3136,6 +3333,7 @@ class CampaignCreator:
             out.warnings.append(_rename_message(requested, plan.name, choice.skipped, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
         existing, found_sets = choice.existing, choice.found_sets
+        self._verify_resume(plan, out, existing)
         if existing:
             out.campaign_id = str(existing["id"])
             out.reused["campaign"] = out.campaign_id
