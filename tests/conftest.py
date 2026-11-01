@@ -80,6 +80,7 @@ def pytest_configure(config):
         "markers",
         "windows_only(reason): the test file needs Windows; CI runs it only in the Windows job (ACL-1582)",
     )
+    config.addinivalue_line("markers", "real_profile_lease: warm checkout checks the real profile lease (ACL-1862)")
 
 
 # Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
@@ -105,6 +106,17 @@ def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
 
     root = tmp_path_factory.mktemp("profile_leases")
     monkeypatch.setattr(profile_lease, "_lease_root", lambda: root)
+
+
+@pytest.fixture(autouse=True)
+def _warm_checkout_sees_a_held_lease(request, monkeypatch):
+    """ACL-1862: боевой `checkout` требует замок профиля у потока. Старые тесты зовут его напрямую
+    с выдуманными id — для них замок считается взятым; тесты замка (`real_profile_lease`) видят настоящий."""
+    if request.node.get_closest_marker("real_profile_lease"):
+        return
+    from src.fb_api import warm
+
+    monkeypatch.setattr(warm, "_caller_holds_lease", lambda _profile_id: True)
 
 
 @pytest.fixture(autouse=True)
