@@ -100,7 +100,7 @@ def test_job_waits_for_a_busy_gate_past_the_old_limit_and_goes_when_it_frees(tmp
     t.start()
     time.sleep(1.6)
     assert got == [], "the job must still be queued after the old limit"
-    assert any(v and v["hold"] == "account_busy" for v in views)
+    assert any(v and v["hold"] == "heavy_limit" for v in views)   # ACL-2293: the limit has its own label
     first.release()
     t.join(5)
     assert len(got) == 1 and views[-1] is None

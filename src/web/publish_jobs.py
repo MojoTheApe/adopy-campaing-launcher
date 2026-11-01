@@ -484,6 +484,11 @@ def _wait_for_profile_sync(job_id: str, account_label: str) -> bool:
     return why != _stop_log.CANCELLED_TEXT
 
 
+def wake_slots() -> None:
+    """Waiting jobs look at the limits again now (ACL-2293: Settings changed them)."""
+    _slots.wake()
+
+
 def slots_snapshot() -> dict[str, Any]:
     """Сколько профилей разом разрешено сейчас, что идёт и что ждёт (ACL-1321)."""
     snap = _slots.snapshot()
@@ -1296,6 +1301,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "used_pct": verdict.get("used_pct"),
         "max_used_pct": verdict.get("max_used_pct"),
         "running": verdict.get("running"),
+        # ACL-2293: the warm heavy-action limit (hold "heavy_limit").
+        "heavy_limit": verdict.get("heavy_limit"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),
@@ -1325,8 +1332,13 @@ def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[st
     if rt is None:
         return
     try:
+        decision = _decision_for_telemetry(verdict)
+        # ACL-2293: how long accounts wait for the ceiling vs memory shows from these two.
+        decision["ceiling_reached"] = verdict.get("reason") == "ceiling"
+        if verdict.get("limit") is not None:
+            decision["effective_limit"] = verdict.get("limit")
         rt.record("job_phase", True, campaign=campaign, note="slot_decision",
-                  diag={"account": account, "decision": _decision_for_telemetry(verdict)})
+                  diag={"account": account, "decision": decision})
     except Exception:
         pass
 

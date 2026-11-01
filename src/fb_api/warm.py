@@ -405,10 +405,13 @@ class HeavyGate:
         if probe.get("status") == "ok" and measured:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
-        view = {"hold": "memory_low" if low else "account_busy",
+        # ACL-2293: the heavy-action limit is its own wait, not "another action of this account".
+        view = {"hold": "memory_low" if low else "heavy_limit" if why == "limit" else "account_busy",
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}
+        if why == "limit":
+            view["heavy_limit"] = max(1, int(self._limit()))
         if memory is not None:
             keep = self._ps.keep_free_mb(memory.total_mb, settings)
             view.update(need_mb=int(keep), max_used_pct=settings.max_used_pct,
