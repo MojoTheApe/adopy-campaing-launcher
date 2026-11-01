@@ -23,7 +23,7 @@ from typing import Any, Callable
 from src.acl_event_log import writer
 
 #: Адрес Worker. Пусто, пока владелец не развернул Worker; можно задать `ACL_EVENT_LOG_URL`.
-DEFAULT_URL = ""
+DEFAULT_URL = "https://acl-event-log.adopy-acl.workers.dev"
 
 BATCH_MAX_BYTES = 512 * 1024
 #: Раз в час: бесплатный KV Cloudflare пускает 1000 записей в сутки на все машины.
