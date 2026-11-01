@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
+from src.fb_api import operation_journal as _oj
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
     resolve_page,
@@ -101,6 +102,15 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
     # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
     return min(max(need + estimate_targeting_reads(plan), CREATE_BUDGET_FLOOR), ceiling), ""
+
+
+#: ACL-1856: extra Graph reads of a verified resume (campaign, ad sets, ads, creatives).
+RESUME_VERIFY_CALLS = 4
+
+
+def journal_enabled() -> bool:
+    """ACL-1856: durable operation journal; `ACL_OPERATION_JOURNAL=0` turns it off."""
+    return os.environ.get("ACL_OPERATION_JOURNAL", "1").strip().lower() not in ("0", "false", "off", "no")
 
 
 def _now_iso() -> str:
@@ -312,6 +322,8 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "created": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.created.items()},
         "reused": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.reused.items()},
         "ts": _now_iso(),
+        #: ACL-1856: durable progress (stages, partial ids, plain next action); None when not recorded.
+        "operation": outcome.operation or None,
     }
 
 
@@ -665,6 +677,19 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
+        journal = None
+        if not self.dry_run and journal_enabled():
+            # ACL-1856: the durable record of this operation is opened before any write; no record - no write.
+            try:
+                # one submit holds several campaigns: the key is bound per campaign (its tag) and plan revision
+                rid = str(getattr(self, "request_id", "") or "")
+                journal = _oj.OperationJournal.open(plan, request_id=f"{rid}#{plan.tag}" if rid else "")
+            except _oj.RequestConflict as exc:
+                return result_dict(Outcome(campaign_name=name), error=f"{exc} Nothing was created.")
+            except _oj.JournalError as exc:
+                return result_dict(Outcome(campaign_name=name), error=str(exc))
+            if journal.confirmed():
+                budget += RESUME_VERIFY_CALLS      # the verified-resume reads come on top of the usual writes
         self._client.reset_budget(budget)
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
@@ -682,7 +707,8 @@ class ApiPublisher:
         spec = self._log_spec(plan, name)
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
-                                  live_progress=lambda text: self.progress(f"{name}: {text}"))
+                                  live_progress=lambda text: self.progress(f"{name}: {text}"),
+                                  journal=journal)
         if self.dry_run:
             outcome = creator.plan_only(plan)
             if self._client.writes:
@@ -720,12 +746,17 @@ class ApiPublisher:
         res = result_dict(outcome)
         # ACL-2192: заметка «Automatic Facebook Page» выбрана раньше creator - в итог она переносится здесь.
         res["warnings"] = [n for n in early_notes if n not in res["warnings"]] + res["warnings"]
+        if journal is not None and journal.load_note:
+            res["warnings"].append(journal.load_note)
         _record("api_create_campaign", res["publishable"], campaign=name,
                 duration_s=round(time.monotonic() - began, 1),
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
                       **({"auto_resumed": True} if self.auto_resumed else {}),
+                      **({"operation": outcome.operation.get("id"), "operation_state": outcome.operation.get("state"),
+                          "stages_confirmed": len(outcome.operation.get("partial_ids") or [])}
+                         if outcome.operation else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
                     "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
