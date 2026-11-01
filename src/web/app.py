@@ -3107,6 +3107,37 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+@app.get("/api/run-limits")
+def api_run_limits() -> JSONResponse:
+    """Profiles at once, heavy actions at once and the memory limit of this computer (ACL-2293)."""
+    from src.web import run_limits
+    return JSONResponse(run_limits.current())
+
+
+@app.post("/api/run-limits")
+async def api_save_run_limits(request: Request) -> JSONResponse:
+    """Change the run limits without a restart; they apply to the next start decision."""
+    from src.web import run_limits
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    allowed = {*run_limits.FIELDS, "reset"}
+    if not isinstance(data, dict) or set(data) - allowed:
+        return JSONResponse({"ok": False, "error": "Expected ceiling, warm_heavy and memory_max_used_pct"},
+                            status_code=400)
+    try:
+        from starlette.concurrency import run_in_threadpool
+        if data.get("reset") is True:
+            result = await run_in_threadpool(run_limits.reset)
+        else:
+            result = await run_in_threadpool(
+                run_limits.save, *(data.get(k) for k in run_limits.FIELDS))
+    except run_limits.RunLimitError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return JSONResponse(result)
+
+
 @app.post("/refresh")
 async def refresh(request: Request) -> Response:
     """Rebuild report now (reuse Excel DF if mtime unchanged), then redirect or JSON.
