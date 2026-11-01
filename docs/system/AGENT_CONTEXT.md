@@ -38,7 +38,7 @@ Windows workflows for those applicable checks; the manual pilot remains explicit
 
 Shared action log (ACL-2347): `src/acl_event_log/` writes events (`emit()`, never raises, never
 touches the network) to `<machine config dir>/event_outbox/`, one file per process; a daemon
-thread ships batches to the Worker in `deploy/event-log/` (R2). Turn it off with
+thread ships batches to the Worker in `deploy/event-log/` (KV). Turn it off with
 `ACL_EVENT_LOG=0`; it is also silent under pytest unless a test calls
 `use_outbox_for_tests()`. The ordinary `scrub` would erase campaign ids, so events go through
 `acl_event_log.clean`. The owner reads it with `scripts/acl_log_pull.py` and

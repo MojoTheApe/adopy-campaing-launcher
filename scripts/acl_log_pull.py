@@ -44,7 +44,9 @@ def default_db_path() -> Path:
 
 
 def _get(url: str, key: str) -> bytes:
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    # Свой User-Agent обязателен: подпись Python-urllib Cloudflare отклоняет (403, код 1010).
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}",
+                                               "User-Agent": shipper.USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as resp:
         return resp.read()
 
