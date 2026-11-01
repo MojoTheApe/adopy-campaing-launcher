@@ -3873,6 +3873,40 @@
     dialog::backdrop { background: var(--adopy-scrim); }
     /* Числа в таблицах и карточках: цифры одной ширины, колонки не прыгают. */
     td.num, th.num, .kpi, .home-kpi, [class*="-kpi"], time { font-variant-numeric: tabular-nums lining-nums; }
+    /* ═══ ACL-1345: перетаскивание карточек в билдере ═══ */
+    .cbm-grip { cursor: grab; color: var(--muted); font-size: var(--adopy-text-sm); letter-spacing: -0.15em; padding: 0 0.3rem; user-select: none; flex-shrink: 0; }
+    .cbm-grip:hover { color: var(--accent); }
+    .cbm-grip.cbm-locked { cursor: not-allowed; opacity: 0.4; }
+    .cbd-camp-head .cbm-grip { align-self: center; }
+    .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
+    .cbd-camp-head .cbm-moveto { align-self: center; opacity: 0; }
+    .cbd-camp-head:hover .cbm-moveto, .cbd-camp-head:focus-within .cbm-moveto { opacity: 1; }
+    .cb-ad-row-header .cbm-moveto { margin-left: auto; }
+    .cb-ad-row-header .cbm-moveto + .cb-dup-ad-btn { margin-left: 0; }
+    .cbm-moveto:hover { color: var(--accent); border-color: var(--accent); }
+    .cbm-moveto:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; opacity: 1; }
+    .cbm-over { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft); position: relative; }
+    .cbm-over[data-cbm-chip]::after { content: attr(data-cbm-chip); position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); background: var(--accent); color: #fff; font-size: var(--adopy-text-xs); border-radius: 3px; padding: 0 0.35rem; pointer-events: none; }
+    .cbm-bad { cursor: not-allowed; opacity: 0.6; }
+    .cbm-ghosts { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .cbm-ghost { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 0.4rem 0.5rem; color: var(--muted); font-size: var(--adopy-text-table); opacity: 0.8; }
+    .cbm-toast { max-width: 32rem; }
+    .cbm-toast.cbm-warn { border-color: var(--danger); }
+    .cbm-toast-note { color: var(--muted); margin-top: 0.15rem; overflow-wrap: anywhere; }
+    .cbm-toast-btns { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
+    .cbm-menu { position: fixed; z-index: 1100; width: 17rem; max-height: 21rem; display: flex; flex-direction: column; gap: 0.3rem; background: var(--bg-elev); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.45rem; box-shadow: var(--adopy-shadow-popover); font-size: var(--adopy-text-table); }
+    .cbm-seg { display: flex; gap: 0.25rem; }
+    .cbm-seg-btn { flex: 1; background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.15rem 0.4rem; color: var(--muted); font: inherit; cursor: pointer; }
+    .cbm-seg-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+    .cbm-menu-title { color: var(--muted); font-size: var(--adopy-text-xs); }
+    .cbm-filter { font: inherit; padding: 0.2rem 0.35rem; }
+    .cbm-list { overflow-y: auto; display: flex; flex-direction: column; }
+    .cbm-item { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: baseline; text-align: left; background: none; border: 0; padding: 0.3rem 0.35rem; color: inherit; font: inherit; cursor: pointer; border-radius: 3px; }
+    .cbm-item:hover, .cbm-item:focus-visible { background: var(--bg-hover); outline: none; }
+    .cbm-item:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+    .cbm-item.cbm-off { opacity: 0.55; cursor: not-allowed; }
+    .cbm-sub, .cbm-why { color: var(--muted); font-size: var(--adopy-text-xs); }
+    /* ═══ /ACL-1345 ═══ */
 </style>
   {#- ACL-1797: токены Adopy подключены один раз, прямо в страницу (без запроса:
       работает и без сети, и до первой отрисовки); значения — только в
@@ -7723,6 +7757,9 @@ window.cbTree = (function () {
   }
 
   function paint() {
+    /* ACL-1345: пока тащат карточку, дерево не перерисовывается (опрос сборки
+       каждые 3 с убил бы перетаскивание); перерисовка - после dragend. */
+    if (window.cbMove && window.cbMove.dragging()) { window.cbMove.deferPaint(); return; }
     // Structural changes can repaint after the user has already started typing.
     var focused = document.activeElement;
     var keepFocus = focused && (host.contains(focused) || connectHost.contains(focused));
@@ -8970,6 +9007,671 @@ window.cbTree = (function () {
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
         countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
     }
+  };
+})();
+</script>
+
+<script>
+/* ═══ ACL-1345: Builder drag & drop — move / Ctrl = copy / Undo ═══════════════
+   Весь код переноса карточек - в этом блоке (+ блок CSS «ACL-1345» выше).
+   Объявление - в другую кампанию или набор, кампания - в другой аккаунт. Тянем за
+   ручку ⋮⋮; то же самое без мыши - кнопка «Move to…». Перенос = тот же узел DOM
+   (все поля целы), копия = новый узел теми же построителями, что у Duplicate.
+   Аккаунтные поля (ссылка трекинга, кабинет, профиль) живут в форме аккаунта, поэтому
+   карточка в чужой форме сама берёт чужие. Страница и Instant Form привязаны к аккаунту
+   и сбрасываются. Undo - обратная операция над теми же узлами. */
+window.cbMove = (function () {
+  'use strict';
+  /* Детали строит скрипт ниже по странице: читаем их в момент вызова, не при загрузке. */
+  var P = new Proxy({}, { get: function (_, k) { return (window.cbMoveParts || {})[k]; } });
+  var MAX_ADS = 100, UNDO_MAX = 10;
+  var NOOP = 'noop';
+  var MSG_BUILDING = 'This campaign is being built — wait for the run to finish or press Stop.';
+  var MSG_CANT_UNDO = 'Can’t undo – the draft changed.';
+  var DRAG_TIP = 'Drag to move — hold Ctrl (⌥ on Mac) to copy';
+  var undoStack = [];
+  var drag = null;            // {kind: 'ad'|'camp', node, paintOk}
+  var pendingPaint = false;
+  var toastEl = null, toastTimer = 0;
+  var menu = null;
+  var hoverTimer = 0, hoverId = '';
+
+  /* ── вспомогательное ───────────────────────────────────────────────── */
+  function $all(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
+  function forms() { return $all(document, 'form.open-account-form'); }
+  function countryOf(form) { return ((form.querySelector('[name="country"]') || {}).value || '').trim(); }
+  function acctLabel(form) {
+    var c = countryOf(form);
+    return cbFormAccount(form) + (c ? ' (' + c + ')' : '');
+  }
+  function slotName(slot) {
+    var hidden = slot.querySelector('.cb-name-hidden');
+    if (hidden && hidden.value) return hidden.value;
+    var shown = slot.querySelector('[data-name-display]');
+    return shown ? (shown.textContent || '').trim() : '';
+  }
+  function niceName(slot) { return slotName(slot) || 'Untitled campaign'; }
+  function adCount(slot) { return slot.querySelectorAll('.cb-ad-row').length; }
+  function setCount(slot) { return slot.querySelectorAll('.cb-adset-sec').length || 1; }
+  function pageOf(slot) { var h = slot.querySelector('input[name$="_page_id"]'); return h ? h.value : ''; }
+  function rowSetOf(row) { var h = row.querySelector('.cb-ad-adset'); return h ? (parseInt(h.value, 10) || 0) : 0; }
+  function setRowSet(row, k) { var h = row.querySelector('.cb-ad-adset'); if (h) h.value = k; }
+  function formIdInput(row) { return row.querySelector('input[name$="_form_id"]'); }
+  function slotById(id) {
+    return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
+  }
+  function formByKey(key) {
+    var hit = null;
+    forms().forEach(function (f) { if (!hit && cbFormKey(f) === key) hit = f; });
+    return hit;
+  }
+  /* Имена полей снимаются перед вставкой в чужую форму: иначе радио-группы
+     camp_0_ad_0_creative_type двух форм склеятся. Вернёт их cbRenumber*. */
+  function stripNames(root) {
+    $all(root, '[name]').forEach(function (el) { el.dataset.renumberName = el.name; el.removeAttribute('name'); });
+  }
+  function activeBuild(slot) {
+    var d = window.cbBuild && window.cbBuild.dot ? window.cbBuild.dot(slot, slotName(slot)) : null;
+    return !!(d && /^build-(run|attn|wait)$/.test(d.state));
+  }
+  function formBusy(form) { return typeof cbAccountBusy === 'function' && cbAccountBusy(cbFormKey(form)); }
+  function busyMsg(form) { return acctLabel(form) + ' is being built — wait for its run to finish.'; }
+  function isOpenSlot(slot) {
+    var a = window.cbTree && window.cbTree.active && window.cbTree.active();
+    return !!(a && a.slot === slot);
+  }
+  /* Форма гостит в правой колонке: из её карточек видна только раскрытая. */
+  function settleHidden(slot) {
+    var b = window.cbTree && window.cbTree.borrowed && window.cbTree.borrowed();
+    slot.hidden = !!(b && b.form === slot.closest('form') && !isOpenSlot(slot));
+  }
+  function repaintTree() { if (window.cbTree) window.cbTree.paint(); }
+
+  /* ── проверки ──────────────────────────────────────────────────────── */
+  /* '' - можно; NOOP - то же место; иначе - причина отказа для человека. */
+  function check(plan) {
+    var copy = plan.mode === 'copy';
+    if (plan.kind === 'ad') {
+      var srcSlot = plan.row.closest('.cb-slot');
+      if (!srcSlot || !plan.destSlot) return NOOP;
+      if (activeBuild(srcSlot)) return MSG_BUILDING;
+      var df = plan.destSlot.closest('form');
+      if (formBusy(df)) return busyMsg(df);
+      if (activeBuild(plan.destSlot)) return MSG_BUILDING;
+      var same = srcSlot === plan.destSlot;
+      if (!copy && same && rowSetOf(plan.row) === plan.k) return NOOP;
+      if ((copy || !same) && adCount(plan.destSlot) >= MAX_ADS) return 'A campaign can hold up to 100 ads.';
+      return '';
+    }
+    var src = plan.slot, dest = plan.destForm;
+    if (!src || !dest) return NOOP;
+    if (activeBuild(src)) return MSG_BUILDING;
+    if (formBusy(dest)) return busyMsg(dest);
+    if (!copy && src.closest('form') === dest) return NOOP;
+    return '';
+  }
+  function reasonOnly(plan) { var r = check(plan); return r === NOOP ? '' : r; }
+
+  /* ── тост и Undo ───────────────────────────────────────────────────── */
+  function hideToast() {
+    clearTimeout(toastTimer);
+    if (toastEl) toastEl.hidden = true;
+  }
+  function toast(text, o) {
+    o = o || {};
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'amap-note-toast cbm-toast';
+      toastEl.setAttribute('role', 'status');
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = '';
+    toastEl.hidden = false;
+    toastEl.classList.toggle('cbm-warn', !!o.warn);
+    var msg = document.createElement('span');
+    msg.className = 'cbm-toast-msg';
+    msg.textContent = text;
+    toastEl.appendChild(msg);
+    (o.notes || []).forEach(function (n) {
+      var d = document.createElement('div');
+      d.className = 'cbm-toast-note';
+      d.textContent = n;
+      toastEl.appendChild(d);
+    });
+    var row = document.createElement('div');
+    row.className = 'cbm-toast-btns';
+    if (o.entry) {
+      var u = document.createElement('button');
+      u.type = 'button'; u.className = 'cbm-undo'; u.textContent = 'Undo';
+      u.addEventListener('click', function () { undoEntry(o.entry); });
+      row.appendChild(u);
+    }
+    var x = document.createElement('button');
+    x.type = 'button'; x.className = 'cbm-dismiss'; x.textContent = 'Dismiss';
+    x.addEventListener('click', hideToast);
+    row.appendChild(x);
+    toastEl.appendChild(row);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, o.warn ? 20000 : 10000);
+  }
+
+  function push(entry) {
+    undoStack.push(entry);
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    return entry;
+  }
+  function undoEntry(entry) {
+    var i = undoStack.indexOf(entry);
+    if (i === -1) { toast(MSG_CANT_UNDO, { warn: true }); return false; }
+    var ok = false;
+    try { ok = entry.undo(); } catch (e) { ok = false; }
+    if (!ok) { toast(MSG_CANT_UNDO, { warn: true }); return false; }
+    undoStack.splice(i, 1);
+    toast('Undone: ' + entry.label);
+    return true;
+  }
+  function undoLatest() {
+    var e = undoStack[undoStack.length - 1];
+    return e ? undoEntry(e) : false;
+  }
+
+  /* ── операции над черновиком ───────────────────────────────────────── */
+  function insertRow(slot, row, k, after) {
+    var container = slot.querySelector('.cb-ad-rows');
+    if (after && after.parentNode === container) { after.insertAdjacentElement('afterend', row); return; }
+    var anchor = null;
+    $all(container, '.cb-ad-row').forEach(function (r) { if (r !== row && rowSetOf(r) <= k) anchor = r; });
+    if (anchor) anchor.insertAdjacentElement('afterend', row);
+    else container.insertAdjacentElement('afterbegin', row);
+  }
+  function refreshSlotAds(slot) {
+    P.renumberAds(slot); P.updateAdCount(slot); P.updateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    if (window.cbFillFormSelects) window.cbFillFormSelects(slot);
+  }
+  function blankAd(slot) {
+    var container = slot.querySelector('.cb-ad-rows');
+    container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(slot.dataset.idx, adCount(slot), 0));
+    var row = container.lastElementChild;
+    P.initAllSelects(row);
+    return row;
+  }
+  /* Instant Form выбрана на Странице; на другой Странице её id ничего не значит. */
+  function pageDiffers(srcSlot, destSlot) {
+    return srcSlot.closest('form') !== destSlot.closest('form') || pageOf(srcSlot) !== pageOf(destSlot);
+  }
+  function twinClash(slot) {
+    var name = slotName(slot), hit = false;
+    if (!name) return false;
+    $all(slot.closest('form'), '.cb-slot').forEach(function (s) { if (s !== slot && slotName(s) === name) hit = true; });
+    return hit;
+  }
+
+  function doAd(plan) {
+    var row = plan.row, k = plan.k, destSlot = plan.destSlot;
+    var srcSlot = row.closest('.cb-slot');
+    var same = srcSlot === destSlot;
+    var notes = [], newRow;
+    var where = ' · Ad set ' + (k + 1);
+    if (plan.mode === 'copy') {
+      var afterSrc = same && rowSetOf(row) === k ? row : null;
+      var container = destSlot.querySelector('.cb-ad-rows');
+      container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(destSlot.dataset.idx, adCount(destSlot), k));
+      newRow = container.lastElementChild;
+      P.copyAdRowValues(row, newRow);
+      setRowSet(newRow, k);
+      insertRow(destSlot, newRow, k, afterSrc);
+      if (pageDiffers(srcSlot, destSlot)) { var fi = formIdInput(newRow); if (fi) fi.value = ''; }
+      refreshSlotAds(destSlot);
+      return { label: 'copied 1 ad', slot: destSlot, notes: notes,
+        text: 'Copied 1 ad to “' + niceName(destSlot) + '”' + where,
+        undo: function () {
+          if (!newRow.isConnected || !destSlot.isConnected || formBusy(destSlot.closest('form'))) return false;
+          newRow.remove();
+          if (!adCount(destSlot)) blankAd(destSlot);
+          refreshSlotAds(destSlot);
+          return true;
+        } };
+    }
+    var oldSet = rowSetOf(row), parent = row.parentNode, next = row.nextElementSibling;
+    var oldFormId = null, blank = null;
+    stripNames(row);
+    setRowSet(row, k);
+    insertRow(destSlot, row, k);
+    if (pageDiffers(srcSlot, destSlot)) {
+      var hid = formIdInput(row);
+      if (hid && hid.value) { oldFormId = hid.value; hid.value = ''; }
+    }
+    if (!same && !adCount(srcSlot)) {
+      blank = blankAd(srcSlot);
+      notes.push('Left a blank ad in “' + niceName(srcSlot) + '” – a campaign needs at least one ad.');
+    }
+    refreshSlotAds(destSlot);
+    if (!same) refreshSlotAds(srcSlot);
+    return { label: 'moved 1 ad', slot: destSlot, notes: notes,
+      text: 'Moved 1 ad to “' + niceName(destSlot) + '”' + where,
+      undo: function () {
+        if (!row.isConnected || !srcSlot.isConnected || !destSlot.isConnected) return false;
+        if (formBusy(srcSlot.closest('form')) || formBusy(destSlot.closest('form'))) return false;
+        if (blank && !blank.isConnected) return false;
+        stripNames(row);
+        setRowSet(row, oldSet);
+        if (next && next.parentNode === parent) parent.insertBefore(row, next); else parent.appendChild(row);
+        if (blank) blank.remove();
+        if (oldFormId !== null) { var h2 = formIdInput(row); if (h2) h2.value = oldFormId; }
+        refreshSlotAds(destSlot);
+        if (!same) refreshSlotAds(srcSlot);
+        return true;
+      } };
+  }
+
+  function doCamp(plan) {
+    var slot = plan.slot, destForm = plan.destForm, srcForm = slot.closest('form');
+    var cross = srcForm !== destForm;
+    var notes = [];
+    if (cross) notes.push('Budget unchanged — check it for ' + acctLabel(destForm) + '.');
+    if (plan.mode === 'copy') {
+      var copy = window.cbDuplicateSlot(slot, destForm);
+      if (!copy) return null;
+      if (cross) $all(copy, 'input[name$="_form_id"]').forEach(function (h) { h.value = ''; });
+      settleHidden(copy);
+      return { label: 'copied campaign', slot: copy, notes: notes,
+        text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
+        undo: function () {
+          if (!copy.isConnected || formBusy(destForm)) return false;
+          copy.remove();
+          P.renumber(destForm); window.cbUpdateCount(destForm);
+          return true;
+        } };
+    }
+    var wasOpen = isOpenSlot(slot), id = slot.dataset.cbdId;
+    var parent = slot.parentNode, next = slot.nextElementSibling;
+    var n = adCount(slot);
+    var oldPage = pageOf(slot), oldAcct = slot._pageAccount, formIds = [];
+    $all(slot, 'input[name$="_form_id"]').forEach(function (h) { if (h.value) formIds.push([h, h.value]); });
+    stripNames(slot);
+    destForm.querySelector('.cb-slots').appendChild(slot);
+    P.renumber(srcForm); P.renumber(destForm);
+    window.cbUpdateCount(srcForm); window.cbUpdateCount(destForm);
+    if (cross) formIds.forEach(function (p) { p[0].value = ''; });
+    if (window.cbSyncPages) window.cbSyncPages(slot);
+    window.cbSyncDestination(slot);
+    settleHidden(slot);
+    return { label: 'moved campaign', slot: slot, notes: notes, reopen: wasOpen ? id : '',
+      text: 'Moved campaign “' + niceName(slot) + '” (' + n + (n === 1 ? ' ad' : ' ads') + ') to ' + acctLabel(destForm),
+      undo: function () {
+        if (!slot.isConnected || !srcForm.isConnected || formBusy(srcForm) || formBusy(destForm)) return false;
+        stripNames(slot);
+        if (next && next.parentNode === parent) parent.insertBefore(slot, next); else parent.appendChild(slot);
+        P.renumber(srcForm); P.renumber(destForm);
+        window.cbUpdateCount(srcForm); window.cbUpdateCount(destForm);
+        var ph = slot.querySelector('input[name$="_page_id"]');
+        if (ph && oldPage) ph.value = oldPage;
+        slot._pageAccount = oldAcct;
+        formIds.forEach(function (p) { p[0].value = p[1]; });
+        window.cbSyncDestination(slot);
+        settleHidden(slot);
+        if (wasOpen && window.cbTree) window.cbTree.open(id); else repaintTree();
+        return true;
+      } };
+  }
+
+  /* Единственный вход: и мышь, и меню приходят сюда (они лишь собирают план). */
+  async function run(plan) {
+    var why = check(plan);
+    if (why === NOOP) return false;
+    if (why) { toast(why, { warn: true }); return false; }
+    if (plan.kind === 'camp') {
+      var to = countryOf(plan.destForm);
+      if (countryOf(plan.slot.closest('form')) !== to) {
+        var yes = await window.aclConfirm('Audience country becomes ' + to + ' and the name is rebuilt.',
+          { title: (plan.mode === 'copy' ? 'Copy' : 'Move') + ' to ' + to + '?',
+            okLabel: plan.mode === 'copy' ? 'Copy' : 'Move' });
+        if (!yes) return false;
+        why = check(plan);          // за время вопроса задание могло стартовать
+        if (why === NOOP) return false;
+        if (why) { toast(why, { warn: true }); return false; }
+      }
+    }
+    var res = plan.kind === 'ad' ? doAd(plan) : doCamp(plan);
+    if (!res) return false;
+    var warn = false;
+    if (plan.kind === 'camp' && twinClash(res.slot)) {
+      res.notes.push(acctLabel(res.slot.closest('form')) + ' already has a campaign named “' + slotName(res.slot)
+        + '”. Publish all will combine them into one campaign.');
+      warn = true;
+    }
+    var entry = push({ label: res.label, undo: res.undo });
+    toast(res.text, { entry: entry, notes: res.notes, warn: warn });
+    if (res.reopen && window.cbTree) window.cbTree.open(res.reopen); else repaintTree();
+    return true;
+  }
+
+  /* ── ручки и кнопки «Move to…» ─────────────────────────────────────── */
+  function gripHtml(kind) {
+    return '<span class="cbm-grip" draggable="true" data-cbm="' + kind + '" aria-hidden="true"'
+      + ' title="' + DRAG_TIP + '">⋮⋮</span>';
+  }
+  function moveBtn(kind) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'cbm-moveto'; b.dataset.cbm = kind;
+    b.setAttribute('aria-haspopup', 'menu');
+    b.textContent = 'Move to…';
+    b.title = kind === 'ad' ? 'Move or copy this ad to another campaign' : 'Move or copy this campaign to another account';
+    return b;
+  }
+  function decorate() {
+    $all(document, '#cbd-body .cbd-camp-head').forEach(function (head) {
+      if (head.querySelector('.cbm-grip')) return;
+      head.insertAdjacentHTML('afterbegin', gripHtml('camp'));
+      var drop = head.querySelector('.cbd-camp-drop');
+      var b = moveBtn('camp');
+      if (drop) head.insertBefore(b, drop); else head.appendChild(b);
+    });
+    $all(document, '#cbd-editor .cb-ad-row-header').forEach(function (hd) {
+      if (hd.querySelector('.cbm-grip')) return;
+      hd.insertAdjacentHTML('afterbegin', gripHtml('ad'));
+      var dup = hd.querySelector('.cb-dup-ad-btn');
+      var b = moveBtn('ad');
+      if (dup) hd.insertBefore(b, dup); else hd.appendChild(b);
+    });
+  }
+  var decorateQueued = false;
+  function queueDecorate() {
+    if (decorateQueued) return;
+    decorateQueued = true;
+    Promise.resolve().then(function () { decorateQueued = false; decorate(); });
+  }
+  ['cbd-body', 'cbd-editor'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) new MutationObserver(queueDecorate).observe(el, { childList: true, subtree: true });
+  });
+  decorate();
+
+  function nodeOf(el) {
+    if (el.dataset.cbm === 'ad') return { kind: 'ad', node: el.closest('.cb-ad-row') };
+    var camp = el.closest('.cbd-camp');
+    return { kind: 'camp', node: camp ? slotById(camp.dataset.camp) : null };
+  }
+  function srcSlotOf(n) { return n.kind === 'ad' ? (n.node && n.node.closest('.cb-slot')) : n.node; }
+
+  /* ── перетаскивание ────────────────────────────────────────────────── */
+  function ghosts() {
+    var body = document.getElementById('cbd-body');
+    if (!body || body.querySelector('.cbm-ghosts')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'cbm-ghosts';
+    var any = false;
+    forms().forEach(function (f) {
+      if (f.querySelector('.cb-slot') || !cbFormAccount(f) || cbFormAccount(f) === '?') return;
+      any = true;
+      var d = document.createElement('div');
+      d.className = 'cbm-ghost';
+      d.dataset.key = cbFormKey(f);
+      d.textContent = acctLabel(f) + ' — Drop here';
+      wrap.appendChild(d);
+    });
+    if (any) body.appendChild(wrap);
+  }
+  function clearOver(except) {
+    $all(document, '.cbm-over, .cbm-bad').forEach(function (e) {
+      if (e === except) return;
+      e.classList.remove('cbm-over', 'cbm-bad'); e.removeAttribute('data-cbm-chip');
+    });
+  }
+  function endDrag() {
+    var was = drag;
+    drag = null;
+    clearTimeout(hoverTimer); hoverTimer = 0; hoverId = '';
+    clearOver();
+    document.body.classList.remove('cbm-dragging');
+    $all(document, '.cbm-ghosts').forEach(function (g) { g.remove(); });
+    if (was && pendingPaint) { pendingPaint = false; repaintTree(); }
+  }
+
+  /* Что под курсором: {el, slot, k} для объявления, {el, form} для кампании. */
+  function resolve(target) {
+    if (!drag || !target.closest) return null;
+    if (drag.kind === 'ad') {
+      var camp = target.closest('.cbd-camp');
+      var slot = camp ? slotById(camp.dataset.camp) : null;
+      if (!slot) return null;
+      var set = target.closest('.cbd-set');
+      if (set) return { el: set, slot: slot, k: parseInt(set.dataset.set, 10) || 0 };
+      return { el: camp.querySelector('.cbd-camp-head') || camp, slot: slot, k: 0, camp: camp };
+    }
+    var ghost = target.closest('.cbm-ghost');
+    if (ghost) return { el: ghost, form: formByKey(ghost.dataset.key) };
+    var acc = target.closest('.cbd-acc');
+    if (!acc) return null;
+    return { el: acc.querySelector('.cbd-account') || acc, form: formByKey(acc.dataset.acc) };
+  }
+  function planFor(hit, copy) {
+    if (!hit) return null;
+    if (drag.kind === 'ad') return { kind: 'ad', mode: copy ? 'copy' : 'move', row: drag.node, destSlot: hit.slot, k: hit.k };
+    return { kind: 'camp', mode: copy ? 'copy' : 'move', slot: drag.node, destForm: hit.form };
+  }
+  function wantsCopy(e) { return !!(e.ctrlKey || e.altKey); }
+
+  document.addEventListener('dragstart', function (e) {
+    var grip = e.target.closest ? e.target.closest('.cbm-grip') : null;
+    if (!grip) return;
+    var n = nodeOf(grip), src = srcSlotOf(n);
+    if (!n.node || !src) { e.preventDefault(); return; }
+    if (activeBuild(src)) { e.preventDefault(); toast(MSG_BUILDING, { warn: true }); return; }
+    drag = { kind: n.kind, node: n.node };
+    pendingPaint = false;
+    try {
+      e.dataTransfer.setData('text/plain', n.kind === 'ad' ? 'ad' : niceName(src));
+      e.dataTransfer.effectAllowed = 'copyMove';
+    } catch (err) { /* не критично */ }
+    setTimeout(function () {
+      if (!drag) return;
+      document.body.classList.add('cbm-dragging');
+      if (drag.kind === 'camp') ghosts();
+    }, 0);
+  });
+
+  document.addEventListener('dragover', function (e) {
+    if (!drag) return;
+    var hit = resolve(e.target);
+    var copy = wantsCopy(e);
+    var plan = hit ? planFor(hit, copy) : null;
+    var why = plan ? check(plan) : NOOP;
+    var el = hit && hit.el;
+    clearOver(el);
+    if (el && why === '') {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
+      el.classList.add('cbm-over'); el.classList.remove('cbm-bad');
+      el.setAttribute('data-cbm-chip', copy ? 'Copy here' : 'Move here');
+    } else {
+      if (el && why && why !== NOOP) { el.classList.add('cbm-bad'); el.title = why; }
+      try { e.dataTransfer.dropEffect = 'none'; } catch (err) { /* ok */ }
+    }
+    /* Кампания с несколькими наборами раскрывается, пока над ней держат объявление. */
+    var campEl = hit && hit.camp;
+    var id = campEl ? campEl.dataset.camp : '';
+    if (id !== hoverId) {
+      clearTimeout(hoverTimer); hoverId = id;
+      if (id && campEl.dataset.open !== '1' && setCount(hit.slot) > 1) {
+        hoverTimer = setTimeout(function () {
+          if (!drag) return;
+          drag.paintOk = true;
+          try { window.cbTree.open(id); } finally { if (drag) drag.paintOk = false; }
+        }, 600);
+      }
+    }
+  });
+  document.addEventListener('drop', function (e) {
+    if (!drag) return;
+    var hit = resolve(e.target);
+    var plan = hit ? planFor(hit, wantsCopy(e)) : null;
+    if (plan) e.preventDefault();
+    endDrag();
+    if (plan) run(plan);
+  });
+  document.addEventListener('dragend', endDrag);
+
+  /* ── меню «Move to…» (то же самое без мыши и на сенсорном экране) ───── */
+  function outside(e) { if (menu && !menu.el.contains(e.target) && !e.target.closest('.cbm-moveto')) closeMenu(false); }
+  function closeMenu(focusBack) {
+    if (!menu) return;
+    var opener = menu.opener;
+    menu.el.remove();
+    document.removeEventListener('mousedown', outside, true);
+    menu = null;
+    if (focusBack && opener && opener.isConnected) opener.focus();
+  }
+
+  function menuItems() {
+    var m = menu, out = [];
+    function item(label, o) { out.push({ label: label, reason: o.reason || '', go: o.go, back: !!o.back, sub: o.sub }); }
+    if (m.step > 0) item('‹ Back', { back: true });
+    if (m.step === 0) {
+      forms().forEach(function (f) {
+        if (!cbFormAccount(f) || cbFormAccount(f) === '?') return;
+        var reason = formBusy(f) ? busyMsg(f) : '';
+        if (m.kind === 'camp') {
+          var cplan = { kind: 'camp', mode: m.mode, slot: m.node, destForm: f };
+          if (!reason) reason = check(cplan) === NOOP ? 'Already in this account' : reasonOnly(cplan);
+        }
+        var drafts = f.querySelectorAll('.cb-slot').length;
+        item(acctLabel(f), { reason: reason, sub: m.kind === 'ad' ? drafts + (drafts === 1 ? ' campaign' : ' campaigns') : '',
+          go: function () {
+            if (m.kind === 'camp') { closeMenu(true); run({ kind: 'camp', mode: m.mode, slot: m.node, destForm: f }); }
+            else { m.form = f; m.step = 1; m.filter = ''; renderMenu(); }
+          } });
+      });
+    } else if (m.step === 1) {
+      $all(m.form, '.cb-slot').forEach(function (s) {
+        var reason = formBusy(m.form) ? busyMsg(m.form) : (activeBuild(s) ? MSG_BUILDING : '');
+        if (!reason && adCount(s) >= MAX_ADS && (m.mode === 'copy' || s !== m.node.closest('.cb-slot'))) reason = 'A campaign can hold up to 100 ads.';
+        item(niceName(s), { reason: reason, sub: adCount(s) + (adCount(s) === 1 ? ' ad' : ' ads'),
+          go: function () { m.slot = s; m.step = 2; m.filter = ''; renderMenu(); } });
+      });
+    } else {
+      for (var k = 0; k < setCount(m.slot); k += 1) (function (k) {
+        var plan = { kind: 'ad', mode: m.mode, row: m.node, destSlot: m.slot, k: k };
+        var r = check(plan);
+        item('Ad set ' + (k + 1), { reason: r === NOOP ? 'Already here' : r,
+          go: function () { closeMenu(true); run(plan); } });
+      })(k);
+    }
+    return out;
+  }
+  function renderMenu() {
+    var m = menu, el = m.el;
+    el.textContent = '';
+    var seg = document.createElement('div');
+    seg.className = 'cbm-seg'; seg.setAttribute('role', 'group');
+    ['move', 'copy'].forEach(function (mode) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'cbm-seg-btn'; b.dataset.mode = mode;
+      b.textContent = mode === 'move' ? 'Move' : 'Copy';
+      b.setAttribute('aria-pressed', m.mode === mode ? 'true' : 'false');
+      b.addEventListener('click', function () { m.mode = mode; renderMenu(); });
+      seg.appendChild(b);
+    });
+    el.appendChild(seg);
+    var title = document.createElement('div');
+    title.className = 'cbm-menu-title';
+    title.textContent = m.step === 0 ? 'Account'
+      : m.step === 1 ? 'Campaign in ' + acctLabel(m.form) : 'Ad set in “' + niceName(m.slot) + '”';
+    el.appendChild(title);
+    var f = document.createElement('input');
+    f.type = 'text'; f.className = 'cbm-filter'; f.placeholder = 'Type to filter…';
+    f.setAttribute('aria-label', 'Filter'); f.value = m.filter || '';
+    el.appendChild(f);
+    var list = document.createElement('div');
+    list.className = 'cbm-list'; list.setAttribute('role', 'menu');
+    el.appendChild(list);
+    function fill() {
+      list.textContent = '';
+      var q = f.value.trim().toLowerCase();
+      menuItems().forEach(function (it) {
+        if (q && !it.back && it.label.toLowerCase().indexOf(q) === -1) return;
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'cbm-item'; b.setAttribute('role', 'menuitem');
+        if (it.back) b.dataset.back = '1';
+        var t = document.createElement('span'); t.textContent = it.label; b.appendChild(t);
+        if (it.sub) { var s = document.createElement('span'); s.className = 'cbm-sub'; s.textContent = it.sub; b.appendChild(s); }
+        if (it.reason) {
+          b.setAttribute('aria-disabled', 'true'); b.title = it.reason; b.classList.add('cbm-off');
+          var r = document.createElement('span'); r.className = 'cbm-why'; r.textContent = it.reason; b.appendChild(r);
+        }
+        b.addEventListener('click', function () {
+          if (it.reason) return;
+          if (it.back) { m.step -= 1; m.filter = ''; renderMenu(); } else it.go();
+        });
+        list.appendChild(b);
+      });
+    }
+    fill();
+    f.addEventListener('input', function () { m.filter = f.value; fill(); });
+    el.onkeydown = function (e) {
+      var items = $all(el, '.cbm-item');
+      var at = items.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); (items[at + 1] || items[0] || f).focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); (at > 0 ? items[at - 1] : f).focus(); }
+      else if (e.key === 'Enter' && document.activeElement === f) {
+        e.preventDefault();
+        var first = items.filter(function (b) { return !b.classList.contains('cbm-off') && !b.dataset.back; })[0];
+        if (first) first.click();
+      }
+    };
+    f.focus();
+  }
+  function openMenu(btn) {
+    closeMenu(false);
+    var n = nodeOf(btn);
+    if (!n.node) return;
+    var src = srcSlotOf(n);
+    if (src && activeBuild(src)) { toast(MSG_BUILDING, { warn: true }); return; }
+    var el = document.createElement('div');
+    el.className = 'cbm-menu'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Move or copy to…');
+    document.body.appendChild(el);
+    var r = btn.getBoundingClientRect();
+    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
+    el.style.top = Math.min(r.bottom + 4, Math.max(8, window.innerHeight - 340)) + 'px';
+    menu = { el: el, opener: btn, kind: n.kind, node: n.node, mode: 'move', step: 0, filter: '' };
+    document.addEventListener('mousedown', outside, true);
+    renderMenu();
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.cbm-moveto') : null;
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    openMenu(b);
+  }, true);
+
+  /* Ctrl+Z (⌘Z) в ящике, когда курсор не в поле ввода. */
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'z' || e.shiftKey) return;
+    var t = e.target;
+    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    if (!t || !t.closest || !t.closest('#cbd-panel')) return;
+    if (undoLatest()) e.preventDefault();
+  });
+
+  /* Запертая карточка тянуться не должна - подсказка на ручке говорит почему. */
+  document.addEventListener('mouseover', function (e) {
+    var grip = e.target.closest ? e.target.closest('.cbm-grip') : null;
+    if (!grip) return;
+    var src = srcSlotOf(nodeOf(grip)), locked = !!(src && activeBuild(src));
+    grip.classList.toggle('cbm-locked', locked);
+    grip.title = locked ? MSG_BUILDING : DRAG_TIP;
+  });
+
+  return {
+    dragging: function () { return !!(drag && !drag.paintOk); },
+    deferPaint: function () { pendingPaint = true; },
+    run: run,
+    check: check,
+    undoLatest: undoLatest,
+    undoDepth: function () { return undoStack.length; },
+    menuOpen: function () { return !!menu; }
   };
 })();
 </script>
@@ -15348,6 +16050,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return h ? (parseInt(h.value, 10) || 0) : 0;
   }
   window.cbRowSet = rowSet;
+  /* ACL-1345: строительные детали для переноса карточек (блок «cbMove» ниже по странице). */
+  window.cbMoveParts = {
+    buildAdRowHTML: buildAdRowHTML, copyAdRowValues: _copyAdRowValues, initAllSelects: initAllSelects,
+    renumberAds: cbRenumberAds, updateAdCount: cbUpdateAdCount, updateAdLabels: cbUpdateAdLabels,
+    renumber: cbRenumber
+  };
 
   /* Место конверсии набора -> что видно и что уходит на сервер. Набор у каждого свой:
      у одного Instant Form, у другого сайт. */
@@ -15961,14 +16669,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return window.cbDuplicateSlot(btn);
   };
 
-  window.cbDuplicateSlot = function(btn) {
-    var srcSlot = btn.closest('.cb-slot');
-    var form = btn.closest('form');
-    if (!srcSlot || !form) return;
+  /* ACL-1345: `destForm` - положить копию в конец другой формы (перенос Ctrl-копией);
+     `btn` может быть самой карточкой. Возвращает новую карточку. */
+  window.cbDuplicateSlot = function(btn, destForm) {
+    var srcSlot = btn.classList && btn.classList.contains('cb-slot') ? btn : btn.closest('.cb-slot');
+    var form = destForm || btn.closest('form');
+    if (!srcSlot || !form) return null;
     var idx = form.querySelectorAll('.cb-slot').length;
-    srcSlot.insertAdjacentHTML('afterend', buildBlankSlotHTML(idx));
-    var newSlot = srcSlot.nextElementSibling;
-    if (!newSlot) return;
+    var newSlot;
+    var into = destForm ? destForm.querySelector('.cb-slots') : null;
+    if (into) { into.insertAdjacentHTML('beforeend', buildBlankSlotHTML(idx)); newSlot = into.lastElementChild; }
+    else { srcSlot.insertAdjacentHTML('afterend', buildBlankSlotHTML(idx)); newSlot = srcSlot.nextElementSibling; }
+    if (!newSlot) return null;
     initAllSelects(newSlot);
 
     // ACL-1768: у копии столько же наборов, сколько у источника (разделы - до копирования полей).
@@ -16056,6 +16768,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     cbRenumber(form);
     cbUpdateCount(form);
     window.cbSyncDestination(newSlot);
+    return newSlot;
   };
 
   // ── Ad sets (ACL-1768) ───────────────────────────────────────────────
