@@ -201,3 +201,28 @@ def test_doctor_line_is_never_a_failure(log, capsys, monkeypatch):
     acl_doctor.check_event_log()
     out = capsys.readouterr().out
     assert "Event log" in out and "not configured yet" in out and acl_doctor._failed == 0
+
+
+def test_post_sends_own_user_agent(monkeypatch):
+    """Cloudflare отклоняет подпись Python-urllib (403, код 1010): отправка идёт со своим заголовком."""
+    import urllib.request
+
+    seen = {}
+
+    class Resp:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen["ua"] = req.get_header("User-agent")
+        seen["auth"] = req.get_header("Authorization")
+        return Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert shipper._http_post("https://log.example/v1/batch", b"x", {"Authorization": "Bearer t"}) == 200
+    assert seen == {"ua": shipper.USER_AGENT, "auth": "Bearer t"}
