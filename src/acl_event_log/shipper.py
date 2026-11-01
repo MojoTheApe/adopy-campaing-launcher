@@ -26,7 +26,8 @@ from src.acl_event_log import writer
 DEFAULT_URL = ""
 
 BATCH_MAX_BYTES = 512 * 1024
-CYCLE_S = 900
+#: Раз в час: бесплатный KV Cloudflare пускает 1000 записей в сутки на все машины.
+CYCLE_S = 3600
 JITTER = 0.2
 FIRST_DELAY_S = (60, 300)
 MAX_BACKOFF_S = 3600

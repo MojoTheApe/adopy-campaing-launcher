@@ -7,10 +7,7 @@ compatibility_date = "2026-10-01"
 [vars]
 LIBRARY_REPO = "MojoTheApe/acl-lib"
 
-[[r2_buckets]]
-binding = "EVENTS"
-bucket_name = "acl-event-log"
-
+# Один бесплатный KV (карта не нужна): записи о токенах под `tok:`, пачки событий под `v1/`.
 [[kv_namespaces]]
 binding = "AUTH"
 # Подставить id, который напечатает `wrangler kv namespace create AUTH`.
