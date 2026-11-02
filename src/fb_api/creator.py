@@ -1075,7 +1075,7 @@ class TargetingResolver:
             return self._locale[lang]
         wkey = self._facts.term_key("locale", _tr.norm(lang))
         warm = self._facts.get_term(wkey)
-        if warm and str(warm.get("id") or "").isdigit():
+        if warm and re.fullmatch(r"[0-9]+", str(warm.get("id") or "")):
             self._touched.add(wkey)
             self._facts_hits += 1
             self._locale[lang] = int(warm["id"])
@@ -1084,7 +1084,7 @@ class TargetingResolver:
             if groups or self.locale_names[lang].casefold().endswith(" (all)"):
                 # группа «X (All)» без известных членов тоже группа: без пометки сравнение станет нестрогим
                 self.locale_groups[self._locale[lang]] = {int(k): str(v) for k, v in groups.items()
-                                                          if str(k).isdigit()}
+                                                          if re.fullmatch(r"[0-9]+", str(k))}
             return self._locale[lang]
         rows = _tr.named_search("adlocale", lambda: self.client.get_all(
             "/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1))

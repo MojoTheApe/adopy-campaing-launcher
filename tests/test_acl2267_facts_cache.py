@@ -227,12 +227,32 @@ def test_refused_batch_with_only_warm_ids_gives_no_confirmed_warning(store, fact
 
 
 def test_rejected_warm_term_has_budget_for_the_search(store, facts):
-    for i, t in enumerate(("Yoga", "Golf", "Chess", "Tennis")):
-        warm(facts, t, f"60030000001{i:02d}")
-    meta = Meta(search={t: [{"id": f"60030000002{i:02d}", "name": t}]
-                        for i, t in enumerate(("Yoga", "Golf", "Chess", "Tennis"))})
-    _, res = run(meta, store, facts, "Yoga", "Golf", "Chess", "Tennis")
-    assert {r["state"] for r in res.values()} == {"exact"}
+    # 8 тёплых терминов, все отвергнуты: бюджет считается по всем ожидающим терминам, а не по `every`
+    names = [f"Term{i}" for i in range(8)]
+    for i, t in enumerate(names):
+        warm(facts, t, f"6003000001{i:03d}")
+    meta = Meta(search={t: [{"id": f"6003000002{i:03d}", "name": t}] for i, t in enumerate(names)})
+    r, res = run(meta, store, facts, *names)
+    assert {x["state"] for x in res.values()} == {"exact"}
+    assert r.job_cap >= tr.JOB_READ_BASE + tr.JOB_READ_PER_TERM * len(names)
+    assert meta.types().count("adinterest") == len(names)
+
+
+def test_corrupt_picks_shape_is_a_miss_not_a_crash(store, facts):
+    key = facts.term_key("term", tr.norm("Yoga"))
+    facts.put_term(key, {"picks": 5})
+    meta = Meta(search={"Yoga": [{"id": YOGA, "name": "Yoga"}]})
+    _, res = run(meta, store, facts, "Yoga")
+    assert res["Yoga"]["state"] == "exact" and "adinterest" in meta.types()
+    facts.put_term(key, {"picks": 5})
+    assert facts.drop_interest_ids([YOGA]) == []
+
+
+def test_corrupt_language_id_is_a_miss_not_a_crash(facts):
+    facts.put_term(facts.term_key("locale", tr.norm("Spanish")), {"id": "²", "name": "Spanish (All)"})
+    meta = Meta()
+    r = cr.TargetingResolver(meta, facts=facts)
+    assert r.locale("Spanish") == 23 and meta.calls == 1
 
 
 def test_short_interest_id_is_never_written_and_reads_as_a_miss(store, facts):
@@ -388,3 +408,14 @@ def test_cached_all_group_without_members_stays_a_group(facts):
     two = cr.TargetingResolver(meta, facts=facts)
     assert two.locale("Spanish") == 1002 and meta.calls == 0
     assert two.locale_groups == {1002: {}}
+
+
+def test_future_dated_entry_is_stale(tmp_path):
+    now = [1_000_000.0]
+    f = fc.FactsCache(path=tmp_path / "f.json", clock=lambda: now[0])
+    f.put_term("term|a", {"picks": []})
+    assert f.get_term("term|a") is not None
+    now[0] -= 2 * 3600            # часы сдвинули назад: запись «из будущего»
+    assert f.get_term("term|a") is None
+    now[0] += 3600                # в пределах допуска на рассинхрон
+    assert f.get_term("term|a") is not None

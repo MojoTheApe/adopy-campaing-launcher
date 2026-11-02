@@ -557,7 +557,7 @@ class TermResolver:
         """Точная находка из долгого кэша (или None). Битая или неправдоподобная запись = промах."""
         value = self._facts.get_term(self._warm_key(term))
         picks = value.get("picks") if isinstance(value, dict) else None
-        if not picks or not all(plausible_pick(p, BUCKETS) for p in picks):
+        if not isinstance(picks, list) or not picks or not all(plausible_pick(p, BUCKETS) for p in picks):
             return None
         self.touched_keys.add(self._warm_key(term))
         return [{"id": str(p["id"]), "type": p["type"], "name": str(p.get("name") or "")} for p in picks]

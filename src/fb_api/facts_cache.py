@@ -27,6 +27,7 @@ from typing import Any
 CACHE_FILE = "facts_cache.json"
 DAYS_ENV = "ACL_FACTS_CACHE_DAYS"
 DEFAULT_DAYS = 60.0
+FUTURE_SKEW_S = 3600.0                  # допуск на рассинхрон часов; дальше «из будущего» = устарела
 _VERSION = 1
 _LOCK = threading.RLock()
 
@@ -102,7 +103,9 @@ class FactsCache:
         if days <= 0 or not isinstance(row, dict):
             return False
         try:
-            return self._clock() - float(row.get("saved_at")) <= days * 86400
+            age = self._clock() - float(row.get("saved_at"))
+            # запись «из будущего» (часы сдвинули назад) считается устаревшей; допуск на рассинхрон часов
+            return -FUTURE_SKEW_S <= age <= days * 86400
         except (TypeError, ValueError):
             return False
 
@@ -147,8 +150,9 @@ class FactsCache:
             for k, row in list(d["terms"].items()):
                 value = row.get("value") if isinstance(row, dict) else None
                 picks = value.get("picks") if isinstance(value, dict) else None
-                if any(isinstance(p, dict) and p.get("type") == "interests" and str(p.get("id")) in bad
-                       for p in picks or []):
+                if isinstance(picks, list) and any(
+                        isinstance(p, dict) and p.get("type") == "interests" and str(p.get("id")) in bad
+                        for p in picks):
                     d["terms"].pop(k, None)
                     gone.append(k)
 
