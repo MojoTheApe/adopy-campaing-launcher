@@ -104,8 +104,11 @@ def harden_machine_dir(directory: str | None = None) -> None:
         os.chmod(target, 0o700)
         with os.scandir(target) as it:
             for entry in it:
-                if entry.is_file(follow_symlinks=False):
-                    os.chmod(entry.path, 0o600)
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        os.chmod(entry.path, 0o600)
+                except OSError:
+                    continue  # один файл не лишает защиты остальные
     except OSError:
         pass
 

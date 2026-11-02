@@ -14,6 +14,6 @@ fi
 chmod +x "$LAUNCHER" "$ROOT/install_acl.sh" 2>/dev/null
 
 mkdir -p "$HOME/Desktop" || exit 1
-printf '#!/usr/bin/env bash\nexec bash "%s"\n' "$LAUNCHER" >"$SHORTCUT" || exit 1
+printf '#!/usr/bin/env bash\nexec bash %q\n' "$LAUNCHER" >"$SHORTCUT" || exit 1
 chmod +x "$SHORTCUT" || exit 1
 echo "Desktop shortcut: $SHORTCUT"
