@@ -76,6 +76,8 @@ from collections import OrderedDict
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Callable
 
+from src.fb_ads_rpa.mimic_process import is_mimic_executable, is_root_mimic_name
+
 log = logging.getLogger(__name__)
 
 #: Сколько секунд ожидающий спит между перепроверками, если его не будили.
@@ -266,7 +268,7 @@ def _mimic_processes() -> list[Any]:
     import psutil
 
     return [p for p in psutil.process_iter(["name", "exe", "cmdline"])
-            if str(p.info.get("name") or "").lower() == "chrome.exe"]
+            if is_root_mimic_name(p.info.get("name"))]
 
 
 def _root_profile(proc: Any, wanted: dict[str, str]) -> str | None:
@@ -276,7 +278,10 @@ def _root_profile(proc: Any, wanted: dict[str, str]) -> str | None:
     полей, уже снятых psutil (`name`/`exe`/`cmdline`): процесс не трогаем.
     """
     info = getattr(proc, "info", {}) or {}
-    if "mimic" not in str(info.get("exe") or "").lower():
+    exe = str(info.get("exe") or "")
+    # Windows: прежняя проверка «mimic в пути»; на macOS — по месту файла (mimic_process).
+    is_mimic = ("mimic" in exe.lower()) if sys.platform == "win32" else is_mimic_executable(exe)
+    if not is_mimic:
         return None
     args = [str(a) for a in (info.get("cmdline") or [])]
     if any(a.startswith("--type=") for a in args):

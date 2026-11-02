@@ -18,6 +18,12 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
 from src.fb_ads_rpa import hand_window, profile_dir, profile_proxy_gate, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
+from src.fb_ads_rpa.mimic_process import (
+    default_mlx_home,
+    is_browser_process_name,
+    mimic_executable_candidates,
+    mimic_version_dir,
+)
 from src.fb_ads_rpa.window_visibility import PerPage
 
 log = logging.getLogger(__name__)
@@ -36,7 +42,7 @@ _MLX_OPEN_HINT = (
 
 
 def _mlx_home() -> Path:
-    return Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
+    return default_mlx_home()
 
 
 def _find_mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
@@ -192,7 +198,7 @@ def _kill_chrome_for_user_data_dir(user_data_dir: str, profile_id: str = "", *, 
 
     for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
         try:
-            if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+            if not is_browser_process_name(proc.info["name"]):
                 continue
             exe = (proc.info["exe"] or "").lower().replace("/", "\\")
             cmd = " ".join(proc.info["cmdline"] or []).lower().replace("/", "\\")
@@ -222,13 +228,14 @@ def _find_mlx_chrome_for_profile(user_data_dir: str | Path | None = None) -> Pat
     deps = _mlx_home() / "deps"
     if not deps.is_dir():
         return None
-    candidates = [p for p in deps.glob("mimic_*/chrome.exe") if p.is_file()]
+    candidates = mimic_executable_candidates(deps)
     if not candidates:
         return None
 
     def _mimic_key(chrome: Path) -> tuple[int, int, str]:
         # mimic_150.4 -> (150, 4)
-        name = chrome.parent.name  # mimic_150.4
+        vdir = mimic_version_dir(chrome)
+        name = vdir.name if vdir else chrome.parent.name  # mimic_150.4
         ver = name.replace("mimic_", "", 1)
         parts = ver.split(".")
         try:
@@ -1757,11 +1764,11 @@ class MultiloginDirectCDPProvider:
             needles.append(last)
         if profile_id:
             needles.append(profile_id.lower())
-        mlx_home_norm = str(Path.home() / "mlx").lower().replace("/", "\\")
+        mlx_home_norm = str(default_mlx_home()).lower().replace("/", "\\")
 
         for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
             try:
-                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
                 if "mimic" not in exe and mlx_home_norm not in exe:
@@ -1789,7 +1796,7 @@ class MultiloginDirectCDPProvider:
                                profile_id.lower(), f"\\{short}~" if short else "") if n]
         for proc in psutil.process_iter(["name", "exe", "cmdline"]):
             try:
-                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
                 if "mimic" not in exe and "\\mlx\\" not in exe:
@@ -1837,11 +1844,11 @@ class MultiloginDirectCDPProvider:
             needles.append(last)
         if profile_id:
             needles.append(profile_id.lower())
-        mlx_home_norm = str(Path.home() / "mlx").lower().replace("/", "\\")
+        mlx_home_norm = str(default_mlx_home()).lower().replace("/", "\\")
 
         for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
             try:
-                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
                 if "mimic" not in exe and mlx_home_norm not in exe:
@@ -2042,7 +2049,7 @@ class MultiloginDirectCDPProvider:
 
         chrome = self._find_mlx_chrome(self._user_data_dir)
         if chrome is None:
-            raise RuntimeError("MLX Mimic browser (chrome.exe) not found under mlx/deps/")
+            raise RuntimeError("MLX Mimic browser not found under mlx/deps/")
 
         # Prefer attaching to an already-open profile instead of killing it.
         reused = self._try_attach_existing(profile_id, self._user_data_dir)
