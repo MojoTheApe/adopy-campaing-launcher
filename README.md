@@ -12,6 +12,8 @@ Start with [AGENTS.md](AGENTS.md) and the [current system](docs/system/PROJECT.m
 
 ## Установка (ACL — Adopy Campaign Manager)
 
+**macOS:** см. [docs/SETUP-MAC.md](docs/SETUP-MAC.md) (`Install ACL.command`, `install_acl.sh`, `start_dashboard.sh`).
+
 Требуется **Python 3.11+**. Двойной клик по `install_acl.bat` (или из консоли):
 
 ```bash

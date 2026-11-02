@@ -50,10 +50,15 @@ def runtime_dir(sha: str) -> Path:
     return _config_dir() / "runtimes" / _sha(sha)
 
 
+def _venv_python(venv: Path) -> Path:
+    # Windows venv: Scripts/python.exe. macOS/Linux venv: bin/python.
+    if os.name == "nt":
+        return venv / "Scripts" / "python.exe"
+    return venv / "bin" / "python"
+
+
 def runtime_python(sha: str) -> Path:
-    # ACL's supported fleet launcher is Windows. Keeping this explicit also
-    # prevents a staged POSIX test runtime from being mistaken for production.
-    return runtime_dir(sha) / "Scripts" / "python.exe"
+    return _venv_python(runtime_dir(sha))
 
 
 def pending_path() -> Path:
@@ -147,9 +152,9 @@ def prepare_runtime(sha: str, requirements: str | Path) -> Path:
             check=True,
             timeout=180,
         )
-        staged_python = staging / "Scripts" / "python.exe"
+        staged_python = _venv_python(staging)
         if not staged_python.is_file():
-            raise RuntimeError("new Windows runtime did not create Scripts/python.exe")
+            raise RuntimeError(f"new runtime did not create {staged_python.name}")
         subprocess.run(
             [
                 str(staged_python),
