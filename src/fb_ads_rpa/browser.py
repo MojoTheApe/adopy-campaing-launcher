@@ -47,6 +47,13 @@ def _mlx_home() -> Path:
     return default_mlx_home()
 
 
+def _mlx_home_for_match() -> str:
+    """Корень MLX для поиска процессов: на macOS учитывает MLX_HOME, иначе прежний ~/mlx."""
+    if sys.platform == "darwin":
+        return str(default_mlx_home())
+    return str(Path.home() / "mlx")
+
+
 def _find_mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
     """Папка профиля Multilogin — по адресу `profiles/{ws}/{folder_id}/{profile_id}`.
 
@@ -1766,14 +1773,14 @@ class MultiloginDirectCDPProvider:
             needles.append(last)
         if profile_id:
             needles.append(profile_id.lower())
-        mlx_home_norm = str(default_mlx_home()).lower().replace("/", "\\")
+        mlx_home_norm = _mlx_home_for_match().lower().replace("/", "\\")
 
         for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
             try:
                 if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if sys.platform != "win32":
+                if sys.platform == "darwin":
                     # macOS: Mimic по месту файла; без --user-data-dir (crashpad) — не браузерный процесс
                     if not is_mimic_executable(proc.info["exe"]) or not any(
                         isinstance(a, str) and a.startswith("--user-data-dir=")
@@ -1808,7 +1815,7 @@ class MultiloginDirectCDPProvider:
                 if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if sys.platform != "win32":
+                if sys.platform == "darwin":
                     # macOS: Mimic по месту файла; без --user-data-dir (crashpad) — не браузерный процесс
                     if not is_mimic_executable(proc.info["exe"]) or not any(
                         isinstance(a, str) and a.startswith("--user-data-dir=")
@@ -1860,14 +1867,14 @@ class MultiloginDirectCDPProvider:
             needles.append(last)
         if profile_id:
             needles.append(profile_id.lower())
-        mlx_home_norm = str(default_mlx_home()).lower().replace("/", "\\")
+        mlx_home_norm = _mlx_home_for_match().lower().replace("/", "\\")
 
         for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
             try:
                 if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if sys.platform != "win32":
+                if sys.platform == "darwin":
                     # macOS: Mimic по месту файла; без --user-data-dir (crashpad) — не браузерный процесс
                     if not is_mimic_executable(proc.info["exe"]) or not any(
                         isinstance(a, str) and a.startswith("--user-data-dir=")

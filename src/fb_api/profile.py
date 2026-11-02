@@ -233,7 +233,7 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
             info = getattr(proc, "info", None) or {}
             exe = str(info.get("exe") or "").lower().replace("\\", "/")
             # Windows: прежнее условие; на macOS — по месту файла внутри MLX home.
-            if sys.platform == "win32":
+            if sys.platform != "darwin":
                 if "mimic" not in exe and "/mlx/" not in exe:
                     continue
             elif not is_mimic_executable(info.get("exe")):

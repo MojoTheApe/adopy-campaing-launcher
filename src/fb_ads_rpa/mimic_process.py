@@ -7,7 +7,7 @@
 открывается только внутри Multilogin.
 
 Платформа берётся из параметра `platform` (None -> `sys.platform`), чтобы
-тесты проверяли обе ветки на любой ОС. Ветка win32 возвращает ровно то, что
+тесты проверяли обе ветки на любой ОС. Все платформы кроме darwin возвращают ровно то, что
 возвращал прежний код.
 """
 from __future__ import annotations
@@ -17,8 +17,13 @@ import sys
 from pathlib import Path
 
 
+def _is_mac(platform: str | None) -> bool:
+    return (platform or sys.platform) == "darwin"
+
+
 def _is_win(platform: str | None) -> bool:
-    return (platform or sys.platform) == "win32"
+    """Прежнее (не-macOS) поведение: Windows и Linux ведут себя как до macOS-поддержки."""
+    return not _is_mac(platform)
 
 
 def default_mlx_home() -> Path:

@@ -280,7 +280,7 @@ def _root_profile(proc: Any, wanted: dict[str, str]) -> str | None:
     info = getattr(proc, "info", {}) or {}
     exe = str(info.get("exe") or "")
     # Windows: прежняя проверка «mimic в пути»; на macOS — по месту файла (mimic_process).
-    is_mimic = ("mimic" in exe.lower()) if sys.platform == "win32" else is_mimic_executable(exe)
+    is_mimic = ("mimic" in exe.lower()) if sys.platform != "darwin" else is_mimic_executable(exe)
     if not is_mimic:
         return None
     args = [str(a) for a in (info.get("cmdline") or [])]
