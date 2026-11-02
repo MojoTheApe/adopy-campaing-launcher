@@ -6,6 +6,7 @@ Graph - поддельная Meta из теста ACL-1761.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -240,3 +241,15 @@ def test_check_plan_and_publish_reach_the_same_result(tmp_path, main, status):
     paired = "asset_customization_rules" in (_creative(meta).get("asset_feed_spec") or {})
     summary_pair = audit.plan["summary"]["ad_sets"][0]["ads"][0].get("stories_reels_same_as_main", False)
     assert paired == summary_pair == (main == (1080, 1080))
+
+
+def test_telemetry_has_one_square_pair_row_and_one_fallback_row(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import run_telemetry as rt
+    rows: list = []
+    monkeypatch.setattr(rt, "record", lambda step, ok=None, **kw: rows.append((step, ok, kw)))
+    _run(FakeMeta(), _same_file(tmp_path))
+    _run(FakeMeta(), _same_file(tmp_path / "p" if (tmp_path / "p").mkdir() is None else tmp_path, main=(1080, 1920)))
+    pairs = [(step, ok, kw["diag"]) for step, ok, kw in rows if (kw.get("diag") or {}).get("metric") == "square_pair"]
+    assert [(s, ok, d["origin"], d.get("reason")) for s, ok, d in pairs] == [
+        ("api_create_step", True, "same_path", None), ("api_create_step", False, "same_path", "not_square")]
+    assert all("png" not in json.dumps(d) for _, _, d in pairs), "no file names in telemetry"

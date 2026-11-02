@@ -1525,21 +1525,23 @@ class CampaignCreator:
         except Exception:  # noqa: BLE001 - телеметрия не должна ронять загрузку
             pass
 
-    def _pair_row(self, plan: CampaignPlan, ad: AdPlan) -> None:
-        """ACL-2084: строка телеметрии на квадратную пару (откуда пара и соотношение основного файла)."""
+    def _pair_row(self, plan: CampaignPlan, ad: AdPlan, reason: str = "") -> None:
+        """ACL-2084: строка телеметрии на пару из одного файла; `reason` - откат к одному файлу."""
         try:
             from src.fb_ads_rpa import run_telemetry
 
-            if ad.same_file_state == "pair":
+            if reason or ad.same_file_state == "pair":
                 origin = "same_path"
             elif ad.vertical_same_media:
                 origin = "same_bytes"
             else:
                 return
+            diag = {"source": "api", "step": f"ad {ad.index}: square pair", "metric": "square_pair",
+                    "kind": ad.kind, "origin": origin}
+            if reason:
+                diag["reason"] = reason
             # Шаг `api_create_step`: другие имена шагов панель прогресса не знает. Имён файлов нет.
-            run_telemetry.record("api_create_step", True, campaign=plan.name, diag={
-                "source": "api", "step": f"ad {ad.index}: square pair", "metric": "square_pair",
-                "kind": ad.kind, "origin": origin})
+            run_telemetry.record("api_create_step", not reason, campaign=plan.name, diag=diag)
         except Exception:  # noqa: BLE001 - телеметрия не должна ронять публикацию
             pass
 
@@ -2779,6 +2781,8 @@ class CampaignCreator:
                 files[ad.path] = data
                 if resolve_same_file_pair(ad, data) == "not_square":
                     out.warnings.append(same_file_warning(ad.index))
+                    if writing:
+                        self._pair_row(plan, ad, reason="not_square")
                     if ad.placements is not None and _vertical_placed(ad.placements):
                         out.warnings.append(crop_warning(ad.index))
                 if ad.vertical_path and ad.vertical_path == ad.path:
