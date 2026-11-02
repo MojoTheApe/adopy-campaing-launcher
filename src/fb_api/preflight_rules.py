@@ -189,13 +189,13 @@ RULES: list[dict[str, Any]] = [
        "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
-       "no 9:16 file: without one Facebook crops the picture itself",
+       "no 9:16 or square Stories / Reels file: without one Facebook crops the picture itself",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("vertical_needs_main", "Main file next to the Stories / Reels file", ERROR, "client",
        "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
        sel=".cb-creative-search", level="ad", unit="ad"),
-    _r("vertical_ratio", "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16", ERROR, "server",
-       "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images "
+    _r("vertical_ratio", "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16 or 1:1", ERROR, "server",
+       "with a Stories / Reels file the main file must be 1:1 or 4:5, the Stories / Reels one 9:16 or 1:1, both images "
        "or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
        sel=".cb-vertical-search", level="ad", unit="ad"),
     _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
