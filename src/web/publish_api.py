@@ -1102,6 +1102,7 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
             # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
             account_audit = {"rule": "account_active", "status": "error", "detail": error, "ads": []}
             error_kind = "account"
+            _pc.invalidate_account(account_label, "account_error")   # ACL-2266: кабинет не годен — зелёных строк в кэше нет
         else:
             # Только отказ ДО первой проверки не блокирует. После частичного
             # ответа неизвестные кампании блокируются; готовые строки не стираются.

@@ -399,3 +399,24 @@ def test_an_unread_audit_rule_of_a_non_last_campaign_is_never_cached(tmp_path, m
     assert pc.counters()["puts"] == 1, "only the cleanly read second campaign is cached"
     again = _check(api)
     assert [bool(r.get("cached")) for r in again["results"]] == [False, True]
+
+
+def test_an_account_error_drops_the_cached_verdicts_of_that_account(tmp_path, monkeypatch):
+    """Review N1: a disabled account must not keep showing cached green rows."""
+    a, b = _two(tmp_path)
+    api, opened, _ = _setup(monkeypatch, [a, b])
+    _check(api)
+    assert pc.counters()["puts"] == 2
+    edited = copy.deepcopy(a)
+    edited.ad_sets[0].ads[0].ad_body = "Edited"
+    monkeypatch.setattr(api, "build_drafts", lambda slots, **kw: copy.deepcopy([edited, b]))
+    from src.web.publish_api import ApiPublishError
+
+    def fail(*a_, **k):
+        raise ApiPublishError("Test: ad account is disabled", code="account")
+
+    monkeypatch.setattr(api, "_plan_in_read_session", fail)
+    out = _check(api)
+    assert out["error_kind"] == "account"
+    monkeypatch.setattr(api, "build_drafts", lambda slots, **kw: copy.deepcopy([a, b]))
+    assert pc.peek("Test", "MX", pc.act_of("Test"), pc.draft_digest(b)) is None
