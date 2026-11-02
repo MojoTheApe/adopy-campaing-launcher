@@ -251,5 +251,5 @@ def test_telemetry_has_one_square_pair_row_and_one_fallback_row(tmp_path, monkey
     _run(FakeMeta(), _same_file(tmp_path / "p" if (tmp_path / "p").mkdir() is None else tmp_path, main=(1080, 1920)))
     pairs = [(step, ok, kw["diag"]) for step, ok, kw in rows if (kw.get("diag") or {}).get("metric") == "square_pair"]
     assert [(s, ok, d["origin"], d.get("reason")) for s, ok, d in pairs] == [
-        ("api_create_step", True, "same_path", None), ("api_create_step", False, "same_path", "not_square")]
+        ("api_create_step", True, "same_path", None), ("api_create_step", None, "same_path", "not_square")]
     assert all("png" not in json.dumps(d) for _, _, d in pairs), "no file names in telemetry"

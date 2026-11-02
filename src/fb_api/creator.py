@@ -1541,7 +1541,8 @@ class CampaignCreator:
             if reason:
                 diag["reason"] = reason
             # Шаг `api_create_step`: другие имена шагов панель прогресса не знает. Имён файлов нет.
-            run_telemetry.record("api_create_step", not reason, campaign=plan.name, diag=diag)
+            # Откат к одному файлу - не сбой: `ok=None`, причина в `diag` (иначе Sentry принял бы его за причину).
+            run_telemetry.record("api_create_step", None if reason else True, campaign=plan.name, diag=diag)
         except Exception:  # noqa: BLE001 - телеметрия не должна ронять публикацию
             pass
 
@@ -2779,7 +2780,9 @@ class CampaignCreator:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
-                if resolve_same_file_pair(ad, data) == "not_square":
+                # ACL-2084: решение по размеру - по исходному файлу, как в Check plan, а не по сжатой копии.
+                sized = data if src == ad.path or ad.same_file_state != "requested" else self.load_media(ad.path, ad.kind)
+                if resolve_same_file_pair(ad, sized) == "not_square":
                     out.warnings.append(same_file_warning(ad.index))
                     if writing:
                         self._pair_row(plan, ad, reason="not_square")
@@ -3347,7 +3350,6 @@ class CampaignCreator:
                     self._step(out, f"ad {ad.index}: Stories / Reels use the main file (no second upload)")
                     self._pair_row(plan, ad)
                 elif ad.vertical_path:
-                    self._pair_row(plan, ad)
                     # ACL-1774: вертикальный файл грузится так же, до креатива; записи - в `rec` для сверки.
                     vdata = files[ad.vertical_path]
                     if ad.kind == "video":
