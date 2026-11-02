@@ -9059,7 +9059,8 @@ window.cbMove = (function () {
   function pageOf(slot) { var h = slot.querySelector('input[name$="_page_id"]'); return h ? h.value : ''; }
   function rowSetOf(row) { var h = row.querySelector('.cb-ad-adset'); return h ? (parseInt(h.value, 10) || 0) : 0; }
   function setRowSet(row, k) { var h = row.querySelector('.cb-ad-adset'); if (h) h.value = k; }
-  function formIdInput(row) { return row.querySelector('input[name$="_form_id"]'); }
+  /* Names may already be stripped (stripNames keeps them in data-renumber-name), so match both. */
+  function formIdInput(row) { return row.querySelector('input[name$="_form_id"], input[data-renumber-name$="_form_id"]'); }
   function slotById(id) {
     return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
   }

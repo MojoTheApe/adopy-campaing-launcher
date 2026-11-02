@@ -121,7 +121,6 @@ def _toast(p):
 def test_move_ad_to_another_campaign_keeps_fields_and_renumbers(page):
     _seed(page, count=2, ads=2)
     _open_campaign(page, 0)
-    page.evaluate("document.querySelector('#cbd-editor .cb-ad-row .cb-ad-row-header').closest('.cb-ad-row').querySelector('select[name$=\"_cta\"]').value")
     grip = page.locator("#cbd-editor .cb-ad-row").first.locator(".cbm-grip")
     _drag(page, grip, page.locator(".cbd-camp-head").nth(1))
     assert _files(page, 0) == [["offline-1.png"], ["offline-10.png", "offline-11.png", "offline-0.png"]]
@@ -326,17 +325,56 @@ def test_the_tree_does_not_repaint_under_a_drag(page):
 
 
 def test_moved_campaign_survives_a_keep_round_trip(page):
-    """Ящик сохраняет черновик по изменению DOM - перенос не должен ломать сериализацию."""
+    """Ящик сохраняет черновик по изменению DOM: перенос и Undo доходят до localStorage."""
     _seed(page, account=0, count=1)
     page.evaluate(
         """async () => { const f = document.querySelectorAll('form.open-account-form');
           await cbMove.run({ kind: 'camp', mode: 'move', slot: f[0].querySelector('.cb-slot'), destForm: f[1] }); }"""
     )
     dest = page.evaluate(
-        """() => { const f = document.querySelectorAll('form.open-account-form')[1]; const fd = new FormData(f);
-          return [fd.get('account_label'), fd.get('camp_0_ad_0_creative_file'), fd.get('camp_count') || fd.get('count')]; }"""
+        """() => { const f = Array.from(document.querySelectorAll('form.open-account-form'))
+            .find(x => x.querySelector('[name="account_label"]').value === 'Other'); const fd = new FormData(f);
+          return [fd.get('account_label'), fd.get('camp_0_ad_0_creative_file')]; }"""
     )
-    assert dest[1] == "offline-0.png"
+    assert dest == ["Other", "offline-0.png"]
+    page.wait_for_timeout(3500)
+    stored = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('acl.builder.v2')).map(k => localStorage.getItem(k)).join('|')")
+    assert "offline-0.png" in stored, "перенесённая кампания не попала в черновик"
+
+
+def _two_accounts_with_form(page):
+    _seed(page, account=0, count=1, ads=1)
+    page.evaluate(
+        """() => { const f = document.querySelectorAll('form.open-account-form')[0];
+          f.querySelector('.cb-slot input[name$="_page_id"]').value = '123';
+          f.querySelector('.cb-slot input[name$="_ad_0_form_id"]').value = 'FID'; }"""
+    )
+    _seed(page, account=1, count=1, ads=1)
+
+
+def _form_ids(page):
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(document.querySelectorAll('form.open-account-form')).map(f =>
+            [f.querySelector('[name="account_label"]').value,
+             Array.from(f.querySelectorAll('.cb-ad-row input[name$="_form_id"], .cb-ad-row input[data-renumber-name$="_form_id"]')).map(i => i.value)]))"""
+    )
+
+
+def test_moving_an_ad_to_another_account_clears_the_instant_form_and_undo_restores_it(page):
+    _two_accounts_with_form(page)
+    page.evaluate(
+        """async () => { const f = Array.from(document.querySelectorAll('form.open-account-form'));
+          const byLabel = l => f.find(x => x.querySelector('[name="account_label"]').value === l);
+          await cbMove.run({ kind: 'ad', mode: 'move', row: byLabel('Demo').querySelector('.cb-ad-row'),
+                             destSlot: byLabel('Other').querySelector('.cb-slot'), k: 0 }); }"""
+    )
+    ids = _form_ids(page)
+    assert ids["Other"] and all(v == "" for v in ids["Other"]), ids
+    assert "FID" not in ids["Other"], "Instant Form чужой Page остался в целевом аккаунте"
+    assert _names_ok(page)
+    _toast(page).locator(".cbm-undo").click()
+    assert "FID" in _form_ids(page)["Demo"], "Undo не вернул Instant Form"
+    assert "FID" not in _form_ids(page)["Other"]
 
 
 def test_static_strings_exist():
