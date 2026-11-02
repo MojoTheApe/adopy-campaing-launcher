@@ -371,3 +371,20 @@ def test_clear_forgets_the_term_in_both_caches(tmp_path, monkeypatch):
     assert warm_id(f, "Yoga") is None and warm_id(f, "Golf") == GOLF
     asyncio.run(web.targeting_resolver_clear(Req({"all": True})))
     assert warm_id(f, "Golf") is None
+
+
+def test_cached_all_group_without_members_stays_a_group(facts):
+    # ACL-1907: «Spanish (All)» без известных членов должна оставаться группой и после чтения из кэша
+    class OnlyAll(Meta):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if (params or {}).get("type") == "adlocale":
+                self.calls += 1
+                return [{"key": 1002, "name": "Spanish (All)"}]
+            return super().get_all(path, params, max_pages=max_pages)
+
+    one = cr.TargetingResolver(OnlyAll(), facts=facts)
+    assert one.locale("Spanish") == 1002 and one.locale_groups == {1002: {}}
+    meta = OnlyAll()
+    two = cr.TargetingResolver(meta, facts=facts)
+    assert two.locale("Spanish") == 1002 and meta.calls == 0
+    assert two.locale_groups == {1002: {}}

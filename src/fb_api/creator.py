@@ -1081,7 +1081,8 @@ class TargetingResolver:
             self._locale[lang] = int(warm["id"])
             self.locale_names[lang] = str(warm.get("name") or lang)
             groups = warm.get("groups") if isinstance(warm.get("groups"), dict) else {}
-            if groups:
+            if groups or self.locale_names[lang].casefold().endswith(" (all)"):
+                # группа «X (All)» без известных членов тоже группа: без пометки сравнение станет нестрогим
                 self.locale_groups[self._locale[lang]] = {int(k): str(v) for k, v in groups.items()
                                                           if str(k).isdigit()}
             return self._locale[lang]
