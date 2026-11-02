@@ -3,11 +3,10 @@
 About 15 minutes. Windows: see
 [SETUP-NEW-PC.md](SETUP-NEW-PC.md).
 
-> **Status.** The dashboard statistics are ported. Connecting accounts,
-> opening Multilogin profiles and building campaigns are **not expected to
-> work on a Mac** until the Mac acceptance run: they find browser processes
-> by Windows names (`chrome.exe`) and read Windows window titles — see
-> *Known limits* at the bottom.
+> **Status.** The dashboard statistics are ported. Profile detection on a Mac
+> matches the Mimic browser by its location inside Multilogin, not by a
+> Windows process name; it is verified on a live Mac in the acceptance run.
+> Window titles are still Windows-only — see *Known limits* at the bottom.
 
 > **Caution.** If `~/Documents` or `~/Desktop` is synced by iCloud, macOS can
 > evict files from `.venv` or `.git` and ACL will break at random. Turn off
@@ -112,12 +111,12 @@ Double-click **Adopy Campaign Manager** on the Desktop (or run `bash ~/Documents
 Keep the Terminal window open — closing it stops ACL. The browser opens
 `http://127.0.0.1:9090`. The first load takes a minute or two.
 
-## Step 5 — Connect your accounts (not expected to work on a Mac yet)
+## Step 5 — Connect your accounts
 
 Dashboard → **Accounts** → pick your open Multilogin profile for each account.
-The picker finds profiles by scanning browser processes the way Windows does, so on a Mac it
-may show nothing. That is a known limit until the Mac acceptance run; do not treat it as a
-broken install.
+On a Mac the picker matches the Mimic browser by its location inside Multilogin, not by a
+Windows process name. This is verified on a live Mac in the acceptance run; if it shows
+nothing before then, do not treat it as a broken install.
 
 ---
 
@@ -145,9 +144,9 @@ Nothing updates on its own.
 
 ## Known limits (macOS)
 
-- **Account picker.** It scans running processes for `chrome` / `chrome.exe` and, on Windows,
-  reads Multilogin window titles. On a Mac the process names differ and there are no such
-  titles, so the picker may list nothing or show ids instead of names.
+- **Account picker.** On a Mac it finds the Mimic browser by its location inside Multilogin
+  (verified in the acceptance run). Window titles are read only on Windows, so the picker may
+  show ids instead of names.
 - **Opening profiles on Mac** is verified only after the Mac acceptance run.
 - **Not verified on a real Mac yet.** The first install on a Mac is a test run: have Evgeni watching,
   and send the whole Terminal output if anything fails.
