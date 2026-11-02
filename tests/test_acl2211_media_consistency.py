@@ -19,11 +19,13 @@ def test_same_portrait_file_is_one_asset_with_a_visible_warning(tmp_path, alias)
         ad.vertical_path = ad.creative_path
     plan = cr.plan_from_draft(draft)
     assert plan.ad_sets[0].ads[0].vertical_path == ""
-    assert any("same file" in text.lower() for text in plan.warnings)
+    # ACL-2084: квадрат пошёл бы парой - решение по размеру, поэтому предупреждение уже у публикации.
+    assert plan.ad_sets[0].ads[0].same_file_state == "requested"
+    assert not any("same file" in text.lower() for text in plan.warnings)
     meta = FakeMeta()
     out, _ = _run(meta, draft)
     assert out.error == "" and out.readback["ok"], out.mismatches
-    assert any("same file" in text.lower() for text in out.warnings)
+    assert len([text for text in out.warnings if "same file" in text.lower()]) == 1
     assert len([path for path, _ in meta.posts if path.endswith("/adimages")]) == 1
     assert "asset_feed_spec" not in _creative(meta)
 

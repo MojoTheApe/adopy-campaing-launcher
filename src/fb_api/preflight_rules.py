@@ -770,6 +770,8 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
             size = None
+            # ACL-2084: тот же файл в обоих слотах решается по размеру - так же, как при публикации.
+            cr.resolve_same_file_pair(ad, data)
             if ad.vertical_path:
                 # ACL-1774: пара файлов — читаем вертикальный, сверяем соотношения и вид.
                 try:
