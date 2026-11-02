@@ -6575,19 +6575,27 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
 
 @app.post("/targeting-resolver/clear")
 async def targeting_resolver_clear(request: Request) -> JSONResponse:
-    """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    """Забыть один подтверждённый термин (`term`) или все (`all: true`).
+
+    ACL-2267: заодно и из долгого кэша точных находок - «забыть» значит искать заново.
+    """
+    from src.fb_api import facts_cache
+    from src.fb_api.targeting_resolver import ConfirmedStore, norm
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
     body = await _targeting_body(request)
     store = ConfirmedStore()
+    facts = facts_cache.default()
     if body.get("all") is True:
-        return JSONResponse({"ok": True, "removed": store.clear()})
+        removed = store.clear()
+        facts.clear()
+        return JSONResponse({"ok": True, "removed": removed})
     term = str(body.get("term") or "")
     if not term.strip():
         return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+    facts.drop_terms([facts.term_key("term", norm(term))])
     return JSONResponse({"ok": True, "removed": 1 if store.remove(term) else 0})
 
 
