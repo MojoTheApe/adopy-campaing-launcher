@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -30,9 +31,9 @@ def _creative_file_on_disk(filename: str, creatives_root: str) -> bool:
     root = Path(creatives_root)
     if not root.is_dir():
         return False
-    target = filename.strip()
+    target = unicodedata.normalize("NFC", filename.strip())
     for path in root.rglob("*"):
-        if path.is_file() and path.name == target:
+        if path.is_file() and unicodedata.normalize("NFC", path.name) == target:
             return True
     return False
 

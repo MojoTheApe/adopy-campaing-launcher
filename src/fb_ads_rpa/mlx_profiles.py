@@ -33,6 +33,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from src.fb_ads_rpa.mimic_process import is_browser_process_name
+
 
 def _profiles_root() -> Path:
     home = (os.environ.get("MLX_HOME") or "").strip() or os.path.join(
@@ -84,7 +86,7 @@ def open_profile_ids() -> list[str]:
     found: list[str] = []
     for proc in psutil.process_iter(["name", "cmdline"]):
         try:
-            if "chrome" not in (proc.info.get("name") or "").lower():
+            if not is_browser_process_name(proc.info.get("name")):
                 continue
             for arg in proc.info.get("cmdline") or []:
                 if not arg.startswith("--user-data-dir=") or "mlx" not in arg.lower():
@@ -133,10 +135,12 @@ def _window_titles_by_pid() -> dict[int, str]:
     ctypes rather than pywin32: no dependency to add for a few lines, and this
     runs on the operator's own machine only.
     """
+    titles: dict[int, str] = {}
+    if os.name != "nt":  # окна читаются через user32; на macOS имён нет, пикер покажет id
+        return titles
     import ctypes
     from ctypes import wintypes
 
-    titles: dict[int, str] = {}
     try:
         user32 = ctypes.windll.user32
     except Exception:
@@ -292,7 +296,7 @@ def open_profiles_detailed() -> list[dict]:
 
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
-            if "chrome" not in (proc.info.get("name") or "").lower():
+            if not is_browser_process_name(proc.info.get("name")):
                 continue
             args = proc.info.get("cmdline") or []
             udd = next((a.split("=", 1)[1] for a in args if a.startswith("--user-data-dir=")), "")

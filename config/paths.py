@@ -81,7 +81,36 @@ def get_local_config_dir() -> str:
     base = get_real_local_appdata()
     if base:  # Windows — every buyer machine today
         return os.path.join(base, "ACL")
+    if sys.platform == "darwin":  # macOS: где Finder и установщик ищут данные программ
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "ACL")
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
+
+
+def harden_machine_dir(directory: str | None = None) -> None:
+    """Машинная папка видна только владельцу: папка 0700, файлы верхнего уровня 0600.
+
+    На Mac/Linux в ней токены и пароли прокси, а по умолчанию новые файлы
+    читаются всеми пользователями компьютера. На Windows права папки в
+    профиле пользователя уже личные, поэтому там ничего не делаем. Папку
+    не создаём, вложенные каталоги не трогаем, ошибки глотаем: это
+    не должно мешать запуску.
+    """
+    if os.name == "nt":
+        return
+    try:
+        target = directory if directory else get_local_config_dir()
+        if not os.path.isdir(target):
+            return
+        os.chmod(target, 0o700)
+        with os.scandir(target) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        os.chmod(entry.path, 0o600)
+                except OSError:
+                    continue  # один файл не лишает защиты остальные
+    except OSError:
+        pass
 
 
 def config_identity(directory: str | os.PathLike | None = None) -> str:

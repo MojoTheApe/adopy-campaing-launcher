@@ -3,7 +3,15 @@ from __future__ import annotations
 import os
 import threading
 import time
+import unicodedata
 from pathlib import Path
+
+
+def _nfc(text: str) -> str:
+    """macOS отдаёт имена файлов в NFD (й = и + бреве), а имя из таблицы
+    приходит в NFC: сравниваем в одной форме. Для уже-NFC имён (Windows) это
+    тождество."""
+    return unicodedata.normalize("NFC", text)
 
 
 class CreativeNotFoundError(FileNotFoundError):
@@ -71,7 +79,7 @@ def _build_snapshot(root: str) -> _Snapshot:
                     continue
             except OSError:
                 continue
-            by_name.setdefault(entry.name.lower(), []).append(rel)
+            by_name.setdefault(_nfc(entry.name).lower(), []).append(rel)
     for rels in by_name.values():
         rels.sort()
     return _Snapshot(by_name, dir_mtimes)
@@ -122,9 +130,9 @@ def _lookup(root_path: Path, root_real: str, snap: _Snapshot, name_norm: str,
     """-> (совпадения, был ли в индексе путь, которого уже нет на диске)."""
     matches: list[Path] = []
     stale = False
-    suffix = name_norm.lower()
+    suffix = _nfc(name_norm).lower()
     for rel in snap.by_name.get(target_basename, ()):
-        if has_path and not rel.lower().endswith(suffix):
+        if has_path and not _nfc(rel).lower().endswith(suffix):
             continue
         path = root_path.joinpath(*rel.split("/"))
         if not path.is_file():
@@ -173,7 +181,7 @@ def find_creative_file(root: str | Path, filename: str, *, fresh: bool = False) 
 
     # Basename — из нормализованного имени: `Path(name).name` на POSIX не
     # считает обратный слэш разделителем, и результат зависел бы от ОС.
-    target_basename = name_norm.rsplit("/", 1)[-1].lower()
+    target_basename = _nfc(name_norm.rsplit("/", 1)[-1]).lower()
 
     # ACL-1342 S02: реальный путь корня — один раз, не на каждой итерации.
     root_real = os.path.realpath(root_path)

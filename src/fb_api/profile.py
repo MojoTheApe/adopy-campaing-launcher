@@ -27,11 +27,13 @@ from __future__ import annotations
 
 import os
 import socket
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from src.fb_ads_rpa.mimic_process import is_mimic_executable
 from src.fb_api import launch as _launch
 
 
@@ -230,7 +232,11 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
         try:
             info = getattr(proc, "info", None) or {}
             exe = str(info.get("exe") or "").lower().replace("\\", "/")
-            if "mimic" not in exe and "/mlx/" not in exe:
+            # Windows: прежнее условие; на macOS — по месту файла внутри MLX home.
+            if sys.platform != "darwin":
+                if "mimic" not in exe and "/mlx/" not in exe:
+                    continue
+            elif not is_mimic_executable(info.get("exe")):
                 continue
             args = list(info.get("cmdline") or [])
             udd = _arg_value(args, "--user-data-dir")

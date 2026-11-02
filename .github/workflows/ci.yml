@@ -362,6 +362,42 @@ jobs:
           python -m pytest "$env:WINDOWS_TEST_FILE" -q -n 0
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+  # Установка на Mac: закреплённые зависимости ставятся на Apple Silicon,
+  # скрипты разбираются системным bash 3.2, Mac-тесты зелёные. Задание
+  # советующее: в admission и в гейт релиза не входит (минуты macOS в 10 раз
+  # дороже, а Mac пока не обязательная платформа).
+  test-macos:
+    name: macOS install smoke (Apple Silicon)
+    needs: scope
+    if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.linux != 'false') }}
+    continue-on-error: true
+    runs-on: macos-14
+    timeout-minutes: 20
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Smoke check (does ACL start on macOS?)
+        run: python scripts/acl_smoke.py
+      - name: Shell scripts parse under system bash 3.2
+        run: |
+          for f in "Install ACL.command" install_acl.sh start_dashboard.sh scripts/install_dashboard_shortcut.sh; do
+            /bin/bash -n "$f"
+          done
+      - name: Mac tests
+        run: python -m pytest tests/test_posix_launcher_contract.py tests/test_mac_machine_hardening.py tests/test_mimic_process.py tests/test_mac_probe.py -q
+
   admission:
     name: ACL verification
     if: ${{ always() }}
