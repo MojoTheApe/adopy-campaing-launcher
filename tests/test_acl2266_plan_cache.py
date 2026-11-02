@@ -203,3 +203,19 @@ def test_invalidate_all_empties_the_store():
     _put(acct="Other", digest="c")
     assert pc.invalidate_all("targeting_confirm") == 2
     assert pc.peek("Acc", "MX", ACT, "a") is None and pc.peek("Other", "MX", ACT, "c") is None
+
+
+def test_merge_and_store_match_fresh_rows_by_campaign_name_when_positions_shift(tmp_path):
+    """Review N3: after a partial failure the fresh rows are [A, C]; C must not be taken for B."""
+    a = _draft(tmp_path, ads=1)
+    b = _draft(tmp_path, ads=1)
+    c = _draft(tmp_path, ads=1)
+    a.name, b.name, c.name = "A", "B", "C"
+    part = pc.Partition([a, b, c], "Acc", "MX")
+    assert [d.name for d in part.todo] == ["A", "B", "C"]
+    row_a, row_c = _row("A"), _row("C")
+    merged = part.merge([row_a, row_c])
+    assert [r["campaign_name"] for r in merged] == ["A", "C"]
+    part.store([row_a, row_c])
+    assert part.rejected == {} and pc.counters()["puts"] == 2
+    assert pc.peek("Acc", "MX", part.act, pc.draft_digest(b)) is None
