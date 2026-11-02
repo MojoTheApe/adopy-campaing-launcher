@@ -56,7 +56,20 @@ def _run(job: str) -> str:
 
 def test_the_old_all_windows_test_job_is_gone():
     assert "test" not in JOBS
-    assert set(JOBS) == {"scope", "process-instructions", "test-linux", "test-windows", "admission"}
+    assert set(JOBS) == {"scope", "process-instructions", "test-linux", "test-windows",
+                         "test-macos", "admission"}
+
+
+def test_the_macos_job_is_advisory_and_runs_the_mac_tests():
+    job = JOBS["test-macos"]
+    assert job["runs-on"] == "macos-14"
+    assert job["needs"] == "scope"
+    assert job["timeout-minutes"] <= 20
+    run = "\n".join(str(s.get("run", "")) for s in job["steps"])
+    assert "/bin/bash -n" in run
+    assert "tests/test_mimic_process.py" in run
+    # Советующее задание: релиз и admission от macOS не зависят.
+    assert "test-macos" not in JOBS["admission"]["needs"]
 
 
 def test_the_linux_job_runs_every_unmarked_file_on_ubuntu_in_shards():
