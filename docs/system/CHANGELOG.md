@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2345 — A tab that died resumes the publish once by itself; a profile starts below 75% memory — 2026-10-30
+
+A publish job stopped by `page_unresponsive` / `page_failed` now closes its profile, waits (up to
+`ACL_AUTO_RESUME_WAIT_S`, default 600) until the memory gate admits a new profile, reopens it and runs the same
+campaign again, once per job. The panel shows "Paused: the computer is short of memory, will continue by itself".
+It never resumes after an unknown write, a login / checkpoint / policy stop, a readback mismatch, an owner Stop, or a
+`page_failed` with a write possibly in flight; nothing is resent (the rerun reuses what exists). Telemetry: a
+`job_phase` row with `note: auto_resume` and the final `api_create_campaign` row with `auto_resumed: true`.
+`ACL_MEMORY_MAX_USED_PCT` now defaults to 75 (was 90); the env override stays.
+
 ## ACL-2328 — Staggered profile start no longer held indefinitely by 70-85% CPU — 2026-10-30
 
 The ACL-2283 staggered start waits for the CPU to settle below `ACL_LOAD_CPU_PCT`, which ACL-2316 lowered to 70,

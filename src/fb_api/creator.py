@@ -821,9 +821,11 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     row = next((r for r in mine if str(r.get("account_id") or r.get("id", "")).removeprefix("act_") == digits),
                None)
     if row is None:
+        _log_account_state(act, None)
         raise PlanError("This profile has no access to the ad account from the account map "
                         "(not in /me/adaccounts). Nothing was created.")
     if str(row.get("account_status")) != "1":
+        _log_account_state(act, row)
         raise PlanError(f"The ad account is not active (account_status {row.get('account_status')}). "
                         "Nothing was created.")
     acc = client.account(act)
@@ -857,7 +859,19 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
 
     facts.profile_loader = load_profile
     _pg.record_counts(merged, where="creator", started=started)
+    _log_account_state(act, row, acc, facts)
     return facts
+
+
+def _log_account_state(act: str, row: dict | None, acc: dict | None = None, facts=None) -> None:
+    """Состояние кабинета в общий журнал (ACL-2347); новых запросов к Meta нет, сбой молчит."""
+    try:
+        from src.acl_event_log import emit
+        from src.acl_event_log.events import account_payload
+
+        emit("account.state", account_payload(act, row, acc, facts), account=act)
+    except Exception:
+        pass
 
 
 def _apply_pages(facts: AccountFacts, merged: "_pg.MergedPages") -> None:
@@ -1413,6 +1427,38 @@ class CampaignCreator:
 
             run_telemetry.beat()
         except Exception:  # noqa: BLE001 - сердцебиение не должно ронять загрузку
+            pass
+
+    @staticmethod
+    def _waiting(what: str) -> None:
+        """Отметка для сторожа тишины: поток ждёт `what`, а не завис."""
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            run_telemetry.set_waiting(what)
+        except Exception:  # noqa: BLE001 - отметка не должна ронять загрузку
+            pass
+
+    def _video_row(self, plan: CampaignPlan, who: str, data: "bytes | LargeFile", mode: str, began: float,
+                   error: Exception | None = None) -> None:
+        """Строка телеметрии на видео: размер, md5 и время (`mode`: found / whole / chunked).
+
+        По md5 видно, грузится ли один и тот же файл снова. Содержимого файла и токена здесь нет.
+        """
+        try:
+            from src.fb_ads_rpa import run_telemetry
+
+            # Шаг `api_create_step`: другие имена шагов панель прогресса не знает.
+            diag: dict[str, Any] = {"source": "api", "step": f"{who}: video upload timing",
+                                    "metric": "video_upload", "mode": mode, "bytes": len(data),
+                                    "md5": _md5(data)[:12],
+                                    "upload_s": round(float(self.clock() - began), 1)}
+            if error is not None:
+                details = getattr(error, "details", None) or {}
+                diag.update(error=type(error).__name__, kind=getattr(error, "kind", ""),
+                            http_status=details.get("http_status"), fbtrace_id=details.get("fbtrace_id"))
+            run_telemetry.record("api_create_step", error is None, campaign=plan.name, diag=diag)
+        except Exception:  # noqa: BLE001 - телеметрия не должна ронять загрузку
             pass
 
     @staticmethod
@@ -2022,19 +2068,31 @@ class CampaignCreator:
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
             return str(hit["id"]) if hit else None
 
+        began = self.clock()
         vid = find()
         if vid:
             self._step(out, f"{who}: video already in the ad account")
-        elif isinstance(data, LargeFile):
-            vid = self._video_chunked(out, plan, data, title, find, who)
-            out.created.setdefault("videos", []).append(vid)
-            self._step(out, f"{who}: video uploaded")
+            self._video_row(plan, who, data, "found", began)
         else:
-            vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
-                              {"name": title, "title": title}, find, files={"source": data},
-                              filename=Path(path).name, upload=(ad.index, f"{role.strip()} video".strip()))
+            mode = "chunked" if isinstance(data, LargeFile) else "whole"
+            began = self.clock()
+            self._waiting("video_upload")
+            try:
+                if mode == "chunked":
+                    vid = self._video_chunked(out, plan, data, title, find, who)
+                else:
+                    vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
+                                      {"name": title, "title": title}, find, files={"source": data},
+                                      filename=Path(path).name,
+                                      upload=(ad.index, f"{role.strip()} video".strip()))
+            except Exception as exc:
+                self._video_row(plan, who, data, mode, began, exc)
+                raise
+            finally:
+                self._waiting("")
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"{who}: video uploaded")
+            self._video_row(plan, who, data, mode, began)
         return vid, self._wait_video(out, ad, vid, who=who)
 
     # -- загрузка большого видео кусками (ACL-1891)
@@ -3167,6 +3225,7 @@ class CampaignCreator:
                     continue
                 data = files[ad.path]
                 rec: dict[str, Any] = {}
+                rec["file_md5"] = _md5(data)  # ACL-2347: хэш уже считается для имён, второго чтения нет
                 if ad.kind == "video":
                     vid, thumb = self._video(out, plan, ad, data)
                     media = {"video_id": vid, "thumb": thumb}

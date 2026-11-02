@@ -31,7 +31,8 @@ def reading(total_gb: float, used_pct: float) -> ps.MemoryReading:
 
 
 def settings(**kw) -> ps.SlotSettings:
-    return ps.SlotSettings(**{"ceiling": 5, **kw})
+    # ACL-2345: the product default is 75 %; this file pins the 90 % the rule was written for
+    return ps.SlotSettings(**{"ceiling": 5, "max_used_pct": 90.0, **kw})
 
 
 @pytest.mark.parametrize("used,allowed", [(50, True), (86, True), (87, True), (89, True), (95, False)])
@@ -103,11 +104,11 @@ def test_a_laptop_with_little_memory_always_keeps_one_gigabyte_free(total_gb, us
 
 
 def test_the_setting_is_read_from_the_machine_env_and_garbage_falls_back():
-    assert ps.load_settings({}).max_used_pct == 90.0
+    assert ps.load_settings({}).max_used_pct == 75.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "85"}).max_used_pct == 85.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "92,5"}).max_used_pct == 92.5
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 90.0
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 90.0     # ниже 10 — мусор
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 75.0
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 75.0     # ниже 10 — мусор
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "150"}).max_used_pct == 99.0
 
 

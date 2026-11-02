@@ -982,7 +982,29 @@ class InPageGraph:
             stop = self._timeout_stop(exc)
             if stop is None:
                 raise
+            # ACL-2341: a login/checkpoint tab is never probed. Otherwise: does the tab answer in a new world? Then
+            # Ads Manager reloaded itself and the old context id was stale - not a freeze; callers re-attach
+            # (the retry boundary of `_eval_helper` / `_read_once` / `_ensure`).
+            if isinstance(stop, PageUnresponsive) and self._context_replaced():
+                raise StaleContextError(f"the page document was replaced ({exc})") from exc
             raise stop from exc
+
+    #: ACL-2341: how many timeouts in a row may be explained as "the document was replaced" before it is a freeze.
+    MAX_REPLACED_PROBES = 2
+    _replaced_probes = 0
+
+    def _context_replaced(self) -> bool:
+        """After a timeout: does a fresh world of the same tab answer at once? Local CDP only, nothing goes to Meta."""
+        if self._ctx is None or self._replaced_probes >= self.MAX_REPLACED_PROBES:
+            return False
+        self._replaced_probes += 1
+        try:
+            fresh = self.tab.create_isolated_world(self.world_name)
+            self.tab.evaluate_in(fresh, "1", timeout=5.0)
+        except Exception:  # noqa: BLE001 - the tab is silent for real
+            return False
+        self._reset_world()
+        return True
 
     # -- отдельный мир и помощник
     def pin_page(self, page: str, *, timeout: float = 30.0) -> dict:
@@ -1018,6 +1040,18 @@ class InPageGraph:
         self._injected = False
 
     def _ensure(self) -> int:
+        for attempt in (0, 1):
+            try:
+                return self._ensure_once()
+            except StaleContextError as exc:
+                # ACL-2341: injection timed out but a fresh world answers - the document was replaced; once more
+                self._reset_world()
+                if attempt:
+                    raise PageUnresponsive("the Ads Manager tab kept replacing its page and did not settle; "
+                                           "nothing more was sent") from exc
+        raise CdpError("isolated world creation failed")  # недостижимо
+
+    def _ensure_once(self) -> int:
         with self._timeouts_as_stops():
             if self._ctx is None:
                 self._ctx = self.tab.create_isolated_world(self.world_name)
@@ -1079,6 +1113,7 @@ class InPageGraph:
     patience: Any = None
     _patience_depth = 0
     _read_sent = False
+    _read_replaced = False
 
     #: ACL-2299: a GET whose answer may already have been asked for is resent at most this many times per call.
     MAX_READ_RESENDS = 2
@@ -1143,6 +1178,7 @@ class InPageGraph:
         """
         try:
             state = self._eval_helper(".state()", timeout=timeout)
+            self._replaced_probes = 0
             if self._session_recovered and isinstance(state, dict) and not state.get("has_token"):
                 state = self._eval_helper(".probe()", timeout=timeout)
         except (CdpError, OSError) as exc:
@@ -1272,7 +1308,18 @@ class InPageGraph:
             raise
         except CdpTimeout:
             raise
-        except (StaleContextError, PageError, CdpError):
+        except StaleContextError:
+            # ACL-2341: a GET changes nothing in Meta; the document was replaced under it (Ads Manager refreshed
+            # itself) - ask again once in the new document instead of reporting an unknown result.
+            if self._read_replaced:
+                return {"error": "call_unknown"}
+            self._read_replaced = True
+            self._reset_world()
+            try:
+                return self._read_once(spec, timeout)
+            finally:
+                self._read_replaced = False
+        except (PageError, CdpError):
             return {"error": "call_unknown"}
         return got if isinstance(got, dict) else {"error": "bad_reply"}
 

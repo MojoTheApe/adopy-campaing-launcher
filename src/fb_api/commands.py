@@ -193,6 +193,16 @@ class OperationStore:
                 os.fsync(fh.fileno())   # след переживает падение процесса
         except OSError as exc:
             raise HistoryUnavailable(str(exc)) from exc
+        # ACL-2347: каждый переход команды — в общий журнал (не роняет запись истории).
+        try:
+            from src.acl_event_log import emit
+
+            emit("command.executed", {
+                k: op.get(k) for k in
+                ("op_id", "command", "value", "state", "actor", "currency", "affected")
+            }, account=op.get("account"))
+        except Exception:
+            pass
 
     # -- доступ
     def add(self, op: dict) -> None:

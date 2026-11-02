@@ -31,6 +31,13 @@ from src.fb_api import warm  # noqa: E402
 from src.fb_api.cdp import CdpError, PageTab  # noqa: E402
 from src.web import profile_slots as ps  # noqa: E402
 
+
+def _s90(**kw):
+    """ACL-2345: the product default is 75 %; these tests were written for the 90 % limit and pin it."""
+    from src.web import profile_slots as _ps
+    return _ps.SlotSettings(**{"max_used_pct": 90.0, **kw})
+
+
 ACT = "act_123456789"
 PID = "550e8400-e29b-41d4-a716-446655440000"
 ADS_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=123456789"
@@ -116,7 +123,7 @@ class Rig:
         self.stops = stop_log.StopLog(tmp_path / "profile_stops.json", wall=lambda: self.now[0])
         self.gate = warm.HeavyGate(
             limit=lambda: limit, memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
-            settings=lambda: ps.SlotSettings(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01)
+            settings=lambda: _s90(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01)
         self.reg = warm.WarmRegistry(
             store=self.store, wall=lambda: self.now[0], scan=self._scan, tab_factory=self._tab,
             start_profile=self._start, close_window=self._stop, slot_queue=lambda: FakeQueue(self),
@@ -125,7 +132,7 @@ class Rig:
             pending_close=lambda pid: self.pending.pop(pid, None),
             pending_restore=lambda pid, prev: self.pending.setdefault(pid, prev),
             memory=reg_memory or (lambda: ps.MemoryReading(64000, 40000)),
-            settings=lambda: ps.SlotSettings(),
+            settings=lambda: _s90(),
             usage=reg_usage if reg_usage is not None else FakeUsage(),
             mono=lambda: self.now[0] - 1_800_000_000.0)
 
@@ -1360,7 +1367,7 @@ def test_close_that_raises_still_starts_the_cooldown(rig):
 
 def test_adopting_during_the_read_grace_works_with_the_real_queue(rig):
     """Чтение держит свой слот все 30 с льготы: усыновление исключает его из «занято»."""
-    queue = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 40000), settings=lambda: ps.SlotSettings(),
+    queue = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 40000), settings=lambda: _s90(),
                             usage=ps.ProfileUsage(measure=lambda p: {}, background=False))
     queue.acquire("read-api:Acc:1", PID)
     assert queue.others_on(PID) is True and queue.others_on(PID, "read-api:Acc:1") is False
@@ -1374,7 +1381,7 @@ def test_adopting_during_the_read_grace_works_with_the_real_queue(rig):
 
 
 def test_adopting_is_refused_and_the_pending_close_restored_when_a_publish_holds_the_profile(rig):
-    queue = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 40000), settings=lambda: ps.SlotSettings(),
+    queue = ps.ProfileSlots(memory=lambda: ps.MemoryReading(64000, 40000), settings=lambda: _s90(),
                             usage=ps.ProfileUsage(measure=lambda p: {}, background=False))
     queue.acquire("read-api:Acc:1", PID)
     queue.acquire("job-1", PID, share_profile=True)       # Publish делит профиль

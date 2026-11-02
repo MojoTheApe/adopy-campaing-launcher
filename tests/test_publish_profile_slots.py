@@ -28,6 +28,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.web import profile_slots as ps  # noqa: E402
+
+
+def _s90(**kw):
+    """ACL-2345: the product default is 75 %; these tests were written for the 90 % limit and pin it."""
+    from src.web import profile_slots as _ps
+    return _ps.SlotSettings(**{"max_used_pct": 90.0, **kw})
+
 from src.web import publish_jobs as pj  # noqa: E402
 
 GB = 1024
@@ -37,7 +44,7 @@ OLD_PROFILE_MB = int(1.5 * GB)
 # До ACL-1603 потолок был 4, запас 1,5 ГБ: механику очереди проверяем на них,
 # новые умолчания (2 / 3 ГБ / 3,5 ГБ) — в test_acl1603_stable_slots.py.
 OLD = dict(ceiling=4, reserve_mb=int(1.5 * GB), profile_floor_mb=int(1.5 * GB))
-S = ps.SlotSettings(profile_mb=OLD_PROFILE_MB, **OLD)   # потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
+S = _s90(profile_mb=OLD_PROFILE_MB, **OLD)   # потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
 
 
 def mem(available_gb: float, total_gb: float = 16) -> ps.MemoryReading:
@@ -76,11 +83,11 @@ def test_the_ceiling_holds_even_on_a_big_machine():
 
 
 def test_the_machine_setting_overrides_memory_both_ways():
-    fixed = ps.SlotSettings(override=2)
+    fixed = _s90(override=2)
     assert ps.decide(1, 1, mem(0.5), fixed)["allow"] is True       # памяти мало — всё равно два
     full = ps.decide(2, 0, mem(60), fixed)
     assert full["allow"] is False and full["reason"] == "override_full"
-    assert ps.decide(5, 0, mem(60), ps.SlotSettings(override=6))["allow"] is True   # выше потолка
+    assert ps.decide(5, 0, mem(60), _s90(override=6))["allow"] is True   # выше потолка
 
 
 def test_unknown_memory_runs_two_at_most():
@@ -135,7 +142,7 @@ class Machine:
     def __init__(self, available_gb: float, settings: ps.SlotSettings | None = None):
         self.available_gb = available_gb
         self.now = 1000.0
-        self.settings = settings or ps.SlotSettings(warmup_s=0, profile_mb=OLD_PROFILE_MB, **OLD)
+        self.settings = settings or _s90(warmup_s=0, profile_mb=OLD_PROFILE_MB, **OLD)
 
     _queue = None
 
@@ -246,7 +253,7 @@ def test_the_first_profile_waits_on_a_machine_with_no_free_memory_and_starts_whe
 
 
 def test_the_ceiling_caps_a_machine_with_plenty_of_memory():
-    m = Machine(available_gb=64, settings=ps.SlotSettings(ceiling=3, warmup_s=0))
+    m = Machine(available_gb=64, settings=_s90(ceiling=3, warmup_s=0))
     slots = m.slots()
     jobs = [Job(slots, f"j{i}", f"P{i}") for i in range(5)]
     assert _until(lambda: sum(j.started for j in jobs) == 3)
@@ -261,7 +268,7 @@ def test_the_ceiling_caps_a_machine_with_plenty_of_memory():
 
 
 def test_the_machine_override_is_obeyed_whatever_the_memory():
-    m = Machine(available_gb=0.5, settings=ps.SlotSettings(override=2, warmup_s=0))
+    m = Machine(available_gb=0.5, settings=_s90(override=2, warmup_s=0))
     slots = m.slots()
     jobs = [Job(slots, f"j{i}", f"P{i}") for i in range(3)]
     assert _until(lambda: sum(j.started for j in jobs) == 2)
@@ -272,7 +279,7 @@ def test_the_machine_override_is_obeyed_whatever_the_memory():
 
 
 def test_waiting_jobs_start_in_the_order_they_were_sent():
-    m = Machine(available_gb=64, settings=ps.SlotSettings(override=1, warmup_s=0))
+    m = Machine(available_gb=64, settings=_s90(override=1, warmup_s=0))
     slots = m.slots()
     order: list[str] = []
     a = Job(slots, "a", "P1")
@@ -292,7 +299,7 @@ def test_waiting_jobs_start_in_the_order_they_were_sent():
 def test_a_job_whose_profile_is_busy_waits_for_it_without_holding_back_others():
     """Два задания на один профиль — никогда разом; сосед на другом профиле
     не ждёт за ним, а оно первым берёт свой профиль, когда тот свободен."""
-    m = Machine(available_gb=64, settings=ps.SlotSettings(ceiling=2, warmup_s=0))
+    m = Machine(available_gb=64, settings=_s90(ceiling=2, warmup_s=0))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     assert _until(lambda: a.started)
@@ -314,7 +321,7 @@ def test_a_job_whose_profile_is_busy_waits_for_it_without_holding_back_others():
 
 
 def test_two_waiting_jobs_on_one_profile_keep_their_order():
-    m = Machine(available_gb=64, settings=ps.SlotSettings(warmup_s=0))
+    m = Machine(available_gb=64, settings=_s90(warmup_s=0))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P1")
@@ -329,7 +336,7 @@ def test_two_waiting_jobs_on_one_profile_keep_their_order():
 
 
 def test_a_cancelled_waiting_job_leaves_the_queue_at_once():
-    m = Machine(available_gb=64, settings=ps.SlotSettings(override=1, warmup_s=0))
+    m = Machine(available_gb=64, settings=_s90(override=1, warmup_s=0))
     slots = m.slots(tick_s=30)            # по таймеру не проснётся: только по wake
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")
@@ -344,7 +351,7 @@ def test_a_cancelled_waiting_job_leaves_the_queue_at_once():
 
 
 def test_a_just_started_profile_holds_back_the_next_until_it_has_warmed_up():
-    m = Machine(available_gb=2.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB, **OLD))
+    m = Machine(available_gb=2.5, settings=_s90(warmup_s=90, profile_mb=OLD_PROFILE_MB, **OLD))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")
@@ -361,7 +368,7 @@ def test_a_just_started_profile_holds_back_the_next_until_it_has_warmed_up():
 @pytest.fixture
 def runner(monkeypatch):
     """`_run_job` без RPA и без реальной памяти: одно место разом."""
-    machine = Machine(available_gb=64, settings=ps.SlotSettings(override=1, warmup_s=0))
+    machine = Machine(available_gb=64, settings=_s90(override=1, warmup_s=0))
     slots = machine.slots(tick_s=30)
     monkeypatch.setattr(pj, "_slots", slots)
     monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
@@ -479,7 +486,7 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     import httpx
     from src.web.app import app
 
-    machine = Machine(available_gb=1.0, settings=ps.SlotSettings())
+    machine = Machine(available_gb=1.0, settings=_s90())
     monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(
         memory=lambda: mem(1.0), settings=lambda: machine.settings, tick_s=0.05,
         usage=ps.ProfileUsage(lambda p: {}, background=False)))

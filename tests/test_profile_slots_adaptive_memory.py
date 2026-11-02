@@ -20,6 +20,13 @@ sys.path.insert(0, str(ROOT))
 
 from src.web import profile_slots as ps  # noqa: E402
 
+
+def _s90(**kw):
+    """ACL-2345: the product default is 75 %; these tests were written for the 90 % limit and pin it."""
+    from src.web import profile_slots as _ps
+    return _ps.SlotSettings(**{"max_used_pct": 90.0, **kw})
+
+
 GB = 1024
 # До ACL-1603: потолок 4, запас 1,5 ГБ, пол замера 1,5 ГБ. Механику (замер,
 # рост, откат к оценке) эти тесты проверяют на прежних числах; новые
@@ -28,7 +35,7 @@ OLD = dict(ceiling=4, reserve_mb=int(1.5 * GB), profile_floor_mb=int(1.5 * GB))
 
 
 def _S(**kw):
-    return ps.SlotSettings(**{**OLD, **kw})
+    return _s90(**{**OLD, **kw})
 
 
 def mem(available_gb: float, total_gb: float = 32) -> ps.MemoryReading:
@@ -39,7 +46,7 @@ def mem(available_gb: float, total_gb: float = 32) -> ps.MemoryReading:
 
 def test_a_run_starts_assuming_three_and_a_half_gb_per_profile():
     assert ps.DEFAULT_PROFILE_MEMORY_GB == 3.5
-    s = ps.load_settings({})
+    s = __import__('dataclasses').replace(ps.load_settings({}), max_used_pct=90.0)
     assert s.profile_mb == int(3.5 * GB)
     # ACL-2255: оценка больше не решает «хватит ли памяти» — решает доля занятой (90 %):
     # на 32 ГБ свободными должны оставаться 3,2 ГБ. Оценка нужна только для профиля,
@@ -64,7 +71,7 @@ def test_the_measured_average_replaces_the_estimate():
 
 
 def test_a_tiny_measurement_never_goes_below_the_floor():
-    s = ps.SlotSettings()
+    s = _s90()
     assert s.profile_floor_mb == int(3.5 * GB)   # ACL-1603
     assert s.profile_floor_mb == int(ps.DEFAULT_PROFILE_FLOOR_GB * GB)
     d = ps.decide(1, 0, mem(20), s, measured_mb=200)
@@ -423,5 +430,5 @@ def test_a_probe_hung_for_too_long_is_replaced_by_a_new_one():
 
 
 def test_the_settle_time_is_read_from_the_machine_env():
-    assert ps.load_settings({}).settle_s == ps.DEFAULT_SETTLE_S == 300.0
+    assert __import__('dataclasses').replace(ps.load_settings({}), max_used_pct=90.0).settle_s == ps.DEFAULT_SETTLE_S == 300.0
     assert ps.load_settings({"ACL_PROFILE_SETTLE_S": "120"}).settle_s == 120.0

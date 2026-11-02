@@ -120,6 +120,7 @@ def journal_path() -> Path:
 
 def record(event: dict, path: Path | None = None) -> Path | None:
     """Строка в журнал пилота. Запись не роняет пилот: ошибка — `None`."""
+    line = None
     try:
         target = path or journal_path()
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +130,15 @@ def record(event: dict, path: Path | None = None) -> Path | None:
         return target
     except Exception:
         return None
+    finally:
+        # Зеркало в общий журнал (ACL-2347): из уже очищенной строки, не роняет запись.
+        if line is not None:
+            try:
+                from src.acl_event_log import emit
+
+                emit("raw.fb_api", line)
+            except Exception:
+                pass
 
 
 def report_stop(kind: str, message: str, context: dict | None = None) -> str:

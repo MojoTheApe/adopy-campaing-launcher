@@ -106,7 +106,8 @@ def test_a_graph_call_timeout_is_classified_and_recorded_on_the_client():
     assert isinstance(client.stopped, g.PageUnresponsive)
     with pytest.raises(g.PageUnresponsive):            # дальше клиент не зовёт ничего
         client.get("/me/adaccounts")
-    assert tab.evals == 1
+    # ACL-2341: the one Graph call plus one local fresh-world probe (is the document replaced?); nothing after the stop
+    assert tab.evals == 2
 
 
 class RawBrowser:
