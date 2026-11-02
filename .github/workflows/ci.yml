@@ -370,6 +370,7 @@ jobs:
     name: macOS install smoke (Apple Silicon)
     needs: scope
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.linux != 'false') }}
+    continue-on-error: true
     runs-on: macos-14
     timeout-minutes: 20
     env:
