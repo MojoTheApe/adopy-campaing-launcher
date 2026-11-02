@@ -4,7 +4,8 @@
 // cbPreflightGate, предупреждения); дерево, сеть и кнопки — заглушки. Проверяется:
 //  - клиентская ошибка блокирует Publish сразу и без единого запроса;
 //  - при API серверные вердикты обновляются перед отправкой, и ошибка из них блокирует;
-//  - свежие вердикты не запрашиваются заново; правка кампании делает их устаревшими;
+//  - ACL-2266: страница вердиктов не помнит — Publish всегда шлёт все выбранные кампании (нетронутые сервер
+//    отдаёт из своего кэша), «Re-check all» шлёт force=1, обычная проверка — никогда;
 //  - предупреждения не блокируют и попадают в окно подтверждения;
 //  - при RPA запросов нет вовсе, ворота смотрят только клиентские ошибки;
 //  - второе нажатие во время проверки её не дублирует.
@@ -32,7 +33,8 @@ function world(backend, fetchReply) {
     window: w, Object, Array, JSON, RegExp, Number, String, parseInt, isFinite, Promise, Date,
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     cbApiMode: () => backend === 'api',
-    cbPlanFormData: (form, only) => ({ only: only ? only.length : 0, names: (only || []).map((x) => x._name) }),
+    cbPlanFormData: (form, only) => ({ only: only ? only.length : 0, names: (only || []).map((x) => x._name),
+      fields: {}, set(k, v) { this.fields[k] = v; } }),
     fetch: async (url, init) => {
       log.fetched.push(url); log.bodies.push(init && init.body);
       await new Promise((r) => setTimeout(r, 5));
@@ -147,12 +149,12 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     assert.equal(w.cbPreflightWarnHtml(), '', 'предупреждения читаются один раз');
     w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
     await new Promise((r) => setTimeout(r, 30));
-    assert.equal(log.fetched.length, 1, 'свежие вердикты запрошены заново');
+    assert.equal(log.fetched.length, 2, 'ACL-2266: Publish обязан спросить сервер (его кэш решает, читать ли Meta)');
     assert.equal(log.proceeded, 2);
     s._rev = 'r2';                                   // правка кампании
     w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
     await new Promise((r) => setTimeout(r, 60));
-    assert.equal(log.fetched.length, 2, 'после правки проверка не обновилась');
+    assert.equal(log.fetched.length, 3, 'после правки проверка не обновилась');
   }
   // 5. Второе нажатие во время проверки её не дублирует.
   {
@@ -251,7 +253,7 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     assert.equal(log.proceeded, 1, 'Publish all не дождался общей проверки');
     assert.equal(form._pfFlight, null, 'запись о идущей проверке не снята');
   }
-  // 10. ACL-2003: другой набор кампаний ждёт идущую проверку и проверяет только то, чего в ней не было.
+  // 10. Другой набор кампаний ждёт идущую проверку и уходит следом ЦЕЛИКОМ (нетронутые сервер отдаёт из кэша).
   {
     const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }, { campaign_name: 'C2', error: null, audit: [] }] };
     const { w, log } = world('api', reply);
@@ -259,43 +261,70 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     const a = w.cbPreflightRun(form, [s1]);
     const b = w.cbPreflightRun(form, [s1, s2]);
     await Promise.all([a, b]);
-    assert.equal(log.fetched.length, 2, 'ожидалось два запроса: C1, затем только C2');
+    assert.equal(log.fetched.length, 2, 'ожидалось два запроса: C1, затем весь набор');
     assert.deepEqual(log.bodies[0].names, ['C1']);
-    assert.deepEqual(log.bodies[1].names, ['C2'], 'второй запрос перепроверил уже проверенную C1');
+    assert.deepEqual(log.bodies[1].names, ['C1', 'C2'], 'второй запрос обязан нести весь набор: решает сервер');
   }
-  // 11. ACL-2003: проверка нетронутого черновика не повторяется, пока вердикт свежий; правка, смена набора и срок — повторяют.
+  // 11. ACL-2266: 10-минутной памяти страницы больше нет; время проверки — серверное.
   {
-    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }] };
+    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [], cached: true, checked_at: '2026-11-02T14:32:05+00:00' }] };
     const { w, log } = world('api', reply);
     const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
-    assert.equal(w.cbPfReusable(s), false, 'до первой проверки вердикта нет');
+    for (const gone of ['cbPfReusable', 'cbPfStoredData', 'cbPfAgo', 'CB_PF_FRESH_MS']) {
+      assert.equal(w[gone], undefined, gone + ' должен быть удалён (единственный кэш — на сервере)');
+    }
     await w.cbPreflightRun(form, [s]);
-    assert.equal(w.cbPfReusable(s), true, 'свежий вердикт не признан годным');
-    const stored = w.cbPfStoredData(form, [s]);
-    assert.equal(stored.results.length, 1);
-    assert.equal(stored.results[0].campaign_name, 'C1');
-    assert.ok(stored.stored_at > 0 && stored.stored_n === 1, 'нет отметки «из памяти»');
-    const s2 = slotOf(form, 'C2', okInput(), 'cbs2');
-    assert.equal(w.cbPfStoredData(form, [s, s2]), null, 'набор шире проверенного не должен браться из памяти');
-    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });    // Publish all берёт сохранённый вердикт
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(log.fetched.length, 1, 'Publish all перепроверил нетронутую кампанию');
-    assert.equal(log.proceeded, 1);
-    s._rev = 'r2';                                                           // правка
-    assert.equal(w.cbPfReusable(s), false, 'после правки вердикт признан годным');
-    s._rev = 'r1';
-    form._pfAudit.byName.C1.at -= 11 * 60 * 1000;                            // вышло окно свежести
-    assert.equal(w.cbPfReusable(s), false, 'просроченный вердикт признан годным');
-    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
-    await new Promise((r) => setTimeout(r, 30));
-    assert.equal(log.fetched.length, 2, 'просроченный вердикт не перепроверен перед Publish');
+    const hit = form._pfAudit.byName.C1;
+    assert.equal(hit.at, Date.parse('2026-11-02T14:32:05+00:00'), 'время проверки должно быть серверным');
+    assert.equal(hit.cached, true);
+    assert.ok(/^\d\d:\d\d$/.test(w.cbPfTime(hit.at)));
+    for (let k = 0; k < 2; k += 1) {
+      w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    assert.equal(log.fetched.length, 3, 'Publish all обязан спрашивать сервер каждый раз');
+    assert.deepEqual(log.bodies[2].names, ['C1']);
   }
-  // 12. ACL-2003: сбой проверки («Could not check») вердиктом не считается — его можно повторить.
+  // 12. Сбой проверки («Could not check») запоминается как сбой, а не как вердикт.
   {
     const { w } = world('api', { error: 'busy', error_kind: 'not_checked', results: [] });
     const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
     await w.cbPreflightRun(form, [s]);
-    assert.equal(w.cbPfReusable(s), false, 'сбой чтения выдан за вердикт');
+    assert.equal(form._pfAudit.byName.C1.errorKind, 'not_checked');
+  }
+  // 13. ACL-2266: «Re-check all» шлёт force=1, обычная проверка и Publish — никогда; force не сливается с обычной.
+  {
+    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }] };
+    const { w, log } = world('api', reply);
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    await w.cbPreflightRun(form, [s]);
+    assert.equal(log.bodies[0].fields.force, undefined, 'обычная проверка послала force');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(log.bodies[1].fields.force, undefined, 'Publish послал force');
+    await w.cbPreflightRun(form, [s], { force: true });
+    assert.equal(log.bodies[2].fields.force, '1', 'Re-check all не послал force=1');
+    const x = w.cbPreflightRun(form, [s]);
+    const y = w.cbPreflightRun(form, [s], { force: true });
+    await Promise.all([x, y]);
+    assert.equal(log.fetched.length, 5, 'force-запрос слился с обычным');
+    assert.equal(log.bodies[3].fields.force, undefined);
+    assert.equal(log.bodies[4].fields.force, '1');
+  }
+  // 14. ACL-2266: после перезагрузки страница один раз спрашивает /publish-plan/cached и ставит значки только
+  //     там, где сервер вернул вердикт; уже известное на форме не затирается.
+  {
+    const reply = { results: [{ campaign_name: 'C1', error: null, audit: [], cached: true, checked_at: '2026-11-02T14:32:05+00:00' }] };
+    const { w, log } = world('api', reply);
+    const form = { querySelectorAll: () => form._slots };
+    const s1 = slotOf(form, 'C1', okInput(), 'cbs1'), s2 = slotOf(form, 'C2', okInput(), 'cbs2');
+    form._slots = [s1, s2];
+    await w.cbPfRestore(form);
+    assert.deepEqual(log.fetched, ['/publish-plan/cached']);
+    assert.ok(form._pfAudit.byName.C1 && form._pfAudit.byName.C1.cached === true, 'вердикт не восстановлен');
+    assert.equal(form._pfAudit.byName.C2, undefined, 'для кампании без вердикта появилась запись');
+    await w.cbPfRestore(form);
+    assert.equal(log.fetched.length, 1, 'восстановление ушло в сеть второй раз');
   }
   process.stdout.write('ok');
 })().catch((e) => { process.stderr.write(String(e && e.stack || e)); process.exit(1); });
