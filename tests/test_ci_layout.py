@@ -65,6 +65,8 @@ def test_the_macos_job_is_advisory_and_runs_the_mac_tests():
     assert job["runs-on"] == "macos-14"
     assert job["needs"] == "scope"
     assert job["timeout-minutes"] <= 20
+    # Без этого упавшее macOS-задание делает весь прогон main failure и блокирует релиз.
+    assert job.get("continue-on-error") is True
     run = "\n".join(str(s.get("run", "")) for s in job["steps"])
     assert "/bin/bash -n" in run
     assert "tests/test_mimic_process.py" in run
