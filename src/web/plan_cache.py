@@ -37,6 +37,8 @@ MAX_ENTRIES = 300
 SCHEMA = 1
 #: Шаг, без которого строка не считается пройденной предпроверкой (creator.py, пробный прогон).
 PASSED_STEP = "dry run: preflight passed, nothing was written"
+#: Начало текста правила, которое не удалось прочитать в Meta (preflight_rules.server_verdicts).
+UNREAD_DETAIL_PREFIXES = ("Not checked:", "Meta did not answer:")
 _PENDING_TERM_STATES = ("pending", "unresolved", "unknown")
 
 _lock = threading.Lock()
@@ -138,6 +140,11 @@ def _reject_reason(row: Any, name: str) -> str:
         return "audit_empty"
     if any(str((a or {}).get("status")) == "error" for a in audit):
         return "audit_error"
+    # Правило, которое не удалось прочитать (остановка Graph, лимит вызовов, «Meta did not answer»), пишется как
+    # `unknown`: это не вердикт, сессионный признак остановки такую строку не ловит (лимит снимается между кампаниями).
+    if any(str((a or {}).get("status")) == "unknown"
+           and str((a or {}).get("detail") or "").startswith(UNREAD_DETAIL_PREFIXES) for a in audit):
+        return "audit_unknown"
     if any(str((t or {}).get("state")) in _PENDING_TERM_STATES for t in (row.get("targeting") or [])):
         return "pending_terms"
     return ""

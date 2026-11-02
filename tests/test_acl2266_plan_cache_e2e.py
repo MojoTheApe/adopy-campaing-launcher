@@ -372,3 +372,30 @@ def test_targeting_confirm_and_clear_drop_all_verdicts(monkeypatch, tmp_path):
         resp = asyncio.run(call(Req(body)))
         assert resp.status_code == 200
         assert pc.peek("Acc", "MX", ACT, "d1") is None, call.__name__
+
+
+@pytest.mark.parametrize("failure", ["graph_error", "call_budget"])
+def test_an_unread_audit_rule_of_a_non_last_campaign_is_never_cached(tmp_path, monkeypatch, failure):
+    """Review B1: GraphError / CallBudget inside the audit leave the rule `unknown`; the row is not a verdict."""
+    import inspect
+
+    from src.fb_api import creator as cr
+
+    a, b = _two(tmp_path)
+    api, opened, _ = _setup(monkeypatch, [a, b])
+    real = cr.resolve_pixel
+
+    def flaky(plan, facts):
+        in_audit = any(f.function == "server_verdicts" for f in inspect.stack())
+        if in_audit and plan.name == "MX Leads 1":
+            raise (g.GraphError("Meta 500") if failure == "graph_error" else g.CallBudget("call budget of 5 reached"))
+        return real(plan, facts)
+
+    monkeypatch.setattr(cr, "resolve_pixel", flaky)
+    first = _check(api)
+    row = first["results"][0]
+    assert any(x["status"] == "unknown" for x in row["audit"]), "the fixture must produce an unread rule"
+    assert pc.counters()["rejected"].get("audit_unknown") == 1
+    assert pc.counters()["puts"] == 1, "only the cleanly read second campaign is cached"
+    again = _check(api)
+    assert [bool(r.get("cached")) for r in again["results"]] == [False, True]
