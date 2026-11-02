@@ -46,11 +46,11 @@ def test_mac_browser_names() -> None:
 
 
 def test_mac_mimic_executable() -> None:
-    assert is_mimic_executable(MAC_MIMIC, "/Users/u/mlx", "darwin")
-    assert is_mimic_executable("/Users/u/mlx/deps/x/Browser", "/Users/u/mlx", "darwin")
-    assert not is_mimic_executable("/Users/u/other/Browser", "/Users/u/mlx", "darwin")
-    assert not is_mimic_executable("", "/Users/u/mlx", "darwin")
-    assert not is_mimic_executable(None, "/Users/u/mlx", "darwin")
+    assert is_mimic_executable(MAC_MIMIC, "/Users/u/mlx")
+    assert is_mimic_executable("/Users/u/mlx/deps/x/Browser", "/Users/u/mlx")
+    assert not is_mimic_executable("/Users/u/other/Browser", "/Users/u/mlx")
+    assert not is_mimic_executable("", "/Users/u/mlx")
+    assert not is_mimic_executable(None, "/Users/u/mlx")
 
 
 def test_mac_candidates(tmp_path: Path) -> None:
@@ -67,8 +67,45 @@ def test_mac_candidates(tmp_path: Path) -> None:
 
 
 def test_ordinary_chrome_is_never_mimic() -> None:
-    for platform in ("win32", "darwin"):
-        assert not is_mimic_executable(MAC_CHROME, "/Users/u", platform)
-        assert not is_mimic_executable(WIN_CHROME, "C:/Users/u/mlx", platform)
-        assert not is_mimic_executable("/Users/u/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                                       "/Users/u", platform)
+    assert not is_mimic_executable(MAC_CHROME, "/Users/u/mlx")
+    assert not is_mimic_executable(WIN_CHROME, "C:/Users/u/mlx")
+    assert not is_mimic_executable(
+        "/Users/u/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Users/u/mlx")
+
+
+def test_mac_mimic_may_be_named_google_chrome() -> None:
+    exe = "/Users/u/mlx/deps/mimic_150/Google Chrome.app/Contents/MacOS/Google Chrome"
+    assert is_mimic_executable(exe, "/Users/u/mlx")
+
+
+def test_applications_chrome_is_not_mimic() -> None:
+    assert not is_mimic_executable(MAC_CHROME, "/Users/u/mlx")
+
+
+def test_sibling_dir_with_mlx_prefix_is_not_mlx_home() -> None:
+    assert not is_mimic_executable("/Users/u/mlx-old/x/chrome", "/Users/u/mlx")
+
+
+def test_path_inside_mlx_home_without_mimic_word() -> None:
+    assert is_mimic_executable("/Users/u/mlx/deps/browser_150/Browser", "/Users/u/mlx")
+
+
+def _proc(exe: str, udd: str) -> object:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(info={"exe": exe, "cmdline": [exe, f"--user-data-dir={udd}",
+                                                         "--client-session-id=abc"]})
+
+
+def test_root_profile_call_site_on_mac(monkeypatch, tmp_path) -> None:
+    import sys
+
+    from src.web import profile_slots
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("MLX_HOME", str(tmp_path / "mlx"))
+    wanted = {"abc": "Doc1"}
+    chrome = _proc(MAC_CHROME, "/x/profiles/abc")
+    inside = _proc(str(tmp_path / "mlx" / "deps" / "mimic_150" / "Browser"), "/x/profiles/abc")
+    assert profile_slots._root_profile(chrome, wanted) is None
+    assert profile_slots._root_profile(inside, wanted) == "Doc1"

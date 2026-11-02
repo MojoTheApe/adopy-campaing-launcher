@@ -47,22 +47,31 @@ def _norm(path: str | Path) -> str:
     return str(path).lower().replace("\\", "/")
 
 
-def is_mimic_executable(
-    exe: str | None,
-    mlx_home: str | Path | None = None,
-    platform: str | None = None,
-) -> bool:
-    """Исполняемый файл принадлежит Mimic (а не обычному Chrome)."""
+_NOT_MIMIC_PREFIXES = ("/applications/", "/opt/homebrew/", "/usr/local/")
+
+
+def is_mimic_executable(exe: str | None, mlx_home: str | Path | None = None) -> bool:
+    """Исполняемый файл принадлежит Mimic (а не обычному Chrome).
+
+    Порядок: внутри MLX home (по префиксу с `/` на конце, `~/mlx-old` не
+    совпадает) -> да; обычные места установки Chrome -> нет; иначе по слову
+    `mimic` в пути.
+    """
     if not exe:
         return False
     low = _norm(exe)
-    # Правило «аккаунт только внутри Multilogin»: обычный Chrome — никогда.
-    if "google chrome.app" in low:
-        return False
-    if "mimic" in low:
-        return True
     home = _norm(mlx_home if mlx_home is not None else default_mlx_home()).rstrip("/")
-    return bool(home) and (low == home or low.startswith(home + "/"))
+    if home and low.startswith(home + "/"):
+        return True
+    user_apps = _norm(Path.home()).rstrip("/") + "/applications/"
+    if (
+        low.startswith(_NOT_MIMIC_PREFIXES)
+        or low.startswith(user_apps)
+        or "/ms-playwright/" in low
+        or "/program files" in low
+    ):
+        return False
+    return "mimic" in low
 
 
 def mimic_executable_candidates(deps: Path, platform: str | None = None) -> list[Path]:
