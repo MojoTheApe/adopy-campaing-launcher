@@ -136,7 +136,7 @@ def test_main_prints_json_and_returns_zero(capsys, monkeypatch, tmp_path):
     assert isinstance(rep["processes"], list)
 
 
-_UUID = "123e4567-e89b-12d3-a456-426614174000"
+_UUID = "550e8400-e29b-41d4-a716-446655440000"
 
 
 @pytest.mark.parametrize(
