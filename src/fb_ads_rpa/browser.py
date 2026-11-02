@@ -7,6 +7,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 from src.fb_ads_rpa.mimic_process import (
     default_mlx_home,
     is_browser_process_name,
+    is_mimic_executable,
     mimic_executable_candidates,
     mimic_version_dir,
 )
@@ -1771,7 +1773,14 @@ class MultiloginDirectCDPProvider:
                 if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if "mimic" not in exe and mlx_home_norm not in exe:
+                if sys.platform != "win32":
+                    # macOS: Mimic по месту файла; без --user-data-dir (crashpad) — не браузерный процесс
+                    if not is_mimic_executable(proc.info["exe"]) or not any(
+                        isinstance(a, str) and a.startswith("--user-data-dir=")
+                        for a in (proc.info["cmdline"] or [])
+                    ):
+                        continue
+                elif "mimic" not in exe and mlx_home_norm not in exe:
                     continue
                 cmd = " ".join(proc.info["cmdline"] or []).lower().replace("/", "\\")
                 if any(n in cmd for n in needles):
@@ -1799,7 +1808,14 @@ class MultiloginDirectCDPProvider:
                 if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if "mimic" not in exe and "\\mlx\\" not in exe:
+                if sys.platform != "win32":
+                    # macOS: Mimic по месту файла; без --user-data-dir (crashpad) — не браузерный процесс
+                    if not is_mimic_executable(proc.info["exe"]) or not any(
+                        isinstance(a, str) and a.startswith("--user-data-dir=")
+                        for a in (proc.info["cmdline"] or [])
+                    ):
+                        continue
+                elif "mimic" not in exe and "\\mlx\\" not in exe:
                     continue
                 args = proc.info["cmdline"] or []
                 if any(a.startswith("--type=") for a in args if isinstance(a, str)):
@@ -1851,7 +1867,14 @@ class MultiloginDirectCDPProvider:
                 if not is_browser_process_name(proc.info["name"]):
                     continue
                 exe = (proc.info["exe"] or "").lower().replace("/", "\\")
-                if "mimic" not in exe and mlx_home_norm not in exe:
+                if sys.platform != "win32":
+                    # macOS: Mimic по месту файла; без --user-data-dir (crashpad) — не браузерный процесс
+                    if not is_mimic_executable(proc.info["exe"]) or not any(
+                        isinstance(a, str) and a.startswith("--user-data-dir=")
+                        for a in (proc.info["cmdline"] or [])
+                    ):
+                        continue
+                elif "mimic" not in exe and mlx_home_norm not in exe:
                     continue
                 cmdline = proc.info["cmdline"] or []
                 cmd = " ".join(cmdline).lower().replace("/", "\\")
