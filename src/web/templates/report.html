@@ -3562,7 +3562,9 @@
       background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md);
     }
     .cbd-pf[hidden] { display: none; }
-    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+    .cbd-pf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs) var(--space-sm); }
+    .cbd-pf-head > * { min-width: 0; max-width: 100%; }
+    .cbd-pf-head .cbd-pf-ready { white-space: normal; }   /* ACL-2266: узкая колонка — значок переносит текст, а не вылезает */
     .cbd-pf-title { margin: 0; font-size: var(--adopy-text-body); font-weight: 700; color: var(--text); }
     .cbd-pf-badge {
       padding: 0.1rem 0.6rem; border-radius: 999px; border: 1px solid currentColor;
@@ -17652,6 +17654,8 @@ window.cbPfRestore = function (form) {
   var slots = Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
   if (!slots.length) return Promise.resolve(null);
   var fd = cbPlanFormData(form, null);
+  var sent = Object.create(null);   // ревизии карточек на момент ЗАПРОСА: правка во время ответа не получает чужой вердикт
+  slots.forEach(function (slot) { sent[cbPfName(slot)] = window.cbPfRev(slot); });
   return fetch('/publish-plan/cached', { method: 'POST', body: fd })
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -17660,7 +17664,7 @@ window.cbPfRestore = function (form) {
       var store = form._pfAudit, revs = Object.create(null);
       slots.forEach(function (slot) {
         var name = cbPfName(slot);
-        if (have[name] && !(store && store.byName[name])) revs[name] = window.cbPfRev(slot);
+        if (have[name] && !(store && store.byName[name]) && sent[name] === window.cbPfRev(slot)) revs[name] = sent[name];
       });
       if (Object.keys(revs).length) { cbPfStore(form, data, revs); cbPfRefresh(); }
       return data;
