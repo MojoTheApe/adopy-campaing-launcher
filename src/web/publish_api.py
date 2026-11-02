@@ -890,7 +890,8 @@ def _tab_load(stop: BaseException | None) -> dict[str, Any]:
 
 
 def _plan_in_read_session(account_label: str, drafts: list[Any], *,
-                          results: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+                          results: list[dict[str, Any]] | None = None,
+                          session_info: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     from src.analysis_agent import account_spend_api as _api
 
     # ACL-1990: готовые вердикты принадлежат вызывающему коду и переживают
@@ -924,6 +925,8 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             results.append(pub.publish_draft(draft))
         if client.writes:
             raise _PlanReadContractError("Check plan must not write")
+        if session_info is not None:   # ACL-2266: итог сессии для кэша вердиктов и телеметрии
+            session_info.update(stopped=client.stopped is not None, graph_calls=client.calls)
         # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
         # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
         # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку
@@ -948,7 +951,7 @@ class _PlanFlight:
         self.waiters = 0
 
 
-_PLAN_FLIGHTS: dict[tuple[str, str, str], _PlanFlight] = {}
+_PLAN_FLIGHTS: dict[tuple[str, str, str, bool], _PlanFlight] = {}
 _PLAN_FLIGHTS_LOCK = threading.Lock()
 
 
@@ -958,30 +961,34 @@ def _plan_flight_waiters() -> int:
         return sum(f.waiters for f in _PLAN_FLIGHTS.values())
 
 
-def _plan_flight_key(slots: list[dict[str, Any]], account_label: str, country: str) -> tuple[str, str, str]:
+def _plan_flight_key(slots: list[dict[str, Any]], account_label: str, country: str,
+                     force: bool = False) -> tuple[str, str, str, bool]:
     import json
 
     try:
         body = json.dumps(slots, sort_keys=True, ensure_ascii=False, default=repr)
     except (TypeError, ValueError):
         body = repr(slots)
-    return (str(account_label or "").strip().casefold(), str(country or "").strip().casefold(), body)
+    # ACL-2266: «Re-check all» не сливается с обычной проверкой.
+    return (str(account_label or "").strip().casefold(), str(country or "").strip().casefold(), body,
+            bool(force))
 
 
-def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str,
+               force: bool = False) -> dict[str, Any]:
     """Черновики билдера → план каждой кампании. Ничего не создаёт.
 
     ACL-2003: тот же аккаунт, страна и черновики, пока предыдущая такая проверка ещё идёт, не
     открывают профиль второй раз: запрос ждёт её и получает копию её ответа. Закончилась —
-    запись снимается, и следующий запрос читает кабинет заново (свежесть вердикта решает
-    страница, сервер ничего не помнит).
+    запись снимается. ACL-2266: готовые чистые вердикты неизменённых кампаний помнит `plan_cache`
+    (единственный кэш вердиктов), `force` его не читает и не сливается с обычной проверкой.
     """
     import copy
 
     # `confirm_reopen` is deliberately not part of the key: it only decides how a hand-opened profile is
     # taken over, and a waiter that needs the confirmation gets `open_by_hand` back and resends it
     # after this flight has ended (no flight is running then).
-    key = _plan_flight_key(slots, account_label, country)
+    key = _plan_flight_key(slots, account_label, country, force)
     with _PLAN_FLIGHTS_LOCK:
         flight = _PLAN_FLIGHTS.get(key)
         leader = flight is None
@@ -991,7 +998,8 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
             flight.waiters += 1
     if leader:
         try:
-            flight.result = _check_plan_logged(slots, account_label=account_label, country=country)
+            flight.result = _check_plan_logged(slots, account_label=account_label, country=country,
+                                               force=force)
             return flight.result
         except BaseException as exc:  # noqa: BLE001 — ждущие получают тот же отказ
             flight.error = exc
@@ -1009,10 +1017,11 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     return copy.deepcopy(flight.result)
 
 
-def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, country: str,
+                       force: bool = False) -> dict[str, Any]:
     """`_check_plan_once` + событие `plan.checked` в общий журнал (ACL-2347), и на ранних выходах."""
     began = time.monotonic()
-    result = _check_plan_once(slots, account_label=account_label, country=country)
+    result = _check_plan_once(slots, account_label=account_label, country=country, force=force)
     try:
         from src.acl_event_log import emit
         from src.acl_event_log.clean import plan_hash
@@ -1026,12 +1035,15 @@ def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, count
     return result
 
 
-def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str,
+                     force: bool = False) -> dict[str, Any]:
     """Одна проверка: профиль → чтение → ответ."""
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 
     started = time.monotonic()
+    from src.web import plan_cache as _pc
+
     try:
         drafts = build_drafts(slots, account_label=account_label, country=country)
     except Exception as exc:  # noqa: BLE001
@@ -1040,22 +1052,37 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
     if not drafts:
         return {"account": account_label, "results": [], "dry_run": True, "error_kind": "plan",
                 "error": "No campaigns to check."}
+    build_s = round(time.monotonic() - started, 2)
+    # ACL-2266: неизменённые кампании берём из кэша вердиктов; профиль и Meta нужны только для остальных.
+    part = _pc.Partition(drafts, account_label, country, force=force)
+    todo = part.todo
+    if not todo:
+        merged = part.merge([])
+        _record("api_plan_check", True,
+                diag={"campaigns": len(drafts), "results": len(merged), "cached": len(part.hits), "read": 0,
+                      "forced": bool(force), "graph_calls": 0, "build_s": build_s, "read_s": 0.0},
+                duration_s=round(time.monotonic() - started, 1))
+        return {"account": account_label, "results": merged, "dry_run": True, "error": "",
+                "error_kind": "", "account_audit": None, "connection_code": "", "cache": part.info(0)}
     run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
+    read_started = time.monotonic()
+    session_info: dict[str, Any] = {}
     results: list[dict[str, Any]] = []
     account_audit: dict[str, Any] | None = None
     error_kind = ""
     except_kind = ""
     connection_code = ""
+    contract_violation = False
     stop_seen: BaseException | None = None
     try:
         try:
-            results = run(account_label, drafts, results=results)
+            results = run(account_label, todo, results=results, session_info=session_info)
         except _PageUnresponsive as first:
             # ACL-2299 (C): a read changes nothing, so after the wait ONE replacement tab (ACL-2262 lifts the
             # frozen-tab pause once per episode) is tried before Check plan gives up.
             stop_seen = first
             results.clear()
-            results = run(account_label, drafts, results=results)
+            results = run(account_label, todo, results=results, session_info=session_info)
             stop_seen = None
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
@@ -1069,6 +1096,7 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
             # отдавать прежние «ok» из такой сессии или разрешать Publish.
             results.clear()
             checked_count = 0
+            contract_violation = True
             error_kind = "plan"
         elif isinstance(exc, ApiPublishError) and exc.code == "account":
             # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
@@ -1080,15 +1108,50 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
             error_kind = "plan" if checked_count else "not_checked"
         # Ошибки уже построенного локального черновика известны даже тогда,
         # когда профиль не открылся. Они не становятся разрешением на Publish.
-        for draft in drafts[checked_count:]:
+        for draft in todo[checked_count:]:
             if draft.errors:
                 out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
                 out.error, out.stop_kind = "; ".join(draft.errors), "plan"
                 results.append(dry_run_result(out))
+    # ACL-2266: чистые строки (и завершённый префикс при частичном сбое) — в кэш; нарушенный запрет записи
+    # или остановка Graph не кэшируют ничего.
+    fresh_n = len(results)
+    part.store(results, skip=contract_violation or bool(session_info.get("stopped")))
+    results = part.merge(results)
     _record("api_plan_check", not error,
-            diag={"campaigns": len(drafts), "results": len(results),
+            diag={"campaigns": len(drafts), "results": len(results), "cached": len(part.hits), "read": fresh_n,
+                  "forced": bool(force), "graph_calls": session_info.get("graph_calls"), "build_s": build_s,
+                  "read_s": round(time.monotonic() - read_started, 1),
+                  **({"rejected": dict(part.rejected)} if part.rejected else {}),
                   **({"error_kind": error_kind, "raised": except_kind} if error_kind else {}),
                   **_tab_load(stop_seen)},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
-            "error_kind": error_kind, "account_audit": account_audit, "connection_code": connection_code}
+            "error_kind": error_kind, "account_audit": account_audit, "connection_code": connection_code,
+            "cache": part.info(fresh_n)}
+
+
+def cached_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+    """ACL-2266: только готовые вердикты из кэша (для значков после перезагрузки страницы).
+
+    Строит черновики локально и отдаёт попадания; не зовёт `check_plan`, не трогает профиль и Meta.
+    """
+    from src.web import plan_cache as _pc
+
+    empty = {"account": account_label, "results": [], "dry_run": True, "error": "", "error_kind": "",
+             "account_audit": None}
+    if not _pc.enabled():
+        return empty
+    try:
+        drafts = build_drafts(slots, account_label=account_label, country=country)
+    except Exception:  # noqa: BLE001 - значки не восстановятся; проверка скажет причину сама
+        return empty
+    if not _pc.unique_names(drafts):
+        return empty
+    act = _pc.act_of(account_label)
+    rows = []
+    for draft, digest in zip(drafts, _pc.digest_all(drafts)):
+        row = _pc.peek(account_label, country, act, digest)
+        if row is not None:
+            rows.append(row)
+    return {**empty, "results": rows}

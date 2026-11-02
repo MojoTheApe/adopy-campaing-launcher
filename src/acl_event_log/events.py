@@ -109,6 +109,7 @@ def result_payload(res: dict) -> dict:
 def check_payload(result: dict, *, plan_hash_value: str, duration_s: float) -> dict:
     """Итог проверки плана: вердикты правил (худший по кампаниям) и блокирующие правила."""
     verdicts: dict[str, str] = {}
+    cache = result.get("cache") if isinstance(result.get("cache"), dict) else {}
     rows = [r for res in result.get("results") or [] for r in (res.get("audit") or [])]
     if result.get("account_audit"):
         rows.append(result["account_audit"])
@@ -122,6 +123,9 @@ def check_payload(result: dict, *, plan_hash_value: str, duration_s: float) -> d
         "blocking_rules": [r for r, s in verdicts.items() if s == "error"],
         "error_kind": result.get("error_kind") or "",
         "campaigns": [res.get("campaign_name") for res in result.get("results") or []],
+        # ACL-2266: сколько кампаний взято из кэша вердиктов и сколько прочитано в Meta.
+        "cached_n": int(cache.get("hits") or 0), "read_n": int(cache.get("read") or 0),
+        "forced": bool(cache.get("forced")), "ttl_min": cache.get("ttl_min") or 0,
     }
 
 

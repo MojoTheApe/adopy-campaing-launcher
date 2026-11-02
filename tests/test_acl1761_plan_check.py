@@ -54,7 +54,12 @@ def _plan_endpoint(monkeypatch, fields, backend="api"):
 def test_plan_endpoint_runs_only_as_a_dry_run(monkeypatch):
     code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1"})
     assert code == 200 and body["dry_run"] is True and calls == [([{"name": "C1"}],
-                                                                  {"account_label": "Acc", "country": "MX"})]
+                                                                  {"account_label": "Acc", "country": "MX",
+                                                                   "force": False})]
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1", "force": "1"})
+    assert calls[0][1]["force"] is True, "Re-check all (force=1) must reach check_plan"
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1", "force": "true"})
+    assert calls[0][1]["force"] is False, "only force=1 forces"
     code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "0"})
     assert code == 400 and calls == []
     code, body, calls = _plan_endpoint(monkeypatch, {})
@@ -533,7 +538,7 @@ def _flight_setup(monkeypatch, gate, runs):
     """check_plan без реального профиля: настоящий _check_plan_once заменён заглушкой."""
     from src.web import publish_api
 
-    def once(slots, *, account_label, country):
+    def once(slots, *, account_label, country, force=False):
         runs.append((account_label, country, list(slots)))
         gate.wait(5)
         return {"account": account_label, "results": [{"campaign_name": "C1"}], "dry_run": True, "error": ""}
@@ -601,15 +606,33 @@ def test_a_different_account_country_or_draft_is_not_merged(monkeypatch):
     assert len(runs) == 4
 
 
-def test_a_finished_check_is_not_cached_by_the_server(monkeypatch):
-    import threading
+def test_a_finished_check_is_served_from_the_server_cache_until_forced_or_expired(tmp_path, monkeypatch):
+    """ACL-2266 reverses ACL-2003 on purpose: the server cache is the one verdict memory.
 
-    gate, runs = threading.Event(), []
-    gate.set()
-    api = _flight_setup(monkeypatch, gate, runs)
-    api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
-    api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
-    assert len(runs) == 2, "после ответа повтор обязан читать кабинет заново (кэш решает страница)"
+    An identical repeat inside the TTL is a hit (no read session), `force` is not, past the TTL it is not.
+    """
+    import copy
+
+    from src.web import plan_cache
+    from src.web import publish_api as api
+
+    d = _draft(tmp_path, ads=1)
+    monkeypatch.setattr(api, "build_drafts", lambda slots, **kw: copy.deepcopy([d]))
+    opened = _read_session(monkeypatch, FakeMeta())
+    clock = [5000.0]
+    monkeypatch.setattr(plan_cache.time, "monotonic", lambda: clock[0])
+    monkeypatch.setenv(plan_cache.TTL_ENV, "10")
+
+    def run(**kw):
+        return api.check_plan([{"name": "C1"}], account_label="Test", country="MX", **kw)
+
+    run()
+    assert len(opened) == 1
+    assert run()["results"][0]["cached"] is True and len(opened) == 1, "an identical repeat must not read Meta"
+    run(force=True)
+    assert len(opened) == 2, "force must read again"
+    clock[0] += 601
+    assert not run()["results"][0].get("cached") and len(opened) == 3, "past the TTL the account is read again"
     assert api._plan_flight_waiters() == 0
 
 
@@ -620,7 +643,7 @@ def test_a_failed_leader_reaches_the_waiters_and_frees_the_key(monkeypatch):
 
     gate, calls = threading.Event(), []
 
-    def once(slots, *, account_label, country):
+    def once(slots, *, account_label, country, force=False):
         calls.append(1)
         gate.wait(5)
         raise RuntimeError("boom")

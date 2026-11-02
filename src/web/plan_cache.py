@@ -238,3 +238,77 @@ def reset_for_tests() -> None:
     with _lock:
         _store.clear()
         _counters.update({"hits": 0, "misses": 0, "puts": 0, "rejected": {}, "invalidated": {}})
+
+
+# ───────────────────────── разбор запроса Check plan (вызывается из publish_api) ─────────────────────────
+
+def _utc_stamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class Partition:
+    """Черновики запроса → «уже проверены» (`hits`) и «читать в Meta» (`todo`), потом склейка в порядке билдера.
+
+    Кэш работает, только когда он включён и имена кампаний уникальны (два одноимённых черновика сервер
+    всё равно откажет): иначе читается весь запрос, как раньше. `force` кэш не читает, но свежие
+    чистые строки его перезаписывают.
+    """
+
+    def __init__(self, drafts: list[Any], account: str, country: str, *, force: bool = False) -> None:
+        self.drafts, self.account, self.country, self.force = list(drafts), account, country, bool(force)
+        self.active = enabled() and unique_names(self.drafts)
+        self.act = act_of(account) if self.active else ""
+        self.digests: list[str] = digest_all(self.drafts) if self.active else []
+        self._digest_of = {str(d.name): h for d, h in zip(self.drafts, self.digests)}
+        self.hits: dict[str, dict[str, Any]] = {}
+        self.rejected: dict[str, int] = {}
+        if self.active and not self.force:
+            for draft, digest in zip(self.drafts, self.digests):
+                row = get(account, country, self.act, digest)
+                if row is not None:
+                    self.hits[str(draft.name)] = row
+        self.todo = [d for d in self.drafts if str(d.name) not in self.hits]
+
+    def store(self, fresh: list[dict[str, Any]], *, skip: bool = False) -> None:
+        """Прочитанные строки (по порядку `todo`): время проверки на каждую, чистые — в кэш.
+
+        `skip` — результаты сессии ненадёжны (нарушен запрет записи, Graph остановился): не кэшируем ничего.
+        """
+        stamp = _utc_stamp()
+        for i, row in enumerate(fresh):
+            if isinstance(row, dict):
+                row.setdefault("checked_at", stamp)
+            if not self.active or i >= len(self.todo):
+                continue
+            draft = self.todo[i]
+            if skip:
+                reason = "stopped"
+                with _lock:
+                    _count("rejected", reason)
+            else:
+                digest = self._digest_of[str(draft.name)]
+                reason = put(self.account, self.country, self.act, digest, str(draft.name), row)
+            if reason:
+                self.rejected[reason] = self.rejected.get(reason, 0) + 1
+
+    def merge(self, fresh: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Свежие строки и попадания в порядке черновиков; лишние свежие строки — в конец, как раньше."""
+        by_name: dict[str, dict[str, Any]] = {}
+        for i, row in enumerate(fresh):
+            if i < len(self.todo):
+                by_name[str(self.todo[i].name)] = row
+        out: list[dict[str, Any]] = []
+        for draft in self.drafts:
+            name = str(draft.name)
+            row = self.hits.get(name) or by_name.get(name)
+            if row is not None:
+                out.append(row)
+        out.extend(fresh[len(self.todo):])
+        return out
+
+    def info(self, read: int) -> dict[str, Any]:
+        info: dict[str, Any] = {"hits": len(self.hits), "read": int(read), "forced": self.force,
+                                "ttl_min": ttl_min() if self.active else 0}
+        if self.active:
+            info["digests"] = {str(d.name): h[:8] for d, h in zip(self.drafts, self.digests)}
+        return info

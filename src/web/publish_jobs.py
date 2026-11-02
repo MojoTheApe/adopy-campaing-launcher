@@ -1502,10 +1502,21 @@ def load_draft_status() -> dict:
     return draft_status.load(get_draft_status_path(), active_jobs=active)
 
 
+def _drop_plan_verdicts(account_label: Any) -> None:
+    """ACL-2266: после задания (любой исход) кампания уже существует, Page и кабинет могли сдвинуться."""
+    try:
+        from src.web import plan_cache
+
+        plan_cache.invalidate_account(str(account_label or ""), "publish_job")
+    except Exception:  # noqa: BLE001 - кэш не должен менять итог задания
+        pass
+
+
 def _finish(job_id: str, *, cancelled: bool = False) -> None:
     with _jobs_lock:
         if _abandoned(job_id):
             _active_publishers.pop(job_id, None)
+            _drop_plan_verdicts(_jobs[job_id].get("account_label"))
             return   # ACL-1614: задание уже закрыто сроком Stop
         cancelled = cancelled or bool(_jobs[job_id].get("cancel_requested"))
         _jobs[job_id]["status"] = "cancelled" if cancelled else "done"
@@ -1515,6 +1526,7 @@ def _finish(job_id: str, *, cancelled: bool = False) -> None:
     _persist_job(snapshot, state="stopped" if cancelled else "")
     _record_history(job_id)
     _log_job_finished(job_id)
+    _drop_plan_verdicts(snapshot.get("account_label"))
 
 
 def _run_rpa(
