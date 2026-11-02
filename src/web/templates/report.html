@@ -3877,7 +3877,8 @@
     .cbm-grip { cursor: grab; color: var(--muted); font-size: var(--adopy-text-sm); letter-spacing: -0.15em; padding: 0 0.15rem; user-select: none; flex-shrink: 0; }
     .cbm-grip:hover { color: var(--accent); }
     .cbm-grip.cbm-locked { cursor: not-allowed; opacity: 0.4; }
-    .cbd-camp-head .cbm-grip { align-self: center; }
+    /* Out of the flow, inside the tick's own left padding (0.5rem): adds no width to the row, whatever the font. */
+    .cbd-camp-head .cbm-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 0.5rem; padding: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 0.7rem; }
     .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
     /* Out of the flow and keyboard-revealed: the campaign Move-to button must not narrow the row or cover its click target (320px tree has no spare width). Mouse users drag by the grip. */
     .cbd-camp-head { position: relative; }
