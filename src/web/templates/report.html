@@ -3874,13 +3874,15 @@
     /* Числа в таблицах и карточках: цифры одной ширины, колонки не прыгают. */
     td.num, th.num, .kpi, .home-kpi, [class*="-kpi"], time { font-variant-numeric: tabular-nums lining-nums; }
     /* ═══ ACL-1345: перетаскивание карточек в билдере ═══ */
-    .cbm-grip { cursor: grab; color: var(--muted); font-size: var(--adopy-text-sm); letter-spacing: -0.15em; padding: 0 0.3rem; user-select: none; flex-shrink: 0; }
+    .cbm-grip { cursor: grab; color: var(--muted); font-size: var(--adopy-text-sm); letter-spacing: -0.15em; padding: 0 0.15rem; user-select: none; flex-shrink: 0; }
     .cbm-grip:hover { color: var(--accent); }
     .cbm-grip.cbm-locked { cursor: not-allowed; opacity: 0.4; }
     .cbd-camp-head .cbm-grip { align-self: center; }
     .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
-    .cbd-camp-head .cbm-moveto { align-self: center; opacity: 0; }
-    .cbd-camp-head:hover .cbm-moveto, .cbd-camp-head:focus-within .cbm-moveto { opacity: 1; }
+    /* Out of the flow and keyboard-revealed: the campaign Move-to button must not narrow the row or cover its click target (320px tree has no spare width). Mouse users drag by the grip. */
+    .cbd-camp-head { position: relative; }
+    .cbd-camp-head .cbm-moveto { position: absolute; right: 1.8rem; top: 50%; transform: translateY(-50%); background: var(--bg-elev); opacity: 0; pointer-events: none; }
+    .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; }
     .cb-ad-row-header .cbm-moveto { margin-left: auto; }
     .cb-ad-row-header .cbm-moveto + .cb-dup-ad-btn { margin-left: 0; }
     .cbm-moveto:hover { color: var(--accent); border-color: var(--accent); }
@@ -16050,12 +16052,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return h ? (parseInt(h.value, 10) || 0) : 0;
   }
   window.cbRowSet = rowSet;
-  /* ACL-1345: строительные детали для переноса карточек (блок «cbMove» ниже по странице). */
-  window.cbMoveParts = {
-    buildAdRowHTML: buildAdRowHTML, copyAdRowValues: _copyAdRowValues, initAllSelects: initAllSelects,
-    renumberAds: cbRenumberAds, updateAdCount: cbUpdateAdCount, updateAdLabels: cbUpdateAdLabels,
-    renumber: cbRenumber
-  };
 
   /* Место конверсии набора -> что видно и что уходит на сервер. Набор у каждого свой:
      у одного Instant Form, у другого сайт. */
@@ -16769,6 +16765,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     cbUpdateCount(form);
     window.cbSyncDestination(newSlot);
     return newSlot;
+  };
+
+  /* ACL-1345: строительные детали для переноса карточек (блок «cbMove» ниже по странице). */
+  window.cbMoveParts = {
+    buildAdRowHTML: buildAdRowHTML, copyAdRowValues: _copyAdRowValues, initAllSelects: initAllSelects,
+    renumberAds: cbRenumberAds, updateAdCount: cbUpdateAdCount, updateAdLabels: cbUpdateAdLabels,
+    renumber: cbRenumber
   };
 
   // ── Ad sets (ACL-1768) ───────────────────────────────────────────────
