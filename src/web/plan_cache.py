@@ -276,41 +276,48 @@ class Partition:
                     self.hits[str(draft.name)] = row
         self.todo = [d for d in self.drafts if str(d.name) not in self.hits]
 
+    def _by_name(self, fresh: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Свежие строки по `campaign_name` (не по позиции: при частичном сбое позиции сдвигаются)."""
+        todo_names = {str(d.name) for d in self.todo}
+        out: dict[str, dict[str, Any]] = {}
+        for row in fresh:
+            name = str(row.get("campaign_name") or "") if isinstance(row, dict) else ""
+            if name in todo_names and name not in out:
+                out[name] = row
+        return out
+
     def store(self, fresh: list[dict[str, Any]], *, skip: bool = False) -> None:
-        """Прочитанные строки (по порядку `todo`): время проверки на каждую, чистые — в кэш.
+        """Прочитанные строки: время проверки на каждую, чистые — в кэш (строка к черновику — по имени кампании).
 
         `skip` — результаты сессии ненадёжны (нарушен запрет записи, Graph остановился): не кэшируем ничего.
         """
         stamp = _utc_stamp()
-        for i, row in enumerate(fresh):
+        for row in fresh:
             if isinstance(row, dict):
                 row.setdefault("checked_at", stamp)
-            if not self.active or i >= len(self.todo):
-                continue
-            draft = self.todo[i]
+        if not self.active:
+            return
+        for name, row in self._by_name(fresh).items():
             if skip:
                 reason = "stopped"
                 with _lock:
                     _count("rejected", reason)
             else:
-                digest = self._digest_of[str(draft.name)]
-                reason = put(self.account, self.country, self.act, digest, str(draft.name), row)
+                reason = put(self.account, self.country, self.act, self._digest_of[name], name, row)
             if reason:
                 self.rejected[reason] = self.rejected.get(reason, 0) + 1
 
     def merge(self, fresh: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Свежие строки и попадания в порядке черновиков; лишние свежие строки — в конец, как раньше."""
-        by_name: dict[str, dict[str, Any]] = {}
-        for i, row in enumerate(fresh):
-            if i < len(self.todo):
-                by_name[str(self.todo[i].name)] = row
+        """Свежие строки и попадания в порядке черновиков; строки без своей кампании — в конец, как раньше."""
+        by_name = self._by_name(fresh)
         out: list[dict[str, Any]] = []
         for draft in self.drafts:
             name = str(draft.name)
             row = self.hits.get(name) or by_name.get(name)
             if row is not None:
                 out.append(row)
-        out.extend(fresh[len(self.todo):])
+        used = {id(r) for r in by_name.values()}
+        out.extend(r for r in fresh if id(r) not in used)
         return out
 
     def info(self, read: int) -> dict[str, Any]:
