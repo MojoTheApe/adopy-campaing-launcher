@@ -171,6 +171,10 @@ try {
         }
     }
 
+    # The token-lookup scenario above puts the real lookup back; the scenarios below
+    # must not depend on a GitHub credential of the machine running them.
+    function Get-AclGitHubToken { 'test-token' }
+
     # Main ahead of the last release: the tag's commit is installed, not main's tip.
     # Release order is by the tagged COMMIT's date, so give the commits distinct dates.
     $savedDate = $env:GIT_COMMITTER_DATE
