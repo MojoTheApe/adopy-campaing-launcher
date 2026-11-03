@@ -419,3 +419,31 @@ def test_future_dated_entry_is_stale(tmp_path):
     assert f.get_term("term|a") is None
     now[0] += 3600                # в пределах допуска на рассинхрон
     assert f.get_term("term|a") is not None
+
+
+@pytest.mark.parametrize("body", [{"term": "yoga"}, {"all": True}])
+def test_clear_drops_both_the_facts_cache_and_the_plan_verdicts(tmp_path, monkeypatch, body):
+    # ACL-2266 + ACL-2267: «забыть» таргетинг сбрасывает и факты, и готовые вердикты Check plan
+    import asyncio
+
+    from src.web import app as web
+    from src.web import plan_cache as pc
+    from tests.test_acl1761_api_create import ACT
+    from tests.test_acl2266_plan_cache import _put
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
+
+    class Req:
+        async def json(self):
+            return body
+
+    pc.reset_for_tests()
+    f = fc.default()
+    warm(f, "Yoga", YOGA)
+    _put()
+    assert pc.peek("Acc", "MX", ACT, "d1") is not None and warm_id(f, "Yoga") == YOGA
+    resp = asyncio.run(web.targeting_resolver_clear(Req()))
+    assert resp.status_code == 200
+    assert warm_id(f, "Yoga") is None, "facts cache must be cleared"
+    assert pc.peek("Acc", "MX", ACT, "d1") is None, "plan verdicts must be cleared"

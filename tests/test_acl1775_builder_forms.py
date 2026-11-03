@@ -114,7 +114,7 @@ def test_a_stored_draft_restores_the_destination_and_resyncs():
 def test_every_place_that_builds_or_copies_rows_resyncs_the_destination():
     page = _page()
     for anchor in ("window.cbAddSlot = function(form) {", "function addAdRow(slot, k) {",
-                   "window.cbDuplicateAd = function(btn) {", "window.cbDuplicateSlot = function(btn) {",
+                   "window.cbDuplicateAd = function(btn) {", "window.cbDuplicateSlot = function(btn, destForm) {",
                    "window.cbAddAdset = function (slot, opts) {", "window.cbCopyAdset = function (slot, k) {",
                    "window.cbRemoveAdset = function (slot, k) {"):
         body = page[page.index(anchor):]

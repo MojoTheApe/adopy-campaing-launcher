@@ -21,10 +21,21 @@ today, so this is the structure read from the code plus the one measured total:
 5. Closing. After a clean check the window is kept (ACL-2117); otherwise the profile is
    stopped softly and Multilogin saves it.
 
-What changed in ACL-2003: identical requests no longer repeat these stages. The page shares
-one in-flight check per form, the server merges identical concurrent requests, and a draft
-that was not edited is shown from its stored verdict for 10 minutes ("Checked N min ago")
-instead of reading the account again. A single check is not faster.
+What changed in ACL-2003: the page shares one in-flight check per form and the server merges
+identical concurrent requests. A single check is not faster.
+
+What changed in ACL-2266: the server remembers the clean verdict of each campaign
+(`src/web/plan_cache.py`, in memory, one entry per campaign). The key is the enriched draft
+(texts from the library, link, pixel, Page, interests) plus size and mtime of its creative files,
+the ad account id, country and the day. An unchanged campaign is answered from memory: when every
+campaign is unchanged no profile is opened and no Graph call is made; when some changed, only
+those are read (the account preflight still runs once). A verdict is stored only with positive
+evidence (passed dry run, non-empty audit without errors, no term waiting for a click). It
+expires after `ACL_PLAN_CACHE_TTL_MIN` minutes (default 60, `0` = off, at most 24 h), when a
+publish job for the account finishes, when a targeting term is confirmed or cleared, or when the
+dashboard restarts. "Re-check all" (`force=1`) reads everything and refreshes the cache. The page
+keeps no verdict memory of its own (the 10-minute memory of ACL-2003 is gone). `api_plan_check`
+now records `cached`, `read`, `forced`, `graph_calls`, `build_s`, `read_s` and `rejected`.
 
 Not measured yet: the split between steps 1-5. Adding per-stage durations to `api_plan_check`
 would answer it from real runs.

@@ -6421,10 +6421,31 @@ async def publish_plan(request: Request) -> JSONResponse:
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
     from src.fb_api.connection import confirmed_reopen
+    # ACL-2266: force=1 («Re-check all») не читает кэш вердиктов сервера.
+    force = (form.get("force") or "").strip() == "1"
     with confirmed_reopen((form.get("confirm_reopen") or "").strip() == "1"):
         result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
-                                         country=country)
+                                         country=country, force=force)
     return JSONResponse(result)
+
+
+@app.post("/publish-plan/cached")
+async def publish_plan_cached(request: Request) -> JSONResponse:
+    """ACL-2266: только готовые вердикты из кэша сервера (без профиля, Meta и check_plan) — для восстановления
+    значков после перезагрузки страницы. Тот же вход и те же условия, что у /publish-plan."""
+    from src.web import publish_api
+
+    form = await read_form(request, BUILDER_FORM)
+    if (form.get("dry_run") or "").strip() != "1":
+        return JSONResponse({"error": "Check plan only runs as a dry run (dry_run=1)."}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"error": "Check plan needs the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    country, account_label, slots = _parse_build_upload_form(form)
+    if not country or not account_label or not slots:
+        return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    return JSONResponse(await asyncio.to_thread(publish_api.cached_plan, slots, account_label=account_label,
+                                                country=country))
 
 
 # ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
@@ -6437,6 +6458,13 @@ async def _targeting_body(request: Request) -> dict:
     except Exception:  # noqa: BLE001
         body = {}
     return body if isinstance(body, dict) else {}
+
+
+def _drop_plan_verdicts(trigger: str) -> None:
+    """ACL-2266: термин может сидеть в любой кампании — готовые вердикты Check plan забываем все."""
+    from src.web import plan_cache
+
+    plan_cache.invalidate_all(trigger)
 
 
 @app.get("/publish-plan/waiting")
@@ -6570,6 +6598,7 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
                                       picks=cand.get("picks"))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    _drop_plan_verdicts("targeting_confirm")
     return JSONResponse({"ok": True, "entry": row})
 
 
@@ -6591,12 +6620,15 @@ async def targeting_resolver_clear(request: Request) -> JSONResponse:
     if body.get("all") is True:
         removed = store.clear()
         facts.clear()
+        _drop_plan_verdicts("targeting_clear")
         return JSONResponse({"ok": True, "removed": removed})
     term = str(body.get("term") or "")
     if not term.strip():
         return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+    removed = 1 if store.remove(term) else 0
     facts.drop_terms([facts.term_key("term", norm(term))])
-    return JSONResponse({"ok": True, "removed": 1 if store.remove(term) else 0})
+    _drop_plan_verdicts("targeting_clear")
+    return JSONResponse({"ok": True, "removed": removed})
 
 
 # ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
