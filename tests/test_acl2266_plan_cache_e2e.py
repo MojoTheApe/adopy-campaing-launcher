@@ -99,9 +99,12 @@ def test_force_reads_everything_and_refreshes_the_cache(tmp_path, monkeypatch):
 def test_duplicate_names_are_never_cached_and_everything_is_read(tmp_path, monkeypatch):
     a = _draft(tmp_path, ads=1)
     api, opened, _ = _setup(monkeypatch, [a, copy.deepcopy(a)])
-    _check(api)
+    first = _check(api)
     again = _check(api)
     assert len(opened) == 2 and again["cache"]["hits"] == 0 and pc.counters()["puts"] == 0
+    # Review 2 / B2: same-name drafts give exactly one row per draft, in draft order (as before the cache).
+    for out in (first, again):
+        assert [r["campaign_name"] for r in out["results"]] == [a.name, a.name]
 
 
 def test_cache_off_reads_every_time(tmp_path, monkeypatch):
@@ -420,3 +423,33 @@ def test_an_account_error_drops_the_cached_verdicts_of_that_account(tmp_path, mo
     assert out["error_kind"] == "account"
     monkeypatch.setattr(api, "build_drafts", lambda slots, **kw: copy.deepcopy([a, b]))
     assert pc.peek("Test", "MX", pc.act_of("Test"), pc.draft_digest(b)) is None
+
+
+def test_an_unreadable_form_terms_rule_is_never_cached(tmp_path, monkeypatch):
+    """Review 2 / B1b: forms.page_terms_accepted swallows GraphError -> `form_terms unknown` (no known prefix)."""
+    from src.fb_api import forms as _forms
+
+    a = _draft(tmp_path, ads=1)
+    api, opened, _ = _setup(monkeypatch, [a])
+    monkeypatch.setattr(_forms, "page_terms_accepted", lambda *x, **k: None)   # Graph answer swallowed -> None
+    from src.fb_api import creator as cr
+    from src.fb_api import preflight_rules as pf
+
+    real_verdicts = pf.server_verdicts
+
+    def templated(creator, plan, **k):
+        for s_ in plan.ad_sets:                     # the audit reads the terms only for an instant form to be created
+            s_.destination = "instant_form"
+            for ad in s_.ads:
+                ad.form_template = {"name": "tpl"}
+        return real_verdicts(creator, plan, **k)
+
+    monkeypatch.setattr(pf, "server_verdicts", templated)
+    monkeypatch.setattr(cr.CampaignCreator, "_check_forms", lambda self, plan: None)
+    out = _check(api)
+    assert out["results"], out
+    row = out["results"][0]
+    terms = [x for x in row["audit"] if x["rule"] == "form_terms"]
+    assert terms and terms[0]["status"] == "unknown", "the fixture must produce the unread rule"
+    assert pc.counters()["rejected"].get("audit_unknown") == 1 and pc.counters()["puts"] == 0
+    assert _check(api)["cache"]["hits"] == 0

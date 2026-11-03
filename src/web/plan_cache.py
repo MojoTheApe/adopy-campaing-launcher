@@ -125,6 +125,17 @@ def _count(bucket: str, name: str) -> None:
     d[name] = d.get(name, 0) + 1
 
 
+def _unread(item: Any) -> bool:
+    """`unknown` вне правил-«свойств данных» (preflight_rules.LOCAL_UNKNOWN_RULES) — чтение не удалось; запасной путь — текст."""
+    from src.fb_api.preflight_rules import LOCAL_UNKNOWN_RULES
+
+    item = item or {}
+    if str(item.get("status")) != "unknown":
+        return False
+    return (str(item.get("rule")) not in LOCAL_UNKNOWN_RULES
+            or str(item.get("detail") or "").startswith(UNREAD_DETAIL_PREFIXES))
+
+
 def _reject_reason(row: Any, name: str) -> str:
     """'' — строку можно положить; иначе причина (по положительным признакам, см. модуль)."""
     if not isinstance(row, dict):
@@ -142,8 +153,7 @@ def _reject_reason(row: Any, name: str) -> str:
         return "audit_error"
     # Правило, которое не удалось прочитать (остановка Graph, лимит вызовов, «Meta did not answer»), пишется как
     # `unknown`: это не вердикт, сессионный признак остановки такую строку не ловит (лимит снимается между кампаниями).
-    if any(str((a or {}).get("status")) == "unknown"
-           and str((a or {}).get("detail") or "").startswith(UNREAD_DETAIL_PREFIXES) for a in audit):
+    if any(_unread(a) for a in audit):
         return "audit_unknown"
     if any(str((t or {}).get("state")) in _PENDING_TERM_STATES for t in (row.get("targeting") or [])):
         return "pending_terms"
@@ -309,6 +319,8 @@ class Partition:
 
     def merge(self, fresh: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Свежие строки и попадания в порядке черновиков; строки без своей кампании — в конец, как раньше."""
+        if not self.active:
+            return list(fresh)   # имена не уникальны или кэш выключен: ответ ровно как до кэша
         by_name = self._by_name(fresh)
         out: list[dict[str, Any]] = []
         for draft in self.drafts:
