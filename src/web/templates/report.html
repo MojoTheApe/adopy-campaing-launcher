@@ -3731,8 +3731,6 @@
     .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
     .cb-headline-line[hidden] { display: none; }
     .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
-    .cb-use-main { display: inline-block; font-size: var(--adopy-text-sm); margin-top: 0.15rem; color: var(--accent); }
-    .cb-use-main[hidden] { display: none; }
     .cb-textx-label[hidden], .cb-textx-sel-wrap[hidden] { display: none; }
     .cb-textx-add-wrap { display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
     .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
@@ -15813,8 +15811,6 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 or square file for Stories and Reels" placeholder="— optional: 9:16 or square file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
-      /* ACL-2084: квадрат в обоих слотах - только по действию байера (решение владельца D1). */
-      '<a href="#" class="cb-use-main" data-use-main hidden title="Use the main file in Stories and Reels too. It is uploaded once." onclick="cbUseMainFile(this, event)">Use main file</a>' +
       '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +
       '</div>' +
       '</div></div>';
@@ -16263,32 +16259,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var vert = row.querySelector('input[type="hidden"][name$="_creative_file_vertical"]');
       var same = window.cbSameCreativeFile && cbSameCreativeFile(main && main.value, vert && vert.value);
       var noteText = same
-        ? "The same file is selected twice. A square file is used for both Feed and Stories / Reels. Any other shape, or an ad that can't take two placement rules, uses it once as the main file."
+        ? 'The same file is selected twice. It will be used once as the main file.'
         : 'Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.';
       if (vnote.textContent !== noteText) vnote.textContent = noteText;
       if (vnote.hidden === api) vnote.hidden = !api;
-      var useMain = row.querySelector('[data-use-main]');
-      if (useMain) {
-        var vtext = row.querySelector('.cb-vertical-search');
-        var offer = api && !!(main && main.value.trim()) && !(vert && vert.value.trim()) && !(vtext && vtext.value.trim());
-        if (useMain.hidden === offer) useMain.hidden = !offer;
-      }
     }
-  };
-
-  /* ACL-2084: «Use main file» - основной файл и в Stories / Reels, ровно тем значением, что в основном. */
-  window.cbUseMainFile = function (link, e) {
-    if (e) e.preventDefault();
-    var row = link.closest('.cb-ad-row');
-    var main = row && row.querySelector('input[type="hidden"][name$="_creative_file"]');
-    var vwrap = row && row.querySelector('.cb-vertical-sel-wrap');
-    if (!main || !main.value.trim() || !vwrap) return;
-    var vh = vwrap.querySelector('input[type="hidden"]');
-    var vt = vwrap.querySelector('.cb-vertical-search');
-    if (vh) vh.value = main.value;
-    if (vt) vt.value = main.value;
-    window.cbSyncTextRows(row, window.ACL_FB_BACKEND === 'api');
-    if (window.cbMarkMissingCreatives) cbMarkMissingCreatives();
   };
 
   window.cbAddTextRow = function (btn) {
@@ -17914,9 +17889,8 @@ function cbPlanHtml(data) {
         (a.ads || []).forEach(function (ad) {
           h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
             + aclEscHtml(ad.file)
-            // ACL-2084: второй файл объявления виден в плане - и обычной пары, и того же квадрата.
-            + (ad.stories_reels_same_as_main ? '<br>Stories / Reels: same square file as Feed'
-               : ad.stories_reels_file ? '<br>Stories / Reels: ' + aclEscHtml(ad.stories_reels_file) : '')
+            // ACL-2084: второй файл объявления виден в плане.
+            + (ad.stories_reels_file ? '<br>Stories / Reels: ' + aclEscHtml(ad.stories_reels_file) : '')
             + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')

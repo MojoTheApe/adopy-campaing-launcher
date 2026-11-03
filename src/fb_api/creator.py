@@ -321,13 +321,6 @@ class AdPlan:
     #: ACL-1774: необязательный вертикальный файл Stories/Reels (того же вида, что основной).
     vertical_path: str = ""
     vertical_kind: str = ""
-    #: ACL-2084: тот же файл выбран в оба слота. "requested" - пара возможна, решает размер
-    #: (`resolve_same_file_pair`); "pair" - квадрат в обоих слотах; "single" - один файл (решено планом);
-    #: "not_square" - один файл (решено по размеру, предупреждение даёт `_prepare`).
-    same_file_state: str = ""
-    #: ACL-2084: файл Stories / Reels - тот же медиафайл, что основной (тот же путь или те же байты):
-    #: одна загрузка, один хэш / одно видео под двумя метками.
-    vertical_same_media: bool = False
     #: ACL-1772: точный выбор набора для правил двух файлов и их сверки.
     placements: dict | None = None
 
@@ -493,58 +486,6 @@ def _same_media_file(main: str, vertical: str) -> bool:
         return False
 
 
-def same_file_warning(index: int) -> str:
-    return (f"Ad {index}: the same file was selected as main and Stories / Reels; "
-            "it will be used once as the main file.")
-
-
-def crop_warning(index: int) -> str:
-    return f"Ad {index}: no separate vertical Stories / Reels file; Meta will crop the main file"
-
-
-def _vertical_placed(placements: dict | None) -> bool:
-    """В ручном выборе есть Stories / Reels (или Advantage+, где Meta решает сама)."""
-    targets = placement_targeting(placements)
-    return not targets or any(x in targets.get("facebook_positions", []) for x in VERTICAL_FACEBOOK) or any(
-        x in targets.get("instagram_positions", []) for x in VERTICAL_INSTAGRAM)
-
-
-def pair_possible(plan_ad: AdPlan, plan_set: AdSetPlan) -> bool:
-    """Объявление может нести два слота с правилами площадок (ACL-2084).
-
-    Один текст (несколько + правила Meta отказала 14.10), сайт (Instant Form с лентой не проверен),
-    не Advantage+ и обе группы площадок в ручном выборе; прежний `placements = None` - полный список.
-    """
-    if plan_ad.multi_text or plan_set.instant:
-        return False
-    if plan_set.placements is None:
-        return True
-    if not placement_targeting(plan_set.placements):
-        return False
-    main_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
-    return bool(main_pos) and bool(vert_pos)
-
-
-def resolve_same_file_pair(ad: AdPlan, data: "bytes | LargeFile") -> str | None:
-    """ACL-2084: тот же файл в обоих слотах - квадрат идёт парой, остальное - одним файлом.
-
-    Решается по размеру, до первого `uses_feed`; Check plan (`preflight_rules`) и публикация (`_prepare`)
-    вызывают одно и то же и приходят к одному результату. Повторный вызов ничего не меняет.
-    Возвращает итог ("pair" / "not_square") или None, если решать нечего.
-    """
-    if ad.same_file_state not in ("requested", "pair", "not_square"):
-        return None
-    if ad.same_file_state == "requested":
-        size = media_size(ad.kind, data)
-        if size and size[1] and _near(size[0] / size[1], 1.0):
-            ad.vertical_path, ad.vertical_kind = ad.path, ad.kind
-            ad.vertical_same_media = True
-            ad.same_file_state = "pair"
-        else:
-            ad.same_file_state = "not_square"
-    return ad.same_file_state
-
-
 def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, problems: list[str],
                              warnings: list[str] | None = None) -> None:
     """Тексты 1-5 и вертикальный файл объявления (ACL-1774). Только правила плана, без чтения файлов."""
@@ -571,13 +512,9 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
     same_file = _same_media_file(plan_ad.path, vertical)
     if same_file:
         vertical = ""
-        if pair_possible(plan_ad, plan_set):
-            # ACL-2084: квадратный файл пойдёт в оба слота; размер читается позже, до любой загрузки.
-            plan_ad.same_file_state = "requested"
-        else:
-            plan_ad.same_file_state = "single"
-            if warnings is not None:
-                warnings.append(same_file_warning(i))
+        if warnings is not None:
+            warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
+                            "it will be used once as the main file.")
     if plan_ad.multi_text and vertical:
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
         # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
@@ -778,9 +715,8 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 has_vertical = not targets or any(
                     x in targets.get("facebook_positions", []) for x in VERTICAL_FACEBOOK) or any(
                     x in targets.get("instagram_positions", []) for x in VERTICAL_INSTAGRAM)
-                if has_vertical and not planned_ad.vertical_path and planned_ad.same_file_state != "requested":
-                    # ACL-2084: у «того же файла» решение по размеру впереди; откат добавит это сам.
-                    warnings.append(crop_warning(i))
+                if has_vertical and not planned_ad.vertical_path:
+                    warnings.append(f"Ad {i}: no separate vertical Stories / Reels file; Meta will crop the main file")
                 if planned_ad.vertical_path:
                     main_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
                     if not targets:
@@ -1523,27 +1459,6 @@ class CampaignCreator:
                             http_status=details.get("http_status"), fbtrace_id=details.get("fbtrace_id"))
             run_telemetry.record("api_create_step", error is None, campaign=plan.name, diag=diag)
         except Exception:  # noqa: BLE001 - телеметрия не должна ронять загрузку
-            pass
-
-    def _pair_row(self, plan: CampaignPlan, ad: AdPlan, reason: str = "") -> None:
-        """ACL-2084: строка телеметрии на пару из одного файла; `reason` - откат к одному файлу."""
-        try:
-            from src.fb_ads_rpa import run_telemetry
-
-            if reason or ad.same_file_state == "pair":
-                origin = "same_path"
-            elif ad.vertical_same_media:
-                origin = "same_bytes"
-            else:
-                return
-            diag = {"source": "api", "step": f"ad {ad.index}: square pair", "metric": "square_pair",
-                    "kind": ad.kind, "origin": origin}
-            if reason:
-                diag["reason"] = reason
-            # Шаг `api_create_step`: другие имена шагов панель прогресса не знает. Имён файлов нет.
-            # Откат к одному файлу - не сбой: `ok=None`, причина в `diag` (иначе Sentry принял бы его за причину).
-            run_telemetry.record("api_create_step", None if reason else True, campaign=plan.name, diag=diag)
-        except Exception:  # noqa: BLE001 - телеметрия не должна ронять публикацию
             pass
 
     @staticmethod
@@ -2780,18 +2695,7 @@ class CampaignCreator:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
-                # ACL-2084: решение по размеру - по исходному файлу, как в Check plan, а не по сжатой копии.
-                sized = data if src == ad.path or ad.same_file_state != "requested" else self.load_media(ad.path, ad.kind)
-                if resolve_same_file_pair(ad, sized) == "not_square":
-                    out.warnings.append(same_file_warning(ad.index))
-                    if writing:
-                        self._pair_row(plan, ad, reason="not_square")
-                    if ad.placements is not None and _vertical_placed(ad.placements):
-                        out.warnings.append(crop_warning(ad.index))
-                if ad.vertical_path and ad.vertical_path == ad.path:
-                    # ACL-2084: тот же квадратный файл в обоих слотах - второго чтения и загрузки нет.
-                    pass
-                elif ad.vertical_path:
+                if ad.vertical_path:
                     try:
                         vsrc = (self._video_for_upload(out, ad.vertical_path, f"ad {ad.index} Stories / Reels")
                                 if writing and ad.vertical_kind == "video" else ad.vertical_path)
@@ -2802,22 +2706,23 @@ class CampaignCreator:
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB")
+                    if len(vdata) == len(data) and _md5(vdata) == _md5(data):
+                        # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
+                        # хэшем под двумя метками («All ad asset values must be unique», живой прогон
+                        # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
+                        # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        ad.vertical_path = ad.vertical_kind = ""
+                        out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
+                                            "it will be used once as the main file.")
+                        continue
                     bad = pair_problems(ad.index, ad.kind, data, vdata)
                     if bad:
                         raise PlanError("; ".join(bad))
                     files[ad.vertical_path] = vdata
-                    # ACL-2084: копия того же файла под другим именем - тоже одна загрузка. md5 только
-                    # при равной длине: обычная пара хэширование не оплачивает.
-                    ad.vertical_same_media = len(vdata) == len(data) and _md5(vdata) == _md5(data)
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
-        mains = {ad.path for s in plan.ad_sets for ad in s.ads}
-        copies = {ad.vertical_path for s in plan.ad_sets for ad in s.ads
-                  if ad.vertical_same_media and ad.vertical_path not in mains}
-        # ACL-2084: копия того же видео грузится один раз - её куски в бюджет не входят.
-        chunk_calls = sum(upload_calls(len(v)) for p, v in files.items()
-                          if isinstance(v, LargeFile) and p not in copies)
+        chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
         # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
@@ -3184,10 +3089,6 @@ class CampaignCreator:
             row["stories_reels_file"] = Path(ad.vertical_path).name
             row["stories_reels_bytes"] = len(files.get(ad.vertical_path, b""))
             row["placements_by_file"] = "Stories and Reels use the vertical file; Feed uses the main file"
-        if ad.vertical_same_media:
-            # ACL-2084: один медиафайл в обоих слотах; у прочих объявлений ключа нет.
-            row["stories_reels_same_as_main"] = True
-            row["placements_by_file"] = "Stories and Reels use the same square file as Feed"
         return row
 
     def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
@@ -3341,15 +3242,7 @@ class CampaignCreator:
                 else:
                     media = {"image_hash": self._image_hash(out, plan, ad, data)}
                     rec["image_hash"] = media["image_hash"]
-                if ad.vertical_path and ad.vertical_same_media:
-                    # ACL-2084: тот же файл в Stories / Reels - тот же хэш / то же видео, второй загрузки нет.
-                    media["vertical"] = dict(media)
-                    for key in ("video_id", "image_hash"):
-                        if key in rec:
-                            rec["vertical_" + key] = rec[key]
-                    self._step(out, f"ad {ad.index}: Stories / Reels use the main file (no second upload)")
-                    self._pair_row(plan, ad)
-                elif ad.vertical_path:
+                if ad.vertical_path:
                     # ACL-1774: вертикальный файл грузится так же, до креатива; записи - в `rec` для сверки.
                     vdata = files[ad.vertical_path]
                     if ad.kind == "video":
@@ -3622,13 +3515,7 @@ class CampaignCreator:
                     # или полем креатива (живая проверка скажет, где именно).
                     check(aobj, "instagram_user_id", self._ig_id,
                           str(spec.get(_ig.IG_KEY) or creative.get(_ig.IG_KEY) or ""))
-                if (ad.uses_feed and ad.same_file_state == "pair" and rec.get("reused")
-                        and not creative.get("asset_feed_spec")):
-                    # ACL-2084: черновик раньше ушёл простым объявлением (ACL-2211) - найден по имени и
-                    # не переписан; сверяем его как простое, а не как пару.
-                    out.warnings.append(f"Ad {ad.index}: already published with one file; "
-                                        "the Stories / Reels choice applies to new ads only.")
-                elif ad.uses_feed:
+                if ad.uses_feed:
                     # ACL-1774: тексты и файлы в ленте ассетов, а не в object_story_spec.
                     image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files,
                                                    diag.setdefault("video_identity", []))
