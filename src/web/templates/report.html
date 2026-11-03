@@ -3573,7 +3573,9 @@
       background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md);
     }
     .cbd-pf[hidden] { display: none; }
-    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+    .cbd-pf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs) var(--space-sm); }
+    .cbd-pf-head > * { min-width: 0; max-width: 100%; }
+    .cbd-pf-head .cbd-pf-ready { white-space: normal; }   /* ACL-2266: узкая колонка — значок переносит текст, а не вылезает */
     .cbd-pf-title { margin: 0; font-size: var(--adopy-text-body); font-weight: 700; color: var(--text); }
     .cbd-pf-badge {
       padding: 0.1rem 0.6rem; border-radius: 999px; border: 1px solid currentColor;
@@ -3582,6 +3584,7 @@
     .cbd-pf-badge.cbd-pf-bad { color: var(--bad); background: var(--bad-soft); }
     .cbd-pf-badge.cbd-pf-warn { color: var(--warn); background: var(--warn-soft); }
     .cbd-pf-badge.cbd-pf-ok { color: var(--good); background: var(--good-soft); }
+    .cbd-pf-badge.cbd-pf-ready { color: var(--muted); background: transparent; font-weight: 600; }
     /* ACL-1990: разделы вместо длинного списка. Раздел — одна строка со статусом;
        раскрывается щелчком и сам, когда в нём ошибка или предупреждение. */
     .cbd-pf-topics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -3884,6 +3887,43 @@
     dialog::backdrop { background: var(--adopy-scrim); }
     /* Числа в таблицах и карточках: цифры одной ширины, колонки не прыгают. */
     td.num, th.num, .kpi, .home-kpi, [class*="-kpi"], time { font-variant-numeric: tabular-nums lining-nums; }
+    /* ═══ ACL-1345: перетаскивание карточек в билдере ═══ */
+    .cbm-grip { cursor: grab; color: var(--muted); font-size: var(--adopy-text-sm); letter-spacing: -0.15em; padding: 0 0.15rem; user-select: none; flex-shrink: 0; }
+    .cbm-grip:hover { color: var(--accent); }
+    .cbm-grip.cbm-locked { cursor: not-allowed; opacity: 0.4; }
+    /* Out of the flow, inside the tick's own left padding (0.5rem): adds no width to the row, whatever the font. */
+    .cbd-camp-head .cbm-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 0.5rem; padding: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 0.7rem; }
+    .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
+    /* Out of the flow and keyboard-revealed: the campaign Move-to button must not narrow the row or cover its click target (320px tree has no spare width). Mouse users drag by the grip. */
+    .cbd-camp-head { position: relative; }
+    .cbd-camp-head .cbm-moveto { position: absolute; right: 1.8rem; top: 50%; transform: translateY(-50%); background: var(--bg-elev); opacity: 0; pointer-events: none; }
+    .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; }
+    .cb-ad-row-header .cbm-moveto { margin-left: auto; }
+    .cb-ad-row-header .cbm-moveto + .cb-dup-ad-btn { margin-left: 0; }
+    .cbm-moveto:hover { color: var(--accent); border-color: var(--accent); }
+    .cbm-moveto:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; opacity: 1; }
+    .cbm-over { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft); position: relative; }
+    .cbm-over[data-cbm-chip]::after { content: attr(data-cbm-chip); position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); background: var(--accent); color: #fff; font-size: var(--adopy-text-xs); border-radius: 3px; padding: 0 0.35rem; pointer-events: none; }
+    .cbm-bad { cursor: not-allowed; opacity: 0.6; }
+    .cbm-ghosts { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .cbm-ghost { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 0.4rem 0.5rem; color: var(--muted); font-size: var(--adopy-text-table); opacity: 0.8; }
+    .cbm-toast { max-width: 32rem; }
+    .cbm-toast.cbm-warn { border-color: var(--danger); }
+    .cbm-toast-note { color: var(--muted); margin-top: 0.15rem; overflow-wrap: anywhere; }
+    .cbm-toast-btns { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
+    .cbm-menu { position: fixed; z-index: 1100; width: 17rem; max-height: 21rem; display: flex; flex-direction: column; gap: 0.3rem; background: var(--bg-elev); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.45rem; box-shadow: var(--adopy-shadow-popover); font-size: var(--adopy-text-table); }
+    .cbm-seg { display: flex; gap: 0.25rem; }
+    .cbm-seg-btn { flex: 1; background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.15rem 0.4rem; color: var(--muted); font: inherit; cursor: pointer; }
+    .cbm-seg-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+    .cbm-menu-title { color: var(--muted); font-size: var(--adopy-text-xs); }
+    .cbm-filter { font: inherit; padding: 0.2rem 0.35rem; }
+    .cbm-list { overflow-y: auto; display: flex; flex-direction: column; }
+    .cbm-item { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: baseline; text-align: left; background: none; border: 0; padding: 0.3rem 0.35rem; color: inherit; font: inherit; cursor: pointer; border-radius: 3px; }
+    .cbm-item:hover, .cbm-item:focus-visible { background: var(--bg-hover); outline: none; }
+    .cbm-item:focus-visible { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+    .cbm-item.cbm-off { opacity: 0.55; cursor: not-allowed; }
+    .cbm-sub, .cbm-why { color: var(--muted); font-size: var(--adopy-text-xs); }
+    /* ═══ /ACL-1345 ═══ */
 </style>
   {#- ACL-1797: токены Adopy подключены один раз, прямо в страницу (без запроса:
       работает и без сети, и до первой отрисовки); значения — только в
@@ -7763,6 +7803,9 @@ window.cbTree = (function () {
   }
 
   function paint() {
+    /* ACL-1345: пока тащат карточку, дерево не перерисовывается (опрос сборки
+       каждые 3 с убил бы перетаскивание); перерисовка - после dragend. */
+    if (window.cbMove && window.cbMove.dragging()) { window.cbMove.deferPaint(); return; }
     // Structural changes can repaint after the user has already started typing.
     var focused = document.activeElement;
     var keepFocus = focused && (host.contains(focused) || connectHost.contains(focused));
@@ -8230,10 +8273,9 @@ window.cbTree = (function () {
       text = '<strong>Could not check:</strong> ' + aclEscHtml(hit.error);
       label = 'Retry';
     } else {
-      var ago = window.cbPfAgo ? window.cbPfAgo(hit.at).replace(/^Checked /, '') : '';
-      var expired = Date.now() - hit.at >= (window.CB_PF_FRESH_MS || 0);
-      text = '<strong>Checked with Meta</strong> ' + aclEscHtml(ago) + ' (' + aclEscHtml(new Date(hit.at).toLocaleTimeString())
-        + '). ' + (expired ? 'Too old to reuse: Publish will check again.' : 'Not edited since: Publish uses this result.');
+      /* ACL-2266: вердикт хранит сервер; Publish всё равно просит у него ответ заново (из кэша или из Meta). */
+      text = '<strong>Checked with Meta</strong> at ' + aclEscHtml(window.cbPfTime(hit.at))
+        + (hit.cached ? ' (saved result, not edited since)' : '') + '. Publish checks the account status and Pages again before it creates anything.';
       label = 'Check again';
     }
     return '<div class="cbd-pf-meta' + cls + '"><span class="cbd-pf-when" aria-live="polite">' + text + '</span>'
@@ -8287,6 +8329,14 @@ window.cbTree = (function () {
       ? '<span class="cbd-pf-badge cbd-pf-bad">errors: ' + n.error + '</span>'
       : n.warning ? '<span class="cbd-pf-badge cbd-pf-warn">warnings: ' + n.warning + '</span>'
       : '<span class="cbd-pf-badge cbd-pf-ok">no errors</span>';
+    /* ACL-2266: «Checked at 14:32» — только для текущей ревизии карточки без ошибок; не «ready to publish». */
+    var seen = form && form._pfAudit && form._pfAudit.byName[slotName(c.slot)];
+    if (seen && seen.rev === pfRev(c.slot) && !seen.error && !seen.errorKind && !n.error) {
+      badge += ' <span class="cbd-pf-badge cbd-pf-ready" title="Checked with Meta at ' + aclEscHtml(window.cbPfTime(seen.at))
+        + ' (saved result) and unchanged since. Publish checks the account status and Pages again before it creates anything.">Checked at '
+        + aclEscHtml(window.cbPfTime(seen.at)) + '</span>';
+    }
+    if (pfApi() && form && window.cbPfRestore) window.cbPfRestore(form);   // один раз на форму
     /* Пока идёт проверка, серверные строки без вердикта рисуются «checking» —
        только на экране: гейт Publish считает их как раньше (unknown). */
     var shown = busy ? ls.map(function (x) {
@@ -9010,6 +9060,672 @@ window.cbTree = (function () {
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
         countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
     }
+  };
+})();
+</script>
+
+<script>
+/* ═══ ACL-1345: Builder drag & drop — move / Ctrl = copy / Undo ═══════════════
+   Весь код переноса карточек - в этом блоке (+ блок CSS «ACL-1345» выше).
+   Объявление - в другую кампанию или набор, кампания - в другой аккаунт. Тянем за
+   ручку ⋮⋮; то же самое без мыши - кнопка «Move to…». Перенос = тот же узел DOM
+   (все поля целы), копия = новый узел теми же построителями, что у Duplicate.
+   Аккаунтные поля (ссылка трекинга, кабинет, профиль) живут в форме аккаунта, поэтому
+   карточка в чужой форме сама берёт чужие. Страница и Instant Form привязаны к аккаунту
+   и сбрасываются. Undo - обратная операция над теми же узлами. */
+window.cbMove = (function () {
+  'use strict';
+  /* Детали строит скрипт ниже по странице: читаем их в момент вызова, не при загрузке. */
+  var P = new Proxy({}, { get: function (_, k) { return (window.cbMoveParts || {})[k]; } });
+  var MAX_ADS = 100, UNDO_MAX = 10;
+  var NOOP = 'noop';
+  var MSG_BUILDING = 'This campaign is being built — wait for the run to finish or press Stop.';
+  var MSG_CANT_UNDO = 'Can’t undo – the draft changed.';
+  var DRAG_TIP = 'Drag to move — hold Ctrl (⌥ on Mac) to copy';
+  var undoStack = [];
+  var drag = null;            // {kind: 'ad'|'camp', node, paintOk}
+  var pendingPaint = false;
+  var toastEl = null, toastTimer = 0;
+  var menu = null;
+  var hoverTimer = 0, hoverId = '';
+
+  /* ── вспомогательное ───────────────────────────────────────────────── */
+  function $all(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
+  function forms() { return $all(document, 'form.open-account-form'); }
+  function countryOf(form) { return ((form.querySelector('[name="country"]') || {}).value || '').trim(); }
+  function acctLabel(form) {
+    var c = countryOf(form);
+    return cbFormAccount(form) + (c ? ' (' + c + ')' : '');
+  }
+  function slotName(slot) {
+    var hidden = slot.querySelector('.cb-name-hidden');
+    if (hidden && hidden.value) return hidden.value;
+    var shown = slot.querySelector('[data-name-display]');
+    return shown ? (shown.textContent || '').trim() : '';
+  }
+  function niceName(slot) { return slotName(slot) || 'Untitled campaign'; }
+  function adCount(slot) { return slot.querySelectorAll('.cb-ad-row').length; }
+  function setCount(slot) { return slot.querySelectorAll('.cb-adset-sec').length || 1; }
+  function pageOf(slot) { var h = slot.querySelector('input[name$="_page_id"]'); return h ? h.value : ''; }
+  function rowSetOf(row) { var h = row.querySelector('.cb-ad-adset'); return h ? (parseInt(h.value, 10) || 0) : 0; }
+  function setRowSet(row, k) { var h = row.querySelector('.cb-ad-adset'); if (h) h.value = k; }
+  /* Names may already be stripped (stripNames keeps them in data-renumber-name), so match both. */
+  function formIdInput(row) { return row.querySelector('input[name$="_form_id"], input[data-renumber-name$="_form_id"]'); }
+  function slotById(id) {
+    return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
+  }
+  function formByKey(key) {
+    var hit = null;
+    forms().forEach(function (f) { if (!hit && cbFormKey(f) === key) hit = f; });
+    return hit;
+  }
+  /* Имена полей снимаются перед вставкой в чужую форму: иначе радио-группы
+     camp_0_ad_0_creative_type двух форм склеятся. Вернёт их cbRenumber*. */
+  function stripNames(root) {
+    $all(root, '[name]').forEach(function (el) { el.dataset.renumberName = el.name; el.removeAttribute('name'); });
+  }
+  function activeBuild(slot) {
+    var d = window.cbBuild && window.cbBuild.dot ? window.cbBuild.dot(slot, slotName(slot)) : null;
+    return !!(d && /^build-(run|attn|wait)$/.test(d.state));
+  }
+  function formBusy(form) { return typeof cbAccountBusy === 'function' && cbAccountBusy(cbFormKey(form)); }
+  function busyMsg(form) { return acctLabel(form) + ' is being built — wait for its run to finish.'; }
+  function isOpenSlot(slot) {
+    var a = window.cbTree && window.cbTree.active && window.cbTree.active();
+    return !!(a && a.slot === slot);
+  }
+  /* Форма гостит в правой колонке: из её карточек видна только раскрытая. */
+  function settleHidden(slot) {
+    var b = window.cbTree && window.cbTree.borrowed && window.cbTree.borrowed();
+    slot.hidden = !!(b && b.form === slot.closest('form') && !isOpenSlot(slot));
+  }
+  function repaintTree() { if (window.cbTree) window.cbTree.paint(); }
+
+  /* ── проверки ──────────────────────────────────────────────────────── */
+  /* '' - можно; NOOP - то же место; иначе - причина отказа для человека. */
+  function check(plan) {
+    var copy = plan.mode === 'copy';
+    if (plan.kind === 'ad') {
+      var srcSlot = plan.row.closest('.cb-slot');
+      if (!srcSlot || !plan.destSlot) return NOOP;
+      if (activeBuild(srcSlot)) return MSG_BUILDING;
+      var df = plan.destSlot.closest('form');
+      if (formBusy(df)) return busyMsg(df);
+      if (activeBuild(plan.destSlot)) return MSG_BUILDING;
+      var same = srcSlot === plan.destSlot;
+      if (!copy && same && rowSetOf(plan.row) === plan.k) return NOOP;
+      if ((copy || !same) && adCount(plan.destSlot) >= MAX_ADS) return 'A campaign can hold up to 100 ads.';
+      return '';
+    }
+    var src = plan.slot, dest = plan.destForm;
+    if (!src || !dest) return NOOP;
+    if (activeBuild(src)) return MSG_BUILDING;
+    if (formBusy(dest)) return busyMsg(dest);
+    if (!copy && src.closest('form') === dest) return NOOP;
+    return '';
+  }
+  function reasonOnly(plan) { var r = check(plan); return r === NOOP ? '' : r; }
+
+  /* ── тост и Undo ───────────────────────────────────────────────────── */
+  function hideToast() {
+    clearTimeout(toastTimer);
+    if (toastEl) toastEl.hidden = true;
+  }
+  function toast(text, o) {
+    o = o || {};
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'amap-note-toast cbm-toast';
+      toastEl.setAttribute('role', 'status');
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = '';
+    toastEl.hidden = false;
+    toastEl.classList.toggle('cbm-warn', !!o.warn);
+    var msg = document.createElement('span');
+    msg.className = 'cbm-toast-msg';
+    msg.textContent = text;
+    toastEl.appendChild(msg);
+    (o.notes || []).forEach(function (n) {
+      var d = document.createElement('div');
+      d.className = 'cbm-toast-note';
+      d.textContent = n;
+      toastEl.appendChild(d);
+    });
+    var row = document.createElement('div');
+    row.className = 'cbm-toast-btns';
+    if (o.entry) {
+      var u = document.createElement('button');
+      u.type = 'button'; u.className = 'cbm-undo'; u.textContent = 'Undo';
+      u.addEventListener('click', function () { undoEntry(o.entry); });
+      row.appendChild(u);
+    }
+    var x = document.createElement('button');
+    x.type = 'button'; x.className = 'cbm-dismiss'; x.textContent = 'Dismiss';
+    x.addEventListener('click', hideToast);
+    row.appendChild(x);
+    toastEl.appendChild(row);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, o.warn ? 20000 : 10000);
+  }
+
+  function push(entry) {
+    undoStack.push(entry);
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    return entry;
+  }
+  function undoEntry(entry) {
+    var i = undoStack.indexOf(entry);
+    if (i === -1) { toast(MSG_CANT_UNDO, { warn: true }); return false; }
+    var ok = false;
+    try { ok = entry.undo(); } catch (e) { ok = false; }
+    if (!ok) { toast(MSG_CANT_UNDO, { warn: true }); return false; }
+    undoStack.splice(i, 1);
+    toast('Undone: ' + entry.label);
+    return true;
+  }
+  function undoLatest() {
+    var e = undoStack[undoStack.length - 1];
+    return e ? undoEntry(e) : false;
+  }
+
+  /* ── операции над черновиком ───────────────────────────────────────── */
+  function insertRow(slot, row, k, after) {
+    var container = slot.querySelector('.cb-ad-rows');
+    if (after && after.parentNode === container) { after.insertAdjacentElement('afterend', row); return; }
+    var anchor = null;
+    $all(container, '.cb-ad-row').forEach(function (r) { if (r !== row && rowSetOf(r) <= k) anchor = r; });
+    if (anchor) anchor.insertAdjacentElement('afterend', row);
+    else container.insertAdjacentElement('afterbegin', row);
+  }
+  function refreshSlotAds(slot) {
+    P.renumberAds(slot); P.updateAdCount(slot); P.updateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    if (window.cbFillFormSelects) window.cbFillFormSelects(slot);
+  }
+  function blankAd(slot) {
+    var container = slot.querySelector('.cb-ad-rows');
+    container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(slot.dataset.idx, adCount(slot), 0));
+    var row = container.lastElementChild;
+    P.initAllSelects(row);
+    return row;
+  }
+  /* Instant Form выбрана на Странице; на другой Странице её id ничего не значит. */
+  function pageDiffers(srcSlot, destSlot) {
+    return srcSlot.closest('form') !== destSlot.closest('form') || pageOf(srcSlot) !== pageOf(destSlot);
+  }
+  function twinClash(slot) {
+    var name = slotName(slot), hit = false;
+    if (!name) return false;
+    $all(slot.closest('form'), '.cb-slot').forEach(function (s) { if (s !== slot && slotName(s) === name) hit = true; });
+    return hit;
+  }
+
+  function doAd(plan) {
+    var row = plan.row, k = plan.k, destSlot = plan.destSlot;
+    var srcSlot = row.closest('.cb-slot');
+    var same = srcSlot === destSlot;
+    var notes = [], newRow;
+    var where = ' · Ad set ' + (k + 1);
+    if (plan.mode === 'copy') {
+      var afterSrc = same && rowSetOf(row) === k ? row : null;
+      var container = destSlot.querySelector('.cb-ad-rows');
+      container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(destSlot.dataset.idx, adCount(destSlot), k));
+      newRow = container.lastElementChild;
+      P.copyAdRowValues(row, newRow);
+      setRowSet(newRow, k);
+      insertRow(destSlot, newRow, k, afterSrc);
+      if (pageDiffers(srcSlot, destSlot)) { var fi = formIdInput(newRow); if (fi) fi.value = ''; }
+      refreshSlotAds(destSlot);
+      return { label: 'copied 1 ad', slot: destSlot, notes: notes,
+        text: 'Copied 1 ad to “' + niceName(destSlot) + '”' + where,
+        undo: function () {
+          if (!newRow.isConnected || !destSlot.isConnected || formBusy(destSlot.closest('form'))) return false;
+          newRow.remove();
+          if (!adCount(destSlot)) blankAd(destSlot);
+          refreshSlotAds(destSlot);
+          return true;
+        } };
+    }
+    var oldSet = rowSetOf(row), parent = row.parentNode, next = row.nextElementSibling;
+    var oldFormId = null, blank = null;
+    stripNames(row);
+    setRowSet(row, k);
+    insertRow(destSlot, row, k);
+    if (pageDiffers(srcSlot, destSlot)) {
+      var hid = formIdInput(row);
+      if (hid && hid.value) { oldFormId = hid.value; hid.value = ''; }
+    }
+    if (!same && !adCount(srcSlot)) {
+      blank = blankAd(srcSlot);
+      notes.push('Left a blank ad in “' + niceName(srcSlot) + '” – a campaign needs at least one ad.');
+    }
+    refreshSlotAds(destSlot);
+    if (!same) refreshSlotAds(srcSlot);
+    return { label: 'moved 1 ad', slot: destSlot, notes: notes,
+      text: 'Moved 1 ad to “' + niceName(destSlot) + '”' + where,
+      undo: function () {
+        if (!row.isConnected || !srcSlot.isConnected || !destSlot.isConnected) return false;
+        if (formBusy(srcSlot.closest('form')) || formBusy(destSlot.closest('form'))) return false;
+        if (blank && !blank.isConnected) return false;
+        stripNames(row);
+        setRowSet(row, oldSet);
+        if (next && next.parentNode === parent) parent.insertBefore(row, next); else parent.appendChild(row);
+        if (blank) blank.remove();
+        if (oldFormId !== null) { var h2 = formIdInput(row); if (h2) h2.value = oldFormId; }
+        refreshSlotAds(destSlot);
+        if (!same) refreshSlotAds(srcSlot);
+        return true;
+      } };
+  }
+
+  function doCamp(plan) {
+    var slot = plan.slot, destForm = plan.destForm, srcForm = slot.closest('form');
+    var cross = srcForm !== destForm;
+    var notes = [];
+    if (cross) notes.push('Budget unchanged — check it for ' + acctLabel(destForm) + '.');
+    if (plan.mode === 'copy') {
+      var copy = window.cbDuplicateSlot(slot, destForm);
+      if (!copy) return null;
+      if (cross) $all(copy, 'input[name$="_form_id"]').forEach(function (h) { h.value = ''; });
+      settleHidden(copy);
+      return { label: 'copied campaign', slot: copy, notes: notes,
+        text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
+        undo: function () {
+          if (!copy.isConnected || formBusy(destForm)) return false;
+          copy.remove();
+          P.renumber(destForm); window.cbUpdateCount(destForm);
+          return true;
+        } };
+    }
+    var wasOpen = isOpenSlot(slot), id = slot.dataset.cbdId;
+    var parent = slot.parentNode, next = slot.nextElementSibling;
+    var n = adCount(slot);
+    var oldPage = pageOf(slot), oldAcct = slot._pageAccount, formIds = [];
+    $all(slot, 'input[name$="_form_id"]').forEach(function (h) { if (h.value) formIds.push([h, h.value]); });
+    stripNames(slot);
+    destForm.querySelector('.cb-slots').appendChild(slot);
+    P.renumber(srcForm); P.renumber(destForm);
+    window.cbUpdateCount(srcForm); window.cbUpdateCount(destForm);
+    if (cross) formIds.forEach(function (p) { p[0].value = ''; });
+    if (window.cbSyncPages) window.cbSyncPages(slot);
+    window.cbSyncDestination(slot);
+    settleHidden(slot);
+    return { label: 'moved campaign', slot: slot, notes: notes, reopen: wasOpen ? id : '',
+      text: 'Moved campaign “' + niceName(slot) + '” (' + n + (n === 1 ? ' ad' : ' ads') + ') to ' + acctLabel(destForm),
+      undo: function () {
+        if (!slot.isConnected || !srcForm.isConnected || formBusy(srcForm) || formBusy(destForm)) return false;
+        stripNames(slot);
+        if (next && next.parentNode === parent) parent.insertBefore(slot, next); else parent.appendChild(slot);
+        P.renumber(srcForm); P.renumber(destForm);
+        window.cbUpdateCount(srcForm); window.cbUpdateCount(destForm);
+        var ph = slot.querySelector('input[name$="_page_id"]');
+        if (ph && oldPage) ph.value = oldPage;
+        slot._pageAccount = oldAcct;
+        formIds.forEach(function (p) { p[0].value = p[1]; });
+        window.cbSyncDestination(slot);
+        settleHidden(slot);
+        if (wasOpen && window.cbTree) window.cbTree.open(id); else repaintTree();
+        return true;
+      } };
+  }
+
+  /* Единственный вход: и мышь, и меню приходят сюда (они лишь собирают план). */
+  async function run(plan) {
+    var why = check(plan);
+    if (why === NOOP) return false;
+    if (why) { toast(why, { warn: true }); return false; }
+    if (plan.kind === 'camp') {
+      var to = countryOf(plan.destForm);
+      if (countryOf(plan.slot.closest('form')) !== to) {
+        var yes = await window.aclConfirm('Audience country becomes ' + to + ' and the name is rebuilt.',
+          { title: (plan.mode === 'copy' ? 'Copy' : 'Move') + ' to ' + to + '?',
+            okLabel: plan.mode === 'copy' ? 'Copy' : 'Move' });
+        if (!yes) return false;
+        why = check(plan);          // за время вопроса задание могло стартовать
+        if (why === NOOP) return false;
+        if (why) { toast(why, { warn: true }); return false; }
+      }
+    }
+    var res = plan.kind === 'ad' ? doAd(plan) : doCamp(plan);
+    if (!res) return false;
+    var warn = false;
+    if (plan.kind === 'camp' && twinClash(res.slot)) {
+      res.notes.push(acctLabel(res.slot.closest('form')) + ' already has a campaign named “' + slotName(res.slot)
+        + '”. Publish all will combine them into one campaign.');
+      warn = true;
+    }
+    var entry = push({ label: res.label, undo: res.undo });
+    toast(res.text, { entry: entry, notes: res.notes, warn: warn });
+    if (res.reopen && window.cbTree) window.cbTree.open(res.reopen); else repaintTree();
+    return true;
+  }
+
+  /* ── ручки и кнопки «Move to…» ─────────────────────────────────────── */
+  function gripHtml(kind) {
+    return '<span class="cbm-grip" draggable="true" data-cbm="' + kind + '" aria-hidden="true"'
+      + ' title="' + DRAG_TIP + '">⋮⋮</span>';
+  }
+  function moveBtn(kind) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'cbm-moveto'; b.dataset.cbm = kind;
+    b.setAttribute('aria-haspopup', 'menu');
+    b.textContent = 'Move to…';
+    b.title = kind === 'ad' ? 'Move or copy this ad to another campaign' : 'Move or copy this campaign to another account';
+    return b;
+  }
+  function decorate() {
+    $all(document, '#cbd-body .cbd-camp-head').forEach(function (head) {
+      if (head.querySelector('.cbm-grip')) return;
+      head.insertAdjacentHTML('afterbegin', gripHtml('camp'));
+      var drop = head.querySelector('.cbd-camp-drop');
+      var b = moveBtn('camp');
+      if (drop) head.insertBefore(b, drop); else head.appendChild(b);
+    });
+    $all(document, '#cbd-editor .cb-ad-row-header').forEach(function (hd) {
+      if (hd.querySelector('.cbm-grip')) return;
+      hd.insertAdjacentHTML('afterbegin', gripHtml('ad'));
+      var dup = hd.querySelector('.cb-dup-ad-btn');
+      var b = moveBtn('ad');
+      if (dup) hd.insertBefore(b, dup); else hd.appendChild(b);
+    });
+  }
+  var decorateQueued = false;
+  function queueDecorate() {
+    if (decorateQueued) return;
+    decorateQueued = true;
+    Promise.resolve().then(function () { decorateQueued = false; decorate(); });
+  }
+  ['cbd-body', 'cbd-editor'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) new MutationObserver(queueDecorate).observe(el, { childList: true, subtree: true });
+  });
+  decorate();
+
+  function nodeOf(el) {
+    if (el.dataset.cbm === 'ad') return { kind: 'ad', node: el.closest('.cb-ad-row') };
+    var camp = el.closest('.cbd-camp');
+    return { kind: 'camp', node: camp ? slotById(camp.dataset.camp) : null };
+  }
+  function srcSlotOf(n) { return n.kind === 'ad' ? (n.node && n.node.closest('.cb-slot')) : n.node; }
+
+  /* ── перетаскивание ────────────────────────────────────────────────── */
+  function ghosts() {
+    var body = document.getElementById('cbd-body');
+    if (!body || body.querySelector('.cbm-ghosts')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'cbm-ghosts';
+    var any = false;
+    forms().forEach(function (f) {
+      if (f.querySelector('.cb-slot') || !cbFormAccount(f) || cbFormAccount(f) === '?') return;
+      any = true;
+      var d = document.createElement('div');
+      d.className = 'cbm-ghost';
+      d.dataset.key = cbFormKey(f);
+      d.textContent = acctLabel(f) + ' — Drop here';
+      wrap.appendChild(d);
+    });
+    if (any) body.appendChild(wrap);
+  }
+  function clearOver(except) {
+    $all(document, '.cbm-over, .cbm-bad').forEach(function (e) {
+      if (e === except) return;
+      e.classList.remove('cbm-over', 'cbm-bad'); e.removeAttribute('data-cbm-chip');
+    });
+  }
+  function endDrag() {
+    var was = drag;
+    drag = null;
+    clearTimeout(hoverTimer); hoverTimer = 0; hoverId = '';
+    clearOver();
+    document.body.classList.remove('cbm-dragging');
+    $all(document, '.cbm-ghosts').forEach(function (g) { g.remove(); });
+    if (was && pendingPaint) { pendingPaint = false; repaintTree(); }
+  }
+
+  /* Что под курсором: {el, slot, k} для объявления, {el, form} для кампании. */
+  function resolve(target) {
+    if (!drag || !target.closest) return null;
+    if (drag.kind === 'ad') {
+      var camp = target.closest('.cbd-camp');
+      var slot = camp ? slotById(camp.dataset.camp) : null;
+      if (!slot) return null;
+      var set = target.closest('.cbd-set');
+      if (set) return { el: set, slot: slot, k: parseInt(set.dataset.set, 10) || 0 };
+      return { el: camp.querySelector('.cbd-camp-head') || camp, slot: slot, k: 0, camp: camp };
+    }
+    var ghost = target.closest('.cbm-ghost');
+    if (ghost) return { el: ghost, form: formByKey(ghost.dataset.key) };
+    var acc = target.closest('.cbd-acc');
+    if (!acc) return null;
+    return { el: acc.querySelector('.cbd-account') || acc, form: formByKey(acc.dataset.acc) };
+  }
+  function planFor(hit, copy) {
+    if (!hit) return null;
+    if (drag.kind === 'ad') return { kind: 'ad', mode: copy ? 'copy' : 'move', row: drag.node, destSlot: hit.slot, k: hit.k };
+    return { kind: 'camp', mode: copy ? 'copy' : 'move', slot: drag.node, destForm: hit.form };
+  }
+  function wantsCopy(e) { return !!(e.ctrlKey || e.altKey); }
+
+  document.addEventListener('dragstart', function (e) {
+    var grip = e.target.closest ? e.target.closest('.cbm-grip') : null;
+    if (!grip) return;
+    var n = nodeOf(grip), src = srcSlotOf(n);
+    if (!n.node || !src) { e.preventDefault(); return; }
+    if (activeBuild(src)) { e.preventDefault(); toast(MSG_BUILDING, { warn: true }); return; }
+    drag = { kind: n.kind, node: n.node };
+    pendingPaint = false;
+    try {
+      e.dataTransfer.setData('text/plain', n.kind === 'ad' ? 'ad' : niceName(src));
+      e.dataTransfer.effectAllowed = 'copyMove';
+    } catch (err) { /* не критично */ }
+    setTimeout(function () {
+      if (!drag) return;
+      document.body.classList.add('cbm-dragging');
+      if (drag.kind === 'camp') ghosts();
+    }, 0);
+  });
+
+  document.addEventListener('dragover', function (e) {
+    if (!drag) return;
+    var hit = resolve(e.target);
+    var copy = wantsCopy(e);
+    var plan = hit ? planFor(hit, copy) : null;
+    var why = plan ? check(plan) : NOOP;
+    var el = hit && hit.el;
+    clearOver(el);
+    if (el && why === '') {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
+      el.classList.add('cbm-over'); el.classList.remove('cbm-bad');
+      el.setAttribute('data-cbm-chip', copy ? 'Copy here' : 'Move here');
+    } else {
+      if (el && why && why !== NOOP) { el.classList.add('cbm-bad'); el.title = why; }
+      try { e.dataTransfer.dropEffect = 'none'; } catch (err) { /* ok */ }
+    }
+    /* Кампания с несколькими наборами раскрывается, пока над ней держат объявление. */
+    var campEl = hit && hit.camp;
+    var id = campEl ? campEl.dataset.camp : '';
+    if (id !== hoverId) {
+      clearTimeout(hoverTimer); hoverId = id;
+      if (id && campEl.dataset.open !== '1' && setCount(hit.slot) > 1) {
+        hoverTimer = setTimeout(function () {
+          if (!drag) return;
+          drag.paintOk = true;
+          try { window.cbTree.open(id); } finally { if (drag) drag.paintOk = false; }
+        }, 600);
+      }
+    }
+  });
+  document.addEventListener('drop', function (e) {
+    if (!drag) return;
+    var hit = resolve(e.target);
+    var plan = hit ? planFor(hit, wantsCopy(e)) : null;
+    if (plan) e.preventDefault();
+    endDrag();
+    if (plan) run(plan);
+  });
+  document.addEventListener('dragend', endDrag);
+
+  /* ── меню «Move to…» (то же самое без мыши и на сенсорном экране) ───── */
+  function outside(e) { if (menu && !menu.el.contains(e.target) && !e.target.closest('.cbm-moveto')) closeMenu(false); }
+  function closeMenu(focusBack) {
+    if (!menu) return;
+    var opener = menu.opener;
+    menu.el.remove();
+    document.removeEventListener('mousedown', outside, true);
+    menu = null;
+    if (focusBack && opener && opener.isConnected) opener.focus();
+  }
+
+  function menuItems() {
+    var m = menu, out = [];
+    function item(label, o) { out.push({ label: label, reason: o.reason || '', go: o.go, back: !!o.back, sub: o.sub }); }
+    if (m.step > 0) item('‹ Back', { back: true });
+    if (m.step === 0) {
+      forms().forEach(function (f) {
+        if (!cbFormAccount(f) || cbFormAccount(f) === '?') return;
+        var reason = formBusy(f) ? busyMsg(f) : '';
+        if (m.kind === 'camp') {
+          var cplan = { kind: 'camp', mode: m.mode, slot: m.node, destForm: f };
+          if (!reason) reason = check(cplan) === NOOP ? 'Already in this account' : reasonOnly(cplan);
+        }
+        var drafts = f.querySelectorAll('.cb-slot').length;
+        item(acctLabel(f), { reason: reason, sub: m.kind === 'ad' ? drafts + (drafts === 1 ? ' campaign' : ' campaigns') : '',
+          go: function () {
+            if (m.kind === 'camp') { closeMenu(true); run({ kind: 'camp', mode: m.mode, slot: m.node, destForm: f }); }
+            else { m.form = f; m.step = 1; m.filter = ''; renderMenu(); }
+          } });
+      });
+    } else if (m.step === 1) {
+      $all(m.form, '.cb-slot').forEach(function (s) {
+        var reason = formBusy(m.form) ? busyMsg(m.form) : (activeBuild(s) ? MSG_BUILDING : '');
+        if (!reason && adCount(s) >= MAX_ADS && (m.mode === 'copy' || s !== m.node.closest('.cb-slot'))) reason = 'A campaign can hold up to 100 ads.';
+        item(niceName(s), { reason: reason, sub: adCount(s) + (adCount(s) === 1 ? ' ad' : ' ads'),
+          go: function () { m.slot = s; m.step = 2; m.filter = ''; renderMenu(); } });
+      });
+    } else {
+      for (var k = 0; k < setCount(m.slot); k += 1) (function (k) {
+        var plan = { kind: 'ad', mode: m.mode, row: m.node, destSlot: m.slot, k: k };
+        var r = check(plan);
+        item('Ad set ' + (k + 1), { reason: r === NOOP ? 'Already here' : r,
+          go: function () { closeMenu(true); run(plan); } });
+      })(k);
+    }
+    return out;
+  }
+  function renderMenu() {
+    var m = menu, el = m.el;
+    el.textContent = '';
+    var seg = document.createElement('div');
+    seg.className = 'cbm-seg'; seg.setAttribute('role', 'group');
+    ['move', 'copy'].forEach(function (mode) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'cbm-seg-btn'; b.dataset.mode = mode;
+      b.textContent = mode === 'move' ? 'Move' : 'Copy';
+      b.setAttribute('aria-pressed', m.mode === mode ? 'true' : 'false');
+      b.addEventListener('click', function () { m.mode = mode; renderMenu(); });
+      seg.appendChild(b);
+    });
+    el.appendChild(seg);
+    var title = document.createElement('div');
+    title.className = 'cbm-menu-title';
+    title.textContent = m.step === 0 ? 'Account'
+      : m.step === 1 ? 'Campaign in ' + acctLabel(m.form) : 'Ad set in “' + niceName(m.slot) + '”';
+    el.appendChild(title);
+    var f = document.createElement('input');
+    f.type = 'text'; f.className = 'cbm-filter'; f.placeholder = 'Type to filter…';
+    f.setAttribute('aria-label', 'Filter'); f.value = m.filter || '';
+    el.appendChild(f);
+    var list = document.createElement('div');
+    list.className = 'cbm-list'; list.setAttribute('role', 'menu');
+    el.appendChild(list);
+    function fill() {
+      list.textContent = '';
+      var q = f.value.trim().toLowerCase();
+      menuItems().forEach(function (it) {
+        if (q && !it.back && it.label.toLowerCase().indexOf(q) === -1) return;
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'cbm-item'; b.setAttribute('role', 'menuitem');
+        if (it.back) b.dataset.back = '1';
+        var t = document.createElement('span'); t.textContent = it.label; b.appendChild(t);
+        if (it.sub) { var s = document.createElement('span'); s.className = 'cbm-sub'; s.textContent = it.sub; b.appendChild(s); }
+        if (it.reason) {
+          b.setAttribute('aria-disabled', 'true'); b.title = it.reason; b.classList.add('cbm-off');
+          var r = document.createElement('span'); r.className = 'cbm-why'; r.textContent = it.reason; b.appendChild(r);
+        }
+        b.addEventListener('click', function () {
+          if (it.reason) return;
+          if (it.back) { m.step -= 1; m.filter = ''; renderMenu(); } else it.go();
+        });
+        list.appendChild(b);
+      });
+    }
+    fill();
+    f.addEventListener('input', function () { m.filter = f.value; fill(); });
+    el.onkeydown = function (e) {
+      var items = $all(el, '.cbm-item');
+      var at = items.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); (items[at + 1] || items[0] || f).focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); (at > 0 ? items[at - 1] : f).focus(); }
+      else if (e.key === 'Enter' && document.activeElement === f) {
+        e.preventDefault();
+        var first = items.filter(function (b) { return !b.classList.contains('cbm-off') && !b.dataset.back; })[0];
+        if (first) first.click();
+      }
+    };
+    f.focus();
+  }
+  function openMenu(btn) {
+    closeMenu(false);
+    var n = nodeOf(btn);
+    if (!n.node) return;
+    var src = srcSlotOf(n);
+    if (src && activeBuild(src)) { toast(MSG_BUILDING, { warn: true }); return; }
+    var el = document.createElement('div');
+    el.className = 'cbm-menu'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Move or copy to…');
+    document.body.appendChild(el);
+    var r = btn.getBoundingClientRect();
+    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
+    el.style.top = Math.min(r.bottom + 4, Math.max(8, window.innerHeight - 340)) + 'px';
+    menu = { el: el, opener: btn, kind: n.kind, node: n.node, mode: 'move', step: 0, filter: '' };
+    document.addEventListener('mousedown', outside, true);
+    renderMenu();
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.cbm-moveto') : null;
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    openMenu(b);
+  }, true);
+
+  /* Ctrl+Z (⌘Z) в ящике, когда курсор не в поле ввода. */
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'z' || e.shiftKey) return;
+    var t = e.target;
+    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    if (!t || !t.closest || !t.closest('#cbd-panel')) return;
+    if (undoLatest()) e.preventDefault();
+  });
+
+  /* Запертая карточка тянуться не должна - подсказка на ручке говорит почему. */
+  document.addEventListener('mouseover', function (e) {
+    var grip = e.target.closest ? e.target.closest('.cbm-grip') : null;
+    if (!grip) return;
+    var src = srcSlotOf(nodeOf(grip)), locked = !!(src && activeBuild(src));
+    grip.classList.toggle('cbm-locked', locked);
+    grip.title = locked ? MSG_BUILDING : DRAG_TIP;
+  });
+
+  return {
+    dragging: function () { return !!(drag && !drag.paintOk); },
+    deferPaint: function () { pendingPaint = true; },
+    run: run,
+    check: check,
+    undoLatest: undoLatest,
+    undoDepth: function () { return undoStack.length; },
+    menuOpen: function () { return !!menu; }
   };
 })();
 </script>
@@ -16001,14 +16717,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return window.cbDuplicateSlot(btn);
   };
 
-  window.cbDuplicateSlot = function(btn) {
-    var srcSlot = btn.closest('.cb-slot');
-    var form = btn.closest('form');
-    if (!srcSlot || !form) return;
+  /* ACL-1345: `destForm` - положить копию в конец другой формы (перенос Ctrl-копией);
+     `btn` может быть самой карточкой. Возвращает новую карточку. */
+  window.cbDuplicateSlot = function(btn, destForm) {
+    var srcSlot = btn.classList && btn.classList.contains('cb-slot') ? btn : btn.closest('.cb-slot');
+    var form = destForm || btn.closest('form');
+    if (!srcSlot || !form) return null;
     var idx = form.querySelectorAll('.cb-slot').length;
-    srcSlot.insertAdjacentHTML('afterend', buildBlankSlotHTML(idx));
-    var newSlot = srcSlot.nextElementSibling;
-    if (!newSlot) return;
+    var newSlot;
+    var into = destForm ? destForm.querySelector('.cb-slots') : null;
+    if (into) { into.insertAdjacentHTML('beforeend', buildBlankSlotHTML(idx)); newSlot = into.lastElementChild; }
+    else { srcSlot.insertAdjacentHTML('afterend', buildBlankSlotHTML(idx)); newSlot = srcSlot.nextElementSibling; }
+    if (!newSlot) return null;
     initAllSelects(newSlot);
 
     // ACL-1768: у копии столько же наборов, сколько у источника (разделы - до копирования полей).
@@ -16096,6 +16816,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     cbRenumber(form);
     cbUpdateCount(form);
     window.cbSyncDestination(newSlot);
+    return newSlot;
+  };
+
+  /* ACL-1345: строительные детали для переноса карточек (блок «cbMove» ниже по странице). */
+  window.cbMoveParts = {
+    buildAdRowHTML: buildAdRowHTML, copyAdRowValues: _copyAdRowValues, initAllSelects: initAllSelects,
+    renumberAds: cbRenumberAds, updateAdCount: cbUpdateAdCount, updateAdLabels: cbUpdateAdLabels,
+    renumber: cbRenumber
   };
 
   // ── Ad sets (ACL-1768) ───────────────────────────────────────────────
@@ -17561,6 +18289,17 @@ function cbPfTick() {
   }, 1000);
 }
 
+function checkedAt(row, fallback) {
+  var t = row && row.checked_at ? Date.parse(row.checked_at) : NaN;
+  return isFinite(t) ? t : fallback;
+}
+
+/* ACL-2266: «14:32» — время проверки на карточке и в плане. */
+window.cbPfTime = function (at) {
+  var d = new Date(at), z = function (n) { return (n < 10 ? '0' : '') + n; };
+  return z(d.getHours()) + ':' + z(d.getMinutes());
+};
+
 function cbPfStore(form, data, revs) {
   var a = form._pfAudit || (form._pfAudit = { byName: Object.create(null) });
   var byName = Object.create(null), now = Date.now();
@@ -17576,8 +18315,9 @@ function cbPfStore(form, data, revs) {
       error: r ? (r.error || '') : ((data && data.error) || 'This campaign was not checked'),
       errorKind: kind,
       accountAudit: (data && data.account_audit) || null,
-      result: r || null,                 // ACL-2003: строка ответа целиком — чтобы показать вердикт без нового чтения
-      rev: revs[name], at: now
+      result: r || null,                 // строка ответа целиком — для показа вердикта
+      /* ACL-2266: время проверки — серверное (`checked_at`), строка могла прийти из кэша сервера. */
+      rev: revs[name], at: checkedAt(r, now), cached: !!(r && r.cached)
     };
   });
 }
@@ -17628,59 +18368,24 @@ window.cbConnectionPlanFetch = function (fd) {
   });
 };
 
-/* ACL-2003: как долго сохранённый вердикт годится без нового чтения кабинета. Правка черновика,
- * другой набор кампаний или конец окна — проверка идёт заново; кнопка «Check again» — всегда заново. */
-window.CB_PF_FRESH_MS = 10 * 60 * 1000;
-
-function cbPfHit(slot) {
-  var form = slot && slot.closest ? slot.closest('form') : null, a = form && form._pfAudit;
-  return (a && a.byName[cbPfName(slot)]) || null;
-}
-
-/* Свежи ли серверные вердикты кампании: есть, ревизия та же и окно не вышло. */
-function cbPfFresh(slot) {
-  var hit = cbPfHit(slot);
-  return !!(hit && hit.rev === window.cbPfRev(slot) && Date.now() - hit.at < window.CB_PF_FRESH_MS);
-}
-
-/* Вердикт можно показать без нового чтения: свежий и это настоящий ответ кабинета, а не сбой чтения. */
-window.cbPfReusable = function (slot) {
-  var hit = cbPfHit(slot);
-  return cbPfFresh(slot) && hit.errorKind !== 'not_checked';
-};
-
-/* Ответ в том же виде, что у /publish-plan, из сохранённых вердиктов; null, если хоть одна кампания не годится. */
-window.cbPfStoredData = function (form, slots) {
-  if (!slots.length || !slots.every(window.cbPfReusable)) return null;
-  var out = { results: [], error: '', error_kind: '', account_audit: null, stored_n: slots.length, stored_at: Infinity };
-  slots.forEach(function (slot) {
-    var hit = cbPfHit(slot);
-    out.stored_at = Math.min(out.stored_at, hit.at);
-    if (hit.result) out.results.push(hit.result);
-    else if (!out.error) { out.error = hit.error || ''; out.error_kind = hit.errorKind || ''; }
-    if (hit.accountAudit && !out.account_audit) out.account_audit = hit.accountAudit;
-  });
-  return out;
-};
-
-/* ACL-2003: одна идущая проверка на форму (`form._pfFlight`). Те же кампании в той же ревизии — тот же
- * запрос (Check plan, «Check» на карточке и Publish all не открывают профиль каждый свой раз); другой
- * набор ждёт идущую и проверяет только то, чего в ней не было. */
-window.cbPreflightRun = function (form, slots) {
+/* ACL-2003: одна идущая проверка на форму (`form._pfFlight`) — это дедупликация запросов, не кэш вердиктов.
+ * Те же кампании в той же ревизии — тот же запрос (Check plan, «Check» на карточке и Publish all не открывают
+ * профиль каждый свой раз); другой набор ждёт идущую и уходит следом целиком: нетронутые кампании сервер
+ * отдаёт из своего кэша вердиктов (ACL-2266), а не читает заново. `opts.force` («Re-check all») кэш не читает. */
+window.cbPreflightRun = function (form, slots, opts) {
+  var force = !!(opts && opts.force);
   var list = slots && slots.length ? slots : Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
   var revs = Object.create(null);
   list.forEach(function (slot) { revs[cbPfName(slot)] = window.cbPfRev(slot); });
   var flight = form._pfFlight;
   if (flight) {
-    var same = Object.keys(revs).every(function (name) { return flight.revs[name] === revs[name]; });
+    var same = !!flight.force === force
+      && Object.keys(revs).every(function (name) { return flight.revs[name] === revs[name]; });
     if (same) return flight.promise;
-    return flight.promise.then(function () {
-      var rest = list.filter(function (slot) { return !window.cbPfReusable(slot); });
-      if (!rest.length) return window.cbPfStoredData(form, list) || {};
-      return window.cbPreflightRun(form, rest);
-    });
+    return flight.promise.then(function () { return window.cbPreflightRun(form, slots, opts); });
   }
   var fd = cbPlanFormData(form, slots && slots.length ? list : null);
+  if (force) fd.set('force', '1');
   form._pfBusy = true;
   form._pfStarted = Date.now();          // ACL-1990: карточка считает, сколько идёт проверка
   cbPfRefresh();
@@ -17695,8 +18400,34 @@ window.cbPreflightRun = function (form, slots) {
       cbPfRefresh();
       return data;
     });
-  form._pfFlight = { revs: revs, promise: promise };
+  form._pfFlight = { revs: revs, promise: promise, force: force };
   return promise;
+};
+
+/* ACL-2266: после перезагрузки страницы один раз спросить у сервера готовые вердикты формы (только память
+ * сервера: ни профиля, ни Meta) и восстановить значки кампаний, чей черновик не менялся. */
+window.cbPfRestore = function (form) {
+  if (!form || form._pfRestored || typeof form.querySelectorAll !== 'function') return Promise.resolve(null);
+  form._pfRestored = true;
+  var slots = Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
+  if (!slots.length) return Promise.resolve(null);
+  var fd = cbPlanFormData(form, null);
+  var sent = Object.create(null);   // ревизии карточек на момент ЗАПРОСА: правка во время ответа не получает чужой вердикт
+  slots.forEach(function (slot) { sent[cbPfName(slot)] = window.cbPfRev(slot); });
+  return fetch('/publish-plan/cached', { method: 'POST', body: fd })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var have = Object.create(null);
+      ((data && data.results) || []).forEach(function (r) { have[String(r.campaign_name || '')] = true; });
+      var store = form._pfAudit, revs = Object.create(null);
+      slots.forEach(function (slot) {
+        var name = cbPfName(slot);
+        if (have[name] && !(store && store.byName[name]) && sent[name] === window.cbPfRev(slot)) revs[name] = sent[name];
+      });
+      if (Object.keys(revs).length) { cbPfStore(form, data, revs); cbPfRefresh(); }
+      return data;
+    })
+    .catch(function () { return null; });
 };
 
 /* Предупреждения (не блокируют) — в окно подтверждения. Читается один раз. */
@@ -17762,10 +18493,10 @@ window.cbPreflightGate = function (items, proceed) {
     proceed();
   }
   if (!cbApiMode()) { done(); return; }
+  /* ACL-2266: уходят ВСЕ выбранные кампании; нетронутые сервер отдаёт из своего кэша вердиктов (без Meta). */
   var pending = [];
   items.forEach(function (it) {
-    var stale = it.slots.filter(function (slot) { return !window.cbPfReusable(slot); });   // ACL-2003: 'Could not check' is never reused
-    if (stale.length) pending.push({ form: it.form, slots: stale });
+    if (it.slots.length) pending.push({ form: it.form, slots: it.slots });
   });
   if (!pending.length) { done(); return; }
   if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
@@ -17844,22 +18575,21 @@ function cbTargetingHtml(items) {
   return rows ? '<div class="cbd-plan-targeting" style="margin:0.2rem 0">' + rows + '</div>' : '';
 }
 
-/* ACL-2003: «Checked 4 min ago». */
-window.cbPfAgo = cbPfAgo;
-function cbPfAgo(at) {
-  var mins = Math.floor(Math.max(0, Date.now() - at) / 60000);
-  return 'Checked ' + (mins < 1 ? 'less than a minute' : mins + ' min') + ' ago';
-}
-
 /* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
 function cbPlanHtml(data) {
   var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
     + aclEscHtml((data && data.account) || '?') + '</strong> — nothing was created</div>';
-  if (data && data.stored_at) {
-    // ACL-2003: вердикт взят из памяти страницы — кабинет заново не читался.
-    h += '<div class="cbd-plan-head cbd-plan-stored">' + aclEscHtml(cbPfAgo(data.stored_at))
-      + ' · ' + aclEscHtml(String(data.stored_n || 0)) + ' campaign(s) not edited since — shown from the last check, '
-      + 'the account was not read again. <button type="button" class="cbd-add" data-act="recheck-plan">Check again</button></div>';
+  var cache = (data && data.cache) || null;
+  if (cache && cache.hits > 0) {
+    // ACL-2266: часть (или все) кампании взяты из кэша вердиктов сервера — Meta о них не спрашивали.
+    var stamps = ((data && data.results) || []).filter(function (r) { return r.cached && r.checked_at; })
+      .map(function (r) { return Date.parse(r.checked_at); }).filter(isFinite);
+    var latest = stamps.length ? window.cbPfTime(Math.max.apply(null, stamps)) : '';
+    h += '<div class="cbd-plan-head cbd-plan-cached">'
+      + (cache.read > 0
+        ? aclEscHtml(cache.hits + ' of ' + (cache.hits + cache.read) + ' campaigns are unchanged since their last check, so Meta was not asked again.')
+        : aclEscHtml('Nothing changed since the last check' + (latest ? ' (' + latest + ')' : '') + '. No request was sent to Meta.'))
+      + ' <button type="button" class="cbd-add" data-act="recheck-plan">Re-check all</button></div>';
   }
   if (data && data.error) {
     h += '<div class="cbd-plan-err" style="color:var(--bad)">' + aclEscHtml(data.error) + '</div>';
@@ -17873,6 +18603,8 @@ function cbPlanHtml(data) {
       + (s ? ' · Campaign PAUSED · ad sets and ads active, start when you turn the campaign on · ' + aclEscHtml(cbPlanMoney(s))
            + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
       + '</div>';
+    if (r.cached && r.checked_at) h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">· checked at '
+      + aclEscHtml(window.cbPfTime(Date.parse(r.checked_at))) + ', unchanged</div>';
     if (r.error) h += '<div class="cbd-plan-err" style="color:var(--bad)">✕ ' + aclEscHtml(r.error) + '</div>';
     (r.warnings || []).forEach(function (w) {
       if (w === 'Dry run: nothing was created') return;
@@ -18222,27 +18954,14 @@ window.cbCheckPlan = function (picked, out, btn, force) {
       .catch(function () {});
   }, 2000);
   forms.forEach(function (x, i) {
-    // ACL-2003: кампании, которые не правили после проверки (и окно свежести не вышло), не читаются
-    // заново — вердикт берётся с формы; «Check again» (force) читает всё.
-    var all = x.only || Array.prototype.slice.call(x.form.querySelectorAll('.cb-slot'));
-    var kept = (!force && typeof window.cbPfReusable === 'function') ? all.filter(window.cbPfReusable) : [];
-    var todo = kept.length ? all.filter(function (slot) { return kept.indexOf(slot) === -1; }) : x.only;
-    var stored = kept.length ? window.cbPfStoredData(x.form, kept) : null;
+    // ACL-2266: уходят все кампании; нетронутые сервер отдаёт из кэша вердиктов, `force` («Re-check all») читает всё.
     // ACL-1819: тот же запрос кладёт вердикты в карточку pre-flight audit (cbPreflightRun).
-    var job = stored && !todo.length ? Promise.resolve(null)
-      : (window.cbPreflightRun ? window.cbPreflightRun(x.form, todo)
-        : window.cbConnectionPlanFetch(cbPlanFormData(x.form, todo)));
+    var job = window.cbPreflightRun ? window.cbPreflightRun(x.form, x.only, { force: !!force })
+      : window.cbConnectionPlanFetch(cbPlanFormData(x.form, x.only));
     job
       .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
       .then(function (data) {
         data = data || {};
-        if (stored) {
-          data.results = (data.results || []).concat(stored.results);
-          data.stored_at = stored.stored_at;
-          data.stored_n = stored.stored_n;
-          if (!data.error && stored.error) { data.error = stored.error; data.error_kind = stored.error_kind; }
-          if (!data.account_audit && stored.account_audit) data.account_audit = stored.account_audit;
-        }
         if (!data.account) data.account = cbFormTitle(x.form);
         // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
         if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);

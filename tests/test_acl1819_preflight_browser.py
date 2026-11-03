@@ -51,13 +51,17 @@ def _open(browser, backend, plan_reply=None, theme="light"):
     p = ctx.new_page()
     errors: list[str] = []
     p.on("pageerror", lambda e: errors.append(str(e)))
-    state = {"plan_posts": 0, "errors": errors, "ctx": ctx}
+    state = {"plan_posts": 0, "cached_posts": 0, "errors": errors, "ctx": ctx}
     html = _page_html(backend)
 
     def route(r):
         url = r.request.url
         if r.request.resource_type == "document":
             r.fulfill(content_type="text/html", body=html)
+        elif "/publish-plan/cached" in url:
+            # ACL-2266: восстановление значков после загрузки — память сервера, не проверка (в Meta не идёт).
+            state["cached_posts"] += 1
+            r.fulfill(json={"results": []})
         elif "/publish-plan" in url:
             state["plan_posts"] += 1
             reply = plan_reply() if callable(plan_reply) else (plan_reply or {"results": []})
