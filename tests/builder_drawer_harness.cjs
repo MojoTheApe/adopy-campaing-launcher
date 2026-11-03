@@ -204,12 +204,12 @@ assert.equal(wide.data['acl.builder.width'], '680');
 assert.equal(page.els['cbd-root'].classes.has('cbd-dragging'), false);
 h.click();                                           // следующий клик — настоящий
 assert.equal(page.api.isOpen(), false);
-// пределы: не уже минимума и не шире окна
+// пределы: не уже минимума и не шире окна минус MIN_PAGE (560) под страницу
 h.fire('pointerdown', ptr(2, 900));
 h.fire('pointermove', ptr(2, 3000));
 assert.equal(cssW(page), '320px', 'ниже минимума');
 h.fire('pointermove', ptr(2, -9000));
-assert.equal(cssW(page), (1400 - 40 - 16) + 'px', 'шире окна');
+assert.equal(cssW(page), (1400 - 40 - 560) + 'px', 'протяжка оставила странице меньше MIN_PAGE');
 h.fire('pointerup', ptr(2, -9000));
 assert.equal(page.api.isOpen(), true, 'протяжка закрытого ящика не открыла его');
 h.click();                                           // этот click гасится
@@ -228,6 +228,20 @@ again = makePage(memoryStore({ 'acl.builder.width': '9999999' }));
 assert.equal(cssW(again), '480px', 'мусор принят');
 again = makePage(memoryStore({ 'acl.builder.width': 'abc' }));
 assert.equal(cssW(again), '480px');
+// MIN_PAGE: сохранённая ширина режется так, чтобы странице осталось 560px
+again = makePage(memoryStore({ 'acl.builder.width': '1200' }), 1400);
+assert.equal(cssW(again), '800px', 'сохранённая ширина оставила странице меньше MIN_PAGE');
+assert.equal(again.body.classes.has('cbd-overlay'), false, 'на пределе протяжки страница должна сдвигаться, а не накрываться');
+again = makePage(memoryStore({ 'acl.builder.width': '1500' }), 1900);
+assert.equal(cssW(again), '1300px', 'MIN_PAGE при широком окне');
+// окно, где обычная ширина с MIN_PAGE не помещается (< 480+40+560): прежнее поведение
+again = makePage(memoryStore({ 'acl.builder.width': '1000' }), 1000);
+assert.equal(cssW(again), (1000 - 40 - 16) + 'px', 'узкое окно: ящик поверх, как раньше');
+assert.equal(again.body.classes.has('cbd-overlay'), true);
+// wide-пресет — осознанный режим «почти всё окно» поверх страницы, MIN_PAGE его не режет
+again = makePage(memoryStore({ 'acl.builder.width': 'wide' }), 1400);
+assert.equal(cssW(again), (1400 - 40 - 16) + 'px', 'wide не должен резаться MIN_PAGE');
+assert.equal(again.body.classes.has('cbd-overlay'), true, 'wide — поверх страницы');
 again = makePage(memoryStore({ 'acl.builder.width': '1200' }), 700);
 assert.equal(cssW(again), (700 - 40 - 16) + 'px', 'сохранённая ширина переросла окно');
 again = makePage(memoryStore(), 380);
