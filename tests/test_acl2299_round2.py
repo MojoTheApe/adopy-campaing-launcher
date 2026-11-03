@@ -287,7 +287,7 @@ def test_check_plan_tries_one_replacement_tab_after_the_wait(monkeypatch):
 
     calls = []
 
-    def runner(account, drafts, results=None):
+    def runner(account, drafts, results=None, session_info=None):
         calls.append(len(results))
         results.append({"half": True})
         if len(calls) == 1:
@@ -300,11 +300,11 @@ def test_check_plan_tries_one_replacement_tab_after_the_wait(monkeypatch):
     monkeypatch.setattr(publish_api, "build_drafts",
                         lambda *a, **k: [SimpleNamespace(errors=[], name="C", warnings=[])])
     out = publish_api._check_plan_once([{}], account_label="A", country="US")
-    assert calls == [0, 0] and out["error"] == "" and out["results"] == [{"ok": True}]
+    assert calls == [0, 0] and out["error"] == "" and [r["ok"] for r in out["results"]] == [True]
 
     calls.clear()
 
-    def always(account, drafts, results=None):
+    def always(account, drafts, results=None, session_info=None):
         calls.append(1)
         raise PageUnresponsive("silent")
 

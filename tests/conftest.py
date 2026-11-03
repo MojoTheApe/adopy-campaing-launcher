@@ -426,3 +426,13 @@ def _fake_creative_receipt_universe(monkeypatch):
                         lambda: fake_creative_receipts.root_for(original()))
     yield
     fake_creative_receipts.select(None)
+
+
+# ACL-2266: кэш вердиктов Check plan живёт в памяти процесса — каждый тест начинает с пустого.
+@pytest.fixture(autouse=True)
+def _plan_verdict_cache_empty_per_test():
+    from src.web import plan_cache
+
+    plan_cache.reset_for_tests()
+    yield
+    plan_cache.reset_for_tests()
