@@ -6435,6 +6435,12 @@ window.cbKeep = (function () {
       if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
       else el.value = data.fields[f];
     });
+    /* Тип файла объявления восстанавливается и в окнах поиска: иначе после перезагрузки
+       видео-объявление ищет файл среди картинок и не находит ничего (найдено на ACL-2084). */
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var t = row.querySelector('input[type="radio"][name$="_creative_type"]:checked');
+      if (t) row.querySelectorAll('.cb-creative-sel-wrap').forEach(function (w) { w.dataset.ctype = t.value; });
+    });
     slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
       var hidden = wrap.querySelector('[name]');
       var text = wrap.querySelector('.cb-sel-text');

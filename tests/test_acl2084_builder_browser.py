@@ -89,3 +89,18 @@ def test_a_ready_post_story_pair_still_fills_first_and_the_link_stays_hidden(pag
     _sync(row)
     assert _form_value(page, row, "_creative_file_vertical") == "7_story.png"
     assert not row.locator("[data-use-main]").is_visible()
+
+
+def test_a_restored_video_ad_searches_videos_in_both_file_boxes(page):
+    """Найдено на живой проверке ACL-2084: после перезагрузки видео-объявление искало среди картинок."""
+    _open_first(page, "ad")
+    _backend(page, "api")
+    slot = page.locator(".cbd-host .cb-slot:not([hidden])")
+    slot.evaluate("""slot => {
+        const data = cbKeep.readSlot(slot);
+        const radio = slot.querySelector('input[type="radio"][name$="_creative_type"]');
+        data.fields[radio.name.replace(/^camp_\d+_/, '')] = 'Video';
+        cbKeep.writeSlot(slot, data);
+    }""")
+    row = _row(page)
+    assert row.evaluate("""r => [...r.querySelectorAll('.cb-creative-sel-wrap')].map(w => w.dataset.ctype)""") == ["Video", "Video"]
