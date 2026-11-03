@@ -247,7 +247,18 @@ def _delay(failures: int) -> float:
     return base * random.uniform(1 - JITTER, 1 + JITTER)
 
 
+def emit_machine_profile() -> None:
+    """Паспорт машины один раз на процесс; читается в фоновом потоке, старт дешборда его не ждёт."""
+    try:
+        from src.acl_event_log.machine import machine_profile
+
+        writer.emit("machine.profile", machine_profile())
+    except Exception:
+        pass
+
+
 def _loop() -> None:
+    emit_machine_profile()
     _wake.wait(random.uniform(*FIRST_DELAY_S))
     failures = 0
     while True:

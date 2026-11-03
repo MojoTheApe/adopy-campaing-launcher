@@ -78,6 +78,9 @@ test("batch with a good token is stored under the dated key", async () => {
   const keys = batchKeys(env);
   assert.equal(keys.length, 1);
   assert.match(keys[0], new RegExp(`^v1/dt=\\d{4}-\\d{2}-\\d{2}/machine=m1/${BATCH}\\.ndjson\\.gz$`));
+  // Пачка в KV не вечная: 90 дней, архив — у владельца.
+  const put = env.AUTH.puts.find((p) => p.key === keys[0]);
+  assert.equal(put.options.expirationTtl, 90 * 24 * 60 * 60);
 });
 
 test("the same batch again is accepted, the object is untouched and no write is spent", async () => {

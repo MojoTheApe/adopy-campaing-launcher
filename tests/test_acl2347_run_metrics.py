@@ -170,3 +170,153 @@ def test_an_ordinary_silence_has_no_waiting_mark(job, monkeypatch):
         assert "waiting_on" not in diag
     finally:
         rt.forget_job(job_id)
+
+
+# ───────────── паспорт машины, нагрузка, счётчики, отпечаток, отчёты ─────────────
+
+from src.acl_event_log import events as ev_mod, machine, shipper, store  # noqa: E402
+from src.acl_event_log.writer import use_outbox_for_tests  # noqa: E402
+
+
+@pytest.fixture
+def outbox(tmp_path):
+    out = tmp_path / "outbox"
+    use_outbox_for_tests(out)
+    yield out
+    use_outbox_for_tests(None)
+
+
+def _lines(p):
+    import json
+    return [json.loads(x) for f in sorted(p.glob("*.ndjson")) for x in f.read_text("utf-8").splitlines()]
+
+
+def test_machine_profile_reads_this_machine_and_never_raises():
+    prof = machine.machine_profile()
+    assert prof["ram_gb"] and prof["ram_gb"] > 0
+    assert prof["cores_logical"] and prof["os"]
+    assert {"screen_px", "scale_pct", "on_battery", "load"} <= set(prof)
+
+
+def test_machine_profile_survives_a_broken_psutil(monkeypatch):
+    monkeypatch.setattr(machine, "_psutil", lambda: (_ for _ in ()).throw(ImportError("no psutil")))
+    prof = machine.machine_profile()
+    assert prof["ram_gb"] is None and prof["load"]["memory_pct"] is None
+
+
+def test_shipper_writes_the_passport_once(outbox):
+    shipper.emit_machine_profile()
+    rows = [x for x in _lines(outbox) if x["type"] == "machine.profile"]
+    assert len(rows) == 1 and rows[0]["payload"]["ram_gb"]
+
+
+def test_cpu_is_averaged_since_the_previous_sample_in_the_thread():
+    import threading
+    got: list = []
+    t = threading.Thread(target=lambda: got.extend([machine.load_now()["cpu_pct"], machine.load_now()["cpu_pct"]]))
+    t.start()
+    t.join()
+    assert got[0] is None, "the first sample in a thread has nothing to compare with"
+    assert got[1] is None or 0.0 <= got[1] <= 100.0
+
+
+def test_job_finished_counts_campaigns_instead_of_a_bare_done(outbox):
+    job_id = "acl2347-counts"
+    with pj._jobs_lock:
+        pj._jobs[job_id] = {"job_id": job_id, "account_label": "Doc120", "fb_backend": "api", "status": "running",
+                            "results": [], "errors": [], "done_count": 0,
+                            "created_at": "2026-11-03T10:00:00+00:00", "started_at": "2026-11-03T10:00:05+00:00",
+                            "finished_at": None}
+    try:
+        for res in ({"campaign_name": "a", "success": True, "publishable": True},
+                    {"campaign_name": "b", "success": False, "error": "page_unresponsive"},
+                    {"campaign_name": "c", "success": False, "not_started": True, "error": "Not started"}):
+            pj._append_result(job_id, res)
+        pj._finish(job_id)
+        fin = [x for x in _lines(outbox) if x["type"] == "job.finished"][0]["payload"]
+        assert (fin["campaigns"], fin["succeeded"], fin["failed"], fin["not_started"]) == (3, 1, 1, 1)
+        assert fin["outcome"] == "partial" and fin["status"] == "done"
+        results = [x["payload"] for x in _lines(outbox) if x["type"] == "publish.result"]
+        assert all("memory_pct" in r["load"] and "running_jobs" in r["load"] for r in results), \
+            "load is written on success too"
+        assert results[2]["consequence"] is True and "fail_fp" not in results[2]
+        assert results[0]["consequence"] is False and "fail_fp" not in results[0]
+        assert results[1]["fail_fp"]
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop(job_id, None)
+
+
+def test_same_failure_with_other_ids_has_one_fingerprint():
+    one = ev_mod.result_payload({"success": False, "stop_kind": "page", "steps_completed": ["campaign", "adset"],
+                                 "error": "Ad set 120212345678901 for 'Trading_35' failed after 95 s"})
+    two = ev_mod.result_payload({"success": False, "stop_kind": "page", "steps_completed": ["campaign", "adset"],
+                                 "error": "Ad set 120299999999999 for 'FX_30' failed after 120 s"})
+    other = ev_mod.result_payload({"success": False, "stop_kind": "network", "steps_completed": ["campaign"],
+                                   "error": "Ad set 120212345678901 for 'Trading_35' failed after 95 s"})
+    assert one["fail_fp"] == two["fail_fp"] != other["fail_fp"]
+    assert one["fail_after"] == "adset" and "120212" not in one["fail_text"] and "trading" not in one["fail_text"]
+
+
+def test_result_dict_carries_the_stop_kind():
+    from src.web import publish_api
+    out = publish_api.Outcome(campaign_name="c")
+    out.stop_kind = "page"
+    assert publish_api.result_dict(out, error="x")["stop_kind"] == "page"
+
+
+def _seg(*rows):
+    import gzip
+    import json
+    return gzip.compress("\n".join(json.dumps(r) for r in rows).encode() + b"\n")
+
+
+def _ev(seq, type, machine_id="m1", ts=None, account="acc", **payload):
+    from datetime import datetime, timezone
+    return {"event_id": f"s-{machine_id}:{seq}", "stream_id": f"s-{machine_id}", "seq": seq, "type": type,
+            "ts": ts or datetime.now(timezone.utc).isoformat(), "machine_id": machine_id, "machine": machine_id.upper(),
+            "manager": "A", "flow_version": "v1", "channel": "prod", "job_id": "j1", "account": account,
+            "campaign": "c", "payload": payload}
+
+
+def test_failures_report_groups_by_fingerprint_and_skips_consequences(tmp_path):
+    conn = store.open_db(tmp_path / "e.sqlite")
+    try:
+        store.ingest_segment(conn, "k1", _seg(
+            _ev(1, "publish.result", success=False, fail_fp="aaa", fail_text="tab", stop_kind="page"),
+            _ev(2, "publish.result", success=False, consequence=True, not_started=True),
+            _ev(3, "publish.result", success=True)))
+        store.ingest_segment(conn, "k2", _seg(
+            _ev(1, "publish.result", machine_id="m2", success=False, fail_fp="aaa", fail_text="tab"),
+            _ev(2, "publish.result", machine_id="m2", success=False, fail_fp="bbb", fail_text="net")))
+        rows = store.failures(conn, days=7)
+        assert [(r["fail_fp"], r["count"], r["machines"]) for r in rows] == [("aaa", 2, 2), ("bbb", 1, 1)]
+    finally:
+        conn.close()
+
+
+def test_events_report_filters_by_type_prefix_and_machine(tmp_path):
+    conn = store.open_db(tmp_path / "e.sqlite")
+    try:
+        store.ingest_segment(conn, "k1", _seg(
+            _ev(1, "raw.run"), _ev(2, "raw.fb_api"), _ev(3, "heartbeat"),
+            _ev(4, "machine.profile", machine_id="m2", ram_gb=16.0, cores_logical=8)))
+        assert [e["type"] for e in store.events(conn, type="raw.")] == ["raw.run", "raw.fb_api"]
+        assert [e["type"] for e in store.events(conn, machine="M2")] == ["machine.profile"]
+        assert len(store.events(conn, limit=2)) == 2
+        m2 = [m for m in store.machines(conn) if m["machine_id"] == "m2"][0]
+        assert (m2["ram_gb"], m2["cores"]) == (16.0, 8)
+    finally:
+        conn.close()
+
+
+def test_report_script_runs_failures_and_events(tmp_path, capsys):
+    from scripts import acl_log_report
+    db = tmp_path / "e.sqlite"
+    conn = store.open_db(db)
+    store.ingest_segment(conn, "k1", _seg(_ev(1, "publish.result", success=False, fail_fp="aaa", fail_text="tab")))
+    conn.close()
+    assert acl_log_report.main(["--db", str(db), "--failures"]) == 0
+    assert "aaa" in capsys.readouterr().out
+    assert acl_log_report.main(["--db", str(db), "--events", "--type", "publish.result"]) == 0
+    assert "publish.result" in capsys.readouterr().out

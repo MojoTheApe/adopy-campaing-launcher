@@ -16,6 +16,8 @@ const GRACE_MS = 24 * 60 * 60 * 1000;     // при падении GitHub вер
 const MACHINE_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const BATCH_RE = /^[A-Za-z0-9-]{1,128}$/;
 const DEFAULT_REPO = "MojoTheApe/acl-lib";
+// Пачка живёт в KV 90 дней: KV — транспорт, архив — SQLite владельца (бесплатный лимит 1 ГБ).
+const BATCH_TTL_S = 90 * 24 * 60 * 60;
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json" } });
@@ -94,7 +96,7 @@ async function handleBatch(request, env) {
   // Пачка уже есть (повтор): это тоже успех, объект не перезаписывается и запись не тратится.
   try {
     if ((await env.AUTH.get(key, { type: "arrayBuffer" })) !== null) return json({ ok: true, duplicate: true });
-    await env.AUTH.put(key, body);
+    await env.AUTH.put(key, body, { expirationTtl: BATCH_TTL_S });
   } catch (_) {
     // Исчерпан суточный лимит записей или сбой KV: машина повторит позже, события лежат в её ящике.
     return json({ error: "storage unavailable" }, 503);

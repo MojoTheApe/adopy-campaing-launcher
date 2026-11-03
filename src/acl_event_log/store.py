@@ -171,6 +171,59 @@ def runs(conn: sqlite3.Connection, *, days: int = 7, account: str | None = None,
     return sorted(out, key=lambda r: r["ts"], reverse=True)
 
 
+def _cutoff(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+
+def failures(conn: sqlite3.Connection, *, days: int = 7) -> list[dict]:
+    """Журнал причин: строка на отпечаток сбоя — сколько раз, на скольких машинах и версиях, когда.
+
+    «Не запускалась» (`consequence`) сюда не входит: это следствие, а не свой сбой.
+    """
+    groups: dict[str, dict] = {}
+    for e in _rows(conn, "SELECT * FROM events WHERE type='publish.result' AND ts >= ? ORDER BY ts, seq",
+                   (_cutoff(days),)):
+        p = e["payload"]
+        if p.get("success") or p.get("consequence") or p.get("not_started"):
+            continue
+        fp = p.get("fail_fp") or "?"
+        g = groups.setdefault(fp, {"fail_fp": fp, "count": 0, "machines": set(), "versions": set(),
+                                   "accounts": set(), "first": e["ts"], "last": e["ts"],
+                                   "stop_kind": p.get("stop_kind") or "", "after": p.get("fail_after") or "",
+                                   "text": p.get("fail_text") or str(p.get("error") or "")[:160]})
+        g["count"] += 1
+        g["last"] = e["ts"]
+        g["machines"].add(e["machine_id"])
+        g["versions"].add(e["flow_version"])
+        g["accounts"].add(e["account"])
+    out = []
+    for g in groups.values():
+        out.append({**g, "machines": len(g["machines"] - {None}), "versions": len(g["versions"] - {None}),
+                    "accounts": len(g["accounts"] - {None})})
+    return sorted(out, key=lambda r: (-r["count"], r["last"]))
+
+
+def events(conn: sqlite3.Connection, *, days: int = 1, type: str | None = None,
+           machine: str | None = None, job: str | None = None, limit: int = 200) -> list[dict]:
+    """Последние события с фильтрами: тип (или префикс `raw.`), машина (id или имя), задание."""
+    sql, args = "SELECT * FROM events WHERE ts >= ?", [_cutoff(days)]
+    if type:
+        if type.endswith("."):
+            sql += " AND type LIKE ?"
+            args.append(type + "%")
+        else:
+            sql += " AND type=?"
+            args.append(type)
+    if machine:
+        sql += " AND (machine_id=? OR machine=?)"
+        args += [machine, machine]
+    if job:
+        sql += " AND job_id=?"
+        args.append(job)
+    rows = _rows(conn, sql + " ORDER BY ts DESC, seq DESC LIMIT ?", (*args, int(limit)))
+    return list(reversed(rows))
+
+
 def machines(conn: sqlite3.Connection) -> list[dict]:
     """Машины: версия, последний heartbeat, размер ящика, отброшенное, дыры по `seq`."""
     gaps: dict[str, int] = {}
@@ -185,7 +238,12 @@ def machines(conn: sqlite3.Connection) -> list[dict]:
         beat = conn.execute("SELECT ts, payload FROM events WHERE machine_id=? AND type='heartbeat' "
                             "ORDER BY ts DESC, seq DESC LIMIT 1", (m["machine_id"],)).fetchone()
         bp = json.loads(beat["payload"]) if beat else {}
+        prof = conn.execute("SELECT payload FROM events WHERE machine_id=? AND type='machine.profile' "
+                            "ORDER BY ts DESC, seq DESC LIMIT 1", (m["machine_id"],)).fetchone()
+        pp = json.loads(prof["payload"]) if prof else {}
         out.append({
+            "ram_gb": pp.get("ram_gb"), "cores": pp.get("cores_logical"), "scale_pct": pp.get("scale_pct"),
+            "on_battery": pp.get("on_battery"),
             "machine_id": m["machine_id"], "machine": latest["machine"], "manager": latest["manager"],
             "flow_version": latest["flow_version"], "events": m["events"],
             "last_event_at": m["last_event_at"], "last_heartbeat_at": beat["ts"] if beat else None,

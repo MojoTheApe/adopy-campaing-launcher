@@ -131,6 +131,44 @@ def _log_event(event_type: str, job_id: str, payload: dict[str, Any], *,
         pass
 
 
+def _result_counts(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Сколько кампаний дошло, не дошло и не запускалось: `status=done` этого не говорит."""
+    not_started = sum(1 for r in results if r.get("not_started"))
+    succeeded = sum(1 for r in results if r.get("success") and not r.get("not_started"))
+    failed = len(results) - not_started - succeeded
+    if not results:
+        outcome = "empty"
+    elif succeeded == len(results):
+        outcome = "all_ok"
+    elif succeeded:
+        outcome = "partial"
+    else:
+        outcome = "none"
+    return {"campaigns": len(results), "succeeded": succeeded, "failed": failed,
+            "not_started": not_started,
+            "publishable": sum(1 for r in results if r.get("publishable")), "outcome": outcome}
+
+
+def _load_for_log() -> dict[str, Any]:
+    """Нагрузка машины для журнала плюс сколько заданий и профилей держит дешборд."""
+    try:
+        from src.acl_event_log.machine import load_now
+
+        load = load_now()
+    except Exception:
+        load = {}
+    try:
+        with _jobs_lock:
+            load["running_jobs"] = sum(1 for j in _jobs.values() if j.get("status") == "running")
+    except Exception:
+        pass
+    try:
+        load["kept_profiles"] = len(_slots.kept_labels())
+    except Exception:
+        pass
+    return load
+
+
 def _log_job_finished(job_id: str) -> None:
     """`job.finished` ровно один раз на задание (его зовут три места завершения)."""
     try:
@@ -145,7 +183,7 @@ def _log_job_finished(job_id: str) -> None:
             payload = {
                 "status": job.get("status"), "cancelled": job.get("status") == "cancelled",
                 "created_at": created, "started_at": started, "finished_at": finished,
-                "duration_s": None,
+                "duration_s": None, **_result_counts(job.get("results") or []),
             }
             account = job.get("account_label")
         try:
@@ -1222,7 +1260,9 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
         try:
             from src.acl_event_log.events import result_payload
 
-            _log_event("publish.result", job_id, result_payload(res), account=account,
+            payload = result_payload(res)
+            payload["load"] = _load_for_log()
+            _log_event("publish.result", job_id, payload, account=account,
                        campaign=res.get("campaign_name"))
         except Exception:
             pass
@@ -1555,6 +1595,8 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     with _jobs_lock:
         _job0 = _jobs.get(job_id) or {}
         _started = {"slot_wait_s": _job0.get("slot_wait_s"), "started_ahead": _job0.get("started_ahead")}
+    # Первый замер CPU в потоке задания: дальше `cpu_pct` каждой кампании — среднее за неё.
+    _started["load"] = _load_for_log()
     _log_event("job.started", job_id, _started, account=account_label)
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
     publisher.units = units

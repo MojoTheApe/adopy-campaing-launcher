@@ -6,7 +6,9 @@
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 import time
 from typing import Any
 
@@ -21,6 +23,7 @@ _SLOT_KEYS = ("name", "targeting", "copy", "copy2", "copy_more", "creative_id", 
               "lead_form_template", "adset_index", "adset_name", "budget")
 
 _RESULT_KEYS = ("campaign_name", "published_as", "status", "success", "publishable", "error",
+                "not_started", "stop_kind",
                 "steps_completed", "campaign_id", "adset_id", "adset_ids", "ad_ids", "creative_ids",
                 "problems", "warnings", "blocking_failures", "manual_required", "created", "reused",
                 "readback")
@@ -102,8 +105,36 @@ def stats_payload(name: str, spec_hash: str, *, outcome: Any = None, plan: Any =
 
 
 def result_payload(res: dict) -> dict:
-    """Итог кампании как есть, без новых полей."""
-    return {k: res.get(k) for k in _RESULT_KEYS}
+    """Итог кампании; у сбоя — отпечаток, у «не запускалась» — пометка следствия."""
+    out = {k: res.get(k) for k in _RESULT_KEYS}
+    # «Не запускалась» — следствие более раннего сбоя задания, а не свой сбой.
+    out["consequence"] = bool(res.get("not_started"))
+    if not res.get("success") and not out["consequence"]:
+        steps = res.get("steps_completed") or []
+        out.update(failure_fingerprint(res.get("stop_kind") or "", str(steps[-1]) if steps else "",
+                                       str(res.get("error") or "")))
+    return out
+
+
+# Длительности и размеры меняются от запуска к запуску, а короткие коды ошибок Meta (#100) — нет.
+_AMOUNT_RE = re.compile(r"\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds|min|%|mb|gb|kb)\b")
+_NUM_RE = re.compile(r"\d{3,}")
+_QUOTED_RE = re.compile(r"'[^']*'|\"[^\"]*\"|«[^»]*»")
+_SPACE_RE = re.compile(r"\s+")
+
+
+def normalize_error(text: str) -> str:
+    """Текст ошибки без того, что меняется от запуска к запуску: id, числа, имена в кавычках."""
+    text = _QUOTED_RE.sub("'…'", str(text or "").lower())
+    text = _NUM_RE.sub("#", _AMOUNT_RE.sub("#", text))
+    return _SPACE_RE.sub(" ", text).strip()[:160]
+
+
+def failure_fingerprint(stop_kind: str, after_step: str, error: str) -> dict:
+    """Отпечаток сбоя: одинаковые сбои группируются без ручного чтения."""
+    text = normalize_error(error)
+    key = hashlib.sha256(f"{stop_kind}|{after_step}|{text}".encode("utf-8")).hexdigest()[:12]
+    return {"fail_fp": key, "fail_after": after_step, "fail_text": text}
 
 
 def check_payload(result: dict, *, plan_hash_value: str, duration_s: float) -> dict:

@@ -306,6 +306,8 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "error": error or None,
         #: ACL-2299: the campaign was never begun (an earlier stop) - the panel shows it as waiting, not failed.
         "not_started": bool(not_started),
+        #: ACL-2347: почему создатель остановился (для отпечатка сбоя в журнале); панель его не рисует.
+        "stop_kind": getattr(outcome, "stop_kind", "") or "",
         "steps_completed": list(outcome.steps),
         "screenshots": [],
         "readback": outcome.readback,
