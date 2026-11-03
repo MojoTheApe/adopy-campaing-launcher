@@ -54,7 +54,12 @@ def _plan_endpoint(monkeypatch, fields, backend="api"):
 def test_plan_endpoint_runs_only_as_a_dry_run(monkeypatch):
     code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1"})
     assert code == 200 and body["dry_run"] is True and calls == [([{"name": "C1"}],
-                                                                  {"account_label": "Acc", "country": "MX"})]
+                                                                  {"account_label": "Acc", "country": "MX",
+                                                                   "force": False})]
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1", "force": "1"})
+    assert calls[0][1]["force"] is True, "Re-check all (force=1) must reach check_plan"
+    code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "1", "force": "true"})
+    assert calls[0][1]["force"] is False, "only force=1 forces"
     code, body, calls = _plan_endpoint(monkeypatch, {"dry_run": "0"})
     assert code == 400 and calls == []
     code, body, calls = _plan_endpoint(monkeypatch, {})
@@ -533,7 +538,7 @@ def _flight_setup(monkeypatch, gate, runs):
     """check_plan без реального профиля: настоящий _check_plan_once заменён заглушкой."""
     from src.web import publish_api
 
-    def once(slots, *, account_label, country):
+    def once(slots, *, account_label, country, force=False):
         runs.append((account_label, country, list(slots)))
         gate.wait(5)
         return {"account": account_label, "results": [{"campaign_name": "C1"}], "dry_run": True, "error": ""}
@@ -601,15 +606,33 @@ def test_a_different_account_country_or_draft_is_not_merged(monkeypatch):
     assert len(runs) == 4
 
 
-def test_a_finished_check_is_not_cached_by_the_server(monkeypatch):
-    import threading
+def test_a_finished_check_is_served_from_the_server_cache_until_forced_or_expired(tmp_path, monkeypatch):
+    """ACL-2266 reverses ACL-2003 on purpose: the server cache is the one verdict memory.
 
-    gate, runs = threading.Event(), []
-    gate.set()
-    api = _flight_setup(monkeypatch, gate, runs)
-    api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
-    api.check_plan([{"name": "C1"}], account_label="Acc", country="MX")
-    assert len(runs) == 2, "после ответа повтор обязан читать кабинет заново (кэш решает страница)"
+    An identical repeat inside the TTL is a hit (no read session), `force` is not, past the TTL it is not.
+    """
+    import copy
+
+    from src.web import plan_cache
+    from src.web import publish_api as api
+
+    d = _draft(tmp_path, ads=1)
+    monkeypatch.setattr(api, "build_drafts", lambda slots, **kw: copy.deepcopy([d]))
+    opened = _read_session(monkeypatch, FakeMeta())
+    clock = [5000.0]
+    monkeypatch.setattr(plan_cache.time, "monotonic", lambda: clock[0])
+    monkeypatch.setenv(plan_cache.TTL_ENV, "10")
+
+    def run(**kw):
+        return api.check_plan([{"name": "C1"}], account_label="Test", country="MX", **kw)
+
+    run()
+    assert len(opened) == 1
+    assert run()["results"][0]["cached"] is True and len(opened) == 1, "an identical repeat must not read Meta"
+    run(force=True)
+    assert len(opened) == 2, "force must read again"
+    clock[0] += 601
+    assert not run()["results"][0].get("cached") and len(opened) == 3, "past the TTL the account is read again"
     assert api._plan_flight_waiters() == 0
 
 
@@ -620,7 +643,7 @@ def test_a_failed_leader_reaches_the_waiters_and_frees_the_key(monkeypatch):
 
     gate, calls = threading.Event(), []
 
-    def once(slots, *, account_label, country):
+    def once(slots, *, account_label, country, force=False):
         calls.append(1)
         gate.wait(5)
         raise RuntimeError("boom")
@@ -648,7 +671,7 @@ def test_a_failed_leader_reaches_the_waiters_and_frees_the_key(monkeypatch):
     assert api.check_plan([{"name": "C1"}], account_label="Acc", country="MX") == {"ok": 1}
 
 
-# ───────────── ACL-2003: Check plan не читает кабинет заново для нетронутых кампаний ─────────────
+# ───────────── ACL-2266: страница вердиктов не помнит — решает сервер ─────────────
 
 _STORED_NODE = r"""
 ESCAPER
@@ -660,10 +683,11 @@ function cbFormDataSkipping(form, skip) { const b = new RealFD(); b.set('camp_co
 const RealFD = FormData;
 globalThis.FormData = function () { return new RealFD(); };   // поддельная форма — пустой FormData
 const fetched = [];
+let reply = null;
 globalThis.fetch = async (url, init) => {
-  fetched.push({ url: url, skip: init.body.get('skip') });
+  fetched.push({ url: url, force: init.body.get('force'), skip: init.body.get('skip') });
   await new Promise((r) => setTimeout(r, 5));
-  return { json: async () => ({ account: 'Test', error: '', results: REPLY }) };
+  return { json: async () => reply };
 };
 const rev = { A: 'a1', B: 'b1' };
 function mkSlot(name) {
@@ -688,45 +712,46 @@ function button(act) {
   const attrs = { 'data-act': act };
   return { getAttribute: (k) => attrs[k], closest: function () { return this; } };
 }
+function row(name, cached) {
+  return Object.assign({ campaign_name: name, dry_run: true, success: true, error: null, warnings: [], plan: {},
+    checked_at: '2026-11-02T14:32:05+00:00' }, cached ? { cached: true } : {});
+}
 const tick = () => new Promise((r) => setTimeout(r, 40));
 (async () => {
   const out = {};
   const box = makeOut(), btn = { disabled: false };
-  window.cbCheckPlan(null, box, btn);                       // 1: первая проверка читает кабинет
+  reply = { account: 'Test', error: '', results: [row('MX Leads 1'), row('MX Leads 2')],
+            cache: { hits: 0, read: 2, forced: false } };
+  window.cbCheckPlan(null, box, btn);                       // 1: первая проверка
   await tick();
-  out.first = fetched.length;
-  out.firstHtml = box.innerHTML;
-  window.cbCheckPlan(null, box, btn);                       // 2: ничего не правили — из памяти
+  out.first = fetched.length; out.firstHtml = box.innerHTML; out.firstForce = fetched[0].force;
+  reply = { account: 'Test', error: '', results: [row('MX Leads 1', true), row('MX Leads 2', true)],
+            cache: { hits: 2, read: 0, forced: false } };
+  window.cbCheckPlan(null, box, btn);                       // 2: ничего не правили — страница всё равно спрашивает сервер
   await tick();
-  out.second = fetched.length;
-  out.secondHtml = box.innerHTML;
-  out.btnFree = btn.disabled === false;
-  rev.B = 'b2';                                             // 3: правка одной кампании — читается только она
-  window.cbCheckPlan(null, box, btn);
+  out.second = fetched.length; out.secondForce = fetched[1].force; out.secondHtml = box.innerHTML; out.btnFree = btn.disabled === false;
+  reply = { account: 'Test', error: '', results: [row('MX Leads 1', true), row('MX Leads 2')],
+            cache: { hits: 1, read: 1, forced: false } };
+  window.cbCheckPlan(null, box, btn);                       // 3: правка одной кампании
   await tick();
-  out.third = fetched.length;
-  out.thirdSkip = fetched[fetched.length - 1].skip;
-  out.thirdHtml = box.innerHTML;
-  box.listeners[0]({ target: button('recheck-plan'), stopPropagation: () => {} });   // 4: «Check again» — всё заново
+  out.third = fetched.length; out.thirdHtml = box.innerHTML;
+  reply = { account: 'Test', error: '', results: [row('MX Leads 1'), row('MX Leads 2')],
+            cache: { hits: 0, read: 2, forced: true } };
+  box.listeners[0]({ target: button('recheck-plan'), stopPropagation: () => {} });   // 4: «Re-check all»
   await tick();
-  out.fourth = fetched.length;
-  out.fourthSkip = fetched[fetched.length - 1].skip;
-  out.fourthStored = box.innerHTML.indexOf('cbd-plan-stored') !== -1;
+  out.fourth = fetched.length; out.fourthForce = fetched[3].force; out.fourthHtml = box.innerHTML;
   process.stdout.write(JSON.stringify(out));
 })();
 """
 
 
-def test_check_plan_shows_the_stored_verdict_of_unedited_campaigns_and_reads_only_the_rest():
+def test_check_plan_always_asks_the_server_and_shows_what_it_served_from_its_cache():
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
-    reply = [{"campaign_name": "MX Leads 1", "dry_run": True, "success": True, "error": None, "warnings": [], "plan": {}},
-             {"campaign_name": "MX Leads 2", "dry_run": True, "success": True, "error": None, "warnings": [], "plan": {}}]
     js = _template_js("function cbPfRefresh() {", "/* Имя карточки для подтверждения. */")
     escaper = _template_js("function aclEscHtml(value) {", "  </script>")
-    script = (_STORED_NODE.replace("REPLY", json.dumps(reply)).replace("ESCAPER\n", escaper + "\n", 1)
-              .replace("JS\n", js + "\n", 1))
+    script = _STORED_NODE.replace("ESCAPER\n", escaper + "\n", 1).replace("JS\n", js + "\n", 1)
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)
         path = fh.name
@@ -736,13 +761,21 @@ def test_check_plan_shows_the_stored_verdict_of_unedited_campaigns_and_reads_onl
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr
     out = json.loads(done.stdout)
-    assert out["first"] == 1 and "cbd-plan-stored" not in out["firstHtml"]
-    assert out["second"] == 1, "нетронутые кампании прочитаны заново"
-    assert "cbd-plan-stored" in out["secondHtml"] and "Checked less than a minute ago" in out["secondHtml"]
-    assert 'data-act="recheck-plan"' in out["secondHtml"] and out["btnFree"] is True
-    assert "MX Leads 1" in out["secondHtml"] and "MX Leads 2" in out["secondHtml"]
-    assert out["third"] == 2, "после правки кабинет не читался"
-    assert out["thirdSkip"] == "0", "прочитана и нетронутая кампания: должна быть пропущена только первая (индекс 0)"
-    assert "cbd-plan-stored" in out["thirdHtml"], "нетронутая кампания не показана из памяти"
-    assert out["fourth"] == 3 and out["fourthSkip"] is None, "Check again обязан прочитать всё заново"
-    assert out["fourthStored"] is False
+    assert out["first"] == 1 and out["firstForce"] is None and "cbd-plan-cached" not in out["firstHtml"]
+    assert out["second"] == 2 and out["secondForce"] is None, "the page keeps no verdicts: the server is always asked"
+    assert "Nothing changed since the last check (" in out["secondHtml"]
+    assert "No request was sent to Meta." in out["secondHtml"]
+    assert 'data-act="recheck-plan"' in out["secondHtml"] and "Re-check all" in out["secondHtml"] and out["btnFree"] is True
+    assert "checked at " in out["secondHtml"] and ", unchanged" in out["secondHtml"]
+    assert "cbd-plan-stored" not in out["secondHtml"] and "Check again" not in out["secondHtml"]
+    assert out["third"] == 3
+    assert "1 of 2 campaigns are unchanged since their last check, so Meta was not asked again." in out["thirdHtml"]
+    assert out["fourth"] == 4 and out["fourthForce"] == "1", "Re-check all must post force=1"
+    assert "cbd-plan-cached" not in out["fourthHtml"]
+
+
+def test_the_ten_minute_page_memory_of_acl_2003_is_gone():
+    text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    for gone in ("CB_PF_FRESH_MS", "cbPfFresh", "cbPfReusable", "cbPfStoredData", "cbd-plan-stored", "cbPfAgo"):
+        assert gone not in text, gone
+    assert "form._pfFlight" in text, "the in-flight reuse is request de-duplication and stays"

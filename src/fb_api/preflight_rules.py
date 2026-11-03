@@ -31,6 +31,10 @@ from typing import Any
 #: Серьёзность правила — потолок: правило со severity=warning никогда не блокирует.
 ERROR, WARNING, OK, UNKNOWN = "error", "warning", "ok", "unknown"
 
+#: Правила, у которых `unknown` — свойство самих данных черновика (ссылка, размеры файлов, таблица валют), а не
+#: «не прочитано в Meta». Любой другой `unknown` значит, что чтение не удалось: это не вердикт (ACL-2266, кэш).
+LOCAL_UNKNOWN_RULES = frozenset({"link_tracking", "media_vertical", "budget_min"})
+
 MAX_HEADLINE = 40
 MAX_PRIMARY_VISIBLE = 125
 AGE_MIN, AGE_MAX = 18, 65
