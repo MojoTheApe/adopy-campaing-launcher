@@ -227,7 +227,7 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
     $enforce = $AclGateEnforce -or (([string]$env:ACL_UPDATE_GATE).Trim() -eq 'enforce')
     $problems = @()
     $runLink = 'https://github\.com/' + [regex]::Escape((Get-AclRepoName)) + '/actions/runs/(\d+)\b'
-    $tags = (Invoke-AclGit $Git $Target @('tag', '--merged', $mainSha, '--list', 'acl-release-*', '--sort=-creatordate')) -split "`n"
+    $tags = (Invoke-AclGit $Git $Target @('tag', '--merged', $mainSha, '--list', 'acl-release-*', '--sort=-*committerdate')) -split "`n"
     foreach ($tag in $tags) {
         $tag = $tag.Trim()
         if (!$tag) { continue }

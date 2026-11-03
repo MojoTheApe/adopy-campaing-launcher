@@ -216,8 +216,14 @@ def _git(repo: Path, *args: str) -> str:
     return out.stdout.strip()
 
 
-def _commit(repo: Path, msg: str) -> str:
-    _git(repo, "commit", "--allow-empty", "-q", "-m", msg)
+def _commit(repo: Path, msg: str, when: int = 0) -> str:
+    import os
+    env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+    if when:  # release order is by the tagged commit's date
+        env["GIT_COMMITTER_DATE"] = f"{1700000000 + when} +0000"
+    subprocess.run([_GIT, "-C", str(repo), "commit", "--allow-empty", "-q", "-m", msg],
+                   check=True, capture_output=True, env=env)
     return _git(repo, "rev-parse", "HEAD")
 
 
@@ -243,7 +249,7 @@ def release_repo(tmp_path: Path):
     repo = tmp_path / "r"
     repo.mkdir()
     _git(repo, "init", "-q")
-    first = _commit(repo, "released")
+    first = _commit(repo, "released", 1)
     _git(repo, "update-ref", "refs/remotes/origin/main", first)
     return repo, first
 
@@ -258,7 +264,7 @@ def test_pick_release_tag_on_tip(release_repo) -> None:
 def test_pick_release_main_ahead_picks_tagged_ancestor(release_repo) -> None:
     repo, first = release_repo
     _tag(repo, "acl-release-1", first, f"CI success {_RUN}", 1)
-    tip = _commit(repo, "main moved on")
+    tip = _commit(repo, "main moved on", 100)
     _git(repo, "update-ref", "refs/remotes/origin/main", tip)
     result = _pick(repo)
     assert result.returncode == 0 and result.stdout.split() == ["acl-release-1", first]
@@ -267,7 +273,7 @@ def test_pick_release_main_ahead_picks_tagged_ancestor(release_repo) -> None:
 def test_pick_release_invalid_newer_tag_falls_back_to_older(release_repo) -> None:
     repo, first = release_repo
     _tag(repo, "acl-release-1", first, f"CI success {_RUN}", 1)
-    tip = _commit(repo, "main moved on")
+    tip = _commit(repo, "main moved on", 100)
     _git(repo, "update-ref", "refs/remotes/origin/main", tip)
     _tag(repo, "acl-release-2", tip, f"Built {_RUN}", 2)  # no success recorded
     result = _pick(repo)
@@ -298,3 +304,13 @@ def test_pick_release_rejects_lightweight_and_foreign_run(release_repo) -> None:
     _git(repo, "tag", "acl-release-light", first)
     _tag(repo, "acl-release-foreign", first, "CI success https://github.com/org/repo/actions/runs/1", 5)
     assert _pick(repo).returncode != 0
+
+
+def test_pick_release_retagged_old_commit_does_not_downgrade(release_repo) -> None:
+    repo, first = release_repo
+    tip = _commit(repo, "main moved on", 100)
+    _git(repo, "update-ref", "refs/remotes/origin/main", tip)
+    _tag(repo, "acl-release-2", tip, f"CI success {_RUN}", 2)
+    _tag(repo, "acl-release-old-retag", first, f"CI success {_RUN}", 999)  # newest tag object
+    result = _pick(repo)
+    assert result.returncode == 0 and result.stdout.split() == ["acl-release-2", tip]

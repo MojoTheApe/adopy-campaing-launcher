@@ -120,7 +120,7 @@ esac
 # when none qualifies. Invalid tags are skipped, never fall back past main.
 pick_release() {
     local checkout="$1" main_sha="$2" repo="$3" tag tag_sha annotation
-    for tag in $(git -C "$checkout" tag --merged "$main_sha" --list 'acl-release-*' --sort=-creatordate); do
+    for tag in $(git -C "$checkout" tag --merged "$main_sha" --list 'acl-release-*' '--sort=-*committerdate'); do
         [ "$(git -C "$checkout" cat-file -t "$tag" 2>/dev/null)" = "tag" ] || continue
         tag_sha="$(git -C "$checkout" rev-parse "$tag^{commit}" 2>/dev/null)" || continue
         [ "${#tag_sha}" = "40" ] || continue

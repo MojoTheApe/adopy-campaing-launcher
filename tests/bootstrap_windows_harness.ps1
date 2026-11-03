@@ -172,7 +172,11 @@ try {
     }
 
     # Main ahead of the last release: the tag's commit is installed, not main's tip.
-    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m 'main moved on'
+    # Release order is by the tagged COMMIT's date, so give the commits distinct dates.
+    $savedDate = $env:GIT_COMMITTER_DATE
+    $env:GIT_COMMITTER_DATE = ([DateTime]::UtcNow.AddDays(1)).ToString('yyyy-MM-ddTHH:mm:ssZ')
+    try { & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m 'main moved on' }
+    finally { if ($null -eq $savedDate) { Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue } else { $env:GIT_COMMITTER_DATE = $savedDate } }
     $mainSha = (& $git -C $temp rev-parse HEAD).Trim()
     & $git -C $temp update-ref refs/remotes/origin/main $mainSha
     Assert ($mainSha -ne $sha) 'fixture: main must be ahead of the release'
@@ -190,18 +194,31 @@ try {
         & $git -C $temp -c user.name=Test -c user.email=test@example.invalid checkout --quiet --detach $mainSha }
 
     # Two releases: the newer one is invalid (does not record success) -> older one wins.
-    Start-Sleep -Seconds 2
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-newer-bad $mainSha -m 'Built https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/124'
     & { function Get-AclGitHubToken { '' }
         $release = Get-AclRelease $git $temp $true 3>$null
         Assert ($release.Tag -eq 'acl-release-test' -and $release.Sha -eq $sha) 'Invalid newer tag must fall through to the older valid one' }
     # Newer valid tag verified by the API wins over the older one.
     & $git -C $temp tag -d acl-release-newer-bad | Out-Null
-    Start-Sleep -Seconds 2
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-newer-good $mainSha -m 'CI success https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/124'
     & { function Invoke-AclGitHubApi { @{ Code = 200; Body = (New-FakeRun @{ id = 124; head_sha = $mainSha }) } }
         $release = Get-AclRelease $git $temp $true
         Assert ($release.Tag -eq 'acl-release-newer-good' -and $release.Sha -eq $mainSha) 'Newest valid tag must win' }
+    # An OLDER commit re-tagged LATER (newest tag object) must not beat a valid tag on a newer commit.
+    & $git -C $temp -c user.name=Test -c user.email=test@example.invalid tag -a acl-release-retagged-old $sha -m 'CI success https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/125'
+    & { function Invoke-AclGitHubApi([string]$Token, [string]$Path) {
+            $id = [int]($Path -replace '.*/', '')
+            @{ Code = 200; Body = (New-FakeRun @{ id = $id; head_sha = $(if ($id -eq 125) { $sha } else { $mainSha }) }) } }
+        $release = Get-AclRelease $git $temp $true
+        Assert ($release.Tag -eq 'acl-release-newer-good' -and $release.Sha -eq $mainSha) 'Re-tagging an old commit must not downgrade the install'
+        # Newer tag's CI run rejected by the API -> the older verified tag is chosen.
+        & { function Invoke-AclGitHubApi([string]$Token, [string]$Path) {
+                $id = [int]($Path -replace '.*/', '')
+                if ($id -eq 124) { @{ Code = 200; Body = (New-FakeRun @{ id = 124; head_sha = $mainSha; conclusion = 'failure' }) } }
+                else { @{ Code = 200; Body = (New-FakeRun @{ id = $id; head_sha = $sha }) } } }
+            $release = Get-AclRelease $git $temp $true
+            Assert ($release.Tag -eq 'acl-release-retagged-old' -and $release.Sha -eq $sha) 'Rejected newer tag must fall through to the older verified one' } }
+    & $git -C $temp tag -d acl-release-retagged-old | Out-Null
     & $git -C $temp tag -d acl-release-newer-good | Out-Null
 
     & $git -C $temp -c user.name=Test -c user.email=test@example.invalid commit --allow-empty --quiet -m divergence
