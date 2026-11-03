@@ -102,32 +102,49 @@ git -C "$CHECKOUT" fetch --quiet origin main:refs/remotes/origin/main --tags \
     || fail "Could not fetch the production release from GitHub."
 
 # ----------------------------------------------------------------- Release
-# Production = origin/main, and only when it carries an annotated acl-release-*
-# tag that points at exactly that commit, links a CI run of this repository and
-# records success. (Same record the Windows installer falls back to when it has
-# no GitHub token to ask the API; the launcher's gate re-checks every update.)
-SHA="$(git -C "$CHECKOUT" rev-parse 'origin/main^{commit}')"
-case "$SHA" in
-    [0-9a-f]*) [ "${#SHA}" = "40" ] || fail "Cannot resolve the production release." ;;
+# Install the NEWEST valid release reachable from origin/main. Main may be ahead
+# of the last promoted release (its delivery run pending or cancelled); the
+# update gate in the launcher simply waits for that, a fresh install must not.
+# A valid release is an annotated acl-release-* tag whose own commit it records,
+# which links a CI run of this repository and records success. (Same record the
+# Windows installer falls back to when it has no GitHub token to ask the API;
+# the launcher's gate re-checks every update.)
+MAIN_SHA="$(git -C "$CHECKOUT" rev-parse 'origin/main^{commit}')"
+case "$MAIN_SHA" in
+    [0-9a-f]*) [ "${#MAIN_SHA}" = "40" ] || fail "Cannot resolve the production release." ;;
     *) fail "Cannot resolve the production release." ;;
 esac
+
+# pick_release <checkout> <main sha> <repo name>: prints "<tag> <commit>" for the
+# newest valid release tag merged into the main sha; prints nothing and returns 1
+# when none qualifies. Invalid tags are skipped, never fall back past main.
+pick_release() {
+    local checkout="$1" main_sha="$2" repo="$3" tag tag_sha annotation
+    for tag in $(git -C "$checkout" tag --merged "$main_sha" --list 'acl-release-*' --sort=-creatordate); do
+        [ "$(git -C "$checkout" cat-file -t "$tag" 2>/dev/null)" = "tag" ] || continue
+        tag_sha="$(git -C "$checkout" rev-parse "$tag^{commit}" 2>/dev/null)" || continue
+        [ "${#tag_sha}" = "40" ] || continue
+        annotation="$(git -C "$checkout" cat-file -p "$tag")"
+        echo "$annotation" | grep -q "^object $tag_sha\$" || continue
+        echo "$annotation" | grep -Eiq "https://github\.com/${repo}/actions/runs/[0-9]+" || continue
+        echo "$annotation" | grep -Eiwq success || continue
+        echo "$tag $tag_sha"
+        return 0
+    done
+    return 1
+}
+
+PICKED="$(pick_release "$CHECKOUT" "$MAIN_SHA" "$REPO_NAME")" \
+    || fail "Production has no annotated ACL release tag with a successful CI run. Nothing will be installed from an unverified commit."
+RELEASE_TAG="${PICKED%% *}"
+SHA="${PICKED##* }"
+[ -n "$RELEASE_TAG" ] && [ "${#SHA}" = "40" ] \
+    || fail "Production has no annotated ACL release tag with a successful CI run. Nothing will be installed from an unverified commit."
 if [ "$FRESH" = "0" ] && ! git -C "$CHECKOUT" merge-base --is-ancestor HEAD "$SHA"; then
     fail "This installation has diverged from production; refusing to update it."
 fi
 
-RELEASE_TAG=""
-for tag in $(git -C "$CHECKOUT" tag --points-at "$SHA" --list 'acl-release-*'); do
-    [ "$(git -C "$CHECKOUT" cat-file -t "$tag" 2>/dev/null)" = "tag" ] || continue
-    annotation="$(git -C "$CHECKOUT" cat-file -p "$tag")"
-    echo "$annotation" | grep -q "^object $SHA\$" || continue
-    echo "$annotation" | grep -Eiq "https://github\.com/${REPO_NAME}/actions/runs/[0-9]+" || continue
-    echo "$annotation" | grep -Eiwq success || continue
-    RELEASE_TAG="$tag"
-    break
-done
-[ -n "$RELEASE_TAG" ] || fail "Production has no annotated ACL release tag with a successful CI run. Nothing will be installed from an unverified commit."
-
-# The promoted release may predate Mac support: check BEFORE touching the tree,
+# The release may predate Mac support: check BEFORE touching the tree,
 # so nothing is checked out or moved and the user gets a plain message.
 for mac_script in install_acl.sh start_dashboard.sh scripts/install_dashboard_shortcut.sh; do
     git -C "$CHECKOUT" cat-file -e "$SHA:$mac_script" 2>/dev/null \

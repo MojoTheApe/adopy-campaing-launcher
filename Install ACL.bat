@@ -202,26 +202,38 @@ function Get-AclCiVerdict([string]$Git, [string]$Target, [string]$RunId, [string
     return @{ Verdict = 'unverified'; Why = 'could not be verified: GitHub API is unreachable' }
 }
 
+function Assert-AclFastForward([string]$Git, [string]$Target, [bool]$FreshInstall, [string]$Sha) {
+    # An existing install may only move forward to the chosen release (HEAD
+    # already being that commit is fine); git exits 1 when it has diverged.
+    if (!$FreshInstall) { Invoke-AclGit $Git $Target @('merge-base', '--is-ancestor', 'HEAD', $Sha) | Out-Null }
+}
+
 function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
-    # Same gate as scripts/acl_update_gate.py: exact promoted main head,
-    # fast-forward, annotated release tag whose linked CI run the GitHub API
-    # confirms. Nothing to verify with (no token, 401/403, offline) falls back
+    # Same checks as scripts/acl_update_gate.py, but the NEWEST valid release
+    # reachable from origin/main wins: main may be ahead of the last promoted
+    # release (its delivery run pending or cancelled) and the update gate simply
+    # waits for that. Candidates are annotated acl-release-* tags merged into
+    # main, newest first; each one's linked CI run must be confirmed by the
+    # GitHub API (head_sha = the TAG's commit) and an existing install must be
+    # able to fast-forward to it. Nothing to verify with (no token, 401/403, offline) falls back
     # to the tag's own record with a warning, unless $AclGateEnforce or
     # ACL_UPDATE_GATE=enforce.
-    $sha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
-    if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
+    $mainSha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
+    if ($mainSha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
     if (!$FreshInstall) {
         $dirty = Invoke-AclGit $Git $Target @('status', '--porcelain', '--untracked-files=no')
         if ($dirty) { throw 'Tracked local changes present. Save/review them before updating ACL.' }
-        Invoke-AclGit $Git $Target @('merge-base', '--is-ancestor', 'HEAD', $sha) | Out-Null
     }
     $enforce = $AclGateEnforce -or (([string]$env:ACL_UPDATE_GATE).Trim() -eq 'enforce')
     $problems = @()
     $runLink = 'https://github\.com/' + [regex]::Escape((Get-AclRepoName)) + '/actions/runs/(\d+)\b'
-    $tags = (Invoke-AclGit $Git $Target @('tag', '--points-at', $sha, '--list', 'acl-release-*')) -split "`n"
+    $tags = (Invoke-AclGit $Git $Target @('tag', '--merged', $mainSha, '--list', 'acl-release-*', '--sort=-creatordate')) -split "`n"
     foreach ($tag in $tags) {
+        $tag = $tag.Trim()
         if (!$tag) { continue }
         if ((Invoke-AclGit $Git $Target @('cat-file', '-t', $tag)) -ne 'tag') { continue }
+        $sha = Invoke-AclGit $Git $Target @('rev-parse', "$tag^{commit}")
+        if ($sha -notmatch '^[0-9a-f]{40}$') { continue }
         $annotation = Invoke-AclGit $Git $Target @('cat-file', '-p', $tag)
         if ($annotation -notmatch "(?m)^object $sha`$") { continue }
         $runIds = @([regex]::Matches($annotation, $runLink, 'IgnoreCase') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
@@ -229,13 +241,14 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
         $rejected = @(); $unverified = @()
         foreach ($runId in $runIds) {
             $result = Get-AclCiVerdict $Git $Target $runId $sha
-            if ($result.Verdict -eq 'verified') { return @{ Sha = $sha; Tag = $tag; Run = $runId; Unverified = '' } }
+            if ($result.Verdict -eq 'verified') { Assert-AclFastForward $Git $Target $FreshInstall $sha; return @{ Sha = $sha; Tag = $tag; Run = $runId; Unverified = '' } }
             if ($result.Verdict -eq 'rejected') { $rejected += "CI run $runId $($result.Why)" } else { $unverified += "CI run $runId $($result.Why)" }
         }
         if ($rejected.Count) { $problems += "$tag " + (($rejected + $unverified) -join '; '); continue }
         $reason = $unverified -join '; '
         if ($enforce) { $problems += "$tag $reason (enforced)"; continue }
         if ($annotation -notmatch '(?i)\bsuccess\b') { $problems += "$tag $reason; the tag does not record success either"; continue }
+        Assert-AclFastForward $Git $Target $FreshInstall $sha
         Write-Warning "CI not verified for ${tag}: $reason. Installing on the release tag's own record (see docs/RELEASE_TRUST.md)."
         return @{ Sha = $sha; Tag = $tag; Run = ''; Unverified = $reason }
     }
