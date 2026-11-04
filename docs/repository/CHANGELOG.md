@@ -1,5 +1,13 @@
 # Repository process history
 
+## 2026-11-04 — ACL-2387 seven-day preview retention
+
+New `ACL-Windows-spike-*` intermediate Windows preview bundles request seven-day
+retention instead of fourteen. Separate update/recovery evidence, delivery
+receipts, published stable releases and earlier recovery installers retain their
+existing policies. No build command, verification gate, release asset or existing
+artifact is changed or deleted.
+
 ## 2026-11-04 — ACL-2376 current workflow and historical guides
 
 The repository workflow is the current entry point for branch, task, review and

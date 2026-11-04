@@ -51,6 +51,15 @@ cannot activate an unimplemented maintenance or evidence collector.
 
 ## ACL checks and preserved boundaries
 
+Intermediate `ACL-Windows-spike-*` preview archives, installers and their bundled
+test logs are retained for seven days. Download a particular preview within that
+window if it is needed for manual investigation. The separate
+`ACL-update-recovery-*` evidence keeps its fourteen-day retention; published
+delivery receipts and acceptance logs keep their existing thirty-day retention.
+Stable installers, checksums and signed manifests remain in `acl-releases`,
+including earlier versions needed for recovery. This artifact-specific setting
+does not delete existing uploads or shorten repository-wide check/run history.
+
 Follow [WORKFLOW.md](WORKFLOW.md) for affected local regressions, scanner and smoke;
 the owner requires the full product suite on hosted CI. Keep the exact required
 `descriptor`, `tracker-link`, `ACL verification` and `Installer verification` names,
