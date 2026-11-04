@@ -1322,6 +1322,8 @@ class NameChoice:
     copy_number: int = 0
     #: Сколько кампаний этого имени уже было на кабинете (для текста «2 earlier»).
     earlier: int = 0
+    #: Почему верхняя своя кампания не дописывается (расхождения с билдером) - в шаги, не в предупреждение.
+    notes: list = field(default_factory=list)
 
     @property
     def renamed(self) -> bool:
@@ -1736,25 +1738,26 @@ class CampaignCreator:
     def _resume_state(self, cand: CampaignPlan, targetings: list[dict], campaign_id: str):
         """Наша кампания кандидата: (найденные наборы, неполная ли), либо None - дописывать нельзя.
 
-        Нельзя, если в ней есть объявления не из плана или она расходится с билдером (в том числе включена).
-        Неполная: нет набора плана или объявления плана под найденным набором. Без Страницы объявления
-        не считаются. Всего одно чтение объявлений кампании: и «подходят», и «неполная».
+        Нельзя, если в ней есть объявления не из плана или она расходится с билдером (в том числе включена):
+        третий элемент - причины текстом. Неполная: нет набора плана или объявления плана под найденным набором.
+        Без Страницы объявления не считаются. Всего одно чтение объявлений кампании: и «подходят», и «неполная».
         """
         found_sets = self._find_sets(cand, campaign_id)
         manual = needs_manual_page(cand)
         ads = self._children(campaign_id, "ads", "id,name,adset_id")
         want = set() if manual else {ad.name for s in cand.ad_sets for ad in s.ads}
         if {str(r.get("name") or "").strip() for r in ads} - want:
-            return None
-        if self._existing_differences(cand, targetings, campaign_id, found_sets):
-            return None
+            return found_sets, False, ["it is a campaign with other ads"]
+        bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
+        if bad:
+            return found_sets, False, [f"{f['object']}: " + "; ".join(f["differences"]) for f in bad]
         have: dict[str, set[str]] = {}
         for r in ads:
             have.setdefault(str(r.get("adset_id") or ""), set()).add(str(r.get("name") or "").strip())
         partial = any(h is None for h in found_sets) or (not manual and any(
             h is not None and any(ad.name not in have.get(str(h["id"]), set()) for ad in s.ads)
             for s, h in zip(cand.ad_sets, found_sets)))
-        return found_sets, partial
+        return found_sets, partial, []
 
     def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict) -> NameChoice | None:
         """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
@@ -1782,10 +1785,10 @@ class CampaignCreator:
             return None
         if str(row.get("effective_status") or row.get("status") or "") not in LIVE_STATES:
             return None
-        state = self._resume_state(cand, targetings, str(row["id"]))
-        if state is None:
+        found_sets, _partial, why = self._resume_state(cand, targetings, str(row["id"]))
+        if why:
             return None
-        return NameChoice(cand, row, state[0], n, n)
+        return NameChoice(cand, row, found_sets, n, n)
 
     def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
         """ACL-2250 (ACL-1902): имя кампании до любой записи - и в боевом запуске, и в Check plan.
@@ -1809,13 +1812,17 @@ class CampaignCreator:
         top = max(fam)
         cand = copy_plan(plan, top)
         ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
+        notes: list[str] = []
         if ours:
-            state = self._resume_state(cand, targetings, str(ours["id"]))
-            if state is not None and state[1]:
-                return NameChoice(cand, ours, state[0], top, len(fam) - 1)
+            found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
+            if partial and not why:
+                return NameChoice(cand, ours, found_sets, top, len(fam) - 1)
+            if why:
+                notes.append(f"{cand.name!r} (earlier campaign) is left as is; it differs from the builder: "
+                             + " | ".join(why))
         cand = copy_plan(plan, top + 1)
         self._check_name_length(cand)
-        return NameChoice(cand, None, [None] * len(plan.ad_sets), top + 1, len(fam))
+        return NameChoice(cand, None, [None] * len(plan.ad_sets), top + 1, len(fam), notes)
 
     def _save_name_receipt(self, out: Outcome, requested: str, choice: NameChoice) -> None:
         """До первой записи: выбранное имя на диск, чтобы повтор после обрыва дописал ту же кампанию."""
@@ -3095,6 +3102,8 @@ class CampaignCreator:
             if choice.renamed:
                 renamed = _rename_message(requested, plan.name, choice.earlier, future=True)
                 out.warnings.append(renamed)
+                for note in choice.notes:
+                    self._step(out, note)
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
@@ -3306,6 +3315,8 @@ class CampaignCreator:
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
+            for note in choice.notes:
+                self._step(out, note)
         existing, found_sets = choice.existing, choice.found_sets
         if existing:
             out.campaign_id = str(existing["id"])

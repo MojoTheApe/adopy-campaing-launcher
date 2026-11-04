@@ -751,8 +751,8 @@ def test_existing_campaign_with_the_same_name_but_not_ours_is_not_touched(tmp_pa
     meta = FakeMeta()
     foreign = meta._new("campaign", name="MX Leads 1", status="ACTIVE")
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    # ACL-1902: чужую не трогаем и не блокируемся - публикуем под свободным именем.
-    assert out.error == "" and out.published_as == "MX Leads 1_2"
+    # ACL-1902: чужую не трогаем и не блокируемся - публикуем копию со счётчиком (ACL-2250).
+    assert out.error == "" and out.published_as == "MX Leads 1 copy 1"
     assert meta.objects[foreign]["status"] == "ACTIVE"
     assert not any(o.get("campaign_id") == foreign for o in meta.objects.values())
 
