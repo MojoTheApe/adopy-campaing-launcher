@@ -1,6 +1,16 @@
 # ACL early adoption: released support, then separate owned selections
 
-## Current executable provider: ACL-2156 candidate — 24 October 2026
+## Current executable provider
+
+Use the exact current selection in [delivery.json](../../delivery.json) and
+[tracker/engine.json](../../tracker/engine.json), with the
+[current workflow](WORKFLOW.md) and [provider guide](STANDALONE_PROVIDER_ACL.md).
+ACL-2351 adopted published Tracker3.24.1 on 4 November 2026 without changing
+native configuration, capacities or optional-policy activation. Master1.8.0
+remains the documentation reference. The dated selections below preserve their
+original evidence and obligations; they do not select today's executable version.
+
+## Historical provider adoption: ACL-2156 — 24 October 2026
 
 The owner selected the separately published standalone Task Tracker3.14.1
 provider at `771d55f3317397e7d56471aa966f0a9de37d1a2e`. Read
