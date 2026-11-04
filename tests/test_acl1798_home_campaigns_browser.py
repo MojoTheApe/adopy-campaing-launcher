@@ -360,7 +360,7 @@ def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
         pg = browser.new_page(viewport={"width": 1280, "height": 600})
         pg.route("http://acl.test/**", site.handle)
         goto(pg, "http://acl.test/")
-        pg.wait_for_selector("[data-hc=body]:not([hidden])")
+        pg.wait_for_selector("[data-hc=body]:not([hidden])", state="attached")   # тело пустое (панели нет), поэтому не «visible»
         open_acc(pg, "Acc")
         pg.wait_for_selector('.hc-table tbody tr')
         assert pg.locator('[data-hc=needs]').is_hidden()

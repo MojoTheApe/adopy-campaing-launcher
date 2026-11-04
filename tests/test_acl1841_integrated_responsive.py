@@ -107,7 +107,7 @@ def integrated(browser, monkeypatch, tmp_path):
             scope.locator("summary").first.click()
         page.wait_for_function("document.querySelector('.view-panel.active .amap-campaigns')?._hc?.ready")
         host = scope.locator(".amap-campaigns")
-        host.locator("[data-hc=body]").wait_for(state="visible")
+        host.locator("[data-hc=body]:not([hidden])").wait_for(state="attached")
         opened.append((context, page, errors, writes, route, theme, width, populated))
         return page, scope, host
 
