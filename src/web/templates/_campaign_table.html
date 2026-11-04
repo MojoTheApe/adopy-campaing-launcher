@@ -587,7 +587,7 @@
     var open = !!S.details[id], tone = n.tone || 'busy';
     var inner = '<span class="hc-ic" aria-hidden="true">' + (ICONS[tone] || '•') + '</span><span class="hc-rm-text" title="' + esc(n.text) + '" role="status">' + esc(n.text) + '</span>' +
       (n.raw ? '<button type="button" class="hc-rm-btn" data-details="' + esc(id) + '" aria-expanded="' + open + '">Details</button>' : '');
-    return '<tr class="hc-rowmsg ' + esc(tone) + '" data-msg="' + esc(id) + '" style="--d:' + (depth || 0) + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div>' +
+    return '<tr class="hc-rowmsg ' + esc(tone) + '" data-msg="' + esc(id) + '" style="--d:' + Number(depth > 0 ? depth : DEPTH.campaign) + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div>' +
       (n.raw && open ? '<div class="hc-rm-raw" tabindex="0">' + esc(n.raw) + '</div>' : '') + '</td></tr>';
   }
   /* Короткий текст и сырой — через общий словарь `acmCommands.explain`; без помощника — как есть. */
@@ -629,7 +629,7 @@
     return {n: n, tone: tone};
   }
   function rowHtml(r, cols) {
-    var lv = r.level, key = r.key, canOpen = lv !== 'ad', d = DEPTH[lv] || 0;
+    var lv = r.level, key = r.key, canOpen = lv !== 'ad', d = DEPTH[lv] > 0 ? DEPTH[lv] : DEPTH.campaign;
     var open = !!S.expanded[key];
     var st = r.status, ns = noteState(key), tone = ns.tone;
     var busy = !!r.busy || tone === 'busy';
