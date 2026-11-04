@@ -4809,7 +4809,7 @@ async function dashRefresh(ev) {
    нельзя. Поэтому карточка с зажатым до трёх строк телом и раскрытием по
    клику. -#}
 <div id="view-ad-texts" class="view-panel">
-  <h2 class="view-title">Ad titles <span class="hint">headline, body and description</span></h2>
+  <h2 class="view-title">Ad titles <span class="hint">primary text, headline and description</span></h2>
   <p style="color:var(--muted);max-width:70ch">
     One library for the whole team. Add, Edit, Remove and Restore are saved to the team
     library straight away, and every manager sees them the next time the list or the builder opens.
@@ -4842,7 +4842,7 @@ async function dashRefresh(ev) {
       </label>
     </div>
     <label style="display:block;margin-top:0.6rem">
-      <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Body — line breaks are kept as typed</div>
+      <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Primary text — line breaks are kept as typed</div>
       <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
     </label>
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
@@ -4854,7 +4854,7 @@ async function dashRefresh(ev) {
   </div>
 
   <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin:0.8rem 0">
-    <input id="at-search" type="search" placeholder="Search title, headline or body…" style="flex:1 1 22rem;max-width:32rem">
+    <input id="at-search" type="search" placeholder="Search title, headline or primary text…" style="flex:1 1 22rem;max-width:32rem">
     <select id="at-lang-filter" style="flex:0 0 auto"><option value="">All languages</option></select>
     <span id="at-count" style="color:var(--muted);font-size:var(--adopy-text-body)"></span>
   </div>
@@ -6782,7 +6782,7 @@ window.cbLayout = (function () {
   /* ACL-1775: место конверсии набора и выбор формы Страницы. Правила форм
      (чья форма, какой статус годен) решает сервер; здесь только то, что
      показать. Годна только форма ACTIVE, как src/fb_api/forms.py (USABLE_STATUS). */
-  var DESTINATIONS = { website: 'Website', instant_form: 'Instant Form' };
+  var DESTINATIONS = { website: 'Website', instant_form: 'Instant forms' };
   var USABLE_FORM_STATUS = 'ACTIVE';
 
   function destination(v) { return v === 'instant_form' ? 'instant_form' : 'website'; }
@@ -16468,7 +16468,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
-      '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
+      '<span class="cb-label cb-form-only" hidden>Instant form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
       /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
       '<select class="cb-input cb-select cb-form-source" name="' + pfx + 'form_source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
@@ -16493,7 +16493,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</div>' +
       /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
          Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
-      '<span class="cb-label">CTA</span>' +
+      '<span class="cb-label">Call to action</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
       /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
@@ -17159,23 +17159,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label">Gender</span>' +
       '<select name="' + pfx + 'gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
       '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
-      '<span class="cb-label">More languages</span>' +
+      '<span class="cb-label">Languages</span>' +
       '<input type="text" name="' + pfx + 'languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + lang + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
       '<datalist id="cb-lang-' + lang + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
       '<span class="cb-label">Devices</span>' +
       '<div class="cb-inline"><select name="' + pfx + 'device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
       '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only (Manual Facebook Feed)</option></select>' +
       '<input type="text" name="' + pfx + 'os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
-      '<span class="cb-label">Start time</span>' +
-      '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
-      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android, Start time and the ad set name work only with the API backend.</div>' +
+      '<div class="cb-api-note" data-api-fields-note hidden>Gender, languages, devices, OS version, Android and the ad set name work only with the API backend.</div>' +
       '<span class="cb-label">Conversion location</span>' +
       '<div class="cb-dest-wrap">' +
       '<select name="' + pfx + 'destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
       '<option value="website" selected>Website</option>' +
-      '<option value="instant_form">Instant Form</option>' +
+      '<option value="instant_form">Instant forms</option>' +
       '</select>' +
-      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '<div class="cb-api-note" data-forms-api-only hidden>Instant forms work only with the API backend.</div>' +
       '</div>' +
       '<span class="cb-label">Placements</span>' + buildPlacementHTML(pfx) +
       '</div>' +
@@ -18574,7 +18572,7 @@ function cbPlanHtml(data) {
     if (s) {
       if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
         + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
-      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
+      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant forms' || x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
         + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
         + (s.page_origin ? ' · from ' + aclEscHtml(s.page_origin) : '')
