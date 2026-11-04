@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "ApiPublishError",
+  "message": "acc: the Ads Manager tab stopped answering on the last run; waiting about 6 min before opening it again.",
+  "expect": {
+    "key": "tab_unresponsive",
+    "short": "The Ads Manager tab stopped answering",
+    "next": "wait about 6 min, it will be reopened, then republish",
+    "severity": "hold",
+    "retry": "later"
+  },
+  "code": "page_unresponsive"
+}

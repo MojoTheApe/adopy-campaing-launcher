@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "ApiPublishError",
+  "message": "acc: the profile is locked by another action",
+  "expect": {
+    "key": "profile_locked",
+    "short": "The Multilogin profile is busy or locked",
+    "next": "wait for the other action or close the window, then republish",
+    "severity": "hold",
+    "retry": "later"
+  },
+  "code": "profile_closed"
+}

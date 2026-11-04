@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "WriteUnknown",
+  "message": "the write result is unknown (network_timeout)",
+  "expect": {
+    "key": "graph_write_unconfirmed",
+    "short": "Meta did not confirm this step",
+    "next": "check the campaign in Ads Manager, then republish (it will not duplicate)",
+    "severity": "blocking",
+    "retry": "later"
+  }
+}

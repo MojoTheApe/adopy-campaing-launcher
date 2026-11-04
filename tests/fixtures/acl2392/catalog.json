@@ -1,0 +1,14 @@
+{
+  "synthetic": true,
+  "type": "GraphError",
+  "message": "Graph API error 10: (#10) Application does not have permission",
+  "expect": {
+    "key": "catalog",
+    "short": "",
+    "next": "",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "code": 10,
+  "expect_catalog": true
+}

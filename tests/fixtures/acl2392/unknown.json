@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "GraphError",
+  "message": "Graph API error 999999: Some brand new Meta text",
+  "expect": {
+    "key": "unknown",
+    "short": "Meta refused this step",
+    "next": "open details",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "code": 999999
+}

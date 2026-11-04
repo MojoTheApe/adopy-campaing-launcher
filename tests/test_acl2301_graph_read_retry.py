@@ -209,8 +209,9 @@ def test_stop_on_ad_3_names_what_stays_in_meta_and_the_next_campaign_is_not_star
     pub = _publisher(Dying())
     first = pub.publish_draft(_draft(tmp_path, ads=3))
     err = first["error"]
-    assert "the page could not call Graph API (network_timeout)" in err or "network_timeout" in err
-    assert '"Publish again" reuses it' in err and "Not created: ad 3." in err
+    assert "network_timeout" not in err and "Meta did not answer in time" in err        # ACL-2392: plain text
+    assert "network_timeout" in first["failure"]["details"]["raw"]
+    assert "Publishing again reuses it" in err and "Not created: ad 3." in err
     assert first["created"].get("ads") == 2 and first["campaign_id"]
     second = pub.publish_draft(_draft(tmp_path, ads=1))
     assert second["error"].startswith("Not started: Graph API stopped earlier")

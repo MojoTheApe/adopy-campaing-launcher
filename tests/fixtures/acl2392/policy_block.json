@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "PolicyBlocked",
+  "message": "Graph API refused (368): temporarily blocked for policies violations",
+  "expect": {
+    "key": "policy_block",
+    "short": "Meta temporarily blocked this action",
+    "next": "wait before trying again, do not retry now",
+    "severity": "blocking",
+    "retry": "never"
+  },
+  "code": 368
+}

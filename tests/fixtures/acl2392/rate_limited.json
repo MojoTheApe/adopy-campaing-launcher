@@ -1,0 +1,14 @@
+{
+  "synthetic": true,
+  "type": "RateLimited",
+  "message": "Graph API rate limit (17): User request limit reached",
+  "expect": {
+    "key": "rate_limited",
+    "short": "Meta is limiting requests",
+    "next": "wait 11 min and republish",
+    "severity": "hold",
+    "retry": "later"
+  },
+  "code": 17,
+  "retry_after_s": 600
+}

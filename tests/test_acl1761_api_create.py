@@ -959,7 +959,8 @@ def test_after_an_unknown_result_the_rest_of_the_job_is_refused(tmp_path):
     meta.fail_next["adsets"] = "unsent"
     pub = _publisher(meta)
     first = pub.publish_draft(_draft(tmp_path, ads=1))
-    assert "unknown" in (first["error"] or "")
+    assert first["failure"]["key"] == "graph_write_unconfirmed"        # ACL-2392: plain text, raw in details
+    assert "unknown" in first["failure"]["details"]["raw"]
     n = len(meta.posts)
     d2 = _draft(tmp_path, ads=1)
     d2.name = d2.ad_sets[0].name = "MX Leads 2"
@@ -972,7 +973,7 @@ def test_own_call_cap_does_not_end_later_campaigns(tmp_path, monkeypatch):
     meta = FakeMeta(video_states=("processing",))
     pub = _publisher(meta)
     first = pub.publish_draft(_draft(tmp_path, video=True, ads=1))
-    assert "call budget" in (first["error"] or "") and pub.stop is None
+    assert "call budget" in first["failure"]["details"]["raw"] and pub.stop is None
     d2 = _draft(tmp_path, ads=1)
     d2.name = d2.ad_sets[0].name = "MX Leads 2"
     second = pub.publish_draft(d2)
@@ -1165,7 +1166,8 @@ def test_result_dict_shape_and_publishability(tmp_path, monkeypatch):
     meta2.mutate_on_read[("adset", "targeting.age_max")] = 65
     bad, _ = _run(meta2, _draft(tmp_path, ads=1))
     res2 = publish_api.result_dict(bad)
-    assert res2["publishable"] is False and res2["blocking_failures"][0].startswith("readback mismatch")
+    assert res2["publishable"] is False and res2["blocking_failures"][0].startswith("Meta saved different values than planned")
+    assert "readback mismatch" in res2["failure"]["details"]["readback_mismatches"][0]
 
 
 def test_backend_switch(monkeypatch):

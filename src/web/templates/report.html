@@ -20183,6 +20183,31 @@ function cbTeachMarkerHtml(steps, cls) {
   return '';
 }
 
+// ACL-2392: the ONLY place raw Meta text / codes / ids are shown: a collapsed "Technical details" block with a
+// Copy button. Everything else in the panel is the plain line the server composed (`failure.line`, `error`).
+function cbFailureDetailsHtml(details) {
+  var d = details && typeof details === 'object' ? details : null;
+  var keys = d ? Object.keys(d) : [];
+  if (!keys.length) return '';
+  var lines = keys.map(function(k) {
+    var v = d[k];
+    return k + ': ' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v));
+  });
+  return '<details class="cb-problems-tech cb-fail-details"><summary>Technical details '
+    + '<span>(what Meta said, codes, run id)</span></summary>'
+    + '<div class="cb-problems-tech-body"><pre class="cb-fail-pre" style="white-space:pre-wrap;margin:0 0 0.3rem">'
+    + aclEscHtml(lines.join('\n')) + '</pre>'
+    + '<button type="button" class="cb-copy-details">Copy details</button></div></details>';
+}
+document.addEventListener('click', function(ev) {
+  var btn = ev.target && ev.target.closest ? ev.target.closest('.cb-copy-details') : null;
+  if (!btn) return;
+  var pre = btn.parentNode && btn.parentNode.querySelector('.cb-fail-pre');
+  var text = pre ? pre.textContent : '';
+  var done = function() { btn.textContent = 'Copied'; setTimeout(function() { btn.textContent = 'Copy details'; }, 1500); };
+  try { navigator.clipboard.writeText(text).then(done, function() {}); } catch (e) { /* no clipboard access */ }
+});
+
 // ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
 // список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
 // подробности. Данные — `r.problems` от робота (failure_policy.problems);
@@ -20243,8 +20268,9 @@ function cbProblemsHtml(r) {
   // ACL-1805: у API-кампании рядом со списком остаются статус PAUSED, что создано и сверка.
   if (r.backend === 'api') h += cbApiReadbackHtml(r);
   h += '<details class="cb-problems-tech"><summary>Technical details '
-    + '<span>(step codes, run id)</span></summary>'
+    + '<span>(what Meta said, codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  h += cbFailureDetailsHtml(r.failure && r.failure.details);
   return h + '</div>';
 }
 
@@ -20444,6 +20470,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : (r.not_started ? ' style="color:var(--warn);border-color:var(--warn)"' : '');   // ACL-2299: not started, not failed
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
+      if (r.failure && !(r.problems || []).length) html += cbFailureDetailsHtml(r.failure.details);
       if (r.blocking_failures && r.blocking_failures.length) {
         html += '<div class="cb-status-err">Do not publish: '
              + r.blocking_failures.map(aclEscHtml).join(', ') + '</div>';
@@ -20459,8 +20486,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }
     });
-    (job.errors || []).forEach(function(e) {
-      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
+    (job.errors || []).forEach(function(e, i) {
+      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e)
+        + cbFailureDetailsHtml((job.error_details || [])[i]) + '</div>';
     });
     if (!isRunning) html += cbCloseProfileHtml(job);
     return html;

@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
+from src.fb_api import plain_errors as _plain
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
     resolve_page,
@@ -225,9 +226,11 @@ def build_drafts(slots: list[dict[str, Any]], *, account_label: str, country: st
 class ApiPublishError(RuntimeError):
     """Отказ всего задания (профиль, страница, кабинет) с текстом человеку."""
 
-    def __init__(self, message: str, code: str = ""):
+    def __init__(self, message: str, code: str = "", *, key: str = ""):
         super().__init__(_tm.scrub(message))
         self.code = code
+        #: ACL-2392: key of `plain_errors.TABLE` when the raise site knows the class.
+        self.key = key
 
 
 #: ACL-2283: pause before the sample taken after a failed start (the load often drops right after it).
@@ -255,6 +258,7 @@ def _published_as(outcome: Outcome) -> str:
 def dry_run_result(outcome: Outcome) -> dict[str, Any]:
     """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
     ok = not outcome.error
+    failure = outcome.failure if outcome.error else None
     return {
         "campaign_name": outcome.campaign_name, "published_as": _published_as(outcome),
         "backend": "api", "dry_run": True, "status": "",
@@ -262,7 +266,9 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
         "blocking_failures": [], "problems": list(outcome.problems), "run_id": None, "campaign_id": None,
         "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
-        "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
+        "error": (failure.text() if failure else outcome.error) or None,
+        "failure": failure.as_dict() if failure else None,
+        "steps_completed": list(outcome.steps), "screenshots": [],
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
         "audit": list(outcome.audit),
@@ -274,12 +280,20 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
 def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False) -> dict[str, Any]:
     """Итог кампании в виде, который рисует панель задания (как `to_job_dict`)."""
     created = bool(outcome.campaign_id)
-    error = error or outcome.error
+    # ACL-2392: the panel gets the plain line; the raw text goes to `failure.details`.
+    failure = None if error else outcome.failure
+    error = error or (failure.text() if failure else outcome.error)
     mismatches = outcome.mismatches
-    blocking = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
-                f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
+    mismatch_lines = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
+                      f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
+    blocking = [_plain.readback_line(mismatches)] if mismatches else []
     if created and error:
         blocking.append("not finished: " + error)
+    if mismatch_lines:
+        readback_failure = _plain.Failure("readback", _plain.readback_line(mismatches), severity="blocking",
+                                          details=_tm.scrub_value({"readback_mismatches": mismatch_lines}))
+        failure = failure or readback_failure
+        failure.details.setdefault("readback_mismatches", readback_failure.details["readback_mismatches"])
     readback_ok = bool(outcome.readback) and outcome.readback.get("ok") is True
     success = created and not error
     return {
@@ -304,6 +318,8 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
         "error": error or None,
+        #: ACL-2392: key / short / next / left / details of the failure; the raw text lives only in `details`.
+        "failure": failure.as_dict() if failure else None,
         #: ACL-2299: the campaign was never begun (an earlier stop) - the panel shows it as waiting, not failed.
         "not_started": bool(not_started),
         "steps_completed": list(outcome.steps),
@@ -419,7 +435,7 @@ class ApiPublisher:
             return f"stop_{kind or 'none'}"
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
             return "write_unknown"
-        if any("readback mismatch" in str(x) for x in ((res or {}).get("blocking_failures") or [])):
+        if any(_plain.READBACK_MARK in str(x) for x in ((res or {}).get("blocking_failures") or [])):
             return "mismatches"
         if kind == "page_failed" and self.writes != writes_before:
             return "write_may_be_in_flight"
@@ -711,6 +727,7 @@ class ApiPublisher:
                 self.stop = exc
                 _start_cooldown(self.account_label, exc)
             raise
+        # ACL-2392: a deterministic rejection proven by readback ("rejected") does not block the next campaigns.
         if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
             self.blocked = outcome.campaign_name
         if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
