@@ -16468,7 +16468,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
-      '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
+      '<span class="cb-label cb-form-only" hidden>Instant form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
       /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
       '<select class="cb-input cb-select cb-form-source" name="' + pfx + 'form_source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
@@ -17159,23 +17159,23 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label">Gender</span>' +
       '<select name="' + pfx + 'gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
       '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
-      '<span class="cb-label">More languages</span>' +
+      '<span class="cb-label">Languages</span>' +
       '<input type="text" name="' + pfx + 'languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + lang + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
       '<datalist id="cb-lang-' + lang + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
       '<span class="cb-label">Devices</span>' +
       '<div class="cb-inline"><select name="' + pfx + 'device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
       '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only (Manual Facebook Feed)</option></select>' +
       '<input type="text" name="' + pfx + 'os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
-      '<span class="cb-label">Start time</span>' +
-      '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
-      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android, Start time and the ad set name work only with the API backend.</div>' +
+      '<span class="cb-label">Start date</span>' +
+      '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start date of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
+      '<div class="cb-api-note" data-api-fields-note hidden>Gender, languages, devices, OS version, Android, Start date and the ad set name work only with the API backend.</div>' +
       '<span class="cb-label">Conversion location</span>' +
       '<div class="cb-dest-wrap">' +
       '<select name="' + pfx + 'destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
       '<option value="website" selected>Website</option>' +
-      '<option value="instant_form">Instant Form</option>' +
+      '<option value="instant_form">Instant forms</option>' +
       '</select>' +
-      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '<div class="cb-api-note" data-forms-api-only hidden>Instant forms work only with the API backend.</div>' +
       '</div>' +
       '<span class="cb-label">Placements</span>' + buildPlacementHTML(pfx) +
       '</div>' +
