@@ -2736,7 +2736,26 @@ class CampaignCreator:
         self._check_planned(plan, targetings)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
+        if writing:
+            self._require_remaining_budget(plan, chunk_calls)
         return targetings, files
+
+    def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int) -> None:
+        """ACL-2244: the calls left must cover every planned write and readback, or nothing is created.
+
+        Runs unconditionally just before the first write: earlier preparation steps (targeting reads, form
+        reads, uploads) may have used part of the budget the plan was sized with.
+        """
+        budget = getattr(self.client, "max_calls", None)
+        used = getattr(self.client, "calls", 0)
+        if not isinstance(budget, int) or not isinstance(used, int):
+            return
+        remaining = budget - used
+        need = estimate_create_calls(plan) + chunk_calls
+        if need > remaining:
+            raise PlanError(f"Not enough Meta calls are left for this campaign: it needs about {need}, "
+                            f"{remaining} remain, so {need - remaining} are missing. Nothing was created; "
+                            "split the campaign or try again.")
 
     def _check_forms(self, plan: CampaignPlan) -> None:
         """Формы объявлений — формы ЭТОЙ Страницы (ACL-1775). Только чтение, до любой записи.
