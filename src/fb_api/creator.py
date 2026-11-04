@@ -45,6 +45,7 @@ from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
 
 from src.fb_api import creative_recovery as _cr
+from src.fb_api import name_receipt as _nr
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
 
@@ -241,14 +242,15 @@ PLACEHOLDER_VIDEO_ID = "100000"
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
 SUPPORTED_OBJECTIVES = frozenset({"leads"})
 
-#: ACL-1902: имя кампании занято - пробуем NAME, NAME_2 ... NAME_20 (всего столько кандидатов).
-NAME_SUFFIX_MAX = 20
+#: ACL-2250: повтор имени получает счётчик в конце: `<имя> copy <n>` (у кампании и всех её наборов).
+COPY_WORD = " copy "
+#: Остановки выбора имени: в Check plan это ERROR правила имени, а не сбой плана.
+NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
-#: суффиксов за её пределами могло не быть видно - тогда ищем каждое имя отдельно.
+#: копий за её пределами могло не быть видно - тогда ищем точнее.
 CAMPAIGN_SEARCH_ROWS = 200
-#: Не больше стольких своих кампаний с похожими именами сверяем с билдером (потолок чтений).
-NAME_SCAN_MAX_OURS = 6
-#: Консервативная защита от слишком длинного имени (точный предел Meta не проверен).
+#: Консервативная защита от слишком длинного имени кампании и набора (точный предел Meta не проверен:
+#: для наборов в источниках 400 или 100). Единственная константа предела - ACL-2250, D6.
 CAMPAIGN_NAME_MAX = 400
 
 #: Что таблица показывает (архив и удалённое не считаем «существующим»).
@@ -392,10 +394,16 @@ class CampaignPlan:
     pixel_source: str = ""
     #: Предупреждения черновика (смешанный таргетинг/бюджет) — в итог (ревью, minor 7).
     warnings: list[str] = field(default_factory=list)
+    #: ACL-2250: метка имени из билдера (до счётчика): видео копии берётся из библиотеки по ней, без повторной загрузки.
+    media_tag: str = ""
 
     @property
     def label(self) -> str:
         return f"acl-{self.tag}"
+
+    @property
+    def video_tag(self) -> str:
+        return self.media_tag or self.tag
 
 
 def _interest_groups(raw: str) -> list[list[str]]:
@@ -1292,6 +1300,11 @@ class Outcome:
     manual_required: list[str] = field(default_factory=list)
     #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
     campaign_confirmed_paused: bool = False
+    #: ACL-2250: (кабинет, имя из билдера) квитанции, когда сверка дошла до конца без остановки; конец задания
+    #: (`publisher.finish_job`) удаляет её. Пусто - квитанция остаётся, следующий запуск допишет эту же кампанию.
+    name_receipt_done: tuple = ()
+    #: ACL-2250: номер счётчика в имени (0 - имя из билдера); в строку телеметрии.
+    copy_number: int = 0
 
     @property
     def mismatches(self) -> list[dict]:
@@ -1300,17 +1313,51 @@ class Outcome:
 
 @dataclass
 class NameChoice:
-    """Итог выбора имени кампании (ACL-1902): план с итоговым именем и меткой, до первой записи."""
+    """Итог выбора имени кампании (ACL-1902, ACL-2250): план с итоговым именем и меткой, до первой записи."""
     plan: CampaignPlan
-    #: Своя совпавшая с билдером кампания (возобновление/повтор) - её переиспользуем; иначе None.
+    #: Своя кампания, которую дописываем (возобновление после обрыва) - её переиспользуем; иначе None.
     existing: dict | None = None
     found_sets: list = field(default_factory=list)
-    #: Пропущенные кандидаты: {"name", "reason": "different"|"foreign", "differences": [...]}.
-    skipped: list = field(default_factory=list)
+    #: Номер счётчика: 0 - имя из билдера, n - `<имя> copy <n>`.
+    copy_number: int = 0
+    #: Сколько кампаний этого имени уже было на кабинете (для текста «2 earlier»).
+    earlier: int = 0
 
     @property
     def renamed(self) -> bool:
-        return bool(self.skipped)
+        return self.copy_number > 0
+
+
+def copy_name(base: str, n: int) -> str:
+    return base if n <= 0 else f"{base}{COPY_WORD}{n}"
+
+
+def copy_plan(plan: CampaignPlan, n: int) -> CampaignPlan:
+    """План с счётчиком `n` (ACL-2250): имя и метка кампании, имена всех наборов; объявления и формы прежние.
+
+    `media_tag` остаётся меткой имени из билдера: видео копии берётся из библиотеки, а не грузится заново.
+    Таргетинги идут по позиции набора, имена на них не влияют.
+    """
+    if n <= 0:
+        return plan
+    name = copy_name(plan.name, n)
+    return replace(plan, name=name, tag=campaign_tag(plan.act, name), media_tag=plan.video_tag,
+                   ad_sets=[replace(s, name=copy_name(s.name, n)) for s in plan.ad_sets])
+
+
+def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
+    """{0: строки `base`, n: строки `base copy n`} - точное имя, с учётом регистра. `copy 0` и `copy 01` не в счёте."""
+    fam: dict[int, list[dict]] = {}
+    prefix = f"{base}{COPY_WORD}"
+    for row in rows:
+        name = str(row.get("name") or "").strip()
+        if name == base:
+            fam.setdefault(0, []).append(row)
+        elif name.startswith(prefix):
+            tail = name[len(prefix):]
+            if tail.isascii() and tail.isdigit() and not tail.startswith("0"):
+                fam.setdefault(int(tail), []).append(row)
+    return fam
 
 
 #: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
@@ -1650,79 +1697,152 @@ class CampaignCreator:
             "filtering": [{"field": "name", "operator": "CONTAIN", "value": name}],
             "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
 
-    def _name_rows(self, act: str, name: str, base_rows: list[dict], truncated: bool) -> list[dict]:
-        """Строки с этим именем: из общего поиска, а если он мог обрезаться - точным запросом по имени.
+    def _family_rows(self, plan: CampaignPlan) -> list[dict]:
+        """Живые кампании с именем семейства: один поиск по подстроке.
 
-        Точный запрос (EQUAL) тоже полный на 200 строках - тогда доверять нечему, стоп до записей.
-        """
-        if not truncated:
-            return base_rows
-        rows = self.client.get_all(f"/{act}/campaigns", {
-            "fields": "id,name,status,adlabels{name}",
-            "filtering": [{"field": "name", "operator": "EQUAL", "value": name}],
-            "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
-        if len(rows) >= CAMPAIGN_SEARCH_ROWS:
-            raise CreationStopped(
-                f"Cannot tell whether the campaign name {name!r} is free: the ad account has too many "
-                "campaigns with that name. Nothing was created; rename the campaign in the builder.",
-                kind="name_unsure")
-        return rows
-
-    def _ad_names_fit(self, cand: CampaignPlan, campaign_id: str) -> bool:
-        """Для NAME_2...: кампания с чужими объявлениями (построена билдером с таким именем) - не наша."""
-        have = {str(r.get("name") or "").strip() for r in self._children(campaign_id, "ads", "id,name")}
-        want = {ad.name for s in cand.ad_sets for ad in s.ads}
-        return have <= want
-
-    def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
-        """ACL-1902: имя кампании до любой записи - и в боевом запуске, и в Check plan.
-
-        Кандидаты NAME, NAME_2 ... NAME_20 (суффикс всегда к полному имени, чужие цифры не разбираем):
-        нет живой кампании с таким именем - берём; наша (метка кандидата) и без расхождений с билдером -
-        переиспользуем (возобновление не плодит дубль); наша, но другая, или чужая (без метки) - дальше.
-        Метка считается от имени кандидата, поэтому у NAME_2 своя метка и свои креативы.
-        Только чтения: один поиск по подстроке на все кандидаты + сверка найденных своих.
+        Если выдача могла обрезаться (200 строк) - ещё два точных поиска: `<имя> copy ` и имя целиком.
+        Они тоже полны на 200 строках - тогда доверять нечему, стоп до записей.
         """
         rows = self._campaign_rows(plan.act, plan.name)
-        truncated = len(rows) >= CAMPAIGN_SEARCH_ROWS
-        skipped: list[dict] = []
-        scans = 0
-        for n in range(1, NAME_SUFFIX_MAX + 1):
-            name = plan.name if n == 1 else f"{plan.name}_{n}"
+        if len(rows) < CAMPAIGN_SEARCH_ROWS:
+            return rows
+        more = self._campaign_rows(plan.act, f"{plan.name}{COPY_WORD}")
+        same = self.client.get_all(f"/{plan.act}/campaigns", {
+            "fields": "id,name,status,adlabels{name}",
+            "filtering": [{"field": "name", "operator": "EQUAL", "value": plan.name}],
+            "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
+        if len(more) >= CAMPAIGN_SEARCH_ROWS or len(same) >= CAMPAIGN_SEARCH_ROWS:
+            raise CreationStopped(
+                f"Cannot tell which copy number of the campaign {plan.name!r} is free: the ad account has too "
+                "many campaigns with that name. Nothing was created; rename the campaign in the builder.",
+                kind="name_unsure")
+        seen: set[str] = set()
+        out: list[dict] = []
+        for row in [*same, *more]:
+            if str(row.get("id")) not in seen:
+                seen.add(str(row.get("id")))
+                out.append(row)
+        return out
+
+    def _check_name_length(self, cand: CampaignPlan) -> None:
+        """ACL-2250 (D6): настоящие итоговые имена кампании и каждого набора - до любой записи; не обрезаем."""
+        for what, name in [("campaign", cand.name), *[("ad set", s.name) for s in cand.ad_sets]]:
             if len(name) > CAMPAIGN_NAME_MAX:
                 raise CreationStopped(
-                    f"The campaign name {name!r} would be longer than the Meta limit of "
-                    f"{CAMPAIGN_NAME_MAX} characters. Nothing was created; shorten the campaign name "
-                    "in the builder.", kind="name_too_long")
-            cand = plan if n == 1 else replace(plan, name=name, tag=campaign_tag(plan.act, name))
-            hits = self._name_rows(plan.act, name, rows, truncated)
-            same = [r for r in hits if str(r.get("name") or "").strip() == name]
-            if not same:
-                return NameChoice(cand, None, [None] * len(plan.ad_sets), skipped)
-            ours = [r for r in same if cand.label in _labels(r)]
-            if not ours:
-                skipped.append({"name": name, "reason": "foreign", "differences": []})
-                continue
-            scans += 1
-            if scans > NAME_SCAN_MAX_OURS:
-                raise CreationStopped(
-                    f"Too many earlier campaigns named like {plan.name!r} to check them all within the "
-                    "call budget. Nothing was created; rename the campaign in the builder or remove "
-                    "old ones in Ads Manager.", kind="name_scan_limit")
-            campaign_id = str(ours[0]["id"])
-            found_sets = self._find_sets(cand, campaign_id)
-            bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
-            if not bad and n > 1 and not self._ad_names_fit(cand, campaign_id):
-                skipped.append({"name": name, "reason": "other_ads", "differences": []})
-                continue
-            if not bad:
-                return NameChoice(cand, ours[0], found_sets, skipped)
-            skipped.append({"name": name, "reason": "different", "differences": bad})
-        raise CreationStopped(
-            f"All {NAME_SUFFIX_MAX} campaign names are taken: {plan.name!r} and {plan.name}_2 ... "
-            f"{plan.name}_{NAME_SUFFIX_MAX} already exist on the ad account (not ours, or ours with different "
-            "settings). Nothing was created; rename the campaign in the builder or remove the old ones "
-            "in Ads Manager.", kind="name_taken")
+                    f"The {what} name {name!r} would be longer than the Meta limit of {CAMPAIGN_NAME_MAX} "
+                    "characters. Nothing was created; shorten the campaign name in the builder.",
+                    kind="name_too_long")
+
+    def _resume_state(self, cand: CampaignPlan, targetings: list[dict], campaign_id: str):
+        """Наша кампания кандидата: (найденные наборы, неполная ли), либо None - дописывать нельзя.
+
+        Нельзя, если в ней есть объявления не из плана или она расходится с билдером (в том числе включена).
+        Неполная: нет набора плана или объявления плана под найденным набором. Без Страницы объявления
+        не считаются. Всего одно чтение объявлений кампании: и «подходят», и «неполная».
+        """
+        found_sets = self._find_sets(cand, campaign_id)
+        manual = needs_manual_page(cand)
+        ads = self._children(campaign_id, "ads", "id,name,adset_id")
+        want = set() if manual else {ad.name for s in cand.ad_sets for ad in s.ads}
+        if {str(r.get("name") or "").strip() for r in ads} - want:
+            return None
+        if self._existing_differences(cand, targetings, campaign_id, found_sets):
+            return None
+        have: dict[str, set[str]] = {}
+        for r in ads:
+            have.setdefault(str(r.get("adset_id") or ""), set()).add(str(r.get("name") or "").strip())
+        partial = any(h is None for h in found_sets) or (not manual and any(
+            h is not None and any(ad.name not in have.get(str(h["id"]), set()) for ad in s.ads)
+            for s, h in zip(cand.ad_sets, found_sets)))
+        return found_sets, partial
+
+    def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict) -> NameChoice | None:
+        """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
+
+        Любое сомнение (нет кампании, ошибка Meta на чтении по id, не наша, не живая, расходится) - квитанция
+        не используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        """
+        n = receipt.get("n")
+        if not isinstance(n, int) or n < 0:
+            return None
+        cand = copy_plan(plan, n)
+        if receipt.get("name") != cand.name:
+            return None
+        campaign_id = str(receipt.get("campaign_id") or "")
+        if campaign_id:
+            try:
+                row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
+            except GraphError:
+                return None
+            row = {**row, "id": campaign_id} if isinstance(row, dict) else None
+        else:
+            hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
+            row = next((r for r in hits if cand.label in _labels(r)), None)
+        if not row or str(row.get("name") or "").strip() != cand.name or cand.label not in _labels(row):
+            return None
+        if str(row.get("effective_status") or row.get("status") or "") not in LIVE_STATES:
+            return None
+        state = self._resume_state(cand, targetings, str(row["id"]))
+        if state is None:
+            return None
+        return NameChoice(cand, row, state[0], n, n)
+
+    def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
+        """ACL-2250 (ACL-1902): имя кампании до любой записи - и в боевом запуске, и в Check plan.
+
+        1. Квитанция этого задания (кабинет + имя из билдера): дописываем ту же кампанию.
+        2. Иначе одним поиском собираем семейство `X`, `X copy 1`, `X copy 2` ... Нет семейства - имя как есть.
+           Верхний номер, если он наш и неполный (обрыв, квитанция потеряна) - дописываем. Иначе новая копия
+           с номером «верхний + 1» (не первая дырка): занятый номер не возвращаем.
+        Только чтения; подробно читается одна строка - верхняя.
+        """
+        base = plan.name
+        receipt = self._read_name_receipt(plan)
+        if receipt:
+            chosen = self._receipt_choice(plan, targetings, receipt)
+            if chosen:
+                return chosen
+        fam = family_rows(base, self._family_rows(plan))
+        if not fam:
+            self._check_name_length(plan)
+            return NameChoice(plan, None, [None] * len(plan.ad_sets))
+        top = max(fam)
+        cand = copy_plan(plan, top)
+        ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
+        if ours:
+            state = self._resume_state(cand, targetings, str(ours["id"]))
+            if state is not None and state[1]:
+                return NameChoice(cand, ours, state[0], top, len(fam) - 1)
+        cand = copy_plan(plan, top + 1)
+        self._check_name_length(cand)
+        return NameChoice(cand, None, [None] * len(plan.ad_sets), top + 1, len(fam))
+
+    def _save_name_receipt(self, out: Outcome, requested: str, choice: NameChoice) -> None:
+        """До первой записи: выбранное имя на диск, чтобы повтор после обрыва дописал ту же кампанию."""
+        try:
+            _nr.save(choice.plan.act, requested, choice.plan.name, choice.copy_number,
+                     str(choice.existing["id"]) if choice.existing else "")
+        except _nr.NameReceiptError as exc:
+            raise CreationStopped(
+                f"The local campaign name record could not be saved ({exc}). Nothing was created; "
+                "check the folder of the ACL machine settings.", kind="name_receipt") from exc
+
+    def _attach_name_receipt(self, out: Outcome, act: str, requested: str) -> None:
+        try:
+            _nr.attach_id(act, requested, out.campaign_id)
+        except _nr.NameReceiptError as exc:
+            raise CreationStopped(
+                f"The local campaign name record could not be updated ({exc}). The campaign "
+                f"{out.campaign_id} exists (PAUSED); nothing else was written.",
+                created=out.created, kind="name_receipt") from exc
+
+    def _read_name_receipt(self, plan: CampaignPlan) -> dict | None:
+        try:
+            return _nr.load(plan.act, plan.name)
+        except _nr.NameReceiptError as exc:
+            raise CreationStopped(
+                f"The local campaign name record could not be read ({exc}). Nothing was created; "
+                "check the folder of the ACL machine settings.", kind="name_receipt") from exc
 
     def _children(self, parent_id: str, edge: str, fields: str) -> list[dict]:
         return self.client.get_all(f"/{parent_id}/{edge}", {
@@ -2058,7 +2178,7 @@ class CampaignCreator:
 
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
                path: str = "", role: str = "") -> tuple[str, str]:
-        title = video_title(plan.tag, data)
+        title = video_title(plan.video_tag, data)
         path = path or ad.path
         who = f"ad {ad.index}{role}"
 
@@ -2959,16 +3079,16 @@ class CampaignCreator:
         differences: list | None = None
         files: dict | None = None
         renamed = name_error = ""
-        requested, skipped = plan.name, []
+        requested, renamed_choice = plan.name, False
         try:
             targetings, files = self._prepare(plan, out, writing=False)
             choice = self._resolve_name(plan, targetings)
-            plan, existing, skipped = choice.plan, choice.existing, choice.skipped
+            plan, existing, renamed_choice = choice.plan, choice.existing, choice.renamed
             out.published_as = plan.name
             self._check_planned(plan, targetings)
             differences = []
             if choice.renamed:
-                renamed = _rename_message(requested, plan.name, skipped, future=True)
+                renamed = _rename_message(requested, plan.name, choice.earlier, future=True)
                 out.warnings.append(renamed)
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
@@ -2985,7 +3105,7 @@ class CampaignCreator:
                                 **({"vertical_file": Path(ad.vertical_path).name,
                                     "vertical_bytes": len(files.get(ad.vertical_path, b""))}
                                    if ad.vertical_path else {}),
-                                "library_name": (video_title(plan.tag, data) if ad.kind == "video"
+                                "library_name": (video_title(plan.video_tag, data) if ad.kind == "video"
                                                  else image_name(ad.path, data)),
                                 "creative": (self.creative_params(plan, ad, ad_set, media, ad.name)
                                              if ad.uses_feed else self._story(plan, ad, ad_set, media))})
@@ -2996,11 +3116,11 @@ class CampaignCreator:
                         "summary": self.plan_summary(plan, targetings, files,
                                                      existing=bool(existing),
                                                      existing_differences=differences,
-                                                     requested_name=requested if skipped else "")}
+                                                     requested_name=requested if renamed_choice else "")}
             self._step(out, "dry run: preflight passed, nothing was written")
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
-            if exc.kind == "name_taken":
+            if exc.kind in NAME_STOPS:
                 name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
@@ -3042,7 +3162,7 @@ class CampaignCreator:
         Не идёт после остановки Graph (лимит/блокировка): новых чтений там быть не должно.
         Сбой самого аудита не ломает план: вердиктов просто нет.
         """
-        if out.stop_kind not in ("", "plan", "graph_error", "name_taken"):
+        if out.stop_kind not in ("", "plan", "graph_error", *NAME_STOPS):
             return
         from src.fb_api import preflight_rules as _pf
 
@@ -3175,9 +3295,11 @@ class CampaignCreator:
         choice = self._resolve_name(plan, targetings)
         requested, plan = plan.name, choice.plan
         out.published_as = plan.name
+        out.copy_number = choice.copy_number
         self._check_planned(plan, targetings)
+        self._save_name_receipt(out, requested, choice)
         if choice.renamed:
-            out.warnings.append(_rename_message(requested, plan.name, choice.skipped, future=False))
+            out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
         existing, found_sets = choice.existing, choice.found_sets
         if existing:
@@ -3190,6 +3312,7 @@ class CampaignCreator:
                 out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
                 lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
             out.created["campaign"] = out.campaign_id
+            self._attach_name_receipt(out, plan.act, requested)
             self._verify_label(out, f"The campaign {plan.name!r}", out.campaign_id, plan.label)
             self._step(out, "campaign: created PAUSED, tag kept")
 
@@ -3287,6 +3410,8 @@ class CampaignCreator:
             self._step(out, "Manual completion required: add a Facebook Page and ads in Ads Manager")
         n = len(out.mismatches)
         self._step(out, "readback: all fields match" if not n else f"readback: {n} mismatch(es)")
+        # ACL-2250: сверка дошла до конца (расхождения - тоже конец: всё записано, дописывать нечего).
+        out.name_receipt_done = (plan.act, requested)
 
     # ───────────────────────── сверка ─────────────────────────
     @staticmethod
@@ -3378,7 +3503,7 @@ class CampaignCreator:
             data = files.get(path, b"")
             if ad.kind == "video":
                 self._video_file_checks(check, aobj, name, name + "_content", made, got,
-                                        plan.tag, data, identities)
+                                        plan.video_tag, data, identities)
             else:
                 if made:
                     check(aobj, name, str(made), got)
@@ -3518,7 +3643,7 @@ class CampaignCreator:
                     check(aobj, "format", "video", "video" if vd else "image")
                     vid = str(vd.get("video_id") or "")
                     self._video_file_checks(check, aobj, "video_id", "video_file",
-                                            rec.get("video_id"), vid, plan.tag, data,
+                                            rec.get("video_id"), vid, plan.video_tag, data,
                                             diag.setdefault("video_identity", []))
                     check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
@@ -3640,20 +3765,10 @@ def _describe_diffs(checks: list[dict]) -> list[str]:
     return out
 
 
-def _rename_message(requested: str, chosen: str, skipped: list[dict], *, future: bool) -> str:
-    """Почему кампания пойдёт под другим именем (ACL-1902); одна строка для плана, итога и аудита."""
-    why = []
-    for item in skipped:
-        if item["reason"] == "foreign":
-            why.append(f"{item['name']!r} is already used by another campaign")
-        elif item["reason"] == "other_ads":
-            why.append(f"{item['name']!r} is a campaign with other ads")
-        else:
-            parts = [f"{f['object']}: " + "; ".join(f["differences"]) for f in item["differences"]]
-            why.append(f"{item['name']!r} (earlier campaign) is left as is; it already exists with different "
-                       "settings (" + " | ".join(parts) + ")")
+def _rename_message(requested: str, chosen: str, earlier: int, *, future: bool) -> str:
+    """Почему кампания пойдёт под именем со счётчиком (ACL-2250); короткая строка для плана, итога и аудита."""
     head = "Will be published as" if future else "Published as"
-    return f"{head} {chosen!r}: " + "; ".join(why) + "."
+    return f"{head} {chosen!r}: this name is already on the ad account ({earlier} earlier)."
 
 
 def _flex_ids(spec: Any) -> list[list[str]]:

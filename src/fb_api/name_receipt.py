@@ -52,9 +52,10 @@ def load(act: str, base: str) -> dict | None:
         raise NameReceiptError(f"name receipt cannot be read: {exc}") from exc
 
 
-def save(act: str, base: str, name: str, n: int) -> None:
-    """Выбранное имя; id кампании сбрасывается (это новый выбор)."""
-    data = {"schema": SCHEMA, "act": act, "base": base, "name": name, "n": int(n), "campaign_id": ""}
+def save(act: str, base: str, name: str, n: int, campaign_id: str = "") -> None:
+    """Выбранное имя (и id кампании, если она уже есть); без id - новый выбор."""
+    data = {"schema": SCHEMA, "act": act, "base": base, "name": name, "n": int(n),
+            "campaign_id": str(campaign_id or "")}
     try:
         path, lock = _locked(act, base)
         with lock:
