@@ -5,6 +5,7 @@ Meta - `FakeMeta`. Квитанции имён лежат во временно�
 """
 from __future__ import annotations
 
+import copy
 import sys
 from pathlib import Path
 
@@ -206,3 +207,68 @@ def test_copy_plan_keeps_the_video_tag_and_numbers_all_ad_sets(tmp_path):
     assert [s.name for s in copy.ad_sets] == [BASE + " copy 3"]
     assert [a.name for a in copy.ad_sets[0].ads] == [a.name for a in plan.ad_sets[0].ads]
     assert cr.copy_plan(plan, 0) is plan and plan.video_tag == plan.tag
+
+
+# ───────────────────────── креативы и видео ─────────────────────────
+
+class _EarlierCreativeMeta(FakeMeta):
+    """Meta отвечает на запись креатива id раннего такого же креатива (ACL-2249)."""
+
+    def _store(self, kind, params):
+        if kind == "creative":
+            for o in self.objects.values():
+                if o["_kind"] == "creative" and o.get("object_story_spec") == params.get("object_story_spec")                         and o.get("asset_feed_spec") == params.get("asset_feed_spec"):
+                    return o["id"]
+        return super()._store(kind, params)
+
+
+def _creatives(meta):
+    return [o for o in meta.objects.values() if o["_kind"] == "creative"]
+
+
+def test_19_several_identical_creatives_under_one_tag_on_resume_use_the_oldest(tmp_path):
+    from src.fb_api import creative_recovery as recovery
+    meta = FakeMeta()
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
+    assert first.error and len(_creatives(meta)) == 1
+    old = _creatives(meta)[0]
+    twin = copy.deepcopy(old)
+    twin["id"] = str(int(old["id"]) + 1000)
+    meta.objects[twin["id"]] = twin
+    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
+        path.unlink()
+    meta.fail_next.clear()
+    second, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert second.error == "", second.error
+    assert second.creative_ids == [old["id"]] and len(_creatives(meta)) == 2
+
+
+def test_20_copy_accepts_the_earlier_creative_quietly(tmp_path):
+    meta = _EarlierCreativeMeta()
+    first, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert first.error == ""
+    _end_job()
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.error == "" and out.published_as == BASE + " copy 1" and out.ad_ids
+    assert not any("existing identical creative" in w for w in out.warnings)
+    assert any("existing identical creative" in st for st in out.steps)
+    assert len(_creatives(meta)) == 1, "оригинал и копия делят один креатив"
+
+
+def test_21_copy_of_a_video_campaign_finds_the_video_by_the_builder_tag(tmp_path):
+    meta = FakeMeta()
+    first, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert first.error == ""
+    _end_job()
+    uploads = lambda: len([p for p, _ in meta.posts if p.endswith("/advideos")])        # noqa: E731
+    assert uploads() == 1
+    out, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert out.error == "" and out.published_as == BASE + " copy 1" and out.readback["ok"] is True
+    assert uploads() == 1, "видео не грузится заново"
+    # из библиотеки видео убрали - грузится один раз
+    for o in [o for o in meta.objects.values() if o["_kind"] == "video"]:
+        del meta.objects[o["id"]]
+    _end_job()
+    out2, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
+    assert out2.error == "" and uploads() == 2

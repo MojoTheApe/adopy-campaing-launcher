@@ -2064,7 +2064,12 @@ class CampaignCreator:
                         and str(row.get("id") or "") == creative_id
                         and (content_ok or self._same_videos(plan, params, row)))
                     if identical_existing:
-                        out.warnings.append("Meta returned an existing identical creative (tag of an earlier run)")
+                        note = "Meta returned an existing identical creative (tag of an earlier run)"
+                        if plan.media_tag and plan.media_tag != plan.tag:
+                            # ACL-2250: у копии это ожидаемо (то же видео и тот же контент) - шаг, а не предупреждение.
+                            self._step(out, note)
+                        else:
+                            out.warnings.append(note)
                         if created:
                             # An existing object, not a new one: report it as reused and remember the acceptance.
                             made = out.created.get("creatives", [])
