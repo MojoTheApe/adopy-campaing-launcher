@@ -872,6 +872,29 @@ def _build_account_map_view(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
     )
 
+    # Home «таблица как в Google»: состояние каждого аккаунта и счётчики. Только
+    # сохранённые данные (статус кабинета, спенд периода) — ни Meta, ни Multilogin
+    # здесь не читаются. `rows` не переставляем (их же рисует Manage), для Home —
+    # отдельный порядок `rows_aov`.
+    from src.web import account_state as _astate
+
+    seen_accounts: dict[str, dict] = {}
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            r["state"] = _astate.account_state(r)
+            seen_accounts.setdefault(r["account"], r["state"])
+        mc["rows_aov"] = _astate.sort_rows(mc.get("rows") or [])
+        mc["state_counts"] = _astate.state_counts(r["state"] for r in mc.get("rows") or [])
+        mc["active"] = mc["state_counts"]["active"] > 0 and not mc.get("virtual")
+    countries.sort(key=lambda mc: (
+        not mc["active"],
+        -float(((mc.get("book") or {}).get("spend") or mc.get("spend") or 0)),
+        (mc["country"] or "").casefold(),
+    ))
+    state_totals = _astate.state_counts(seen_accounts.values())
+    state_totals["countries_total"] = len(countries)
+    state_totals["countries_active"] = sum(1 for mc in countries if mc["active"])
+
     # ACL-1319: Available accounts — только те, с кем есть смысл работать.
     # `all_known` остаётся прежним: из него строятся выпадающие списки
     # привязки, и там нужен каждый аккаунт. Сужается только этот список и его
@@ -930,6 +953,7 @@ def _build_account_map_view(
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),
+        "state_totals": state_totals,
         # ACL-1656: «Campaign managers» внизу Home.
         "cm_section": _amap_cm_section(report),
         "available": available,
