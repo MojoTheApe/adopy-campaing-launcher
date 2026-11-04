@@ -5280,12 +5280,15 @@ def account_map_fragment(
 
     base_report = report
     period_cmp, compare_note = None, ""
+    # Отчёт тоже считается за выбранный период — как на самой странице: строки аккаунтов карта пересчитывает сама,
+    # а «Total · all countries» и книжные тоталы страны берутся из отчёта. С отчётом без периода итог показывал
+    # все даты книги рядом со строками за выбранные (ACL-2384).
+    date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+    try:
+        report = report_for_period(base_report, df, date_from, date_to)
+    except PeriodReportError:
+        return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
     if compare.strip():
-        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
-        try:
-            report = report_for_period(base_report, df, date_from, date_to)
-        except PeriodReportError:
-            return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
         period_cmp, compare_note = _build_compare(
             base_report, df, date_from, date_to, span.strip(),
             compare.strip(), cmp_from.strip(), cmp_to.strip())

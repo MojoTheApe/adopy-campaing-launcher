@@ -58,3 +58,32 @@ def test_no_live_reads(monkeypatch):
             monkeypatch.setattr(sp, name, boom)
     view = _build_account_map_view(_report())
     assert view["state_totals"]["all"] >= 1
+
+
+def test_fragment_totals_come_from_the_selected_period(monkeypatch):
+    """ACL-2384: при смене периода /account-map считает отчёт за этот период, а не отдаёт тоталы всех дат книги.
+
+    Строки аккаунтов карта пересчитывает сама, а «Total · all countries» берёт из отчёта; отчёт без периода давал
+    итог за всю книгу рядом со строками за выбранные дни.
+    """
+    from starlette.requests import Request
+    from src.web import app as web
+
+    seen = []
+    whole = {"countries": [{"country": "Chile", "my_totals": {"spend": 832093, "leads": 34514, "deposits": 680}, "account_rows": []}]}
+    period = {"countries": [{"country": "Chile", "my_totals": {"spend": 662, "leads": 43, "deposits": 1}, "account_rows": []}]}
+
+    def for_period(report, df, date_from, date_to):
+        seen.append((date_from, date_to))
+        return period
+
+    monkeypatch.setattr(web, "get_cached_report", lambda *a, **k: (whole, None, []))
+    monkeypatch.setattr(web, "report_for_period", for_period)
+    monkeypatch.setattr(web, "_enrich_country_overview", lambda r: None)
+    monkeypatch.setattr(web, "mlx_instance_labels", lambda: {})
+    links.add_value("country", "Chile")
+    request = Request({"type": "http", "method": "GET", "path": "/account-map", "query_string": b"", "headers": [],
+                       "server": ("testserver", 80), "scheme": "http"})
+    response = web.account_map_fragment.__wrapped__(request, date_from="2026-10-25", date_to="2026-11-03", span="")
+    assert seen == [("2026-10-25", "2026-11-03")]
+    assert response.context["amap"]["totals"]["spend"] == 662 and response.context["amap"]["totals"]["deposits"] == 1
