@@ -274,3 +274,141 @@ def test_estimate_create_calls_is_the_same_with_and_without_a_cover(tmp_path):
     plan_a = cr.plan_from_draft(_tpl_draft(tmp_path, [a]))
     plan_b = cr.plan_from_draft(_tpl_draft(tmp_path, [b]))
     assert cr.estimate_create_calls(plan_a) == cr.estimate_create_calls(plan_b)
+
+
+# ───────────────────────── чтение картинок Страницы ─────────────────────────
+
+import asyncio  # noqa: E402
+import json  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from src.fb_api import forms as fm  # noqa: E402
+from src.fb_api import graph as g  # noqa: E402
+
+URL = "https://scontent.example.com/secret-image.jpg"
+
+
+class PhotoMeta:
+    """Transport: `/{page}/photos` и `/{page}/leadgen_forms` с обложками; каждый источник можно уронить."""
+
+    def __init__(self, photos=None, forms=None, photos_error=None, forms_error=None, more=False):
+        self.photos = [{"id": "11", "width": 1200, "height": 628, "created_time": "2026-10-20T10:00:00+0000",
+                        "images": [{"source": URL}]},
+                       {"id": "12", "width": 800, "height": 800, "created_time": "2026-10-21T10:00:00+0000"}] \
+            if photos is None else photos
+        self.forms = [{"id": "f1", "name": "Form A", "context_card": {"cover_photo": {"id": "12", "width": 800,
+                                                                                       "height": 800}}},
+                      {"id": "f2", "name": "No cover"}] if forms is None else forms
+        self.photos_error, self.forms_error, self.more = photos_error, forms_error, more
+        self.gets: list[tuple[str, dict]] = []
+        self.posts = []
+
+    def state(self):
+        return {"kind": "ads_manager", "has_token": True}
+
+    def request(self, method, path, params=None):
+        if method != "GET":
+            self.posts.append(path)
+        self.gets.append((path, dict(params or {})))
+        rows, err = (self.photos, self.photos_error) if path.endswith("/photos") else (self.forms, self.forms_error)
+        if err:
+            return {"status": 400, "body": {"error": err}}
+        body = {"data": rows}
+        if self.more:
+            body["paging"] = {"next": "https://graph/next", "cursors": {"after": "x"}}
+        return {"status": 200, "body": body}
+
+
+def photos_client(meta):
+    return g.GraphClient(meta, sleep=lambda s: None, min_interval_s=0.0, max_calls=20)
+
+
+def test_photos_merge_by_id_and_carry_no_url():
+    meta = PhotoMeta()
+    read = fm.read_page_photos(photos_client(meta), PAGE)
+    assert read.ok and [p.id for p in read.photos] == ["12", "11"]
+    assert read.photos[0].form_name == "Form A" and read.photos[0].created_time == "2026-10-21T10:00:00+0000"
+    assert URL not in json.dumps(read.as_dict()) and "images" not in json.dumps(read.as_dict())
+    assert all("images" not in p["fields"] for _, p in meta.gets) and not meta.posts
+    assert all(m[1]["limit"] in (50, 100) for m in meta.gets)
+
+
+def test_one_refused_source_does_not_fail_the_other():
+    err = {"code": 200, "message": "(#200) denied"}
+    only_forms = fm.read_page_photos(photos_client(PhotoMeta(photos_error=err)), PAGE)
+    assert only_forms.ok and [p.id for p in only_forms.photos] == ["12"]
+    only_photos = fm.read_page_photos(photos_client(PhotoMeta(forms_error=err)), PAGE)
+    assert only_photos.ok and [p.id for p in only_photos.photos] == ["12", "11"]
+
+
+def test_both_refused_and_empty_give_the_same_text():
+    err = {"code": 200, "message": "(#200) denied"}
+    both = fm.read_page_photos(photos_client(PhotoMeta(photos_error=err, forms_error=err)), PAGE)
+    assert both.state == fm.UNREADABLE and not both.ok and both.message == fm.MSG_NO_PHOTOS
+    empty = fm.read_page_photos(photos_client(PhotoMeta(photos=[], forms=[])), PAGE)
+    assert empty.state == fm.EMPTY and empty.ok and empty.message == fm.MSG_NO_PHOTOS
+
+
+def test_truncated_when_a_next_page_exists_and_bad_page_makes_no_call():
+    meta = PhotoMeta(more=True)
+    assert fm.read_page_photos(photos_client(meta), PAGE).truncated is True
+    assert fm.read_page_photos(photos_client(PhotoMeta()), PAGE).truncated is False
+    meta = PhotoMeta()
+    assert fm.read_page_photos(photos_client(meta), "12/../x").state == fm.NO_PAGE and meta.gets == []
+
+
+def test_a_stop_of_the_client_is_not_swallowed_by_the_photos_read():
+    class Stopping(PhotoMeta):
+        def request(self, method, path, params=None):
+            return {"status": 400, "body": {"error": {"code": 4, "message": "limit"}}}
+
+    with pytest.raises(g.RateLimited):
+        fm.read_page_photos(photos_client(Stopping()), PAGE)
+
+
+def _patch_session(monkeypatch, meta, pages=(PAGE,)):
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+    from src.web import account_pages
+
+    client = photos_client(meta)
+
+    @contextmanager
+    def fake_session(account):
+        yield SimpleNamespace(client=client, act="act_1", account=account, notes={})
+
+    monkeypatch.setattr(_api, "_session", fake_session)
+    monkeypatch.setattr(_as, "serialized_browser", lambda **kw: (lambda fn: fn))
+    monkeypatch.setattr(account_pages, "pages_from_client", lambda c, act, **k: [{"id": p, "name": p} for p in pages])
+    return client
+
+
+def test_read_photos_refuses_a_page_outside_the_account_and_cannot_write(monkeypatch):
+    from src.web import page_forms
+
+    meta = PhotoMeta()
+    client = _patch_session(monkeypatch, meta)
+    out = page_forms.read_photos("Acc", PAGE)
+    assert out["ok"] is True and [p["id"] for p in out["photos"]] == ["12", "11"] and out["account"] == "Acc"
+    assert client.writes == 0 and not client.allow_writes and not meta.posts
+    meta2 = PhotoMeta()
+    _patch_session(monkeypatch, meta2)
+    bad = page_forms.read_photos("Acc", "999")
+    assert bad["ok"] is False and "not available for this account" in bad["message"] and meta2.gets == []
+
+
+def test_the_photos_endpoint_needs_account_page_and_the_api_backend(monkeypatch):
+    from src.web import app as web
+    from src.web import page_forms
+    from tests.test_acl1775_instant_forms import _Req
+
+    calls = []
+    monkeypatch.setattr(page_forms, "read_photos", lambda a, p: calls.append((a, p)) or {"ok": True, "photos": []})
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
+    assert asyncio.run(web.api_page_photos(_Req({"account_label": "A", "page_id": PAGE}))).status_code == 409
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
+    assert asyncio.run(web.api_page_photos(_Req({"page_id": PAGE}))).status_code == 400
+    assert asyncio.run(web.api_page_photos(_Req({"account_label": "A"}))).status_code == 400
+    assert asyncio.run(web.api_page_photos(_Req({"account_label": "A", "page_id": PAGE}))).status_code == 200
+    assert calls == [("A", PAGE)]

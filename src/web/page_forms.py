@@ -80,3 +80,43 @@ def read_forms(account_label: str, selected_page: str | None = None) -> dict[str
                 {"account": account_label, "source": "api", "state": out.get("state"),
                  "forms": len(out.get("forms") or [])})
     return out
+
+
+def _read_photos_in_session(account_label: str, selected_page: str) -> dict[str, Any]:
+    from src.analysis_agent import account_spend_api as _api
+    from src.web.account_pages import pages_from_client, resolve_selection
+
+    with _api._session(account_label) as sess:
+        client = sess.client
+        if client.allow_writes:
+            raise AssertionError("the page pictures read must not be able to write")
+        client.reset_budget(READ_MAX_CALLS)
+        # Страница должна принадлежать аккаунту (тот же объединённый список, что и в выборе билдера).
+        page_id = resolve_selection(pages_from_client(client, sess.act), selected_page)["id"]
+        read = _forms.read_page_photos(client, page_id)
+        if client.writes:
+            raise AssertionError("the page pictures read must not write")
+    return read.as_dict()
+
+
+def read_photos(account_label: str, selected_page: str) -> dict[str, Any]:
+    """Картинки Страницы аккаунта (ACL-2188). Только по нажатию; всегда словарь без ссылок на картинки."""
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+
+    started = time.monotonic()
+    run = _as.serialized_browser(key=_as._profile_key, reading=True)(
+        lambda account: _read_photos_in_session(account, selected_page))
+    from src.fb_api.connection import user_started_action
+    try:
+        with user_started_action():      # ACL-2272: only by the person's press
+            out = run(account_label)
+        error = ""
+    except Exception as exc:  # noqa: BLE001 - отказ профиля/страницы: текстом человеку
+        error = _api._failure(account_label, exc)[0]
+        out = {"state": "failed", "ok": False, "page_id": "", "photos": [], "truncated": False, "message": error}
+    out["account"] = account_label
+    _as._record("api_page_photos_read", not error and out.get("ok") is True, time.monotonic() - started,
+                {"account": account_label, "source": "api", "state": out.get("state"),
+                 "photos": len(out.get("photos") or [])})
+    return out
