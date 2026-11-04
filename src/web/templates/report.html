@@ -2013,12 +2013,6 @@
     .aov-table td.acc { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
     .aov-table td.acc .aov-acc { display: inline-flex; flex-direction: column; vertical-align: middle; }
     .aov-table td.acc .aov-act { color: var(--adopy-text-muted); font-size: var(--adopy-text-xs); font-variant-numeric: tabular-nums; }
-    /* Подсказка точки State — видна и при наведении, и при фокусе с клавиатуры. */
-    .aov-st[data-tip] { position: relative; cursor: help; }
-    .aov-st[data-tip]:hover::after, .aov-st[data-tip]:focus-visible::after {
-      content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 4px); z-index: 20; width: max-content; max-width: 280px;
-      padding: 6px 9px; border-radius: var(--adopy-radius-sm, 6px); border: 1px solid var(--adopy-border); background: var(--adopy-surface);
-      color: var(--adopy-text); box-shadow: var(--adopy-shadow-md, var(--adopy-shadow-sm)); white-space: normal; font-weight: 400; font-size: var(--adopy-text-sm); }
     /* Хост таблицы кампаний нужен только как точка монтирования: без рамки и отступов он рисовался пустой скруглённой полосой над шапкой. */
     .aov .hc.hc-scoped.amap-campaigns { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; border-radius: 0; }
     .aov-table td.amap-list { color: var(--adopy-text-muted); } .aov-table td.amap-list .nodata, .aov-table td.amap-list .hc-snap { font-size: var(--adopy-text-sm); }

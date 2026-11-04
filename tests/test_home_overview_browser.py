@@ -280,7 +280,7 @@ def test_close_country_button_in_both_views(open_page):
 
 
 def test_account_cell_shows_act_id_state_tip_and_no_empty_strip(open_page, amap):
-    """ACL-2384: имя и номер кабинета целиком; причина и чтение — в подсказке State (hover/focus/aria); пустой полосы над шапкой нет."""
+    """ACL-2384: имя и номер кабинета целиком; причина и чтение не выводятся; пустой полосы над шапкой нет."""
     for mc in amap["countries"]:
         for r in mc["rows_aov"]:
             r["act_id"] = "act_1234567890123456"
@@ -289,10 +289,7 @@ def test_account_cell_shows_act_id_state_tip_and_no_empty_strip(open_page, amap)
     assert "act_1234567890123456" in cell.inner_text()
     assert pg.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1", cell.element_handle())
     st = pg.locator('#aov-expanded [data-aov-country="Argentina"] tr.aov-row', has_text="Facebook_DQ-212").locator(".aov-st")
-    tip = st.get_attribute("data-tip")
-    assert "account disabled" in tip and "read " in tip and st.get_attribute("aria-label") == tip and st.get_attribute("title") == tip
-    st.focus()
-    assert pg.evaluate("(e) => getComputedStyle(e, '::after').content", st.element_handle()).strip('"').startswith("Dead")
+    assert st.get_attribute("data-tip") is None and st.get_attribute("title") is None   # подсказки на State нет (решение владельца)
     # колонок What happened / Read / Campaigns нет
     heads = pg.eval_on_selector_all('#aov-expanded [data-aov-country="Chile"] thead th', "els => els.map(e => e.textContent)")
     assert not {"What happened", "Read", "Campaigns"} & set(heads)
