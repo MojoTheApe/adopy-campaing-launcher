@@ -1,5 +1,14 @@
 # Repository process history
 
+## 2026-11-04 — ACL-2376 current workflow and historical guides
+
+The repository workflow is the current entry point for branch, task, review and
+release guidance. README and the runtime delivery guide point to it and the
+official stable release channel. The former branch, board and release pages
+retain their historical text. This change updates documentation links and
+records existing practice without changing Tracker configuration or delivery
+behavior.
+
 ## 2026-10-22 — ACL-2079 isolated manual verification support candidate
 
 Select independently reviewed published Master1.8.0 / Tracker3.10.0 and their
