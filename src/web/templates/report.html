@@ -1373,6 +1373,13 @@
 
     /* Searchable select */
     .cb-sel-wrap { position: relative; width: 100%; }
+    /* Поле, куда пойдёт «Use» из Country Workbench: обводка и метка справа над полем. */
+    .cb-sel-wrap.cb-use-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+    .cb-use-tag { position: absolute; right: 0; top: -1.45rem; display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 0 0.1rem 0 0.45rem; border-radius: 999px; background: var(--accent); color: var(--bg-elev);
+      font-size: var(--adopy-text-xs); line-height: 1.3; z-index: 2; }
+    .cb-use-tag-x { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 0 0.3rem; line-height: 1.3; }
+    .cb-use-tag-x:focus-visible { outline: 2px solid var(--focus-ring); border-radius: 999px; }
     .cb-sel-text {
       width: 100%;
       background: var(--field-bg);
@@ -7355,6 +7362,10 @@ window.cbTree = (function () {
   var adIdx = 0, lastAdFor = '', lastAdCount = 0;
   /* ACL-1768: выбранный набор выбранной кампании (интерфейс, не данные). */
   var setIdx = 0, lastSetFor = '', lastSetCount = 0;
+  /* Поле-цель для «Use» из Country Workbench: `{campId, field, el}` — отмеченное кликом
+     поле билдера. Набор и объявление считаются по самому элементу, поэтому
+     удаление или перенос ряда их не «ломает». Интерфейс, не данные. */
+  var useField = null, lastAnnounce = '';
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -8465,6 +8476,8 @@ window.cbTree = (function () {
       edEmpty.hidden = false;
       lastHead = '';
       paintAudit(null);
+      useField = null;
+      announceUse(null);
       return;
     }
     edEmpty.hidden = true;
@@ -8475,7 +8488,120 @@ window.cbTree = (function () {
     if (html !== lastHead) { edHead.innerHTML = html; lastHead = html; }
     paintAudit(found);
     refreshAudit();
+    paintUseMark(found);
   }
+
+  /* ── Поле-цель для «Use» (Country Workbench) ────────────────────────────
+     Клик или фокус в поле, которое принимает «Use», делает его целью; Workbench
+     кладёт туда и больше никуда. Ключи совпадают с FIELD_LABEL в cwWorkbench. */
+  function useFieldKey(el) {
+    if (!el || !el.classList) return '';
+    if (el.classList.contains('cb-targeting-search')) return 'targeting';
+    if (el.classList.contains('cb-vertical-search')) return 'vertical';
+    if (el.classList.contains('cb-creative-search')) return 'file';
+    if (el.classList.contains('cb-adtitle-search')) return 'text1';
+    if (el.classList.contains('cb-text2-search')) {
+      var w = el.closest('.cb-sel-wrap');
+      var n = w && w.dataset.textx;
+      return 'text' + (n || '2');
+    }
+    return '';
+  }
+
+  /* Набор, объявление и поле цели — по живому элементу. null — цели нет или она устарела. */
+  function useResolve(found) {
+    if (!useField || !found || useField.campId !== openId) return null;
+    var el = useField.el, slot = found.camp.slot;
+    if (!el || !el.isConnected || !slot.contains(el)) return null;
+    var rows = slot.querySelectorAll('.cb-ad-row');
+    var row = el.closest('.cb-ad-row');
+    var sec = el.closest('.cb-adset-sec');
+    var ai = row ? Array.prototype.indexOf.call(rows, row) : -1;
+    var si = sec ? (parseInt(sec.dataset.adset, 10) || 0) : (row && window.cbRowSet ? window.cbRowSet(row) : 0);
+    return { setIndex: si, adIndex: Math.max(0, ai), field: useField.field, el: el };
+  }
+
+  /* Куда пойдёт «Use» сейчас: цель, иначе выбранный набор и его объявление. */
+  function useAt(found) {
+    var u = useResolve(found);
+    if (u) return u;
+    var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
+    var ai = Math.max(0, Math.min(adIdx, rows.length - 1));
+    var inSet = [];
+    Array.prototype.forEach.call(rows, function (r, i) {
+      if ((window.cbRowSet ? window.cbRowSet(r) : 0) === setIdx) inSet.push(i);
+    });
+    if (inSet.length && inSet.indexOf(ai) === -1) ai = inSet[0];
+    return { setIndex: setIdx, adIndex: ai, field: '' };
+  }
+
+  /* Событие для Workbench — только когда что-то из показанного изменилось. */
+  function announceUse(found) {
+    var sig = '';
+    if (found) {
+      var at = useAt(found);
+      sig = [openId, at.setIndex, at.adIndex, at.field, level, ticks().on.length].join('|');
+    }
+    if (sig === lastAnnounce) return;
+    lastAnnounce = sig;
+    document.dispatchEvent(new CustomEvent('acl:cbtarget'));
+  }
+
+  /* Обводка и метка «Use goes here» — только у текущей цели; в DOM пишем при изменении
+     (наблюдатель формы услышит мутацию, безусловная запись зациклила бы страницу). */
+  function paintUseMark(found) {
+    var u = useResolve(found);
+    if (useField && !u) useField = null;
+    var want = u ? u.el.closest('.cb-sel-wrap') : null;
+    host.querySelectorAll('.cb-use-target').forEach(function (w) {
+      if (w !== want) {
+        w.classList.remove('cb-use-target');
+        var old = w.querySelector(':scope > .cb-use-tag');
+        if (old) old.remove();
+      }
+    });
+    if (want) {
+      if (!want.classList.contains('cb-use-target')) want.classList.add('cb-use-target');
+      if (!want.querySelector(':scope > .cb-use-tag')) {
+        var tag = document.createElement('span');
+        tag.className = 'cb-use-tag';
+        tag.innerHTML = 'Use goes here <button type="button" class="cb-use-tag-x" aria-label="Clear the Use target" title="Clear the Use target">×</button>';
+        want.insertBefore(tag, want.firstChild);
+      }
+    }
+    announceUse(found);
+  }
+
+  function markUseField(el) {
+    var key = useFieldKey(el);
+    if (!key || !openId || !host.contains(el)) return;
+    var found = findCampaign(openId);
+    if (!found) return;
+    var same = useField && useField.el === el;
+    useField = { campId: openId, field: key, el: el };
+    var at = useResolve(found);
+    if (!same && at) { adIdx = at.adIndex; setIdx = at.setIndex; }
+    paintUseMark(found);
+  }
+
+  function clearUseField() {
+    if (!useField) return;
+    useField = null;
+    var found = openId ? findCampaign(openId) : null;
+    paintUseMark(found);
+  }
+
+  editor.addEventListener('pointerdown', function (e) {
+    if (e.target.closest && e.target.closest('.cb-use-tag-x')) return;
+    markUseField(e.target);
+  });
+  editor.addEventListener('focusin', function (e) { markUseField(e.target); });
+  editor.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && useField && e.target === useField.el) clearUseField();
+  });
+  editor.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.cb-use-tag-x')) clearUseField();
+  });
 
   function setLevel(next) {
     level = L.level(next);
@@ -8695,6 +8821,7 @@ window.cbTree = (function () {
   /* ── что делают руками ────────────────────────────────────────────── */
 
   function rememberOpen(id) {
+    if ((id || '') !== openId) useField = null;
     openId = id || '';
     try { localStorage.setItem(OPEN_KEY, openId); } catch (e) { /* не помним */ }
   }
@@ -9017,8 +9144,10 @@ window.cbTree = (function () {
     active: function () {
       var f = (openId && BORROWED) ? findCampaign(openId) : null;
       if (!f) return null;
+      var at = useAt(f);
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
-        countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
+        countryName: f.group.countryName, slot: f.camp.slot, adIndex: at.adIndex, setIndex: at.setIndex,
+        field: at.field, ticked: ticks().on.length, level: level };
     }
   };
 })();
@@ -15370,6 +15499,19 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var v = dup ? pf.rel_path : pf.filename;
     if (vt) vt.value = v;
     if (vh) vh.value = v;
+  };
+
+  /* «Use» из Country Workbench: вертикальная пара файла и имена файлов выбранного типа
+     (CREATIVES виден только этому блоку). Только чтение. */
+  window.cbVerticalPartnerOf = function (picked) {
+    var f = CREATIVES.filter(function (c) { return c.filename === picked || c.rel_path === picked; })[0];
+    var pf = f && f.vertical_partner ? CREATIVES.filter(function (c) { return c.rel_path === f.vertical_partner; })[0] : null;
+    if (!pf || pf.type !== f.type) return '';
+    var dup = CREATIVES.filter(function (c) { return c.filename.toLowerCase() === pf.filename.toLowerCase(); }).length > 1;
+    return dup ? pf.rel_path : pf.filename;
+  };
+  window.cbCreativeNames = function (ctype) {
+    return CREATIVES.filter(function (c) { return c.type === ctype; }).map(function (c) { return c.rel_path || c.filename; });
   };
 
   // close creative dropdown on blur
@@ -22314,13 +22456,52 @@ window.cwWorkbench = (function () {
       + '<div class="cw-ref" data-ref="peer"><b>Observed peers</b>' + esc(peer) + '</div></div>';
   }
 
-  /* Куда уйдёт улика: Country / Account / Campaign / Ad set (/ Ad). */
+  var FIELD_LABEL = { file: 'File', vertical: 'Stories / Reels file', text1: 'Primary text 1', text2: 'Primary text 2',
+    text3: 'Primary text 3', text4: 'Primary text 4', text5: 'Primary text 5', targeting: 'Targeting' };
+
+  /* В какое поле реально пойдёт улика. kind — target / creative / landing; active.field —
+     отмеченное в билдере поле ('' — не отмечено). */
+  function useField(kind, ev, active) {
+    var f = (active && active.field) || '';
+    if (kind === 'target') return { field: 'targeting', ok: true, reason: '' };
+    if (kind !== 'creative') return { field: '', ok: true, reason: '' };
+    if (f === 'file' || f === 'vertical') return { field: f, ok: true, reason: '' };
+    if (/^text[1-5]$/.test(f)) {
+      if (ev && ev.text) return { field: f, ok: true, reason: '' };
+      return { field: f, ok: false, reason: 'This version has no ad text — mark a file field instead' };
+    }
+    return { field: '', ok: true, reason: '' };   // не отмечено (или Targeting): файл + Primary text 1
+  }
+
+  /* Куда уйдёт улика: Country / Account / Campaign / Ad set N (/ Ad M (/ поле)).
+     kind 'builder' — строка «Builder destination»: объявление и отмеченное поле, если оно есть. */
   function destinationPath(active, kind) {
     if (!active) return '';
     var parts = [active.countryName || active.country || '', active.account || '',
-      active.name || 'Untitled campaign', 'Ad set 1'];
-    if (kind === 'creative') parts.push('Ad ' + ((active.adIndex || 0) + 1));
+      active.name || 'Untitled campaign', 'Ad set ' + ((active.setIndex || 0) + 1)];
+    var f = active.field || '';
+    if (kind === 'creative') {
+      parts.push('Ad ' + ((active.adIndex || 0) + 1));
+      if (f && f !== 'targeting') parts.push(FIELD_LABEL[f]);
+    } else if (kind === 'builder') {
+      if (f && f !== 'targeting') parts.push('Ad ' + ((active.adIndex || 0) + 1), FIELD_LABEL[f]);
+      else if (f === 'targeting') parts.push(FIELD_LABEL[f]);
+      else parts.push('Ad ' + ((active.adIndex || 0) + 1));
+    }
     return parts.filter(Boolean).join(' / ');
+  }
+
+  /* Подсказка кнопки Use: что и куда она положит (или почему не может). */
+  function useTitle(kind, ev, active) {
+    if (!active) return 'No draft is selected in the builder';
+    var set = 'Ad set ' + ((active.setIndex || 0) + 1), ad = 'Ad ' + ((active.adIndex || 0) + 1);
+    if (kind === 'landing') return 'Noted on the draft — the builder has no landing field';
+    if (kind === 'target') return 'Puts the target into: ' + set + ' · Targeting';
+    var u = useField(kind, ev, active);
+    if (!u.ok) return u.reason;
+    if (!u.field) return 'Puts the file and its ad text into: ' + ad + ' · File + Primary text 1';
+    if (u.field === 'vertical' || u.field === 'file') return 'Puts the file into: ' + ad + ' · ' + FIELD_LABEL[u.field];
+    return 'Puts the ad text into: ' + ad + ' · ' + FIELD_LABEL[u.field];
   }
 
   /* Решение «можно ли и куда» — без DOM. active == null — выбора нет. */
@@ -22332,6 +22513,8 @@ window.cwWorkbench = (function () {
       return { ok: false, reason: 'no_target',
         message: 'No draft is selected in the builder. Open a campaign there (or add one), then press Use again. Evidence is never added to the last campaign automatically.' };
     }
+    var fld = useField(kind, ctx.ev, active);
+    if (!fld.ok) return { ok: false, reason: 'field', message: fld.reason + '.' };
     var notes = [];
     if (ctx.country && active.country && ctx.country !== active.country) {
       notes.push('This evidence is from ' + (ctx.countryName || ctx.country) + ', the selected draft is in ' + (active.countryName || active.country) + '.');
@@ -22339,12 +22522,12 @@ window.cwWorkbench = (function () {
     if (ctx.asset && active.asset && String(ctx.asset).toLowerCase() !== String(active.asset).toLowerCase()) {
       notes.push('The evidence asset is “' + ctx.asset + '”, the draft asset is “' + active.asset + '”.');
     }
-    return { ok: true, destination: destinationPath(active, kind),
+    return { ok: true, destination: destinationPath(active, kind), field: fld.field,
       mismatch: notes.length ? notes.join(' ') + ' Use it anyway?' : '' };
   }
 
   /* Какой файл из выпадающего списка билдера — точно этот пакет и версия. */
-  function pickCreativeFile(names, pack, version) {
+  function pickCreativeFiles(names, pack, version) {
     var hits = [];
     names.forEach(function (n, i) {
       var base = String(n).split(/[\\/]/).pop().toLowerCase();
@@ -22354,6 +22537,10 @@ window.cwWorkbench = (function () {
       var v = lead ? String(parseInt(lead[1], 10)) : '';
       if (version ? v === String(version) : true) hits.push(i);
     });
+    return hits;
+  }
+  function pickCreativeFile(names, pack, version) {
+    var hits = pickCreativeFiles(names, pack, version);
     return hits.length === 1 ? hits[0] : -1;
   }
 
@@ -22575,12 +22762,33 @@ window.cwWorkbench = (function () {
     if (!box) return;
     var a = activeTarget();
     var cid = panel.dataset.country;
-    var path = a ? destinationPath(a, 'campaign') : '';
-    box.className = 'cw-dest' + (a ? '' : ' cw-dest-empty');
-    box.innerHTML = '<span class="cw-dest-label">Builder destination</span>'
+    var path = a ? destinationPath(a, 'builder') : '';
+    var cls = 'cw-dest' + (a ? '' : ' cw-dest-empty');
+    var html = '<span class="cw-dest-label">Builder destination</span>'
       + '<span class="cw-dest-path">' + (a ? esc(path) : 'No draft selected — evidence is not added anywhere until you pick one') + '</span>'
       + '<button type="button" class="cw-link" data-cw-open-builder>' + (a ? 'Change in builder' : 'Open builder') + '</button>'
+      + (a && a.ticked > 1 ? '<span class="cw-dest-status">Only the open campaign gets it; ticked campaigns are not changed.</span>' : '')
       + (statusText[cid] ? '<span class="cw-dest-status' + (statusText[cid].warn ? ' cw-warn' : '') + '">' + esc(statusText[cid].text) + '</span>' : '');
+    /* Только при изменении: строка обновляется по событию и раз в секунду, без лишних перерисовок. */
+    if (box.className !== cls) box.className = cls;
+    if (box._cwHtml !== html) { box._cwHtml = html; box.innerHTML = html; }
+    refreshUseButtons(panel, a);
+  }
+
+  /* Подсказка и доступность каждой кнопки Use — по отмеченному полю. */
+  function refreshUseButtons(panel, a) {
+    var cid = panel.dataset.country, st = states[cid];
+    var d = dataOf(panel);
+    if (!st || !d.data || !d.data.slices) return;
+    var sl = d.data.slices[st.asset] || d.data.slices[''];
+    panel.querySelectorAll('.cw-use').forEach(function (btn) {
+      var ev = evidenceFor(st.tab, sl, btn);
+      var kind = btn.dataset.cwUse;
+      var title = ev ? useTitle(kind, ev, a) : '';
+      var off = !!(a && ev && kind === 'creative' && !useField(kind, ev, a).ok);
+      if (btn.title !== title) btn.title = title;
+      if (btn.disabled !== off) btn.disabled = off;
+    });
   }
 
   function say(panel, text, warn) {
@@ -22588,10 +22796,10 @@ window.cwWorkbench = (function () {
     refreshDest(panel);
   }
 
-  function stamp(slot, kind, value, ctx, panel) {
+  function stamp(slot, kind, field, value, ctx, panel) {
     var list = [];
     try { list = JSON.parse(slot.dataset.cwEvidence || '[]'); } catch (e) { list = []; }
-    list.push({ kind: kind, value: value, country: ctx.countryName, asset: ctx.asset || 'All assets',
+    list.push({ kind: kind, field: field || '', value: value, country: ctx.countryName, asset: ctx.asset || 'All assets',
       from: panel.dataset.cwFrom || '', to: panel.dataset.cwTo || '', component: 'revision ' + (list.length + 1) });
     slot.dataset.cwEvidence = JSON.stringify(list);
     slot.dataset.cwCombination = 'new';   // изменённая комбинация: CPA источника её не предсказывает
@@ -22602,54 +22810,100 @@ window.cwWorkbench = (function () {
   }
 
   function applyTarget(a, ev) {
-    var input = a.slot.querySelector('.cb-targeting-search');
+    var sec = a.slot.querySelector('.cb-adset-sec[data-adset="' + (a.setIndex || 0) + '"]');
+    var input = (sec || a.slot).querySelector('.cb-targeting-search');
     if (!input) return { done: false, text: 'This draft has no targeting field.' };
     input.value = ev.target;
     var ok = typeof window.cbTargetingCommit === 'function' && window.cbTargetingCommit(input);
-    if (ok) { changed(input); return { done: true, text: 'Target “' + ev.target + '” set on the draft’s ad set.' }; }
+    if (ok) { changed(input); return { done: true, text: 'Target “' + ev.target + '” set on Ad set ' + ((a.setIndex || 0) + 1) + '.' }; }
     if (typeof window.cbTargetingSearch === 'function') window.cbTargetingSearch(input);
     changed(input);
     return { done: false, text: 'No saved target is named “' + ev.target + '”. The text is in the field — pick a saved target from the list; nothing was guessed.' };
   }
 
-  function applyCreative(a, ev) {
+  /* Выбрать из выпадающего списка поля единственную опцию-файл пакета/версии (или partner). */
+  function fillFileField(input, ev, want) {
+    var wrap = input.closest('.cb-sel-wrap');
+    input.value = want || ev.pack;
+    /* ACL-1903: текст положен кодом, а не человеком, но прежний выбранный файл в скрытом поле
+       от него не должен остаться: если подходящего файла не нашлось, в окне — искомый пакет,
+       а в плане — старый файл. cbCreativeTyped снимает выбор, потом поиск ставит новый. */
+    if (typeof window.cbCreativeTyped === 'function') window.cbCreativeTyped(input);
+    else if (typeof window.cbCreativeSearch === 'function') window.cbCreativeSearch(input);
+    var opts = Array.prototype.slice.call(wrap.querySelectorAll('.cb-sel-opt[data-val]'));
+    var ix = want
+      ? opts.map(function (o) { return o.dataset.val; }).indexOf(want)
+      : pickCreativeFile(opts.map(function (o) { return o.dataset.val; }), ev.pack, ev.version);
+    changed(input);
+    if (ix >= 0) {
+      opts[ix].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      return { ok: true, msg: 'file ' + opts[ix].dataset.val };
+    }
+    return { ok: false, msg: opts.length + ' file' + (opts.length === 1 ? '' : 's') + ' match pack ' + ev.pack + (ev.version ? ' version ' + ev.version : '') + ' — pick the file from the list' };
+  }
+
+  /* Текст версии — в поле Primary text N (1: .cb-adtitle-search, 2: .cb-text2-search, 3-5: по data-textx). */
+  function textInputOf(row, field) {
+    if (field === 'text1') return row.querySelector('.cb-adtitle-search');
+    if (field === 'text2') return row.querySelector('.cb-sel-wrap.cb-text2-sel-wrap:not([data-textx]) .cb-text2-search');
+    return row.querySelector('.cb-textx-sel-wrap[data-textx="' + field.slice(4) + '"] .cb-text2-search');
+  }
+
+  function applyCreative(a, ev, field) {
     var rows = a.slot.querySelectorAll('.cb-ad-row');
     // 1769: карточки объявлений стоят стопкой, скрытых нет — берём нужную по номеру.
     var row = rows[a.adIndex || 0] || rows[0];
     if (!row) return { done: false, text: 'This draft has no ad to put a creative on.' };
     var msgs = [], done = true;
+    field = field || '';
+    var no = Array.prototype.indexOf.call(rows, row) + 1;
 
-    var fileIn = row.querySelector('.cb-creative-search');
-    if (fileIn && ev.pack) {
-      fileIn.value = ev.pack;
-      /* ACL-1903: текст положен кодом, а не человеком, но прежний выбранный файл в скрытом поле
-         от него не должен остаться: если подходящего файла не нашлось, в окне — искомый пакет,
-         а в плане — старый файл. cbCreativeTyped снимает выбор, потом поиск ставит новый. */
-      if (typeof window.cbCreativeTyped === 'function') window.cbCreativeTyped(fileIn);
-      else if (typeof window.cbCreativeSearch === 'function') window.cbCreativeSearch(fileIn);
-      var opts = Array.prototype.slice.call(row.querySelectorAll('.cb-creative-sel-wrap .cb-sel-opt[data-val]'));
-      var ix = pickCreativeFile(opts.map(function (o) { return o.dataset.val; }), ev.pack, ev.version);
-      if (ix >= 0) {
-        opts[ix].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        msgs.push('file ' + opts[ix].dataset.val);
-      } else {
-        done = false;
-        msgs.push(opts.length + ' file' + (opts.length === 1 ? '' : 's') + ' match pack ' + ev.pack + (ev.version ? ' version ' + ev.version : '') + ' — pick the file from the list');
+    if (field === 'vertical') {
+      var vIn = row.querySelector('.cb-vertical-search');
+      if (!vIn) return { done: false, text: 'Ad ' + no + ' has no Stories / Reels file field (API mode only).' };
+      var partner = '';
+      var mainWrap = row.querySelector('.cb-creative-sel-wrap:not(.cb-vertical-sel-wrap)');
+      if (mainWrap && typeof window.cbCreativeNames === 'function' && typeof window.cbVerticalPartnerOf === 'function') {
+        var names = window.cbCreativeNames(mainWrap.dataset.ctype || 'Image');
+        /* Файлов пакета/версии может быть несколько (квадрат и вертикаль): берём пару, если она одна. */
+        var found = [];
+        pickCreativeFiles(names, ev.pack, ev.version).forEach(function (i) {
+          var pr = window.cbVerticalPartnerOf(names[i]);
+          if (pr && found.indexOf(pr) === -1) found.push(pr);
+        });
+        if (found.length === 1) partner = found[0];
       }
-      changed(fileIn);
+      var vr = fillFileField(vIn, ev, partner);
+      if (!vr.ok && partner) vr = fillFileField(vIn, ev, '');
+      if (!vr.ok) done = false;
+      msgs.push(vr.msg);
+      return { done: done, text: (done ? 'Stories / Reels file set on Ad ' : 'Stories / Reels file started on Ad ') + no + ': ' + msgs.join('; ') + '.' };
     }
-    var textIn = row.querySelector('.cb-adtitle-search');
+
+    if (!field || field === 'file') {
+      var fileIn = row.querySelector('.cb-creative-search');
+      if (fileIn && ev.pack) {
+        var fr = fillFileField(fileIn, ev, '');
+        if (!fr.ok) done = false;
+        msgs.push(fr.msg);
+      }
+    }
+    var textField = !field ? 'text1' : (/^text/.test(field) ? field : '');
+    var textIn = textField ? textInputOf(row, textField) : null;
     if (textIn && ev.text) {
       textIn.value = ev.text;
       if (typeof window.cbAdTitleSearch === 'function') window.cbAdTitleSearch(textIn);
-      var hit = Array.prototype.filter.call(row.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-opt[data-val]'), function (o) {
+      var hit = Array.prototype.filter.call(textIn.closest('.cb-sel-wrap').querySelectorAll('.cb-sel-opt[data-val]'), function (o) {
         return (o.dataset.val || '').toLowerCase() === ev.text.toLowerCase();
       })[0];
       if (hit) { hit.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); msgs.push('ad text ' + ev.text); }
       else { done = false; msgs.push('no saved ad text named “' + ev.text + '” — pick one from the list'); }
       changed(textIn);
+    } else if (textField && field && !textIn) {
+      done = false;
+      msgs.push('Ad ' + no + ' has no ' + FIELD_LABEL[field] + ' field');
     }
-    return { done: done, text: (done ? 'Creative set on Ad ' : 'Creative started on Ad ') + (Array.prototype.indexOf.call(rows, row) + 1) + ': ' + msgs.join('; ') + '.' };
+    return { done: done, text: (done ? 'Creative set on Ad ' : 'Creative started on Ad ') + no + ': ' + msgs.join('; ') + '.' };
   }
 
   function applyLanding(a, ev) {
@@ -22663,15 +22917,15 @@ window.cwWorkbench = (function () {
     var cid = panel.dataset.country;
     var ctx = { country: cid, countryName: panel.dataset.cwCountry, asset: (states[cid] || {}).asset || '' };
     var active = activeTarget();
-    var plan = planUse(kind, ctx, active);
+    var plan = planUse(kind, Object.assign({ ev: ev }, ctx), active);
     if (!plan.ok) { say(panel, plan.message, true); return plan; }
     if (plan.mismatch && !await aclConfirm(plan.mismatch.replace(/\s*Use it anyway\?$/, ''),
         { title: 'Use it anyway?', okLabel: 'Use it' })) {
       say(panel, 'Cancelled — nothing was added.', false);
       return { ok: false, reason: 'declined' };
     }
-    var res = kind === 'target' ? applyTarget(active, ev) : (kind === 'creative' ? applyCreative(active, ev) : applyLanding(active, ev));
-    stamp(active.slot, kind, kind === 'target' ? ev.target : (kind === 'landing' ? ev.landing : (ev.pack + (ev.version ? ' v' + ev.version : ''))), ctx, panel);
+    var res = kind === 'target' ? applyTarget(active, ev) : (kind === 'creative' ? applyCreative(active, ev, plan.field) : applyLanding(active, ev));
+    stamp(active.slot, kind, plan.field, kind === 'target' ? ev.target : (kind === 'landing' ? ev.landing : (ev.pack + (ev.version ? ' v' + ev.version : ''))), ctx, panel);
     if (window.cbTree && typeof window.cbTree.refreshEditor === 'function') window.cbTree.refreshEditor();
     say(panel, plan.destination + ' — ' + res.text + ' New combination: the source CPA does not predict it.', !res.done && !res.noted);
     return { ok: true, applied: !!res.done, destination: plan.destination, text: res.text };
@@ -22737,6 +22991,11 @@ window.cwWorkbench = (function () {
       var p = document.querySelector('.cw-panel.active');
       if (p && !document.hidden) refreshDest(p);
     }, 1000);
+    /* Билдер сообщает о смене кампании, уровня, набора, объявления и поля-цели. */
+    document.addEventListener('acl:cbtarget', function () {
+      var p = document.querySelector('.cw-panel.active');
+      if (p) refreshDest(p);
+    });
     document.addEventListener('acl:viewchange', function () {
       var p = document.querySelector('.cw-panel.active');
       if (p) refreshDest(p);
@@ -22744,7 +23003,7 @@ window.cwWorkbench = (function () {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  return { planUse: planUse, destinationPath: destinationPath, useEvidence: useEvidence, render: render,
+  return { planUse: planUse, pickCreativeFiles: pickCreativeFiles, destinationPath: destinationPath, useField: useField, useTitle: useTitle, useEvidence: useEvidence, render: render,
     select: selectAsset, selected: selectedAsset };
 })();
 </script>
