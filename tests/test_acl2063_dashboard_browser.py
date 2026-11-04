@@ -318,7 +318,8 @@ def test_hand_edit_pause_refuses_write_shows_message_and_refreshes_account(dashb
     world.meta.objs[CAMP_A]['status'] = 'PAUSED'
     page.click('dialog.acm-confirm [data-acm="confirm"]')
     page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.summaries.Acc.counts.campaigns > 0")
-    page.wait_for_function("document.querySelector('[data-hc=batch-note]').textContent.toLowerCase().includes('changed since the preview')")
+    # The batch note left the toolbar with ACL-2374: the refusal now shows as the row's failure marker.
+    page.wait_for_function("(document.querySelector('.hc-mk.bad')||{getAttribute:()=>''}).getAttribute('aria-label').toLowerCase().includes('previous state kept')")
     page.wait_for_function(f"document.querySelector('.hc-switch[data-object-id=\"{CAMP_A}\"]').getAttribute('aria-checked') === 'false'")
     assert world.meta.posts == [] and site.reads == [('Acc', 'action')]
     assert site.errors == []
@@ -349,13 +350,14 @@ def test_backend_rpa_keeps_saved_structure_and_bi_but_refuses_real_reads(dashboa
     assert site.errors==[]
 
 
-def test_cpl_default_order_hiding_and_persistence_survive_structure_refresh(dashboard):
+def test_cpl_default_order_survives_structure_refresh(dashboard):
     site,page=dashboard
     goto(page,'http://acl.test/?view_only=1');wait_ready(page);open_acc(page,'Acc')
     headings=page.locator('.hc-table .hc-heads th').all_inner_texts()
     assert headings.index('CPL')==headings.index('CPA (FTD)')-1
     assert '$0.80' in page.locator('tr[data-key="campaign:2"]').inner_text()
-    page.click('[data-hc=cols] > summary');page.uncheck('[data-col=b_cpl]')
+    # The column picker left the toolbar with ACL-2374; the default order must survive a reload.
     page.reload();wait_ready(page);open_acc(page,'Acc')
-    assert page.locator('.hc-table .hc-heads th',has_text='CPL').count()==0
+    headings=page.locator('.hc-table .hc-heads th').all_inner_texts()
+    assert headings.index('CPL')==headings.index('CPA (FTD)')-1
     assert site.reads==[] and site.errors==[]

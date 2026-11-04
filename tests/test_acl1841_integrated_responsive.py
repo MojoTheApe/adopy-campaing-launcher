@@ -107,7 +107,7 @@ def integrated(browser, monkeypatch, tmp_path):
             scope.locator("summary").first.click()
         page.wait_for_function("document.querySelector('.view-panel.active .amap-campaigns')?._hc?.ready")
         host = scope.locator(".amap-campaigns")
-        host.locator("[data-hc=body]").wait_for(state="visible")
+        host.locator("[data-hc=body]:not([hidden])").wait_for(state="attached")
         opened.append((context, page, errors, writes, route, theme, width, populated))
         return page, scope, host
 
@@ -140,50 +140,14 @@ def no_horizontal_page_overflow_or_main_pan(page):
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("route", ["home", "manage"])
 @pytest.mark.parametrize("inventory", ["populated", "empty"])
-def test_full_routes_keep_toolbar_groups_and_controls_reachable(integrated, width, theme, route, inventory):
+def test_full_routes_have_no_toolbar_and_keep_the_table_and_add_form_reachable(integrated, width, theme, route, inventory):
+    """Панель инструментов над таблицей аккаунтов удалена 04.11: остались вкладки, таблица аккаунтов и форма добавления."""
     page, scope, host = integrated(width, theme, route, inventory == "populated")
-    toolbar = host.locator(".hc-toolbar")
-    groups = [toolbar.get_by_role("group", name=name, exact=True) for name in
-              ["Search and filter", "Metric navigation", "Tree expansion", "Column settings"]]
-    for group in groups:
-        assert group.count() == 1, "related controls need a named group, including after wrapping"
-        bounds = group.bounding_box()
-        for control in group.locator("input,select,button,summary").all():
-            if not control.is_visible():
-                continue
-            rect = control.bounding_box()
-            assert bounds["x"] - 1 <= rect["x"] and rect["x"] + rect["width"] <= bounds["x"] + bounds["width"] + 1
-            if control.is_enabled():
-                control.focus()
-                assert control.evaluate("e => e === document.activeElement")
-    expand, collapse = host.locator('[data-hc="expand-all"]'), host.locator('[data-hc="collapse-all"]')
-    assert expand.bounding_box()["y"] == pytest.approx(collapse.bounding_box()["y"], abs=1)
-    host.locator('[data-hc="search"]').fill("No such synthetic campaign")
-    host.locator('[data-hc="search"]').fill("")
-    host.locator('[data-hc="delivery"]').select_option("paused")
-    host.locator('[data-hc="delivery"]').select_option("all")
-    expand.click()
-    if inventory == "populated":
-        scope.locator('.hc-table tr[data-key="campaign:1"]').wait_for(state="visible")
-        scope.locator('.hc-table [data-sel="campaign:1"]').check()
-        for button in host.locator("[data-hc=batch] button").all():
-            assert button.is_enabled()
-            button.focus()
-            assert button.evaluate("e => e === document.activeElement")
-    batch = host.get_by_role("group", name="Commands for the selected rows")
-    assert batch.locator("button").count() == 4
-    assert batch.evaluate("e => e.scrollWidth <= e.clientWidth + 1")
-    assert toolbar.evaluate("e => e.scrollWidth <= e.clientWidth + 1")
-    host.locator('[data-hc="preset"]').select_option("all")
-    columns = host.locator(".hc-cols > summary")
-    columns.focus(); page.keyboard.press("Enter")
-    popup = host.locator(".hc-cols-pop")
-    assert popup.is_visible()
-    rect = popup.bounding_box()
-    assert 0 <= rect["x"] and rect["x"] + rect["width"] <= width + 1
-    page.keyboard.press("Space")
-    assert not popup.is_visible()
-    collapse.click()
+    for gone in (".hc-toolbar", "[data-hc=search]", "[data-hc=delivery]", "[data-hc=expand-all]", "[data-hc=collapse-all]",
+                 "[data-hc=preset]", "[data-hc=batch]", ".hc-cols", "[data-jump]"):
+        assert host.locator(gone).count() == 0 and scope.locator(gone).count() == 0, gone
+    assert scope.locator(".amap-table-scroll").count() == 1 and scope.locator(".amap-add").count() == 1
+    assert scope.locator(".amap-add").first.is_visible()
     no_horizontal_page_overflow_or_main_pan(page)
 
 
@@ -211,12 +175,11 @@ def assert_action_clearance(page, scope):
 @pytest.mark.parametrize("width", [1280, 1024, 768, 390])
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("route", ["home", "manage"])
-def test_full_routes_keep_footer_and_builder_clear_of_table_actions(integrated, width, theme, route):
+def test_full_routes_keep_the_add_form_and_builder_clear_of_table_actions(integrated, width, theme, route):
     page, scope, host = integrated(width, theme, route)
     assert_action_clearance(page, scope)
-    # ACL-2063 removed the country manual-read toolbar. Keep the same clearance
-    # and focus assertions on the actual grouped campaign controls.
-    for container in ([host.locator(".hc-toolbar")] + ([page.locator("#view-home .amap-head")] if route == "home" else [])):
+    if route == "home":
+        container = page.locator("#view-home .amap-head")
         outer = container.bounding_box()
         for control in container.locator("button,input,select").all():
             if not control.is_visible():
@@ -226,18 +189,8 @@ def test_full_routes_keep_footer_and_builder_clear_of_table_actions(integrated, 
             assert outer["x"] - 1 <= rect["x"] and rect["x"] + rect["width"] <= outer["x"] + outer["width"] + 1
     positions = scope.evaluate("""root => {
       const r = s => root.querySelector(s).getBoundingClientRect();
-      return {table:r('.amap-table-scroll').bottom, footer:r('[data-hc-after]').top,
-              footerBottom:r('[data-hc-after]').bottom, form:r('.amap-add').top};
+      return {table:r('.amap-table-scroll').bottom, form:r('.amap-add').top};
     }""")
-    assert positions["table"] <= positions["footer"] <= positions["footerBottom"] <= positions["form"]
-    no_horizontal_page_overflow_or_main_pan(page)
-
-
-@pytest.mark.parametrize("theme", ["light", "dark"])
-def test_open_non_overlay_builder_keeps_its_existing_reserved_width(integrated, theme):
-    page, scope, host = integrated(1280, theme, "home")
-    page.evaluate("cbDrawer.open()")
-    page.wait_for_timeout(250)
-    assert page.locator("body.cbd-open:not(.cbd-overlay)").count() == 1
-    assert_action_clearance(page, scope)
+    assert positions["table"] <= positions["form"]
+    assert scope.locator("[data-hc-after], .hc-foot, .hc-hist").count() == 0
     no_horizontal_page_overflow_or_main_pan(page)

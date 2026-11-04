@@ -229,9 +229,9 @@ RECEIPT_UNKNOWN_S = 900
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
 LABEL_VERTICAL = "acl_vertical"
-#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, вертикальный — 9:16 (допуск 1,5 %).
+#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, Stories / Reels — 9:16 или 1:1 (ACL-2084), допуск 1,5 %.
 MAIN_RATIOS = (1.0, 0.8)
-VERTICAL_RATIO = 9 / 16
+VERTICAL_RATIOS = (9 / 16, 1.0)
 RATIO_TOLERANCE = 0.015
 #: Площадки вертикального файла (Stories и Reels); остальные из ручного списка — основному файлу.
 VERTICAL_FACEBOOK = ("story", "facebook_reels")
@@ -437,7 +437,7 @@ def _near(ratio: float, target: float) -> bool:
 
 
 def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[str]:
-    """Основной файл 1:1 или 4:5 и вертикальный 9:16 — проверка ДО любой загрузки (ACL-1774).
+    """Основной файл 1:1 или 4:5, Stories / Reels 9:16 или 1:1 — проверка ДО любой загрузки (ACL-1774, ACL-2084).
 
     Не прочитали размер — тоже отказ: пару, которую нельзя проверить, Meta обрежет молча.
     """
@@ -451,9 +451,9 @@ def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[s
                    "the main file must be 1:1 or 4:5")
     if not v or not v[1]:
         out.append(f"Ad {index}: the size of the Stories / Reels file cannot be read; {hint}")
-    elif not _near(v[0] / v[1], VERTICAL_RATIO):
+    elif not any(_near(v[0] / v[1], r) for r in VERTICAL_RATIOS):
         out.append(f"Ad {index}: the Stories / Reels file is {v[0]}x{v[1]}; it must be 9:16 "
-                   "(for example 1080x1920)")
+                   "(for example 1080x1920) or 1:1 (for example 1080x1080)")
     return out
 
 
@@ -2769,6 +2769,15 @@ class CampaignCreator:
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB")
+                    if len(vdata) == len(data) and _md5(vdata) == _md5(data):
+                        # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
+                        # хэшем под двумя метками («All ad asset values must be unique», живой прогон
+                        # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
+                        # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        ad.vertical_path = ad.vertical_kind = ""
+                        out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
+                                            "it will be used once as the main file.")
+                        continue
                     bad = pair_problems(ad.index, ad.kind, data, vdata)
                     if bad:
                         raise PlanError("; ".join(bad))

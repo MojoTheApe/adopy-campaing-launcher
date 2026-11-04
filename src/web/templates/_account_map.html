@@ -26,6 +26,15 @@
 
     {% if amap.saved_source_check and amap.saved_source_check.rows %}{% include "_saved_source_comparison.html" %}{% endif %}
 
+    {#- Общий поиск аккаунтов над списком стран: по имени аккаунта и имени из книги (в нём профиль). Фильтрует строки во всех
+        странах, скрывает страны без совпадений, раскрывает совпавшие, не меняя запомненное раскрытие (`amapSearch*` в report.html). -#}
+    <div class="amap-search-row" role="search">
+      <label class="amap-search"><svg class="amap-search-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
+        <input type="search" id="amap-search-all" placeholder="Find account or profile" aria-label="Find account" autocomplete="off" spellcheck="false"></label>
+      <span class="amap-search-count" id="amap-search-count" aria-live="polite"></span>
+    </div>
+    <div class="amap-empty" id="amap-search-empty" hidden></div>
+
     {#- ACL-356, вторая итерация (решение владельца 10.09): одна таблица
         вместо двух. Countries overview слился сюда — каждая строка несёт
         книжные тоталы страны (те же my_totals, что показывал overview),

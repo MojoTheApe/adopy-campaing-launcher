@@ -1,10 +1,9 @@
-# ACL repository adoption (Adopy Campaign Manager)
+# Adopy Campaign Manager
 
-ACL uses the Master Repo layout and main/stage process. Read the verified
-[cutover and activation gate](docs/repository/ADOPTION.md): main is the integration
-branch, stage is permanent, and master is retained only for old source installations.
-Normal admissions wait for ACL-1248's verified promotion and Tracker handoff.
-Start with [AGENTS.md](AGENTS.md) and the [current system](docs/system/PROJECT.md).
+For development, start with the [current ACL workflow](docs/repository/WORKFLOW.md)
+and the [project reading map](AGENTS.md). For the application, see the
+[system overview](docs/system/PROJECT.md) and the
+[current stable Windows release](https://github.com/MojoTheApe/acl-releases/releases/latest).
 
 # fb_agents
 
@@ -312,4 +311,4 @@ python run_content_machine.py plan -w config/content_plan_week.example.json
 
 ## Task tracker
 
-[English task UI](https://tracker.team7.cloud) · [Workflow and commands](docs/TASK-BOARD.md) · [Portable tracker package](tracker/README.md). Agents must set In progress before implementation; priorities are High / Medium / Low.
+[ACL board](https://tracker.team7.cloud/projects/acl/) · [Current workflow](docs/repository/WORKFLOW.md) · [Owner guide](docs/repository/OWNER_GUIDE.md).

@@ -1,5 +1,42 @@
 # Repository process history
 
+## 2026-11-04 — ACL-2405 Master Repo 1.9.0 guidance
+
+Point current ACL instructions to the published Master Repo 1.9.0 standard,
+document map and workflow-evolution guide. Preserve the dated adoption records
+and the Master 1.8.0 ancestry required by standalone Tracker 3.24.1. ACL retains
+its selected workflow, checks, package delivery and manual-merge recovery.
+This documentation update uses reviewed instruction completion.
+
+## 2026-11-04 — ACL-2389 current selection and durable handoffs
+
+Align current entry points with the actual Tracker3.24.1 pin and clearly retain
+the original ACL-2156/earlier adoption accounts as history. Keep WORKFLOW.md the
+current route, clarify affected local tests versus full hosted CI, and record
+tested remote source, still-local changes and exceptional outcomes in the original
+task. New requirements after acceptance use a linked follow-up; typo/history
+clarifications do not create engineering work. Pins, configuration, generated
+contracts, source/review/delivery controls and product behavior are unchanged.
+This instruction-only task requests no ACL package publication or repeated
+package verification.
+
+## 2026-11-04 — ACL-2387 seven-day preview retention
+
+New `ACL-Windows-spike-*` intermediate Windows preview bundles request seven-day
+retention instead of fourteen. Separate update/recovery evidence, delivery
+receipts, published stable releases and earlier recovery installers retain their
+existing policies. No build command, verification gate, release asset or existing
+artifact is changed or deleted.
+
+## 2026-11-04 — ACL-2376 current workflow and historical guides
+
+The repository workflow is the current entry point for branch, task, review and
+release guidance. README and the runtime delivery guide point to it and the
+official stable release channel. The former branch, board and release pages
+retain their historical text. This change updates documentation links and
+records existing practice without changing Tracker configuration or delivery
+behavior.
+
 ## 2026-10-22 — ACL-2079 isolated manual verification support candidate
 
 Select independently reviewed published Master1.8.0 / Tracker3.10.0 and their

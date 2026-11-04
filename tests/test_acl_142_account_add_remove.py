@@ -202,11 +202,12 @@ def test_remove_from_acl_works_when_this_machine_has_no_map_file(tmp_path, monke
     assert out["ok"] and len(out["unlinked"]) == 1
 
 
-def test_nothing_to_remove_is_still_a_404(machine):
+def test_removing_a_name_with_nothing_stored_still_succeeds(machine):
+    # The row may come from the shared sheet only: Remove then just hides it.
     out = _remove({"account_name": "Nobody", "also_unlink": True})
-    assert out["ok"] is False and "not in the map" in out["error"]
+    assert out["ok"] is True and out["removed"] == [] and out["missing"] == ["Nobody"]
     out = _remove({"account_name": "Nobody"})
-    assert out["ok"] is False
+    assert out["ok"] is True
 
 
 def test_a_retry_after_a_failed_placement_write_finishes_the_removal(machine, monkeypatch):
