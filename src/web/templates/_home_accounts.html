@@ -34,6 +34,7 @@
       <span class="aov-sp"></span>
       {% if not rows and not mc.virtual %}<button type="button" class="aov-btn" data-aov-go="{{ slug | e }}">+ Add account</button>{% endif %}
       <button type="button" class="aov-btn q" data-aov-go="{{ slug | e }}">{% if mc.virtual %}Connect in Manage →{% else %}Manage →{% endif %}</button>
+      {% if not mc.virtual %}<button type="button" class="aov-btn danger" data-aov-close onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})" title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>{% endif %}
     </div>
     {% if mc.virtual %}
     <div class="aov-warn">{% if mc.from_reading %}{{ mc.country }} is not on the map — the accounts themselves attributed spend here for these dates.{% else %}{{ mc.country }} has source money for this period but no accounts placed here — the spend is not covered by the map.{% endif %}
@@ -106,6 +107,7 @@
       <small class="num">{{ tv[0] }} · {{ tv[1] }} leads · {{ tv[2] }} FTD</small>
       {% elif mc.virtual %}<small>not covered by the map</small>{% else %}<small>no accounts yet</small>{% endif %}
       <button type="button" class="aov-btn q sm" data-aov-go="{{ slug | e }}">Manage →</button>
+      {% if not mc.virtual %}<button type="button" class="aov-btn danger sm" data-aov-close onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})" title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>{% endif %}
     </div>
     <div class="aov-tiles">
       {% for r in rows %}

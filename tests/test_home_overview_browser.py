@@ -265,3 +265,15 @@ def test_ftd_and_cpa_reach_row_total_and_compact(open_page):
     assert pg.get_attribute('.aov-tile[data-name="Facebook_DQ-214"]', "data-cpa") == "$117"
     pg.click('.aov-tile[data-name="Facebook_DQ-214"]')
     assert "CPA" in pg.inner_text("#aov-pop") and "$117" in pg.inner_text("#aov-pop")
+
+
+def test_close_country_button_in_both_views(open_page):
+    """ACL-2384: «Close» (retire country) вернулась в шапку страны и в Compact; зовёт тот же amapClose, пустой виртуальной страны нет."""
+    pg = open_page()
+    pg.evaluate("window.__closed = []; window.amapClose = function (k, v, l) { window.__closed.push([k, v, l]); }; 0")
+    assert pg.locator('#aov-expanded [data-aov-country="Chile"] [data-aov-close]').get_attribute("title").startswith("Retire this country.")
+    pg.click('#aov-expanded [data-aov-country="Costa Rica"] [data-aov-close]')
+    assert pg.evaluate("window.__closed") == [["country", "Costa Rica", "Costa Rica"]]
+    pg.click("[data-aov-view=compact]")
+    pg.click('#aov-compact [data-aov-country="Brazil"] [data-aov-close]')
+    assert pg.evaluate("window.__closed")[-1] == ["country", "Brazil", "Brazil"]
