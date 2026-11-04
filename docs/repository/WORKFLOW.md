@@ -18,10 +18,29 @@
 - **Record exceptions in the original task.** For a local build transfer, link
   both source revisions and record the selected result, checks and rollback.
   For an integration or release failure, keep the first error, the affected
-  version, the run link and the actual resolution. For a manual merge, link the
-  merged PR and any existing release, and record the missing Tracker step.
-  [ACL-2351](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1351)
-  tracks recovery for a batch merged outside Tracker.
+  version, the run link and the actual resolution. If GitHub merged the PR
+  outside Tracker, follow the [manual-merge recovery checklist](#recover-a-manual-github-merge).
+
+### Recover a manual GitHub merge
+
+1. In the original task, link the merged PR and batch ID. Record why it was
+   merged manually and link any existing release and verification evidence.
+   Preserve the original review and ownership history.
+2. If the original batch still holds the exact reviewed candidate, use its
+   existing handoff to record the merge. For a cancelled direct-`main` batch, use the pinned
+   `scripts/acl_task_tracker.py batch adopt-merged` preview with the PR and batch
+   ID. Verify the exact merged contents and use the existing checks. Record
+   independent review of that merge, then pass `--apply` with the preview's
+   `--expected-recovery` and the review `--evidence-file`. See the
+   [recovery procedure](BATCH_INTEGRATION.md#recover-a-cancelled-batch-already-merged-in-github).
+3. Record any applicable acceptance, run `merged` for the actual PR, and finish
+   with `batch close-sources`. If a published release contains that exact
+   change and its verification covers the accepted result, use
+   `record-delivery` with that evidence. Reuse the published package and its
+   verification. If the evidence is missing, leave delivery pending and record
+   what is needed.
+4. Read the task back from Tracker. Confirm **Done** and verified delivery for
+   product work, and check that the recovered batch released its integration slot.
 
 Use the [owner guide](OWNER_GUIDE.md) for reading the board and the
 [process history](CHANGELOG.md) for past changes. The
