@@ -1948,7 +1948,7 @@
     .aov-btn.q { border-color: transparent; background: transparent; color: var(--adopy-link); }
     .aov-btn:focus-visible, .aov-fb:focus-visible, .aov-tile:focus-visible, .aov-more:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: var(--adopy-focus-offset); }
     .aov-scroll { overflow-x: auto; }
-    .aov-table { width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: var(--adopy-text-table); }
+    .aov-table { width: 100%; min-width: 1180px; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: var(--adopy-text-table); }
     .aov-table th, .aov-table td { padding: 7px 12px; border-bottom: 1px solid var(--adopy-border); text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .aov-table th { font-size: var(--adopy-text-sm); font-weight: 600; color: var(--adopy-text-muted); background: var(--adopy-surface); }
     .aov-table th.num, .aov-table td.num { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
@@ -2003,9 +2003,20 @@
     .aov-pop { position: fixed; z-index: var(--adopy-z-popover); width: 300px; max-width: calc(100vw - 16px); padding: 12px 14px; border: 1px solid var(--adopy-border-strong);
       border-radius: var(--adopy-radius-md); background: var(--adopy-surface-raised); color: var(--adopy-text); box-shadow: var(--adopy-shadow-popover); font-size: var(--adopy-text-table); }
     .aov-pop h4 { margin: 6px 0 2px; font-size: var(--adopy-text-body); word-break: break-all; } .aov-pop .sub { color: var(--adopy-text-muted); font-size: var(--adopy-text-sm); }
-    .aov-pop dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; margin: 10px 0; } .aov-pop dt { font-size: var(--adopy-text-xs); color: var(--adopy-text-muted); }
+    .aov-pop dl { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px 8px; margin: 10px 0; } .aov-pop dt { font-size: var(--adopy-text-xs); color: var(--adopy-text-muted); }
     .aov-pop dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; } .aov-pop .why { margin: 6px 0 10px; }
     @media (max-width: 1099px) { .aov-table col.c7 { width: 170px; } }
+    /* Колонки CPA / Campaigns / Note и дерево кампаний в таблице страны (ACL-2384). Дерево берёт те же классы, что в Manage. */
+    .aov-table col.c9 { width: 120px; } .aov-table col.c10 { width: 170px; }
+    .aov-table td.amap-list { color: var(--adopy-text-muted); } .aov-table td.amap-list .nodata, .aov-table td.amap-list .hc-snap { font-size: var(--adopy-text-sm); }
+    .aov-table td.aov-note { padding-top: 3px; padding-bottom: 3px; }
+    .aov-table td.aov-note .amap-note-box { height: 1.6rem; line-height: calc(1.6rem - 2px); }
+    .aov-table td.acc .amap-caret, .aov-table td.acc .amap-caret-off { margin-right: 4px; }
+    .aov-row.hc-acct-row { cursor: pointer; }
+    .aov-row[hidden] + .hc-acct-child { display: none; }
+    .aov-table tr.hc-acct-child > td { padding: 0; white-space: normal; background: var(--adopy-surface); }
+    /* На Home аккаунты не опрашиваются: кнопки чтения и открытия профиля дерева живут только в Manage. */
+    .aov .hc-rc, .aov .hc-ro, .aov .amap-pstate { display: none !important; }
     @media (max-width: 699px) {
       .aov { padding: 0 var(--adopy-space-3) var(--adopy-space-3); }
       .aov-view { width: 100%; height: var(--adopy-touch-target); } .aov-vbtn { flex: 1; justify-content: center; }
@@ -11246,7 +11257,15 @@ document.addEventListener('acl:viewchange', function () { setTimeout(function ()
         'Showing ' + rowsShown + ' ' + NAMES[st.filter] + ' account' + (rowsShown === 1 ? '' : 's') +
         ' in ' + countriesShown + ' countr' + (countriesShown === 1 ? 'y' : 'ies');
     }
+    mountTrees();
     return { rows: rowsShown, countries: countriesShown };
+  }
+
+  /* Дерево кампаний создаётся для видимых блоков (хосты в скрытом виде не монтируются), только сохранённое. */
+  function mountTrees() {
+    if (typeof window.amapCampaignMountVisible === 'function' && window.AMAP_CAMPAIGN_TABLE) {
+      try { window.amapCampaignMountVisible(); } catch (e) {}
+    }
   }
 
   function setView(v, persist) {
@@ -11278,7 +11297,7 @@ document.addEventListener('acl:viewchange', function () { setTimeout(function ()
     p.appendChild(el('h4', '', d.name));
     p.appendChild(el('div', 'sub', (d.alias ? 'Workbook: ' + d.alias + ' · ' : '') + d.country));
     var dl = el('dl');
-    [['Spend', d.spend], ['Leads', d.leads], ['CPL', d.cpl], ['FTDs', d.ftd]].forEach(function (kv) {
+    [['Spend', d.spend], ['Leads', d.leads], ['CPL', d.cpl], ['FTDs', d.ftd], ['CPA', d.cpa]].forEach(function (kv) {
       var box = el('div'); box.appendChild(el('dt', '', kv[0])); box.appendChild(el('dd', '', kv[1])); dl.appendChild(box);
     });
     p.appendChild(dl);
@@ -12999,11 +13018,11 @@ function amapCampaignMount(host) {
   host.dataset.periodTo = per.to || '';
   host.dataset.periodSpan = per.span || '';
   var seen = {}, accounts = [];
-  scope.querySelectorAll('table.amap-grid td.amap-list[data-account]').forEach(function (c) {
+  scope.querySelectorAll('table.amap-grid td.amap-list[data-account], table.aov-table td.amap-list[data-account]').forEach(function (c) {
     var a = c.dataset.account;
     if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
   });
-  var grid = scope.querySelector('table.amap-grid');
+  var grid = scope.querySelector('table.amap-grid, table.aov-table');
   host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
                                    rows: grid ? amapCampaignTree(grid, accounts) : {}});
   host._hc.ready = host._hc.init();

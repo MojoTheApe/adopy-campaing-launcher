@@ -145,7 +145,8 @@ def test_tile_content_by_state(open_page):
         return pg.inner_text(f'.aov-tile[data-name="{name}"]').split("\n")
 
     assert tile("Facebook_DQ-214")[1].startswith("$117 · 12 leads")
-    assert tile("Facebook_DQ-214")[2].startswith("CPL ")
+    assert tile("Facebook_DQ-214")[2] == "1 FTD · CPA $117"          # есть FTD — вместо CPL строка про CPA
+    assert tile("Facebook_DQ-213")[2].startswith("CPL ")              # FTD нет — остаётся CPL
     br = tile("Facebook_BR1")
     assert br[1] == "not in BM" and br[2].startswith("read ") and br[2].endswith("· 5d")
     dead = tile("Facebook_DQ-212")
@@ -220,3 +221,47 @@ def test_total_bar_sums_country_book_totals(open_page):
     text = " ".join(pg.inner_text("#amap-totals").split())
     assert "Spend $0" not in text and "Spend $2" in text, text
     assert "Accounts 28" in text
+
+
+def test_expanded_table_has_cpa_notes_and_campaign_cells(open_page, amap):
+    """ACL-2384: вернулись CPA, заметка аккаунта и ячейка списка кампаний — те же, что в Manage."""
+    amap["notes"] = {"Facebook_DQ-214": "call back on Monday"}
+    pg = open_page()
+    heads = pg.eval_on_selector_all('[data-aov-country="Colombia"] thead th', "els => els.map(e => e.textContent)")
+    assert heads == ["State", "Account", "Spend", "Leads", "CPL", "FTDs", "CPA", "Campaigns", "What happened", "Note", "Read"]
+    cells = pg.eval_on_selector_all('[data-aov-country="Colombia"] tr.aov-row:first-child td', "els => els.map(e => e.textContent.trim())")
+    assert cells[1].endswith("Facebook_DQ-214") and cells[2] == "$117" and cells[5] == "1" and cells[6] == "$117"
+    assert pg.inner_text('[data-note-kind=account][data-account="Facebook_DQ-214"]') == "call back on Monday"
+    assert pg.get_attribute('[data-note-kind=account][data-account="Facebook_DQ-214"]', "data-note") == "call back on Monday"
+    # итог страны несёт CPA тем же правилом (spend / FTD)
+    tot = pg.eval_on_selector('[data-aov-country="Colombia"] tr.tot', "e => e.textContent.replace(/\s+/g, ' ')")
+    assert "$117" in tot
+    assert not pg.errors
+
+
+def test_campaign_tree_is_mounted_per_country_from_saved_data(open_page):
+    """Дерево кампаний создаётся на видимых блоках и получает аккаунты страны; чтение с Home не запускается."""
+    pg = open_page()
+    mounts = pg.evaluate("window.__hc")
+    by = {m["country"]: m for m in mounts}
+    assert "Chile" in by and "Colombia" in by
+    assert "Facebook_DQ-214" in by["Colombia"]["accounts"] and "Facebook_DQ-214" in by["Colombia"]["rows"]
+    assert pg.locator('[data-aov-country="Colombia"] tr.aov-row').first.get_attribute("aria-expanded") == "false"
+    assert pg.locator('[data-aov-country="Colombia"] .amap-caret').count() == 2
+    # кнопки чтения дерева на Home спрятаны: открытие карты не касается аккаунтов
+    assert pg.evaluate("[...document.querySelectorAll('#aov .hc-rc, #aov .hc-ro')].every(b => getComputedStyle(b).display === 'none')")
+    # свёрнутый вид без монтирования: после переключения на Compact хосты других блоков не трогаются повторно
+    n = len(mounts)
+    pg.click("[data-aov-view=compact]")
+    pg.click("[data-aov-view=expanded]")
+    assert len(pg.evaluate("window.__hc")) == n
+
+
+def test_ftd_and_cpa_reach_row_total_and_compact(open_page):
+    """Строка с FTD показывает FTD и CPA в таблице, итоге страны и плитке (Chile B95: спенд делится на FTD)."""
+    pg = open_page()
+    assert pg.eval_on_selector('[data-aov-country="Colombia"] tr.tot', "e => [e.cells[4].textContent.trim(), e.cells[5].textContent.trim()]") == ["1", "$117"]
+    pg.click("[data-aov-view=compact]")
+    assert pg.get_attribute('.aov-tile[data-name="Facebook_DQ-214"]', "data-cpa") == "$117"
+    pg.click('.aov-tile[data-name="Facebook_DQ-214"]')
+    assert "CPA" in pg.inner_text("#aov-pop") and "$117" in pg.inner_text("#aov-pop")

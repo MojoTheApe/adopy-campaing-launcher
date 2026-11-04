@@ -16,6 +16,8 @@ TOKENS = (ROOT / "src" / "web" / "templates" / "adopy-tokens.css").read_text(enc
 _CSS = REPORT[REPORT.index("<style>") + 7: REPORT.index("</style>")]
 #: Jinja-вставки внутри CSS стенду не нужны — отрезаем строки с «{%»/«{{».
 _CSS = "\n".join(line for line in _CSS.splitlines() if "{%" not in line and "{{" not in line)
+#: Монтирование дерева кампаний (без самого компонента `hcMount`: его подменяет заглушка стенда).
+_TREE_JS = REPORT[REPORT.index("function amapCampaignTree("): REPORT.index("/* «Read campaigns in")]
 _JS = REPORT[REPORT.index("var AMAP_OPEN_KEY = 'acl.amap.open';"): REPORT.index("/* Раскрытие билдера переживает")]
 
 
@@ -61,7 +63,13 @@ def page_html(amap, theme: str = "light") -> str:
             "<div class='sidebar-link' data-view='country-chile-manage' style='display:none'></div>"
             "<script>window.__manage = []; document.querySelectorAll('.sidebar-link').forEach(function(b){"
             "b.addEventListener('click', function(){ window.__manage.push(b.dataset.view); }); });</script>"
-            f"<script>{_JS}</script></body></html>")
+            # заглушка hcMount запоминает, какие аккаунты и строки получило дерево; сети нет — читать нечего
+            "<template id='hc-scoped-tpl'><div class='hc-stub'></div></template>"
+            "<script>window.AMAP_CAMPAIGN_TABLE = true; window.__hc = [];"
+            "window.hcMount = function (host, opts) { window.__hc.push({country: host.dataset.country,"
+            " accounts: opts.seed[0].accounts, rows: Object.keys(opts.rows)});"
+            " return {init: function () { return Promise.resolve(); }, syncTop: function () {}}; };</script>"
+            f"<script>{_TREE_JS}</script><script>{_JS}</script></body></html>")
 
 
 #: Набор из мокапа: пять стран, все пять состояний, Chile с 22 аккаунтами (складывание на 15).
