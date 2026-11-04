@@ -65,17 +65,17 @@ def test_the_ad_set_has_a_real_conversion_location_choice_not_a_stub():
     assert "future('forms'" not in slot, "заглушка ACL-1775 осталась"
     assert "'<select name=\"' + pfx + 'destination\"" in slot
     assert '<option value="website" selected>Website</option>' in slot
-    assert '<option value="instant_form">Instant Form</option>' in slot
+    assert '<option value="instant_form">Instant forms</option>' in slot
     # Умолчание - сайт: старая карточка и старые черновики ничего не меняют.
     assert slot.index('value="website" selected') < slot.index('value="instant_form"')
     assert "data-forms-api-only hidden" in slot, "причина для RPA не нарисована"
-    assert "Instant Form works only with the API backend." in slot
+    assert "Instant forms work only with the API backend." in slot
 
 
 def test_the_form_picker_exists_in_every_ad_and_starts_hidden_and_not_submitted():
     row = _ad_row_code()
     assert row.count("cb-form-only") == 2
-    assert "'<span class=\"cb-label cb-form-only\" hidden>Instant Form</span>'" in row
+    assert "'<span class=\"cb-label cb-form-only\" hidden>Instant form</span>'" in row
     assert "'<div class=\"cb-form-wrap cb-form-only\" hidden>'" in row
     # Скрытое поле: имя по номеру объявления (переименовывается вместе с рядом), выключено до выбора формы.
     assert "'<input type=\"hidden\" name=\"' + pfx + 'form_id\" value=\"\" disabled>'" in row
@@ -134,7 +134,7 @@ def test_the_page_and_the_server_agree_on_destinations_and_form_statuses():
     from src.fb_api import forms as fm
 
     page = _page()
-    assert f"{cr.DEST_WEBSITE}: 'Website'" in page and f"{cr.DEST_FORM}: 'Instant Form'" in page
+    assert f"{cr.DEST_WEBSITE}: 'Website'" in page and f"{cr.DEST_FORM}: 'Instant forms'" in page
     m = re.search(r"var USABLE_FORM_STATUS = '([^']*)'", page)
     assert m.group(1) == fm.USABLE_STATUS == "ACTIVE"
     # имя поля, которое разбирает сервер

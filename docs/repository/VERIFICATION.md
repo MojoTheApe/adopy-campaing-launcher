@@ -10,8 +10,8 @@ Split mixed changes and use only the pinned supported completion proof.
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
-Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/docs/verification.md)
-at this project's exact standard pin. `delivery.json` defines actual product
+Follow the [shared verification guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/verification.md)
+in Master Repo 1.9.0. `delivery.json` defines actual product
 commands/required CI names; retain matching Tracker settings, runtime checks and
 local exceptions. These compatible local wording clarifications require no new
 standard release, pin/helper upgrade or policy selection. Separate fast source
@@ -23,7 +23,9 @@ platforms and distinct truthful result names. Fast feedback is intermediate;
 ready handoff and admission need all applicable full coverage. Group related
 corrections into a meaningful ready submission on the owned task branch; retain
 useful intermediate feedback and normal review fixes. Explain manual expensive
-launches or unexpected repeats through existing task/PR/run links. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/docs/verification-submission.md).
+launches or unexpected repeats through existing task/PR/run links. Apply the
+[shared submission guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/verification-submission.md)
+through ACL's [selected Tracker guide](TRACKER.md).
 
 Preserve the adopted collector's existing bounded reuse rules. Expand context
 proof only through reviewed compatible support/adoption; the common policy alone
@@ -44,12 +46,21 @@ adopted collector; otherwise use supported bounded complete coverage or stop.
 Preserve stricter adopted limits and inspect an uncertain dispatch before another
 request. Shared retry/evidence export does not opt ACL in.
 
-For an authorized standard upgrade, use the
-[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/docs/workflow-upgrades.md).
-Only the exact compatible Tracker guide supplies commands. A newer standard/skill
-cannot activate an unimplemented maintenance or evidence collector.
+For a separately authorized provider upgrade, use the
+[ACL standalone provider procedure](STANDALONE_PROVIDER_ACL.md) and the
+[shared coordination guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/workflow-upgrades.md).
+Use the selected Tracker guide for supported commands and capabilities.
 
 ## ACL checks and preserved boundaries
+
+Intermediate `ACL-Windows-spike-*` preview archives, installers and their bundled
+test logs are retained for seven days. Download a particular preview within that
+window if it is needed for manual investigation. The separate
+`ACL-update-recovery-*` evidence keeps its fourteen-day retention; published
+delivery receipts and acceptance logs keep their existing thirty-day retention.
+Stable installers, checksums and signed manifests remain in `acl-releases`,
+including earlier versions needed for recovery. This artifact-specific setting
+does not delete existing uploads or shorten repository-wide check/run history.
 
 Follow [WORKFLOW.md](WORKFLOW.md) for affected local regressions, scanner and smoke;
 the owner requires the full product suite on hosted CI. Keep the exact required

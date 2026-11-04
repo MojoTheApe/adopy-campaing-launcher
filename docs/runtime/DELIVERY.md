@@ -2,11 +2,15 @@
 
 Profile: package. Target identities are the isolated Windows stage installation and
 the stable ACL installer/update channel. Neither Git storage nor a source merge
-changes employee installations. Read ../repository/ADOPTION.md during the transition.
+changes employee installations. See the [current ACL workflow](../repository/WORKFLOW.md#current-workflow)
+for the active integration route.
 
 ## Existing maintained mechanism
 
-Use ../../packaging/windows/README.md, ../SETUP-NEW-PC.md and ../RELEASES.md.
+Use the [Windows packaging guide](../../packaging/windows/README.md) and the
+[installation instructions](../SETUP-NEW-PC.md). The
+[stable release channel](https://github.com/MojoTheApe/acl-releases/releases/latest)
+is the current distribution record.
 Packaged ACL.exe uses src/web/release_updates.py and packaging/windows/updater.py:
 validate manifest/version/size/hash, serialize an update, avoid active campaign
 jobs, run the installer, verify the new process/version, and recover the previous
@@ -19,7 +23,7 @@ bridge described in the cutover runbook.
 
 After the admitted configured route (temporary direct main; Stage when re-enabled),
 obtain successful full CI on the exact main
-release commit. Record scope and limitations in the release ledger. Create the
+release commit. Record scope and limitations in the release notes. Create the
 existing annotated acl-release-* tag with its genuine SHA/success/run URL under the
 project's release authorization. scripts/acl_publish_release.py verifies tag, HEAD,
 current main and the successful exact-main CI through GitHub. If that main run reused
