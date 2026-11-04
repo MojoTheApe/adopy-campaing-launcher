@@ -162,8 +162,8 @@ def test_switch_flow_end_to_end_row_comes_from_the_readback(open_page, world):
     assert world.meta.posts == []
     page.click('dialog.acm-confirm [data-acm="confirm"]')
     page.wait_for_selector(f'.hc-switch[data-object-id="{CAMP_A}"][aria-checked="true"]', timeout=15000)
-    assert "Confirmed" in page.inner_text(f'tr[data-msg="row:campaign:{CAMP_A}"]')           # итог — строкой под строкой, не в ячейке Status
-    assert "Confirmed" not in page.inner_text(f'tr[data-key="campaign:{CAMP_A}"] td.p2')
+    page.wait_for_selector(f'tr[data-key="campaign:{CAMP_A}"] .hc-mk.ok[title="Confirmed by Meta"]')   # итог — ✓ у переключателя, отдельной строки нет
+    assert page.locator(f'tr[data-msg="row:campaign:{CAMP_A}"]').count() == 0
     assert world.meta.posts == [(f"/{CAMP_A}", {"status": "ACTIVE"})]
     assert world.meta.objs[CAMP_A]["status"] == "ACTIVE"
     shot(page, "02-switch-confirmed")
@@ -288,35 +288,15 @@ def test_bid_editor_is_refused_on_automatic_bidding(open_page, world):
     page.wait_for_selector("dialog.acm-confirm[open]")
     assert "Bid cap: 1.50 USD → 1.58 USD" in page.inner_text("dialog.acm-confirm")
     page.click('dialog.acm-confirm [data-acm="confirm"]')
-    page.wait_for_selector("text=Confirmed", timeout=15000)
+    page.wait_for_selector('.hc-mk.ok[title="Confirmed by Meta"]', timeout=15000)
     assert world.meta.posts == [(f"/{SET_BID}", {"bid_amount": "158"})]
-
-
-def test_batch_lists_every_object_with_skipped_and_is_capped(open_page, world):
-    page, site = open_page(extra=8)
-    page.check(f'input[data-sel="campaign:{CAMP_A}"]')
-    page.check(f'input[data-sel="campaign:{CAMP_CBO}"]')
-    assert not page.locator('[data-batch="on"]').is_disabled()
-    page.click('[data-batch="on"]')
-    page.wait_for_selector("dialog.acm-confirm[open]")
-    text = page.inner_text("dialog.acm-confirm")
-    assert "Switch on 1 object" in text and "Skipped" in text and "Already On" in text   # CBO уже включена
-    shot(page, "09-batch-preview-with-skipped")
-    page.click('dialog.acm-confirm [data-acm="cancel"]')
-    # потолок вызовов: 8 строк > 7
-    for i in range(8):
-        page.check(f'input[data-sel="campaign:{1000100 + i}"]')
-    b = page.locator('[data-batch="on"]')
-    assert b.is_disabled() and "At most 7 objects per command" in b.get_attribute("title")
-    shot(page, "10-batch-capped")
-    assert world.meta.posts == []
 
 
 def test_commands_are_disabled_with_a_reason_when_not_on_loopback(open_page, world):
     page, site = open_page(bind="0.0.0.0")
     s = sw(page, CAMP_A)
     assert s.is_disabled() and "127.0.0.1" in s.get_attribute("title") and "Commands unavailable" in s.get_attribute("title")
-    assert page.locator("[data-batch]").first.is_disabled()
+    assert page.locator("[data-batch], .hc-toolbar").count() == 0                         # пакетной панели нет
     shot(page, "11-disabled-not-loopback")
     s.click(force=True)
     page.wait_for_timeout(200)
@@ -325,7 +305,6 @@ def test_commands_are_disabled_with_a_reason_when_not_on_loopback(open_page, wor
 
 def test_duplicate_and_copy_stay_disabled(open_page, world):
     page, site = open_page()
-    page.select_option("[data-hc=preset]", "all")
     info = page.evaluate("""() => [...document.querySelectorAll('.hc-cmd[data-action=duplicate], .hc-cmd[data-action=copy], .hc-cmd[data-action=more]')]
         .map(b => ({a: b.dataset.action, d: b.disabled, t: b.title}))""")
     assert info and all(i["d"] for i in info)
@@ -348,7 +327,8 @@ def test_country_table_screenshots_light_and_dark(open_page, monkeypatch, world)
     page.reload()
     open_acc(page, "Acc")
     page.wait_for_selector(".hc-table tbody tr")
-    page.click("[data-hc=expand-all]")
+    page.click(f'[data-exp="campaign:{CAMP_A}"]')
+    page.click(f'[data-exp="adset:{SET_BID}"]')
     page.wait_for_selector(f'tr[data-key="ad:{AD_1}"]', timeout=15000)
     block = page.locator(".amap")
     for theme in ("light", "dark"):
@@ -356,10 +336,10 @@ def test_country_table_screenshots_light_and_dark(open_page, monkeypatch, world)
         page.evaluate("document.querySelector('.hc-scroll').scrollLeft = 0")
         page.wait_for_timeout(150)
         block.screenshot(path=str(Path(SHOTS) / f"account-tree-controls-{theme}.png"))
-        page.click("[data-jump=bi]")
+        page.evaluate("const s = document.querySelector('.hc-scroll'); s.scrollLeft = s.scrollWidth / 2")
         page.wait_for_timeout(150)
         block.screenshot(path=str(Path(SHOTS) / f"account-tree-bi-{theme}.png"))
-        page.click("[data-jump=meta]")
+        page.evaluate("const s = document.querySelector('.hc-scroll'); s.scrollLeft = s.scrollWidth")
         page.wait_for_timeout(150)
         block.screenshot(path=str(Path(SHOTS) / f"account-tree-meta-{theme}.png"))
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")

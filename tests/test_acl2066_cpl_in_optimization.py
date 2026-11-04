@@ -1,4 +1,4 @@
-"""ACL-2066: CPL виден в пресете Optimization (по умолчанию) и в уже сохранённых раскладках."""
+"""ACL-2066: CPL виден в пресете Optimization (единственный набор колонок)."""
 import re
 from pathlib import Path
 
@@ -13,6 +13,6 @@ def test_optimization_preset_shows_cpl_before_cpa():
     assert cols.index("b_cpl") == cols.index("b_cpa") - 1
 
 
-def test_saved_layout_gets_cpl_once():
-    assert "!saved.cpl_seen && colState.visible.indexOf('b_cpl') < 0" in SRC
-    assert "cpl_seen: true" in SRC
+def test_saved_column_layout_is_not_read_any_more():
+    """Выбор колонок убран (04.11): сохранённая раскладка не читается, CPL приходит из пресета Optimization."""
+    assert "cpl_seen" not in SRC and "localStorage.getItem(STORE_KEY" not in SRC

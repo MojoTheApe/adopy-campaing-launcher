@@ -1754,19 +1754,6 @@
     .amap-country > summary::-webkit-details-marker { display: none; }
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: var(--adopy-text-sm); }
     .amap-country[open] > summary::before { content: '▾'; }
-    /* ACL-1840: the campaign footer mounts beside the account table. Keep
-       its reading line aligned with the workbook notice and connection form. */
-    .amap-country > .hc.hc-after {
-      margin-top: 0;
-      padding: 0.5rem 0.85rem;
-      box-sizing: border-box;
-    }
-    .amap-country > .hc-after .hc-foot { overflow-wrap: anywhere; }
-    .amap-country > .hc-after .hc-hist { margin-top: 0.25rem; }
-    .amap-country > .hc-after .hc-hist > summary {
-      max-width: 100%; overflow-wrap: anywhere;
-    }
-    .amap-country > .hc-after .hc-hist-body { overflow-wrap: anywhere; }
     .amap-sum {
       margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: var(--adopy-text-table); color: var(--muted);
@@ -2498,6 +2485,20 @@
     .amap-empty {
       padding: 0.7rem 0.85rem; font-size: var(--adopy-text-table); color: var(--muted);
     }
+    .amap-empty[hidden], .amap-country[hidden] { display: none; }
+    /* Общий поиск аккаунтов на Home: тот же вид, что у «Find country» в боковой колонке. */
+    .amap-search-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--adopy-space-2); padding: 0.5rem 0.85rem; }
+    .amap-search { display: flex; align-items: center; gap: var(--adopy-space-2); flex: 1 1 14rem; max-width: 28rem; height: 36px;
+      padding: 0 var(--adopy-space-2); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-sm);
+      background: var(--adopy-surface); color: var(--adopy-text-muted); }
+    .amap-search:focus-within { border-color: var(--adopy-focus);
+      box-shadow: 0 0 0 var(--adopy-focus-width) color-mix(in srgb, var(--adopy-focus) 25%, transparent); }
+    .amap-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--adopy-text);
+      font: inherit; font-size: var(--adopy-text-table); }
+    .amap-search input::placeholder { color: var(--adopy-text-muted); }
+    .amap-search-ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .amap-search-count { font-size: var(--adopy-text-table); color: var(--muted); }
+    td.amap-acc.amap-found { background: var(--adopy-selected-bg); }
 
     /* ── Goals Progress Panel ── */
     .goals-panel {
@@ -10959,6 +10960,7 @@ function amapWatchOpen() {
     if (d.dataset.openWatch === '1') return;
     d.dataset.openWatch = '1';
     d.addEventListener('toggle', function () {
+      if (d.dataset.searchOpen === '1' || document.documentElement.dataset.amapSearching === '1') return;   // раскрытие поиском не запоминаем
       var now = amapOpenList();
       var at = now.indexOf(key);
       if (d.open && at === -1) now.push(key);
@@ -10973,6 +10975,71 @@ if (document.readyState === 'loading') {
 } else {
   amapWatchOpen();
 }
+
+/* ── Общий поиск аккаунтов над странами (Home). Регистронезависимо, слова через пробел — все должны встретиться (AND). Строка
+   аккаунта скрывается вместе со своей строкой-потомком `tr.hc-acct-child`; страны без совпадений скрыты, совпавшие раскрыты, но
+   запомненное раскрытие (`acl.amap.open`) не меняется: на время поиска `toggle` его не пишет, при очистке всё возвращается. ── */
+var amapSearchTimer = 0;
+function amapSearchTokens() {
+  var box = document.getElementById('amap-search-all');
+  return box ? box.value.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+}
+function amapSearchApply() {
+  var box = document.getElementById('amap-search-all');
+  if (!box) return;
+  var words = amapSearchTokens(), root = document.documentElement, active = words.length > 0;
+  var countries = document.querySelectorAll('details.amap-country[data-country]');
+  var shownRows = 0, shownCountries = 0;
+  if (active) root.dataset.amapSearching = '1';
+  Array.prototype.forEach.call(countries, function (d) {
+    var rows = d.querySelectorAll('table.amap-grid > tbody > tr[data-search]'), hits = 0;
+    Array.prototype.forEach.call(rows, function (tr) {
+      var hay = tr.getAttribute('data-search') || '';
+      var hit = words.every(function (w) { return hay.indexOf(w) !== -1; });
+      var child = tr.nextElementSibling && tr.nextElementSibling.classList.contains('hc-acct-child') ? tr.nextElementSibling : null;
+      tr.hidden = active && !hit;
+      if (child) child.hidden = tr.hidden || !tr.classList.contains('amap-open');
+      var cell = tr.querySelector('td.amap-acc');
+      if (cell) cell.classList.toggle('amap-found', active && hit);
+      if (hit) hits++;
+    });
+    if (!active) {
+      d.hidden = false;
+      if (d.dataset.searchOpen === '1') { d.open = d.dataset.wasOpen === '1'; delete d.dataset.searchOpen; delete d.dataset.wasOpen; }
+      return;
+    }
+    d.hidden = hits === 0;
+    if (hits) {
+      shownCountries++; shownRows += hits;
+      if (d.dataset.searchOpen !== '1') { d.dataset.searchOpen = '1'; d.dataset.wasOpen = d.open ? '1' : '0'; }
+      d.open = true;
+    } else if (d.dataset.searchOpen === '1') {
+      d.open = d.dataset.wasOpen === '1'; delete d.dataset.searchOpen; delete d.dataset.wasOpen;
+    }
+  });
+  var count = document.getElementById('amap-search-count'), empty = document.getElementById('amap-search-empty');
+  if (count) count.textContent = active ? shownRows + ' account' + (shownRows === 1 ? '' : 's') + ' in ' + shownCountries + ' countr' + (shownCountries === 1 ? 'y' : 'ies') : '';
+  if (empty) {
+    empty.hidden = !active || shownRows > 0;
+    if (!empty.hidden) empty.textContent = 'No account matches “' + box.value.trim() + '”.';
+  }
+  if (!active) setTimeout(function () { delete root.dataset.amapSearching; }, 0);
+}
+function amapSearchInit() {
+  var box = document.getElementById('amap-search-all');
+  if (!box || box.dataset.searchBound === '1') return;
+  box.dataset.searchBound = '1';
+  box.addEventListener('input', function () { clearTimeout(amapSearchTimer); amapSearchTimer = setTimeout(amapSearchApply, 80); });
+  box.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && box.value) { box.value = ''; amapSearchApply(); }
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', amapSearchInit);
+} else {
+  amapSearchInit();
+}
+document.addEventListener('acl:viewchange', function () { setTimeout(function () { amapSearchInit(); amapSearchApply(); }, 0); });
 
 /* Раскрытие билдера переживает перезагрузку — тем же способом, что страны на
    карте аккаунтов. Дешборд обновляет себя сам, и схлопывать билдер посреди
@@ -11237,6 +11304,7 @@ function amapRefreshCountryLines(per) {
       var count = map.querySelector('.amap-head > .amap-note');
       if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from ' + AMAP_SOURCE;
       if (typeof amapWatchOpen === 'function') amapWatchOpen();
+      if (typeof amapSearchApply === 'function') amapSearchApply();
     });
 }
 
@@ -12630,15 +12698,13 @@ function amapCampaignMount(host) {
   if (host._hc) return host._hc;
   amapCampaignTabs(host);
   var mount = host.querySelector('[data-hc-mount]');
-  var tpl = document.getElementById('hc-scoped-tpl'), tplAfter = document.getElementById('hc-after-tpl');
+  var tpl = document.getElementById('hc-scoped-tpl');
   if (!mount || !tpl || typeof window.hcMount !== 'function') {
     if (mount) mount.textContent = 'The campaign table is not available on this page. Reload the dashboard.';
     return null;
   }
   mount.appendChild(tpl.content.cloneNode(true));
   var scope = host.parentNode || document;
-  var after = scope.querySelector('[data-hc-after]');
-  if (after && tplAfter && !after.firstChild) after.appendChild(tplAfter.content.cloneNode(true));
   var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
   host.dataset.periodFrom = per.from || '';
   host.dataset.periodTo = per.to || '';
@@ -12650,7 +12716,7 @@ function amapCampaignMount(host) {
   });
   var grid = scope.querySelector('table.amap-grid');
   host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
-                                   rows: grid ? amapCampaignTree(grid, accounts) : {}, after: after});
+                                   rows: grid ? amapCampaignTree(grid, accounts) : {}});
   host._hc.ready = host._hc.init();
   return host._hc;
 }

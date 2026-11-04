@@ -65,7 +65,8 @@
         </tr></thead>
         <tbody>
         {% for r in mc.rows %}
-          <tr>
+          {#- data-search: имя аккаунта + имя из книги (оно несёт профиль); читает общий поиск аккаунтов на Home (`amapSearch*` в report.html). -#}
+          <tr data-search="{{ ((r.account or '') ~ ' ' ~ (r.workbook_alias or '')) | lower | e }}">
             <td class="amap-acc">
               {#- Стрелка раскрывает только то, что в аккаунте сейчас: кампании
                   и объявления, прочитанные с самого кабинета (acl-113).
@@ -174,9 +175,6 @@
         </tbody>
       </table>
       </div>
-      {%- if campaign_table_api is defined and campaign_table_api() %}
-      <section class="hc hc-after" data-hc-after></section>
-      {%- endif %}
       {% set blank = mc.rows | rejectattr('has_data') | list | length %}
       {% if blank %}
       <div class="amap-empty">{{ blank }} of {{ mc.rows | length }} accounts have no rows in the workbook for this date.</div>
