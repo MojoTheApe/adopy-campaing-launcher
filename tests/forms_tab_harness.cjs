@@ -30,6 +30,7 @@ if (scenario === 'contacts') {
   });
 }
 if (scenario === 'legacy-locale') VALID.locale = 'UK_UA';
+if (scenario === 'cover') Object.assign(VALID, {intro: 'Tell us more.', cover_photo_id: '111', cover_page_id: '222'});
 const rows = [
   {id: 'aaaaaaaaaaaa', name: 'Demo <"form">', locale: 'EN_US', summary: 'Name, Email · 1 question',
    author: 'Anna', changed_at: '2026-10-21 10:00:00 UTC', revision: 'revision-opened-by-anna', invalid: false, errors: [], template: VALID},
@@ -42,7 +43,7 @@ const rows = [
 const elements = {}, listeners = {}, requests = [], events = [];
 const get = id => elements[id] ||= {
   id, value: '', style: {}, hidden: false, disabled: false, checked: false, innerHTML: '', textContent: '',
-  getAttribute() { return null; }, scrollIntoView() {},
+  getAttribute() { return null; }, scrollIntoView() {}, appendChild() {},
 };
 let confirmed = true, saveOk = true;
 let saveError = 'A template named \'X\' already exists';
@@ -50,8 +51,17 @@ let library = {connected: true, ok: true, error: '', synced_at: '2026-10-21 10:0
 let migration = {available: true, uploadable: 2, skipped: [
   {name: 'Demo <"form">', reason: 'Already in the team library'},
   {name: 'Old local', reason: 'Invalid template: Headline is required'}]};
+// ACL-2188: общий выбор картинки живёт в билдере; здесь его заменяет заглушка с тем же get/set.
+const coverState = {photo: '', page: '', sets: 0};
 const context = {
+  formCoverPicker() {
+    return {
+      get: () => ({cover_photo_id: coverState.photo, cover_page_id: coverState.page}),
+      set: (photo, page) => { coverState.photo = photo || ''; coverState.page = page || ''; coverState.sets++; },
+    };
+  },
   document: {
+    createElement: () => ({style: {}, appendChild() {}, textContent: '', value: ''}),
     getElementById: get,
     querySelectorAll() { return Object.values(elements); },
     addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
@@ -94,6 +104,30 @@ const lastPost = () => requests.filter(r => r.body).pop();
   const list = () => get('fm-list').innerHTML;
   assert(requests[0].url.includes('force=true'), 'вкладка должна перечитывать библиотеку');
 
+
+  if (scenario === 'cover') {
+    // ACL-2188: the saved pair reaches the picker, comes back on save, and Remove blanks both keys.
+    click('', {'data-fm-edit': VALID.id});
+    assert.deepEqual([coverState.photo, coverState.page], ['111', '222'], 'saved cover was not given to the picker');
+    click('fm-save-btn'); await flush();
+    assert.deepEqual([lastPost().body.cover_photo_id, lastPost().body.cover_page_id], ['111', '222']);
+    click('', {'data-fm-edit': VALID.id});
+    coverState.photo = ''; coverState.page = '';                       // Remove
+    click('fm-save-btn'); await flush();
+    assert.strictEqual(lastPost().body.cover_photo_id, '', 'Remove left the old photo id in the request');
+    assert.strictEqual(lastPost().body.cover_page_id, '', 'Remove left the old page id in the request');
+    // New template: no inherited cover.
+    click('fm-new-btn');
+    assert.deepEqual([coverState.photo, coverState.page], ['', ''], 'New inherited the previous cover');
+    // A cover without a Description is refused on the page, as on the server.
+    click('', {'data-fm-edit': VALID.id});
+    type('fm-intro', '');
+    const n = requests.filter(r => r.body).length;
+    click('fm-save-btn'); await flush();
+    assert.equal(requests.filter(r => r.body).length, n, 'cover without Description was submitted');
+    assert(get('fm-editor-msg').textContent.includes('Background image needs a Description'));
+    return;
+  }
 
   if (scenario === 'contacts') {
     // Both no-op and headline-only saves preserve each supported split-name field

@@ -412,3 +412,83 @@ def test_the_photos_endpoint_needs_account_page_and_the_api_backend(monkeypatch)
     assert asyncio.run(web.api_page_photos(_Req({"account_label": "A"}))).status_code == 400
     assert asyncio.run(web.api_page_photos(_Req({"account_label": "A", "page_id": PAGE}))).status_code == 200
     assert calls == [("A", PAGE)]
+
+
+# ───────────────────────── страница ─────────────────────────
+
+import re  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+HTML = ROOT / "src" / "web" / "templates" / "report.html"
+
+
+def _node():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    return node
+
+
+def test_the_page_validates_the_cover_exactly_like_the_server():
+    cases = {
+        "ok": tpl(**COVER),
+        "plain": tpl(),
+        "photo_only": tpl(cover_photo_id=PHOTO),
+        "page_only": tpl(cover_page_id=PAGE),
+        "letters": tpl(cover_photo_id="12ab", cover_page_id=PAGE),
+        "page_letters": tpl(cover_photo_id=PHOTO, cover_page_id="p1"),
+        "no_description": {**TEMPLATE, "intro": "", **COVER},
+        "half_no_description": {**TEMPLATE, "intro": "", "cover_photo_id": PHOTO},
+        "blank_pair": tpl(cover_photo_id="", cover_page_id=""),
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as fh:
+        import json
+        json.dump(cases, fh)
+        path = fh.name
+    try:
+        done = subprocess.run([_node(), str(ROOT / "tests" / "form_templates_harness.cjs"), str(HTML), path],
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        Path(path).unlink(missing_ok=True)
+    assert done.returncode == 0, done.stderr
+    js = json.loads(done.stdout)
+    for name, t in cases.items():
+        assert js[name] == ft.validate(t)[1], name
+
+
+def test_the_picker_runs_for_real():
+    done = subprocess.run([_node(), str(ROOT / "tests" / "cover_picker_harness.cjs"), str(HTML)],
+                          capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "ok"
+
+
+def test_the_picker_loads_no_remote_image_and_the_csp_is_not_relaxed():
+    page = HTML.read_text(encoding="utf-8")
+    start = page.index("window.formCoverPicker = function")
+    picker = page[start:page.index("function coverContext", start)]
+    assert "<img" not in picker and "createElement('img')" not in picker and ".src" not in picker
+    assert "https://" not in picker and "innerHTML" not in picker
+    app = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
+    assert "img-src 'self' data: blob:;" in app
+
+
+def test_the_builder_panel_template_carries_the_cover_pair():
+    page = HTML.read_text(encoding="utf-8")
+    assert 'class="cb-fc-label cb-fc-cover"' in page
+    body = page[page.index("window.cbFormPanelTemplate = function"):]
+    body = body[:body.index("window.cbFormCreateOpen")]
+    assert "coverOf(panel)" in body and "cover.get()" in body
+    # Страница билдера - та же, что у Refresh forms
+    assert "window.cbResolvedPage ? window.cbResolvedPage(slotEl)" in page[page.index("function coverContext"):][:400]
+
+
+def test_the_forms_tab_uses_the_account_pages_endpoint_and_one_picker():
+    page = HTML.read_text(encoding="utf-8")
+    assert 'id="fm-cover-account"' in page and 'id="fm-cover-page"' in page
+    assert len(re.findall(r"fetch\('/api/page-photos'", page)) == 1, "чтение картинок должно быть в одном месте"
+    assert "fetch('/api/account-pages'" in page
