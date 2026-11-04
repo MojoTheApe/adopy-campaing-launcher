@@ -8,7 +8,8 @@ What is protected:
     A clear-text value of an older install is moved once by ``load_env`` ->
     ``protect_machine_secrets``; the connection-sheet sign-in and the manual
     fields write through ``update_machine_env`` and so land protected at once.
-  * Google token files (``token_accounts.json``, ``token_telemetry.json``) -
+  * Google token files (``token_accounts.json``, ``token_telemetry.json``,
+    ``token_identity.json`` - вход в дешборд, ACL-1242) -
     same path, content becomes ``ACLDPAPI1\\n`` + ciphertext.
 
 DPAPI binds the ciphertext to the Windows user: another account or a copied
@@ -41,7 +42,7 @@ from pathlib import Path
 ENV_PREFIX = "dpapi:v1:"
 FILE_MAGIC = b"ACLDPAPI1\n"
 SECRET_ENV_KEY = re.compile(r"^(?:MULTILOGIN_AUTOMATION_TOKEN_[A-Z0-9]+|ACL_LIBRARY_TOKEN|BI_MYSQL_PASSWORD)$")
-TOKEN_FILES = ("token_accounts.json", "token_telemetry.json")
+TOKEN_FILES = ("token_accounts.json", "token_telemetry.json", "token_identity.json")
 BACKUP_DIR_NAME = "protected-backup"
 TOKEN_LOCK_NAME = ".tokens.lock"
 BACKUPS_KEPT = 3

@@ -90,12 +90,23 @@ def now() -> str:
 
 
 def author() -> str:
-    """Кто правит. До входа через Google (ACL-1242) — выбранный на дешборде CM."""
+    """Кто правит: имя CM, подтверждённое входом через Google (ACL-1242).
+
+    Без входа — выбранный на дешборде CM, как раньше. Лид, смотрящий дашборд
+    Боба, больше не правит библиотеку «как Боб».
+    """
+    name = ""
     try:
-        from src.web.buyer import get_selected_cm
-        name = get_selected_cm()
+        from src.analysis_agent import google_identity
+        name = google_identity.current().bound_name
     except Exception:
         name = ""
+    if not name:
+        try:
+            from src.web.buyer import get_selected_cm
+            name = get_selected_cm()
+        except Exception:
+            name = ""
     return name or os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
 
 

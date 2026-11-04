@@ -1852,6 +1852,13 @@ async def _warm_on_startup() -> None:
         connection_settings.refresh_on_start()
 
     threading.Thread(target=_refresh_connections, name="acl-connection-refresh", daemon=True).start()
+    # ACL-1242: тихая суточная перепроверка входа (без окон; нет входа — ничего не делает).
+    try:
+        from src.analysis_agent import google_identity
+
+        google_identity.recheck_async_if_due()
+    except Exception:  # noqa: BLE001 - вход не должен мешать старту дешборда
+        logging.getLogger(__name__).exception("Google identity re-check could not start")
     # ACL-2347: фоновая отправка общего журнала действий (молчит без адреса и токена).
     try:
         from src.acl_event_log import start_shipper
@@ -3725,6 +3732,74 @@ def api_connections_state() -> JSONResponse:
     return JSONResponse({"ok": True, **cs.status()})
 
 
+# ── ACL-1242: вход рабочим аккаунтом Google. Метка, а не замок: ни один другой
+# маршрут от этого состояния не зависит. Те же проверки происхождения, что у всех
+# изменяющих запросов (`local_dashboard_boundary`).
+
+@app.get("/api/identity")
+async def api_identity() -> JSONResponse:
+    from src.analysis_agent import google_identity as gi
+
+    gi.recheck_async_if_due()
+    return JSONResponse({"ok": True, **gi.public()})
+
+
+@app.post("/api/identity/sign-in")
+async def api_identity_sign_in() -> JSONResponse:
+    from src.analysis_agent import google_identity as gi
+
+    try:
+        result = await asyncio.to_thread(gi.sign_in)
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "failed", "message": gi.MESSAGES["failed"]}, status_code=500)
+    if result.get("ok"):
+        return JSONResponse(result)
+    return JSONResponse(result, status_code=409 if result.get("reason") == "busy" else 400)
+
+
+@app.post("/api/identity/decline")
+async def api_identity_decline() -> JSONResponse:
+    from src.analysis_agent import google_identity as gi
+
+    return JSONResponse(await asyncio.to_thread(gi.decline))
+
+
+@app.post("/api/identity/name")
+async def api_identity_name(request: Request) -> JSONResponse:
+    """Привязать имя CM. Нет в списке — 409 с подсказками, повтор с confirm_unlisted."""
+    from src.analysis_agent import google_identity as gi
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    try:
+        name = gi._clean_name(data.get("name"))
+        known = await asyncio.to_thread(gi.known_cm_names)
+        found, suggestions = gi.check_name(name, known)
+        if known and not found and not data.get("confirm_unlisted"):
+            return JSONResponse({
+                "ok": False, "reason": "not_listed", "suggestions": suggestions,
+                "message": f'"{name}" is not in the campaign manager list.'
+                           + (f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""),
+            }, status_code=409)
+        identity = gi.set_name(name, cm_checked=found)
+    except gi.IdentityError as exc:
+        return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"ok": False, "message": "Could not save the name. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, "identity": identity})
+
+
+@app.post("/api/identity/sign-out")
+async def api_identity_sign_out() -> JSONResponse:
+    from src.analysis_agent import google_identity as gi
+
+    return JSONResponse(await asyncio.to_thread(gi.sign_out))
+
+
 @app.post("/api/connections/sign-in")
 async def api_connections_sign_in() -> JSONResponse:
     """Sign in with the employee's own Google account, read the team connection
@@ -4606,6 +4681,16 @@ async def report_problem(request: Request) -> JSONResponse:
         context["last_failures"] = failed[-8:]
     except Exception as exc:  # окружение не собралось — обращение всё равно уходит
         context["context_error"] = str(exc)[:200]
+
+    try:
+        # ACL-1242: кто сообщает — подтверждённое имя CM и состояние входа, без почты.
+        from src.analysis_agent import google_identity
+
+        who = google_identity.current()
+        context["reporter"] = who.bound_name
+        context["identity"] = who.state
+    except Exception:
+        pass
 
     event_id = ""
     try:

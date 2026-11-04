@@ -117,7 +117,7 @@ def local_values_to_redact(config_directory: str | Path) -> set[str]:
                 values.update(str(value).strip() for value in row.values() if value and len(str(value).strip()) >= 4)
     except Exception:
         pass
-    for name in ("oauth_client.json", "token_accounts.json", "token_telemetry.json"):
+    for name in ("oauth_client.json", "token_accounts.json", "token_telemetry.json", "token_identity.json"):
         path = config_dir / name
         try:
             if path.stat().st_size > MAX_JSON_SECRET_SOURCE_BYTES:
@@ -130,6 +130,14 @@ def local_values_to_redact(config_directory: str | Path) -> set[str]:
             values.update(value for value in _json_strings(document) if len(value) >= 8)
         except Exception:
             pass
+    # ACL-1242: identity.json без секретов, но почта менеджера в пакет не уходит.
+    try:
+        document = json.loads((config_dir / "identity.json").read_text(encoding="utf-8"))
+        email = str(document.get("email") or "").strip()
+        if len(email) >= 8:
+            values.add(email)
+    except Exception:
+        pass
     return values
 
 

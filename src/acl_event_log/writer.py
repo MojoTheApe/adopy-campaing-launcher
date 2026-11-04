@@ -87,7 +87,8 @@ def _identity() -> dict:
     global _ident
     if _ident is not None:
         return _ident
-    ident: dict[str, Any] = {"machine_id": "", "machine": "", "manager": "", "flow_version": ""}
+    ident: dict[str, Any] = {"machine_id": "", "machine": "", "manager": "", "flow_version": "",
+                             "identity": "none", "identity_id": "", "email": ""}
     try:
         from src.fb_ads_rpa import telemetry_sync
         label, mid = telemetry_sync.machine_identity()
@@ -104,8 +105,22 @@ def _identity() -> dict:
         ident["flow_version"] = telemetry_sync.flow_version()
     except Exception:
         pass
+    try:
+        # ACL-1242 (D2): в общий журнал, который читает только владелец, идёт и почта.
+        from src.analysis_agent import google_identity
+        who = google_identity.current()
+        ident["identity"], ident["identity_id"], ident["email"] = who.state, who.identity_id, who.email
+    except Exception:
+        pass
     _ident = ident
     return ident
+
+
+def reset_identity() -> None:
+    """Вход, выход или смена состояния: следующая строка журнала берёт свежую идентичность."""
+    global _ident
+    with _lock:
+        _ident = None
 
 
 def _outbox_bytes(directory: Path) -> int:

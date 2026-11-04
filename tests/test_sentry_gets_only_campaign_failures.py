@@ -180,6 +180,7 @@ def test_a_do_not_publish_campaign_sends_one_event_per_blocking_failure(monkeypa
     loc, copy = events
     # ACL-1447: каждое событие подписано именем менеджера машины.
     assert loc["tags"].pop("manager")
+    assert loc["tags"].pop("identity")  # ACL-1242: состояние входа, не часть проверяемого набора
     assert loc["tags"] == {"step": "audience_location", "reason": "location-rows-not-read",
                            "failure_kind": "blocking", "account": "FacebookDoc19"}
     assert copy["fingerprint"] == ["acl-step", "ad_copy", "copy-fields-not-revealed"]

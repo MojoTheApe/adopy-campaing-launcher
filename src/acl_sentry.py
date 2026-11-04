@@ -89,6 +89,14 @@ def _scrub_deep(value: Any) -> Any:
 def manager_label() -> str:
     """Имя менеджера этой машины (ACL-1447): `ACL_MACHINE_LABEL`, иначе
     `MY_CM_NAME` — имя, под которым он входит в дешборд. Пусто — не задано."""
+    try:
+        # ACL-1242: подтверждённое входом имя CM важнее набранного руками.
+        from src.analysis_agent import google_identity
+        bound = google_identity.current().bound_name
+        if bound:
+            return bound[:200]
+    except Exception:
+        pass
     for key in ("ACL_MACHINE_LABEL", "MY_CM_NAME"):
         value = (os.environ.get(key) or "").strip()
         if value:
@@ -123,6 +131,16 @@ def _tag_manager(event: dict) -> None:
     _set_event_tag(event, "manager", manager_label() or "unset")
 
 
+def _tag_identity(event: dict) -> None:
+    """ACL-1242 (D2): состояние входа и псевдоним, но не почта (её вычищает `_scrub_deep`)."""
+    from src.analysis_agent import google_identity
+
+    who = google_identity.current()
+    _set_event_tag(event, "identity", who.state)
+    if who.identity_id:
+        _set_event_tag(event, "identity_id", who.identity_id)
+
+
 def _tag_machine(event: dict) -> None:
     # Тег, уже стоящий на событии, не перебиваем — он точнее нашего снимка.
     for key, value in _machine_tags.items():
@@ -137,6 +155,10 @@ def _before_send(event: dict, _hint: dict) -> dict | None:
         pass  # без тега событие всё равно ценно
     try:
         _tag_machine(event)
+    except Exception:
+        pass
+    try:
+        _tag_identity(event)
     except Exception:
         pass
     try:
