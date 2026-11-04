@@ -230,15 +230,25 @@ def test_17b_check_plan_reports_name_stops_as_errors(tmp_path):
     assert rule["status"] == "error" and pf.blocks(res["audit"])
 
 
-def test_17c_check_plan_after_a_publish_job_shows_the_next_number_not_a_cached_one(tmp_path, jobs):
-    from src.web import plan_cache
-    meta = FakeMeta()
-    first = _publisher(meta, dry_run=True).publish_draft(_draft(tmp_path, ads=1))
-    assert not first["published_as"]
-    jobs(meta, _three(tmp_path)[:1], "j1")                # публикация задания: имя занято, квитанции нет
-    again = _publisher(meta, dry_run=True).publish_draft(_draft(tmp_path, ads=1))
-    assert again["published_as"] == BASE + " copy 1"
-    assert plan_cache is not None
+def test_17c_check_plan_after_a_publish_job_shows_the_next_number_not_a_cached_one(tmp_path, monkeypatch):
+    from src.web import plan_cache as pc
+    from tests.test_acl2266_plan_cache_e2e import _check, _setup
+    pc.reset_for_tests()
+    drafts = [_draft(tmp_path, ads=1)]
+    api, _opened, meta = _setup(monkeypatch, drafts)
+    first = _check(api)
+    assert first["error"] == "" and not first["results"][0].get("published_as")
+    again = _check(api)
+    assert again["results"][0]["cached"] is True, "пока ничего не публиковали - ответ из памяти"
+    # публикация этого имени: задание занимает его и кончается (с ним сбрасывается память вердиктов аккаунта)
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.error == ""
+    nr.delete(ACT, BASE)                                  # конец чистого задания
+    pj._drop_plan_verdicts("Test")
+    after = _check(api)
+    row = after["results"][0]
+    assert not row.get("cached") and row["published_as"] == BASE + " copy 1"
+    assert pc.SCHEMA == 1, "форма строки не менялась: published_as в ней и раньше был"
 
 
 def test_18_unwritable_receipt_stops_before_any_write(tmp_path, monkeypatch):
