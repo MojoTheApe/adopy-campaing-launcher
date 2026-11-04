@@ -6,9 +6,9 @@ Use the exact current selection in [delivery.json](../../delivery.json) and
 [tracker/engine.json](../../tracker/engine.json), with the
 [current workflow](WORKFLOW.md) and [provider guide](STANDALONE_PROVIDER_ACL.md).
 ACL-2351 adopted published Tracker3.24.1 on 4 November 2026 without changing
-native configuration, capacities or optional-policy activation. Master1.8.0
-remains the documentation reference. The dated selections below preserve their
-original evidence and obligations; they do not select today's executable version.
+native configuration, capacities or optional-policy activation. For current
+Master Repo 1.9.0 guidance, see [AGENTS.md](../../AGENTS.md). The dated selections
+below preserve their original evidence and obligations.
 
 ## Historical provider adoption: ACL-2156 — 24 October 2026
 

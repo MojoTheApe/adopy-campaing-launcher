@@ -19,12 +19,15 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
-- [Selected Master 1.8.0 standard](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/standard.md).
+- [Master Repo 1.9.0 shared guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/standard.md):
+  [document map](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/project-documents.md)
+  and [workflow evolution](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/workflow-evolution.md).
+  Follow ACL's local workflow and selected Tracker guide for operations.
 - [ACL standalone workflow provider](docs/repository/STANDALONE_PROVIDER_ACL.md):
   the current executable source is the exact published revision in
   [tracker/engine.json](tracker/engine.json) and [delivery.json](delivery.json).
-  Master remains the unchanged documentation reference. Earlier provider
-  selections in the adoption record are history, not instructions to downgrade. Provider, engine, private checkout and canonical
+  The Master 1.8.0 reference in the descriptor and template baseline records
+  the audited provider ancestry required by Tracker 3.24.1. Provider, engine, private checkout and canonical
   export must agree. Use the immutable official provider entry point for rendering and
   validation; do not run consumer-controlled validation with credentials or
   rewrite global skills. Existing task ownership and all review/check/package

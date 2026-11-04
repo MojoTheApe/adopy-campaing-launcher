@@ -81,8 +81,9 @@ Use the exact published Task Tracker revision selected by
 The original ACL-2156 selection of Tracker3.14.1 remains in the
 [dated provider history](STANDALONE_PROVIDER_ACL.md#historical-adoption--acl-2156-24-october-2026).
 `delivery.json.workflow_provider`, the engine lock and immutable private-provider checkout name the
-same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed. Master1.8.0 stays the unchanged pinned documentation
-reference; this route needs no Master write or companion publication.
+same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed.
+[AGENTS.md](../../AGENTS.md) links the current Master Repo 1.9.0 guidance.
+The descriptor and template baseline retain the provider's audited Master 1.8.0 ancestry.
 
 Use the exact official Tracker source and its isolated
 `scripts/workflow_provider.py` entry point for future supported rendering. Read
