@@ -228,9 +228,9 @@ def test_expanded_table_has_cpa_notes_and_campaign_cells(open_page, amap):
     amap["notes"] = {"Facebook_DQ-214": "call back on Monday"}
     pg = open_page()
     heads = pg.eval_on_selector_all('[data-aov-country="Colombia"] thead th', "els => els.map(e => e.textContent)")
-    assert heads == ["State", "Account", "Spend", "Leads", "CPL", "FTDs", "CPA", "Campaigns", "What happened", "Note", "Read"]
+    assert heads == ["State", "Account", "Spend", "Leads", "CPL", "FTDs", "CPA", "Notes"]
     cells = pg.eval_on_selector_all('[data-aov-country="Colombia"] tr.aov-row:first-child td', "els => els.map(e => e.textContent.trim())")
-    assert cells[1].endswith("Facebook_DQ-214") and cells[2] == "$117" and cells[5] == "1" and cells[6] == "$117"
+    assert "Facebook_DQ-214" in cells[1] and cells[2] == "$117" and cells[5] == "1" and cells[6] == "$117"
     assert pg.inner_text('[data-note-kind=account][data-account="Facebook_DQ-214"]') == "call back on Monday"
     assert pg.get_attribute('[data-note-kind=account][data-account="Facebook_DQ-214"]', "data-note") == "call back on Monday"
     # итог страны несёт CPA тем же правилом (spend / FTD)
@@ -277,3 +277,25 @@ def test_close_country_button_in_both_views(open_page):
     pg.click("[data-aov-view=compact]")
     pg.click('#aov-compact [data-aov-country="Brazil"] [data-aov-close]')
     assert pg.evaluate("window.__closed")[-1] == ["country", "Brazil", "Brazil"]
+
+
+def test_account_cell_shows_act_id_state_tip_and_no_empty_strip(open_page, amap):
+    """ACL-2384: имя и номер кабинета целиком; причина и чтение — в подсказке State (hover/focus/aria); пустой полосы над шапкой нет."""
+    for mc in amap["countries"]:
+        for r in mc["rows_aov"]:
+            r["act_id"] = "act_1234567890123456"
+    pg = open_page()
+    cell = pg.locator('#aov-expanded [data-aov-country="Argentina"] tr.aov-row', has_text="Facebook_DQ-212").locator("td.acc")
+    assert "act_1234567890123456" in cell.inner_text()
+    assert pg.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1", cell.element_handle())
+    st = pg.locator('#aov-expanded [data-aov-country="Argentina"] tr.aov-row', has_text="Facebook_DQ-212").locator(".aov-st")
+    tip = st.get_attribute("data-tip")
+    assert "account disabled" in tip and "read " in tip and st.get_attribute("aria-label") == tip and st.get_attribute("title") == tip
+    st.focus()
+    assert pg.evaluate("(e) => getComputedStyle(e, '::after').content", st.element_handle()).strip('"').startswith("Dead")
+    # колонок What happened / Read / Campaigns нет
+    heads = pg.eval_on_selector_all('#aov-expanded [data-aov-country="Chile"] thead th', "els => els.map(e => e.textContent)")
+    assert not {"What happened", "Read", "Campaigns"} & set(heads)
+    # хост дерева кампаний не рисуется пустой рамкой
+    h = pg.evaluate("(() => { const e = document.querySelector('#aov-expanded .amap-campaigns'); const s = getComputedStyle(e); return [s.borderTopWidth, e.offsetHeight]; })()")
+    assert h[0] == "0px" and h[1] < 4, h

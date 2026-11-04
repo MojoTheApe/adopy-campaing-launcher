@@ -603,7 +603,8 @@ def _build_account_map_view(
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
-    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    known = list(map_entries)
     all_known = sorted(set(known) | labels_in_report, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
@@ -716,6 +717,8 @@ def _build_account_map_view(
                     excel = _numbers(country_name, resolved) or excel
             rows.append({
                 "account": label,
+                # номер кабинета из карты аккаунтов — Home показывает его второй строкой под именем
+                "act_id": (getattr(map_entries.get(label), "ad_account_id", "") or "").strip(),
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
