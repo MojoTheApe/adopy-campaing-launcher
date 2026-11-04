@@ -69,6 +69,37 @@ ownership history, preserving all task receipts and their pending/failed state;
 it permits a new reviewed fix batch without claiming completion. It is a new
 decision on abandoned work, not another routine release approval.
 
+### Recover a cancelled batch already merged in GitHub
+
+When a direct-main PR was merged outside Tracker and the original batch is
+cancelled, use `batch adopt-merged --batch-id ID --pr N --actor Coordinator-XXXX
+--session ACTUAL_RUN --reason "Actual recovery decision"`. Preview is read-only.
+It verifies the official merge, current-main ancestry, exact combined and merged
+tree, current frozen approvals and retained checks. Apply requires the preview's
+`--expected-recovery`, `--apply` and an `--evidence-file` with independent
+post-merge review of that tree. Use the existing independent-review format with
+the preview's frozen Coordinator as `implementer`, the actual independent
+`reviewer` and `review_session`, and the exact batch ID, source heads, head, base,
+tree and report. Recovery binds the review to a new lane automatically.
+
+Only an authenticated repository maintainer or administrator can adopt. The
+original cancellation and any old release request remain in history. The
+recovery reserves the existing integration lane for the new Coordinator and
+reviewer, leaving unrelated intake and ownership intact. Record any applicable
+acceptance and use the normal `merged` and `batch close-sources` steps. An owned
+`batch cancel` can release the recovery before acceptance or a merge receipt
+is recorded.
+If an eligible package is already published, record its existing verification
+through the normal delivery receipt procedure.
+
+For an already admitted batch that is exactly current main and still needs
+publication, an owner-authorized operator can preview `batch request-delivery
+--batch-id ID --actor Coordinator-XXXX --session ACTUAL_RUN --reason "Owner
+delivery decision" --deliver --delivery-workflow PATH --delivery-job NAME`.
+Apply with the same inputs, `--expected-recovery` and `--apply`. This records
+authorization without launching a release. Resume the existing delivery workflow
+with the exact main CI run. Existing requests and verified packages stay intact.
+
 Changing an existing staging policy needs the explicit fenced, queue-preserving
 [policy migration](DELIVERY_POLICY.md#staging-only-policy-migration). Publish
 compatible writers/service, drain real owners, inspect preview, and apply only
@@ -445,3 +476,43 @@ config: `python -m tracker --config /absolute/original/tracker/config.json
 record-acceptance ...`, then normal `merged` commands. Do not patch cached
 runtime code, change config or adopt a new policy. This explicit engine invocation
 is recovery only; permanent consumer-pin adoption is separately tracked/reviewed.
+
+
+## Owner-authorized unregistered-coordinator recovery — TT-209
+
+Ordinary `batch return` still requires the recorded Coordinator or actual held
+intake/batch owner. A recorded name alone never authorizes impersonating that run.
+When the owner explicitly confirms the former executor stopped, a maintain/admin
+operator may use `batch recover-return --issue TASK_ID --actor Coordinator-ACTUAL
+--session ACTUAL_RUN --stopped --report-file report.md` from this immutable,
+reviewed official Tracker source. This is preview-only until `--apply` and the
+preview's exact `--expected-approval SHA256` are supplied. The durable report
+records the real owner decision, stopped fact, replacement/cancellation reason and
+what must remain unfinished. A successful return permits ordinary archive; the
+recovery command itself never archives, merges or claims delivery/Done.
+
+The command supports only adopted execution2/3 and the exact official current-main
+consumer config. It refuses a registered former Coordinator, another real Worker,
+review lane, running intake or held batch for the task, pause/maintenance, a changed
+or merged original PR, inconsistent author/coordinator/PR records, changed scope
+since preview and modern execution4. Other tasks may continue: no project-wide
+drain, fabricated intake or policy transition is introduced. Ordinary source
+approval/main compatibility is deliberately not asserted by this cancellation
+return. Current maintain/admin GitHub permission and actual Coordinator/session
+are checked independently of the old absent actor.
+
+The first apply journals the real return owner and a complete retained original
+approval before any Issue label changes, using normal compare-and-swap. A race
+cannot overwrite another state. After an uncertain write, inspect private
+`execution show`; keep the exact report, principal, preview binding and recovery
+`--claim` from that record. Resume the same `recover-return` rather than creating a
+new operation. Successful retries reuse the original journal. Unrelated ownership,
+source author/branch/PR, prior approvals, history and pending delivery remain.
+
+This explicitly owner-selected administrative writer operates on the unchanged
+existing native protocol from its published immutable official source. It does
+not upgrade the consumer's pinned provider/portable helpers, install a policy,
+change fingerprints/capacity, deploy the shared service or publish a consumer
+installer. Ordinary consumer operations continue through their pinned adapter.
+Master impact: none; this is a bounded Tracker-owned recovery for an absent actor,
+not a change to the common task lifecycle or a blanket foreign-owner takeover.

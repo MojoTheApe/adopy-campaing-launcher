@@ -18,10 +18,51 @@
 - **Record exceptions in the original task.** For a local build transfer, link
   both source revisions and record the selected result, checks and rollback.
   For an integration or release failure, keep the first error, the affected
-  version, the run link and the actual resolution. For a manual merge, link the
-  merged PR and any existing release, and record the missing Tracker step.
-  [ACL-2351](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1351)
-  tracks recovery for a batch merged outside Tracker.
+  version, the run link and the actual resolution. If GitHub merged the PR
+  outside Tracker, follow the [manual-merge recovery checklist](#recover-a-manual-github-merge).
+
+### Hand off a tested local result
+
+Before another executor takes over, push the tested source to an accessible
+GitHub branch and put its branch/PR link and exact tested revision in the original
+task. Say explicitly which changes remain only on the local computer; a branch
+name alone does not establish that the tested content is available remotely.
+Keep the existing handoff procedure and actual ownership.
+
+After an exceptional transfer, manual merge or recovery, finish the same task's
+comment or handoff with a short outcome: what happened; the accepted version and
+its source; which changes from the shared version were preserved; links to the
+existing verification and any release; and unfinished work with its task links.
+Keep the first failure and actual resolution. This uses the existing task, not a
+new incident register or a report for every commit. Inaccessible local files stay
+uninspected, and a transfer must preserve other work and rollback information.
+
+New requirements for an already accepted result belong in a linked follow-up task;
+keep the original acceptance and decisions. Correcting a typo or clarifying
+history alone needs no new engineering task. If an old record no longer matches
+an already accepted result, inspect the requirements difference and use the
+supported reconciliation procedure; do not rewrite acceptance or set Done by hand.
+
+### Recover a manual GitHub merge
+
+1. In the original task, link the merged PR and batch ID. Record why it was
+   merged manually and link any existing release and verification evidence.
+   Preserve the original review and ownership history.
+2. If the original batch still holds the exact reviewed candidate, use its
+   existing handoff to record the merge. For a cancelled direct-`main` batch, use the pinned
+   `scripts/acl_task_tracker.py batch adopt-merged` preview with the PR and batch
+   ID. Verify the exact merged contents and use the existing checks. Record
+   independent review of that merge, then pass `--apply` with the preview's
+   `--expected-recovery` and the review `--evidence-file`. See the
+   [recovery procedure](BATCH_INTEGRATION.md#recover-a-cancelled-batch-already-merged-in-github).
+3. Record any applicable acceptance, run `merged` for the actual PR, and finish
+   with `batch close-sources`. If a published release contains that exact
+   change and its verification covers the accepted result, use
+   `record-delivery` with that evidence. Reuse the published package and its
+   verification. If the evidence is missing, leave delivery pending and record
+   what is needed.
+4. Read the task back from Tracker. Confirm **Done** and verified delivery for
+   product work, and check that the recovered batch released its integration slot.
 
 Use the [owner guide](OWNER_GUIDE.md) for reading the board and the
 [process history](CHANGELOG.md) for past changes. The
@@ -31,10 +72,14 @@ pages retain their historical text.
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
-## Executable workflow provider — ACL-2156
+## Current executable workflow provider
 
-The owner selected the standalone Task Tracker provider1 from its reviewed stable
-3.14.1 source, immutable commit `771d55f3317397e7d56471aa966f0a9de37d1a2e`.
+Use the exact published Task Tracker revision selected by
+[tracker/engine.json](../../tracker/engine.json) and
+[delivery.json](../../delivery.json). ACL-2351 adopted Tracker3.24.1 at
+`9dc08c3e31ef1204130f43b0740d173e733d5cb7` on 4 November 2026.
+The original ACL-2156 selection of Tracker3.14.1 remains in the
+[dated provider history](STANDALONE_PROVIDER_ACL.md#historical-adoption--acl-2156-24-october-2026).
 `delivery.json.workflow_provider`, the engine lock and immutable private-provider checkout name the
 same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed. Master1.8.0 stays the unchanged pinned documentation
 reference; this route needs no Master write or companion publication.
@@ -42,7 +87,7 @@ reference; this route needs no Master write or companion publication.
 Use the exact official Tracker source and its isolated
 `scripts/workflow_provider.py` entry point for future supported rendering. Read
 [the local provider adoption](STANDALONE_PROVIDER_ACL.md) and
-[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/771d55f3317397e7d56471aa966f0a9de37d1a2e/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/9dc08c3e31ef1204130f43b0740d173e733d5cb7/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 Preserve all local rules below, true pristine ancestry, independent review and
 full applicable checks. The native configuration, adopted execution3, capacities,
 target, required checks, IDs, existing owners and original task scope are unchanged.
@@ -50,9 +95,10 @@ No optional policy is activated. ACL-2099 is a separate preparation-only selecti
 its own package must be verified through the retained actual preselection config
 before any separately authorized owned idle adoption.
 
-Standalone v1 grants no new process-completion waiver. This owner-selected
-migration and explicit publication requests retain normal source/combined review,
-frozen-batch admission, Main acceptance and actual verified package delivery.
+The original ACL-2156 migration retained its explicitly requested package delivery;
+that dated obligation is not a new release request for every later process update.
+Current completion follows the process/product boundary below and any actual
+publication request. A pin alone grants no completion waiver or live activation.
 
 ## Adoption boundary
 
@@ -239,9 +285,10 @@ support enables no `ci_evidence_policy`. Reuse only covered applicable jobs and
 retain independent composition, exact-stage and package-delivery checks.
 
 Use the requirements and isolation rules in [engineering context](../system/AGENT_CONTEXT.md).
-Run focused behavior tests first, then scanner, smoke, the complete required tests
-and packaging checks on the final candidate. CI (Linux and Windows test jobs)
-remains required for code, dependencies, packaging and CI changes. Record success, skip, infrastructure failure
+Run focused affected tests locally, plus the applicable scanner/smoke checks.
+The complete product suite and applicable packaging checks run in hosted CI on
+the final candidate, as detailed below; do not duplicate them locally by default.
+CI (Linux and Windows test jobs) remains required for code, dependencies, packaging and CI changes. Record success, skip, infrastructure failure
 and unrun manual checks separately. Group related fixes into a meaningful ready
 submission while preserving useful early feedback. Do not request another run for
 a successful unchanged candidate without a new failure, change or unresolved concern.

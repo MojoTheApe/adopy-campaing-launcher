@@ -103,3 +103,74 @@ activation/export and browser visibility regressions. Source validation does not
 claim consumer activation, native delivery, service publication or pilot success.
 The matching Master change owns descriptor validation/export consistency. Final
 rollout evidence belongs in the coordinated implementation ledger.
+
+## Re-affirming delivery after requirements changed (TT-242)
+
+A Merged task whose receipt is admitted becomes `requirements-changed` when its Issue
+is edited later. `historical_completion` cannot help because it applies only when no
+receipt exists, and dependents stay blocked. `completion reaffirm` is the explicit,
+owner-authorized, audited repair. It is a dry run unless `--apply` is supplied and runs
+inside an owned maintenance reservation, exactly like `completion adopt`:
+
+```sh
+python -m tracker maintenance reserve --actor Maintainer-EX01 --session reaffirm-example --report-file report.txt --apply
+python -m tracker completion reaffirm --issues TT-1 TT-2 --evidence-file reaffirm.json --actor Maintainer-EX01 --session reaffirm-example --claim CLAIM
+python -m tracker completion reaffirm --issues TT-1 TT-2 --evidence-file reaffirm.json --actor Maintainer-EX01 --session reaffirm-example --claim CLAIM --apply
+python -m tracker maintenance resume --actor Maintainer-EX01 --session reaffirm-example --claim CLAIM --report-file report.txt --apply
+```
+
+Evidence is `kind: scope-reaffirmation`, `schema_version: 1`, the exact repository and
+delivery policy fingerprint, `approved_by` (the GitHub login of the repository admin who
+approves), a durable `report`, `issues` (at most 16, identical to `--issues`) and, for
+each task, exactly: `old_scope` (the receipt scope), `new_scope` (the engine-computed
+current task scope), `accepted_scope` (the current Issue digest), `implementer`, an
+independent `reviewer`, `verdict: requirements-diff-accepted`, `requirements_diff`
+(a real explanation of 40-4000 characters, not a placeholder) and a task `report`.
+Unknown fields anywhere are refused.
+
+Owner approval is a verifiable artifact, not a string. Every Issue needs a comment whose
+author is `approved_by` and currently has repository `admin` permission (the same native
+check as the other owner-attested commands), containing the line
+`Tracker scope-reaffirmation sha256: <digest>`. The comment must never have been edited
+(`updated_at` equals `created_at`): anyone with write access can edit another user's
+comment while GitHub keeps the original author, so an edited comment is not evidence. If
+an approval comment was edited for any reason, post the approval again as a new comment.
+The digest is the canonical SHA-256 of that task's own manifest entry together with the
+kind, schema, repository, policy, Issue number, `approved_by` and the top-level `report`,
+so changing anything the owner approved invalidates the comment. The dry run lists the
+digest each Issue still needs (`approvals`, `missing_approvals`); apply refuses while any
+is missing and records the comment id, author, creation and update time in the audit entry.
+Deleting a comment after apply is not detected; the audit entry retains its identity.
+
+The command refuses, without writing anything, unless the maintenance claim belongs to the
+caller, the config equals the official base-branch config, and every selected task is a
+Merged, unarchived, unowned and fully checked task in `requirements-changed` state whose
+receipt is a non-process receipt that the completion assessment treats as current policy
+(including an audited policy reconciliation), admitted, in state `verified` or `pending`,
+with `old_scope` equal to its recorded scope and a retained scope provenance. A `pending`
+receipt only passes when the policy needs no verification (reviewed-merge); the recomputed
+assessment must also be verified when the policy requires it. The reviewer must differ,
+after trimming and case folding, from the manifest implementer, the recorded task
+implementers and every source PR author. Git is re-verified: each source PR is the recorded
+merge into the base branch, the merge tree is unchanged, each source and verification
+revision is in the current base head, and a recorded release is still published, matches
+the retained release identity or installer digest, and is unchanged again just before the
+write. CI, native-run and package proofs are not re-run; the retained receipt is trusted
+for those.
+
+Apply appends `scope_reaffirmations[]` (`from_scope`, `to_scope`, manifest digest,
+`approved_by`, `report`, maintenance actor/session/claim, approval comment, task digest,
+reviewer, implementer, the requirements-diff text and digest, accepted scope, time) and
+moves the receipt `scope` together with that record. The original `receipt_digest` is
+unchanged. `delivery_state` is recomputed by the shared completion assessment and is never
+supplied; the write is refused if the result would not be current and admitted. A repeat
+with the same manifest is a no-op and a changed manifest is refused. A stale
+`flag:blocked` keeps `complete` false; the command only reports it, and removing it is a
+separate owner-approved step.
+
+Portable consumers must take the matching `tracker_delivery_policy.py` before the
+first apply, because `receipt_digest` now ignores `scope_reaffirmations`.
+
+Always run `maintenance resume` after any outcome of `--apply`, including a refusal or a
+failed run. The reservation holds the whole project (task admission and native delivery
+recording) until it is resumed; nothing cleans it up automatically.
