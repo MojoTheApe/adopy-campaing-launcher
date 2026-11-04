@@ -1460,6 +1460,8 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
+templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 
 
 def _campaign_table_api() -> bool:
