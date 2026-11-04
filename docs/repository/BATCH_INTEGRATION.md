@@ -445,3 +445,43 @@ config: `python -m tracker --config /absolute/original/tracker/config.json
 record-acceptance ...`, then normal `merged` commands. Do not patch cached
 runtime code, change config or adopt a new policy. This explicit engine invocation
 is recovery only; permanent consumer-pin adoption is separately tracked/reviewed.
+
+
+## Owner-authorized unregistered-coordinator recovery — TT-209
+
+Ordinary `batch return` still requires the recorded Coordinator or actual held
+intake/batch owner. A recorded name alone never authorizes impersonating that run.
+When the owner explicitly confirms the former executor stopped, a maintain/admin
+operator may use `batch recover-return --issue TASK_ID --actor Coordinator-ACTUAL
+--session ACTUAL_RUN --stopped --report-file report.md` from this immutable,
+reviewed official Tracker source. This is preview-only until `--apply` and the
+preview's exact `--expected-approval SHA256` are supplied. The durable report
+records the real owner decision, stopped fact, replacement/cancellation reason and
+what must remain unfinished. A successful return permits ordinary archive; the
+recovery command itself never archives, merges or claims delivery/Done.
+
+The command supports only adopted execution2/3 and the exact official current-main
+consumer config. It refuses a registered former Coordinator, another real Worker,
+review lane, running intake or held batch for the task, pause/maintenance, a changed
+or merged original PR, inconsistent author/coordinator/PR records, changed scope
+since preview and modern execution4. Other tasks may continue: no project-wide
+drain, fabricated intake or policy transition is introduced. Ordinary source
+approval/main compatibility is deliberately not asserted by this cancellation
+return. Current maintain/admin GitHub permission and actual Coordinator/session
+are checked independently of the old absent actor.
+
+The first apply journals the real return owner and a complete retained original
+approval before any Issue label changes, using normal compare-and-swap. A race
+cannot overwrite another state. After an uncertain write, inspect private
+`execution show`; keep the exact report, principal, preview binding and recovery
+`--claim` from that record. Resume the same `recover-return` rather than creating a
+new operation. Successful retries reuse the original journal. Unrelated ownership,
+source author/branch/PR, prior approvals, history and pending delivery remain.
+
+This explicitly owner-selected administrative writer operates on the unchanged
+existing native protocol from its published immutable official source. It does
+not upgrade the consumer's pinned provider/portable helpers, install a policy,
+change fingerprints/capacity, deploy the shared service or publish a consumer
+installer. Ordinary consumer operations continue through their pinned adapter.
+Master impact: none; this is a bounded Tracker-owned recovery for an absent actor,
+not a change to the common task lifecycle or a blanket foreign-owner takeover.

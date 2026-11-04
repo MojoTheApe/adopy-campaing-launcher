@@ -1,5 +1,12 @@
 # Executor activity and recorded history
 
+The TT-213 workspace labels an expired confirmation `No agent update` with its
+age, while never-confirmed work says `Agent activity not reported`. This changes
+presentation only; the existing five-minute expiry, frozen confirmed clock and
+retained authority remain. Fresh matching reports alone say `Agent is working`.
+Exact-current-PR GitHub checks can supply separate primary progress; details
+retain actual agent reporting/last update and stage residence independently.
+
 A reservation is ownership, not proof of a working agent. Only the actual
 recorded owner/session/claim reports its own activity. Report at least once a
 minute while working, and report `waiting` before waiting for checks or input.
@@ -115,7 +122,7 @@ history preserves the actual label changes. Approval waiting age is separate fro
 confirmed Work/Review/Merge time, and missing history stays unknown.
 History does not claim that every label edit changes a category count. Initial
 and reconciliation reads cover at most ten pages, with overlap on incremental
-reads; retain at most 500 relevant native events and show 10 readable changes per
+reads; retain at most 500 relevant native events and show25 readable changes by default (25/50/100) per
 page, grouped by local day with task search and expandable original event details.
 Only unambiguous opposite status-label events for one task/account within five
 seconds form a transition; Archive and ambiguous records remain separate events.
