@@ -115,8 +115,9 @@ def test_country_block_carries_tabs_the_read_button_and_one_tree():
     assert "Read campaigns in {{ mc.country }}" not in COUNTRY and "Read all spend in {{ mc.country }}" not in COUNTRY
     assert COUNTRY.count('class="hc hc-scoped amap-campaigns"') == 1 and COUNTRY.count("data-hc-mount") == 1
     assert "data-hc-tabs" in COUNTRY and "anchor_slug" not in COUNTRY      # вкладки строит JS: шаблон не требует серверных фильтров
-    # одно дерево: тулбар и вкладки — НАД списком аккаунтов, подвал и журнал — под ним; отдельной таблицы кампаний нет
-    assert COUNTRY.index('amap-campaigns"') < COUNTRY.index('<table class="amap-grid"') < COUNTRY.index("data-hc-after")
+    # одно дерево: вкладки — НАД списком аккаунтов; панели инструментов и сноски нет (04.11), отдельной таблицы кампаний нет
+    assert COUNTRY.index('amap-campaigns"') < COUNTRY.index('<table class="amap-grid"')
+    assert "data-hc-after" not in COUNTRY and "hc-after" not in COUNTRY
     assert '<span class="amap-caret-off">·</span>' in COUNTRY              # стрелку и остальное строке аккаунта добавляет JS (`amapCampaignTree`), только под api
     assert "amapCampaignToggle" not in COUNTRY + REPORT and "hc-band " not in TABLE
 

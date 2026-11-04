@@ -1754,19 +1754,6 @@
     .amap-country > summary::-webkit-details-marker { display: none; }
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: var(--adopy-text-sm); }
     .amap-country[open] > summary::before { content: '▾'; }
-    /* ACL-1840: the campaign footer mounts beside the account table. Keep
-       its reading line aligned with the workbook notice and connection form. */
-    .amap-country > .hc.hc-after {
-      margin-top: 0;
-      padding: 0.5rem 0.85rem;
-      box-sizing: border-box;
-    }
-    .amap-country > .hc-after .hc-foot { overflow-wrap: anywhere; }
-    .amap-country > .hc-after .hc-hist { margin-top: 0.25rem; }
-    .amap-country > .hc-after .hc-hist > summary {
-      max-width: 100%; overflow-wrap: anywhere;
-    }
-    .amap-country > .hc-after .hc-hist-body { overflow-wrap: anywhere; }
     .amap-sum {
       margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: var(--adopy-text-table); color: var(--muted);
@@ -2498,6 +2485,20 @@
     .amap-empty {
       padding: 0.7rem 0.85rem; font-size: var(--adopy-text-table); color: var(--muted);
     }
+    .amap-empty[hidden], .amap-country[hidden] { display: none; }
+    /* Общий поиск аккаунтов на Home: тот же вид, что у «Find country» в боковой колонке. */
+    .amap-search-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--adopy-space-2); padding: 0.5rem 0.85rem; }
+    .amap-search { display: flex; align-items: center; gap: var(--adopy-space-2); flex: 1 1 14rem; max-width: 28rem; height: 36px;
+      padding: 0 var(--adopy-space-2); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-sm);
+      background: var(--adopy-surface); color: var(--adopy-text-muted); }
+    .amap-search:focus-within { border-color: var(--adopy-focus);
+      box-shadow: 0 0 0 var(--adopy-focus-width) color-mix(in srgb, var(--adopy-focus) 25%, transparent); }
+    .amap-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--adopy-text);
+      font: inherit; font-size: var(--adopy-text-table); }
+    .amap-search input::placeholder { color: var(--adopy-text-muted); }
+    .amap-search-ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .amap-search-count { font-size: var(--adopy-text-table); color: var(--muted); }
+    td.amap-acc.amap-found { background: var(--adopy-selected-bg); }
 
     /* ── Goals Progress Panel ── */
     .goals-panel {
@@ -4809,7 +4810,7 @@ async function dashRefresh(ev) {
    нельзя. Поэтому карточка с зажатым до трёх строк телом и раскрытием по
    клику. -#}
 <div id="view-ad-texts" class="view-panel">
-  <h2 class="view-title">Ad titles <span class="hint">headline, body and description</span></h2>
+  <h2 class="view-title">Ad titles <span class="hint">primary text, headline and description</span></h2>
   <p style="color:var(--muted);max-width:70ch">
     One library for the whole team. Add, Edit, Remove and Restore are saved to the team
     library straight away, and every manager sees them the next time the list or the builder opens.
@@ -4842,7 +4843,7 @@ async function dashRefresh(ev) {
       </label>
     </div>
     <label style="display:block;margin-top:0.6rem">
-      <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Body — line breaks are kept as typed</div>
+      <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Primary text — line breaks are kept as typed</div>
       <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
     </label>
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
@@ -4854,7 +4855,7 @@ async function dashRefresh(ev) {
   </div>
 
   <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin:0.8rem 0">
-    <input id="at-search" type="search" placeholder="Search title, headline or body…" style="flex:1 1 22rem;max-width:32rem">
+    <input id="at-search" type="search" placeholder="Search title, headline or primary text…" style="flex:1 1 22rem;max-width:32rem">
     <select id="at-lang-filter" style="flex:0 0 auto"><option value="">All languages</option></select>
     <span id="at-count" style="color:var(--muted);font-size:var(--adopy-text-body)"></span>
   </div>
@@ -6473,6 +6474,12 @@ window.cbKeep = (function () {
       if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
       else el.value = data.fields[f];
     });
+    /* Тип файла объявления восстанавливается и в окнах поиска: иначе после перезагрузки
+       видео-объявление ищет файл среди картинок и не находит ничего (найдено на ACL-2084). */
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var t = row.querySelector('input[type="radio"][name$="_creative_type"]:checked');
+      if (t) row.querySelectorAll('.cb-creative-sel-wrap').forEach(function (w) { w.dataset.ctype = t.value; });
+    });
     slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
       var hidden = wrap.querySelector('[name]');
       var text = wrap.querySelector('.cb-sel-text');
@@ -6782,7 +6789,7 @@ window.cbLayout = (function () {
   /* ACL-1775: место конверсии набора и выбор формы Страницы. Правила форм
      (чья форма, какой статус годен) решает сервер; здесь только то, что
      показать. Годна только форма ACTIVE, как src/fb_api/forms.py (USABLE_STATUS). */
-  var DESTINATIONS = { website: 'Website', instant_form: 'Instant Form' };
+  var DESTINATIONS = { website: 'Website', instant_form: 'Instant forms' };
   var USABLE_FORM_STATUS = 'ACTIVE';
 
   function destination(v) { return v === 'instant_form' ? 'instant_form' : 'website'; }
@@ -10959,6 +10966,7 @@ function amapWatchOpen() {
     if (d.dataset.openWatch === '1') return;
     d.dataset.openWatch = '1';
     d.addEventListener('toggle', function () {
+      if (d.dataset.searchOpen === '1' || document.documentElement.dataset.amapSearching === '1') return;   // раскрытие поиском не запоминаем
       var now = amapOpenList();
       var at = now.indexOf(key);
       if (d.open && at === -1) now.push(key);
@@ -10973,6 +10981,71 @@ if (document.readyState === 'loading') {
 } else {
   amapWatchOpen();
 }
+
+/* ── Общий поиск аккаунтов над странами (Home). Регистронезависимо, слова через пробел — все должны встретиться (AND). Строка
+   аккаунта скрывается вместе со своей строкой-потомком `tr.hc-acct-child`; страны без совпадений скрыты, совпавшие раскрыты, но
+   запомненное раскрытие (`acl.amap.open`) не меняется: на время поиска `toggle` его не пишет, при очистке всё возвращается. ── */
+var amapSearchTimer = 0;
+function amapSearchTokens() {
+  var box = document.getElementById('amap-search-all');
+  return box ? box.value.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+}
+function amapSearchApply() {
+  var box = document.getElementById('amap-search-all');
+  if (!box) return;
+  var words = amapSearchTokens(), root = document.documentElement, active = words.length > 0;
+  var countries = document.querySelectorAll('details.amap-country[data-country]');
+  var shownRows = 0, shownCountries = 0;
+  if (active) root.dataset.amapSearching = '1';
+  Array.prototype.forEach.call(countries, function (d) {
+    var rows = d.querySelectorAll('table.amap-grid > tbody > tr[data-search]'), hits = 0;
+    Array.prototype.forEach.call(rows, function (tr) {
+      var hay = tr.getAttribute('data-search') || '';
+      var hit = words.every(function (w) { return hay.indexOf(w) !== -1; });
+      var child = tr.nextElementSibling && tr.nextElementSibling.classList.contains('hc-acct-child') ? tr.nextElementSibling : null;
+      tr.hidden = active && !hit;
+      if (child) child.hidden = tr.hidden || !tr.classList.contains('amap-open');
+      var cell = tr.querySelector('td.amap-acc');
+      if (cell) cell.classList.toggle('amap-found', active && hit);
+      if (hit) hits++;
+    });
+    if (!active) {
+      d.hidden = false;
+      if (d.dataset.searchOpen === '1') { d.open = d.dataset.wasOpen === '1'; delete d.dataset.searchOpen; delete d.dataset.wasOpen; }
+      return;
+    }
+    d.hidden = hits === 0;
+    if (hits) {
+      shownCountries++; shownRows += hits;
+      if (d.dataset.searchOpen !== '1') { d.dataset.searchOpen = '1'; d.dataset.wasOpen = d.open ? '1' : '0'; }
+      d.open = true;
+    } else if (d.dataset.searchOpen === '1') {
+      d.open = d.dataset.wasOpen === '1'; delete d.dataset.searchOpen; delete d.dataset.wasOpen;
+    }
+  });
+  var count = document.getElementById('amap-search-count'), empty = document.getElementById('amap-search-empty');
+  if (count) count.textContent = active ? shownRows + ' account' + (shownRows === 1 ? '' : 's') + ' in ' + shownCountries + ' countr' + (shownCountries === 1 ? 'y' : 'ies') : '';
+  if (empty) {
+    empty.hidden = !active || shownRows > 0;
+    if (!empty.hidden) empty.textContent = 'No account matches “' + box.value.trim() + '”.';
+  }
+  if (!active) setTimeout(function () { delete root.dataset.amapSearching; }, 0);
+}
+function amapSearchInit() {
+  var box = document.getElementById('amap-search-all');
+  if (!box || box.dataset.searchBound === '1') return;
+  box.dataset.searchBound = '1';
+  box.addEventListener('input', function () { clearTimeout(amapSearchTimer); amapSearchTimer = setTimeout(amapSearchApply, 80); });
+  box.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && box.value) { box.value = ''; amapSearchApply(); }
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', amapSearchInit);
+} else {
+  amapSearchInit();
+}
+document.addEventListener('acl:viewchange', function () { setTimeout(function () { amapSearchInit(); amapSearchApply(); }, 0); });
 
 /* Раскрытие билдера переживает перезагрузку — тем же способом, что страны на
    карте аккаунтов. Дешборд обновляет себя сам, и схлопывать билдер посреди
@@ -11237,6 +11310,7 @@ function amapRefreshCountryLines(per) {
       var count = map.querySelector('.amap-head > .amap-note');
       if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from ' + AMAP_SOURCE;
       if (typeof amapWatchOpen === 'function') amapWatchOpen();
+      if (typeof amapSearchApply === 'function') amapSearchApply();
     });
 }
 
@@ -12630,15 +12704,13 @@ function amapCampaignMount(host) {
   if (host._hc) return host._hc;
   amapCampaignTabs(host);
   var mount = host.querySelector('[data-hc-mount]');
-  var tpl = document.getElementById('hc-scoped-tpl'), tplAfter = document.getElementById('hc-after-tpl');
+  var tpl = document.getElementById('hc-scoped-tpl');
   if (!mount || !tpl || typeof window.hcMount !== 'function') {
     if (mount) mount.textContent = 'The campaign table is not available on this page. Reload the dashboard.';
     return null;
   }
   mount.appendChild(tpl.content.cloneNode(true));
   var scope = host.parentNode || document;
-  var after = scope.querySelector('[data-hc-after]');
-  if (after && tplAfter && !after.firstChild) after.appendChild(tplAfter.content.cloneNode(true));
   var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
   host.dataset.periodFrom = per.from || '';
   host.dataset.periodTo = per.to || '';
@@ -12650,7 +12722,7 @@ function amapCampaignMount(host) {
   });
   var grid = scope.querySelector('table.amap-grid');
   host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
-                                   rows: grid ? amapCampaignTree(grid, accounts) : {}, after: after});
+                                   rows: grid ? amapCampaignTree(grid, accounts) : {}});
   host._hc.ready = host._hc.init();
   return host._hc;
 }
@@ -15264,6 +15336,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       }
     }
     if (hidden && hidden.value && input.value.trim() !== hidden.value) {
+      /* ACL-2084: основной файл снят поиском - его копия в Stories / Reels снимается тоже. */
+      if (window.cbDropOldMainFromVertical) cbDropOldMainFromVertical(wrap, hidden.value, '');
       hidden.value = '';
       var slot = wrap.closest('.cb-slot');
       if (slot && window.cbUpdateName) cbUpdateName(slot);
@@ -15332,6 +15406,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       opt.addEventListener('mousedown', function(e) {
         e.preventDefault();
         var val = opt.dataset.val || '';
+        cbDropOldMainFromVertical(wrap, hidden ? hidden.value : input.value, val);
         input.value = val;
         if (hidden) hidden.value = val;
         dropdown.hidden = true;
@@ -15348,6 +15423,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
      Не трогаем: непустое поле (выбор человека главнее) и объявление с несколькими текстами
      (вместе с вертикальным файлом такой запрос отказывается до записи). Подставляем только в момент
      выбора основного файла, поэтому очищенное человеком поле само не возвращается. */
+  /* ACL-2084: сменили основной файл, а в Stories / Reels стоял прежний основной - слот очищается,
+     иначе старый креатив молча ушёл бы в публикацию. Файл, выбранный в слот отдельно, остаётся. */
+  window.cbDropOldMainFromVertical = function (wrap, before, after) {
+    if (!wrap || wrap.classList.contains('cb-vertical-sel-wrap') || !before || before === after) return;
+    var row = wrap.closest('.cb-ad-row');
+    var vwrap = row && row.querySelector('.cb-vertical-sel-wrap');
+    if (!vwrap) return;
+    var vh = vwrap.querySelector('input[type="hidden"]');
+    var vt = vwrap.querySelector('.cb-vertical-search');
+    var held = (vh && vh.value) || (vt && vt.value) || '';
+    if (!held || !window.cbSameCreativeFile || !cbSameCreativeFile(before, held)) return;
+    if (vh) vh.value = '';
+    if (vt) vt.value = '';
+  };
+
   window.cbPrefillVertical = function (wrap, picked) {
     if (window.ACL_FB_BACKEND !== 'api' || !wrap || wrap.classList.contains('cb-vertical-sel-wrap')) return;
     var row = wrap.closest('.cb-ad-row');
@@ -16468,7 +16558,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
-      '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
+      '<span class="cb-label cb-form-only" hidden>Instant form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
       /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
       '<select class="cb-input cb-select cb-form-source" name="' + pfx + 'form_source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
@@ -16493,14 +16583,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</div>' +
       /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
          Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
-      '<span class="cb-label">CTA</span>' +
+      '<span class="cb-label">Call to action</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
-      /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
-         (1:1 или 4:5). Соотношение и размер проверяет сервер до любой загрузки. Только API. */
-      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16, optional)</span></span>' +
+      /* ACL-1774: необязательный файл Stories / Reels рядом с основным (1:1 или 4:5); ACL-2084: 9:16
+         или квадрат. Соотношение и размер проверяет сервер до любой загрузки. Только API. */
+      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16 or 1:1, optional)</span></span>' +
       '<div class="cb-sel-wrap cb-creative-sel-wrap cb-vertical-sel-wrap" data-ctype="Image">' +
-      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
+      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 or square file for Stories and Reels" placeholder="— optional: 9:16 or square file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
       '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +
@@ -17159,23 +17249,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label">Gender</span>' +
       '<select name="' + pfx + 'gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
       '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
-      '<span class="cb-label">More languages</span>' +
+      '<span class="cb-label">Languages</span>' +
       '<input type="text" name="' + pfx + 'languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + lang + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
       '<datalist id="cb-lang-' + lang + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
       '<span class="cb-label">Devices</span>' +
       '<div class="cb-inline"><select name="' + pfx + 'device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
       '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only (Manual Facebook Feed)</option></select>' +
       '<input type="text" name="' + pfx + 'os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
-      '<span class="cb-label">Start time</span>' +
-      '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
-      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android, Start time and the ad set name work only with the API backend.</div>' +
+      '<div class="cb-api-note" data-api-fields-note hidden>Gender, languages, devices, OS version, Android and the ad set name work only with the API backend.</div>' +
       '<span class="cb-label">Conversion location</span>' +
       '<div class="cb-dest-wrap">' +
       '<select name="' + pfx + 'destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
       '<option value="website" selected>Website</option>' +
-      '<option value="instant_form">Instant Form</option>' +
+      '<option value="instant_form">Instant forms</option>' +
       '</select>' +
-      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '<div class="cb-api-note" data-forms-api-only hidden>Instant forms work only with the API backend.</div>' +
       '</div>' +
       '<span class="cb-label">Placements</span>' + buildPlacementHTML(pfx) +
       '</div>' +
@@ -18574,7 +18662,7 @@ function cbPlanHtml(data) {
     if (s) {
       if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
         + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
-      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
+      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant forms' || x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
         + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
         + (s.page_origin ? ' · from ' + aclEscHtml(s.page_origin) : '')
@@ -18596,7 +18684,10 @@ function cbPlanHtml(data) {
           + '</div><ol class="cbd-plan-ads" style="font-size:var(--adopy-text-sm);margin:0.1rem 0 0 1rem">';
         (a.ads || []).forEach(function (ad) {
           h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
-            + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
+            + aclEscHtml(ad.file)
+            // ACL-2084: второй файл объявления виден в плане.
+            + (ad.stories_reels_file ? '<br>Stories / Reels: ' + aclEscHtml(ad.stories_reels_file) : '')
+            + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')
             + (ad.form_locale ? '<br>' + aclEscHtml(ad.form_locale) : '')
@@ -20911,8 +21002,8 @@ function aclPickerSearch(inst, text) {
             : ' <button type="button" class="acc-btn danger ac-drop" data-removable="'
               + (removable ? '1' : '0') + '" title="'
               + (removable
-                  ? 'Drops this machine&#39;s row for the account. The shared sheet keeps it.'
-                  : 'Comes from the shared sheet — there is no local row to drop, so it is put out of sight here.')
+                  ? 'Removes the account from ACL on this machine. The shared sheet keeps it.'
+                  : 'Comes from the shared sheet — it leaves the list on this machine. The shared sheet keeps it.')
               + '">Remove</button>')
         + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
@@ -21030,13 +21121,13 @@ function aclPickerSearch(inst, text) {
     var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
     var mapped = picked.filter(function (x) { return x.removable; }).map(function (x) { return x.label; });
     var sheet = picked.filter(function (x) { return !x.removable; }).map(function (x) { return x.label; });
-    if (!await aclConfirm('Take ' + labels.length + ' account(s) out of this list?'
+    if (!await aclConfirm('Remove ' + labels.length + ' account(s) from ACL?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
         + (mapped.length ? mapped.length + ' had a row on this machine — it is dropped.' + String.fromCharCode(10) : '')
         + (sheet.length ? sheet.length + ' came from the shared sheet with nothing stored here — '
-            + 'they are put out of sight and can be brought back.' + String.fromCharCode(10) : '')
+            + 'they leave the list on this computer and can be brought back.' + String.fromCharCode(10) : '')
         + String.fromCharCode(10) + 'Nothing in the shared sheet changes.',
-        { okLabel: 'Take out', danger: true })) return;
+        { okLabel: 'Remove', danger: true })) return;
 
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
@@ -21062,7 +21153,7 @@ function aclPickerSearch(inst, text) {
       if (bad.length) { say((bad[0] && bad[0].error) || 'failed', 'err'); load(true); return; }
       var parts = [];
       if (mapped.length) parts.push('removed: ' + mapped.length);
-      if (sheet.length) parts.push('out of sight: ' + sheet.length);
+      if (sheet.length) parts.push('removed from the list: ' + sheet.length);
       say(parts.join(' · '), 'ok');
       load(true);
     }).catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); load(true); });
@@ -21099,23 +21190,22 @@ function aclPickerSearch(inst, text) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
     var hasRow = btn.dataset.removable === '1';
-    if (!await aclConfirm(hasRow
-        ? 'Remove "' + label + '" from the map of THIS machine?'
-          + String.fromCharCode(10, 10)
-          + 'The account stays in the shared sheet with all its history — this '
-          + 'computer simply stops knowing how to reach it.'
-        : 'Take "' + label + '" out of this list?'
-          + String.fromCharCode(10, 10)
-          + 'It comes from the shared sheet and nothing is stored for it here, '
-          + 'so there is nothing to delete — it is put out of sight on this '
-          + 'machine and can be brought back.',
-        { okLabel: hasRow ? 'Remove' : 'Take out', danger: true })) return;
+    if (!await aclConfirm('Remove "' + label + '" from ACL?'
+        + String.fromCharCode(10, 10)
+        + (hasRow
+            ? 'This computer drops its row for the account and the account leaves '
+              + 'the Accounts list. It stays in the shared sheet with all its '
+              + 'history; add it again any time.'
+            : 'It comes from the shared sheet and nothing is stored for it here, '
+              + 'so it just leaves the Accounts list on this computer. It stays in '
+              + 'the shared sheet and can be brought back.'),
+        { okLabel: 'Remove', danger: true })) return;
     if (!btn.isConnected) return;
     btn.disabled = true;
     var done = function (ok, err) {
       btn.disabled = false;
       if (!ok) { say(err || 'failed', 'err'); return; }
-      say((hasRow ? 'Removed: ' : 'Out of sight here: ') + label, 'ok');
+      say('Removed from ACL: ' + label, 'ok');
       load(true);
     };
     if (!hasRow) {

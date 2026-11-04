@@ -701,7 +701,7 @@ def test_component_renders_the_scoped_markup_and_no_home_section():
     assert 'id="hc-root"' not in html and 'id="hc-title"' not in html and 'id="hc-seed"' not in html
     assert '<template id="hc-scoped-tpl">' in html
     assert "Campaign inventory needs the API backend" in html          # блок отказа есть, скрыт до ответа статуса
-    assert "What was changed here" in html
+    assert "What was changed here" not in html and "hc-after-tpl" not in html and "hc-toolbar" not in html
     assert 'data-hc="table"' not in html and 'data-hc="frame"' not in html and ' id="hc-table"' not in html   # таблицы рисуются под строками аккаунтов, id нет
 
 
