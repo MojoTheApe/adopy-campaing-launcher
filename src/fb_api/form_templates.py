@@ -80,6 +80,11 @@ ROBOT_NAME_RE = re.compile(r" · ACL [0-9a-f]{6}$")
 
 _HTTPS_RE = re.compile(r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$", re.I)
 _ID_RE = re.compile(r"^[0-9a-f]{12}$")
+#: ACL-2188: id фото Страницы (и самой Страницы) - строка из цифр. Зеркало: FORM_PHOTO_ID_RE в write_policy.
+PHOTO_ID_RE = re.compile(r"^[0-9]{1,25}$")
+#: Ключи, которые `save` убирает из записи, когда редактор их не прислал (иначе Remove ничего не делает:
+#: `{**was, **out}` хранит старое значение).
+DROPPED_WHEN_EMPTY = ("cover_photo_id", "cover_page_id")
 
 _lock = threading.RLock()
 
@@ -131,6 +136,18 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
         errors.append(f"Intro title is longer than {MAX_INTRO_TITLE} characters")
     if intro_title:
         out["intro_title"] = intro_title
+
+    # ACL-2188: фоновая картинка - пара «фото + Страница», только цифры, в шаблон кладётся лишь заданной.
+    cover_photo, cover_page = _s(src.get("cover_photo_id")), _s(src.get("cover_page_id"))
+    if cover_photo or cover_page:
+        if not (cover_photo and cover_page):
+            errors.append("Background image needs both a Photo ID and a Page")
+        elif not (PHOTO_ID_RE.match(cover_photo) and PHOTO_ID_RE.match(cover_page)):
+            errors.append("Photo ID must contain digits only")
+        else:
+            out["cover_photo_id"], out["cover_page_id"] = cover_photo, cover_page
+        if not out["intro"]:
+            errors.append("Background image needs a Description (Meta shows it on the intro screen)")
 
     contacts = src.get("contact_fields")
     contacts = contacts if isinstance(contacts, (list, tuple)) else []
@@ -277,6 +294,8 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
     if tpl.get("intro"):
         params["context_card"] = {"title": tpl.get("intro_title") or tpl["headline"],
                                   "style": "PARAGRAPH_STYLE", "content": [tpl["intro"]]}
+        if tpl.get("cover_photo_id"):
+            params["context_card"]["cover_photo_id"] = tpl["cover_photo_id"]
     if tpl.get("thank_you_text") or tpl.get("website_url"):
         thanks: dict[str, Any] = {"title": tpl["thank_you_title"]}
         if tpl.get("thank_you_text"):
@@ -492,7 +511,8 @@ def get(template_id: str) -> dict[str, Any] | None:
 def summary(tpl: dict[str, Any]) -> str:
     contacts = ", ".join(_CONTACT_LABEL[k] for k in tpl.get("contact_fields") or [] if k in _CONTACT_LABEL)
     n = len(tpl.get("questions") or [])
-    return f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
+    text = f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
+    return text + (" · background image" if tpl.get("cover_photo_id") else "")
 
 
 def _revision(rec: Any) -> str:
@@ -640,6 +660,9 @@ def save(raw: Any) -> dict[str, Any]:
         out = {**clean, "id": tid}
         # Поля записи, которых редактор не знает (поле из будущей версии), едут дальше.
         merged = {**(was if isinstance(was, dict) else {}), **out}
+        for key in DROPPED_WHEN_EMPTY:
+            if key not in out:
+                merged.pop(key, None)
         lib["templates"][tid] = _stamp(merged, was)
         return out
 
