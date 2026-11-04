@@ -1377,8 +1377,8 @@
     .cb-sel-wrap.cb-use-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
     .cb-use-tag { position: absolute; right: 1.5rem; top: 0.28rem; display: inline-flex; align-items: center; gap: 0.25rem;
       padding: 0 0.1rem 0 0.45rem; border-radius: 999px; background: var(--accent); color: var(--bg-elev);
-      font-size: var(--adopy-text-xs); line-height: 1.3; z-index: 2; }
-    .cb-use-tag-x { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 0 0.3rem; line-height: 1.3; }
+      font-size: var(--adopy-text-xs); line-height: 1.3; z-index: 2; pointer-events: none; }
+    .cb-use-tag-x { pointer-events: auto; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 0 0.3rem; line-height: 1.3; }
     .cb-use-target > [class~="cb-sel-text"] { padding-right: 7.5rem; }
     .cb-use-tag-x:focus-visible { outline: 2px solid var(--focus-ring); border-radius: 999px; }
     .cb-sel-text {
@@ -8545,7 +8545,7 @@ window.cbTree = (function () {
     }
     if (sig === lastAnnounce) return;
     lastAnnounce = sig;
-    document.dispatchEvent(new CustomEvent('acl:cbtarget'));
+    try { document.dispatchEvent(new CustomEvent('acl:cbtarget')); } catch (e) { /* окружение без CustomEvent (юнит-харнесс) */ }
   }
 
   /* Обводка и метка «Use goes here» — только у текущей цели; в DOM пишем при изменении
