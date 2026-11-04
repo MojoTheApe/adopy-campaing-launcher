@@ -20909,8 +20909,8 @@ function aclPickerSearch(inst, text) {
             : ' <button type="button" class="acc-btn danger ac-drop" data-removable="'
               + (removable ? '1' : '0') + '" title="'
               + (removable
-                  ? 'Drops this machine&#39;s row for the account. The shared sheet keeps it.'
-                  : 'Comes from the shared sheet — there is no local row to drop, so it is put out of sight here.')
+                  ? 'Removes the account from ACL on this machine. The shared sheet keeps it.'
+                  : 'Comes from the shared sheet — it leaves the list on this machine. The shared sheet keeps it.')
               + '">Remove</button>')
         + ' <span class="ac-row-msg acc-meta"></span></td>'
         + '</tr>';
@@ -21028,13 +21028,13 @@ function aclPickerSearch(inst, text) {
     var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
     var mapped = picked.filter(function (x) { return x.removable; }).map(function (x) { return x.label; });
     var sheet = picked.filter(function (x) { return !x.removable; }).map(function (x) { return x.label; });
-    if (!await aclConfirm('Take ' + labels.length + ' account(s) out of this list?'
+    if (!await aclConfirm('Remove ' + labels.length + ' account(s) from ACL?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
         + (mapped.length ? mapped.length + ' had a row on this machine — it is dropped.' + String.fromCharCode(10) : '')
         + (sheet.length ? sheet.length + ' came from the shared sheet with nothing stored here — '
-            + 'they are put out of sight and can be brought back.' + String.fromCharCode(10) : '')
+            + 'they leave the list on this computer and can be brought back.' + String.fromCharCode(10) : '')
         + String.fromCharCode(10) + 'Nothing in the shared sheet changes.',
-        { okLabel: 'Take out', danger: true })) return;
+        { okLabel: 'Remove', danger: true })) return;
 
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
@@ -21060,7 +21060,7 @@ function aclPickerSearch(inst, text) {
       if (bad.length) { say((bad[0] && bad[0].error) || 'failed', 'err'); load(true); return; }
       var parts = [];
       if (mapped.length) parts.push('removed: ' + mapped.length);
-      if (sheet.length) parts.push('out of sight: ' + sheet.length);
+      if (sheet.length) parts.push('removed from the list: ' + sheet.length);
       say(parts.join(' · '), 'ok');
       load(true);
     }).catch(function (e) { if (btn) btn.disabled = false; say(String(e), 'err'); load(true); });
@@ -21097,23 +21097,22 @@ function aclPickerSearch(inst, text) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
     var hasRow = btn.dataset.removable === '1';
-    if (!await aclConfirm(hasRow
-        ? 'Remove "' + label + '" from the map of THIS machine?'
-          + String.fromCharCode(10, 10)
-          + 'The account stays in the shared sheet with all its history — this '
-          + 'computer simply stops knowing how to reach it.'
-        : 'Take "' + label + '" out of this list?'
-          + String.fromCharCode(10, 10)
-          + 'It comes from the shared sheet and nothing is stored for it here, '
-          + 'so there is nothing to delete — it is put out of sight on this '
-          + 'machine and can be brought back.',
-        { okLabel: hasRow ? 'Remove' : 'Take out', danger: true })) return;
+    if (!await aclConfirm('Remove "' + label + '" from ACL?'
+        + String.fromCharCode(10, 10)
+        + (hasRow
+            ? 'This computer drops its row for the account and the account leaves '
+              + 'the Accounts list. It stays in the shared sheet with all its '
+              + 'history; add it again any time.'
+            : 'It comes from the shared sheet and nothing is stored for it here, '
+              + 'so it just leaves the Accounts list on this computer. It stays in '
+              + 'the shared sheet and can be brought back.'),
+        { okLabel: 'Remove', danger: true })) return;
     if (!btn.isConnected) return;
     btn.disabled = true;
     var done = function (ok, err) {
       btn.disabled = false;
       if (!ok) { say(err || 'failed', 'err'); return; }
-      say((hasRow ? 'Removed: ' : 'Out of sight here: ') + label, 'ok');
+      say('Removed from ACL: ' + label, 'ok');
       load(true);
     };
     if (!hasRow) {
