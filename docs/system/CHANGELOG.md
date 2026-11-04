@@ -1,5 +1,11 @@
 # System history
 
+## ACL-2393 — Warning when the campaign name and the targeting differ — 2026-11-05
+
+The builder now warns when a campaign name mentions a targeting preset (for example Green) and a different one is selected (for example Mix2). It is only a warning; you can still publish.
+A line under the name shows `Name says Green, targeting is Mix2 – fix one of them` (or `…but no targeting is selected – pick one`), with a `Use Green` button when the name has exactly one preset. The same text appears in the Publish confirmation (button "Build anyway") and as a note above the Check plan result. Presets are matched as whole words of the name; the card's own parts (country, OS, creative type, asset, age, date) never count, and any ad set's targeting satisfies the name. Dashboard page only; nothing is sent to the server.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1393).
+
 ## ACL-2084 — Square file in the Stories / Reels slot — 2026-11-04
 
 The Stories / Reels file may now be 9:16 or 1:1 (images and videos); the main file stays 1:1 or 4:5, so
