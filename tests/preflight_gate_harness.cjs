@@ -292,6 +292,19 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     await w.cbPreflightRun(form, [s]);
     assert.equal(form._pfAudit.byName.C1.errorKind, 'not_checked');
   }
+  // 12b. ACL-2273: на форме лежит сбой проверки («Could not check»); Publish его не переиспользует
+  //      и спрашивает сервер заново — как и с обычным вердиктом.
+  {
+    const { w, log } = world('api', { error: 'busy', error_kind: 'not_checked', results: [] });
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    await w.cbPreflightRun(form, [s]);
+    assert.equal(form._pfAudit.byName.C1.errorKind, 'not_checked');
+    assert.equal(log.fetched.length, 1);
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(log.fetched.length, 2, 'Publish переиспользовал сохранённый сбой проверки');
+    assert.equal(log.proceeded, 1, 'сбой проверки не должен блокировать Publish');
+  }
   // 13. ACL-2266: «Re-check all» шлёт force=1, обычная проверка и Publish — никогда; force не сливается с обычной.
   {
     const reply = { results: [{ campaign_name: 'C1', error: null, audit: [] }] };

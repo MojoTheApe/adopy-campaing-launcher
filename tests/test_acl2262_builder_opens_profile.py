@@ -342,3 +342,36 @@ def test_messages_do_not_depend_on_the_button_or_a_three_minute_wait():
     for text in (warm.HAND_MESSAGE, sp.HAND_OPEN_MESSAGE_API):
         assert "Open profiles for today" not in text and "3 minutes" not in text
     assert warm.HAND_MESSAGE == sp.HAND_OPEN_MESSAGE_API
+
+
+# ---- ACL-2273 review follow-ups ----
+
+def test_slot_holder_matches_the_profile_in_any_uuid_case():
+    import threading
+
+    from src.web.profile_slots import ProfileSlots
+
+    class Q:
+        holds = ProfileSlots.holds
+
+        def __init__(self):
+            self._cond = threading.Condition()
+            self._running = {"job-1": {"profile": PID.lower()}}
+
+    q = Q()
+    assert q.holds("job-1", PID.upper()) and q.holds("job-1", " " + PID.lower() + " ")
+    assert not q.holds("job-1", "11111111-2222-3333-4444-555555555555")
+    assert q.holds("job-1")
+
+
+def test_a_profile_our_own_job_just_closed_does_not_trigger_the_restart_cooldown(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "180")     # the code default, not the owner's 0
+    rig = Rig(tmp_path)
+    rig.warm_up()
+    rig.checkout().release()
+    rig.scan_result[PID] = ("closing", None)
+    rig.reg._sleep = lambda s: rig.scan_result.__setitem__(PID, ("none", None))
+    before = len(rig.started)
+    result = rig.reg.open_one("Acc", _entry())
+    assert result["ok"], result
+    assert len(rig.started) == before + 1 and result.get("code") != "restart_cooldown"

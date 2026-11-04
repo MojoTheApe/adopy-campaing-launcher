@@ -163,6 +163,20 @@ class MemoryReading:
     available_mb: int
 
 
+def _same_profile(recorded: Any, asked: Any) -> bool:
+    """ACL-2273: slots are recorded under the canonical lower-case UUID; a caller may hold the raw account-map form."""
+    def canon(value: Any) -> str:
+        text = str(value or "").strip()
+        try:
+            from uuid import UUID
+
+            return str(UUID(text))
+        except ValueError:
+            return text.casefold()
+
+    return canon(recorded) == canon(asked)
+
+
 def _env_number(env: dict[str, str] | Any, key: str, default: float, *, minimum: float) -> float:
     raw = str(env.get(key, "") or "").strip().replace(",", ".")
     if not raw:
@@ -1104,7 +1118,7 @@ class ProfileSlots:
         """ACL-2262: держит ли это задание сейчас своё место (оно идёт, а не ждёт) — для этого профиля."""
         with self._cond:
             run = self._running.get(str(job_id or ""))
-            return run is not None and (not profile or run.get("profile") == str(profile))
+            return run is not None and (not profile or _same_profile(run.get("profile"), profile))
 
     def others_on(self, profile: str, job_id: str | tuple[str, ...] = "") -> bool:
         """Держит ли место этого профиля или ждёт его кто-то, кроме `job_id` (ACL-1580)."""

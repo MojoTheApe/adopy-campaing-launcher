@@ -869,6 +869,7 @@ class WarmRegistry:
             if may_reopen_manual():
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
+        closed_by_our_job = False
         if kind == "closing":
             # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
             # released it ends in "can't lock profile". Wait (bounded, one local look every few seconds,
@@ -877,11 +878,14 @@ class WarmRegistry:
             if kind != "none":
                 return _result(False, f"The {label} profile is still closing in Multilogin; nothing was "
                                "started. Try again in a minute.", "profile_closing")
+            closed_by_our_job = True
         if kind == "none" and self.session(pid) is not None:
             # B2: профиль в реестре, а процесса нет — его закрыли (человек, таймер чтения).
             # Останавливаем отсчёт от момента, когда увидели, и только потом решаем про запуск.
-            self._forget(pid, stopped=True)
-        why = _stop_log.refusal(pid, self._stops)
+            # ACL-2273: профиль, который только что закрыло наше задание и мы дождались его ухода, не начинает
+            # новую паузу: ожидание закрытия уже было паузой.
+            self._forget(pid, stopped=not closed_by_our_job)
+        why = "" if closed_by_our_job else _stop_log.refusal(pid, self._stops)
         if why:
             return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
         # S3: память под ещё один профиль с учётом роста уже запущенных и прогревающихся.
