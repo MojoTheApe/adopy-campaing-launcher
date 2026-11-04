@@ -1,6 +1,32 @@
 # ACL repository workflow
 
-For a plain-language owner overview, read [the owner guide](OWNER_GUIDE.md).
+## Current workflow
+
+- **Start in Task Tracker.** Use the existing ACL task or create one for new work.
+  Claim it before editing and link its PR. Use a separate branch from current
+  `main`. Save working fixes from a local pilot to that branch and record the
+  tested revision in the task so another session can retrieve the same code.
+- **Review and integrate.** Ordinary changes receive independent source review,
+  then go through a reviewed batch of up to five tasks into `main`. Stage is
+  disabled. Its branch is retained, and `master` serves legacy source installs.
+  Eligible repository instructions use the [short reviewed route](PROCESS_INSTRUCTIONS_ACL.md).
+- **Deliver and record.** For product changes, publish the Windows package
+  built from the verified revision to the [stable release channel](https://github.com/MojoTheApe/acl-releases/releases/latest).
+  Done follows the [published-package verification](../runtime/DELIVERY.md) and
+  its Tracker record. The release history and the version tested are separate
+  from the merge status.
+- **Record exceptions in the original task.** For a local build transfer, link
+  both source revisions and record the selected result, checks and rollback.
+  For an integration or release failure, keep the first error, the affected
+  version, the run link and the actual resolution. For a manual merge, link the
+  merged PR and any existing release, and record the missing Tracker step.
+  [ACL-2351](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1351)
+  tracks recovery for a batch merged outside Tracker.
+
+Use the [owner guide](OWNER_GUIDE.md) for reading the board and the
+[process history](CHANGELOG.md) for past changes. The
+[branch](../BRANCHING.md), [board](../TASK-BOARD.md) and [release ledger](../RELEASES.md)
+pages retain their historical text.
 
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
