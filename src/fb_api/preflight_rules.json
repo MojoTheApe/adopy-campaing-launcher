@@ -19,7 +19,8 @@
         "APPLY_NOW",
         "GET_QUOTE",
         "SUBSCRIBE",
-        "DOWNLOAD"
+        "DOWNLOAD",
+        "SEE_DETAILS"
       ]
     },
     "default_objective": "leads",
