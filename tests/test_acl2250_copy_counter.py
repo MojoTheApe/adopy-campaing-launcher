@@ -1,7 +1,7 @@
 """ACL-2250: повтор имени получает счётчик `copy 1, 2, 3 ...` у кампании и всех её наборов.
 
 Meta - `FakeMeta`. Квитанции имён лежат во временной папке теста (`ACL_CONFIG_DIR`); «конец задания»
-в тестах без издателя - `_end_job` (удаляет квитанцию, как `publisher.finish_job`).
+в тестах без издателя - `_end_job` (удаляет квитанцию, как `publisher.finish_name_records`).
 """
 from __future__ import annotations
 
