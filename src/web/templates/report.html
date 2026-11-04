@@ -4809,7 +4809,7 @@ async function dashRefresh(ev) {
    нельзя. Поэтому карточка с зажатым до трёх строк телом и раскрытием по
    клику. -#}
 <div id="view-ad-texts" class="view-panel">
-  <h2 class="view-title">Ad titles <span class="hint">headline, body and description</span></h2>
+  <h2 class="view-title">Ad titles <span class="hint">primary text, headline and description</span></h2>
   <p style="color:var(--muted);max-width:70ch">
     One library for the whole team. Add, Edit, Remove and Restore are saved to the team
     library straight away, and every manager sees them the next time the list or the builder opens.
@@ -4842,7 +4842,7 @@ async function dashRefresh(ev) {
       </label>
     </div>
     <label style="display:block;margin-top:0.6rem">
-      <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Body — line breaks are kept as typed</div>
+      <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Primary text — line breaks are kept as typed</div>
       <textarea id="at-body" rows="5" style="width:100%;font-family:inherit;line-height:1.45"></textarea>
     </label>
     <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.6rem">
@@ -4854,7 +4854,7 @@ async function dashRefresh(ev) {
   </div>
 
   <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin:0.8rem 0">
-    <input id="at-search" type="search" placeholder="Search title, headline or body…" style="flex:1 1 22rem;max-width:32rem">
+    <input id="at-search" type="search" placeholder="Search title, headline or primary text…" style="flex:1 1 22rem;max-width:32rem">
     <select id="at-lang-filter" style="flex:0 0 auto"><option value="">All languages</option></select>
     <span id="at-count" style="color:var(--muted);font-size:var(--adopy-text-body)"></span>
   </div>
@@ -16493,7 +16493,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '</div>' +
       /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
          Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
-      '<span class="cb-label">CTA</span>' +
+      '<span class="cb-label">Call to action</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
       /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
