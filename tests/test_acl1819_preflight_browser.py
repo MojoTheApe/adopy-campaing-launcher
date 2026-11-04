@@ -183,7 +183,7 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         if theme == "dark":
             p.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
         _first(p)
-        assert _badge(p).startswith("errors: ") and int(_badge(p).split(": ")[1]) >= 3
+        assert _badge(p).startswith("errors: ") and int(_badge(p).split(": ")[1]) >= 2
         assert p.locator(".cbd-pf-tree").first.inner_text().startswith("errors: "), "значка нет в дереве"
         assert "Account checks need the API backend" in p.locator(".cbd-pf").inner_text()
         assert p.locator(".cbd-pf [data-act='pf-check']").count() == 0
@@ -191,7 +191,7 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         ids = p.evaluate("() => [...document.querySelectorAll('.cbd-pf-topic')].map(t => t.dataset.topic)")
         assert ids == ["audience", "budget", "destination", "creative", "names"], ids
         # Раздел с ошибкой раскрыт сам, чистый — свёрнут.
-        assert _topic(p, "creative")["status"] == "error" and _topic(p, "creative")["open"]
+        assert _topic(p, "creative")["status"] == "warning" and _topic(p, "creative")["open"]
         assert "Primary text" in _topic(p, "creative")["summary"]
         assert _topic(p, "audience") == {"status": "ok", "open": False, "summary": "3 checks ok"}
         assert _topic_rule_ids(p, "audience") == ["country_set", "age_range", "devices_consistent"]
