@@ -422,7 +422,33 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
             heads = [m.get('head_sha') for m in held.get('members', [])]
             if heads and all(request(root + '/compare/' + h + '...' + merge_sha).get('status')
                              in ('ahead', 'identical') for h in heads):
-                raise PendingDelivery('Record the admitted main merge and finish its Coordinator handoff first')
+                lane = section.get('review') or {}
+                if not held.get('pr') or lane.get('batch_id') != held.get('id'):
+                    raise ValueError('Merged content has no admitted batch review. Inspect the held batch; for a '
+                                     'cancelled batch use batch adopt-merged with independent post-merge review.')
+                review = shared.get('delivery_workflow', {}).get('reviews', {}).get(str(held['pr']), {})
+                if (not review or review.get('execution_lane') != lane.get('id')
+                        or review.get('reviewer') != lane.get('actor')
+                        or review.get('review_session') != lane.get('session')):
+                    raise ValueError('Complete the retained independent review with record-review --pr '
+                                     + str(held['pr']) + ' before recording the merged handoff.')
+                raise PendingDelivery('Finish the retained merge handoff with merged <tasks> --pr '
+                                      + str(held['pr']) + ' --reviewed-complete --apply')
+        cancelled = {key: batch for key, batch in section.get('batches', {}).items()
+                     if batch.get('state') == 'cancelled'
+                     and (batch.get('delivery_request') or {}).get('state') == 'requested'}
+        if cancelled:
+            parents = request(root + '/git/commits/' + merge_sha).get('parents', [])
+            baseline = parents[0].get('sha') if parents else None
+            if any(batch.get('main_sha') == baseline for batch in cancelled.values()):
+                for pr in request(root + '/commits/' + merge_sha + '/pulls?per_page=100'):
+                    if (pr.get('merged_at') and pr.get('merge_commit_sha') == merge_sha
+                            and pr.get('base', {}).get('ref') == 'main'
+                            and pr.get('base', {}).get('repo', {}).get('full_name', '').lower() == repo.lower()):
+                        marker = re.findall(r'^Tracker batch:\s*([a-f0-9]{32})\s*$', pr.get('body') or '', re.M)
+                        if len(marker) == 1 and marker[0] in cancelled and cancelled[marker[0]].get('main_sha') == baseline:
+                            raise ValueError(f'Cancelled batch {marker[0]} is already merged. Preview batch adopt-merged '
+                                             f'--batch-id {marker[0]} --pr {pr["number"]} before reconciling delivery.')
         return {'eligible': False, 'reason': 'No completed batch authorized delivery for this main revision'}
     batch, pr = matches[0]
     auth = authorization(config, batch)

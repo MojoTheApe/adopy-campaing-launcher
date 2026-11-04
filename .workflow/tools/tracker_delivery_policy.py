@@ -258,7 +258,8 @@ def retain_scope(receipt):
 def receipt_digest(receipt):
     # Scope recovery is auxiliary original-proof metadata. Adding it during
     # activation must not invalidate an already audited receipt fingerprint.
-    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations', 'scope', 'scope_provenance')}
+    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations', 'scope', 'scope_provenance',
+                                                    'scope_reaffirmations')}
     return hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest()
 
 
