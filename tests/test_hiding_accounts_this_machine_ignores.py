@@ -143,7 +143,7 @@ def test_what_happens_under_the_button_is_chosen_by_the_row():
     body = _until_next_function(body)
     assert "btn.dataset.removable === '1'" in body, "исход выбирается не по строке"
     assert "/api/accounts-hidden" in body and "/account-map-remove" in body
-    assert "Take \"' + label + '\" out of this list?" in body, (
+    assert "Remove \"' + label + '\" from ACL?" in body, (
         "человеку не сказано, что со строкой из таблицы будет другое"
     )
 

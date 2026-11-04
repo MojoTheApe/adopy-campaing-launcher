@@ -8,9 +8,9 @@ ACL-2351 adopted Tracker3.24.1 at `9dc08c3e31ef1204130f43b0740d173e733d5cb7`
 through [PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383).
 The provider, engine and trusted private-checkout workflow select the same source.
 Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/9dc08c3e31ef1204130f43b0740d173e733d5cb7/docs/STANDALONE_WORKFLOW_PROVIDER.md)
-and the [current ACL workflow](WORKFLOW.md). Master remains the unchanged
-1.8.0 documentation reference. No configuration, optional policy or product
-release is activated by this documentation clarification.
+and the [current ACL workflow](WORKFLOW.md). The provider validates the exact
+Master 1.8.0 ancestry in the descriptor and template baseline. For current
+shared guidance, use Master Repo 1.9.0 from [AGENTS.md](../../AGENTS.md).
 
 ## Historical adoption — ACL-2156, 24 October 2026
 

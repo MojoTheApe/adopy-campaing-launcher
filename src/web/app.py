@@ -4301,6 +4301,13 @@ async def account_map_patch(request: Request) -> JSONResponse:
             rows.append(new_row)
 
         write_csv_atomic(map_path, fieldnames, rows)
+
+        # Saving or adding an account is an explicit "I want this one": bring
+        # it back if it was removed from ACL (or hidden) earlier.
+        from src.web import hidden_accounts as _hidden
+
+        if _hidden.is_hidden(account_name):
+            _hidden.set_hidden(account_name, False)
     except PermissionError:
         # Same class of bug fixed in /account-link-patch below: an unhandled
         # exception here previously made FastAPI's default 500 come back as
@@ -5622,9 +5629,11 @@ def _accounts_spending_today(accounts: list[str]) -> list[str]:
 
 @app.post("/account-map-remove")
 async def account_map_remove(request: Request) -> JSONResponse:
-    """Disconnect an account from THIS machine. Body JSON: {account_name}.
+    """Remove an account from ACL on THIS machine. Body JSON: {account_name}.
 
-    Removes the row from the machine-local map only. The account keeps
+    Removes the row from the machine-local map (if there is one) and sets the
+    per-machine hidden flag, so a sheet-only account leaves the Accounts list
+    too. The account keeps
     existing in the company's sheet, keeps its history and its campaigns —
     this machine simply stops knowing how to reach it. Nothing here can or
     should delete a shared record.
@@ -5701,12 +5710,16 @@ async def account_map_remove(request: Request) -> JSONResponse:
                         if account_links.unlink(name, kind, place):
                             unlinked.append({"account": name, "kind": kind, "value": place})
 
-        if not removed and not unlinked:
-            shown = "«" + "», «".join(wanted[:3]) + "»"
-            return JSONResponse(
-                {"ok": False, "error": f"{shown} is not in the map of this machine"},
-                status_code=404,
-            )
+        # Remove means "remove from ACL": the account must also leave the
+        # Accounts list. A row that comes from the shared sheet has nothing in
+        # the map to delete, so every removed name gets the same per-machine
+        # hidden flag that /api/accounts-hidden sets. The shared sheet is
+        # never touched; saving the account again (/account-map-patch) clears
+        # the flag.
+        from src.web import hidden_accounts as _hidden
+
+        for name in dict.fromkeys(wanted):
+            _hidden.set_hidden(name, True)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 

@@ -182,7 +182,7 @@ def _check(data: dict, name: str, headline: str, body: str, description: str,
            *, ignore: str = "") -> None:
     values = (name, headline, body, description)
     if any(not isinstance(v, str) for v in values):
-        raise AdTextError("Title, headline, body and description must be text.")
+        raise AdTextError("Title, primary text, headline and description must be text.")
     # Перенос строки в теле объявления законен — им разбивают абзацы.
     # Остальные управляющие символы приезжают из копипаста и ломают разметку.
     if any(ord(c) < 32 and c != "\n" for v in values for c in v):
@@ -192,7 +192,7 @@ def _check(data: dict, name: str, headline: str, body: str, description: str,
     if not tidy(name):
         raise AdTextError("The text needs an ad title.")
     if not tidy(headline) and not tidy(body):
-        raise AdTextError("Fill in the headline or the body — an empty text cannot be saved.")
+        raise AdTextError("Fill in the headline or the primary text — an empty text cannot be saved.")
     known = AdText.__dataclass_fields__
     for raw in data["texts"].values():
         t = AdText(**{k: v for k, v in raw.items() if k in known})
@@ -202,7 +202,7 @@ def _check(data: dict, name: str, headline: str, body: str, description: str,
             raise AdTextError(f"The title “{tidy(name)}” is already taken by another text.")
         if fingerprint(t.headline, t.body, t.description) == fingerprint(headline, body, description):
             raise AdTextError(
-                f"This text already exists as “{t.name}”: headline, body and description match "
+                f"This text already exists as “{t.name}”: primary text, headline and description match "
                 "(letter case and extra spaces do not count)."
             )
 

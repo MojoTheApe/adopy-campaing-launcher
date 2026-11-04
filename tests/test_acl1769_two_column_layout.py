@@ -213,7 +213,7 @@ def test_the_ui_shows_only_what_the_creator_sends():
     assert cr.CTA_TYPE == "LEARN_MORE" and 'data-default="LEARN_MORE"' in page
     # ACL-1775: выбор Website / Instant Form - настоящий, значения те, что шлёт создатель
     assert cr.DESTINATION == "WEBSITE" and cr.DEST_WEBSITE == "website" and cr.DEST_FORM == "instant_form"
-    assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant Form<' in page
+    assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant forms<' in page
     assert cr.PAUSED == "PAUSED" and "PAUSED campaigns" in page
     assert cr.SUPPORTED_OBJECTIVES == frozenset({"leads"})
     assert cr.OBJECTIVE == "OUTCOME_LEADS"

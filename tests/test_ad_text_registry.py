@@ -192,3 +192,11 @@ def test_lookup_ignores_case_and_spacing():
 
 def test_lookup_of_a_missing_text_is_nothing_not_an_error():
     assert ar.lookup("нет такого") is None
+
+
+def test_empty_text_error_says_primary_text_not_body():
+    """ACL-2379: the visible message uses Facebook's name for the body field."""
+    with pytest.raises(ar.AdTextError) as exc:
+        _add("Empty", headline="", body="")
+    assert "primary text" in str(exc.value)
+    assert "body" not in str(exc.value).lower()
