@@ -125,6 +125,7 @@ const rowOf = (html, key) => (new RegExp('<tr class="hc-r-[a-z]+[^"]*" data-key=
   const out = {};
   const inst = win.hcMount(root, {scoped: true, seed: IN.seed, rows: H});
   const ctx = {inst, H, els, R1, calls, posts, warmCalls, win, store, docL, tick, T, BTN, CARET, colw, rowOf, out, mkRoot,
+    expand: async (key) => { H.Acc.table.listeners.click[0]({target: T({'[data-exp]': {dataset: {exp: key}}})}); await tick(40); },
     mount: (r) => win.hcMount(r.root, {scoped: true, seed: IN.seed, rows: r.H}), sandbox};
   if (!IN.noinit) await inst.init();
   await tick(10);
@@ -261,17 +262,17 @@ def test_maximum_keeps_structure_available_and_removes_manual_country_reads():
 # ───────────────────────── колонки и данные (как в макете) ─────────────────────────
 
 def _acc_table():
-    return _node(OPEN_ALL + " out.acc = H.Acc.table.innerHTML; out.other = H.Other.table.innerHTML; out.count = els.count.textContent;"
-                 " inst.state.acctOpen = {}; out.collapsedCount = els.count.textContent;")
+    return _node(OPEN_ALL + " out.acc = H.Acc.table.innerHTML; out.other = H.Other.table.innerHTML;")
 
 
 def test_toolbar_and_count_line_are_compact_and_the_template_has_no_separate_table_frame():
     tpl = _render_table()
     for needle in ("Search campaigns, ad sets or ads", "All delivery", "Enabled campaigns", "Paused campaigns", ">Controls<", ">BI metrics<",
-                   ">Structure<", ">Tracking<", "Expand all", "Collapse all", "Switch on", "Set bid…", "What was changed here"):
-        assert needle in tpl, needle
+                   ">Structure<", ">Tracking<", "Expand all", "Collapse all", "Switch on", "Set bid…", "What was changed here", "Manage columns"):
+        assert needle not in tpl, needle                                                                       # панель и сноска удалены 04.11
     assert 'data-hc="frame"' not in tpl and 'data-hc="table"' not in tpl and "Identity stays pinned" not in tpl     # отдельной таблицы нет
-    assert _acc_table()["count"] == "4 campaigns"                                                                  # Acc: 3, Other: 1
+    assert 'data-hc="status"' in tpl and 'data-hc="count"' not in tpl and 'data-hc="preset"' not in tpl
+    assert "STORE_KEY" not in TABLE and "saveCols" not in TABLE                                              # выбор колонок убран: сохранённое не читается
 
 
 def test_column_groups_and_order_follow_the_prototype():
@@ -282,10 +283,6 @@ def test_column_groups_and_order_follow_the_prototype():
     assert names[at + 8: at + 11] == ["Spend", "Leads", "FTDs"]
     assert "MANAGEMENT &amp; DECISIONS" in acc or "MANAGEMENT & DECISIONS" in acc
     assert "BI · business outcomes" in acc and "Account / campaign hierarchy" in acc and "Campaign / Ad set / Ad" in acc
-    allcols = _node("inst.state.acctOpen = {Acc: true}; els.preset.value = 'all'; els.preset.listeners.change[0].call(els.preset); out.t = H.Acc.table.innerHTML;")["t"]
-    flat = [re.sub(r"<[^>]+>", "", h) for h in re.findall(r"<th[^>]*>(.*?)</th>", allcols)]
-    for h in ("Deposits (all)", "CR lead→FTD", "Keitaro", "Placements", "Devices", "Landing Variant", "History"):
-        assert h in flat, h
 
 
 def test_rows_pin_identity_and_show_level_country_account():
@@ -316,7 +313,7 @@ def test_every_command_is_disabled_with_a_reason_without_the_helper():
 def test_budget_and_bid_columns_show_the_value_and_the_owner_note():
     t = _node("""
       H.Acc.row.listeners.click[0]({target: T({})}); await tick(10);
-      els['expand-all'].listeners.click[0](); await tick(80);
+      for (const k of ['campaign:1', 'campaign:2', 'campaign:3', 'adset:11', 'adset:12']) { await ctx.expand(k); }
       out.t = H.Acc.table.innerHTML;
     """)["t"]
     text = _text(t)
@@ -325,34 +322,16 @@ def test_budget_and_bid_columns_show_the_value_and_the_owner_note():
     assert "Ads have no budget" in t and "Managed by ad set" in t
 
 
-def test_delivery_filter_and_search_narrow_the_rows_of_every_account():
-    out = _node(OPEN_ALL + """
-      els.delivery.value = 'paused'; els.delivery.listeners.change[0].call(els.delivery);
-      out.paused = H.Acc.table.innerHTML; out.pausedOther = H.Other.table.innerHTML; out.count = els.count.textContent;
-      els.delivery.value = 'all'; els.delivery.listeners.change[0].call(els.delivery);
-      els.search.value = 'spend with'; els.search.listeners.input[0].call(els.search);
-      out.search = H.Acc.table.innerHTML;
-    """)
-    assert 'data-key="campaign:2"' in out["paused"] and 'data-key="campaign:1"' not in out["paused"] and "of" in out["count"]
-    assert 'data-key="campaign:9"' in out["pausedOther"] or "campaign:9" not in out["pausedOther"]
-    assert 'data-key="campaign:3"' in out["search"] and 'data-key="campaign:1"' not in out["search"]
-
-
-def test_expand_all_opens_every_account_and_reads_children_from_the_local_snapshot_only():
+def test_expanding_rows_reads_children_from_the_local_snapshot_only():
     out = _node("""
+      H.Acc.row.listeners.click[0]({target: T({})}); await tick(10);
       const before = calls.length;
-      els['expand-all'].listeners.click[0](); await tick(120);
-      out.open = Object.keys(H).filter(a => !H[a].child.hidden);
+      for (const k of ['campaign:1', 'campaign:2', 'campaign:3', 'adset:11', 'adset:12']) { await ctx.expand(k); }
       out.acc = H.Acc.table.innerHTML; out.calls = calls.slice(before);
-      els['collapse-all'].listeners.click[0](); await tick(5);
-      out.afterCollapse = Object.keys(H).filter(a => !H[a].child.hidden);
-      out.collapsedTable = H.Acc.child.hidden;
     """)
-    assert out["open"] == ["Acc", "Other", "Fresh"]
     assert 'data-key="adset:11"' in out["acc"] and 'data-key="adset:12"' in out["acc"] and 'data-key="ad:111"' in out["acc"]
     kids = [c for c in out["calls"] if "/campaign-inventory/children" in c]
     assert kids and not [c for c in out["calls"] if c.startswith("POST")]
-    assert out["afterCollapse"] == []
 
 
 # ───────────────────────── общая прокрутка и ширина закреплённого блока ─────────────────────────

@@ -174,9 +174,6 @@
         </tbody>
       </table>
       </div>
-      {%- if campaign_table_api is defined and campaign_table_api() %}
-      <section class="hc hc-after" data-hc-after></section>
-      {%- endif %}
       {% set blank = mc.rows | rejectattr('has_data') | list | length %}
       {% if blank %}
       <div class="amap-empty">{{ blank }} of {{ mc.rows | length }} accounts have no rows in the workbook for this date.</div>

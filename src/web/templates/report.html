@@ -1754,19 +1754,6 @@
     .amap-country > summary::-webkit-details-marker { display: none; }
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: var(--adopy-text-sm); }
     .amap-country[open] > summary::before { content: '▾'; }
-    /* ACL-1840: the campaign footer mounts beside the account table. Keep
-       its reading line aligned with the workbook notice and connection form. */
-    .amap-country > .hc.hc-after {
-      margin-top: 0;
-      padding: 0.5rem 0.85rem;
-      box-sizing: border-box;
-    }
-    .amap-country > .hc-after .hc-foot { overflow-wrap: anywhere; }
-    .amap-country > .hc-after .hc-hist { margin-top: 0.25rem; }
-    .amap-country > .hc-after .hc-hist > summary {
-      max-width: 100%; overflow-wrap: anywhere;
-    }
-    .amap-country > .hc-after .hc-hist-body { overflow-wrap: anywhere; }
     .amap-sum {
       margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: var(--adopy-text-table); color: var(--muted);
@@ -12630,15 +12617,13 @@ function amapCampaignMount(host) {
   if (host._hc) return host._hc;
   amapCampaignTabs(host);
   var mount = host.querySelector('[data-hc-mount]');
-  var tpl = document.getElementById('hc-scoped-tpl'), tplAfter = document.getElementById('hc-after-tpl');
+  var tpl = document.getElementById('hc-scoped-tpl');
   if (!mount || !tpl || typeof window.hcMount !== 'function') {
     if (mount) mount.textContent = 'The campaign table is not available on this page. Reload the dashboard.';
     return null;
   }
   mount.appendChild(tpl.content.cloneNode(true));
   var scope = host.parentNode || document;
-  var after = scope.querySelector('[data-hc-after]');
-  if (after && tplAfter && !after.firstChild) after.appendChild(tplAfter.content.cloneNode(true));
   var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
   host.dataset.periodFrom = per.from || '';
   host.dataset.periodTo = per.to || '';
@@ -12650,7 +12635,7 @@ function amapCampaignMount(host) {
   });
   var grid = scope.querySelector('table.amap-grid');
   host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
-                                   rows: grid ? amapCampaignTree(grid, accounts) : {}, after: after});
+                                   rows: grid ? amapCampaignTree(grid, accounts) : {}});
   host._hc.ready = host._hc.init();
   return host._hc;
 }

@@ -97,7 +97,6 @@ class Site:
                 '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait"><nav class="hc-tabs" data-hc-tabs></nav>'
                 '<div class="hc-mount" data-hc-mount></div></section>'
                 f'<table class="amap-grid"><thead><tr><th>Account</th><th>Campaign list</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
-                '<section class="hc hc-after" data-hc-after></section>'
                 "</details></div>"
                 "<script>window.AMAP_CAMPAIGN_TABLE = true; function amapPeriod() { return {from: '" + D + "', to: '" + D + "', span: ''}; }\n" + MOUNT_JS + "</script>"
                 "</body></html>")
@@ -190,7 +189,6 @@ def page(site):
 
 
 def test_one_shared_scroll_sticky_header_and_no_page_overflow(page):
-    page.select_option("[data-hc=preset]", "all")
     info = page.evaluate("""() => {
       const sc = document.querySelector('.hc-scroll'), t = document.querySelector('.hc-table');
       const inner = [...t.querySelectorAll('*')].filter(e => ['auto','scroll'].includes(getComputedStyle(e).overflowX) && e !== sc);
@@ -252,7 +250,6 @@ def test_partial_not_read_states_are_distinct(page, site, monkeypatch):
 
 
 def test_unknown_values_are_dashes_not_zeros(page):
-    page.select_option("[data-hc=preset]", "all")
     row = page.locator('tr[data-key="campaign:2"]')          # у кампании 2 нет строки Insights и нет BI
     cells = row.locator("td.num").all_inner_texts()
     assert cells and all(c.strip() == "—" for c in cells), cells
@@ -262,7 +259,6 @@ def test_unknown_values_are_dashes_not_zeros(page):
 
 
 def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
-    page.select_option("[data-hc=preset]", "all")
     page.click('[data-exp="campaign:1"]')
     page.wait_for_selector('tr[data-key="adset:11"]')
     info = page.evaluate("""() => [...document.querySelectorAll('.hc-cmd, .hc-switch')].map(b => ({
@@ -281,24 +277,6 @@ def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
     page.wait_for_timeout(200)
     assert [r for r in site.requests if r[0] != 'GET' and r[1].startswith('/campaign-commands/')] == posts_before == []
     assert not site.reads and not site.warm_posts
-
-
-def test_column_preset_and_visibility_persist(page):
-    page.select_option("[data-hc=preset]", "bi")
-    assert page.locator(".hc-table thead th", has_text="CPA (FTD)").count() == 1
-    assert page.locator(".hc-table thead th", has_text="Impressions").count() == 0
-    page.reload()
-    open_acc(page, "Acc")
-    page.wait_for_selector(".hc-table tbody tr")
-    assert page.input_value("[data-hc=preset]") == "bi"
-    page.click("[data-hc=cols] > summary")
-    page.uncheck('[data-col="b_cr"]')
-    assert page.input_value("[data-hc=preset]") == "custom"
-    page.reload()
-    open_acc(page, "Acc")
-    page.wait_for_selector(".hc-table tbody tr")
-    assert page.locator(".hc-table thead th", has_text="CR lead").count() == 0
-    assert page.input_value("[data-hc=preset]") == "custom"
 
 
 def test_unread_account_queues_attention_once_without_a_manual_read_button(page, site):
@@ -480,7 +458,6 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     from pathlib import Path
 
     shots = os.environ.get("ACL_SHOTS_DIR", "")
-    page.evaluate("document.querySelector('[data-hc=preset]').value = 'all'")
     page.add_script_tag(url="http://acl.test/static/acm_commands.js")
     page.wait_for_function("!!window.acmCommands")
     # Persist a real terminal attempt before attention. A recent failure must
@@ -543,7 +520,7 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
 
 # ───────────────────────── выравнивание шапки таблицы страны (ACL-1800) ─────────────────────────
 
-def test_the_toolbar_lines_up_and_the_expanded_tree_does_not_overflow_the_page(page):
+def test_the_tabs_line_up_and_the_expanded_tree_does_not_overflow_the_page(page):
     import os
     from pathlib import Path
 
@@ -551,19 +528,17 @@ def test_the_toolbar_lines_up_and_the_expanded_tree_does_not_overflow_the_page(p
       const L = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().left * 10) / 10 : null; };
       const R = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().right * 10) / 10 : null; };
       const textLeft = sel => { const e = document.querySelector(sel); const r = document.createRange(); r.selectNodeContents(e); return Math.round(r.getBoundingClientRect().left * 10) / 10; };
-      return {toolbar: L('.hc-toolbar'), tabs: textLeft('.hc-tabs .hc-tab'), section: L('.amap-campaigns'), grid: L('table.amap-grid'), gridR: R('table.amap-grid'),
+      return {tabs: textLeft('.hc-tabs .hc-tab'), section: L('.amap-campaigns'), grid: L('table.amap-grid'), gridR: R('table.amap-grid'),
               frame: L('.hc-frame'), frameR: R('.hc-frame'), doc: document.documentElement.scrollWidth, win: innerWidth};
     }""")
-    assert abs(left["toolbar"] - left["tabs"]) <= 2 and left["toolbar"] - left["section"] >= 8
+    assert left["tabs"] - left["section"] >= 8 and page.locator(".hc-toolbar, [data-hc-after], .hc-foot").count() == 0   # панели и сноски нет
     assert left["frame"] >= left["grid"] - 1 and left["frameR"] <= left["gridR"] + 1      # таблица кампаний лежит внутри списка аккаунтов
     assert left["doc"] <= left["win"]
     assert page.evaluate("getComputedStyle(document.querySelector('.hc-table thead th')).position") == "sticky"
-    page.select_option("[data-hc=preset]", "all")
     assert page.evaluate("const s = document.querySelector('.hc-scroll'); s.scrollWidth > s.clientWidth")   # прокрутка внутри раскрытого аккаунта
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     shots = os.environ.get("ACL_SHOTS_DIR", "")
     if shots:
-        page.select_option("[data-hc=preset]", "optimization")
         open_acc(page, "Fresh")
         for theme in ("light", "dark"):
             page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
@@ -587,7 +562,6 @@ def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(pag
     from PIL import Image
 
     shots = os.environ.get("ACL_SHOTS_DIR", "")
-    page.select_option("[data-hc=preset]", "all")
     page.mouse.move(2, 2)
     for theme in ("light", "dark"):
         page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
