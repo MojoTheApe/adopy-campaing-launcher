@@ -206,6 +206,8 @@ def test_the_country_attributed_part_shows_only_amounts(splits):
         view = _build_account_map_view(report, date_from="2026-09-01", date_to="2026-09-15")
         assert view["source_info"] == report["source_info"]
         html = templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+        # Список кампаний с Home переехал в Manage страны (тот же partial) — проверяем обе страницы.
+        html += "".join(templates.env.get_template("_account_map_country.html").render(mc=mc, amap=view, mlx={}) for mc in view["countries"])
         # Keep historical amounts in the model without showing Meta spend as BI.
         assert 'class="amap-country-read"' not in html
         assert 'class="amap-live-summary"' not in html
