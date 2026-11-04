@@ -345,7 +345,7 @@ class ApiPublisher:
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
-        #: ACL-2250: квитанции имён кампаний, дошедших до конца сверки; удаляются в конце задания (`finish_job`).
+        #: ACL-2250: квитанции имён кампаний, дошедших до конца сверки; удаляются в конце задания (`finish_name_records`).
         self._finished_receipts: list[tuple[str, str]] = []
         #: ACL-2283: local load reading taken right before the profile start (None - unknown).
         self._load_before: dict[str, Any] | None = None

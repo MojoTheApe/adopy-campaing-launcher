@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.fb_api import creator as cr  # noqa: E402
 from src.fb_api import name_receipt as nr  # noqa: E402
-from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _run  # noqa: E402
+from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _publisher, _run  # noqa: E402
 
 BASE = "MX Leads 1"
 
@@ -272,3 +272,32 @@ def test_21_copy_of_a_video_campaign_finds_the_video_by_the_builder_tag(tmp_path
     _end_job()
     out2, _ = _run(meta, _draft(tmp_path, video=True, ads=1))
     assert out2.error == "" and uploads() == 2
+
+
+# ───────────────────────── что видит владелец ─────────────────────────
+
+def test_24_publish_history_keeps_the_published_name():
+    from src.web import publish_history as ph
+    line = ph._result_line({"campaign_name": BASE, "published_as": BASE + " copy 2", "success": True})
+    assert line["published_as"] == BASE + " copy 2"
+    assert "published_as" not in ph._result_line({"campaign_name": BASE, "success": True})
+
+
+def test_rename_message_is_short_and_does_not_grow_with_the_count():
+    one = cr._rename_message(BASE, BASE + " copy 2", 2, future=False)
+    many = cr._rename_message(BASE, BASE + " copy 26", 26, future=True)
+    assert one == "Published as 'MX Leads 1 copy 2': this name is already on the ad account (2 earlier)."
+    assert many.startswith("Will be published as 'MX Leads 1 copy 26'") and len(many) < 120
+
+
+def test_api_create_telemetry_row_carries_the_copy_number(tmp_path, monkeypatch):
+    from src.web import publish_api
+    rows = []
+    monkeypatch.setattr(publish_api, "_record", lambda *a, **k: rows.append((a, k)))
+    meta = FakeMeta()
+    pub = _publisher(meta)
+    pub.publish_draft(_draft(tmp_path, ads=1))
+    pub.finish_name_records()
+    pub.publish_draft(_draft(tmp_path, ads=1))
+    created = [k["diag"]["copy_number"] for a, k in rows if a and a[0] == "api_create_campaign"]
+    assert created == [0, 1]
