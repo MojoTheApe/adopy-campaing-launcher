@@ -194,7 +194,7 @@ def test_one_shared_scroll_sticky_header_and_no_page_overflow(page):
       const inner = [...t.querySelectorAll('*')].filter(e => ['auto','scroll'].includes(getComputedStyle(e).overflowX) && e !== sc);
       return {doc: document.documentElement.scrollWidth, win: innerWidth, scrollW: sc.scrollWidth, clientW: sc.clientWidth,
               inner: inner.length, headPos: getComputedStyle(t.querySelector('thead th')).position,
-              pinned: getComputedStyle(t.querySelector('tbody .p3')).position};
+              pinned: getComputedStyle(t.querySelector('tbody .p1')).position};
     }""")
     assert info["doc"] <= info["win"], "the page itself must not overflow horizontally"
     assert info["scrollW"] > info["clientW"] and info["inner"] == 0
@@ -379,10 +379,10 @@ def _pinned(page):
       const t = document.querySelector('.hc-table');
       const w = e => Math.round(e.getBoundingClientRect().width);
       const rows = ['campaign:1', 'adset:11', 'ad:111'].map(k => t.querySelector('tr[data-key="' + k + '"]'));
-      return {head: w(t.querySelector('thead tr.hc-heads th.p3')),
-              names: rows.map(r => r && w(r.querySelector('td.p3'))),
-              firstMetricLeft: Math.round(t.querySelector('thead tr.hc-heads th.p3 + th').getBoundingClientRect().left),
-              rowMetricLefts: rows.map(r => r && Math.round(r.querySelector('td.p3 + td').getBoundingClientRect().left)),
+      return {head: w(t.querySelector('thead tr.hc-heads th.p1')),
+              names: rows.map(r => r && w(r.querySelector('td.p1'))),
+              firstMetricLeft: Math.round(t.querySelector('thead tr.hc-heads th.p1 + th').getBoundingClientRect().left),
+              rowMetricLefts: rows.map(r => r && Math.round(r.querySelector('td.p1 + td').getBoundingClientRect().left)),
               stored: localStorage.getItem('acl.hc.pinw.v1'),
               now: document.querySelector('.hc-resize').getAttribute('aria-valuenow')};
     }""")
@@ -395,7 +395,7 @@ def test_dragging_the_pinned_boundary_widens_every_row_and_is_remembered(page):
     page.click('[data-exp="adset:11"]')
     page.wait_for_selector('tr[data-key="ad:111"]')
     before = _pinned(page)
-    assert before["head"] == 280 and before["names"] == [280, 280, 280]
+    assert before["head"] == 440 and before["names"] == [440, 440, 440]
     box = page.locator(".hc-resize").bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     page.mouse.move(x, y)
@@ -409,7 +409,7 @@ def test_dragging_the_pinned_boundary_widens_every_row_and_is_remembered(page):
     assert after["names"] == [after["head"]] * 3                       # шапка и все уровни — одна и та же ширина
     shift = after["firstMetricLeft"] - before["firstMetricLeft"]
     assert abs(shift - 120) <= 2 and after["rowMetricLefts"] == [after["firstMetricLeft"]] * 3   # колонки метрик строго под заголовками
-    assert after["stored"] == str(432 + 120) and after["now"] == after["stored"]
+    assert after["stored"] == str(440 + 120) and after["now"] == after["stored"]
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     # запомнено: после перезагрузки ширина та же
     page.reload()
@@ -419,17 +419,17 @@ def test_dragging_the_pinned_boundary_widens_every_row_and_is_remembered(page):
     # клавиатура и двойной щелчок
     page.focus(".hc-resize")
     page.keyboard.press("ArrowRight")
-    assert int(page.get_attribute(".hc-resize", "aria-valuenow")) == 432 + 120 + 16
+    assert int(page.get_attribute(".hc-resize", "aria-valuenow")) == 440 + 120 + 16
     page.keyboard.press("Home")
-    assert _pinned(page)["head"] == 240 - 116
+    assert _pinned(page)["head"] == 300
     page.dblclick(".hc-resize")
-    assert _pinned(page)["head"] == 280 and _pinned(page)["stored"] == "432"
+    assert _pinned(page)["head"] == 440 and _pinned(page)["stored"] == "440"
     assert page.errors == []
 
 
 def test_names_stay_within_two_lines_and_carry_the_full_name_in_the_tooltip(page):
     info = page.evaluate("""() => {
-      const b = document.querySelector('tr[data-key="campaign:1"] td.p3 .hc-name b');
+      const b = document.querySelector('tr[data-key="campaign:1"] td.p1 .hc-name b');
       const cs = getComputedStyle(b);
       return {clamp: cs.webkitLineClamp || cs.lineClamp, title: b.title, text: b.textContent, h: Math.round(b.getBoundingClientRect().height), lh: parseFloat(cs.lineHeight)};
     }""")
@@ -476,7 +476,7 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     sub = page.locator('tr[data-msg="row:campaign:1"]')
     assert row.bounding_box()["height"] <= 90                                              # строка осталась обычной высоты
     assert sub.bounding_box()["height"] <= 40                                              # сообщение — одна строка
-    status = row.locator("td.p2")
+    status = row.locator("td.p1")
     assert "WinError" not in status.inner_text() and "Multilogin" not in status.inner_text()
     assert status.locator(".hc-mk.bad").count() == 1 and "Multilogin" in status.locator(".hc-mk").get_attribute("title")
     table_w = page.evaluate("document.querySelector('.hc-table').getBoundingClientRect().width")
@@ -569,11 +569,11 @@ def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(pag
         page.wait_for_timeout(250)
         info = page.evaluate("""() => {
           const sc = document.querySelector('.hc-scroll'), fr = document.querySelector('.hc-frame');
-          const allowedPinned = e => e.matches('thead th, td.p0, td.p1, td.p2, td.p3');
+          const allowedPinned = e => e.matches('thead th, td.p1');
           const sticky = [...sc.querySelectorAll('*')].filter(e => ['sticky', 'absolute', 'fixed'].includes(getComputedStyle(e).position));
           const other = sticky.filter(e => !allowedPinned(e) && !e.matches('.hc-band-in, .hc-rm-raw, .hc-resize, thead th > span'));
           const partial = sticky.filter(e => e.matches('.hc-band-in, .hc-rm-raw')).filter(e => e.getBoundingClientRect().width < sc.clientWidth - 2);
-          const pinnedBg = [...sc.querySelectorAll('td.p0, td.p1, td.p2, td.p3, thead th.p0, thead th.p1, thead th.p2, thead th.p3, th.hc-pin-top')].map(e => getComputedStyle(e).backgroundColor);
+          const pinnedBg = [...sc.querySelectorAll('td.p1, thead th.p1, th.hc-pin-top')].map(e => getComputedStyle(e).backgroundColor);
           const cs = (pe) => { const c = getComputedStyle(fr, pe); return {content: c.content, position: c.position, events: c.pointerEvents, right: c.right}; };
           const pin = parseFloat(getComputedStyle(document.querySelector('.hc-scoped')).getPropertyValue('--hc-pin-w'));
           const row = document.querySelector('tr[data-key="campaign:1"]').getBoundingClientRect(), frr = fr.getBoundingClientRect();

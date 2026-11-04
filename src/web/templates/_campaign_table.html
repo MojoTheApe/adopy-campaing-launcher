@@ -29,7 +29,7 @@
     --adopy-row-campaign-min: 64px; --adopy-row-adset-min: 56px; --adopy-row-ad-min: 52px;
     --adopy-cell-x: 12px; --adopy-z-sticky-cell: 10; --adopy-z-table-header: 20;
     --adopy-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    --hc-pin-w: 432px; --hc-inset: 0.75rem;
+    --hc-pin-w: 440px; --hc-inset: 0.75rem; --hc-indent: 22px; --adopy-guide: #aab6c8;
   }
   :root[data-theme="dark"] .hc {
     --adopy-bg: #111720; --adopy-surface: #19222e; --adopy-surface-subtle: #202b39;
@@ -41,7 +41,7 @@
     --adopy-warning: #e5bd78; --adopy-warning-bg: #3c3223;
     --adopy-danger: #ffb4aa; --adopy-danger-bg: #462a2e;
     --adopy-neutral-bg: #263446; --adopy-switch-off: #75869d; --adopy-switch-thumb: #10233f;
-    --adopy-shadow-sm: 0 1px 3px rgb(0 0 0 / 20%);
+    --adopy-shadow-sm: 0 1px 3px rgb(0 0 0 / 20%); --adopy-guide: #5f7089;
   }
   .hc {
     margin-top: 1.5rem; min-width: 0; max-width: 100%; color: var(--adopy-text);
@@ -81,9 +81,9 @@
   .hc-frame { position: relative; }
   .hc-frame[data-more-right="1"]::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 14px; pointer-events: none; z-index: 30;
     background: linear-gradient(to left, rgb(24 44 76 / 14%), transparent); }
-  .hc-frame[data-more-left="1"] .hc-table .p3 { box-shadow: 8px 0 8px -6px rgb(24 44 76 / 24%); }
+  .hc-frame[data-more-left="1"] .hc-table .p1 { box-shadow: 8px 0 8px -6px rgb(24 44 76 / 24%); }
   :root[data-theme="dark"] .hc-frame[data-more-right="1"]::after { background: linear-gradient(to left, rgb(0 0 0 / 40%), transparent); }
-  :root[data-theme="dark"] .hc-frame[data-more-left="1"] .hc-table .p3 { box-shadow: 8px 0 8px -6px rgb(0 0 0 / 55%); }
+  :root[data-theme="dark"] .hc-frame[data-more-left="1"] .hc-table .p1 { box-shadow: 8px 0 8px -6px rgb(0 0 0 / 55%); }
   /* Ни один предок не растёт вслед за широкой таблицей: прокручивается только `.hc-scroll`, страница — нет. */
   .hc-scoped, .hc-scoped [data-hc="body"], .hc-mount, .hc-frame { min-width: 0; max-width: 100%; }
   table.hc-table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: auto; margin: 0; font-size: 0.8125rem;
@@ -99,14 +99,19 @@
   .hc-table th.hc-grp { border-left: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
   .hc-table th.hc-grp small { font-weight: 400; color: var(--adopy-text-muted); margin-left: 0.375rem; }
   .hc-table .num { text-align: right; }
-  .hc-table .p1, .hc-table .p2, .hc-table .p3 { position: sticky; z-index: var(--adopy-z-sticky-cell); }
-  .hc-table thead .p1, .hc-table thead .p2, .hc-table thead .p3 { z-index: calc(var(--adopy-z-table-header) + 5); }
-  .hc-table .p1 { padding: 0 4px; text-align: center; }
-  .hc-table .p2 { padding: 0 8px; }
-  .hc-table .p1 { left: 0; } .hc-table .p2 { left: 28px; } .hc-table .p3 { left: 116px; border-right: 1px solid var(--adopy-border-strong); }
+  /* Вариант D (04.11): одна закреплённая колонка; вся строка (стрелка, переключатель, имя) сдвигается по уровню --d (0/1/2). */
+  .hc-table .p1 { position: sticky; left: 0; z-index: var(--adopy-z-sticky-cell); padding: 0; white-space: normal; border-right: 1px solid var(--adopy-border-strong); }
+  .hc-table thead .p1 { z-index: calc(var(--adopy-z-table-header) + 5); padding: 0 var(--adopy-cell-x); }
+  /* Направляющие: по одной линии 2px на каждый уровень предка + «ёлочка» 8px к своему caret; тянутся на всю высоту ячейки. */
+  .hc-table tbody td.p1::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--d, 0) * var(--hc-indent));
+    background: repeating-linear-gradient(90deg, transparent 0 10px, var(--adopy-guide) 10px 12px, transparent 12px var(--hc-indent)); pointer-events: none; }
+  .hc-table tbody tr[style*="--d:1"] td.p1::after, .hc-table tbody tr[style*="--d:2"] td.p1::after { content: ""; position: absolute; top: 50%; height: 2px; width: 8px;
+    left: calc(var(--d) * var(--hc-indent) - 12px); background: var(--adopy-guide); pointer-events: none; }
   .hc-table tbody tr:hover > td { background: var(--adopy-surface-hover); }
-  .hc-table tr.hc-r-campaign > td { height: var(--adopy-row-campaign-min); }
-  .hc-table tr.hc-r-adset > td { height: var(--adopy-row-adset-min); background: var(--adopy-surface); }
+  .hc-table tr.hc-r-campaign > td { height: var(--adopy-row-campaign-min); border-top: 1px solid var(--adopy-border-strong); }
+  /* Подкрашена только раскрытая кампания: группа читается как блок, свёрнутые остаются белыми. */
+  .hc-table tr.hc-r-campaign.hc-open > td { background: color-mix(in srgb, var(--adopy-selected-bg) 60%, var(--adopy-surface)); }
+  .hc-table tr.hc-r-adset > td { height: var(--adopy-row-adset-min); }
   .hc-table tr.hc-r-ad > td { height: var(--adopy-row-ad-min); }
   .hc-table td.hc-gl { border-left: 1px solid var(--adopy-border); }
   .hc-msg td, .hc-rowmsg td { overflow: visible; }
@@ -120,31 +125,31 @@
   .hc-msg .hc-band-in { white-space: normal; }
   .hc-msg.hc-bad .hc-band-in { color: var(--adopy-danger); }
   .hc-msg.hc-warn .hc-band-in { color: var(--adopy-warning); }
-  .hc-id { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-  .hc-name { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .hc-id { position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 8px 4px calc(var(--d, 0) * var(--hc-indent) + 6px); }
+  .hc-name { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   /* Имя — до двух строк, дальше многоточие; полное имя — в title. Вторая строка (страна · аккаунт) — одна. */
   .hc-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical;
     -webkit-line-clamp: 2; line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
-  .hc-table td.p3 { white-space: normal; }
   .hc-name span { white-space: nowrap; }
   .hc-name span { color: var(--adopy-text-muted); font-size: 0.6875rem; overflow: hidden; text-overflow: ellipsis; }
-  .hc-badge { flex: none; font-size: 0.625rem; font-weight: 600; padding: 1px 6px; border-radius: var(--adopy-radius-pill);
+  .hc-badge { flex: none; margin-left: auto; font-size: 0.625rem; font-weight: 600; padding: 1px 6px; border-radius: var(--adopy-radius-pill);
     background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
   .hc-resize { position: absolute; top: 0; right: 0; width: 9px; height: 100%; cursor: col-resize; touch-action: none; z-index: 6; }
   .hc-resize::after { content: ""; position: absolute; right: 3px; top: 22%; bottom: 22%; width: 2px; border-radius: 1px; background: var(--adopy-border-strong); }
   .hc-resize:hover::after, .hc-resize:focus-visible::after, .hc-resizing .hc-resize::after { background: var(--adopy-primary); width: 3px; }
   .hc-resize:focus-visible { outline: 2px solid var(--adopy-focus); outline-offset: -2px; }
   .hc-resizing, .hc-resizing * { user-select: none; cursor: col-resize !important; }
-  .hc-lv-adset .hc-id { padding-left: 16px; } .hc-lv-ad .hc-id { padding-left: 32px; }
-  .hc-exp { width: 24px; min-height: 24px !important; padding: 0 !important; border: 0 !important; background: transparent !important; color: var(--adopy-text-muted); }
+  .hc-lv-campaign .hc-name b { font-weight: 700; } .hc-lv-ad .hc-name b { font-weight: 400; font-size: 12.5px; }
+  .hc-exp { flex: none; width: 16px; min-height: 24px !important; padding: 0 !important; border: 0 !important; background: transparent !important; color: var(--adopy-text-muted); }
   .hc-exp[aria-expanded="true"]::before { content: "\25BE"; } .hc-exp[aria-expanded="false"]::before { content: "\25B8"; }
-  .hc-exp-none { display: inline-block; width: 24px; }
+  .hc-exp-none { flex: none; display: inline-block; width: 16px; }
   .hc-switch { position: relative; width: 34px; height: 18px; min-height: 18px !important; padding: 0 !important; border-radius: var(--adopy-radius-pill) !important;
     background: var(--adopy-switch-off) !important; border: 0 !important; vertical-align: middle; }
   .hc-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--adopy-switch-thumb); }
   .hc-switch[aria-checked="true"] { background: var(--adopy-primary) !important; }
   .hc-switch[aria-checked="true"]::after { left: 18px; }
-  .hc-status-txt { margin-left: 0.375rem; font-size: 0.75rem; color: var(--adopy-text-muted); }
+  .hc-status-txt { flex: none; min-width: 58px; font-size: 0.75rem; color: var(--adopy-text-muted); white-space: nowrap; }
+  .hc-status-txt.busy { color: var(--adopy-primary); } .hc-status-txt.bad { color: var(--adopy-danger); }
   .hc-pill { display: inline-block; padding: 1px 8px; border-radius: var(--adopy-radius-pill); font-size: 0.75rem; font-weight: 500; }
   .hc-pill.ok { background: var(--adopy-success-bg); color: var(--adopy-success); }
   .hc-pill.off { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
@@ -155,10 +160,19 @@
   .hc-cmd { min-width: 28px; padding: 0 0.375rem !important; min-height: 28px !important; }
   .hc-cmd-note { font-size: 0.6875rem; color: var(--adopy-text-muted); }
   /* Маркер результата в ячейке Status — точка с подсказкой; сам текст — в строке `.hc-rowmsg` под строкой. */
-  .hc-mk { display: inline-block; width: 8px; height: 8px; margin-left: 0.375rem; border-radius: 50%; background: var(--adopy-text-muted); vertical-align: middle; cursor: help; }
-  .hc-mk.ok { background: var(--adopy-success); } .hc-mk.bad { background: var(--adopy-danger); } .hc-mk.warn { background: var(--adopy-warning); }
-  .hc-table tr.hc-rowmsg > td { height: 32px; padding: 0; background: var(--adopy-surface-subtle); }
-  .hc-rowmsg .hc-band-in { height: 32px; }
+  /* Слот обратной связи фиксированной ширины (✓ гаснет через ~4 с, «!» остаётся), чтобы имена одного уровня стояли ровно. */
+  .hc-mk-slot { flex: none; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
+  .hc-mk { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; min-height: 18px !important; padding: 0 !important;
+    border: 0 !important; border-radius: 50% !important; font-size: 11px; font-weight: 700; line-height: 1; cursor: help; background: transparent; }
+  .hc-mk.ok { color: var(--adopy-success); background: transparent !important; animation: hc-fade 4s forwards; }
+  .hc-mk.bad { background: var(--adopy-danger) !important; color: #fff; } .hc-mk.warn { background: var(--adopy-warning) !important; color: #fff; }
+  @keyframes hc-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+  .hc-switch[aria-busy="true"]::before { content: ""; position: absolute; inset: -3px; border: 2px solid transparent; border-top-color: var(--adopy-primary); border-radius: 50%; animation: hc-spin 1s linear infinite; }
+  @keyframes hc-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .hc-switch[aria-busy="true"]::before, .hc-mk.ok { animation: none; } }
+  .hc-table tr.hc-rowmsg > td { height: 26px; padding: 0; background: var(--adopy-surface-subtle); }
+  .hc-table tr.hc-rowmsg.bad > td { background: var(--adopy-danger-bg); } .hc-table tr.hc-rowmsg.warn > td { background: var(--adopy-warning-bg); }
+  .hc-rowmsg .hc-band-in { height: 26px; padding-left: calc(var(--d, 0) * var(--hc-indent) + 6px + 16px + 6px); }
   .hc-rowmsg .hc-ic { flex: none; width: 1.25em; text-align: center; color: var(--adopy-text-muted); }
   .hc-rowmsg.ok .hc-ic, .hc-rowmsg.ok .hc-rm-text { color: var(--adopy-success); }
   .hc-rowmsg.bad .hc-ic, .hc-rowmsg.bad .hc-rm-text { color: var(--adopy-danger); }
@@ -167,7 +181,7 @@
   .hc-rm-btn { flex: none; min-height: 22px !important; padding: 0 0.5rem !important; font-size: 0.6875rem !important; }
   .hc-rm-raw { position: sticky; left: 0; width: min(var(--hc-view-w, 900px), 100vw); max-height: 9rem; overflow: auto; margin: 0; padding: 0.375rem var(--adopy-cell-x) 0.5rem;
     white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 0.6875rem/1.4 ui-monospace, Consolas, monospace; color: var(--adopy-text); border-top: 1px solid var(--adopy-border); background: var(--adopy-surface-subtle); }
-  .hc-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+  .hc-switch[aria-busy="true"] { opacity: 0.55; cursor: progress; }
   .hc-switch:not(:disabled), .hc-cmd:not(:disabled) { cursor: pointer; }
   @media (max-width: 760px) { .hc { --hc-pin-w: 330px; } }
   /* Таблица страны под списком аккаунтов (карта аккаунтов на Home и вкладка страны, ACL-1800). */
@@ -194,14 +208,13 @@
   .hc-chip.alert { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
   .hc-chip.note { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
   .hc-hint-ok { color: var(--adopy-success); font-weight: 500; } .hc-hint-warn { color: var(--adopy-warning); font-weight: 500; } .hc-hint-neutral { color: var(--adopy-text); }
-  .hc-table tr.hc-r-adset > td { background: var(--adopy-surface-subtle); }
   .hc-pstate { flex: none; padding: 1px 8px; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-pill); font-size: 0.6875rem; color: var(--adopy-text-muted); cursor: help; }
   .hc-pstate[data-state="warm"] { color: var(--adopy-success); border-color: currentColor; }
   .hc-pstate[data-state="by_hand"], .hc-pstate[data-state="logged_out"] { color: var(--adopy-danger); border-color: currentColor; }
   .hc-pstate[data-state="closing"] { color: var(--adopy-warning); border-color: currentColor; }
   /* Дерево: строка аккаунта — родитель, под ней раскрывается таблица её кампаний (`.hc-embed` в `td` строки `.hc-acct-child`). */
   /* Правила карты (`.amap table.amap-grid td`, их сила выше) протекают во вложенную таблицу: имя должно переноситься, и вторая строка последней ячейки не пропадает. */
-  .amap table.amap-grid .hc-embed .hc-table td.p3 { white-space: normal; }
+  .amap table.amap-grid .hc-embed .hc-table td.p1 { white-space: normal; }
   .amap tbody .hc-acct-child tr:last-child td { border-bottom: 1px solid var(--adopy-border); }
   .hc-acct-row { cursor: pointer; }
   .hc-acct-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
@@ -273,9 +286,12 @@
   }
   var REASON_COPY = 'ACL-1773';
   var DASH = '—';
-  /* Закреплённый блок: стрелка 28 + переключатель 88 + имя. Ширину всего блока
-     (по умолчанию 432) тянут за ручку в шапке имени; запоминается общим ключом на все таблицы стран. */
-  var PIN_DEFAULT = 432, PIN_FIXED = 116, PIN_MIN = 240, PIN_KEEP = 160, PIN_KEY = 'acl.hc.pinw.v1';
+  /* Пояснение из прежней сноски: переключатель — настроенное состояние, а не фактическая доставка. */
+  var STATUS_NOTE = 'Status shows the configured on/off from Meta; Effective delivery is separate. The switch changes only after Meta confirms it.';
+  var OK_FADE_MS = 4000;
+  /* Закреплённый блок — одна колонка: [отступ уровня][стрелка][переключатель][статус][слот ✓/!][имя][бейдж]. Ширину
+     (по умолчанию 440) тянут за ручку в шапке имени; запоминается общим ключом на все таблицы стран. */
+  var PIN_DEFAULT = 440, PIN_FIXED = 0, PIN_MIN = 300, PIN_KEEP = 160, PIN_KEY = 'acl.hc.pinw.v1';
   function loadPin() {
     try {
       var v = Number(localStorage.getItem(PIN_KEY));
@@ -540,11 +556,11 @@
       var last = groups[groups.length - 1];
       if (last && last.g === c.g) last.n++; else groups.push({g: c.g, n: 1});
     });
-    var top = '<tr class="hc-groups"><th class="hc-pin-top" colspan="3">Account / campaign hierarchy</th>' + groups.map(function (g) {
+    var top = '<tr class="hc-groups"><th class="hc-pin-top" colspan="1">Account / campaign hierarchy</th>' + groups.map(function (g) {
       var note = g.g === 'meta' ? metaGroupNote() : g.g === 'bi' ? biPeriodNote() + ' · $' : '';
       return '<th class="hc-grp" data-g="' + esc(g.g) + '" colspan="' + g.n + '">' + esc(GROUPS[g.g]) + (note ? '<small>' + esc(note) + '</small>' : '') + '</th>';
     }).join('') + '</tr>';
-    var heads = '<tr class="hc-heads"><th class="p1"><span style="position:absolute;left:-9999px">Expand</span></th><th class="p2">Status</th><th class="p3">Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
+    var heads = '<tr class="hc-heads"><th class="p1" title="' + esc(STATUS_NOTE) + '">Status · Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
       cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>'; }).join('') + '</tr>';
     return '<thead>' + top + heads + '</thead>';
   }
@@ -561,17 +577,17 @@
   function clampPin(w) { return Math.max(PIN_MIN, Math.min(pinMax(), Math.round(w))); }
   function effPin() { return clampPin(pinW); }
   function colgroup(cols) {
-    return '<colgroup><col style="width:28px"><col style="width:88px"><col style="width:' + (effPin() - PIN_FIXED) + 'px">' +
+    return '<colgroup><col style="width:' + (effPin() - PIN_FIXED) + 'px">' +
       cols.map(function (c) { return '<col style="width:' + c.w + 'px">'; }).join('') + '</colgroup>';
   }
   /* Одна компактная строка на всю ширину таблицы под строкой: значок, короткое сообщение (одна строка,
      многоточие) и «Details» с полным техническим текстом (экранируется, выделяется для копирования). */
   var ICONS = {ok: '✓', bad: '⚠', warn: '⚠', busy: '…'};
-  function rowMsg(id, n, span) {
+  function rowMsg(id, n, span, depth) {
     var open = !!S.details[id], tone = n.tone || 'busy';
     var inner = '<span class="hc-ic" aria-hidden="true">' + (ICONS[tone] || '•') + '</span><span class="hc-rm-text" title="' + esc(n.text) + '" role="status">' + esc(n.text) + '</span>' +
       (n.raw ? '<button type="button" class="hc-rm-btn" data-details="' + esc(id) + '" aria-expanded="' + open + '">Details</button>' : '');
-    return '<tr class="hc-rowmsg ' + esc(tone) + '" data-msg="' + esc(id) + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div>' +
+    return '<tr class="hc-rowmsg ' + esc(tone) + '" data-msg="' + esc(id) + '" style="--d:' + (depth || 0) + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div>' +
       (n.raw && open ? '<div class="hc-rm-raw" tabindex="0">' + esc(n.raw) + '</div>' : '') + '</td></tr>';
   }
   /* Короткий текст и сырой — через общий словарь `acmCommands.explain`; без помощника — как есть. */
@@ -595,38 +611,58 @@
     return '<tr class="hc-msg ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
   }
 
+  var DEPTH = {campaign: 0, adset: 1, ad: 2};
+  /* Обратная связь команды живёт в самой строке, без отдельной полосы «Confirmed»: busy — кольцо у переключателя и «Confirming…»;
+     ok — ✓ в слоте, гаснет через ~4 с (`at` ставится при первой отрисовке, одна задержка на заметку); отказ и неопределённость
+     остаются видимыми: «!» в слоте и прикреплённая строка под объектом (`rowMsg`) до следующей команды по строке. */
+  function noteState(key) {
+    var n = S.notes[key];
+    if (!n) return {n: null, tone: ''};
+    var tone = n.tone || 'busy';
+    if (tone === 'ok') {
+      if (!n.at) {
+        n.at = Date.now();
+        setTimeout(function () { if (S.notes[key] === n) { delete S.notes[key]; render(); } }, OK_FADE_MS);
+      }
+      if (Date.now() - n.at >= OK_FADE_MS) return {n: null, tone: ''};
+    }
+    return {n: n, tone: tone};
+  }
   function rowHtml(r, cols) {
-    var lv = r.level, key = r.key, canOpen = lv !== 'ad';
+    var lv = r.level, key = r.key, canOpen = lv !== 'ad', d = DEPTH[lv] || 0;
     var open = !!S.expanded[key];
-    var st = r.status;
-    /* Итог команды — не в узкой ячейке Status, а одной строкой под строкой объекта (`rowMsg`); здесь только маркер. */
-    var note = S.notes[key] ? '<span class="hc-mk ' + esc(S.notes[key].tone) + '" role="img" aria-label="' + esc(S.notes[key].text) + '" title="' + esc(S.notes[key].text) + '"></span>' : '';
+    var st = r.status, ns = noteState(key), tone = ns.tone;
+    var busy = !!r.busy || tone === 'busy';
+    var slot = '';
+    if (ns.n && tone === 'ok') slot = '<span class="hc-mk ok" role="img" aria-label="Confirmed by Meta" title="Confirmed by Meta">✓</span>';
+    else if (ns.n && tone !== 'busy') slot = '<button type="button" class="hc-mk ' + esc(tone) + '" aria-label="' + esc(ns.n.text) + '" title="' + esc(ns.n.text) + '">!</button>';
+    var statusCls = busy ? ' busy' : tone === 'bad' ? ' bad' : '';
     var sw;
     if (st === 'unknown') {
-      sw = '<span class="hc-status-txt" title="Meta status ' + esc(r.status_raw) + '">' + esc(r.status_raw || DASH) + '</span>' + note;
+      sw = '<span class="hc-status-txt" title="Meta status ' + esc(r.status_raw) + '">' + esc(r.status_raw || DASH) + '</span>';
     } else {
       var sc = ctl(r, 'status');
+      var label = busy ? 'Confirming…' : tone === 'bad' ? 'Not sent' : st === 'on' ? 'On' : 'Off';
       sw = '<button type="button" class="hc-switch" role="switch" aria-checked="' + (st === 'on') + '"' + (sc.enabled ? '' : ' disabled aria-disabled="true"') +
-        (r.busy ? ' aria-busy="true"' : '') + objAttrs(r, 'status') + ' aria-label="Configured status: ' + (st === 'on' ? 'On' : 'Off') +
+        (busy ? ' aria-busy="true"' : '') + objAttrs(r, 'status') + ' aria-label="Configured status: ' + (st === 'on' ? 'On' : 'Off') +
         (sc.enabled ? '. Click to switch ' + (st === 'on' ? 'off' : 'on') : '. ' + esc(sc.reason)) + '" title="' +
-        esc(sc.enabled ? 'Switch ' + (st === 'on' ? 'off' : 'on') + ' (asks for confirmation)' : sc.reason) + '"></button><span class="hc-status-txt">' +
-        (st === 'on' ? 'On' : 'Off') + '</span>' + note;
+        esc(sc.enabled ? 'Switch ' + (st === 'on' ? 'off' : 'on') + ' (asks for confirmation)' : sc.reason) + '"></button><span class="hc-status-txt' + statusCls + '"' + (busy ? ' role="status"' : '') + '>' + label + '</span>';
     }
     var badge = lv === 'campaign' ? 'Campaign' : lv === 'adset' ? 'Ad set' : 'Ad';
     var count = '';
     if (r.child_count != null) count = r.child_state === 'not_read' ? ' · children not read' : ' · ' + r.child_count + (lv === 'campaign' ? ' ad sets' : ' ads') + (r.child_state === 'partial' ? ' (partial)' : '');
-    var html = '<tr class="hc-r-' + lv + ' hc-lv-' + lv + '" data-key="' + esc(key) + '" data-object-id="' + esc(r.id) + '" data-level="' + esc(lv) + '" data-account="' + esc(r.account) + '" data-parent-id="' + esc(r.parent_id || '') + '">' +
-      '<td class="p1">' + (canOpen ? '<button type="button" class="hc-exp" data-exp="' + esc(key) + '" aria-expanded="' + open + '" aria-label="' + (open ? 'Collapse ' : 'Expand ') + esc(r.name) + '"></button>' : '<span class="hc-exp-none"></span>') + '</td>' +
-      '<td class="p2">' + sw + '</td>' +
-      '<td class="p3"><div class="hc-id"><span class="hc-badge">' + badge + '</span><span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + '</b>' +
-      '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span></div></td>' +
+    var html = '<tr class="hc-r-' + lv + ' hc-lv-' + lv + (open && canOpen ? ' hc-open' : '') + '" style="--d:' + d + '" data-key="' + esc(key) + '" data-object-id="' + esc(r.id) + '" data-level="' + esc(lv) + '" data-account="' + esc(r.account) + '" data-parent-id="' + esc(r.parent_id || '') + '">' +
+      '<td class="p1"><div class="hc-id">' + (canOpen ? '<button type="button" class="hc-exp" data-exp="' + esc(key) + '" aria-expanded="' + open + '" aria-label="' + (open ? 'Collapse ' : 'Expand ') + esc(r.name) + '"></button>' : '<span class="hc-exp-none"></span>') +
+      sw + '<span class="hc-mk-slot">' + slot + '</span>' +
+      '<span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + '</b>' +
+      '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span><span class="hc-badge">' + badge + '</span></div></td>' +
       cols.map(function (c) { return c.cell(r); }).join('') + '</tr>';
-    if (S.notes[key]) html += rowMsg('row:' + key, dedupNote(S.notes[key], r.account), 3 + cols.length);
+    if (ns.n && tone !== 'ok' && tone !== 'busy') html += rowMsg('row:' + key, dedupNote(ns.n, r.account), 1 + cols.length, d);
     if (open && canOpen) html += kidsHtml(r, cols);
     return html;
   }
   function kidsHtml(r, cols) {
-    var span = 3 + cols.length, k = S.kids[r.key], noun = r.level === 'campaign' ? 'ad sets' : 'ads';
+    var span = 1 + cols.length, k = S.kids[r.key], noun = r.level === 'campaign' ? 'ad sets' : 'ads';
     if (!k || k.state === 'loading') return msg('', 'Loading ' + noun + '…', span);
     if (k.state === 'error') return msg('hc-bad', 'Could not load ' + noun + ': ' + esc(k.note) + ' <button type="button" data-retry="' + esc(r.key) + '">Retry</button>', span);
     if (k.state === 'not_read') return msg('hc-warn', 'The ' + noun + ' of this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + ' were not read — ' + esc(k.note || 'Retry this account list') + '. This is not the same as having none.', span);
@@ -691,7 +727,7 @@
   }
 
   function accountMessage(a, cols) {
-    var sum = S.summaries[a.account] || {state: 'idle'}, span = 3 + cols.length, att = sum.attempt;
+    var sum = S.summaries[a.account] || {state: 'idle'}, span = 1 + cols.length, att = sum.attempt;
     var out = '';
     function one(id, tone, head, cause, code, tail) {
       var ex = cause ? noteFrom(cause, 'bad', code) : {text: '', raw: null};
@@ -942,7 +978,7 @@
     root.style.setProperty('--hc-pin-w', eff + 'px');
     openHandles().forEach(function (oh) {
       var table = oh.table, cg = table.querySelector('colgroup');
-      if (cg && cg.children[2]) cg.children[2].style.width = (eff - PIN_FIXED) + 'px';
+      if (cg && cg.children[0]) cg.children[0].style.width = (eff - PIN_FIXED) + 'px';
       if ((S.rows[oh.account] || []).length) table.style.width = (eff + visibleCols().reduce(function (n, c) { return n + c.w; }, 0)) + 'px';
       var hd = table.querySelector('.hc-resize');
       if (hd) { hd.setAttribute('aria-valuenow', String(eff)); hd.setAttribute('aria-valuemax', String(pinMax())); }

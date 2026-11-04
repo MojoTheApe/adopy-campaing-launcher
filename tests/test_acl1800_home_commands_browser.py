@@ -162,8 +162,8 @@ def test_switch_flow_end_to_end_row_comes_from_the_readback(open_page, world):
     assert world.meta.posts == []
     page.click('dialog.acm-confirm [data-acm="confirm"]')
     page.wait_for_selector(f'.hc-switch[data-object-id="{CAMP_A}"][aria-checked="true"]', timeout=15000)
-    assert "Confirmed" in page.inner_text(f'tr[data-msg="row:campaign:{CAMP_A}"]')           # итог — строкой под строкой, не в ячейке Status
-    assert "Confirmed" not in page.inner_text(f'tr[data-key="campaign:{CAMP_A}"] td.p2')
+    page.wait_for_selector(f'tr[data-key="campaign:{CAMP_A}"] .hc-mk.ok[title="Confirmed by Meta"]')   # итог — ✓ у переключателя, отдельной строки нет
+    assert page.locator(f'tr[data-msg="row:campaign:{CAMP_A}"]').count() == 0
     assert world.meta.posts == [(f"/{CAMP_A}", {"status": "ACTIVE"})]
     assert world.meta.objs[CAMP_A]["status"] == "ACTIVE"
     shot(page, "02-switch-confirmed")
@@ -288,7 +288,7 @@ def test_bid_editor_is_refused_on_automatic_bidding(open_page, world):
     page.wait_for_selector("dialog.acm-confirm[open]")
     assert "Bid cap: 1.50 USD → 1.58 USD" in page.inner_text("dialog.acm-confirm")
     page.click('dialog.acm-confirm [data-acm="confirm"]')
-    page.wait_for_selector("text=Confirmed", timeout=15000)
+    page.wait_for_selector('.hc-mk.ok[title="Confirmed by Meta"]', timeout=15000)
     assert world.meta.posts == [(f"/{SET_BID}", {"bid_amount": "158"})]
 
 
