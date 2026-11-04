@@ -12937,30 +12937,6 @@ document.addEventListener('click', function (e) {
    Таблица создаётся при первом показе блока страны и читает только локальный снимок
    (GET своего сервера). Мета читается только нажатием «Read campaigns» — в строке
    аккаунта внутри таблицы или в заголовке страны («Read campaigns in <страна>»). */
-/* Вкладки над таблицей: Campaigns (эта) и разделы той же страны, которые есть на странице
-   (панель `view-country-<slug>-<раздел>`); нет раздела — вкладка выключена и говорит почему.
-   Слаг считается так же, как `anchor_slug` на сервере. */
-function amapCampaignSlug(country) {
-  return String(country || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
-}
-function amapCampaignTabs(host) {
-  var nav = host.querySelector('[data-hc-tabs]');
-  if (!nav) return;
-  var slug = amapCampaignSlug(host.dataset.country);
-  var tabs = [['Campaigns', 'manage'], ['Winning setups', 'assets'], ['Landings', 'landings'],
-              ['Targets', 'targeting'], ['Creatives', 'creatives'], ['Buyers', '']];
-  nav.innerHTML = '';
-  tabs.forEach(function (t) {
-    var has = t[1] && document.getElementById('view-country-' + slug + '-' + t[1]);
-    var el = document.createElement(has ? 'a' : 'span');
-    el.className = 'hc-tab' + (has ? '' : ' hc-tab-off');
-    el.textContent = t[0];
-    if (has) { el.href = '#country-' + slug + '-' + t[1]; if (t[1] === 'manage') el.setAttribute('aria-current', 'page'); }
-    else el.title = t[1] ? 'This section has no data for ' + host.dataset.country + ' on this page' : 'Buyer comparison is not part of this build';
-    nav.appendChild(el);
-  });
-}
-
 /* Дерево аккаунтов страны: строка аккаунта — родитель, под ней раскрывается таблица её кампаний.
    Страница создаёт узлы (стрелка, строка снимка, кнопки, рамка прокрутки, таблица) и отдаёт компоненту;
    под rpa ничего этого нет. Раскрытие строки ничего не читает у Meta. */
@@ -13010,7 +12986,6 @@ function amapCampaignTree(grid, accounts) {
 
 function amapCampaignMount(host) {
   if (host._hc) return host._hc;
-  amapCampaignTabs(host);
   var mount = host.querySelector('[data-hc-mount]');
   var tpl = document.getElementById('hc-scoped-tpl');
   if (!mount || !tpl || typeof window.hcMount !== 'function') {
