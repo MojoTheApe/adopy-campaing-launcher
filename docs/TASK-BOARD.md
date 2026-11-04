@@ -1,4 +1,8 @@
-# Task tracker
+# Task Tracker — historical guide
+
+> This page describes the earlier board. For current task stages and commands,
+> use the [ACL workflow](repository/WORKFLOW.md#current-workflow) and the
+> [owner guide](repository/OWNER_GUIDE.md). The old text is retained below.
 
 GitHub Issues are the source of truth. The private English UI is [tracker.team7.cloud](https://tracker.team7.cloud).
 
