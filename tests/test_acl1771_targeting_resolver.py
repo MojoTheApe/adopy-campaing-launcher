@@ -274,10 +274,12 @@ def test_store_rejects_bad_ids_and_types_and_clears_all(tmp_path):
     assert s.clear() == 2 and s.entries() == []
 
 
-def test_corrupt_cache_file_is_treated_as_empty(tmp_path):
+def test_corrupt_cache_file_is_a_read_failure_not_empty(tmp_path):
+    # ACL-2243: a damaged file is an unknown state (see test_acl2243_store_read_failure.py).
     p = tmp_path / "confirmed.json"
     p.write_text("{not json", encoding="utf-8")
-    assert tr.ConfirmedStore(p).get("anything") is None
+    with pytest.raises(tr.ConfirmedStoreUnreadable):
+        tr.ConfirmedStore(p).get("anything")
 
 
 def test_default_store_lives_in_the_local_config_dir(tmp_path, monkeypatch):

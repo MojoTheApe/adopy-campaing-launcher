@@ -186,6 +186,10 @@ def picks_of(entry: dict) -> list[dict]:
     return [{"id": entry["id"], "type": entry["type"], "name": entry.get("name") or ""}]
 
 
+class ConfirmedStoreUnreadable(RuntimeError):
+    """The confirmed-targeting file exists but could not be read (ACL-2243): its state is unknown, not empty."""
+
+
 class ConfirmedStore:
     """Локальный кэш подтверждённых человеком соответствий: (тип, термин) → id + имя."""
 
@@ -201,12 +205,23 @@ class ConfirmedStore:
         return Path(paths.get_local_config_dir()) / CACHE_FILE
 
     def _read(self) -> dict[str, dict]:
+        # A missing file is a first run (empty store); any other failure leaves the state unknown.
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except FileNotFoundError:
             return {}
+        except (OSError, ValueError) as exc:
+            raise self._unreadable() from exc
         entries = data.get("entries") if isinstance(data, dict) else None
-        return entries if isinstance(entries, dict) else {}
+        if not isinstance(entries, dict):
+            raise self._unreadable()
+        return entries
+
+    def _unreadable(self) -> ConfirmedStoreUnreadable:
+        return ConfirmedStoreUnreadable(
+            f"Confirmed targeting could not be read from {self.path}. Nothing was changed or deleted. "
+            "Close other programs using that file or restore it from a backup, then try again; "
+            "if the file is damaged, move it away and confirm the targeting again.")
 
     def _write(self, entries: dict[str, dict]) -> None:
         p = self.path
