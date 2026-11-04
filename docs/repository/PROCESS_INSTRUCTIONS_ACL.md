@@ -1,12 +1,16 @@
 # Repository instructions and application changes use separate routes
 
 [ACL-1750](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/750)
-prepares the owner's 2026-10-08 decision. The matching process policy must already
+records the historical preparation of the owner's 2026-10-08 decision. The matching process policy must already
 be present in main before a source can use the new route. This adoption changes
 policy, helpers and CI, so it follows the existing stage route. Source preparation
 is not activation; [ACL-1747](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/747)
 and its draft main promotion retain their genuine old-policy handoff and the
 [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) service/state cutover gates.
+
+The paragraph above describes the original adoption. The matching process policy
+is already selected in current main; ordinary instruction changes use the active
+route below and do not repeat that adoption or its old Stage route.
 
 ## Instruction-only route
 
