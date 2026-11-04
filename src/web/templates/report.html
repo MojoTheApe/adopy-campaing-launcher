@@ -6473,6 +6473,12 @@ window.cbKeep = (function () {
       if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
       else el.value = data.fields[f];
     });
+    /* Тип файла объявления восстанавливается и в окнах поиска: иначе после перезагрузки
+       видео-объявление ищет файл среди картинок и не находит ничего (найдено на ACL-2084). */
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var t = row.querySelector('input[type="radio"][name$="_creative_type"]:checked');
+      if (t) row.querySelectorAll('.cb-creative-sel-wrap').forEach(function (w) { w.dataset.ctype = t.value; });
+    });
     slot.querySelectorAll('.cb-sel-wrap').forEach(function (wrap) {
       var hidden = wrap.querySelector('[name]');
       var text = wrap.querySelector('.cb-sel-text');
@@ -15264,6 +15270,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       }
     }
     if (hidden && hidden.value && input.value.trim() !== hidden.value) {
+      /* ACL-2084: основной файл снят поиском - его копия в Stories / Reels снимается тоже. */
+      if (window.cbDropOldMainFromVertical) cbDropOldMainFromVertical(wrap, hidden.value, '');
       hidden.value = '';
       var slot = wrap.closest('.cb-slot');
       if (slot && window.cbUpdateName) cbUpdateName(slot);
@@ -15332,6 +15340,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       opt.addEventListener('mousedown', function(e) {
         e.preventDefault();
         var val = opt.dataset.val || '';
+        cbDropOldMainFromVertical(wrap, hidden ? hidden.value : input.value, val);
         input.value = val;
         if (hidden) hidden.value = val;
         dropdown.hidden = true;
@@ -15348,6 +15357,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
      Не трогаем: непустое поле (выбор человека главнее) и объявление с несколькими текстами
      (вместе с вертикальным файлом такой запрос отказывается до записи). Подставляем только в момент
      выбора основного файла, поэтому очищенное человеком поле само не возвращается. */
+  /* ACL-2084: сменили основной файл, а в Stories / Reels стоял прежний основной - слот очищается,
+     иначе старый креатив молча ушёл бы в публикацию. Файл, выбранный в слот отдельно, остаётся. */
+  window.cbDropOldMainFromVertical = function (wrap, before, after) {
+    if (!wrap || wrap.classList.contains('cb-vertical-sel-wrap') || !before || before === after) return;
+    var row = wrap.closest('.cb-ad-row');
+    var vwrap = row && row.querySelector('.cb-vertical-sel-wrap');
+    if (!vwrap) return;
+    var vh = vwrap.querySelector('input[type="hidden"]');
+    var vt = vwrap.querySelector('.cb-vertical-search');
+    var held = (vh && vh.value) || (vt && vt.value) || '';
+    if (!held || !window.cbSameCreativeFile || !cbSameCreativeFile(before, held)) return;
+    if (vh) vh.value = '';
+    if (vt) vt.value = '';
+  };
+
   window.cbPrefillVertical = function (wrap, picked) {
     if (window.ACL_FB_BACKEND !== 'api' || !wrap || wrap.classList.contains('cb-vertical-sel-wrap')) return;
     var row = wrap.closest('.cb-ad-row');
@@ -16496,11 +16520,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label">CTA</span>' +
       '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
       cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
-      /* ACL-1774: необязательный вертикальный (9:16) файл Stories / Reels рядом с основным
-         (1:1 или 4:5). Соотношение и размер проверяет сервер до любой загрузки. Только API. */
-      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16, optional)</span></span>' +
+      /* ACL-1774: необязательный файл Stories / Reels рядом с основным (1:1 или 4:5); ACL-2084: 9:16
+         или квадрат. Соотношение и размер проверяет сервер до любой загрузки. Только API. */
+      '<span class="cb-label">Stories / Reels file <span style="opacity:0.6">(9:16 or 1:1, optional)</span></span>' +
       '<div class="cb-sel-wrap cb-creative-sel-wrap cb-vertical-sel-wrap" data-ctype="Image">' +
-      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 file for Stories and Reels" placeholder="— optional: vertical 9:16 file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
+      '<input type="text" class="cb-sel-text cb-vertical-search cb-api-field" data-default="" data-tip="A separate 9:16 or square file for Stories and Reels" placeholder="— optional: 9:16 or square file —" autocomplete="off" value="" oninput="cbCreativeTyped(this, event)">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file_vertical" value="">' +
       '<div class="cb-api-note" data-vertical-note hidden>Same kind as the main file (two images or two videos). Stories and Reels use this file; Feed uses the main one.</div>' +
@@ -18596,7 +18620,10 @@ function cbPlanHtml(data) {
           + '</div><ol class="cbd-plan-ads" style="font-size:var(--adopy-text-sm);margin:0.1rem 0 0 1rem">';
         (a.ads || []).forEach(function (ad) {
           h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
-            + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
+            + aclEscHtml(ad.file)
+            // ACL-2084: второй файл объявления виден в плане.
+            + (ad.stories_reels_file ? '<br>Stories / Reels: ' + aclEscHtml(ad.stories_reels_file) : '')
+            + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')
             + (ad.form_locale ? '<br>' + aclEscHtml(ad.form_locale) : '')
