@@ -188,7 +188,7 @@ jobs:
             packaging/windows/.artifacts/test-logs/
             packaging/windows/.artifacts/installer-test-logs/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   admission:
     name: Installer verification
