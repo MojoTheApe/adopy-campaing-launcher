@@ -421,7 +421,7 @@ _HELPER_JS = r"""
   // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
   function checkForm(spec) {
     const F = WRITE && WRITE.form_create;
-    if (!F || !Array.isArray(F.bool_keys)) return 'form_policy';
+    if (!F || !Array.isArray(F.bool_keys) || typeof F.photo_id_re !== 'string') return 'form_policy';
     const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
     if (!m) return 'form_path';
     // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
@@ -491,6 +491,7 @@ _HELPER_JS = r"""
       const x = c.context_card;
       if (!only(x, 'context_card') || !txt(x.title) || F.card_styles.indexOf(x.style) < 0) return 'form_card';
       if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
+      if ('cover_photo_id' in x && !(typeof x.cover_photo_id === 'string' && new RegExp(F.photo_id_re).test(x.cover_photo_id))) return 'form_card';
     }
     return null;
   }

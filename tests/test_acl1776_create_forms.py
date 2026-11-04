@@ -262,6 +262,8 @@ def _deep(path, key, value):
     return out
 
 
+_CARD = {"title": "Hello", "style": "PARAGRAPH_STYLE", "content": ["Hi there"], "cover_photo_id": "122118707799486042"}
+
 #: Одна таблица на ОБЕ линии: (имя, страница пути, ребро пути, параметры, разрешено).
 FORM_MATRIX = [
     ("ok", PAGE, "leadgen_forms", BASE, True),
@@ -305,6 +307,14 @@ FORM_MATRIX = [
     ("no_locale", PAGE, "leadgen_forms", _p(locale=None), False),
     *[(n, PAGE, "leadgen_forms", prm, False) for n, prm in NESTED_TERMS],
     ("ok_thank_you_no_link_none", PAGE, "leadgen_forms", BASE, True),
+    # ACL-2188: фоновая картинка - строка из цифр внутри context_card
+    ("ok_cover_photo_id", PAGE, "leadgen_forms", _p(context_card=_CARD), True),
+    ("ok_cover_photo_id_json", PAGE, "leadgen_forms",
+     _p(context_card=json.dumps({**_CARD, "cover_photo_id": "122118707799486042"})), True),
+    ("cover_photo_id_number", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo_id": 12345}), False),
+    ("cover_photo_id_letters", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo_id": "12ab"}), False),
+    ("cover_photo_id_empty", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo_id": ""}), False),
+    ("cover_photo_nested", PAGE, "leadgen_forms", _p(context_card={**_CARD, "cover_photo": {"id": "1"}}), False),
     # другие рёбра и чужие Страницы
     ("page_feed", PAGE, "feed", BASE, False),
     ("page_tos_edge", PAGE, "leadgen_tos", BASE, False),

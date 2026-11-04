@@ -127,3 +127,30 @@ def test_team_library_round_trip(team):
     saved = ft.save(tpl(**COVER))
     on("b")
     assert ft.get(saved["id"])["cover_photo_id"] == PHOTO
+
+
+# ───────────────────────── политика записи ─────────────────────────
+
+def test_the_policy_table_carries_the_photo_id_pattern():
+    from src.fb_api import write_policy as wp
+    t = wp.policy_for_form_create(PAGE)
+    assert t["photo_id_re"] == wp.FORM_PHOTO_ID_RE
+    assert "cover_photo_id" in t["nested"]["context_card"]
+    assert "cover_photo" not in t["nested"]["context_card"]
+
+
+def test_the_template_with_a_cover_emits_only_allowed_keys():
+    from src.fb_api import write_policy as wp
+    clean, errors = ft.validate(tpl(**COVER))
+    assert errors == []
+    params = ft.form_params(clean)
+    assert set(params) <= wp.FORM_KEYS
+    wp.check_form_create(PAGE, "POST", f"/{PAGE}/leadgen_forms", params, pinned_page=PAGE)
+
+
+def test_the_page_helper_refuses_a_policy_without_the_photo_pattern():
+    from tests.test_acl1776_create_forms import ACT, _node_form_matrix
+    from src.fb_api import write_policy as wp
+    policy = wp.policy_for_page(ACT, PAGE)
+    del policy["form_create"]["photo_id_re"]
+    assert _node_form_matrix(policy)["ok"].get("error") == "write_refused"
