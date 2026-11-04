@@ -42,7 +42,9 @@ def build_amap(web, links, monkeypatch, spec: dict[str, list[tuple]]):
                 "has_data": spend is not None, "spend": spend, "leads": 12 if spend else 0,
                 "deposits": 1 if spend and spend > 100 else 0, "cpl": 4.0, "cpa": 40.0, "cr": 8.0}})
         report_countries.append({"country": country, "account_rows": rows,
-                                 "my_spend": sum(a[1] or 0 for a in accounts)})
+                                 "my_spend": sum(a[1] or 0 for a in accounts),
+                                 # книжные тоталы страны: из них _amap_totals строит «Total · all countries»
+                                 "my_totals": {"spend": sum(a[1] or 0 for a in accounts), "leads": 12 * len(accounts), "deposits": len(accounts)}})
     monkeypatch.setattr(web, "_account_status", lambda a: statuses.get(a, {}))
     monkeypatch.setattr(web, "_workbook_has_account", lambda df, country, label: label not in not_in_book)
     return web._build_account_map_view({"countries": report_countries})
