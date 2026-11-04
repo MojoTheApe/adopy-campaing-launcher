@@ -1,4 +1,25 @@
-# ACL standalone workflow provider — ACL-2156
+# ACL standalone workflow provider
+
+## Current selection
+
+The current provider is the exact published revision in
+[delivery.json](../../delivery.json) and [tracker/engine.json](../../tracker/engine.json).
+ACL-2351 adopted Tracker3.24.1 at `9dc08c3e31ef1204130f43b0740d173e733d5cb7`
+through [PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383).
+The provider, engine and trusted private-checkout workflow select the same source.
+Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/9dc08c3e31ef1204130f43b0740d173e733d5cb7/docs/STANDALONE_WORKFLOW_PROVIDER.md)
+and the [current ACL workflow](WORKFLOW.md). Master remains the unchanged
+1.8.0 documentation reference. No configuration, optional policy or product
+release is activated by this documentation clarification.
+
+## Historical adoption — ACL-2156, 24 October 2026
+
+The following original source-selection, ancestry and delivery account is retained
+as history. Its version and migration sequence describe that adoption, not the
+current executable pin or a requirement to repeat the migration. Preserve its
+security boundaries and genuine unfinished task obligations; use current settings
+and each original task's latest decisions for any later operation.
+
 
 The owner selected Task Tracker as ACL's executable workflow provider on
 24 October 2026. Master Repo stays the immutable documentation reference.
