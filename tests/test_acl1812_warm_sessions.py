@@ -1168,14 +1168,32 @@ def test_a_dead_owners_tab_is_closed_but_never_a_live_ones(tmp_path):
     assert heir.tabs[0].closed_targets == ["T-dead-owner"]
 
 
-def test_first_action_below_the_memory_reserve_waits_with_a_clear_message(tmp_path, monkeypatch):
+def test_first_action_on_a_warm_profile_is_not_memory_gated(tmp_path, monkeypatch):
+    # ACL-2369: was "..._below_the_memory_reserve_waits_with_a_clear_message" (refused with below_reserve).
+    # The gate runs only on an already open profile, so the first action goes even with no memory left.
     monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
     rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
+    sess = rig.checkout()
+    assert rig.gate.active() == [PID] and len(rig.tabs) == 1
+    sess.release()
+
+
+def test_second_concurrent_action_under_low_memory_says_how_much_to_free(tmp_path, monkeypatch):
+    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
+    other = "660e8400-e29b-41d4-a716-446655440000"
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig.warm_up()
+    rig.warm_up(other, account="Acc2")
+    first = rig.checkout()
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout()
-    assert ei.value.code == "below_reserve" and "safety reserve" in str(ei.value)
-    assert rig.tabs == [] and rig.gate.active() == []
+        rig.checkout(other, account="Acc2")
+    msg = str(ei.value)
+    assert ei.value.code == "memory_low"
+    # 16000 MB at 90 % max: 1600 MB must stay free, 1000 free -> 600 MB more
+    assert "Free about 600 MB more" in msg and "second account action" in msg
+    assert rig.gate.active() == [PID]
+    first.release()
 
 
 def test_opening_waits_for_the_growth_of_profiles_still_warming_up(tmp_path, monkeypatch):

@@ -383,9 +383,8 @@ class HeavyGate:
         limit = max(1, int(self._limit()))
         memory = self._memory()
         if n == 0:
-            # S3: и первое действие не обходит запас: выше допустимой доли занятой памяти ждёт, а не лезет в неё.
-            if memory is not None and memory.available_mb < self._ps.keep_free_mb(memory.total_mb, self._settings()):
-                return False, "below_reserve"
+            # ACL-2369: шлюз работает только на уже открытом (тёплом) профиле — его память уже занята,
+            # новой не прибавится; у открытия профиля свой тест памяти. Первое действие не блокируем.
             return True, "first"
         if n >= limit:
             return False, "limit"
@@ -413,7 +412,8 @@ class HeavyGate:
         if memory is not None:
             keep = self._ps.keep_free_mb(memory.total_mb, settings)
             view.update(need_mb=int(keep), max_used_pct=settings.max_used_pct,
-                        used_pct=self._ps.used_pct(memory), total_mb=int(memory.total_mb))
+                        used_pct=self._ps.used_pct(memory), total_mb=int(memory.total_mb),
+                        short_mb=self._ps.free_more_mb(memory, settings))
         return view
 
     def acquire(self, profile_id: str, *, wait_s: float = DEFAULT_GATE_WAIT_S,
@@ -440,10 +440,16 @@ class HeavyGate:
                     self._active[profile_id] = 1
                     return
                 if self._clock() >= deadline:
-                    if why == "below_reserve":
+                    if why == "memory_low":
+                        view = self.wait_view(why)
+                        free = self._ps.format_mb(view.get("short_mb") or 0)
                         raise WarmError(
-                            "Free memory is below the safety reserve, so the action was not started. "
-                            "Close something and try again. Nothing was called.", code="below_reserve")
+                            "Not enough free memory to run a second account action alongside the first one: "
+                            f"{(view.get('available_mb') or 0) / 1024:.1f} GB free, "
+                            f"{(view.get('need_mb') or 0) / 1024:.1f} GB must stay free. "
+                            + (f"Free about {free} more, or wait for the running action to finish. " if free
+                               else "Wait for the running action to finish. ")
+                            + "Nothing was called.", code="memory_low")
                     raise WarmError(
                         "Another account action is still running and there is no room for a second "
                         "one yet. Nothing was called; try again when it finishes.", code="gate_wait")
@@ -932,8 +938,7 @@ class WarmRegistry:
                 grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
                                       or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
                 if grant is None:
-                    return _result(False, "Not started: not enough free memory for another profile. "
-                                   "Close something and try again.", "memory_low")
+                    return _result(False, self._slot_refusal_text(), "memory_low")
             try:
                 opened = self._start_profile(pid, folder, instance)
                 turn_kept = bool(getattr(opened, "started_now", False))
@@ -1073,6 +1078,27 @@ class WarmRegistry:
         settings = (self._settings or _ps.load_settings)()
         return memory, settings, _ps
 
+    @staticmethod
+    def _free_more_sentence(memory, settings, _ps, extra_mb: int = 0) -> str:
+        """ACL-2369: «Free about X more…» — сколько освободить, чтобы профиль стартовал."""
+        free = _ps.format_mb(_ps.free_more_mb(memory, settings, extra_mb))
+        if not free:
+            return "Close something and try again."
+        return (f"Free about {free} more, for example by closing a Multilogin profile "
+                "you don't need, then try again.")
+
+    def _slot_refusal_text(self) -> str:
+        """Отказ очереди слотов: с цифрой, если память читается, иначе прежний текст."""
+        old = "Not started: not enough free memory for another profile. Close something and try again."
+        try:
+            memory, settings, _ps = self._memory_state()
+            if memory is None:
+                return old
+            return ("Not started: not enough free memory for another profile. "
+                    + self._free_more_sentence(memory, settings, _ps, self._memory_need(settings, _ps)[1]))
+        except Exception:  # noqa: BLE001
+            return old
+
     def _wait_for_memory(self, cancelled: Callable[[], bool]) -> str:
         """Пусто — памяти хватает. Иначе текст отказа.
 
@@ -1099,7 +1125,7 @@ class WarmRegistry:
                         f"{need / 1024:.1f} GB needed for another profile (memory is {used:.0f}% used; "
                         f"a profile starts while at most {settings.max_used_pct:.0f}% is used"
                         f"{', counting profiles still warming up' if growth else ''}). "
-                        "Close something and try again.")
+                        f"{self._free_more_sentence(memory, settings, _ps, growth)}")
                 if cancelled():
                     return "Stopped while waiting for memory. " + text if job is not None else text
                 if job is None:

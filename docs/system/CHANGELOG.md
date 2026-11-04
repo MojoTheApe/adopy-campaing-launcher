@@ -1,5 +1,9 @@
 # System history
 
+## ACL-2369 — Memory limit no longer stops actions on an open profile — 2026-11-04
+
+Account actions (Check plan and the like) on a profile that is already open are no longer stopped by the memory limit; the limit now applies only to opening a profile or running a second action at the same time, and the message says how much memory to free.
+
 ## ACL-2266 — Check plan asks Meta only about changed campaigns — 2026-11-02
 
 Check plan now remembers the clean result of every campaign on the server (in memory, 60 minutes by

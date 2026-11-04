@@ -19019,10 +19019,14 @@ function cbMemoryWait(q) {
   var hint = '. Close a Multilogin profile you don\'t need.';
   if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  /* ACL-2369: сколько ещё освободить (short_mb от сервера, иначе need - available), от 0.1 ГБ. */
+  var shortMb = q.short_mb != null ? Number(q.short_mb) : (Number(q.need_mb) || 0) - (Number(q.available_mb) || 0);
+  var shortGb = shortMb > 0 ? (Math.ceil(shortMb / 1024 * 10 - 1e-9) / 10).toFixed(1) : '';
   /* ACL-2255: решает доля занятой памяти, а не «ГБ на профиль». */
   if (q.used_pct != null && q.max_used_pct != null) {
     return 'Waiting for memory: ' + Math.round(q.used_pct) + '% in use, a new profile starts below ' + Math.round(q.max_used_pct)
-      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)' + tail + hint;
+      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)'
+      + (shortGb ? '. Free about ' + shortGb + ' GB more — close a Multilogin profile you don't need.' + tail : tail + hint);
   }
   var reserve = Number(q.reserve_mb) || 0;
   var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
