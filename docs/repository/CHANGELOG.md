@@ -1,5 +1,17 @@
 # Repository process history
 
+## 2026-11-04 — ACL-2389 current selection and durable handoffs
+
+Align current entry points with the actual Tracker3.24.1 pin and clearly retain
+the original ACL-2156/earlier adoption accounts as history. Keep WORKFLOW.md the
+current route, clarify affected local tests versus full hosted CI, and record
+tested remote source, still-local changes and exceptional outcomes in the original
+task. New requirements after acceptance use a linked follow-up; typo/history
+clarifications do not create engineering work. Pins, configuration, generated
+contracts, source/review/delivery controls and product behavior are unchanged.
+This instruction-only task requests no ACL package publication or repeated
+package verification.
+
 ## 2026-11-04 — ACL-2376 current workflow and historical guides
 
 The repository workflow is the current entry point for branch, task, review and

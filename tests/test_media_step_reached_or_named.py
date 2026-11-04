@@ -35,6 +35,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -620,14 +621,42 @@ def quick_picker(monkeypatch):
 def test_a_current_media_step_that_loads_is_waited_for_not_clicked(page, wizard_opens, tmp_path,
                                                                    quick_picker, monkeypatch):
     monkeypatch.setattr(md, "MEDIA_PICKER_LOAD_S", 10.0)
-    wizard_opens["html"] = _loading_media(ORDER_08CA, 500)
+    # ACL-2089: a browser timer starts before _wait_media_picker measures its
+    # wait, so setup/scheduling can consume most of the former 500 ms delay.
+    # Keep the real DOM loading until the real poller has waited five ticks.
+    # Only that helper gets a private clock; Playwright and telemetry keep time.
+    wizard_opens["html"] = _loading_media(ORDER_08CA, None)
+    monkeypatch.setattr(md, "_MEDIA_PICKER_POLL_S", 0.1)
+    original_wait = md._wait_media_picker
+    waits = []
+
+    def controlled_wait(p, limit_s):
+        elapsed = 0.0
+
+        def sleep(seconds):
+            nonlocal elapsed
+            assert p.locator("#picker [role=progressbar]").count() == 3
+            assert p.locator("#upload").count() == 0
+            assert p.evaluate("window.mediaClicks") == 0
+            assert p.evaluate("window.nextClicks") == 0
+            waits.append(seconds)
+            elapsed = round(elapsed + seconds, 10)
+            if elapsed >= 0.5:
+                p.evaluate("show('Media')")
+
+        with monkeypatch.context() as clock:
+            clock.setattr(md, "time", SimpleNamespace(time=lambda: elapsed, sleep=sleep))
+            return original_wait(p, limit_s)
+
+    monkeypatch.setattr(md, "_wait_media_picker", controlled_wait)
     assert md.upload_ad_creative(page, "Video", "C:/media/2012.mp4", reuse_only=True) is True
     assert wizard_opens["reuse"] == [1], "до медиатеки не дошли"
     assert page.evaluate("window.mediaClicks") == 0, "кликнули по текущему шагу Media"
     assert page.evaluate("window.nextClicks") == 0, "жали Next на шаге Media"
     row = [r for r in _rows(tmp_path) if r.get("note") == "media_picker:ready"]
     assert row and row[-1]["diag"]["skeletons_at_start"] == 3, _rows(tmp_path)
-    assert row[-1]["diag"]["waited_s"] >= 0.4
+    assert waits == [0.1] * 5
+    assert row[-1]["diag"]["waited_s"] == 0.5
 
 
 def test_a_current_media_step_that_never_loads_is_named(page, wizard_opens, tmp_path, quick_picker):
