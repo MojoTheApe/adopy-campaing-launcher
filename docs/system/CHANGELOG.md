@@ -1,5 +1,48 @@
 # System history
 
+## ACL-2266 — Check plan asks Meta only about changed campaigns — 2026-11-02
+
+Check plan now remembers the clean result of every campaign on the server (in memory, 60 minutes by
+default, `ACL_PLAN_CACHE_TTL_MIN`, `0` turns it off). A campaign counts as unchanged when its draft
+as the server builds it (library texts, link, pixel, Page, interests) and its creative files
+(size and modification time) are the same, for the same ad account, country and day. Unchanged
+campaigns are answered at once without opening the Multilogin profile or calling Meta; only edited
+ones are read. The panel says how many campaigns were served from the saved result, shows "Checked
+at HH:MM" on the campaign card (also after a page reload) and offers "Re-check all". Publish still
+runs its own full pre-flight and refuses on a real error. A finished publish job for the account and
+a confirmed or cleared targeting term drop the saved results. The 10-minute memory of the page
+(ACL-2003) is removed: the server is the only place that remembers a result.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1266).
+
+## ACL-1345 — Builder: drag an ad or a campaign to another place (move, Ctrl = copy, Undo) — 2026-11-01
+
+An ad card can be dragged by its ⋮⋮ handle onto a campaign in the tree (it lands in Ad set 1) or onto one of
+its Ad set nodes; a campaign can be dragged onto another account, including accounts with no drafts yet.
+Plain drag moves, Ctrl (⌥ on a Mac) copies. The same actions are on the "Move to…" button of every ad card and
+campaign row (keyboard; on a campaign row it appears on keyboard focus so the narrow tree keeps its width). A moved card keeps all its fields but takes the destination account's
+tracking link, ad account and profile; the Facebook Page and Instant Form of the old account are cleared; a
+cross-country move asks first. A toast says what happened and offers Undo (10 s, last 10 moves, Ctrl+Z);
+a same-name campaign in the destination is kept with a warning, a campaign left without ads gets a blank ad.
+Cards of a campaign that is being built cannot be dragged and accounts that are being built cannot receive
+cards. Draft-only change in the Builder page; no server, robot or Meta call.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/345).
+
+## ACL-2347 — Shared action log (event log) — 2026-10-30
+
+Every API publish, plan check, account check and budget/status command now leaves events in a
+local outbox (`event_outbox/` next to the machine config). A background thread ships them in
+batches to a Cloudflare Worker (Cloudflare KV storage, written with the team library token); the owner
+downloads them into a local SQLite with `scripts/acl_log_pull.py` and reads them with
+`scripts/acl_log_report.py`. Nothing is shown to the buyer, the log never makes a new Graph or
+Multilogin request, a failing log never changes a publish result, and `ACL_EVENT_LOG=0` turns it
+off. Sending stays off until the Worker address is filled in (`DEFAULT_URL`). Meta ids and ad copy
+are kept; tokens, passwords, proxy credentials and link parameter values are never written.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1347).
+
+The telemetry now records when a job starts waiting for memory or a slot and every real reason of that
+wait, the size, hash, mode and time of each video upload, and marks silence during an upload as waiting,
+not as a hung tab. Results and the dashboard do not change.
+
 ## ACL-2345 — A tab that died resumes the publish once by itself; a profile starts below 75% memory — 2026-10-30
 
 A publish job stopped by `page_unresponsive` / `page_failed` now closes its profile, waits (up to
