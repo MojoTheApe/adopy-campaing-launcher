@@ -6782,7 +6782,7 @@ window.cbLayout = (function () {
   /* ACL-1775: место конверсии набора и выбор формы Страницы. Правила форм
      (чья форма, какой статус годен) решает сервер; здесь только то, что
      показать. Годна только форма ACTIVE, как src/fb_api/forms.py (USABLE_STATUS). */
-  var DESTINATIONS = { website: 'Website', instant_form: 'Instant Form' };
+  var DESTINATIONS = { website: 'Website', instant_form: 'Instant forms' };
   var USABLE_FORM_STATUS = 'ACTIVE';
 
   function destination(v) { return v === 'instant_form' ? 'instant_form' : 'website'; }
@@ -18572,7 +18572,7 @@ function cbPlanHtml(data) {
     if (s) {
       if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
         + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
-      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
+      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant forms' || x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
         + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
         + (s.page_origin ? ' · from ' + aclEscHtml(s.page_origin) : '')

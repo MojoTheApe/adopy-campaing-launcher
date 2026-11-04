@@ -134,7 +134,7 @@ def test_the_page_and_the_server_agree_on_destinations_and_form_statuses():
     from src.fb_api import forms as fm
 
     page = _page()
-    assert f"{cr.DEST_WEBSITE}: 'Website'" in page and f"{cr.DEST_FORM}: 'Instant Form'" in page
+    assert f"{cr.DEST_WEBSITE}: 'Website'" in page and f"{cr.DEST_FORM}: 'Instant forms'" in page
     m = re.search(r"var USABLE_FORM_STATUS = '([^']*)'", page)
     assert m.group(1) == fm.USABLE_STATUS == "ACTIVE"
     # имя поля, которое разбирает сервер

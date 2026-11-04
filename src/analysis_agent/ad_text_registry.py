@@ -192,7 +192,7 @@ def _check(data: dict, name: str, headline: str, body: str, description: str,
     if not tidy(name):
         raise AdTextError("The text needs an ad title.")
     if not tidy(headline) and not tidy(body):
-        raise AdTextError("Fill in the headline or the body — an empty text cannot be saved.")
+        raise AdTextError("Fill in the headline or the primary text — an empty text cannot be saved.")
     known = AdText.__dataclass_fields__
     for raw in data["texts"].values():
         t = AdText(**{k: v for k, v in raw.items() if k in known})
