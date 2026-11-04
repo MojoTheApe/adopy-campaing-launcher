@@ -421,7 +421,7 @@ def test_dragging_the_pinned_boundary_widens_every_row_and_is_remembered(page):
     page.keyboard.press("ArrowRight")
     assert int(page.get_attribute(".hc-resize", "aria-valuenow")) == 432 + 120 + 16
     page.keyboard.press("Home")
-    assert _pinned(page)["head"] == 240 - 152
+    assert _pinned(page)["head"] == 240 - 116
     page.dblclick(".hc-resize")
     assert _pinned(page)["head"] == 280 and _pinned(page)["stored"] == "432"
     assert page.errors == []

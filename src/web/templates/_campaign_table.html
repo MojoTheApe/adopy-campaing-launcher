@@ -99,16 +99,15 @@
   .hc-table th.hc-grp { border-left: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
   .hc-table th.hc-grp small { font-weight: 400; color: var(--adopy-text-muted); margin-left: 0.375rem; }
   .hc-table .num { text-align: right; }
-  .hc-table .p0, .hc-table .p1, .hc-table .p2, .hc-table .p3 { position: sticky; z-index: var(--adopy-z-sticky-cell); }
-  .hc-table thead .p0, .hc-table thead .p1, .hc-table thead .p2, .hc-table thead .p3 { z-index: calc(var(--adopy-z-table-header) + 5); }
-  .hc-table .p0 { left: 0; } .hc-table .p0, .hc-table .p1 { padding: 0 4px; text-align: center; }
+  .hc-table .p1, .hc-table .p2, .hc-table .p3 { position: sticky; z-index: var(--adopy-z-sticky-cell); }
+  .hc-table thead .p1, .hc-table thead .p2, .hc-table thead .p3 { z-index: calc(var(--adopy-z-table-header) + 5); }
+  .hc-table .p1 { padding: 0 4px; text-align: center; }
   .hc-table .p2 { padding: 0 8px; }
-  .hc-table .p1 { left: 36px; } .hc-table .p2 { left: 64px; } .hc-table .p3 { left: 152px; border-right: 1px solid var(--adopy-border-strong); }
+  .hc-table .p1 { left: 0; } .hc-table .p2 { left: 28px; } .hc-table .p3 { left: 116px; border-right: 1px solid var(--adopy-border-strong); }
   .hc-table tbody tr:hover > td { background: var(--adopy-surface-hover); }
   .hc-table tr.hc-r-campaign > td { height: var(--adopy-row-campaign-min); }
   .hc-table tr.hc-r-adset > td { height: var(--adopy-row-adset-min); background: var(--adopy-surface); }
   .hc-table tr.hc-r-ad > td { height: var(--adopy-row-ad-min); }
-  .hc-table tr.hc-sel > td { background: var(--adopy-selected-bg); }
   .hc-table td.hc-gl { border-left: 1px solid var(--adopy-border); }
   .hc-msg td, .hc-rowmsg td { overflow: visible; }
   .hc-table thead th.hc-pin-top { left: 0; z-index: calc(var(--adopy-z-table-header) + 6); border-right: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
@@ -140,7 +139,6 @@
   .hc-exp { width: 24px; min-height: 24px !important; padding: 0 !important; border: 0 !important; background: transparent !important; color: var(--adopy-text-muted); }
   .hc-exp[aria-expanded="true"]::before { content: "\25BE"; } .hc-exp[aria-expanded="false"]::before { content: "\25B8"; }
   .hc-exp-none { display: inline-block; width: 24px; }
-  .hc-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--adopy-primary); }
   .hc-switch { position: relative; width: 34px; height: 18px; min-height: 18px !important; padding: 0 !important; border-radius: var(--adopy-radius-pill) !important;
     background: var(--adopy-switch-off) !important; border: 0 !important; vertical-align: middle; }
   .hc-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--adopy-switch-thumb); }
@@ -275,9 +273,9 @@
   }
   var REASON_COPY = 'ACL-1773';
   var DASH = '—';
-  /* Закреплённый блок: выбор 36 + стрелка 28 + переключатель 88 + имя. Ширину всего блока
+  /* Закреплённый блок: стрелка 28 + переключатель 88 + имя. Ширину всего блока
      (по умолчанию 432) тянут за ручку в шапке имени; запоминается общим ключом на все таблицы стран. */
-  var PIN_DEFAULT = 432, PIN_FIXED = 152, PIN_MIN = 240, PIN_KEEP = 160, PIN_KEY = 'acl.hc.pinw.v1';
+  var PIN_DEFAULT = 432, PIN_FIXED = 116, PIN_MIN = 240, PIN_KEEP = 160, PIN_KEY = 'acl.hc.pinw.v1';
   function loadPin() {
     try {
       var v = Number(localStorage.getItem(PIN_KEY));
@@ -319,7 +317,7 @@
     treeErr: {},                     // account -> текст ошибки локального GET
     bi: {},                          // account -> сводка BI
     kids: {},                        // 'level:id' -> {state, rows, note}
-    expanded: {}, selected: {}, details: {}, acctOpen: {},
+    expanded: {}, details: {}, acctOpen: {},
     running: {}, uncertain: {}, readsAvailable: null, busy: queueBusy,
     avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
@@ -542,11 +540,11 @@
       var last = groups[groups.length - 1];
       if (last && last.g === c.g) last.n++; else groups.push({g: c.g, n: 1});
     });
-    var top = '<tr class="hc-groups"><th class="hc-pin-top" colspan="4">Account / campaign hierarchy</th>' + groups.map(function (g) {
+    var top = '<tr class="hc-groups"><th class="hc-pin-top" colspan="3">Account / campaign hierarchy</th>' + groups.map(function (g) {
       var note = g.g === 'meta' ? metaGroupNote() : g.g === 'bi' ? biPeriodNote() + ' · $' : '';
       return '<th class="hc-grp" data-g="' + esc(g.g) + '" colspan="' + g.n + '">' + esc(GROUPS[g.g]) + (note ? '<small>' + esc(note) + '</small>' : '') + '</th>';
     }).join('') + '</tr>';
-    var heads = '<tr class="hc-heads"><th class="p0"><span style="position:absolute;left:-9999px">Select</span></th><th class="p1"><span style="position:absolute;left:-9999px">Expand</span></th><th class="p2">Status</th><th class="p3">Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
+    var heads = '<tr class="hc-heads"><th class="p1"><span style="position:absolute;left:-9999px">Expand</span></th><th class="p2">Status</th><th class="p3">Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
       cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>'; }).join('') + '</tr>';
     return '<thead>' + top + heads + '</thead>';
   }
@@ -563,7 +561,7 @@
   function clampPin(w) { return Math.max(PIN_MIN, Math.min(pinMax(), Math.round(w))); }
   function effPin() { return clampPin(pinW); }
   function colgroup(cols) {
-    return '<colgroup><col style="width:36px"><col style="width:28px"><col style="width:88px"><col style="width:' + (effPin() - PIN_FIXED) + 'px">' +
+    return '<colgroup><col style="width:28px"><col style="width:88px"><col style="width:' + (effPin() - PIN_FIXED) + 'px">' +
       cols.map(function (c) { return '<col style="width:' + c.w + 'px">'; }).join('') + '</colgroup>';
   }
   /* Одна компактная строка на всю ширину таблицы под строкой: значок, короткое сообщение (одна строка,
@@ -599,7 +597,7 @@
 
   function rowHtml(r, cols) {
     var lv = r.level, key = r.key, canOpen = lv !== 'ad';
-    var open = !!S.expanded[key], sel = !!S.selected[key];
+    var open = !!S.expanded[key];
     var st = r.status;
     /* Итог команды — не в узкой ячейке Status, а одной строкой под строкой объекта (`rowMsg`); здесь только маркер. */
     var note = S.notes[key] ? '<span class="hc-mk ' + esc(S.notes[key].tone) + '" role="img" aria-label="' + esc(S.notes[key].text) + '" title="' + esc(S.notes[key].text) + '"></span>' : '';
@@ -617,19 +615,18 @@
     var badge = lv === 'campaign' ? 'Campaign' : lv === 'adset' ? 'Ad set' : 'Ad';
     var count = '';
     if (r.child_count != null) count = r.child_state === 'not_read' ? ' · children not read' : ' · ' + r.child_count + (lv === 'campaign' ? ' ad sets' : ' ads') + (r.child_state === 'partial' ? ' (partial)' : '');
-    var html = '<tr class="hc-r-' + lv + ' hc-lv-' + lv + (sel ? ' hc-sel' : '') + '" data-key="' + esc(key) + '" data-object-id="' + esc(r.id) + '" data-level="' + esc(lv) + '" data-account="' + esc(r.account) + '" data-parent-id="' + esc(r.parent_id || '') + '">' +
-      '<td class="p0"><input type="checkbox" data-sel="' + esc(key) + '"' + (sel ? ' checked' : '') + ' aria-label="Select ' + esc(r.name) + '"></td>' +
+    var html = '<tr class="hc-r-' + lv + ' hc-lv-' + lv + '" data-key="' + esc(key) + '" data-object-id="' + esc(r.id) + '" data-level="' + esc(lv) + '" data-account="' + esc(r.account) + '" data-parent-id="' + esc(r.parent_id || '') + '">' +
       '<td class="p1">' + (canOpen ? '<button type="button" class="hc-exp" data-exp="' + esc(key) + '" aria-expanded="' + open + '" aria-label="' + (open ? 'Collapse ' : 'Expand ') + esc(r.name) + '"></button>' : '<span class="hc-exp-none"></span>') + '</td>' +
       '<td class="p2">' + sw + '</td>' +
       '<td class="p3"><div class="hc-id"><span class="hc-badge">' + badge + '</span><span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + '</b>' +
       '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span></div></td>' +
       cols.map(function (c) { return c.cell(r); }).join('') + '</tr>';
-    if (S.notes[key]) html += rowMsg('row:' + key, dedupNote(S.notes[key], r.account), 4 + cols.length);
+    if (S.notes[key]) html += rowMsg('row:' + key, dedupNote(S.notes[key], r.account), 3 + cols.length);
     if (open && canOpen) html += kidsHtml(r, cols);
     return html;
   }
   function kidsHtml(r, cols) {
-    var span = 4 + cols.length, k = S.kids[r.key], noun = r.level === 'campaign' ? 'ad sets' : 'ads';
+    var span = 3 + cols.length, k = S.kids[r.key], noun = r.level === 'campaign' ? 'ad sets' : 'ads';
     if (!k || k.state === 'loading') return msg('', 'Loading ' + noun + '…', span);
     if (k.state === 'error') return msg('hc-bad', 'Could not load ' + noun + ': ' + esc(k.note) + ' <button type="button" data-retry="' + esc(r.key) + '">Retry</button>', span);
     if (k.state === 'not_read') return msg('hc-warn', 'The ' + noun + ' of this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + ' were not read — ' + esc(k.note || 'Retry this account list') + '. This is not the same as having none.', span);
@@ -694,7 +691,7 @@
   }
 
   function accountMessage(a, cols) {
-    var sum = S.summaries[a.account] || {state: 'idle'}, span = 4 + cols.length, att = sum.attempt;
+    var sum = S.summaries[a.account] || {state: 'idle'}, span = 3 + cols.length, att = sum.attempt;
     var out = '';
     function one(id, tone, head, cause, code, tail) {
       var ex = cause ? noteFrom(cause, 'bad', code) : {text: '', raw: null};
@@ -945,7 +942,7 @@
     root.style.setProperty('--hc-pin-w', eff + 'px');
     openHandles().forEach(function (oh) {
       var table = oh.table, cg = table.querySelector('colgroup');
-      if (cg && cg.children[3]) cg.children[3].style.width = (eff - PIN_FIXED) + 'px';
+      if (cg && cg.children[2]) cg.children[2].style.width = (eff - PIN_FIXED) + 'px';
       if ((S.rows[oh.account] || []).length) table.style.width = (eff + visibleCols().reduce(function (n, c) { return n + c.w; }, 0)) + 'px';
       var hd = table.querySelector('.hc-resize');
       if (hd) { hd.setAttribute('aria-valuenow', String(eff)); hd.setAttribute('aria-valuemax', String(pinMax())); }
@@ -1002,12 +999,6 @@
     if (!S.kids[key] || S.kids[key].state === 'error') loadKids(row); else render();
     if (S.readsAvailable !== false && window.aclAccountRefresh) window.aclAccountRefresh.request(row.account, 'attention');
   };
-  var onTableChange = function (ev) {
-    var key = ev.target && ev.target.dataset ? ev.target.dataset.sel : '';
-    if (!key) return;
-    if (ev.target.checked) S.selected[key] = true; else delete S.selected[key];
-    render();
-  };
   /* ── старт: сначала — есть ли бэкенд; без него больше ничего не делаем ── */
   function init() {
     if (!S.countries.length) { el('body').hidden = false; el('status').textContent = 'No accounts are placed in a country yet.'; return; }
@@ -1043,7 +1034,6 @@
     h.table.addEventListener('dblclick', onDbl);
     h.table.addEventListener('keydown', onKey);
     h.table.addEventListener('click', onTableClick);
-    h.table.addEventListener('change', onTableChange);
     bindScroll(h);
   });
 

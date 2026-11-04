@@ -287,7 +287,7 @@ def test_column_groups_and_order_follow_the_prototype():
 
 def test_rows_pin_identity_and_show_level_country_account():
     acc = _acc_table()["acc"]
-    assert 'data-sel="campaign:1"' in acc and 'data-exp="campaign:1"' in acc and 'class="hc-switch"' in acc
+    assert 'data-sel' not in acc and 'type="checkbox"' not in acc and 'class="p0"' not in acc and 'data-exp="campaign:1"' in acc and 'class="hc-switch"' in acc
     assert "Chile · Acc" in _text(acc) and 'class="p3"' in acc
 
 
@@ -379,14 +379,14 @@ def test_the_pinned_column_resizes_for_every_open_account_by_keyboard_mouse_and_
       for (const a of Object.keys(H)) H[a].frame.clientWidth = 0;
       inst.setPin(2000, false); out.hidden = inst.pinWidth();
     """)
-    assert out["initial"]["w"] == 432 and out["initial"]["cols"][:4] == [36, 28, 88, 280] and out["initial"]["stored"] is True
+    assert out["initial"]["w"] == 432 and out["initial"]["cols"][:3] == [28, 88, 316] and out["initial"]["stored"] is True
     assert out["handle"] == ["840", "432"]
     right = out["right"]
     assert right["w"] == 448 and right["stored"] == "448" and right["prevented"] is True and right["other"] == 448 and right["var"] == "448px"
     assert out["leftShift"] == 384 and out["home"] == 240 and out["end"] == 840
     assert out["dragLive"] == {"w": 552, "stored": "432", "hasUp": "function"}
     assert out["dragDone"] == {"w": 552, "stored": "552", "moveGone": True, "other": 552}
-    assert out["colsAcc"][:4] == out["colsOther"][:4] == [36, 28, 88, 552 - 152]    # шапка и все аккаунты — одни и те же <col>
+    assert out["colsAcc"][:3] == out["colsOther"][:3] == [28, 88, 552 - 116]    # шапка и все аккаунты — одни и те же <col>
     assert out["dragMin"] == 240 and out["dragMax"] == 840
     assert out["reset"] == {"w": 432, "stored": "432", "other": 432}
     assert out["narrow"] == 420 and out["hidden"] == 900
@@ -490,7 +490,7 @@ def test_the_message_is_a_full_width_sub_row_under_its_row_not_a_status_cell_not
     """)
     assert "hc-mk bad" in out["status"] and "WinError" not in out["status"] and "HTTPSConnectionPool" not in out["status"]
     assert out["order"] is True
-    assert int(re.search(r'colspan="(\d+)"', out["sub"]).group(1)) > 4
+    assert int(re.search(r'colspan="(\d+)"', out["sub"]).group(1)) > 3
     assert "Multilogin isn&#39;t running — start it and try again" in out["sub"] and "WinError" not in out["sub"]
     assert 'class="hc-rm-btn" data-details="row:campaign:1" aria-expanded="false">Details' in out["sub"] and "hc-rm-raw" not in out["sub"]
     assert 'class="hc-rm-btn"' not in out["ok"] and "Confirmed" in out["ok"]
