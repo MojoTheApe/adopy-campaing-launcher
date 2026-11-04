@@ -212,3 +212,11 @@ def test_filter_and_open_blocks_survive_period_swap(open_page):
     pg.click("[data-aov-filter=issue]")
     assert visible(pg, '[data-aov-country="Chile"] tr.aov-row') == 22
     assert not pg.errors
+
+
+def test_total_bar_sums_country_book_totals(open_page):
+    """Итог по всем странам строится из книжных тоталов стран, как и в старой строке Total."""
+    pg = open_page()
+    text = " ".join(pg.inner_text("#amap-totals").split())
+    assert "Spend $0" not in text and "Spend $2" in text, text
+    assert "Accounts 28" in text
