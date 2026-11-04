@@ -195,3 +195,20 @@ def test_no_page_overflow_and_shots(open_page, width, theme, mode):
     if SHOTS:
         Path(SHOTS).mkdir(parents=True, exist_ok=True)
         pg.screenshot(path=str(Path(SHOTS) / f"home-{mode}-{theme}-{width}.png"), full_page=True)
+
+
+def test_filter_and_open_blocks_survive_period_swap(open_page):
+    """Смена периода подменяет #amap-slot: чип, вид и раскрытые блоки остаются."""
+    pg = open_page()
+    pg.click('[data-aov-country="Chile"] [data-aov-more]')
+    pg.click("[data-aov-filter=issue]")
+    pg.evaluate("""() => {
+      const slot = document.getElementById('amap-slot');
+      slot.innerHTML = slot.innerHTML;
+      document.dispatchEvent(new Event('htmx:afterSwap'));
+    }""")
+    pg.wait_for_function("document.querySelector('[data-aov-filter=issue]').getAttribute('aria-pressed') === 'true'")
+    assert visible(pg, "tr.aov-row") == 6
+    pg.click("[data-aov-filter=issue]")
+    assert visible(pg, '[data-aov-country="Chile"] tr.aov-row') == 22
+    assert not pg.errors
