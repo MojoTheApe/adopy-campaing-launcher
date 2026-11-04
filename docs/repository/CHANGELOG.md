@@ -1,5 +1,13 @@
 # Repository process history
 
+## 2026-11-04 — ACL-2405 Master Repo 1.9.0 guidance
+
+Point current ACL instructions to the published Master Repo 1.9.0 standard,
+document map and workflow-evolution guide. Preserve the dated adoption records
+and the Master 1.8.0 ancestry required by standalone Tracker 3.24.1. ACL retains
+its selected workflow, checks, package delivery and manual-merge recovery.
+This documentation update uses reviewed instruction completion.
+
 ## 2026-11-04 — ACL-2389 current selection and durable handoffs
 
 Align current entry points with the actual Tracker3.24.1 pin and clearly retain
