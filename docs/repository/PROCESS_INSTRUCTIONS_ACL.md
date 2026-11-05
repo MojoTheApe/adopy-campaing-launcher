@@ -85,3 +85,16 @@ sides. CI/policy/helper changes adopt through the ordinary route, even when thei
 purpose is process improvement. Manual/release runs and stage/batch/promotion
 contexts retain complete applicable verification. Never relabel a product task
 or trim its outstanding acceptance criteria to obtain instruction completion.
+
+## Project-owned delivery tooling
+
+[The explicit ACL declaration](../../delivery.json) lists the four existing delivery/CI
+controls and three verification files that belong to this project's process.
+The declaration is local; the pristine template, shared Tracker defaults and
+application inputs remain unchanged. It permits the shared
+[process-support proof](PROCESS_SUPPORT.md) to assess later changes to those exact
+files. It grants no approval by itself: the complete task, indirect product
+effects, ordinary source/batch reviews and applicable checks remain required.
+Actual product changes and publication requests keep their delivery obligations.
+ACL-2423 introduces only this boundary; publisher behavior and instruction schema1
+remain unchanged until their separately reviewed tasks finish.
