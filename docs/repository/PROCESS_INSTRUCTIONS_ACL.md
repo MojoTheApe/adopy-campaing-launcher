@@ -96,5 +96,9 @@ application inputs remain unchanged. It permits the shared
 files. It grants no approval by itself: the complete task, indirect product
 effects, ordinary source/batch reviews and applicable checks remain required.
 Actual product changes and publication requests keep their delivery obligations.
-ACL-2423 introduces only this boundary; publisher behavior and instruction schema1
-remain unchanged until their separately reviewed tasks finish.
+ACL-2423 introduced only this boundary. ACL-2424 connects the existing shared
+handoff wait and prepares original-product continuation: a later checkout can
+publish the original product only after actual schema2 adoption and the complete
+native instruction/request proof. Current-main receipt helpers retain the real
+original verification evidence. Instruction schema1 remains selected until
+ACL-2425; this preparation does not enable the independent route by itself.
