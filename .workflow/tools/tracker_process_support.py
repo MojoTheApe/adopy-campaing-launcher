@@ -7,6 +7,7 @@ export closure; consumer metadata cannot authenticate itself.
 """
 import ast
 import hashlib
+import inspect
 import json
 import re
 from urllib.parse import quote
@@ -298,6 +299,11 @@ def provider_export(request, root, files, revision):
         'helper_files': 'e0aa07927e2f92b507ac8de2aab17a30bff313a9fd75df3b3d547ba9e5760b18',
         'manifest_bytes': '0c649287884508fbce94185b1ec70edea3dec6315da1f5c8669c489697183e77',
     }
+    dump_options = {'include_attributes': False}
+    #3.13 omits empty lists by default. Keep the exact incumbent goldens,
+    # using the explicit option only on runtimes that actually support it.
+    if 'show_empty' in inspect.signature(ast.dump).parameters:
+        dump_options['show_empty'] = True
     for name, expected in algorithms.items():
         function = functions.get(name)
         if function is not None:
@@ -309,7 +315,7 @@ def provider_export(request, root, files, revision):
                     if node.type_params:
                         raise ValueError('Unsupported provider type parameters')
                     del node.type_params
-        if function is None or hashlib.sha256(ast.dump(function, include_attributes=False).encode()).hexdigest() != expected:
+        if function is None or hashlib.sha256(ast.dump(function, **dump_options).encode()).hexdigest() != expected:
             raise ValueError('Unsupported official provider export algorithm: ' + name)
     constants = {}
     for node in module.body:

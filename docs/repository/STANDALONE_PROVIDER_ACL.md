@@ -4,13 +4,13 @@
 
 The current provider is the exact published revision in
 [delivery.json](../../delivery.json) and [tracker/engine.json](../../tracker/engine.json).
-ACL-2421 selects published Tracker3.27.0 at
-`e4bf8ea36c1333889bad15e01dc3af117197b197` with universal project-owned
+ACL-2421 selects published Tracker3.27.1 at
+`057da261eab69173e37ca4df81fff03b0f43b3d0` with universal project-owned
 process support and compatible lossless-archive readers/writers. ACL-2417's
 Tracker3.26.0 recovery/handoff support and ACL-2351's earlier Tracker3.24.1 selection through
 [PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383) remains history.
 The provider, engine and trusted private-checkout workflow select the same source.
-Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/e4bf8ea36c1333889bad15e01dc3af117197b197/docs/STANDALONE_WORKFLOW_PROVIDER.md)
+Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/057da261eab69173e37ca4df81fff03b0f43b3d0/docs/STANDALONE_WORKFLOW_PROVIDER.md)
 and the [current ACL workflow](WORKFLOW.md). The provider validates the exact
 Master 1.8.0 ancestry in the descriptor and template baseline. For current
 shared guidance, use Master Repo 1.9.0 from [AGENTS.md](../../AGENTS.md).

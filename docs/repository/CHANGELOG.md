@@ -2,8 +2,8 @@
 
 ## 2026-11-05 — ACL-2421 universal Tracker support
 
-Select published Tracker3.27.0 at `e4bf8ea36c1333889bad15e01dc3af117197b197`.
-The exact prior provider reproduces92 pristine files; the maintained new
+Select published Tracker3.27.1 at `057da261eab69173e37ca4df81fff03b0f43b3d0`.
+The original3.26.0 provider reproduces92 pristine files; the maintained new
 renderer/merger supplies the genuine96-file baseline and complete15/30-helper
 closure, including the common lossless-archive codec. Preserve native config,
 outer8 state, instruction schema1, all existing ownership/capacity, local
@@ -11,6 +11,11 @@ publisher/CI code and every product/build/runtime input. This is compatible
 support adoption only: the static adapter declaration, publisher continuation
 and guarded archive activation remain separate outcomes. No ACL installer
 publication or repeated package acceptance is requested.
+The initial3.27.0 candidate was returned before approval/adoption after an
+independent Python3.13 fingerprint finding. Published3.27.1 corrects that
+serialization defect; its exact predecessor independently reproduces the
+96-file intermediate baseline. Neither earlier candidate nor source publication
+was treated as consumer delivery.
 
 ## 2026-11-05 — ACL-2417 Tracker recovery support
 
