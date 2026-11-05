@@ -32,6 +32,13 @@ trees cannot establish this route. Mixed changes, configuration, scripts, CI,
 runtime, product and other documentation retain the ordinary delivery route.
 Titles, labels, author claims and opt-out text cannot select the exception.
 
+An already admitted product awaiting its requested delivery still holds the
+instruction route. Preserve this existing guard until the consumer publication
+adapter supports later instruction commits. The read-only `instruction_continuation`
+proof is prepared for that separate wiring: it verifies current-main identity,
+original process receipts, scope, policy and immutable trees. It neither activates
+independent instruction admission nor changes existing receipt-only recovery.
+
 The exact opt-in must already exist in both authoritative base configuration and
 base descriptor; a caller's temporary configuration cannot activate it. The
 working source includes the exact main baseline. The exported portable helper

@@ -1,5 +1,16 @@
 # Repository process history
 
+## 2026-11-05 — ACL-2417 Tracker recovery support
+
+Select published Tracker3.26.0 at `3f523b56ec6ad9efd4940efa6d315f5526872c33`.
+Reuse the independently audited old-provider92-file pristine ancestry and the
+maintained new renderer/three-way writer. Update only canonical workflow support,
+pins and current repository guidance; keep native config, capacities, pause8,
+existing release guards and all product/build/runtime inputs unchanged. Normal
+source/singleton batch review and applicable checks remain. Exact canonical
+process proof completes this support without a new ACL installer. ACL-2312's
+separate recovery retains its original history and reuses existing release proof.
+
 ## 2026-11-05 — ACL-2414 phase-preserving pause activation
 
 After the owner confirmed five stopped review sessions and their Coordinator,
