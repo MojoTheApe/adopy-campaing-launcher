@@ -93,9 +93,12 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
                                             and direction == 'approval' and len(status) == 2
                                             and {stages.get(s) for s in status} == {'review', 'approved'})
         if not resuming_merge and (len(status)!=1 or stages.get(status[0]) not in allowed):
+            phases = [stages.get(s) for s in status]
+            handing_off = (phases == ['in_progress'] or len(phases) == 2
+                           and set(phases) == {'in_progress', 'review'})
             if (not admission and not pr.get('draft') and pr.get('state') == 'open'
                     and config.get('execution_policy', {}).get('schema_version') in (2, 3)
-                    and direction in ('approval', 'process') and status == ['in_progress']
+                    and direction in ('approval', 'process') and handing_off
                     and issue.get('state') == 'open'
                     and not labels.intersection({'flag:blocked', 'flag:archived'})):
                 raise HandoffPending(f'#{n}: waiting for the Worker handoff to Review')
