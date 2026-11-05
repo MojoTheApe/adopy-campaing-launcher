@@ -93,22 +93,36 @@ consumer product release. Existing product batches retain their delivery labels.
 
 ## Compatibility and rollout
 
-### ACL delivery governance
+### Project-owned process adapters
 
-ACL's existing delivery adapter has a separate bounded `acl-delivery-governance`
-proof for `.github/workflows/complete-delivery.yml`,
-`scripts/acl_complete_delivery.py`, `scripts/acl_publish_release.py`, their named
-delivery regressions and normal repository instructions. Every other immutable
-product/build/runtime/pin/policy entry must be identical; all three existing
-control files remain present as normal files. Arbitrary scripts, release build
-workflows, dependencies, product tests and other repositories do not qualify.
+There are no repository-name exceptions for new process receipts. A project may
+explicitly declare its existing process adapters in `delivery.json`:
 
-The actual independent source and combined reviewer must assess every original
-outcome and indirect build/import isolation, as well as the changed publication
-controls. Ordinary source/batch/main admission and configured checks remain.
-An existing real product-publication request is never waived. Publish/install
-the compatible reader before recording this new typed receipt. This is ACL's
-local delivery adapter, not a general workflow-policy option.
+```json
+{"workflow": {"process_support": {"schema_version": 1,
+  "control_files": ["scripts/publish.py", ".github/workflows/publish.yml"],
+  "verification_files": ["tests/test_publish.py"]}}}
+```
+
+The example is an optional part of the existing descriptor, not a replacement
+descriptor or a default inherited by new projects. Paths are exact, unique,
+bounded and non-executable regular text files; globs, executable plugins, product
+paths, canonical helpers and policy files are excluded. Accept the declaration
+in its own independently reviewed metadata-only change. That change cannot also
+edit the files it authorizes. The project-owned declaration does not alter the
+pristine template. A later adapter PR must keep the entire descriptor and Tracker
+config unchanged and preserve every Git entry outside the declared files and
+normal repository instructions.
+
+This establishes eligibility, not product isolation. Actual source/combined
+reviewers still inspect the complete outcome, imports, packaging/build effects
+and changed publication controls. Normal admission and configured checks remain;
+an actual product-publication request is never waived. A separate tightly bounded
+metadata proof also supports explicit instruction schema1-to-schema2 selection
+with matching config/descriptor and unchanged checks. Publisher compatibility is
+verified before that selection. Publish/install a compatible reader before new
+typed receipts. Existing `acl-delivery-governance` receipts remain readable as
+historical evidence; the old ACL-specific permission is no longer issued.
 
 Schema1 instruction eligibility/admission, existing delivery profiles and policy
 selection are unchanged. Old receipts are not reclassified. Publish compatible

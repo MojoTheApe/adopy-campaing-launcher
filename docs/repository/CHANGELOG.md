@@ -1,5 +1,36 @@
 # Repository process history
 
+## 2026-11-05 — ACL-2421 universal Tracker support
+
+Select published Tracker3.27.3 at `e94e9a4c7f5291631cf9e6046dc3a719e7e04d35`.
+The original3.26.0 provider reproduces92 pristine files; the maintained new
+renderer/merger supplies the genuine96-file baseline and complete15/30-helper
+closure, including the common lossless-archive codec. Preserve native config,
+outer8 state, instruction schema1, all existing ownership/capacity, local
+publisher/CI code and every product/build/runtime input. This is compatible
+support adoption only: the static adapter declaration, publisher continuation
+and guarded archive activation remain separate outcomes. No ACL installer
+publication or repeated package acceptance is requested.
+The initial3.27.0 candidate was returned before approval/adoption after an
+independent Python3.13 fingerprint finding. Published3.27.1 corrects that
+serialization defect; its exact predecessor independently reproduces the
+96-file intermediate baseline. Neither earlier candidate nor source publication
+was treated as consumer delivery.
+The3.27.1 candidate passed its original pin-only isolation assessment but was
+returned before approval to include TT-258: actual add-Review/remove-In-Progress
+events exposed the dual-label handoff gap. Published3.27.2 covers that exact
+feedback phase with the same bounded wait and strict admission. Its exact
+predecessor reproduces the96-file intermediate baseline. The compatible central
+reader3.27.1 is installed; no second service installation is needed. The local
+wrapper and other activation outcomes remain separate.
+The valid3.27.2 source was returned before intake/main admission to include
+TT-254's final native receiver correction. A later trusted verification workflow
+keeps its actual identity while validating the original product; publication
+and receipt chains reach that exact original commit. Unknown equal-tree gaps
+refuse and genuine admitted doc roundtrips pass. Published3.27.3 changes no
+receipt/state shape; the installed3.27.1 reader remains compatible. All earlier
+source checks/reviews remain history, and no application release is requested.
+
 ## 2026-11-05 — ACL-2417 Tracker recovery support
 
 Select published Tracker3.26.0 at `3f523b56ec6ad9efd4940efa6d315f5526872c33`.

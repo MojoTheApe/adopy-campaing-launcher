@@ -32,12 +32,34 @@ trees cannot establish this route. Mixed changes, configuration, scripts, CI,
 runtime, product and other documentation retain the ordinary delivery route.
 Titles, labels, author claims and opt-out text cannot select the exception.
 
-An already admitted product awaiting its requested delivery still holds the
-instruction route. Preserve this existing guard until the consumer publication
-adapter supports later instruction commits. The read-only `instruction_continuation`
-proof is prepared for that separate wiring: it verifies current-main identity,
-original process receipts, scope, policy and immutable trees. It neither activates
-independent instruction admission nor changes existing receipt-only recovery.
+Schema1 retains its existing guard: an admitted product awaiting requested
+delivery holds the instruction route. Schema2 of this same optional setting
+explicitly enables independent instructions, with the same required checks and
+fixed file eligibility. Existing projects are not upgraded automatically.
+
+Before selecting schema2, publish compatible readers/writers and adapt the
+project's own publisher. It must resolve, build, tag and verify the ORIGINAL
+authorized product SHA and its successful native CI. Newer main is allowed only
+through `instruction_continuation` and retained independently reviewed instruction
+receipts; arbitrary or mixed commits remain blocked. Select schema2 through a
+separate reviewed config/descriptor change while the project is idle. No pending
+product request, held integration or Stage is bypassed to adopt this setting.
+
+After adoption, a pending product alone does not hold instruction review/main
+completion. Held Stage, frozen intake and integration still do. The instruction
+task receives only its own process receipt; the original product request and
+receipt stay pending until actual delivery. Receipt-only recovery of an existing
+verified product retains its previous semantics.
+
+A trusted verification run may itself belong to a later admitted instruction
+revision while its actual checkout, package and evidence retain the original
+product. The schema2 receiver validates that complete instruction chain, the
+producer's inclusion in main and the actual matching run/job heads. It never
+rewrites native API identity or replaces the product CI. A retained successful
+producer need not still be the latest main during receipt-only recovery.
+Publication and receipt chains must reach the exact original product commit;
+an unadmitted intermediate commit with the same tree is insufficient. Genuine
+admitted instruction roundtrips are checked through all their retained receipts.
 
 The exact opt-in must already exist in both authoritative base configuration and
 base descriptor; a caller's temporary configuration cannot activate it. The

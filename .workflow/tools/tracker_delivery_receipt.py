@@ -68,24 +68,34 @@ def configuration(request, repo, revision):
     return config
 
 
-def state(request, repo):
+def state(request, repo, *, with_context=False):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    shared = rules.pause_module().decode(json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object))
+    wire = json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object)
+    hydrated, context = rules.archive_module().hydrate(wire, repo, row.get('sha'), request)
+    shared = rules.pause_module().decode(hydrated)
     rules.state_schema(shared)
     if shared.get('maintenance'):
         raise PendingDelivery('Delivery continuation is paused by owned maintenance; resume after cutover')
-    return shared, row['sha']
+    return (shared, row['sha'], context) if with_context else (shared, row['sha'])
 
 
-def official_run(request, repo, run_id, revision):
+def native_main_run(request, repo, run_id):
     if type(run_id) is not int or run_id < 1:
         raise ValueError('A real native workflow run is required')
     run = request(f'repos/{repo}/actions/runs/{run_id}')
-    if (run.get('head_sha') != revision or run.get('head_branch') != 'main'
+    if (not isinstance(run.get('head_sha'), str) or not rules.SHA.fullmatch(run['head_sha'])
+            or run.get('head_branch') != 'main'
             or run.get('event') not in ('push', 'workflow_dispatch', 'workflow_run')
             or run.get('head_repository', {}).get('full_name', '').lower() != repo.lower()
             or not WORKFLOW.fullmatch(run.get('path', ''))):
+        raise ValueError('Native run must belong to this official main revision and trusted workflow')
+    return run
+
+
+def official_run(request, repo, run_id, revision):
+    run = native_main_run(request, repo, run_id)
+    if run['head_sha'] != revision:
         raise ValueError('Native run must belong to this official main revision and trusted workflow')
     return run
 
@@ -390,6 +400,12 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
     root = 'repos/' + repo
     current = request(root + '/git/ref/heads/main')['object']['sha']
     config = configuration(request, repo, current)
+    if (not include_delivered and current != merge_sha
+            and (rules.process_module().policy(config) or {}).get('schema_version') == 2):
+        # Publication may use an older product only across its verified
+        # instruction descendants. Recording an already verified delivery keeps
+        # its existing ancestry-based recovery semantics.
+        instruction_continuation(repo, merge_sha, current, request=request)
     original, active = rules.policy(source_config), rules.policy(config)
     if ({k: v for k, v in original.items() if k != 'staging'}
             != {k: v for k, v in active.items() if k != 'staging'}
@@ -488,7 +504,7 @@ def instruction_continuation(repo, merge_sha, current, *, request=github):
     shared, _ = state(request, repo)
     process = rules.process_module()
     if not process.idle(shared, config) or not process.stage_base_compatible(
-            request, config, merge_sha, current, shared):
+            request, config, merge_sha, current, shared, exact_base=True):
         raise ValueError('Only retained independently admitted instructions may follow the authorized product')
     if request(root + '/git/ref/heads/main')['object']['sha'] != current:
         raise ValueError('Current main changed during continuation; preserve the pending request')
@@ -584,14 +600,33 @@ def verification_job(request, repo, run_id, name, attempt):
     raise ValueError('Verification job is absent from every native run attempt')
 
 
+def instruction_verifier(request, repo, product, producer):
+    """A later trusted producer may verify the original package, never replace it."""
+    root = 'repos/' + repo
+    current = request(root + '/git/ref/heads/main')['object']['sha']
+    config = configuration(request, repo, current)
+    process = rules.process_module()
+    if (process.policy(config) or {}).get('schema_version') != 2:
+        raise ValueError('A later verification producer requires explicit instruction schema2')
+    shared, _ = state(request, repo)
+    if (not process.idle(shared, config)
+            or request(root + '/compare/' + producer + '...' + current).get('status') not in ('ahead', 'identical')
+            or not process.stage_base_compatible(request, config, product, producer, shared, exact_base=True)):
+        raise ValueError('Verification producer must be a retained independently admitted instruction descendant')
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during verification producer proof; retain the original report')
+
+
 def verified_native(request, document, receipt, run_id, job_id):
     repo = document['repository']
-    run = official_run(request, repo, run_id, document['merge_sha'])
+    run = native_main_run(request, repo, run_id)
     if run.get('path') != document['workflow'] or type(job_id) is not int or job_id < 1:
         raise ValueError('Verification workflow differs from the authorized project producer')
+    if run['head_sha'] != document['merge_sha']:
+        instruction_verifier(request, repo, document['merge_sha'], run['head_sha'])
     job = request(f'repos/{repo}/actions/jobs/{job_id}')
     if (job.get('run_id') != run_id or job.get('name') != document['job']
-            or job.get('head_sha') != document['merge_sha']
+            or job.get('head_sha') != run['head_sha']
             or job.get('status') != 'completed' or job.get('conclusion') != 'success'):
         raise ValueError('The exact authorized verification job has not passed')
     latest, _ = verification_job(request, repo, run_id, document['job'], run.get('run_attempt', 1))
@@ -625,7 +660,7 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
             or not isinstance(receipt.get('report'), str) or not receipt['report'].strip()):
         raise ValueError('A passed exact-target/revision delivery verification is required')
     repo = document['repository']
-    shared, sha = state(request, repo)
+    shared, sha, archive_context = state(request, repo, with_context=True)
     current = request('repos/' + repo + '/git/ref/heads/main')['object']['sha']
     config = configuration(request, repo, current)
     selected = selection_delivery_context(request, repo, shared, config, current, document['merge_sha'])
@@ -709,9 +744,8 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
                 raise ValueError('Official selection main changed during native delivery verification')
         rules.execution_state(shared,config)
         # CAS failure/uncertain response is never retried with a stale body.
-        request(root + '/contents/.tracker-state.json', 'PUT', {
-            'message': 'Record verified authorized delivery [skip ci]', 'branch': 'tracker-state', 'sha': sha,
-            'content': base64.b64encode(json.dumps(rules.pause_module().encode(shared), indent=2).encode()).decode()})
+        rules.archive_module().write(request, repo, rules.pause_module().encode(shared), sha, archive_context,
+            message='Record verified authorized delivery [skip ci]', completion=rules.policy(config)['completion'], legacy_indent=2)
     return {'applied': apply, 'issues': numbers, 'result': 'passed'}
 
 
