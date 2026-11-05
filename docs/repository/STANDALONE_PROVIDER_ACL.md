@@ -4,13 +4,25 @@
 
 The current provider is the exact published revision in
 [delivery.json](../../delivery.json) and [tracker/engine.json](../../tracker/engine.json).
-ACL-2351 adopted Tracker3.24.1 at `9dc08c3e31ef1204130f43b0740d173e733d5cb7`
-through [PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383).
+ACL-2417 selects published Tracker3.26.0 at
+`3f523b56ec6ad9efd4940efa6d315f5526872c33` for maintained source recovery and
+ready-source handoff feedback. ACL-2351's earlier Tracker3.24.1 selection through
+[PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383) remains history.
 The provider, engine and trusted private-checkout workflow select the same source.
-Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/9dc08c3e31ef1204130f43b0740d173e733d5cb7/docs/STANDALONE_WORKFLOW_PROVIDER.md)
+Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/3f523b56ec6ad9efd4940efa6d315f5526872c33/docs/STANDALONE_WORKFLOW_PROVIDER.md)
 and the [current ACL workflow](WORKFLOW.md). The provider validates the exact
 Master 1.8.0 ancestry in the descriptor and template baseline. For current
 shared guidance, use Master Repo 1.9.0 from [AGENTS.md](../../AGENTS.md).
+
+The two-provider upgrade reuses ACL-2351's reviewed ancestry procedure: the exact
+old official source reproduces all92 pristine files, then the new official
+renderer/merger writes the genuine new baseline and exports. Both immutable
+provider validations remain required. Native config, pause fence8, capacities,
+target and existing release behavior are unchanged. The canonical process proof
+and independent whole-outcome/import isolation assessment complete this support
+without publishing an ACL installer. Independent documentation delivery remains
+deferred until its consumer continuation is wired; the existing pending-release
+guard remains active.
 
 ## Historical adoption — ACL-2156, 24 October 2026
 

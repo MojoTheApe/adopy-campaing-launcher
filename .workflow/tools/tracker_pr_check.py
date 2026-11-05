@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import time
 try:
     from . import delivery_policy
 except ImportError:
@@ -36,6 +37,10 @@ def linked_numbers(body, config):
         numbers.append(number)
     if not numbers or len(set(numbers)) != len(numbers): raise ValueError('List each linked task exactly once')
     return numbers
+
+
+class HandoffPending(ValueError):
+    """A ready source is waiting for its Worker to record Review."""
 
 
 def check(request, config, pr_number, *, allow_transition=False, admission=False, approval_recovery=False):
@@ -88,6 +93,12 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
                                             and direction == 'approval' and len(status) == 2
                                             and {stages.get(s) for s in status} == {'review', 'approved'})
         if not resuming_merge and (len(status)!=1 or stages.get(status[0]) not in allowed):
+            if (not admission and not pr.get('draft') and pr.get('state') == 'open'
+                    and config.get('execution_policy', {}).get('schema_version') in (2, 3)
+                    and direction in ('approval', 'process') and status == ['in_progress']
+                    and issue.get('state') == 'open'
+                    and not labels.intersection({'flag:blocked', 'flag:archived'})):
+                raise HandoffPending(f'#{n}: waiting for the Worker handoff to Review')
             raise ValueError(f'#{n}: start and implement the task, then move it to Review before a ready PR')
         closed_by_merge = allow_transition and pr.get('merged') and issue.get('state_reason')=='completed'
         if 'flag:archived' in labels or issue.get('state_reason')=='not_planned' or issue.get('state')=='closed' and stages.get(status[0])!='merged' and not closed_by_merge:
@@ -108,6 +119,35 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
     return result
 
 
+def check_with_handoff_wait(request, config, pr_number, *, admission=False, sleep=time.sleep):
+    """Only CI feedback waits; final admission remains immediate and strict."""
+    identity = None
+
+    def current_request(path):
+        nonlocal identity
+        value = request(path)
+        if path == 'repos/' + config['project']['repository'] + f'/pulls/{pr_number}':
+            current = json.dumps({key: value.get(key) for key in
+                                  ('body', 'state', 'draft', 'merged')},
+                                 sort_keys=True)
+            for side in ('head', 'base'):
+                branch = value.get(side) or {}
+                current += json.dumps((branch.get('sha'), branch.get('ref'),
+                                      (branch.get('repo') or {}).get('full_name')), sort_keys=True)
+            if identity is not None and current != identity:
+                raise ValueError('PR changed while waiting for its handoff; check the current candidate')
+            identity = current
+        return value
+
+    for attempt in range(13):
+        try:
+            return check(current_request, config, pr_number, admission=admission)
+        except HandoffPending:
+            if attempt == 12:
+                raise
+            sleep(5)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--pr',type=int,required=True)
     p.add_argument('--config',type=Path,default=Path(__file__).resolve().parents[2]/'tracker/config.json')
@@ -118,7 +158,7 @@ def main():
         result=subprocess.run(['gh','api',path],text=True,capture_output=True,timeout=90)
         if result.returncode: raise RuntimeError('GitHub read failed; PR linkage is not verified')
         return json.loads(result.stdout)
-    print(json.dumps(check(request,json.loads(args.config.read_text()),args.pr,admission=args.admission),indent=2))
+    print(json.dumps(check_with_handoff_wait(request,json.loads(args.config.read_text()),args.pr,admission=args.admission),indent=2))
 
 
 if __name__=='__main__':
