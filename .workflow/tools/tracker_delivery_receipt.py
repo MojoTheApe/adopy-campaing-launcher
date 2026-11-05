@@ -474,6 +474,27 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
             'ci_run': ci_run}
 
 
+def instruction_continuation(repo, merge_sha, current, *, request=github):
+    """Read-only publication guard; retained delivery recording is unchanged."""
+    if (not re.fullmatch(r'[\w.-]+/[\w.-]+', repo)
+            or any(not rules.SHA.fullmatch(str(value)) for value in (merge_sha, current))):
+        raise ValueError('Use the exact original product and actual current main')
+    root = 'repos/' + repo
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during continuation; preserve the pending request')
+    if current == merge_sha:
+        return True
+    config = configuration(request, repo, current)
+    shared, _ = state(request, repo)
+    process = rules.process_module()
+    if not process.idle(shared, config) or not process.stage_base_compatible(
+            request, config, merge_sha, current, shared):
+        raise ValueError('Only retained independently admitted instructions may follow the authorized product')
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during continuation; preserve the pending request')
+    return True
+
+
 def authorization_direct(config,archive):
     direct=rules.direct_module();auth=archive.get('delivery_request')
     if not auth:return None

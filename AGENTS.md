@@ -27,7 +27,7 @@ evidence; current work follows the active policies below.
   the current executable source is the exact published revision in
   [tracker/engine.json](tracker/engine.json) and [delivery.json](delivery.json).
   The Master 1.8.0 reference in the descriptor and template baseline records
-  the audited provider ancestry required by Tracker 3.24.1. Provider, engine, private checkout and canonical
+  the audited provider ancestry retained by the selected Tracker. Provider, engine, private checkout and canonical
   export must agree. Use the immutable official provider entry point for rendering and
   validation; do not run consumer-controlled validation with credentials or
   rewrite global skills. Existing task ownership and all review/check/package

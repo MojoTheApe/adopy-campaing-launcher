@@ -681,7 +681,7 @@ def summary(receipt):
             except ImportError:
                 import tracker_process_support as support
             valid = (type(proof.get('schema_version')) is int and proof['schema_version'] == 1
-                     and proof.get('kind') in (support.KIND, support.VERIFICATION) and proof.get('policy') == receipt.get('policy')
+                     and proof.get('kind') in (support.KIND, support.VERIFICATION, support.RETENTION, support.GOVERNANCE) and proof.get('policy') == receipt.get('policy')
                      and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
                      and all(isinstance(proof.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', proof[k])
                              for k in ('proof_sha256', 'review_sha256'))
@@ -717,6 +717,8 @@ def summary(receipt):
                          and supplemental.get('workflow_run') == {'id': native['id'], 'attempt': native['attempt']}
                          and supplemental.get('process_support') == proof.get('assessment')
                          and support.digest(supplemental) == proof['review_sha256'])
+            if valid and proof['kind'] == support.RETENTION:
+                valid = support.valid_retention_receipt(proof, sources)
             if valid:
                 result['process_support'] = True
         result['verified'] = result['verified'] and bool(valid)
