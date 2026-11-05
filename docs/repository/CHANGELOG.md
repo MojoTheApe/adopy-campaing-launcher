@@ -1,5 +1,16 @@
 # Repository process history
 
+## 2026-11-05 — ACL-2414 phase-preserving pause activation
+
+After the owner confirmed five stopped review sessions and their Coordinator,
+the maintained takeover/cancellation released only their unstarted intake.
+All five source approvals and heads, 4,677 prior history entries and delivery
+receipts were preserved. Selected Tracker3.24.1 and the deployed Tracker3.25.0
+reader passed the readiness check. Owned idle activation enabled the outer8
+pause fence and the same maintenance owner resumed admission. The fresh shared
+board read the state successfully. An actual ACL-2414 stop/resume retained
+In Progress and saved work, revoked the old claim and returned fresh authority.
+
 ## 2026-11-04 — ACL-2405 Master Repo 1.9.0 guidance
 
 Point current ACL instructions to the published Master Repo 1.9.0 standard,
