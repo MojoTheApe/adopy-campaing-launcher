@@ -2,7 +2,7 @@
 
 ## 2026-11-05 — ACL-2421 universal Tracker support
 
-Select published Tracker3.27.1 at `057da261eab69173e37ca4df81fff03b0f43b3d0`.
+Select published Tracker3.27.2 at `5fa571705fa678053effe29ac5cdecceddb9ec10`.
 The original3.26.0 provider reproduces92 pristine files; the maintained new
 renderer/merger supplies the genuine96-file baseline and complete15/30-helper
 closure, including the common lossless-archive codec. Preserve native config,
@@ -16,6 +16,13 @@ independent Python3.13 fingerprint finding. Published3.27.1 corrects that
 serialization defect; its exact predecessor independently reproduces the
 96-file intermediate baseline. Neither earlier candidate nor source publication
 was treated as consumer delivery.
+The3.27.1 candidate passed its original pin-only isolation assessment but was
+returned before approval to include TT-258: actual add-Review/remove-In-Progress
+events exposed the dual-label handoff gap. Published3.27.2 covers that exact
+feedback phase with the same bounded wait and strict admission. Its exact
+predecessor reproduces the96-file intermediate baseline. The compatible central
+reader3.27.1 is installed; no second service installation is needed. The local
+wrapper and other activation outcomes remain separate.
 
 ## 2026-11-05 — ACL-2417 Tracker recovery support
 

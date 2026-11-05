@@ -76,8 +76,8 @@ Shared contract references retain canonical bodies; `_ACL` documents preserve th
 
 Use the exact published Task Tracker revision selected by
 [tracker/engine.json](../../tracker/engine.json) and
-[delivery.json](../../delivery.json). ACL-2421 selects published Tracker3.27.1 at
-`057da261eab69173e37ca4df81fff03b0f43b3d0`. ACL-2417's Tracker3.26.0 recovery
+[delivery.json](../../delivery.json). ACL-2421 selects published Tracker3.27.2 at
+`5fa571705fa678053effe29ac5cdecceddb9ec10`. ACL-2417's Tracker3.26.0 recovery
 support remains history. The previous ACL-2351 selection of
 Tracker3.24.1 on 4 November 2026 remains preserved as history.
 The original ACL-2156 selection of Tracker3.14.1 remains in the
@@ -90,7 +90,7 @@ The descriptor and template baseline retain the provider's audited Master 1.8.0 
 Use the exact official Tracker source and its isolated
 `scripts/workflow_provider.py` entry point for future supported rendering. Read
 [the local provider adoption](STANDALONE_PROVIDER_ACL.md) and
-[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/057da261eab69173e37ca4df81fff03b0f43b3d0/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/5fa571705fa678053effe29ac5cdecceddb9ec10/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 Preserve all local rules below, true pristine ancestry, independent review and
 full applicable checks. The native configuration, adopted execution3, capacities,
 target, required checks, IDs, existing owners and original task scope are unchanged.

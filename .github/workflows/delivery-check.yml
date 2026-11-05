@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: MojoTheApe/task-tracker
-          ref: 057da261eab69173e37ca4df81fff03b0f43b3d0
+          ref: 5fa571705fa678053effe29ac5cdecceddb9ec10
           path: trusted/provider
           ssh-key: ${{ secrets.TRACKER_PROVIDER_READ_KEY }}
           ssh-strict: true
