@@ -1,5 +1,17 @@
 # Repository process history
 
+## 2026-11-05 — ACL-2421 universal Tracker support
+
+Select published Tracker3.27.0 at `e4bf8ea36c1333889bad15e01dc3af117197b197`.
+The exact prior provider reproduces92 pristine files; the maintained new
+renderer/merger supplies the genuine96-file baseline and complete15/30-helper
+closure, including the common lossless-archive codec. Preserve native config,
+outer8 state, instruction schema1, all existing ownership/capacity, local
+publisher/CI code and every product/build/runtime input. This is compatible
+support adoption only: the static adapter declaration, publisher continuation
+and guarded archive activation remain separate outcomes. No ACL installer
+publication or repeated package acceptance is requested.
+
 ## 2026-11-05 — ACL-2417 Tracker recovery support
 
 Select published Tracker3.26.0 at `3f523b56ec6ad9efd4940efa6d315f5526872c33`.

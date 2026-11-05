@@ -59,12 +59,16 @@
       1
     ],
     "process_instructions": [
-      1
+      1,
+      2
     ],
     "process_support": [
       1
     ],
     "selection_task_fragment": [
+      1
+    ],
+    "state_archive": [
       1
     ],
     "task_context_policy": [
@@ -77,7 +81,7 @@
   },
   "engine": {
     "repository": "MojoTheApe/task-tracker",
-    "revision": "3f523b56ec6ad9efd4940efa6d315f5526872c33"
+    "revision": "e4bf8ea36c1333889bad15e01dc3af117197b197"
   },
   "format_version": 1,
   "layouts": {
@@ -86,15 +90,16 @@
       "scripts/tracker_batch_policy.py": "a96eb7e7ccbd5e0056e7fe1f8ae76558b8e346f4f262ee07ac33937674463995",
       "scripts/tracker_ci_accounting.py": "c9c8d12aa05ced4775956fecae7bfa69bbb945e6a940a5bd7fbd326b68f28aed",
       "scripts/tracker_ci_evidence.py": "a35c57b079c6774662c9e15a2f033bf605df6b166c71d65a7f67c9f5b9cdf230",
-      "scripts/tracker_ci_gate.py": "8496073ab5c4deabacb26255420963d7a531cd4b6cc0541d6b29a6bb1462f307",
+      "scripts/tracker_ci_gate.py": "f5e1eed16cf1552c9888fcbe97ac3ed5ddaa57f99875f684b8024227361bb43a",
       "scripts/tracker_ci_retry.py": "058d385513827e96f2d7b968af27af16cf56b7fe5b6df73952db2d88af168d86",
-      "scripts/tracker_delivery_policy.py": "751a32cab7f50c49072b0dd87db514457b232ca7a62d682eb6759d48c63d5b79",
-      "scripts/tracker_delivery_receipt.py": "4d25bb1b16736bdd1774b4e3151d51faeb0dedfde35400cfa422ccd2ddaf147d",
+      "scripts/tracker_delivery_policy.py": "4193667a8e4ff8555c37e418edef12127121dc9b88bf2053800c1143967f93f7",
+      "scripts/tracker_delivery_receipt.py": "78e500145cb0fd656f8aa50dca48adde8c2fc46c2d8b0d60aaaf0602e3cdcd89",
       "scripts/tracker_direct_policy.py": "7b263533dc011d9ba07f4e80fda98ea1c231eaa1fe7e723344249a9e733f5c29",
       "scripts/tracker_pause_policy.py": "c5a8ae75d56e437750fb4c3dfb26a1652a83a3854e45f488e72187dac020df17",
       "scripts/tracker_pr_check.py": "63b2a418e3a22d362a27c50330dc37c2a6746adbea5ecdef31ba8c7c56825958",
-      "scripts/tracker_process_instructions.py": "9d3a32a9693bd7019a44e95a64b7ccf06085447808576626522e4937cd791605",
-      "scripts/tracker_process_support.py": "3aed95af9ff7ca72566433723e88b50a3c9b01bacbe6f0f768585de98c63a86a",
+      "scripts/tracker_process_instructions.py": "6fa52a669f008f48abfeab9051cc860676846d0e904e2de66b6c538212e3e1ec",
+      "scripts/tracker_process_support.py": "627f408ff9df28373a7ed181a72747221fe9efc203a87b992b6489a22241e4d9",
+      "scripts/tracker_state_archive.py": "ffd0b4fb0c90f9e8b9086a128ef96046bf88ee4805132ca9fe2f22ca27cd528e",
       "scripts/tracker_task_context.py": "11daf45783f55a08e7b5ff8048fe8e6bd2f5f6babe7556c61dbb13911d55ebcf"
     },
     "separated": {
@@ -102,15 +107,16 @@
       ".workflow/tools/tracker_batch_policy.py": "a96eb7e7ccbd5e0056e7fe1f8ae76558b8e346f4f262ee07ac33937674463995",
       ".workflow/tools/tracker_ci_accounting.py": "c9c8d12aa05ced4775956fecae7bfa69bbb945e6a940a5bd7fbd326b68f28aed",
       ".workflow/tools/tracker_ci_evidence.py": "a35c57b079c6774662c9e15a2f033bf605df6b166c71d65a7f67c9f5b9cdf230",
-      ".workflow/tools/tracker_ci_gate.py": "8496073ab5c4deabacb26255420963d7a531cd4b6cc0541d6b29a6bb1462f307",
+      ".workflow/tools/tracker_ci_gate.py": "f5e1eed16cf1552c9888fcbe97ac3ed5ddaa57f99875f684b8024227361bb43a",
       ".workflow/tools/tracker_ci_retry.py": "058d385513827e96f2d7b968af27af16cf56b7fe5b6df73952db2d88af168d86",
-      ".workflow/tools/tracker_delivery_policy.py": "751a32cab7f50c49072b0dd87db514457b232ca7a62d682eb6759d48c63d5b79",
-      ".workflow/tools/tracker_delivery_receipt.py": "4d25bb1b16736bdd1774b4e3151d51faeb0dedfde35400cfa422ccd2ddaf147d",
+      ".workflow/tools/tracker_delivery_policy.py": "4193667a8e4ff8555c37e418edef12127121dc9b88bf2053800c1143967f93f7",
+      ".workflow/tools/tracker_delivery_receipt.py": "78e500145cb0fd656f8aa50dca48adde8c2fc46c2d8b0d60aaaf0602e3cdcd89",
       ".workflow/tools/tracker_direct_policy.py": "7b263533dc011d9ba07f4e80fda98ea1c231eaa1fe7e723344249a9e733f5c29",
       ".workflow/tools/tracker_pause_policy.py": "c5a8ae75d56e437750fb4c3dfb26a1652a83a3854e45f488e72187dac020df17",
       ".workflow/tools/tracker_pr_check.py": "540afde13e70d544e650de44139f6f7422a0765ae11fce45f836ca0caf6ea74f",
-      ".workflow/tools/tracker_process_instructions.py": "9d3a32a9693bd7019a44e95a64b7ccf06085447808576626522e4937cd791605",
-      ".workflow/tools/tracker_process_support.py": "3aed95af9ff7ca72566433723e88b50a3c9b01bacbe6f0f768585de98c63a86a",
+      ".workflow/tools/tracker_process_instructions.py": "6fa52a669f008f48abfeab9051cc860676846d0e904e2de66b6c538212e3e1ec",
+      ".workflow/tools/tracker_process_support.py": "627f408ff9df28373a7ed181a72747221fe9efc203a87b992b6489a22241e4d9",
+      ".workflow/tools/tracker_state_archive.py": "ffd0b4fb0c90f9e8b9086a128ef96046bf88ee4805132ca9fe2f22ca27cd528e",
       ".workflow/tools/tracker_task_context.py": "11daf45783f55a08e7b5ff8048fe8e6bd2f5f6babe7556c61dbb13911d55ebcf",
       "scripts/task_tracker.py": "404a87faf60b4daec1965c7ff5bd34e0da11215b53cc6dfa5216c9e205e55887",
       "scripts/tracker_batch_policy.py": "fcd088bcfc2d282f4a8e6d6daee22dbce6e780c29e484090f00f7cac8020240e",
@@ -125,6 +131,7 @@
       "scripts/tracker_pr_check.py": "3b817af552b4c0a277760523ed569037453f6d933657ea6c6de2b984b11fa76d",
       "scripts/tracker_process_instructions.py": "4f810aaa6e9544b226ca36faaeca2a5bf78cabf75b96f5d4c7b9e3835bceff27",
       "scripts/tracker_process_support.py": "805c7aa02870524ecb4e6da68bb682473848fd644bb0f081cf28e9a43d9e398f",
+      "scripts/tracker_state_archive.py": "f3a01b35fb9a66d4e3f71eb36581d56379ac3e1dbe3b5ec809c5269971ba7ad4",
       "scripts/tracker_task_context.py": "d155cdc0275b7e741d90ce29b296e611f0e9b8e3a28d8ba01bb76175399742f6"
     }
   },

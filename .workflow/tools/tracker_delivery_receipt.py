@@ -68,14 +68,16 @@ def configuration(request, repo, revision):
     return config
 
 
-def state(request, repo):
+def state(request, repo, *, with_context=False):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    shared = rules.pause_module().decode(json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object))
+    wire = json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object)
+    hydrated, context = rules.archive_module().hydrate(wire, repo, row.get('sha'), request)
+    shared = rules.pause_module().decode(hydrated)
     rules.state_schema(shared)
     if shared.get('maintenance'):
         raise PendingDelivery('Delivery continuation is paused by owned maintenance; resume after cutover')
-    return shared, row['sha']
+    return (shared, row['sha'], context) if with_context else (shared, row['sha'])
 
 
 def official_run(request, repo, run_id, revision):
@@ -390,6 +392,12 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
     root = 'repos/' + repo
     current = request(root + '/git/ref/heads/main')['object']['sha']
     config = configuration(request, repo, current)
+    if (not include_delivered and current != merge_sha
+            and (rules.process_module().policy(config) or {}).get('schema_version') == 2):
+        # Publication may use an older product only across its verified
+        # instruction descendants. Recording an already verified delivery keeps
+        # its existing ancestry-based recovery semantics.
+        instruction_continuation(repo, merge_sha, current, request=request)
     original, active = rules.policy(source_config), rules.policy(config)
     if ({k: v for k, v in original.items() if k != 'staging'}
             != {k: v for k, v in active.items() if k != 'staging'}
@@ -625,7 +633,7 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
             or not isinstance(receipt.get('report'), str) or not receipt['report'].strip()):
         raise ValueError('A passed exact-target/revision delivery verification is required')
     repo = document['repository']
-    shared, sha = state(request, repo)
+    shared, sha, archive_context = state(request, repo, with_context=True)
     current = request('repos/' + repo + '/git/ref/heads/main')['object']['sha']
     config = configuration(request, repo, current)
     selected = selection_delivery_context(request, repo, shared, config, current, document['merge_sha'])
@@ -709,9 +717,8 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
                 raise ValueError('Official selection main changed during native delivery verification')
         rules.execution_state(shared,config)
         # CAS failure/uncertain response is never retried with a stale body.
-        request(root + '/contents/.tracker-state.json', 'PUT', {
-            'message': 'Record verified authorized delivery [skip ci]', 'branch': 'tracker-state', 'sha': sha,
-            'content': base64.b64encode(json.dumps(rules.pause_module().encode(shared), indent=2).encode()).decode()})
+        rules.archive_module().write(request, repo, rules.pause_module().encode(shared), sha, archive_context,
+            message='Record verified authorized delivery [skip ci]', completion=rules.policy(config)['completion'], legacy_indent=2)
     return {'applied': apply, 'issues': numbers, 'result': 'passed'}
 
 

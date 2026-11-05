@@ -24,29 +24,182 @@ KIND = 'canonical-process-support'
 VERIFICATION = 'isolated-process-verification'
 RETENTION = 'artifact-retention-verification'
 GOVERNANCE = 'acl-delivery-governance'
+PROJECT = 'project-process-support'
+SETTINGS = 'project-process-settings'
 
 
-def governance_proof(config, before, after, before_tree, after_tree):
-    """ACL's bounded delivery adapter; never a global local-code exemption."""
-    if config['project']['repository'] != 'MojoTheApe/adopy-campaing-launcher':
+def declaration(value):
+    """A static project-owned boundary, never executable code or a path glob."""
+    if value is None:
         return None
-    controls = {'.github/workflows/complete-delivery.yml', 'scripts/acl_complete_delivery.py',
-                'scripts/acl_publish_release.py'}
-    tests = {'tests/test_acl_complete_delivery.py', 'tests/test_publish_release.py',
-             'tests/test_acl_ci_workflows.py', 'tests/test_acl_ci_chain.py'}
+    if (not isinstance(value, dict) or set(value) != {'schema_version', 'control_files', 'verification_files'}
+            or type(value.get('schema_version')) is not int or value['schema_version'] != 1):
+        raise ValueError('Project process support needs an explicit static file declaration')
+    occupied = set()
+    for key in ('control_files', 'verification_files'):
+        paths = value[key]
+        if (not isinstance(paths, list) or len(paths) > 32 or key == 'control_files' and not paths
+                or any(not isinstance(path, str) or not re.fullmatch(r'[A-Za-z0-9._/-]+', path)
+                       or not git_proof.safe_path(path) for path in paths)
+                or len(set(paths)) != len(paths) or occupied.intersection(paths)):
+            raise ValueError('Project process files must be unique exact safe paths')
+        for path in paths:
+            allowed = (path.startswith('tests/') if key == 'verification_files' else
+                       path.startswith(('scripts/', '.github/workflows/'))
+                       and not path.startswith('scripts/tracker_')
+                       and path not in ('scripts/task_tracker.py', '.github/workflows/delivery-check.yml'))
+            if not allowed:
+                raise ValueError('Project process files cannot select product, policy or canonical support paths')
+        occupied.update(paths)
+    return value
+
+
+def descriptor_declaration(value):
+    workflow = value.get('workflow', {})
+    if not isinstance(workflow, dict):
+        raise ValueError('Project workflow must be an object')
+    return declaration(workflow.get('process_support'))
+
+
+def governance_proof(request, config, before, after, before_tree, after_tree):
+    """Only previously admitted project declarations can classify adapter edits."""
+    if not all(name in before and name in after for name in ('delivery.json', 'tracker/config.json')):
+        return None
+    root = 'repos/' + config['project']['repository']
+    descriptors = [document(read(request, root, files, 'delivery.json')) for files in (before, after)]
+    selected = descriptor_declaration(descriptors[0])
+    if selected is None:
+        return None
+    if digest(descriptors[0]) != digest(descriptors[1]) or before['tracker/config.json'] != after['tracker/config.json']:
+        return None
+    if digest(document(read(request, root, before, 'tracker/config.json'))) != digest(config):
+        raise ValueError('Project process proof requires the authoritative unchanged base configuration')
+    controls, tests = set(selected['control_files']), set(selected['verification_files'])
     changed = sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
     if (not set(changed) & controls or any(name not in controls | tests and not git_proof.instruction_path(name) for name in changed)
-            or any(name not in before or name not in after for name in controls)
+            or any(name not in before or name not in after for name in controls | tests)
             or any(any(row and (row['type'] != 'blob' or row['mode'] != '100644')
-                       for row in (before.get(name), after.get(name))) for name in set(changed) | controls)):
+                       for row in (before.get(name), after.get(name))) for name in set(changed) | controls | tests)):
         return None
+    for path in set(changed) | controls | tests:
+        for files in (before, after):
+            if path in files:
+                read(request, root, files, path)
     # Every build, packaging, product, runtime, pin and policy entry is identical.
     # Changed control logic still requires genuine full-scope and indirect
     # import/build isolation review plus ordinary source/batch/main checks.
-    content = dict(schema_version=1, kind=GOVERNANCE, base_tree_sha=before_tree, tree_sha=after_tree,
+    content = dict(schema_version=1, kind=PROJECT, repository=config['project']['repository'],
+                   declaration=selected, base_tree_sha=before_tree, tree_sha=after_tree,
                    files=[dict(path=name, before=before.get(name), after=after.get(name)) for name in changed],
                    unchanged_inputs_sha256=digest({name: row for name, row in before.items()
                                                   if name not in controls | tests and not git_proof.instruction_path(name)}))
+    return dict(content, proof_sha256=digest(content))
+
+
+def instruction_version_delta(before, after):
+    if digest(before) == digest(after):
+        return False
+    if (not isinstance(before, dict) or not isinstance(after, dict)
+            or type(before.get('schema_version')) is not int or before['schema_version'] != 1
+            or type(after.get('schema_version')) is not int or after['schema_version'] != 2
+            or digest(dict(before, schema_version=2)) != digest(after)):
+        raise ValueError('Only the explicit instruction schema1-to-schema2 selection qualifies')
+    return True
+
+
+def settings_pair(before, after):
+    """Only static process declaration and instruction-version changes; no pins."""
+    old, new = document(json.dumps(before)), document(json.dumps(after))
+    old_workflow, new_workflow = old.get('workflow', {}), new.get('workflow', {})
+    selected = [descriptor_declaration(value) for value in (old, new)]
+    version = instruction_version_delta(old_workflow.get('process_instructions'), new_workflow.get('process_instructions'))
+    if digest(selected[0]) == digest(selected[1]) and not version:
+        return False
+    for workflow in (old_workflow, new_workflow):
+        workflow.pop('process_support', None)
+        if version:
+            workflow.pop('process_instructions')
+    if digest(old) != digest(new):
+        raise ValueError('Process settings cannot change other workflow or delivery choices')
+    return digest(selected[0]) != digest(selected[1]) or version
+
+
+def settings_proof(request, config, before, after, before_tree, after_tree):
+    """A separate declaration-only adoption cannot authorize code in that PR."""
+    metadata = {'delivery.json', 'tracker/config.json', BASELINE}
+    changed = sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
+    if (not set(changed) & metadata or any(name not in metadata and not git_proof.instruction_path(name)
+                                         and name != 'tracker/AGENT_WORKFLOW.md' for name in changed)
+            or any(name not in before or name not in after for name in ('delivery.json', 'tracker/config.json'))):
+        return None
+    root = 'repos/' + config['project']['repository']
+    descriptors = [document(read(request, root, files, 'delivery.json')) for files in (before, after)]
+    if not settings_pair(*descriptors):
+        return None
+    configs = [document(read(request, root, files, 'tracker/config.json')) for files in (before, after)]
+    if digest(config) not in [digest(value) for value in configs]:
+        raise ValueError('Process settings must use an exact immutable prior or selected configuration')
+    version = instruction_version_delta(configs[0].get('process_instructions'), configs[1].get('process_instructions'))
+    for descriptor, selected in zip(descriptors, configs):
+        if digest(descriptor.get('workflow', {}).get('process_instructions')) != digest(selected.get('process_instructions')):
+            raise ValueError('Instruction selection must match both immutable descriptor/config pairs')
+    if version:
+        if digest(dict(configs[0], process_instructions=configs[1]['process_instructions'])) != digest(configs[1]):
+            raise ValueError('Instruction selection cannot change other project settings')
+        for selected in configs:
+            git_proof.policy(selected)
+    elif digest(configs[0]) != digest(configs[1]):
+        raise ValueError('Process declaration cannot change project configuration')
+    for value in descriptors:
+        selected = descriptor_declaration(value)
+        for path in (selected or {}).get('control_files', []) + (selected or {}).get('verification_files', []):
+            for files in (before, after):
+                row = files.get(path)
+                if not row or row['type'] != 'blob' or row['mode'] != '100644':
+                    raise ValueError('Declared process files must already exist unchanged as regular files')
+                read(request, root, files, path)
+    if BASELINE in changed:
+        if not version:
+            raise ValueError('Project-owned declarations do not change pristine template ancestry')
+        old, new = [document(read(request, root, files, BASELINE)) for files in (before, after)]
+        if set(old) != set(new) or set(old) != {'schema_version', 'standard_revision', 'inputs', 'files'}:
+            raise ValueError('Process settings need the retained template ancestry')
+        if digest({k: v for k, v in old.items() if k not in ('inputs', 'files')}) != digest({k: v for k, v in new.items() if k not in ('inputs', 'files')}):
+            raise ValueError('Process settings cannot repin template ancestry')
+        expected_inputs = dict(old['inputs'])
+        if version:
+            if digest(expected_inputs.get('process_instructions')) != digest(configs[0]['process_instructions']):
+                raise ValueError('Retained template instruction selection differs')
+            expected_inputs['process_instructions'] = configs[1]['process_instructions']
+        if digest(new['inputs']) != digest(expected_inputs) or old['files'].keys() != new['files'].keys():
+            raise ValueError('Process settings cannot change unrelated template inputs or inventory')
+        for path in old['files']:
+            a, b = old['files'][path], new['files'][path]
+            if a == b:
+                continue
+            if path == 'delivery.json':
+                a, b = document(a), document(b)
+                if digest(descriptor_declaration(a)) != digest(descriptor_declaration(b)):
+                    raise ValueError('Project-owned declarations cannot alter pristine template content')
+                if any(digest(value.get('workflow', {}).get('process_instructions')) != digest(selected['process_instructions'])
+                       for value, selected in zip((a, b), configs)):
+                    raise ValueError('Pristine instruction selection differs from the actual selection')
+                settings_pair(a, b)
+            elif path == 'tracker/config.json':
+                a, b = document(a), document(b)
+                if (digest(a.get('process_instructions')) != digest(configs[0]['process_instructions'])
+                        or digest(dict(a, process_instructions=configs[1]['process_instructions'])) != digest(b)):
+                    raise ValueError('Process settings changed unrelated pristine configuration')
+            elif not git_proof.instruction_path(path) and path != 'tracker/AGENT_WORKFLOW.md':
+                raise ValueError('Process settings changed unrelated pristine content')
+    manifest = []
+    for path in changed:
+        for files in (before, after):
+            if path in files:
+                read(request, root, files, path)
+        manifest.append(dict(path=path, before=before.get(path), after=after.get(path)))
+    content = dict(schema_version=1, kind=SETTINGS, repository=config['project']['repository'],
+                   base_tree_sha=before_tree, tree_sha=after_tree, files=manifest)
     return dict(content, proof_sha256=digest(content))
 
 
@@ -140,13 +293,23 @@ def provider_export(request, root, files, revision):
     module = ast.parse(read(request, root, files, 'tracker/export_contract.py'))
     functions = {n.name: n for n in module.body if isinstance(n, ast.FunctionDef)}
     algorithms = {
-        'digest': '7e2b61bdb800307ce234842ec7d11f79d199671c8e9c3ff5ef97957790c0a087',
-        'forwarder': '5eaa07b6667582696b17e8523fe478bc05d82fc7f5cab098a35e2c5e40d1499d',
-        'helper_files': 'c73734f6976a7b6ba1fe1621c5be80df6e153f0063eff0fd844ba210309ef815',
-        'manifest_bytes': '67bff6cd27d77d58a818ee4b9fb5b64166ade570b256110e7dd3359b19c54ea9',
+        'digest': '0b854b65fff3a246b9483923c448dabca49fa39ff421b7ca34bf22614fbc44db',
+        'forwarder': 'dbf4300fd284dbce9b06630c441f648227cbb73709813852d859d1b4eae93016',
+        'helper_files': 'e0aa07927e2f92b507ac8de2aab17a30bff313a9fd75df3b3d547ba9e5760b18',
+        'manifest_bytes': '0c649287884508fbce94185b1ec70edea3dec6315da1f5c8669c489697183e77',
     }
     for name, expected in algorithms.items():
-        if name not in functions or hashlib.sha256(ast.dump(functions[name], include_attributes=False).encode()).hexdigest() != expected:
+        function = functions.get(name)
+        if function is not None:
+            # Python 3.12 added this empty field to ordinary functions. Its
+            # absence on 3.9–3.11 must not reject the identical published source.
+            # Actual type parameters are a different, unsupported algorithm.
+            for node in ast.walk(function):
+                if hasattr(node, 'type_params'):
+                    if node.type_params:
+                        raise ValueError('Unsupported provider type parameters')
+                    del node.type_params
+        if function is None or hashlib.sha256(ast.dump(function, include_attributes=False).encode()).hexdigest() != expected:
             raise ValueError('Unsupported official provider export algorithm: ' + name)
     constants = {}
     for node in module.body:
@@ -289,7 +452,10 @@ def classify(request, config, pr):
     before_tree, after_tree = rules.tree(request, root, base), rules.tree(request, root, head)
     before = git_proof.entries(request, root, before_tree)
     after = git_proof.entries(request, root, after_tree)
-    governance = governance_proof(config, before, after, before_tree, after_tree)
+    settings = settings_proof(request, config, before, after, before_tree, after_tree)
+    if settings:
+        return settings
+    governance = governance_proof(request, config, before, after, before_tree, after_tree)
     if governance:
         return governance
     changed = sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))

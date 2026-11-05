@@ -16,7 +16,7 @@ def policy(config):
         return None
     value = config['process_instructions']
     if (not isinstance(value, dict) or set(value) != {'schema_version', 'required_checks'}
-            or type(value.get('schema_version')) is not int or value['schema_version'] != 1):
+            or type(value.get('schema_version')) is not int or value['schema_version'] not in (1, 2)):
         raise ValueError('Invalid process_instructions policy')
     checks = value['required_checks']
     if (not isinstance(checks, list) or not checks or any(not isinstance(x, str) or not x.strip() or x != x.strip() for x in checks)
@@ -198,7 +198,10 @@ def classify_local(config, repository, base_sha, head_sha):
 def idle(shared, config):
     section = rules.execution_state(shared, config)
     stage = shared.get('delivery_workflow', {}).get('stage', {})
-    return not (rules.pending_delivery(shared, config) or stage and stage.get('state') != 'promoted' or section and
+    # Schema2 is an explicit project adoption after its publisher is ready to
+    # keep the original product SHA through admitted instruction descendants.
+    held_delivery = rules.pending_delivery(shared, config) and (policy(config) or {}).get('schema_version') != 2
+    return not (held_delivery or stage and stage.get('state') != 'promoted' or section and
                 (section.get('integration') or section.get('intake') and section['intake'].get('state') == 'running'))
 
 

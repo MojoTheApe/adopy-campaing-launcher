@@ -417,12 +417,22 @@ def file_bytes(request, root, row):
 def read_full_state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    state = pause_module().decode(json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object))
+    wire = json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object)
+    hydrated, _ = archive_module().hydrate(wire, repo, row.get('sha'), request)
+    state = pause_module().decode(hydrated)
     if 'task_pause' in state and state['task_pause']['repository'].lower() != repo.lower():
         raise ValueError('Task pause belongs to a different repository')
     if state_schema(state) not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
+
+
+def archive_module():
+    try:
+        from . import state_archive
+    except ImportError:
+        import tracker_state_archive as state_archive
+    return state_archive
 
 
 def pause_module():
@@ -681,7 +691,7 @@ def summary(receipt):
             except ImportError:
                 import tracker_process_support as support
             valid = (type(proof.get('schema_version')) is int and proof['schema_version'] == 1
-                     and proof.get('kind') in (support.KIND, support.VERIFICATION, support.RETENTION, support.GOVERNANCE) and proof.get('policy') == receipt.get('policy')
+                     and proof.get('kind') in (support.KIND, support.VERIFICATION, support.RETENTION, support.GOVERNANCE, support.PROJECT, support.SETTINGS) and proof.get('policy') == receipt.get('policy')
                      and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
                      and all(isinstance(proof.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', proof[k])
                              for k in ('proof_sha256', 'review_sha256'))
