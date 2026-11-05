@@ -22,6 +22,20 @@
         "tracker-link",
         "Process instructions"
       ]
+    },
+    "process_support": {
+      "schema_version": 1,
+      "control_files": [
+        ".github/workflows/complete-delivery.yml",
+        "scripts/acl_complete_delivery.py",
+        "scripts/acl_publish_release.py",
+        "scripts/acl_pr_check.py"
+      ],
+      "verification_files": [
+        "tests/test_acl_complete_delivery.py",
+        "tests/test_acl_ci_workflows.py",
+        "tests/test_master_adoption.py"
+      ]
     }
   },
   "tracker": {

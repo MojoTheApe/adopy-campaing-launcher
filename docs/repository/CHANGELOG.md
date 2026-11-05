@@ -1,5 +1,14 @@
 # Repository process history
 
+## 2026-11-05 — ACL-2423 project-owned process boundary
+
+Declare the four existing delivery/CI controls and three existing verification
+files in `delivery.json.workflow.process_support`. This project-owned metadata
+does not change their bytes, native configuration, canonical pins, pristine
+ancestry, instruction schema1 or application/build/runtime inputs. Later process
+changes retain genuine whole-scope isolation review and normal source/batch checks;
+this declaration alone changes no behavior and requests no ACL release.
+
 ## 2026-11-05 — ACL-2421 universal Tracker support
 
 Select published Tracker3.27.3 at `e94e9a4c7f5291631cf9e6046dc3a719e7e04d35`.
