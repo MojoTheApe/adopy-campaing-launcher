@@ -105,14 +105,14 @@ def test_readback_mismatches_are_one_summary_line_and_the_gate_is_unchanged():
     out = cr.Outcome(campaign_name="C", campaign_id="1", readback={"ok": False, "mismatches": mism})
     res = publish_api.result_dict(out)
     assert res["blocking_failures"] == [
-        "Meta saved different values than planned: daily budget, targeting - open details"]
+        "Meta saved different values than planned: daily budget, targeting - see details in Recent runs"]
     assert res["publishable"] is False
     assert len(res["failure"]["details"]["readback_mismatches"]) == 2
 
 
 def test_a_local_bug_is_not_blamed_on_meta():
     failure = pe.classify(KeyError("boom"))
-    assert failure.line() == "Publishing stopped unexpectedly - open details"
+    assert failure.line() == "Publishing stopped unexpectedly - see details in Recent runs"
     assert failure.details["raw"]
 
 
@@ -151,6 +151,7 @@ def test_1870226_is_a_rejection_after_the_readback_and_does_not_block_the_job(tm
     assert out.failure.key == "targeting_merged"
     assert out.failure.left == [
         "Left in Meta: an empty paused campaign. Publishing again reuses it, you do not need to delete it."]
+    assert out.failure.stage.startswith('while creating ad set "')
     res = publish_api.result_dict(out)
     assert res["error"].startswith("Targeting options were merged by Meta - replace the interests and republish")
     assert res["failure"]["details"]["subcode"] == 1870226
@@ -184,3 +185,66 @@ def test_a_rejection_does_not_block_the_next_campaign_of_the_job(tmp_path):
     d2.name = d2.ad_sets[0].name = "MX Leads 2"
     second = pub.publish_draft(d2)
     assert not (second["error"] or "").startswith("Not started")
+
+
+# -- owner delta: stage in the line, link to Recent runs, left text, history ----------------------
+
+def test_stage_in_plain_words_from_the_write_label():
+    assert pe.stage_of("campaign") == "while creating the campaign"
+    assert pe.stage_of("ad set 'Kuwait 25-45'") == 'while creating ad set "Kuwait 25-45"'
+    assert pe.stage_of("ad 2: image upload") == "while uploading ad 2 creative"
+    assert pe.stage_of("ad 2: creative") == "while creating ad 2 creative"
+
+
+@pytest.mark.parametrize("key,exc", [
+    ("unknown", g.GraphError("odd", code=77)),
+    ("graph_write_unconfirmed", g.WriteUnknown("lost", path="/x")),
+    ("graph_read_timeout", publish_api.ApiPublishError("timed out", code="cdp_timeout")),
+])
+def test_staged_classes_name_the_stage_and_point_to_recent_runs(key, exc):
+    exc.stage = "while creating ad set \"X\""
+    failure = pe.classify(exc)
+    assert failure.key == key
+    assert '(while creating ad set "X")' in failure.short
+    assert failure.details["stage"] == exc.stage
+    if key == "unknown":
+        assert failure.line() == 'Meta refused this step (while creating ad set "X") - see details in Recent runs'
+
+
+def test_a_job_level_stop_names_the_phase():
+    exc = publish_api.ApiPublishError("boom", stage="while opening the Multilogin profile")
+    assert pe.classify(exc).stage == "while opening the Multilogin profile"
+
+
+def test_left_text_names_the_reuse_rule_and_the_second_name():
+    assert pe.left_in_meta(campaign=True, adsets=1, ads=2, name="MX") == [
+        'Left in Meta: a paused campaign, 1 ad set, 2 ads. Publishing again reuses it if its settings match; '
+        'otherwise the new one is published as "MX_2".']
+    assert pe.left_in_meta(campaign=True, name="MX")[0].startswith("Left in Meta: a paused campaign. ")
+
+
+def test_history_keeps_the_failure_and_old_lines_still_render(tmp_path, monkeypatch):
+    from src.web import publish_history as ph
+
+    failure = pe.classify(g.GraphError("odd token=SECRETSECRET123", code=77))
+    job = {"job_id": "j1", "status": "done", "errors": ["Account logged out - log in and republish"],
+           "error_details": [{"raw": "Bearer abcdefghijklmnop", "code": 190}],
+           "results": [{"campaign_name": "C", "success": False, "error": failure.text(),
+                        "failure": failure.as_dict()}]}
+    entry = ph.entry_from_job(job)
+    saved = entry["results"][0]["failure"]
+    assert saved["line"] == failure.line() and "SECRETSECRET123" not in json.dumps(entry)
+    assert "abcdefghijklmnop" not in json.dumps(entry["error_details"])
+    assert saved["details"]["raw"]
+    old = ph.entry_from_job({"job_id": "j0", "results": [{"campaign_name": "C", "error": "x"}]})
+    assert old["results"][0]["failure"] is None and old["error_details"] == []
+
+
+def test_recent_runs_popup_shows_details_and_copy_and_the_builder_only_links():
+    js = (TEMPLATE.parent.parent / "static" / "recent_runs.js").read_text(encoding="utf-8")
+    for needle in ("Copy details", "Hide details", "failureBlock", "error_details", "aclRecentRunsOpen"):
+        assert needle in js, needle
+    html = TEMPLATE.read_text(encoding="utf-8")
+    start = html.index("function cbFailureDetailsHtml(")
+    body = html[start:html.index("document.addEventListener('click'", start)]
+    assert "Details in Recent runs" in body and "JSON.stringify" not in body and "Copy details" not in body

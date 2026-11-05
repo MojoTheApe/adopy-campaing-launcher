@@ -6,10 +6,13 @@ JSON line is appended to `<ACL config dir>/publish_history.jsonl`:
 
     {"v": 1, "job_id", "account_label", "country", "status", "created_at",
      "started_at", "finished_at", "build", "fb_backend", "total", "done_count",
-     "publishable", "errors": [...],
+     "publishable", "errors": [...], "error_details": [{...}|null],
      "results": [{"campaign_name", "success", "publishable", "status",
                   "campaign_id", "adset_id", "ad_id", "ad_ids", "creative_id",
-                  "warnings", "blocking_failures", "error", "steps"}]}
+                  "warnings", "blocking_failures", "error", "steps", "failure"}]}
+
+ACL-2392: `errors` / `error` hold the plain line; `failure` and `error_details` carry the
+raw Meta text, codes and stage (all through `redact()`). Older lines have neither and still render.
 
 Only these fields are copied (an allow-list), and every string goes through
 `redact()`: tokens, cookies, passwords and URL query strings never reach the
@@ -93,6 +96,33 @@ def _texts(values: Any) -> list[str]:
     return [_text(v) for v in list(values)[:_MAX_ITEMS]]
 
 
+def _deep(value: Any, depth: int = 0) -> Any:
+    """ACL-2392: a nested details dict / list through `redact()`; scalars other than text pass as they are."""
+    if depth > 4:
+        return None
+    if isinstance(value, str):
+        return _text(value)
+    if isinstance(value, dict):
+        return {str(k)[:80]: _deep(v, depth + 1) for k, v in list(value.items())[:60]}
+    if isinstance(value, (list, tuple)):
+        return [_deep(v, depth + 1) for v in list(value)[:_MAX_ITEMS]]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return _text(value)
+
+
+def _failure(value: Any) -> dict[str, Any] | None:
+    """ACL-2392: the plain failure of a campaign or a job error, with the raw text only under `details`."""
+    if not isinstance(value, dict):
+        return None
+    return {
+        "key": _text(value.get("key")), "short": _text(value.get("short")), "next": _text(value.get("next")),
+        "line": _text(value.get("line")), "stage": _text(value.get("stage")),
+        "left": _texts(value.get("left")), "severity": _text(value.get("severity")),
+        "details": _deep(value.get("details") or {}),
+    }
+
+
 def _id(value: Any) -> str | None:
     return None if value in (None, "") else _text(value)[:200]
 
@@ -121,6 +151,7 @@ def _result_line(result: dict[str, Any]) -> dict[str, Any]:
         "blocking_failures": _texts(blocking),
         "error": _text(result.get("error")) if result.get("error") else None,
         "steps": _texts(result.get("steps_completed")),
+        "failure": _failure(result.get("failure")),
     }
 
 
@@ -150,6 +181,7 @@ def entry_from_job(job: dict[str, Any]) -> dict[str, Any]:
         "done_count": int(job.get("done_count") or 0),
         "publishable": bool(job.get("publishable")),
         "errors": _texts(job.get("errors")),
+        "error_details": [_deep(d) if d else None for d in list(job.get("error_details") or [])[:_MAX_ITEMS]],
         "results": [_result_line(r) for r in results[:_MAX_ITEMS]],
     }
 
@@ -312,4 +344,6 @@ def _summary(entry: dict[str, Any]) -> dict[str, Any]:
             {"name": r.get("campaign_name"), "status": r.get("status"),
              "campaign_id": r.get("campaign_id")} for r in results[:20]],
         "errors": list(entry.get("errors") or [])[:3],
+        "failures": [r["failure"]["line"] for r in results[:20] if isinstance(r.get("failure"), dict)
+                     and r["failure"].get("line")],
     }

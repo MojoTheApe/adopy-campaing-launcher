@@ -226,9 +226,11 @@ def build_drafts(slots: list[dict[str, Any]], *, account_label: str, country: st
 class ApiPublishError(RuntimeError):
     """Отказ всего задания (профиль, страница, кабинет) с текстом человеку."""
 
-    def __init__(self, message: str, code: str = "", *, key: str = ""):
+    def __init__(self, message: str, code: str = "", *, key: str = "", stage: str = ""):
         super().__init__(_tm.scrub(message))
         self.code = code
+        #: ACL-2392: the phase in plain words ("while opening the Multilogin profile").
+        self.stage = stage
         #: ACL-2392: key of `plain_errors.TABLE` when the raise site knows the class.
         self.key = key
 
@@ -451,11 +453,11 @@ class ApiPublisher:
         self._load_before = None        # ACL-2283: a sample from an earlier attempt must not count
         entry = _resolve_entry(account_label)
         if entry is None:
-            raise ApiPublishError(f"{account_label} is not in the account map")
+            raise ApiPublishError(f"{account_label} is not in the account map", stage="while looking up the account")
         try:
             self.act = normalize_act(str(getattr(entry, "ad_account_id", "") or ""))
         except ValueError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}") from exc
+            raise ApiPublishError(f"{account_label}: {exc}", stage="while looking up the account") from exc
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
@@ -493,10 +495,11 @@ class ApiPublisher:
                 if earlier is not None and getattr(earlier, "started_now", False):
                     self.inherited_profile = True      # ACL-2283: a retry attaches; the window is still ours
         except _fb_profile.ProfileError as exc:
-            raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
+            raise ApiPublishError(str(exc), code=getattr(exc, "code", ""),
+                                  stage="while opening the Multilogin profile") from exc
         except Exception as exc:  # noqa: BLE001
             raise ApiPublishError(f"{account_label}: the profile could not be opened with automation: "
-                                  f"{_tm.scrub(str(exc))}") from exc
+                                  f"{_tm.scrub(str(exc))}", stage="while opening the Multilogin profile") from exc
         self.progress("profile attached")
         self._tab = _open_tab(self._opened.cdp_url)
         graph = _make_graph(self._tab, self.act, writes=not self.dry_run)
@@ -522,7 +525,8 @@ class ApiPublisher:
             self._halt(LoggedOut("the profile is logged out of Facebook"))
         if not state.get("has_token"):
             raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
-                                  "(no Graph session in the page); nothing was created")
+                                  "(no Graph session in the page); nothing was created",
+                                  stage="while loading Ads Manager")
         self._finish_open(account_label, graph)
 
     def _finish_open(self, account_label: str, graph: Any) -> None:
@@ -535,11 +539,13 @@ class ApiPublisher:
         try:
             self._facts = preflight_account(self._client, self.act)
         except PlanError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}") from exc
+            raise ApiPublishError(f"{account_label}: {exc}", stage="while checking the ad account") from exc
         except GraphStop as exc:
+            exc.stage = "while checking the ad account"
             self._halt(exc)
         except GraphError as exc:
-            raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}") from exc
+            raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}",
+                                  stage="while checking the ad account") from exc
         self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
         self.progress("ad account verified")
 
@@ -561,7 +567,7 @@ class ApiPublisher:
                 managed = prepare_existing(reg, self._entry, account_label)
         except _warm.WarmError as exc:
             self._requeue_if_closed(exc)
-            raise ApiPublishError(str(exc), code=exc.code) from exc
+            raise ApiPublishError(str(exc), code=exc.code, stage="while opening the Multilogin profile") from exc
         if not managed:
             return False
         act, dry = self.act, self.dry_run
@@ -577,7 +583,7 @@ class ApiPublisher:
             _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
             self._requeue_if_closed(exc)
-            raise ApiPublishError(str(exc), code=exc.code) from exc
+            raise ApiPublishError(str(exc), code=exc.code, stage="while opening the Multilogin profile") from exc
         except GraphStop as exc:
             self._halt(exc)
         self.progress("profile attached (warm)")
@@ -627,7 +633,7 @@ class ApiPublisher:
         _start_cooldown(self.account_label, stop)
         _tm.report_stop(stop.kind, str(stop), {"source": "publish", "code": stop.code})
         raise ApiPublishError(f"{self.account_label}: Graph API stopped ({stop.kind}): {stop}",
-                              code=stop.kind)
+                              code=stop.kind, stage=getattr(stop, "stage", "") or "while loading Ads Manager")
 
     # -- одна кампания
     def publish_draft(self, draft: Any) -> dict[str, Any]:
@@ -931,7 +937,7 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
         try:
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
+            raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
         pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
         for draft in drafts:
             if draft.errors:

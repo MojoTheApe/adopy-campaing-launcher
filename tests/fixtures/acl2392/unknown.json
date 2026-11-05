@@ -5,7 +5,7 @@
   "expect": {
     "key": "unknown",
     "short": "Meta refused this step",
-    "next": "open details",
+    "next": "see details in Recent runs",
     "severity": "blocking",
     "retry": "after_fix"
   },

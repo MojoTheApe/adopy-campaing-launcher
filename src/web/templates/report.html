@@ -20183,29 +20183,20 @@ function cbTeachMarkerHtml(steps, cls) {
   return '';
 }
 
-// ACL-2392: the ONLY place raw Meta text / codes / ids are shown: a collapsed "Technical details" block with a
-// Copy button. Everything else in the panel is the plain line the server composed (`failure.line`, `error`).
+// ACL-2392: the builder never prints raw Meta text, codes or ids. A failure with details gets one link that opens
+// the header "Recent runs" popup on this job, where the full text lives (recent_runs.js, with Copy details).
+var cbDetailsJobId = '';
 function cbFailureDetailsHtml(details) {
   var d = details && typeof details === 'object' ? details : null;
-  var keys = d ? Object.keys(d) : [];
-  if (!keys.length) return '';
-  var lines = keys.map(function(k) {
-    var v = d[k];
-    return k + ': ' + (v && typeof v === 'object' ? JSON.stringify(v) : String(v));
-  });
-  return '<details class="cb-problems-tech cb-fail-details"><summary>Technical details '
-    + '<span>(what Meta said, codes, run id)</span></summary>'
-    + '<div class="cb-problems-tech-body"><pre class="cb-fail-pre" style="white-space:pre-wrap;margin:0 0 0.3rem">'
-    + aclEscHtml(lines.join('\n')) + '</pre>'
-    + '<button type="button" class="cb-copy-details">Copy details</button></div></details>';
+  if (!d || !Object.keys(d).length) return '';
+  return '<div class="cb-fail-link" style="margin-top:0.25rem"><a href="#recent-runs" class="cb-open-details" data-job="'
+    + aclEscHtml(cbDetailsJobId) + '">Details in Recent runs</a></div>';
 }
 document.addEventListener('click', function(ev) {
-  var btn = ev.target && ev.target.closest ? ev.target.closest('.cb-copy-details') : null;
-  if (!btn) return;
-  var pre = btn.parentNode && btn.parentNode.querySelector('.cb-fail-pre');
-  var text = pre ? pre.textContent : '';
-  var done = function() { btn.textContent = 'Copied'; setTimeout(function() { btn.textContent = 'Copy details'; }, 1500); };
-  try { navigator.clipboard.writeText(text).then(done, function() {}); } catch (e) { /* no clipboard access */ }
+  var a = ev.target && ev.target.closest ? ev.target.closest('.cb-open-details') : null;
+  if (!a) return;
+  ev.preventDefault();
+  if (window.aclRecentRunsOpen) window.aclRecentRunsOpen(a.getAttribute('data-job') || '');
 });
 
 // ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
@@ -20268,7 +20259,7 @@ function cbProblemsHtml(r) {
   // ACL-1805: у API-кампании рядом со списком остаются статус PAUSED, что создано и сверка.
   if (r.backend === 'api') h += cbApiReadbackHtml(r);
   h += '<details class="cb-problems-tech"><summary>Technical details '
-    + '<span>(what Meta said, codes, run id)</span></summary>'
+    + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
   h += cbFailureDetailsHtml(r.failure && r.failure.details);
   return h + '</div>';
@@ -20369,6 +20360,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
+    cbDetailsJobId = job.job_id || jobId;  // ACL-2392: the "Details in Recent runs" link targets this job
     var done = job.done_count || 0;
     var total = job.total || 0;
     var hasFatal = (job.errors || []).length > 0;

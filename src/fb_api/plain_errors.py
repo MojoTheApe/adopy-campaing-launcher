@@ -19,10 +19,15 @@ from src.fb_api.graph import (
 )
 
 DETAILS_HEADING = "Technical details (what Meta said, codes, run id)"
+#: Where the full text lives (the header "Recent runs" popup); the builder only links to it.
+WHERE = "see details in Recent runs"
+DETAILS_LINK = "Details in Recent runs"
 COPY_LABEL = "Copy details"
 NO_DETAILS = "Nothing more to show."
 #: Marker of the one-line readback summary (publish_api tells it from other blocking failures).
 READBACK_MARK = "Meta saved different values than planned"
+#: Keys whose line names the stage ("... (while creating ad set "X")"): the owner asked for what AND where.
+STAGED = ("unknown", "graph_write_unconfirmed", "graph_read_timeout")
 
 
 @dataclass(frozen=True)
@@ -54,9 +59,9 @@ TABLE: dict[str, Plain] = {
                               "wait about {minutes} min, it will be reopened, then republish", "hold", "later"),
     "proxy_error": Plain("The profile's proxy or secure connection failed",
                          "check the proxy of this profile in Multilogin and republish"),
-    "graph_read_timeout": Plain("Meta did not answer in time", "nothing was changed, republish in a few minutes",
+    "graph_read_timeout": Plain("Meta did not answer in time{stage}", "nothing was changed, republish in a few minutes",
                                 "blocking", "later"),
-    "graph_write_unconfirmed": Plain("Meta did not confirm this step",
+    "graph_write_unconfirmed": Plain("Meta did not confirm this step{stage}",
                                      "check the campaign in Ads Manager, then republish (it will not duplicate)",
                                      "blocking", "later"),
     "rate_limited": Plain("Meta is limiting requests", "wait {minutes} min and republish", "hold", "later"),
@@ -66,7 +71,7 @@ TABLE: dict[str, Plain] = {
     "account_hold": Plain("Another action on this account is still running", "wait for it to finish", "hold",
                           "later"),
     "creative_file": Plain("A creative file cannot be used{ad}", "replace the file and republish"),
-    "unknown": Plain("Meta refused this step", "open details"),
+    "unknown": Plain("Meta refused this step{stage}", WHERE),
 }
 
 #: Not table entries: our own text passed through (`meta_rule`, `plan_text`) or the catalog (`catalog`).
@@ -83,6 +88,7 @@ class Failure:
     retry: str = "after_fix"
     details: dict = field(default_factory=dict)
     sep: str = " - "
+    stage: str = ""
 
     def line(self) -> str:
         return f"{self.short}{self.sep}{self.next_step}" if self.next_step else self.short
@@ -93,7 +99,7 @@ class Failure:
 
     def as_dict(self) -> dict:
         return {"key": self.key, "short": self.short, "next": self.next_step, "line": self.line(),
-                "left": list(self.left), "severity": self.severity, "retry": self.retry,
+                "left": list(self.left), "stage": self.stage, "severity": self.severity, "retry": self.retry,
                 "details": dict(self.details)}
 
 
@@ -103,14 +109,16 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     names = ctx.get("names") or []
     ad = ctx.get("ad")
     fill = {"names": (": " + ", ".join(f'"{n}"' for n in names[:3])) if names else "",
-            "ad": f": ad {ad}" if ad else "", "minutes": ctx.get("minutes") or 10}
+            "ad": f": ad {ad}" if ad else "", "stage": f" ({ctx['stage']})" if ctx.get("stage") else "",
+            "minutes": ctx.get("minutes") or 10}
     short, nxt = plain.short, plain.next_step
     for k, v in fill.items():
         short = short.replace("{" + k + "}", str(v))
         nxt = nxt.replace("{" + k + "}", str(v))
     if key == "mlx_token_rejected":
         short = str(ctx.get("text") or _mlx.SESSION_LOST_MESSAGE)
-    return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry, **over)
+    return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry,
+                   stage=str(ctx.get("stage") or ""), **over)
 
 
 # ───────────────────────── details (scrubbed) ─────────────────────────
@@ -208,8 +216,11 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
     explicit = getattr(exc, "failure", None)
     if isinstance(explicit, Failure):
         return explicit
+    stage = str(ctx.get("stage") or getattr(exc, "stage", "") or "")
+    if stage:
+        ctx["stage"] = stage
     details = build_details(None if isinstance(exc, str) else exc, raw=raw, kind=kind,
-                            extra=ctx.pop("details", None))
+                            extra={**(ctx.pop("details", None) or {}), **({"stage": stage} if stage else {})})
     key = getattr(exc, "key", "") or ""
     code, sub = getattr(exc, "code", None), getattr(exc, "subcode", None)
     if not key and isinstance(exc, Checkpoint):
@@ -253,23 +264,45 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
     if key in TABLE:
         return _make(key, ctx, details=details)
     if key == "meta_rule":
-        return Failure("meta_rule", _tm.scrub(raw), details=details)
+        return Failure("meta_rule", _tm.scrub(raw), details=details, stage=stage)
     if isinstance(exc, (GraphError, GraphStop)) or isinstance(code, int):
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details)
+            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
         return _make("unknown", ctx, details=details)
     if exc is not None and raw and type(exc).__name__ in _OWN_TEXT:
-        return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details)
+        return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details, stage=stage)
     if exc is not None and not isinstance(exc, str) and not isinstance(exc, (GraphError, GraphStop)):
         # Not a Meta answer at all (a bug or a local failure): do not blame Meta.
-        return Failure("internal", "Publishing stopped unexpectedly", "open details", severity="blocking",
-                       retry="later", details=details)
+        return Failure("internal", "Publishing stopped unexpectedly", WHERE, severity="blocking",
+                       retry="later", details=details, stage=stage)
     return _make("unknown", ctx, details=details)
 
 
+_AD = re.compile(r"^(ad \d+)")
+
+
+def stage_of(what: str) -> str:
+    """The `what` of a creator write ("ad set 'X'", "ad 2: image upload") in plain words."""
+    w = (what or "").strip()
+    m = _AD.match(w)
+    if w == "campaign":
+        return "while creating the campaign"
+    if w.startswith("ad set"):
+        return f'while creating ad set "{w[6:].strip().strip(chr(39) + chr(34))}"'
+    if "upload" in w:
+        return f"while uploading {m.group(1)} creative" if m else "while uploading a creative file"
+    if w.startswith("form"):
+        return "while creating the Instant Form"
+    if m and "creative" in w:
+        return f"while creating {m.group(1)} creative"
+    if m:
+        return f"while creating {m.group(1)}"
+    return "while writing to Meta"
+
+
 def left_in_meta(*, campaign: bool, adsets: int = 0, ads: int = 0, empty_note: bool = False,
-                 not_created: list[int] | None = None) -> list[str]:
+                 not_created: list[int] | None = None, name: str = "") -> list[str]:
     """What a stop left in Meta (English). Nothing created -> []."""
     if not campaign:
         return []
@@ -280,7 +313,9 @@ def left_in_meta(*, campaign: bool, adsets: int = 0, ads: int = 0, empty_note: b
         parts.append(f"{adsets} ad set{'s' if adsets != 1 else ''}")
     if ads:
         parts.append(f"{ads} ad{'s' if ads != 1 else ''}")
-    text = "Left in Meta: " + ", ".join(parts) + ". Publishing again reuses it, nothing is duplicated."
+    again = (f'otherwise the new one is published as "{name}_2"' if name else "otherwise a new one is published")
+    text = ("Left in Meta: " + ", ".join(parts)
+            + f". Publishing again reuses it if its settings match; {again}.")
     if not_created:
         text += " Not created: " + ", ".join(f"ad {n}" for n in not_created) + "."
     return [text]
@@ -299,9 +334,9 @@ def readback_line(mismatches: list[dict]) -> str:
         label = _FIELD_NAMES.get(raw, raw.replace("_", " ")) or "settings"
         if label not in names:
             names.append(label)
-    return f"{READBACK_MARK}: {', '.join(names) or 'settings'} - open details"
+    return f"{READBACK_MARK}: {', '.join(names) or 'settings'} - {WHERE}"
 
 
 __all__ = ["Failure", "Plain", "TABLE", "classify", "build_details", "left_in_meta", "readback_line",
-           "offending_note", "REJECTION_SUBCODES", "READBACK_MARK", "DETAILS_HEADING", "COPY_LABEL",
+           "offending_note", "REJECTION_SUBCODES", "READBACK_MARK", "WHERE", "DETAILS_LINK", "STAGED", "stage_of", "DETAILS_HEADING", "COPY_LABEL",
            "NO_DETAILS"]

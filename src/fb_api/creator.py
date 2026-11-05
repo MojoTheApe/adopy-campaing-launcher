@@ -1508,10 +1508,19 @@ class CampaignCreator:
             self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
         return show
 
-    def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
-               *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False, children_active: bool = False, form_page: str = "",
-               upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
+    def _write(self, out: Outcome, what: str, *args: Any, **kwargs: Any) -> str:
+        """ACL-2392: `_write_inner` plus the plain-words stage on whatever stops it ("while creating ad set ...")."""
+        try:
+            return self._write_inner(out, what, *args, **kwargs)
+        except (CreationStopped, GraphError, GraphStop, WriteUnknown) as exc:
+            if not getattr(exc, "stage", ""):
+                exc.stage = _plain.stage_of(what)
+            raise
+
+    def _write_inner(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
+                     *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
+                     on_ad: bool = False, children_active: bool = False, form_page: str = "",
+                     upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
         ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
@@ -1614,7 +1623,7 @@ class CampaignCreator:
                     self.client.reconciled(path)
                     raise CreationStopped(
                         f"{what}: Meta rejected the write ({exc}); nothing was found by readback.",
-                        created=out.created, kind="rejected", failure=_plain.classify(exc, kind="rejected")) from exc
+                        created=out.created, kind="rejected", failure=_plain.classify(exc, kind="rejected", ctx={"stage": _plain.stage_of(what)})) from exc
                 else:
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
                     raise CreationStopped(
@@ -2597,17 +2606,29 @@ class CampaignCreator:
     @staticmethod
     def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
         """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
-        failure = _plain.classify(exc, kind=kind)
+        stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
         if failure.key == "targeting_merged":
             planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
             hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))
             failure.details.update({"offending": hits, "offending_note": note})
         if out.campaign_id and not failure.left:
             failure.left = _plain.left_in_meta(
-                campaign=True, adsets=len(out.adset_ids), ads=len(out.ad_ids),
+                campaign=True, adsets=len(out.adset_ids), ads=len(out.ad_ids), name=plan.name,
                 empty_note=failure.key == "targeting_merged",
                 not_created=[ad.index for s_ in plan.ad_sets for ad in s_.ads if ad.index not in out.ad_media])
         return failure
+
+    @staticmethod
+    def _stage_from_outcome(out: Outcome) -> str:
+        """A stop outside a write: where the run was, from what it had created so far."""
+        if not out.campaign_id:
+            return "before the campaign was created"
+        if not out.adset_ids:
+            return "after the campaign was created, before any ad set"
+        if not out.ad_ids:
+            return "after the ad set was created, before any ad"
+        return "after some ads were created"
 
     @staticmethod
     def _left_in_meta(plan: CampaignPlan, out: Outcome) -> str:
