@@ -201,7 +201,13 @@ alone proves neither branch protection nor ruleset enforcement. Never present
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
-## Pause and resume before outer8 activation
+## Current pause and retained pre-activation history
+
+ACL-2414 completed the owned idle activation on 5 November 2026. Use the selected
+[pause/resume commands](TASK_PAUSE.md) for a confirmed stopped executor. An actual
+ACL-2414 implementation pause and resume preserved In Progress, its branch and
+work location while releasing the old claim and acquiring fresh authority.
+The following pre-activation procedure is retained as historical guidance.
 
 The source includes compatible phase-preserving [pause support](TASK_PAUSE.md),
 but a pin update does not activate it. Use `pause stop/resume` only after actual
@@ -460,6 +466,8 @@ condition releases ownership. No detached endless reporter or coordinator heartb
 for another executor. Existing runs without a producer remain unknown.
 
 ## Explicit phase-preserving pause after verified activation
+
+The ACL-2414 activation is now verified; see the [process history](CHANGELOG.md).
 
 Source support is installed separately from live activation; see the actual
 readiness boundary in [EARLY_ADOPTION.md](EARLY_ADOPTION.md#pause-readiness-and-live-boundary).
