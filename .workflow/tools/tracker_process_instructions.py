@@ -269,23 +269,29 @@ def admit(request, config, pr, numbers, shared):
             'policy': rules.fingerprint(config), 'process_policy': fingerprint(config)}
 
 
-def stage_base_compatible(request, config, stage_sha, main_sha, shared):
+def stage_base_compatible(request, config, stage_sha, main_sha, shared, *, exact_base=False):
     """Allow only an idle stage gap composed of retained verified process merges.
 
     This neither moves a ref nor permits held work to change its frozen baseline.
     The next ordinary candidate still includes exact current main, full source
     approvals, independent combined review and normal stage/delivery checks.
+    Publication/receipt callers require the exact product commit anchor; Stage
+    compatibility keeps its incumbent tree-equivalence behavior by default.
     """
     if not policy(config):
         return False
     root = 'repos/' + config['project']['repository']
     proof = tree_proof(request, config, stage_sha, main_sha)
-    if not proof or request(root + '/compare/' + stage_sha + '...' + main_sha).get('status') not in ('ahead', 'identical'):
-        return False
     stage_tree = rules.tree(request, root, stage_sha)
+    if not proof and (not exact_base or rules.tree(request, root, main_sha) != stage_tree):
+        return False
+    if request(root + '/compare/' + stage_sha + '...' + main_sha).get('status') not in ('ahead', 'identical'):
+        return False
     cursor = main_sha
     for _ in range(64):
-        if rules.tree(request, root, cursor) == stage_tree:
+        if exact_base and cursor == stage_sha:
+            return True
+        if not exact_base and rules.tree(request, root, cursor) == stage_tree:
             return request(root + '/compare/' + stage_sha + '...' + cursor).get('status') in ('ahead', 'identical')
         matches = [(row, source) for row in shared.get('delivery_workflow', {}).get('tasks', {}).values()
                    if row.get('process') and row.get('state') == 'verified'

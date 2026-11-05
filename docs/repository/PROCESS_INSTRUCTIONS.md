@@ -51,6 +51,16 @@ task receives only its own process receipt; the original product request and
 receipt stay pending until actual delivery. Receipt-only recovery of an existing
 verified product retains its previous semantics.
 
+A trusted verification run may itself belong to a later admitted instruction
+revision while its actual checkout, package and evidence retain the original
+product. The schema2 receiver validates that complete instruction chain, the
+producer's inclusion in main and the actual matching run/job heads. It never
+rewrites native API identity or replaces the product CI. A retained successful
+producer need not still be the latest main during receipt-only recovery.
+Publication and receipt chains must reach the exact original product commit;
+an unadmitted intermediate commit with the same tree is insufficient. Genuine
+admitted instruction roundtrips are checked through all their retained receipts.
+
 The exact opt-in must already exist in both authoritative base configuration and
 base descriptor; a caller's temporary configuration cannot activate it. The
 working source includes the exact main baseline. The exported portable helper

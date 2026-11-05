@@ -80,14 +80,22 @@ def state(request, repo, *, with_context=False):
     return (shared, row['sha'], context) if with_context else (shared, row['sha'])
 
 
-def official_run(request, repo, run_id, revision):
+def native_main_run(request, repo, run_id):
     if type(run_id) is not int or run_id < 1:
         raise ValueError('A real native workflow run is required')
     run = request(f'repos/{repo}/actions/runs/{run_id}')
-    if (run.get('head_sha') != revision or run.get('head_branch') != 'main'
+    if (not isinstance(run.get('head_sha'), str) or not rules.SHA.fullmatch(run['head_sha'])
+            or run.get('head_branch') != 'main'
             or run.get('event') not in ('push', 'workflow_dispatch', 'workflow_run')
             or run.get('head_repository', {}).get('full_name', '').lower() != repo.lower()
             or not WORKFLOW.fullmatch(run.get('path', ''))):
+        raise ValueError('Native run must belong to this official main revision and trusted workflow')
+    return run
+
+
+def official_run(request, repo, run_id, revision):
+    run = native_main_run(request, repo, run_id)
+    if run['head_sha'] != revision:
         raise ValueError('Native run must belong to this official main revision and trusted workflow')
     return run
 
@@ -496,7 +504,7 @@ def instruction_continuation(repo, merge_sha, current, *, request=github):
     shared, _ = state(request, repo)
     process = rules.process_module()
     if not process.idle(shared, config) or not process.stage_base_compatible(
-            request, config, merge_sha, current, shared):
+            request, config, merge_sha, current, shared, exact_base=True):
         raise ValueError('Only retained independently admitted instructions may follow the authorized product')
     if request(root + '/git/ref/heads/main')['object']['sha'] != current:
         raise ValueError('Current main changed during continuation; preserve the pending request')
@@ -592,14 +600,33 @@ def verification_job(request, repo, run_id, name, attempt):
     raise ValueError('Verification job is absent from every native run attempt')
 
 
+def instruction_verifier(request, repo, product, producer):
+    """A later trusted producer may verify the original package, never replace it."""
+    root = 'repos/' + repo
+    current = request(root + '/git/ref/heads/main')['object']['sha']
+    config = configuration(request, repo, current)
+    process = rules.process_module()
+    if (process.policy(config) or {}).get('schema_version') != 2:
+        raise ValueError('A later verification producer requires explicit instruction schema2')
+    shared, _ = state(request, repo)
+    if (not process.idle(shared, config)
+            or request(root + '/compare/' + producer + '...' + current).get('status') not in ('ahead', 'identical')
+            or not process.stage_base_compatible(request, config, product, producer, shared, exact_base=True)):
+        raise ValueError('Verification producer must be a retained independently admitted instruction descendant')
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during verification producer proof; retain the original report')
+
+
 def verified_native(request, document, receipt, run_id, job_id):
     repo = document['repository']
-    run = official_run(request, repo, run_id, document['merge_sha'])
+    run = native_main_run(request, repo, run_id)
     if run.get('path') != document['workflow'] or type(job_id) is not int or job_id < 1:
         raise ValueError('Verification workflow differs from the authorized project producer')
+    if run['head_sha'] != document['merge_sha']:
+        instruction_verifier(request, repo, document['merge_sha'], run['head_sha'])
     job = request(f'repos/{repo}/actions/jobs/{job_id}')
     if (job.get('run_id') != run_id or job.get('name') != document['job']
-            or job.get('head_sha') != document['merge_sha']
+            or job.get('head_sha') != run['head_sha']
             or job.get('status') != 'completed' or job.get('conclusion') != 'success'):
         raise ValueError('The exact authorized verification job has not passed')
     latest, _ = verification_job(request, repo, run_id, document['job'], run.get('run_attempt', 1))
