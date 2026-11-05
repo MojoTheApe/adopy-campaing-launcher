@@ -241,9 +241,10 @@ RULES: list[dict[str, Any]] = [
        "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
     _r("adset_has_ads", "Every ad set has an ad", ERROR, "client",
        "add an ad to the ad set or remove the ad set", sel="", level="ad"),
-    _r("existing_diffs", "Campaign name is free, or gets a _2, _3 suffix", ERROR, "server",
-       "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... "
-       "(up to _20); an error only when all 20 names are taken: rename the campaign"),
+    _r("existing_diffs", "Campaign name is free, or gets a copy 1, copy 2 counter", ERROR, "server",
+       "if a campaign with this name is already on the ad account, the robot publishes a copy named "
+       "'NAME copy 1', 'NAME copy 2' ... (the campaign and its ad sets); an error only when the name is "
+       "too long or the copy number cannot be told: rename the campaign"),
 ]
 RULE_BY_ID = {r["id"]: r for r in RULES}
 CLIENT_IDS = [r["id"] for r in RULES if r["side"] == "client"]
@@ -839,12 +840,12 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         put("budget_min", OK)
 
     if name_error:
-        # ACL-1902: заняты все NAME ... NAME_20 - публикация остановилась бы до записи.
+        # ACL-2250: имя слишком длинное, номер копии не определить или квитанция недоступна - стоп до записи.
         put("existing_diffs", ERROR, name_error)
     elif not existing_checked:
         put("existing_diffs", UNKNOWN, "Not checked: fix the errors above first")
     elif renamed:
-        # ACL-1902: имя занято другой кампанией - робот возьмёт свободное, это не блокирует публикацию.
+        # ACL-2250: имя уже на кабинете - робот опубликует копию со счётчиком, это не блокирует публикацию.
         put("existing_diffs", WARNING, renamed)
     else:
         put("existing_diffs", OK)
