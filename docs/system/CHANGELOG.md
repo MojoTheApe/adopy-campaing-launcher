@@ -1,5 +1,14 @@
 # System history
 
+## ACL-2400 — Memory threshold 92 % by default — 2026-11-05
+
+`ACL_MEMORY_MAX_USED_PCT` now defaults to 92 (was 75). With the usual work open (Claude sessions, a browser,
+one or two Multilogin profiles) memory in use stays at 86-89 %, so with 75 or 85 Check plan and campaign reads
+waited about 5 minutes for memory and then failed with a generic read error. At least 1 GB always stays free on
+small laptops; an explicit value in the machine `.env` still wins. Moving explicit 75/85 values to 92 on update
+and an immediate memory message are not part of this change.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1400).
+
 ## ACL-2084 — Square file in the Stories / Reels slot — 2026-11-04
 
 The Stories / Reels file may now be 9:16 or 1:1 (images and videos); the main file stays 1:1 or 4:5, so
