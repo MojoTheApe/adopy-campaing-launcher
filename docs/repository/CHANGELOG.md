@@ -1,5 +1,16 @@
 # Repository process history
 
+## 2026-11-06 — ACL-2425 independent instruction selection
+
+Select instruction schema2 in matching descriptor/config, preserving the exact
+checks and every other choice. The immutable published E94 provider reproduces
+the genuine96-file ancestry and renders the selected guide/new baseline through
+its maintained three-way writer. Local declaration, controls, canonical helpers,
+pins and all application inputs remain unchanged. Reviewed instructions may
+finish while an original product request waits; its code, CI, target and real
+acceptance remain original. Product/mixed work and held composition retain their
+existing guards. No product release, package acceptance or live demo is needed.
+
 ## 2026-11-06 — ACL-2424 original delivery and review handoff
 
 Resolve the product from its actual successful native CI rather than the later

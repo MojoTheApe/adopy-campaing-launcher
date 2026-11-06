@@ -31,9 +31,12 @@ All original task/history and delivery records remain available.
 ACL-2424 wires the published bounded handoff wait and original-product delivery
 continuation into the local adapters, including the current-main receipt writer.
 The product checkout, original CI/target/tag, real acceptance and full CI/reuse
-proof remain separate and unchanged. Instruction schema1 is still selected;
-independent documentation delivery needs the later explicit ACL-2425 selection.
-The existing pending-release admission guard remains active until that adoption.
+proof remain separate and unchanged. ACL-2425 separately selects instruction
+schema2 consistently in descriptor/config and the genuine96-file baseline.
+Independent reviewed instructions can finish while an original product delivery
+waits; its original request and acceptance remain pending. Ordinary product/mixed
+changes and held composition keep their existing guards. No new provider pin,
+consumer installer or service installation accompanies that metadata selection.
 
 ## Historical adoption — ACL-2156, 24 October 2026
 
