@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -133,7 +134,8 @@ VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
-#: Запас вызовов на всё остальное в кампании при проверке бюджета кусков (ACL-1891).
+#: Прежний фиксированный запас на остальную кампанию в Check plan (ACL-1891); с ACL-2370 не используется -
+#: остаток считает `estimate_create_calls`. Имя оставлено для старых тестов.
 CALLS_RESERVE_OTHER = 40
 
 
@@ -197,6 +199,41 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
     if any(x.instant for x in plan.ad_sets):
         total += CALLS_INSTANT_FORM
     return total
+
+
+#: ACL-2370: запас на повторы кусков (ACL-2000, докачка со смещения): 5% кусков, не меньше двух вызовов.
+CHUNK_RETRY_SLACK_FRACTION = 0.05
+CHUNK_RETRY_SLACK_MIN = 2
+
+
+def video_files_of(plan: "CampaignPlan") -> list[str]:
+    """Видеофайлы плана без повторов: главный и вертикальный (Stories / Reels) каждого видео-объявления.
+
+    Один путь в нескольких объявлениях грузится ОДИН раз: `_video` ищет видео в кабинете по заголовку
+    (тег + md5), и второе объявление находит уже загруженное. Поэтому считаем по уникальному пути.
+    """
+    seen: dict[str, None] = {}
+    for ad_set in plan.ad_sets:
+        for ad in ad_set.ads:
+            if ad.kind == "video":
+                seen.setdefault(ad.path, None)
+            if ad.vertical_path and ad.vertical_kind == "video":
+                seen.setdefault(ad.vertical_path, None)
+    return list(seen)
+
+
+def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
+    """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
+
+    Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
+    `estimate_create_calls`). Верхняя оценка: проверка плана читает исходный файл, а запуск может
+    сжать его до загрузки.
+    """
+    size_of = size_of or _disk_size
+    chunks = sum(upload_calls(size_of(path)) for path in video_files_of(plan))
+    if not chunks:
+        return 0
+    return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
 
 
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
@@ -2725,14 +2762,24 @@ class CampaignCreator:
         chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
-        # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
+        # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
+        # и запуск (раньше - фиксированные 40, и проверка принимала то, что запуск потом отказывал).
+        # Здесь куски без запаса на повторы: это страховка, размер после сжатия может отличаться.
         if isinstance(budget, int) and chunk_calls:
-            rest = estimate_create_calls(plan) if writing else CALLS_RESERVE_OTHER
+            rest = estimate_create_calls(plan)
             if chunk_calls + rest > budget:
                 raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
                                 f"and the rest of the campaign about {rest}, more than "
                                 f"one run allows ({budget}). Use a smaller video or split the campaign. "
                                 "Nothing was created.")
+            if not writing:
+                # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
+                sizes = [len(v) for v in files.values() if isinstance(v, LargeFile)]
+                n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
+                out.warnings.append(
+                    f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
+                    f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                    "for this run (upper bound; the file may be compressed before upload).")
         self._check_planned(plan, targetings)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
