@@ -102,9 +102,11 @@ ACL-2424 connects the existing bounded review-handoff wait and prepares delivery
 continuation through the published original-request proof. The normal receipt
 writer uses current-main helpers; product verification and publication keep the
 original product checkout, CI, tag, target and actual acceptance.
-Instruction schema1 remains selected: only the later separately reviewed
-ACL-2425 selection can enable independent instructions while a product waits.
-Until then the existing pending-release admission guard remains active.
+ACL-2425 separately selects instruction schema2 in matching descriptor/config
+and genuine template ancestry. Reviewed instruction-only work can finish while
+an original product request waits, keeping its original code/CI/target and actual
+acceptance. Product/mixed work and held integration/intake/unpromoted Stage retain
+their existing admission/delivery guards. No new release is implied by docs Done.
 ACL-2099 is a separate preparation-only selection;
 its own package must be verified through the retained actual preselection config
 before any separately authorized owned idle adoption.

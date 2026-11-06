@@ -21,12 +21,20 @@ A task that changes only normal Markdown files at `AGENTS.md`, `CLAUDE.md` or
 
 Keep the real one-task source PR, Worker and independent Reviewer. The matching
 `workflow.process_instructions` and Tracker `process_instructions` objects must
-explicitly select schema1 and the actual checks `descriptor`, `tracker-link` and
+explicitly select schema2 and the actual checks `descriptor`, `tracker-link` and
 `Process instructions`. The pinned engine records current review and admits the
 source directly into main; this route does not enter Approved or a batch. Its
 normal reviewed-Merged receipt completes the instruction-only task without an
 application installer or runtime delivery claim. Review-return, author reclaim,
 fresh head/base/scope approval and normal Merged recording still apply.
+
+ACL-2425 selects schema2 after the compatible ACL-2424 publisher/receipt delivery.
+An independently reviewed instruction-only task can now finish while an existing
+authorized product delivery waits. Its admitted Markdown descendants retain the
+native instruction receipts; the product request keeps its original code, CI,
+target and real package acceptance. Neither the docs merge nor its Done receipt
+publishes a product or satisfies that pending request. Arbitrary/mixed changes
+and held integration/intake/unpromoted Stage keep their existing guards.
 
 The task's source review lane is held through the direct main merge. Under the
 prepared schema-3 policy it consumes one of five source slots; each held process
@@ -100,5 +108,6 @@ ACL-2423 introduced only this boundary. ACL-2424 connects the existing shared
 handoff wait and prepares original-product continuation: a later checkout can
 publish the original product only after actual schema2 adoption and the complete
 native instruction/request proof. Current-main receipt helpers retain the real
-original verification evidence. Instruction schema1 remains selected until
-ACL-2425; this preparation does not enable the independent route by itself.
+original verification evidence. ACL-2425 separately selects schema2 consistently
+in descriptor/config and the genuine generated baseline. Other execution,
+verification and product-delivery choices remain unchanged.
