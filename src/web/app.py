@@ -603,7 +603,8 @@ def _build_account_map_view(
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
-    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    known = list(map_entries)
     all_known = sorted(set(known) | labels_in_report, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
@@ -716,6 +717,8 @@ def _build_account_map_view(
                     excel = _numbers(country_name, resolved) or excel
             rows.append({
                 "account": label,
+                # номер кабинета из карты аккаунтов — Home показывает его второй строкой под именем
+                "act_id": (getattr(map_entries.get(label), "ad_account_id", "") or "").strip(),
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
@@ -872,6 +875,29 @@ def _build_account_map_view(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
     )
 
+    # Home «таблица как в Google»: состояние каждого аккаунта и счётчики. Только
+    # сохранённые данные (статус кабинета, спенд периода) — ни Meta, ни Multilogin
+    # здесь не читаются. `rows` не переставляем (их же рисует Manage), для Home —
+    # отдельный порядок `rows_aov`.
+    from src.web import account_state as _astate
+
+    seen_accounts: dict[str, dict] = {}
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            r["state"] = _astate.account_state(r)
+            seen_accounts.setdefault(r["account"], r["state"])
+        mc["rows_aov"] = _astate.sort_rows(mc.get("rows") or [])
+        mc["state_counts"] = _astate.state_counts(r["state"] for r in mc.get("rows") or [])
+        mc["active"] = mc["state_counts"]["active"] > 0 and not mc.get("virtual")
+    countries.sort(key=lambda mc: (
+        not mc["active"],
+        -float(((mc.get("book") or {}).get("spend") or mc.get("spend") or 0)),
+        (mc["country"] or "").casefold(),
+    ))
+    state_totals = _astate.state_counts(seen_accounts.values())
+    state_totals["countries_total"] = len(countries)
+    state_totals["countries_active"] = sum(1 for mc in countries if mc["active"])
+
     # ACL-1319: Available accounts — только те, с кем есть смысл работать.
     # `all_known` остаётся прежним: из него строятся выпадающие списки
     # привязки, и там нужен каждый аккаунт. Сужается только этот список и его
@@ -930,6 +956,7 @@ def _build_account_map_view(
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),
+        "state_totals": state_totals,
         # ACL-1656: «Campaign managers» внизу Home.
         "cm_section": _amap_cm_section(report),
         "available": available,
@@ -1436,6 +1463,8 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
+templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 
 
 def _campaign_table_api() -> bool:
@@ -5254,12 +5283,15 @@ def account_map_fragment(
 
     base_report = report
     period_cmp, compare_note = None, ""
+    # Отчёт тоже считается за выбранный период — как на самой странице: строки аккаунтов карта пересчитывает сама,
+    # а «Total · all countries» и книжные тоталы страны берутся из отчёта. С отчётом без периода итог показывал
+    # все даты книги рядом со строками за выбранные (ACL-2384).
+    date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+    try:
+        report = report_for_period(base_report, df, date_from, date_to)
+    except PeriodReportError:
+        return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
     if compare.strip():
-        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
-        try:
-            report = report_for_period(base_report, df, date_from, date_to)
-        except PeriodReportError:
-            return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
         period_cmp, compare_note = _build_compare(
             base_report, df, date_from, date_to, span.strip(),
             compare.strip(), cmp_from.strip(), cmp_to.strip())

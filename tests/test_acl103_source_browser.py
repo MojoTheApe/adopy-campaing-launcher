@@ -180,8 +180,8 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         assert page.evaluate("acl6Metrics(12.5,5,1)[0]") == expected
         # ACL-2204: подпись суммы с Meta без валюты не меняется (только BI / книга получают USD).
         assert page.evaluate("amapMoney(5, '')") == "currency unknown 5.00"
-        page.locator("#amap-slot details.amap-country > summary").first.click()
-        assert expected in page.locator("#amap-slot .amap-grid").inner_text()
+        # Home shows the accounts overview open (no country expansion); amounts keep the retained unit.
+        assert expected in page.locator("#amap-slot").inner_text()
         if not currency:
             assert "currency unknown" not in page.locator("#home-kpis").inner_text()
             assert page.locator('#home-kpis [data-kpi="spend"] .hk-you').inner_text().strip().startswith("$")
