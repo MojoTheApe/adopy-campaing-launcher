@@ -2065,7 +2065,9 @@ def _render_report(
     except FileNotFoundError as e:
         # Без BI и без книги (свежая установка) тупика быть не должно:
         # показываем страницу подключения; путь к книге в основной текст не идёт.
-        if not bi_stats.bi_enabled():
+        # FB_STATS_SOURCE=excel — книгу выбрали сознательно: классическая страница с путём.
+        if (not bi_stats.bi_enabled()
+                and (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() != "excel"):
             return templates.TemplateResponse(
                 request,
                 "error.html",

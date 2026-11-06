@@ -601,3 +601,18 @@ def test_value_error_page_unchanged(monkeypatch):
     html = web._render_report(_home_request()).body.decode("utf-8")
     assert "Excel format problem" in html
     assert "Connect your data" not in html
+
+
+def test_excel_source_keeps_classic_no_data_page(monkeypatch):
+    from src.web import app as web
+
+    monkeypatch.setattr(bi_stats, "bi_enabled", lambda: False)
+    monkeypatch.setenv("FB_STATS_SOURCE", "excel")
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("Excel file not found: /chosen/stats.xlsx")
+
+    monkeypatch.setattr(web, "get_cached_report", missing)
+    html = web._render_report(_home_request()).body.decode("utf-8")
+    assert "No data file" in html and "/chosen/stats.xlsx" in html
+    assert "Connect your data" not in html

@@ -173,6 +173,8 @@ def test_a_failed_background_build_shows_the_real_error(tmp_path, monkeypatch):
         raise FileNotFoundError("Stats workbook not found: missing.xlsx")
 
     monkeypatch.setattr(cache, "load_morning_report", missing)
+    # Классическая страница с путём — когда книга выбрана явно (FB_STATS_SOURCE=excel); иначе без BI — страница подключения.
+    monkeypatch.setenv("FB_STATS_SOURCE", "excel")
     monkeypatch.setattr("src.web.buyer.get_selected_cm", lambda: "Tester")
     cache.cache_clear()
 

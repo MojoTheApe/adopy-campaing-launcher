@@ -304,7 +304,7 @@ def check_campaign_manager_identity() -> None:
             MISSING,
             "Campaign manager identity",
             "MY_CM_NAME is not configured",
-            "Set it exactly as the campaign manager name appears in the stats workbook.",
+            "Set it exactly as BI or the CM column of the stats workbook knows it.",
         )
 
 

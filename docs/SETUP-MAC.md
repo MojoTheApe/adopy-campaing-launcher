@@ -111,7 +111,9 @@ Keep the Terminal window open — closing it stops ACL. The browser opens
 
 There is no setup wizard on a Mac; everything below is done on the dashboard.
 
-1. **Connections.** Press **Connections** in the dashboard header, then **Sign in with
+1. **Connections.** On a clean Mac the first screen is the **Connect your data** page;
+   press **Connections** in the page body (later, the same button sits next to the team
+   library status line), then **Sign in with
    Google** and sign in with your Adopy account in the browser.
    **You should see:** *Team library: connected (N targets, M texts)* and *BI: connected
    (last data date …)*. If your team lead has not shared the connection file with your
