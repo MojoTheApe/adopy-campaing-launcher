@@ -172,7 +172,7 @@ RELEASES_REPO="MojoTheApe/acl-releases"
 fetch_google_client() {
     local py dest tmp url
     py="$(find_python)" || return 0
-    dest="$(PYTHONPATH="$TARGET" "$py" -c 'import os
+    dest="$(PYTHONPATH="$TARGET" "$py" -P -c 'import os
 from config.paths import get_google_oauth_client_path as path, is_valid_google_oauth_client as valid, get_local_config_dir as config_dir
 print("" if valid(path()) else os.path.join(config_dir(), "oauth_client.json"))' 2>/dev/null)" || return 0
     [ -n "$dest" ] || return 0
@@ -180,7 +180,7 @@ print("" if valid(path()) else os.path.join(config_dir(), "oauth_client.json"))'
     url="https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}/${OAUTH_ASSET}"
     tmp="$(mktemp "${TMPDIR:-/tmp}/acl-oauth.XXXXXX")" || return 0
     if curl -fsSL --max-time 60 -o "$tmp" "$url" \
-       && PYTHONPATH="$TARGET" "$py" -c 'import sys
+       && PYTHONPATH="$TARGET" "$py" -P -c 'import sys
 from config.paths import is_valid_google_oauth_client as valid
 raise SystemExit(0 if valid(sys.argv[1]) else 1)' "$tmp" 2>/dev/null \
        && (umask 077; mkdir -p "$(dirname "$dest")") \
@@ -188,7 +188,7 @@ raise SystemExit(0 if valid(sys.argv[1]) else 1)' "$tmp" 2>/dev/null \
         echo "Google sign-in file installed from release $RELEASE_TAG."
     else
         rm -f "$tmp"
-        echo "NOTE: release $RELEASE_TAG has no Google sign-in file. Ask Evgeni for oauth_client.json (docs/SETUP-MAC.md, Step 2)."
+        echo "NOTE: could not get the Google sign-in file from release $RELEASE_TAG (not published there, or no connection). Ask Evgeni for oauth_client.json (docs/SETUP-MAC.md, Step 2)."
     fi
     return 0
 }
