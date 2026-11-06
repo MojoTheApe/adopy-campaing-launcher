@@ -2869,6 +2869,17 @@
     }
     .cbd-root[data-open="1"] { right: 0; }
     .cbd-root > * { pointer-events: auto; }
+    /* Мягкий спад страницы слева от панели. Рисуется отдельным слоем, чтобы
+       ширина тени не зависела от размера панели; без blur и backdrop-filter —
+       они дороги при протяжке. Анимируется только opacity. */
+    .cbd-root::before {
+      content: ""; position: absolute; top: 0; bottom: 0; right: 100%;
+      width: clamp(48px, 8vw, 140px); pointer-events: none;
+      background: linear-gradient(to left, var(--adopy-drawer-fade), transparent);
+      opacity: 0; transition: opacity 220ms var(--ease-out);
+    }
+    .cbd-root[data-open="1"]::before { opacity: 1; }
+    body.cbd-overlay .cbd-root::before { width: clamp(80px, 12vw, 220px); }
 
     /* Язычок: единственное, что видно, пока ящик закрыт. */
     .cbd-tab {
@@ -2877,9 +2888,9 @@
       background: var(--bg-elev);
       border: 1px solid var(--border); border-right: none;
       border-radius: var(--radius-md) 0 0 var(--radius-md);
-      box-shadow: var(--shadow-md);
     }
     .cbd-root.cbd-dragging { transition: none; }
+    .cbd-root.cbd-dragging::before { transition: none; }
     body.cbd-resizing { user-select: none; }
     .cbd-handle {
       width: 100%; box-sizing: border-box;
@@ -3781,7 +3792,7 @@
       body.cbd-open { padding-right: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .cbd-root, .cbd-handle-arrow { transition: none; }
+      .cbd-root, .cbd-root::before, .cbd-handle-arrow { transition: none; }
     }
     /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
        Были нарисованы рамкой полей (--field-border), почти тем же фоном и
@@ -3927,7 +3938,9 @@
        только из токенов страницы (--bg-elev, --border, --text, --muted,
        --accent, --good, --bad, --warn…), поэтому светлая и тёмная темы и
        будущая перекраска токенов подхватываются сами. */
-    .cw-panel { min-width: 0; }
+    /* Статистика перестраивается по ширине СВОЕГО контейнера, а не окна:
+       открытый билдер отъедает полэкрана, окно при этом остаётся широким. */
+    .cw-panel { min-width: 0; container: cw / inline-size; }
     .cw-title { margin: 0; font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
     .cw-crumb { font-size: 0.72rem; color: var(--muted); margin: 0 0 0.25rem; }
     .cw-sub { font-size: 0.75rem; color: var(--muted); margin: 0.3rem 0 0; max-width: 62ch; }
@@ -4000,11 +4013,21 @@
     .cw-foot { font-size: 0.7rem; color: var(--muted); padding: 0.7rem 1rem; line-height: 1.6; border-top: 1px solid var(--border); }
     .cw-links { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin-top: var(--space-lg); font-size: 0.75rem; color: var(--muted); }
     .cw-link { border: 0; background: transparent; color: var(--accent-strong); font: inherit; padding: 0; cursor: pointer; text-decoration: underline; }
-    @media (max-width: 900px) {
+    @container cw (max-width: 760px) {
       .cw-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .cw-kpi:nth-child(2) { border-right: 0; }
+      .cw-kpi:nth-child(2n) { border-right: 0; }
+      .cw-kpi:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
       .cw-refs { grid-template-columns: 1fr; }
       .cw-ref { border-right: 0; border-bottom: 1px solid var(--border); }
+    }
+    @container cw (max-width: 440px) {
+      .cw-kpis { grid-template-columns: minmax(0, 1fr); }
+      .cw-kpi { border-right: 0; }
+      .cw-kpi:not(:last-child) { border-bottom: 1px solid var(--border); }
+      .cw-kpi-you { font-size: 1.3rem; white-space: normal; overflow-wrap: anywhere; }
+      .cw-kpi-you small { display: block; margin-left: 0; }
+      .cw-kpi-label, .cw-kpi-peer { flex-wrap: wrap; }
+      .cw-kpi-label > span:last-child { display: none; }
     }
   </style>
   <style id="shell-1827">
@@ -4070,7 +4093,7 @@
     .sb-empty[hidden] { display: none; }
 
     /* Home: полоса «Вы / Другие» — шесть плиток, три в ряд. */
-    .hk-row { margin: 0 0 var(--adopy-space-6); }
+    .hk-row { margin: 0 0 var(--adopy-space-6); container: cw / inline-size; }
     .hk-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--adopy-space-1) var(--adopy-space-3); margin-bottom: var(--adopy-space-3); }
     .hk-title { margin: 0; font-size: var(--adopy-text-section); font-weight: var(--adopy-weight-semibold); }
     .hk-sub { font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
@@ -4097,12 +4120,19 @@
     .hk-cap { margin-top: var(--adopy-space-2); font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
     .hk-cap.hk-good { color: var(--adopy-success); }
     .hk-cap.hk-bad { color: var(--adopy-danger); }
-    @media (max-width: 900px) {
+    @container cw (max-width: 760px) {
       .hk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .hk-tile:nth-child(3n) { border-right: 1px solid var(--adopy-border); }
       .hk-tile:nth-child(2n) { border-right: 0; }
       .hk-tile:nth-last-child(-n+3) { border-bottom: 1px solid var(--adopy-border); }
       .hk-tile:nth-last-child(-n+2) { border-bottom: 0; }
+    }
+    @container cw (max-width: 440px) {
+      .hk-grid { grid-template-columns: minmax(0, 1fr); }
+      .hk-tile, .hk-tile:nth-child(3n), .hk-tile:nth-child(2n) { border-right: 0; }
+      .hk-tile, .hk-tile:nth-last-child(-n+3), .hk-tile:nth-last-child(-n+2) { border-bottom: 1px solid var(--adopy-border); }
+      .hk-tile:last-child { border-bottom: 0; }
+      .hk-label, .hk-others { flex-wrap: wrap; }
     }
 
     /* Robot health: панель под шапкой (ссылка на страницу остаётся). */
@@ -6077,6 +6107,10 @@ window.cbDrawer = (function () {
   var SIZE_KEY = 'acl.builder.width';
   var NORMAL_W = 480, MIN_W = 320, WIDE_AT = 800, DRAG_PX = 4, STEP = 40;
   var HANDLE_W = 40, EDGE = 16;
+  /* Сколько страницы должно остаться видимым при протяжке (сайдбар 232 + не
+     меньше 320 под контент). Это же порог, с которого широкий ящик ложится
+     поверх страницы, а не сдвигает её. */
+  var MIN_PAGE = 560;
 
   var root = document.getElementById('cbd-root');
   if (!root) return null;
@@ -6116,10 +6150,16 @@ window.cbDrawer = (function () {
   function isOpen() { return root.getAttribute('data-open') === '1'; }
   function viewport() { return (window.innerWidth | 0) || 1280; }
   /* Почти всё окно, но язычок остаётся на виду — за него ящик и тянут. */
-  function maxWidth() { return Math.max(240, viewport() - HANDLE_W - EDGE); }
+  function fullWidth() { return Math.max(240, viewport() - HANDLE_W - EDGE); }
+  /* Протяжкой дашборд не сузить меньше MIN_PAGE. В окне, где и обычная ширина
+     с MIN_PAGE не помещаются, остаётся прежнее поведение (ящик поверх). */
+  function maxWidth() {
+    if (viewport() < NORMAL_W + HANDLE_W + MIN_PAGE) return fullWidth();
+    return Math.max(NORMAL_W, viewport() - HANDLE_W - MIN_PAGE);
+  }
   function clamp(w) { return Math.max(Math.min(MIN_W, maxWidth()), Math.min(maxWidth(), w)); }
   function width() {
-    if (mode === 'wide') return Math.max(maxWidth(), Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W)));
+    if (mode === 'wide') return Math.max(fullWidth(), Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W)));
     if (mode === 'custom') return clamp(custom);
     return Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W));
   }
@@ -6149,7 +6189,7 @@ window.cbDrawer = (function () {
     document.documentElement.style.setProperty('--cbd-w', w + 'px');
     root.setAttribute('data-expanded', wide ? '1' : '0');
     document.body.classList.toggle('cbd-expanded', wide);
-    document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < 600);
+    document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < MIN_PAGE);
     syncHeaderTop();
     var open = isOpen();
     pressed(presetClosed, !open);
