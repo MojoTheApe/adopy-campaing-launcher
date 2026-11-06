@@ -39,7 +39,7 @@ def check(request, number, root=ROOT):
     admitted_config = json.loads(shared.delivery_policy.file_bytes(request, f'repos/{repo}', base))
     if admitted_config.get('project', {}).get('repository') != repo:
         raise ValueError('PR base does not describe the official ACL project')
-    return shared.check(request, admitted_config, number)
+    return shared.check_with_handoff_wait(request, admitted_config, number)
 
 
 def main():
