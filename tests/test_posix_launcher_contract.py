@@ -314,3 +314,78 @@ def test_pick_release_retagged_old_commit_does_not_downgrade(release_repo) -> No
     _tag(repo, "acl-release-old-retag", first, f"CI success {_RUN}", 999)  # newest tag object
     result = _pick(repo)
     assert result.returncode == 0 and result.stdout.split() == ["acl-release-2", tip]
+
+
+# --- Файл входа Google на Mac: из ассета релиза, только если своего нет ---
+
+def _fetch_google_client_function() -> str:
+    text = _text("Install ACL.command")
+    start = text.index("fetch_google_client() {")
+    end = text.index("\n}\n", start) + 3
+    return text[start:end]
+
+
+def _fetch_client(config_dir: Path, curl_body: str | None) -> tuple[subprocess.CompletedProcess, list]:
+    import os
+    import sys
+
+    log = config_dir.parent / "curl.log"
+    if curl_body is None:
+        curl = f'curl() {{ echo called >> "{log.as_posix()}"; return 22; }}'
+    else:
+        body = config_dir.parent / "asset.json"
+        body.write_text(curl_body, encoding="utf-8")
+        curl = ('curl() { local out=""; while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done; '
+                f'echo "$out" >> "{log.as_posix()}"; cp "{body.as_posix()}" "$out"; }}')
+    script = "\n".join([
+        f'find_python() {{ echo "{Path(sys.executable).as_posix()}"; }}',
+        curl,
+        f'TARGET="{_ROOT.as_posix()}"; RELEASE_TAG="acl-release-test"',
+        'OAUTH_ASSET="google-oauth-client.json"; RELEASES_REPO="test/releases"',
+        _fetch_google_client_function(),
+        "fetch_google_client",
+    ])
+    env = {**os.environ, "ACL_CONFIG_DIR": str(config_dir), "GSHEET_OAUTH_CLIENT": ""}
+    done = subprocess.run([_BASH, "-c", script], capture_output=True, text=True, env=env)
+    calls = log.read_text().splitlines() if log.exists() else []
+    return done, calls
+
+
+_VALID_CLIENT = '{"installed": {"client_id": "x.apps.googleusercontent.com"}}'
+
+
+@pytest.fixture()
+def config_dir(tmp_path: Path) -> Path:
+    if not _BASH:
+        pytest.skip("bash is required to run the installer step")
+    return tmp_path / "cfg"
+
+
+def test_google_client_is_installed_from_the_release_when_missing(config_dir) -> None:
+    done, calls = _fetch_client(config_dir, _VALID_CLIENT)
+    assert done.returncode == 0, done.stderr
+    assert len(calls) == 1
+    assert (config_dir / "oauth_client.json").read_text(encoding="utf-8") == _VALID_CLIENT
+    assert "installed from release acl-release-test" in done.stdout
+
+
+def test_google_client_from_an_old_release_is_a_note_not_a_failure(config_dir) -> None:
+    done, _calls = _fetch_client(config_dir, None)
+    assert done.returncode == 0
+    assert not (config_dir / "oauth_client.json").exists()
+    assert "Ask Evgeni for oauth_client.json" in done.stdout
+
+
+def test_an_invalid_downloaded_client_is_not_installed(config_dir) -> None:
+    done, _calls = _fetch_client(config_dir, "{}")
+    assert done.returncode == 0
+    assert not (config_dir / "oauth_client.json").exists()
+
+
+def test_an_existing_client_is_never_replaced_or_downloaded(config_dir) -> None:
+    config_dir.mkdir()
+    (config_dir / "oauth_client.json").write_text(_VALID_CLIENT.replace("x.", "mine."), encoding="utf-8")
+    done, calls = _fetch_client(config_dir, _VALID_CLIENT)
+    assert done.returncode == 0
+    assert calls == []
+    assert "mine." in (config_dir / "oauth_client.json").read_text(encoding="utf-8")

@@ -162,6 +162,38 @@ if [ "$FRESH" = "1" ]; then
     CHECKOUT=""
 fi
 
+# ------------------------------------------------ Google sign-in client file
+# Windows gets the OAuth client inside its installer. A Mac install comes from
+# git, so the release publishes the same file as an asset; it is downloaded
+# only when this machine has no valid one, and never replaces an existing file.
+OAUTH_ASSET="google-oauth-client.json"
+RELEASES_REPO="MojoTheApe/acl-releases"
+
+fetch_google_client() {
+    local py dest tmp url
+    py="$(find_python)" || return 0
+    dest="$(PYTHONPATH="$TARGET" "$py" -c 'import os
+from config.paths import get_google_oauth_client_path as path, is_valid_google_oauth_client as valid, get_local_config_dir as config_dir
+print("" if valid(path()) else os.path.join(config_dir(), "oauth_client.json"))' 2>/dev/null)" || return 0
+    [ -n "$dest" ] || return 0
+    [ -e "$dest" ] && { echo "NOTE: $dest exists but is not a valid Google sign-in file; leaving it as is."; return 0; }
+    url="https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}/${OAUTH_ASSET}"
+    tmp="$(mktemp "${TMPDIR:-/tmp}/acl-oauth.XXXXXX")" || return 0
+    if curl -fsSL --max-time 60 -o "$tmp" "$url" \
+       && PYTHONPATH="$TARGET" "$py" -c 'import sys
+from config.paths import is_valid_google_oauth_client as valid
+raise SystemExit(0 if valid(sys.argv[1]) else 1)' "$tmp" 2>/dev/null \
+       && (umask 077; mkdir -p "$(dirname "$dest")") \
+       && mv "$tmp" "$dest" && chmod 600 "$dest"; then
+        echo "Google sign-in file installed from release $RELEASE_TAG."
+    else
+        rm -f "$tmp"
+        echo "NOTE: release $RELEASE_TAG has no Google sign-in file. Ask Evgeni for oauth_client.json (docs/SETUP-MAC.md, Step 2)."
+    fi
+    return 0
+}
+fetch_google_client
+
 # --------------------------------------------------------- Shortcut + setup
 bash "$TARGET/scripts/install_dashboard_shortcut.sh" \
     || echo "WARNING: Desktop shortcut could not be created; use $TARGET/start_dashboard.sh."

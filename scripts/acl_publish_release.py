@@ -104,6 +104,11 @@ def publish(tag: str, repo: str, directory: Path) -> None:
     signature = directory / "release.json.sig"
     if signature.is_file():
         assets.append(signature)
+    # Mac ставится из git: файл входа Google (тот же, что внутри Windows-
+    # установщика) едет отдельным ассетом, если шаг сборки его положил.
+    oauth_client = directory / "google-oauth-client.json"
+    if oauth_client.is_file():
+        assets.append(oauth_client)
     # Upload first to a draft. /releases/latest cannot expose a half upload.
     _gh("release", "create", tag, *(str(p) for p in assets), "--repo", repo, "--draft",
         "--title", f"Adopy Campaign Manager {manifest['version']}",

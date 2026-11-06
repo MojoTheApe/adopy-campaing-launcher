@@ -105,6 +105,25 @@ def test_release_only_becomes_visible_after_all_assets_upload(tmp_path, monkeypa
         assert "--clobber" not in str(calls)
 
 
+@pytest.mark.parametrize("with_client", [False, True])
+def test_google_sign_in_file_is_uploaded_only_when_the_build_wrote_it(tmp_path, monkeypatch, with_client):
+    """Mac ставится из git и берёт файл входа Google из ассетов релиза."""
+    (tmp_path / "release.json").write_text(json.dumps({"tag": "acl-release-test", "version": "test",
+                                                     "installer": {"name": "Setup.exe"}}))
+    for name in ["Setup.exe", "Setup.exe.sha256", "release-notes.md"]:
+        (tmp_path / name).write_text("test")
+    if with_client:
+        (tmp_path / "google-oauth-client.json").write_text("{}")
+    calls = []
+    def gh(*args):
+        calls.append(args)
+        return "[]"
+    monkeypatch.setattr(pub, "_gh", gh)
+    pub.publish("acl-release-test", "test/releases", tmp_path)
+    uploaded = [arg for arg in calls[1] if arg.endswith("google-oauth-client.json")]
+    assert len(uploaded) == (1 if with_client else 0)
+
+
 # --- ACL-1565: a main run that reused a full green run of the same tree -----------------------
 
 @pytest.fixture(autouse=True)
