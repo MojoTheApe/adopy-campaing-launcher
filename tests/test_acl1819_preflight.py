@@ -846,7 +846,8 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     i = page.index("    e.resend = function () {")
     body = page[i:page.index("    e.dismiss = function () {", i)]
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
-    assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
+    # ACL-2353: замороженная отправка (из ревью) повторяется без ворот; живая карточка идёт через ворота.
+    assert body.index("if (e.frozen)") < body.index("cbPreflightGate") < body.rindex("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
 
 
