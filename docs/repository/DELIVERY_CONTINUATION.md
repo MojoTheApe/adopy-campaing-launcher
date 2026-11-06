@@ -1,7 +1,7 @@
 # Authorized delivery continuation
 
-Follow the [shared continuation contract](https://github.com/MojoTheApe/master-repo/blob/fddcdd0d60db2e14cce0a53e6af23e12356c3bc7/docs/delivery-continuation.md)
-at this project's exact standard pin and [runtime procedure](../runtime/DELIVERY.md).
+Follow the [shared continuation guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/delivery-continuation.md)
+and ACL's selected [runtime procedure](../runtime/DELIVERY.md).
 Under this adopted flow, owner approval to integrate/merge selected tasks into
 main covers review/checks,
 optional stage, admitted main merge, maintained delivery, verification and final
