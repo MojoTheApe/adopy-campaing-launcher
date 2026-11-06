@@ -7040,9 +7040,14 @@ window.cbPreflight = (function () {
         return multi && (id === 'texts_vertical') === !!s(a.vertical_file)
           && (id === 'texts_vertical' || (st.ads || []).length > 1);
       }));
-      else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
-      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));
+      else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }, 'warning'));
+      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }, 'warning'));
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
+      else if (id === 'feed_texts') out.push(perAd(id, inp, function (a) {
+        var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
+        if (!multi && !s(a.vertical_file)) return false;
+        return !((s(a.body) || distinct(a.bodies).length) && (s(a.headline) || distinct(a.headlines).length));
+      }));
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
         var objective = s(inp.objective).toLowerCase() || C.default_objective;
