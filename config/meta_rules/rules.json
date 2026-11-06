@@ -830,6 +830,44 @@
     "note": "Lead Ads/create explicitly specifies OUTCOME_LEADS and these six link_data.call_to_action values. Applies to Instant Forms, not website conversion campaigns. Same values as write_policy.CTA_FORM."
   },
   {
+    "id": "acl2056.cta_enum.instant_form_live",
+    "kind": "cta_enum",
+    "applies_to": {
+      "objective": "OUTCOME_LEADS",
+      "destination_type": "ON_AD",
+      "optimization_goal": [
+        "LEAD_GENERATION",
+        "QUALITY_LEAD"
+      ]
+    },
+    "allowed": [
+      "SEE_DETAILS"
+    ],
+    "status": "ga",
+    "source_url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1056",
+    "checked_date": "2026-11-04",
+    "note": "Not in Meta's docs. Seen on buyer ads (D71, 2026-10-21), proven through the API on pending. Instant Form only: the documented rules (cta.enum, acl2125.cta.instant_form) are left as they are."
+  },
+  {
+    "id": "acl2056.cta_by_objective.instant_form_live",
+    "kind": "cta_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_LEADS",
+      "destination_type": "ON_AD",
+      "optimization_goal": [
+        "LEAD_GENERATION",
+        "QUALITY_LEAD"
+      ]
+    },
+    "allowed": [
+      "SEE_DETAILS"
+    ],
+    "status": "ga",
+    "source_url": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1056",
+    "checked_date": "2026-11-04",
+    "note": "Not in Meta's docs. Seen on buyer ads (D71, 2026-10-21), proven through the API on pending. Instant Form only: the documented rules (cta.enum, acl2125.cta.instant_form) are left as they are."
+  },
+  {
     "id": "acl2125.placements.instant_form.no_rhc",
     "kind": "placements_by_objective",
     "applies_to": {
