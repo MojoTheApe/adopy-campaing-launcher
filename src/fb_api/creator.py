@@ -37,6 +37,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import error_catalog as _catalog
+from src.fb_api import facts_cache as _facts_cache
 from src.fb_api import form_create as _fc
 from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
@@ -867,7 +868,7 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
                         "Nothing was created.")
     acc = client.account(act)
     got = str(acc.get("account_id") or "").strip()
-    if got and got != digits:
+    if got != digits:      # ACL-2267: пустой account_id в ответе - тоже несовпадение
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
     started = time.monotonic()
     merged = _pg.read_merged(client, act, always_profile=False)
@@ -1031,14 +1032,19 @@ class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
     def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
-                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = ""):
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None):
         self.client = client
+        #: ACL-2267: долгий кэш разобранных терминов (страна, язык, интерес); по умолчанию - кэш машины.
+        self._facts = facts if facts is not None else _facts_cache.default()
+        #: Ключи долгого кэша, использованные этим резолвером: при отказе Meta по таргетингу сбрасываются.
+        self._touched: set[str] = set()
+        self._facts_hits = 0
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
-        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope)
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts)
         #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
         #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
         self.locale_groups: dict[int, dict[int, str]] = {}
@@ -1050,6 +1056,13 @@ class TargetingResolver:
         if key.upper() in self._geo:
             return self._geo[key.upper()]
         up = key.upper()
+        wkey = self._facts.term_key("country", _tr.norm(key))
+        warm = self._facts.get_term(wkey)
+        if warm and re.fullmatch(r"[A-Z]{2}", str(warm.get("code") or "")):
+            self._touched.add(wkey)
+            self._facts_hits += 1
+            self._geo[up] = str(warm["code"])
+            return self._geo[up]
         code = ""
         # Для двухбуквенного кода «q=AR» отдаёт десятки стран с «ar» в названии, и нужная может
         # выпасть из страницы, поэтому: сначала код с широкой выдачей, затем английские названия.
@@ -1072,13 +1085,43 @@ class TargetingResolver:
         if not code:
             raise PlanError(f"Country {key!r} was not found by Meta targeting search")
         self._geo[key.upper()] = code
+        self._facts.put_term(wkey, {"code": code})
+        self._touched.add(wkey)
         return code
+
+    def drop_cached(self) -> int:
+        """Meta отвергла таргетинг: забыть всё, что этот резолвер взял из долгого кэша или положил в него."""
+        keys = sorted(self._touched | self.terms.touched_keys)
+        self._facts.drop_terms(keys)
+        self._touched.clear()
+        self.terms.touched_keys.clear()
+        return len(keys)
+
+    def facts_stats(self) -> dict:
+        """Счётчики долгого кэша за задание (для телеметрии Check plan, без имён терминов)."""
+        st = dict(self.terms.facts_stats)
+        st["warm_hits"] += self._facts_hits
+        st["targeting_reads"] = self.terms.reads
+        return st
 
     def locale(self, language: str) -> int | None:
         lang = (language or "").strip()
         if not lang:
             return None
         if lang in self._locale:
+            return self._locale[lang]
+        wkey = self._facts.term_key("locale", _tr.norm(lang))
+        warm = self._facts.get_term(wkey)
+        if warm and re.fullmatch(r"[0-9]+", str(warm.get("id") or "")):
+            self._touched.add(wkey)
+            self._facts_hits += 1
+            self._locale[lang] = int(warm["id"])
+            self.locale_names[lang] = str(warm.get("name") or lang)
+            groups = warm.get("groups") if isinstance(warm.get("groups"), dict) else {}
+            if groups or self.locale_names[lang].casefold().endswith(" (all)"):
+                # группа «X (All)» без известных членов тоже группа: без пометки сравнение станет нестрогим
+                self.locale_groups[self._locale[lang]] = {int(k): str(v) for k, v in groups.items()
+                                                          if re.fullmatch(r"[0-9]+", str(k))}
             return self._locale[lang]
         rows = _tr.named_search("adlocale", lambda: self.client.get_all(
             "/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1))
@@ -1100,6 +1143,10 @@ class TargetingResolver:
                 and str(r.get("name") or "").strip().casefold() != pick_name.casefold()
                 and (str(r.get("name") or "").strip().casefold() == base
                      or str(r.get("name") or "").strip().casefold().startswith(base + " ("))}
+        self._facts.put_term(wkey, {"id": str(self._locale[lang]), "name": self.locale_names[lang],
+                                    "groups": {str(k): v for k, v in
+                                               self.locale_groups.get(self._locale[lang], {}).items()}})
+        self._touched.add(wkey)
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
@@ -2578,6 +2625,21 @@ class CampaignCreator:
     def _find_sets(self, plan: CampaignPlan, campaign_id: str) -> list[dict | None]:
         return [self._find_child(campaign_id, "adsets", s.name) for s in plan.ad_sets]
 
+    def _reset_stale_facts(self, exc: BaseException) -> None:
+        """ACL-2267: Meta отвергла таргетинг (по коду) - забыть термины задания из долгого кэша."""
+        try:
+            if "targeting" in _facts_cache.kinds_for_error(exc):
+                drop = getattr(self.resolver, "drop_cached", None)
+                n = drop() if drop is not None else 0
+                if n:
+                    log.info("facts cache: %s targeting entries dropped after a Meta refusal", n)
+                    from src.fb_ads_rpa import run_telemetry
+
+                    run_telemetry.record("api_facts_dropped", True, diag={"source": "api", "dropped": n,
+                                                                          "reason": "meta_refused_targeting"})
+        except Exception:  # noqa: BLE001
+            log.debug("facts cache reset failed", exc_info=True)
+
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
         self._recovery_rows = None
@@ -2598,6 +2660,7 @@ class CampaignCreator:
             out.error += self._left_in_meta(plan, out)
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
+            self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
@@ -3065,6 +3128,7 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
+            self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         out.targeting = self._targeting_report()
