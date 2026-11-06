@@ -654,7 +654,7 @@ FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "co
 FORM_NESTED: dict[str, list[str]] = {
     "privacy_policy": ["link_text", "url"],
     "thank_you_page": ["body", "button_text", "button_type", "title", "website_url"],
-    "context_card": ["button_text", "content", "style", "title"],
+    "context_card": ["button_text", "content", "cover_photo_id", "style", "title"],
     "question": ["key", "label", "options", "type"],
     "option": ["key", "value"],
 }
@@ -670,6 +670,8 @@ FORM_MAX_TEXT = 1000
 FORM_NAME_RE = r" · ACL [0-9a-f]{6}$"
 FORM_PAGE_RE = r"^[0-9]{1,25}$"
 FORM_LOCALE_RE = r"^[A-Z]{2}_[A-Z]{2}$"
+#: ACL-2188: id существующего фото Страницы в context_card. Только строка из цифр; `cover_photo` (файл) отказ.
+FORM_PHOTO_ID_RE = r"^[0-9]{1,25}$"
 FORM_URL_RE = r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$"
 #: Ключи, которых нет нигде и на любой глубине (условия, токены, обходные пути).
 FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "tos", "terms",
@@ -686,6 +688,7 @@ def policy_for_form_create(page: str = "") -> dict:
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
         "max_options": FORM_MAX_OPTIONS, "max_text": FORM_MAX_TEXT,
         "name_re": FORM_NAME_RE, "page_re": FORM_PAGE_RE, "locale_re": FORM_LOCALE_RE,
+        "photo_id_re": FORM_PHOTO_ID_RE,
         "url_re": FORM_URL_RE, "forbidden": sorted(FORM_FORBIDDEN_ANYWHERE),
     }
 
@@ -820,6 +823,10 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         content = cc.get("content")
         if not (isinstance(content, list) and content and all(isinstance(x, str) and x.strip() for x in content)):
             raise WriteRefused("write refused: context_card.content must be a list of texts")
+        if "cover_photo_id" in cc:
+            photo = cc["cover_photo_id"]
+            if not (isinstance(photo, str) and re.match(FORM_PHOTO_ID_RE, photo)):
+                raise WriteRefused("write refused: context_card.cover_photo_id must be a photo id of digits")
     return FORM_EDGE
 
 

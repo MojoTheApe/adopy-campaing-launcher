@@ -26,6 +26,13 @@ log = logging.getLogger(__name__)
 #: Поля чтения созданной формы для сверки.
 READBACK_FIELDS = "id,name,status,locale,page{id},questions{key,label,type,options}"
 
+#: ACL-2188: картинка шаблона принадлежит другой Странице - стоп на Check plan, до любой записи.
+MSG_COVER_OTHER_PAGE = ("Form template {name!r}: the background image belongs to another Page. Duplicate the "
+                        "template and choose a picture of this Page, or remove the image.")
+MSG_COVER_REFUSED = ("Meta refused the form {form_name!r} with its background image: {why}. "
+                     "Choose another picture or remove the image, then publish again.")
+MSG_COVER_UNCONFIRMED = "the background image could not be confirmed"
+
 MSG_TERMS_STOP = ("This Page has not accepted the Lead Ads terms, so the robot can't create a form. "
                   "Accept the terms for this Page in Meta (the robot never accepts them), then publish again")
 MSG_NO_PERMISSION = ("The captured Ads Manager session can't create forms on this Page "
@@ -106,11 +113,35 @@ def compare_form(tpl: dict[str, Any], page_id: str, row: dict[str, Any]) -> list
     return bad
 
 
-def refused_message(exc: Exception) -> str:
+def readback_fields(tpl: dict[str, Any] | None = None) -> str:
+    """Поля чтения созданной формы. Без картинки - прежняя строка байт в байт.
+
+    Неизвестное поле роняет всё чтение, поэтому константу не расширяем: `context_card` просим только у
+    шаблона с картинкой.
+    """
+    if tpl and tpl.get("cover_photo_id"):
+        return READBACK_FIELDS + ",context_card{cover_photo{id}}"
+    return READBACK_FIELDS
+
+
+def compare_cover(tpl: dict[str, Any], row: dict[str, Any]) -> list[str]:
+    """Картинка прочитанной формы против шаблона (отдельно от `compare_form`)."""
+    want = str(tpl.get("cover_photo_id") or "")
+    if not want:
+        return []
+    card = row.get("context_card") if isinstance(row, dict) else None
+    photo = card.get("cover_photo") if isinstance(card, dict) else None
+    got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
+    return [] if got == want else ["background image"]
+
+
+def refused_message(exc: Exception, tpl: dict[str, Any] | None = None) -> str:
     """Текст человеку, когда Meta отказала в создании формы."""
     text = str(exc)
     if _forms.mentions_terms(text):
         return MSG_TERMS_STOP
+    if tpl and tpl.get("cover_photo_id"):
+        return MSG_COVER_REFUSED.format(form_name=ft.form_name(tpl), why=text[:300])
     return MSG_REFUSED.format(why=text[:300])
 
 

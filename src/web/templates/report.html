@@ -5055,6 +5055,17 @@ async function dashRefresh(ev) {
     </div>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
+    <div id="fm-cover-box" style="margin-top:0.6rem">
+      <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
+        <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Account</div>
+          <select id="fm-cover-account" style="width:100%"></select></label>
+        <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Page</div>
+          <select id="fm-cover-page" style="width:100%"></select></label>
+        <button type="button" id="fm-cover-pages-btn" class="btn">Refresh pages</button>
+      </div>
+      <div id="fm-cover-pages-msg" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
+      <div id="fm-cover"></div>
+    </div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
       <label><input type="checkbox" id="fm-c-first_name" checked> First name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name" checked> Last name</label>
@@ -7024,6 +7035,13 @@ window.cbLayout = (function () {
     else if (headline.length > L.headline) e.push('Headline is longer than ' + L.headline + ' characters');
     if (String(t.intro || '').trim().length > L.intro) e.push('Intro is longer than ' + L.intro + ' characters');
     if (squeeze(t.intro_title).length > L.introTitle) e.push('Intro title is longer than ' + L.introTitle + ' characters');
+    /* ACL-2188: фоновая картинка - пара «фото + Страница»; зеркало form_templates.validate. */
+    var coverPhoto = squeeze(t.cover_photo_id), coverPage = squeeze(t.cover_page_id);
+    if (coverPhoto || coverPage) {
+      if (!(coverPhoto && coverPage)) e.push('Background image needs both a Photo ID and a Page');
+      else if (!(/^[0-9]{1,25}$/.test(coverPhoto) && /^[0-9]{1,25}$/.test(coverPage))) e.push('Photo ID must contain digits only');
+      if (!String(t.intro || '').trim()) e.push('Background image needs a Description (Meta shows it on the intro screen)');
+    }
     var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
     if (!chosen.length) e.push('Choose at least one contact field (name, first name, last name, email or phone)');
     if (chosen.indexOf('name') !== -1 && (chosen.indexOf('first_name') !== -1 || chosen.indexOf('last_name') !== -1))
@@ -16754,6 +16772,103 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
 
   function panelValue(panel, sel) { var el = panel.querySelector(sel); return el ? String(el.value || '') : ''; }
 
+  /* ACL-2188: выбор фоновой картинки формы - общий для вкладки Forms и панели билдера.
+     Одно чтение на нажатие «Choose from Page»: ни опроса, ни чтения при отрисовке.
+     Строки и подписи - только textContent (имена форм приходят извне); картинок на экране нет
+     (ни одного <img>: адреса Meta из дешборда не грузим). */
+  window.formCoverPicker = function (box, getContext, opts) {
+    var btnClass = (opts && opts.btnClass) || 'btn';
+    var st = { photo: '', page: '' };
+    function node(tag, text, cls) {
+      var n = document.createElement(tag);
+      if (text) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    }
+    function button(text) { var b = node('button', text, btnClass); b.type = 'button'; return b; }
+    box.textContent = '';
+    var title = node('div', 'Background image (optional)');
+    title.style.fontWeight = '600';
+    var help = node('div', 'A picture already on this Page, shown on the intro screen. To add a new one, upload it once in a form in Ads Manager.', 'cb-form-note');
+    var hint = node('div', 'Landscape pictures around 1.91:1 (for example 1200×628) usually fit best.', 'cb-form-note');
+    var state = node('div', '', 'cb-form-note');
+    var idLabel = node('label', 'Photo ID ');
+    var idInput = node('input'); idInput.type = 'text'; idInput.setAttribute('inputmode', 'numeric'); idInput.maxLength = 25;
+    idLabel.appendChild(idInput);
+    var pick = button('Choose from Page'), remove = button('Remove');
+    var actions = node('div'); actions.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.3rem 0';
+    actions.appendChild(idLabel); actions.appendChild(pick); actions.appendChild(remove);
+    var msg = node('div', '', 'cb-form-note'); msg.setAttribute('role', 'status');
+    var list = node('div');
+    [title, help, hint, state, actions, msg, list].forEach(function (n) { box.appendChild(n); });
+
+    function paint() {
+      state.textContent = st.photo ? 'Photo ' + st.photo + ', Page ' + (st.page || '—') : '';
+      if (idInput.value !== st.photo) idInput.value = st.photo;
+    }
+    idInput.addEventListener('input', function () {
+      st.photo = idInput.value.trim();
+      if (!st.photo) st.page = '';
+      else if (!st.page) st.page = String((getContext() || {}).pageId || '');
+      paint();
+    });
+    remove.addEventListener('click', function () { st.photo = ''; st.page = ''; list.textContent = ''; msg.textContent = ''; paint(); });
+    function row(p) {
+      var label = p.form_name ? 'Cover of form "' + p.form_name + '"'
+        : 'Page photo, ' + (p.width || '?') + '×' + (p.height || '?') + (p.created_time ? ', ' + String(p.created_time).slice(0, 10) : '');
+      var b = button(label + ' — ' + p.id);
+      b.style.cssText = 'display:block;margin:0.2rem 0;text-align:left';
+      b.addEventListener('click', function () { st.photo = String(p.id); st.page = String((getContext() || {}).pageId || ''); paint(); });
+      return b;
+    }
+    pick.addEventListener('click', function () {
+      var ctx = getContext() || {};
+      list.textContent = '';
+      if (!ctx.account || !ctx.pageId) { msg.textContent = 'Refresh Facebook Pages before choosing an image.'; return; }
+      if (pick.disabled) return;
+      pick.disabled = true;
+      msg.textContent = 'Reading the pictures of the Page from Meta…';
+      var body = new FormData();
+      body.append('account_label', ctx.account);
+      body.append('page_id', ctx.pageId);
+      function finish(text) { pick.disabled = false; msg.textContent = text || ''; }
+      fetch('/api/page-photos', { method: 'POST', body: body })
+        .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
+        .then(function (d) {
+          var photos = d.photos || [];
+          if (!d.ok || !photos.length) {
+            return finish(d.state === 'failed' || !d.state ? (d.message || d.error || 'The pictures could not be read')
+              : 'No pictures could be read on this Page. Paste a Photo ID, or upload a picture once in a form in Ads Manager.');
+          }
+          photos.forEach(function (p) { list.appendChild(row(p)); });
+          finish(d.truncated ? 'Showing the most recent ones. Paste a Photo ID for an older picture.' : '');
+        })
+        .catch(function () { finish('The dashboard did not answer; try again'); });
+    });
+    paint();
+    return {
+      get: function () { return { cover_photo_id: st.photo, cover_page_id: st.page }; },
+      set: function (photo, page) { st.photo = String(photo || ''); st.page = String(page || ''); list.textContent = ''; msg.textContent = ''; paint(); }
+    };
+  };
+
+  function coverContext(panel) {
+    var row = panel.closest('.cb-ad-row'), slotEl = row ? row.closest('.cb-slot') : null;
+    var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+    return {
+      account: row ? formAccount(row) : '',
+      pageId: window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '')
+    };
+  }
+  function coverOf(panel) {
+    if (!panel._cover) {
+      var box = panel.querySelector('.cb-fc-cover');
+      if (!box) return null;
+      panel._cover = window.formCoverPicker(box, function () { return coverContext(panel); }, { btnClass: 'cb-form-refresh' });
+    }
+    return panel._cover;
+  }
+
   /* Содержимое панели -> шаблон (то, что понимает сервер и cbLayout.validateTemplate). */
   window.cbFormPanelTemplate = function (panel) {
     var contacts = [];
@@ -16765,7 +16880,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       if (kind === 'multiple_choice') item.options = panelValue(q, '.cb-fc-q-options').split('\n');
       qs.push(item);
     });
-    return {
+    var cover = coverOf(panel);
+    return Object.assign({
       name: panelValue(panel, '.cb-fc-name'), headline: panelValue(panel, '.cb-fc-headline'),
       intro: panelValue(panel, '.cb-fc-intro'), intro_title: panelValue(panel, '.cb-fc-intro-title'),
       contact_fields: contacts, questions: qs,
@@ -16774,7 +16890,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
       form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
       locale: panelValue(panel, '.cb-fc-locale') || 'AUTO'
-    };
+    }, cover ? cover.get() : {});
   };
 
   window.cbFormCreateOpen = function (btn) {
@@ -16786,6 +16902,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (msg) msg.textContent = '';
     var main = row.querySelector('.cb-form-templatebox');
     if (main) main.hidden = true;
+    coverOf(panel);
   };
 
   window.cbFormCreateClose = function (btn) {
@@ -16838,6 +16955,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
       '<div class="cb-fc-questions"></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionAdd(this)">+ Add question</button></div>' +
+      '<div class="cb-fc-label cb-fc-cover"></div>' +
       '<label class="cb-fc-label">Privacy policy URL<input type="text" class="cb-input cb-fc-privacy" placeholder="https://example.com/privacy"></label>' +
       '<label class="cb-fc-label">Completion screen<textarea class="cb-input cb-fc-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you."></textarea></label>' +
       '<label class="cb-fc-label">Website link on the completion screen <span class="cb-fc-opt">(optional, https)</span><input type="text" class="cb-input cb-fc-site"></label>' +
@@ -17907,6 +18025,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   window.aclAccountOptionsFor = accountOptionsFor;
+  /* ACL-2188: все подписи аккаунтов без привязки к стране (у вкладки Forms страны нет). */
+  window.aclAllAccountLabels = function () {
+    var seen = {};
+    Object.keys(ACCOUNT_ALIAS_MAP || {}).forEach(function (c) {
+      Object.values(ACCOUNT_ALIAS_MAP[c] || {}).forEach(function (label) { if (label) seen[label] = true; });
+    });
+    return Object.keys(seen).sort();
+  };
   window.aclFindAccountRow = findAccountRow;
 
   // ── Корзинка и «Send to Builder» убраны ───────────────────────────────
@@ -22337,6 +22463,7 @@ window.aclTeamLibrary = (function () {
 (function () {
   var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
   var contactKeys = ['first_name', 'last_name', 'email', 'phone'];
+  var cover = null, coverPages = [];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -22469,8 +22596,57 @@ window.aclTeamLibrary = (function () {
     }).join('');
   }
 
+  /* ACL-2188: фоновая картинка. Аккаунт и Страница выбираются здесь, потому что у вкладки Forms
+     своего аккаунта нет; список Страниц - из кэша, с профиля только по кнопке Refresh pages. */
+  function setOptions(select, items, keep, emptyLabel) {
+    select.textContent = '';
+    var first = document.createElement('option'); first.value = ''; first.textContent = emptyLabel; select.appendChild(first);
+    items.forEach(function (it) {
+      var o = document.createElement('option'); o.value = it.value; o.textContent = it.label; select.appendChild(o);
+    });
+    if (keep && !items.some(function (it) { return it.value === keep; })) {
+      var k = document.createElement('option'); k.value = keep; k.textContent = 'Page ' + keep; select.appendChild(k);
+    }
+    select.value = keep || '';
+  }
+  function loadCoverPages(force, keep) {
+    var account = el('fm-cover-account').value, msg = el('fm-cover-pages-msg');
+    if (!account) { coverPages = []; setOptions(el('fm-cover-page'), [], keep, 'Choose a Page'); msg.textContent = ''; return; }
+    var body = new FormData();
+    body.append('account_label', account);
+    body.append(force ? 'force' : 'cached', '1');
+    msg.textContent = force ? 'Reading the Pages from Meta…' : '';
+    fetch('/api/account-pages', {method: 'POST', body: body})
+      .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
+      .then(function (d) {
+        if (el('fm-cover-account').value !== account) return;
+        coverPages = (d.pages || []).map(function (p) { return {value: String(p.id), label: (p.name || p.id) + ' (' + p.id + ')'}; });
+        var current = el('fm-cover-page').value || keep || '';
+        setOptions(el('fm-cover-page'), coverPages, current, 'Choose a Page');
+        msg.textContent = d.ok === false ? (d.message || 'The Pages could not be read') : (coverPages.length || !force ? '' : 'No Pages found for this account.');
+      })
+      .catch(function () { msg.textContent = 'The dashboard did not answer; try again'; });
+  }
+  function initCover(tpl) {
+    var labels = typeof window.aclAllAccountLabels === 'function' ? window.aclAllAccountLabels() : [];
+    var sel = el('fm-cover-account');
+    sel.textContent = '';
+    var first = document.createElement('option'); first.value = ''; first.textContent = 'Choose an account'; sel.appendChild(first);
+    labels.forEach(function (l) { var o = document.createElement('option'); o.value = l; o.textContent = l; sel.appendChild(o); });
+    coverPages = [];
+    setOptions(el('fm-cover-page'), [], tpl.cover_page_id || '', 'Choose a Page');
+    el('fm-cover-pages-msg').textContent = '';
+    if (!cover) {
+      cover = window.formCoverPicker(el('fm-cover'), function () {
+        return {account: el('fm-cover-account').value, pageId: el('fm-cover-page').value};
+      });
+    }
+    cover.set(tpl.cover_photo_id, tpl.cover_page_id);
+  }
+
   function fillEditor(tpl, title, invalidErrors) {
     tpl = tpl || {};
+    initCover(tpl);
     el('fm-name').value = tpl.name || '';
     el('fm-headline').value = tpl.headline || '';
     el('fm-intro').value = tpl.intro || '';
@@ -22521,7 +22697,7 @@ window.aclTeamLibrary = (function () {
       }),
       privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
       website_url: el('fm-site').value, locale: el('fm-locale').value || 'AUTO'
-    });
+    }, cover ? cover.get() : {});      // Remove даёт пустую пару: сервер её не хранит и убирает из записи
   }
 
   async function saveEditor() {
@@ -22545,6 +22721,13 @@ window.aclTeamLibrary = (function () {
 
   function rowById(id) { return rows.find(function (r) { return r.id === id; }); }
 
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (!t || pending) return;
+    if (t.id === 'fm-cover-account') loadCoverPages(false, '');
+    if (t.id === 'fm-cover-page' && cover && cover.get().cover_photo_id) cover.set(cover.get().cover_photo_id, t.value);
+  });
+
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (!t || !t.getAttribute || pending) return;
@@ -22552,6 +22735,7 @@ window.aclTeamLibrary = (function () {
     if (t.id === 'fm-refresh-btn') { load(false); return; }
     if (t.id === 'fm-cancel-btn') { closeEditor(); return; }
     if (t.id === 'fm-save-btn') { saveEditor(); return; }
+    if (t.id === 'fm-cover-pages-btn') { loadCoverPages(true, el('fm-cover-page').value); return; }
     if (t.id === 'fm-add-q-btn') {
       var max = (window.cbLayout && window.cbLayout.FORM_LIMITS && window.cbLayout.FORM_LIMITS.questions) || 5;
       if (questions.length >= max) { editorSay('At most ' + max + ' custom questions', true); return; }
