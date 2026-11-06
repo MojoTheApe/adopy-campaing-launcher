@@ -63,12 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha=$(git rev-parse HEAD)
-          if [ -n "$EVENT_SHA" ] && [ "$EVENT_SHA" != "$sha" ]; then
-            echo "Superseded CI event: preserve the pending request and resume its exact current-main run."
-            echo "eligible=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          sha=$(python scripts/acl_complete_delivery.py ci-source --repository "$SOURCE_REPO" --ci-run "$CI_RUN" --event-sha "$EVENT_SHA")
           mkdir -p delivery
           for attempt in $(seq 1 20); do
             set +e
@@ -193,7 +188,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve.outputs.merge_sha }}
+          ref: main
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:

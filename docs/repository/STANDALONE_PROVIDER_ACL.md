@@ -23,11 +23,17 @@ The root archive guide only forwards to its single current body under
 provider validations remain required. Native config, pause fence8, capacities,
 target and existing release behavior are unchanged. The canonical process proof
 and independent whole-outcome/import isolation assessment complete this support
-without publishing an ACL installer. Independent documentation delivery remains
-deferred until its consumer continuation is wired; the existing pending-release
-guard remains active. The project-owned adapter declaration is not selected by
-this pin. Archive storage and instruction schema2 require their separate actual
-readiness/adoption; this upgrade preserves the current outer8 state and schema1.
+without publishing an ACL installer. The pin alone selected neither the local
+declaration nor storage/policy activation. Subsequent ACL-2423 declared the exact
+existing process controls, and TT-188 activated lossless outer9 storage around
+the retained pause8 state after compatible-reader/writer and owned-idle checks.
+All original task/history and delivery records remain available.
+ACL-2424 wires the published bounded handoff wait and original-product delivery
+continuation into the local adapters, including the current-main receipt writer.
+The product checkout, original CI/target/tag, real acceptance and full CI/reuse
+proof remain separate and unchanged. Instruction schema1 is still selected;
+independent documentation delivery needs the later explicit ACL-2425 selection.
+The existing pending-release admission guard remains active until that adoption.
 
 ## Historical adoption — ACL-2156, 24 October 2026
 
