@@ -1,5 +1,6 @@
 import gzip
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -12,7 +13,15 @@ def seg(*events):
     return gzip.compress("\n".join(json.dumps(e) for e in events).encode() + b"\n")
 
 
-def ev(seq, type="job.started", stream="s1", job="j1", ts="2026-10-30T10:00:00.000+00:00", **kw):
+def ago(days):
+    """Timestamp `days` before now, in the format the store writes (relative so the 7-day window never expires)."""
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="milliseconds")
+
+
+RECENT = ago(1)  # one shared value, so events that were equal before stay equal
+
+
+def ev(seq, type="job.started", stream="s1", job="j1", ts=RECENT, **kw):
     return {"event_id": f"{stream}:{seq}", "stream_id": stream, "seq": seq, "type": type, "ts": ts,
             "machine_id": "m1", "machine": "M", "manager": "A", "flow_version": "v1", "channel": "prod",
             "job_id": job, "account": "acc", "campaign": kw.pop("campaign", "c"), "payload": kw}
@@ -83,7 +92,7 @@ def test_runs_prefers_campaign_duration_and_stop_reason(db):
 def test_runs_filters_and_old_events_dropped(db):
     ingest_segment(db, "k1", seg(
         ev(1, "publish.result", campaign_name="c"),
-        ev(2, "publish.result", job="j2", ts="2020-01-01T00:00:00.000+00:00", campaign_name="old")))
+        ev(2, "publish.result", job="j2", ts=ago(30), campaign_name="old")))
     assert sorted(r["job_id"] for r in runs(db, days=100000)) == ["j1", "j2"]
     assert [r["job_id"] for r in runs(db, days=7)] == ["j1"]
     assert runs(db, account="other") == [] and runs(db, manager="other") == []
