@@ -5,7 +5,9 @@ the incumbent route admits the actual main merge and an independent reviewer has
 classified the whole task outcome. Public Master publication authenticates the
 export closure; consumer metadata cannot authenticate itself.
 """
+import ast
 import hashlib
+import inspect
 import json
 import re
 from urllib.parse import quote
@@ -21,6 +23,185 @@ LAYOUT = {'schema_version': 1, 'repository': 'docs/repository/',
           'system': 'docs/system/', 'runtime': 'docs/runtime/', 'tools': '.workflow/tools/'}
 KIND = 'canonical-process-support'
 VERIFICATION = 'isolated-process-verification'
+RETENTION = 'artifact-retention-verification'
+GOVERNANCE = 'acl-delivery-governance'
+PROJECT = 'project-process-support'
+SETTINGS = 'project-process-settings'
+
+
+def declaration(value):
+    """A static project-owned boundary, never executable code or a path glob."""
+    if value is None:
+        return None
+    if (not isinstance(value, dict) or set(value) != {'schema_version', 'control_files', 'verification_files'}
+            or type(value.get('schema_version')) is not int or value['schema_version'] != 1):
+        raise ValueError('Project process support needs an explicit static file declaration')
+    occupied = set()
+    for key in ('control_files', 'verification_files'):
+        paths = value[key]
+        if (not isinstance(paths, list) or len(paths) > 32 or key == 'control_files' and not paths
+                or any(not isinstance(path, str) or not re.fullmatch(r'[A-Za-z0-9._/-]+', path)
+                       or not git_proof.safe_path(path) for path in paths)
+                or len(set(paths)) != len(paths) or occupied.intersection(paths)):
+            raise ValueError('Project process files must be unique exact safe paths')
+        for path in paths:
+            allowed = (path.startswith('tests/') if key == 'verification_files' else
+                       path.startswith(('scripts/', '.github/workflows/'))
+                       and not path.startswith('scripts/tracker_')
+                       and path not in ('scripts/task_tracker.py', '.github/workflows/delivery-check.yml'))
+            if not allowed:
+                raise ValueError('Project process files cannot select product, policy or canonical support paths')
+        occupied.update(paths)
+    return value
+
+
+def descriptor_declaration(value):
+    workflow = value.get('workflow', {})
+    if not isinstance(workflow, dict):
+        raise ValueError('Project workflow must be an object')
+    return declaration(workflow.get('process_support'))
+
+
+def governance_proof(request, config, before, after, before_tree, after_tree):
+    """Only previously admitted project declarations can classify adapter edits."""
+    if not all(name in before and name in after for name in ('delivery.json', 'tracker/config.json')):
+        return None
+    root = 'repos/' + config['project']['repository']
+    descriptors = [document(read(request, root, files, 'delivery.json')) for files in (before, after)]
+    selected = descriptor_declaration(descriptors[0])
+    if selected is None:
+        return None
+    if digest(descriptors[0]) != digest(descriptors[1]) or before['tracker/config.json'] != after['tracker/config.json']:
+        return None
+    if digest(document(read(request, root, before, 'tracker/config.json'))) != digest(config):
+        raise ValueError('Project process proof requires the authoritative unchanged base configuration')
+    controls, tests = set(selected['control_files']), set(selected['verification_files'])
+    changed = sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
+    if (not set(changed) & controls or any(name not in controls | tests and not git_proof.instruction_path(name) for name in changed)
+            or any(name not in before or name not in after for name in controls | tests)
+            or any(any(row and (row['type'] != 'blob' or row['mode'] != '100644')
+                       for row in (before.get(name), after.get(name))) for name in set(changed) | controls | tests)):
+        return None
+    for path in set(changed) | controls | tests:
+        for files in (before, after):
+            if path in files:
+                read(request, root, files, path)
+    # Every build, packaging, product, runtime, pin and policy entry is identical.
+    # Changed control logic still requires genuine full-scope and indirect
+    # import/build isolation review plus ordinary source/batch/main checks.
+    content = dict(schema_version=1, kind=PROJECT, repository=config['project']['repository'],
+                   declaration=selected, base_tree_sha=before_tree, tree_sha=after_tree,
+                   files=[dict(path=name, before=before.get(name), after=after.get(name)) for name in changed],
+                   unchanged_inputs_sha256=digest({name: row for name, row in before.items()
+                                                  if name not in controls | tests and not git_proof.instruction_path(name)}))
+    return dict(content, proof_sha256=digest(content))
+
+
+def instruction_version_delta(before, after):
+    if digest(before) == digest(after):
+        return False
+    if (not isinstance(before, dict) or not isinstance(after, dict)
+            or type(before.get('schema_version')) is not int or before['schema_version'] != 1
+            or type(after.get('schema_version')) is not int or after['schema_version'] != 2
+            or digest(dict(before, schema_version=2)) != digest(after)):
+        raise ValueError('Only the explicit instruction schema1-to-schema2 selection qualifies')
+    return True
+
+
+def settings_pair(before, after):
+    """Only static process declaration and instruction-version changes; no pins."""
+    old, new = document(json.dumps(before)), document(json.dumps(after))
+    old_workflow, new_workflow = old.get('workflow', {}), new.get('workflow', {})
+    selected = [descriptor_declaration(value) for value in (old, new)]
+    version = instruction_version_delta(old_workflow.get('process_instructions'), new_workflow.get('process_instructions'))
+    if digest(selected[0]) == digest(selected[1]) and not version:
+        return False
+    for workflow in (old_workflow, new_workflow):
+        workflow.pop('process_support', None)
+        if version:
+            workflow.pop('process_instructions')
+    if digest(old) != digest(new):
+        raise ValueError('Process settings cannot change other workflow or delivery choices')
+    return digest(selected[0]) != digest(selected[1]) or version
+
+
+def settings_proof(request, config, before, after, before_tree, after_tree):
+    """A separate declaration-only adoption cannot authorize code in that PR."""
+    metadata = {'delivery.json', 'tracker/config.json', BASELINE}
+    changed = sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
+    if (not set(changed) & metadata or any(name not in metadata and not git_proof.instruction_path(name)
+                                         and name != 'tracker/AGENT_WORKFLOW.md' for name in changed)
+            or any(name not in before or name not in after for name in ('delivery.json', 'tracker/config.json'))):
+        return None
+    root = 'repos/' + config['project']['repository']
+    descriptors = [document(read(request, root, files, 'delivery.json')) for files in (before, after)]
+    if not settings_pair(*descriptors):
+        return None
+    configs = [document(read(request, root, files, 'tracker/config.json')) for files in (before, after)]
+    if digest(config) not in [digest(value) for value in configs]:
+        raise ValueError('Process settings must use an exact immutable prior or selected configuration')
+    version = instruction_version_delta(configs[0].get('process_instructions'), configs[1].get('process_instructions'))
+    for descriptor, selected in zip(descriptors, configs):
+        if digest(descriptor.get('workflow', {}).get('process_instructions')) != digest(selected.get('process_instructions')):
+            raise ValueError('Instruction selection must match both immutable descriptor/config pairs')
+    if version:
+        if digest(dict(configs[0], process_instructions=configs[1]['process_instructions'])) != digest(configs[1]):
+            raise ValueError('Instruction selection cannot change other project settings')
+        for selected in configs:
+            git_proof.policy(selected)
+    elif digest(configs[0]) != digest(configs[1]):
+        raise ValueError('Process declaration cannot change project configuration')
+    for value in descriptors:
+        selected = descriptor_declaration(value)
+        for path in (selected or {}).get('control_files', []) + (selected or {}).get('verification_files', []):
+            for files in (before, after):
+                row = files.get(path)
+                if not row or row['type'] != 'blob' or row['mode'] != '100644':
+                    raise ValueError('Declared process files must already exist unchanged as regular files')
+                read(request, root, files, path)
+    if BASELINE in changed:
+        if not version:
+            raise ValueError('Project-owned declarations do not change pristine template ancestry')
+        old, new = [document(read(request, root, files, BASELINE)) for files in (before, after)]
+        if set(old) != set(new) or set(old) != {'schema_version', 'standard_revision', 'inputs', 'files'}:
+            raise ValueError('Process settings need the retained template ancestry')
+        if digest({k: v for k, v in old.items() if k not in ('inputs', 'files')}) != digest({k: v for k, v in new.items() if k not in ('inputs', 'files')}):
+            raise ValueError('Process settings cannot repin template ancestry')
+        expected_inputs = dict(old['inputs'])
+        if version:
+            if digest(expected_inputs.get('process_instructions')) != digest(configs[0]['process_instructions']):
+                raise ValueError('Retained template instruction selection differs')
+            expected_inputs['process_instructions'] = configs[1]['process_instructions']
+        if digest(new['inputs']) != digest(expected_inputs) or old['files'].keys() != new['files'].keys():
+            raise ValueError('Process settings cannot change unrelated template inputs or inventory')
+        for path in old['files']:
+            a, b = old['files'][path], new['files'][path]
+            if a == b:
+                continue
+            if path == 'delivery.json':
+                a, b = document(a), document(b)
+                if digest(descriptor_declaration(a)) != digest(descriptor_declaration(b)):
+                    raise ValueError('Project-owned declarations cannot alter pristine template content')
+                if any(digest(value.get('workflow', {}).get('process_instructions')) != digest(selected['process_instructions'])
+                       for value, selected in zip((a, b), configs)):
+                    raise ValueError('Pristine instruction selection differs from the actual selection')
+                settings_pair(a, b)
+            elif path == 'tracker/config.json':
+                a, b = document(a), document(b)
+                if (digest(a.get('process_instructions')) != digest(configs[0]['process_instructions'])
+                        or digest(dict(a, process_instructions=configs[1]['process_instructions'])) != digest(b)):
+                    raise ValueError('Process settings changed unrelated pristine configuration')
+            elif not git_proof.instruction_path(path) and path != 'tracker/AGENT_WORKFLOW.md':
+                raise ValueError('Process settings changed unrelated pristine content')
+    manifest = []
+    for path in changed:
+        for files in (before, after):
+            if path in files:
+                read(request, root, files, path)
+        manifest.append(dict(path=path, before=before.get(path), after=after.get(path)))
+    content = dict(schema_version=1, kind=SETTINGS, repository=config['project']['repository'],
+                   base_tree_sha=before_tree, tree_sha=after_tree, files=manifest)
+    return dict(content, proof_sha256=digest(content))
 
 
 def digest(value):
@@ -53,6 +234,8 @@ def read(request, root, entries, name):
 
 
 def published(request, descriptor, require_capability=False):
+    if 'workflow_provider' in descriptor:
+        return published_provider(request, descriptor, require_capability)
     selected = descriptor.get('standard', {})
     if (not isinstance(selected, dict) or set(selected) != {'repository', 'revision', 'version'}
             or selected['repository'] != 'https://github.com/' + MASTER
@@ -106,6 +289,131 @@ def published(request, descriptor, require_capability=False):
                 helpers=expected, release=release['id'])
 
 
+def provider_export(request, root, files, revision):
+    """Reconstruct the fixed published exporter as data; never execute upstream code."""
+    module = ast.parse(read(request, root, files, 'tracker/export_contract.py'))
+    functions = {n.name: n for n in module.body if isinstance(n, ast.FunctionDef)}
+    algorithms = {
+        'digest': '0b854b65fff3a246b9483923c448dabca49fa39ff421b7ca34bf22614fbc44db',
+        'forwarder': 'dbf4300fd284dbce9b06630c441f648227cbb73709813852d859d1b4eae93016',
+        'helper_files': 'e0aa07927e2f92b507ac8de2aab17a30bff313a9fd75df3b3d547ba9e5760b18',
+        'manifest_bytes': '0c649287884508fbce94185b1ec70edea3dec6315da1f5c8669c489697183e77',
+    }
+    dump_options = {'include_attributes': False}
+    #3.13 omits empty lists by default. Keep the exact incumbent goldens,
+    # using the explicit option only on runtimes that actually support it.
+    if 'show_empty' in inspect.signature(ast.dump).parameters:
+        dump_options['show_empty'] = True
+    for name, expected in algorithms.items():
+        function = functions.get(name)
+        if function is not None:
+            # Python 3.12 added this empty field to ordinary functions. Its
+            # absence on 3.9–3.11 must not reject the identical published source.
+            # Actual type parameters are a different, unsupported algorithm.
+            for node in ast.walk(function):
+                if hasattr(node, 'type_params'):
+                    if node.type_params:
+                        raise ValueError('Unsupported provider type parameters')
+                    del node.type_params
+        if function is None or hashlib.sha256(ast.dump(function, **dump_options).encode()).hexdigest() != expected:
+            raise ValueError('Unsupported official provider export algorithm: ' + name)
+    constants = {}
+    for node in module.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name = node.targets[0].id
+            if name in ('FORMAT', 'REPOSITORY', 'HELPERS'):
+                if name in constants:
+                    raise ValueError('Duplicate provider export declaration')
+                constants[name] = ast.literal_eval(node.value)
+    helpers = constants.get('HELPERS')
+    if (type(constants.get('FORMAT')) is not int or constants['FORMAT'] != 1 or constants.get('REPOSITORY') != 'MojoTheApe/task-tracker'
+            or not isinstance(helpers, dict) or not 1 <= len(helpers) <= 64
+            or any(not re.fullmatch(r'(?:task_tracker|tracker_[a-z_]+)\.py', str(name))
+                   or not git_proof.safe_path(path) or not path.endswith('.py') for name, path in helpers.items())):
+        raise ValueError('Unknown published provider helper inventory')
+    layouts = {'raw': {}, 'separated': {}}
+    for name, source in helpers.items():
+        raw = read(request, root, files, 'tracker/' + source)
+        layouts['raw']['scripts/' + name] = hashlib.sha256(raw.encode()).hexdigest()
+        if name in ('task_tracker.py', 'tracker_pr_check.py'):
+            old = 'Path(__file__).resolve().parents[1]'
+            if raw.count(old) != 1:
+                raise ValueError('Unsupported provider helper root adaptation')
+            raw = raw.replace(old, 'Path(__file__).resolve().parents[2]')
+        forwarder = ('#!/usr/bin/env python3\n'
+            '"""Compatibility entry point; shared implementation is in .workflow/tools."""\n'
+            'from pathlib import Path\nimport runpy\nimport sys\n'
+            "_tools = Path(__file__).resolve().parents[1] / '.workflow/tools'\n"
+            'sys.path.insert(0, str(_tools))\n'
+            "globals().update(runpy.run_path(str(_tools / '" + name + "'), run_name=__name__))\n")
+        layouts['separated']['.workflow/tools/' + name] = hashlib.sha256(raw.encode()).hexdigest()
+        layouts['separated']['scripts/' + name] = hashlib.sha256(forwarder.encode()).hexdigest()
+    function = functions.get('manifest')
+    if not function or len(function.body) != 2 or not isinstance(function.body[-1], ast.Return) or not isinstance(function.body[-1].value, ast.Dict):
+        raise ValueError('Unknown provider manifest producer')
+    values = function.body[-1].value
+    fields = {ast.literal_eval(k): v for k, v in zip(values.keys, values.values)}
+    expected = {'format_version', 'engine', 'runtime', 'contracts', 'ci_gate', 'ci_reuse_contexts',
+                'validator', 'retry_validator', 'route_validator', 'layouts'}
+    if set(fields) != expected or len(values.keys) != len(expected):
+        raise ValueError('Unknown provider manifest fields')
+    dynamic = dict(format_version='FORMAT', engine="{'repository': REPOSITORY, 'revision': revision}",
+                   layouts="{layout: {name: digest(raw) for name, raw in helper_files(layout).items()} for layout in ('raw', 'separated')}")
+    if any(ast.dump(fields[key]) != ast.dump(ast.parse(text, mode='eval').body) for key, text in dynamic.items()):
+        raise ValueError('Unknown provider manifest generation')
+    contract = {key: ast.literal_eval(fields[key]) for key in ('runtime', 'contracts', 'ci_gate', 'ci_reuse_contexts')}
+    contract.update(format_version=1, engine=dict(repository=constants['REPOSITORY'], revision=revision), layouts=layouts)
+    for key in ('validator', 'retry_validator', 'route_validator'):
+        value = fields[key]
+        if not isinstance(value, ast.Dict):
+            raise ValueError('Unknown provider validator declaration')
+        parts = {ast.literal_eval(k): v for k, v in zip(value.keys, value.values)}
+        path = ast.literal_eval(parts['source'])
+        if set(parts) != {'source', 'sha256'} or len(value.keys) != 2 or not git_proof.safe_path(path) or not path.startswith('tracker/'):
+            raise ValueError('Unknown provider validator')
+        expression = ast.parse('digest((SOURCE / ' + repr(path.removeprefix('tracker/')) + ').read_bytes())', mode='eval').body
+        if ast.dump(parts['sha256']) != ast.dump(expression):
+            raise ValueError('Unknown provider validator digest')
+        contract[key] = dict(source=path, sha256=hashlib.sha256(read(request, root, files, path).encode()).hexdigest())
+    if contract['runtime'] != {'engine_min_python': '3.11', 'portable_min_python': '3.9'}:
+        raise ValueError('Unknown provider runtime')
+    return contract, json.dumps(contract, sort_keys=True, indent=2) + '\n'
+
+
+def published_provider(request, descriptor, require_capability=False):
+    selected = descriptor['workflow_provider']
+    if (not isinstance(selected, dict) or set(selected) != {'schema_version', 'repository', 'revision'}
+            or type(selected['schema_version']) is not int or selected['schema_version'] != 1
+            or selected['repository'] != 'https://github.com/MojoTheApe/task-tracker'
+            or not rules.SHA.fullmatch(str(selected['revision']))):
+        raise ValueError('Use the exact official standalone provider')
+    root = 'repos/MojoTheApe/task-tracker'; revision = selected['revision']
+    files = git_proof.entries(request, root, rules.tree(request, root, revision))
+    versions = re.findall(r'(?m)^version = "(\d+\.\d+\.\d+)"$', read(request, root, files, 'pyproject.toml'))
+    if len(versions) != 1:
+        raise ValueError('Unknown provider version')
+    tag = 'v' + versions[0]
+    release = request(root + '/releases/tags/' + tag)
+    if (release.get('draft') is not False or release.get('prerelease') is not False or release.get('tag_name') != tag
+            or not release.get('published_at') or type(release.get('id')) is not int or release['id'] < 1):
+        raise ValueError('Provider is not a published stable release')
+    ref = request(root + '/git/ref/tags/' + tag)['object']
+    for _ in range(4):
+        if ref.get('type') != 'tag': break
+        ref = request(root + '/git/tags/' + ref['sha'])['object']
+    if ref.get('type') != 'commit' or ref.get('sha') != revision:
+        raise ValueError('Published provider tag differs from its selected commit')
+    reference = document(read(request, root, files, 'tracker/provider/REFERENCE.json'))
+    standard = {key: reference[key] for key in ('repository', 'revision', 'version')}
+    standard['repository'] = 'https://github.com/' + standard['repository']
+    if descriptor.get('standard') != standard:
+        raise ValueError('Retain the official provider standard ancestry')
+    contract, raw = provider_export(request, root, files, revision)
+    if require_capability and contract['contracts'].get('process_support') != [1]: return None
+    return dict(standard=standard, engine=contract['engine'], contract=contract, contract_text=raw,
+                helpers=contract['layouts']['separated'], release=release['id'], provider=selected)
+
+
 def descriptor_without_pins(value):
     result = document(json.dumps(value))
     standard = result.get('standard', {})
@@ -115,6 +423,8 @@ def descriptor_without_pins(value):
     standard.pop('revision', None)
     standard.pop('version', None)
     tracker.pop('revision', None)
+    if isinstance(result.get('workflow_provider'), dict):
+        result['workflow_provider'].pop('revision', None)
     return result
 
 
@@ -148,6 +458,12 @@ def classify(request, config, pr):
     before_tree, after_tree = rules.tree(request, root, base), rules.tree(request, root, head)
     before = git_proof.entries(request, root, before_tree)
     after = git_proof.entries(request, root, after_tree)
+    settings = settings_proof(request, config, before, after, before_tree, after_tree)
+    if settings:
+        return settings
+    governance = governance_proof(request, config, before, after, before_tree, after_tree)
+    if governance:
+        return governance
     changed = sorted(name for name in set(before) | set(after) if before.get(name) != after.get(name))
     # Avoid upstream lookups for ordinary application work or legacy repositories.
     bridge = {'delivery.json', 'tracker/engine.json', 'tracker/export-contract.json', BASELINE}
@@ -200,7 +516,13 @@ def classify(request, config, pr):
             text = baseline['files'].get(name)
             if not isinstance(text, str) or hashlib.sha256(text.encode()).hexdigest() != expected:
                 raise ValueError('Template helper ancestry differs from the published canonical closure')
-    if digest(old_base['inputs']) != digest(new_base['inputs']):
+        if selected.get('provider') and baseline['inputs'].get('workflow_provider') != selected['provider']:
+            raise ValueError('Template inputs differ from the published provider identity')
+    def inputs(value):
+        result = document(json.dumps(value))
+        if isinstance(result.get('workflow_provider'), dict): result['workflow_provider'].pop('revision', None)
+        return result
+    if digest(inputs(old_base['inputs'])) != digest(inputs(new_base['inputs'])):
         return None
     def allowed(name, old_text, new_text):
         if name in new['helpers'] or name in old['helpers']:
@@ -219,6 +541,9 @@ def classify(request, config, pr):
                     and a.get('tracker', {}).get('revision') == old['engine']['revision']
                     and b.get('tracker', {}).get('revision') == new['engine']['revision'])
         if name == '.github/workflows/delivery-check.yml':
+            if old.get('provider') and new.get('provider'):
+                a, b = old['provider']['revision'], new['provider']['revision']
+                return old_text is not None and new_text is not None and old_text.count(a) == 1 and old_text.replace(a, b) == new_text
             return old_text is not None and new_text is not None and pin_workflow(old_text, new_text, old['standard']['revision'], new['standard']['revision'])
         return all(text is None or instructions(name, text) for text in (old_text, new_text))
     for name in set(old_base['files']) | set(new_base['files']):
@@ -361,7 +686,7 @@ def completion(request, config, state, pr, admission, numbers, review=None):
     root = 'repos/' + config['project']['repository']
     if rules.pr_tree(request, root, pr) != proof['tree_sha']:
         raise ValueError('Actual support merge includes unreviewed content')
-    return dict(schema_version=1, kind=KIND, route='process-support', policy=rules.fingerprint(config),
+    return dict(schema_version=1, kind=proof['kind'], route='process-support', policy=rules.fingerprint(config),
                 tree_sha=proof['tree_sha'], main_sha=rules.merge_base(request, root, pr),
                 support_proof=proof, proof_sha256=proof['proof_sha256'], review_sha256=digest(review),
                 admission=admission, issue_scopes=scopes, assessment=review['process_support'])
@@ -584,9 +909,7 @@ def verified_run(api, proof, source, supplied):
 
 def record_verification(api, config, store, number, value, apply=False):
     """Supplemental delivery assessment; does not acquire or rewrite source review."""
-    import copy
-    from . import pr_checks, export_contract
-    from .sync import now
+    from . import export_contract
     # A newer source checkout cannot activate this capability for an older
     # consumer. Its real current-main selection must identify a published pair
     # authenticating these exact portable semantics before any state mutation.
@@ -599,6 +922,17 @@ def record_verification(api, config, store, number, value, apply=False):
             or read(api.request, api.root, entries, 'tracker/export-contract.json') != selected['contract_text']
             or export_contract.manifest_bytes(selected['engine']['revision']).decode() != selected['contract_text']):
         raise ValueError('Adopt the exact published compatible isolated-verification support before recording process completion')
+    return record_outcome(api, config, store, number, value, apply)
+
+
+def record_outcome(api, config, store, number, value, apply=False, *,
+                   proof_factory=verification_proof, run_factory=verified_run,
+                   kind=VERIFICATION, evidence_kind='independent-process-verification',
+                   current_check=None, authority=None):
+    """Shared post-main guards, called only after the route's own authentication."""
+    import copy
+    from . import pr_checks
+    from .sync import now
     state, sha = store.read(optional=True)
     rules.completion_state(state, config)
     checked = pr_checks.check(api.request, config, number, allow_transition=True, admission=True)
@@ -628,32 +962,112 @@ def record_verification(api, config, store, number, value, apply=False):
     from . import acceptance
     if acceptance.criteria(issue.get('body')):
         acceptance.verify(api, config, store, issue, [number])
-    proof = verification_proof(api.request, config, pr)
+    proof = proof_factory(api.request, config, pr)
     if not proof:
         raise ValueError('This is not a supported isolated manual verification candidate')
+    if current_check is not None:
+        current_check(api, config, proof)
     authors = {original.get('implementer')}
     task = (state.get('execution') or {}).get('tasks', {}).get(str(issue_number), {})
     authors.add(task.get('worker'))
     authors.update(w.get('actor') for w in task.get('implementers', []))
     if (not isinstance(value, dict) or set(value) != {'kind', 'reviewer', 'implementer', 'report', 'process_support', 'workflow_run'}
-            or value.get('kind') != 'independent-process-verification'
+            or value.get('kind') != evidence_kind
             or not isinstance(value.get('reviewer'), str) or not value['reviewer'].strip()
             or len(value['reviewer']) > 256
             or value.get('implementer') != original.get('implementer') or value['reviewer'] in authors
             or not isinstance(value.get('report'), str) or not value['report'].strip() or len(value['report']) > 32768
             or not valid_assessment(value.get('process_support'), assessment(proof, scopes))):
         raise ValueError('An actual independent assessor must verify the exact immutable proof and whole original outcome')
-    run = verified_run(api, proof, source, value['workflow_run'])
-    verification = dict(schema_version=1, kind=VERIFICATION, route='process-support', policy=row['policy'],
+    previous = row.get('verification', {})
+    if (kind == RETENTION and row.get('process') and row.get('state') == 'verified'
+            and rules.summary(row).get('verified') and previous.get('kind') == kind
+            and previous.get('support_proof') == proof and previous.get('supplemental_review') == value):
+        # A real verified receipt is durable after temporary artifacts expire.
+        # Revalidate authority, accepted scope and current setting, then retain
+        # the original evidence verbatim; never replace it with a new run.
+        return dict(applied=False, already_recorded=True, issues=numbers, result='process-verified')
+    run = run_factory(api, proof, source, value['workflow_run'])
+    verification = dict(schema_version=1, kind=kind, route='process-support', policy=row['policy'],
         tree_sha=source['tree_sha'], main_sha=rules.merge_base(api.request, api.root, pr), support_proof=proof,
         proof_sha256=proof['proof_sha256'], review_sha256=digest(value), admission=admission, issue_scopes=scopes,
         assessment=value['process_support'], supplemental_review=copy.deepcopy(value), workflow_run=run)
+    if authority is not None:
+        verification['operator_authority'] = copy.deepcopy(authority)
     if row.get('process') and row.get('state') == 'verified' and row.get('verification') == verification:
         return dict(applied=False, already_recorded=True, issues=numbers, result='process-verified')
     if row.get('state') != 'pending' or row.get('verification') or row.get('process'):
         raise ValueError('Only the original pending process outcome can be completed; preserve other delivery results')
     if apply:
+        if current_check is not None:
+            current_check(api, config, proof)
         row.setdefault('history', []).append({k: copy.deepcopy(v) for k, v in row.items() if k != 'history'})
         row.update(state='verified', process=True, verification=verification, verified_at=now())
         store.write(state, sha)
     return dict(applied=apply, issues=numbers, result='process-verified')
+
+
+def valid_retention_receipt(proof, sources):
+    """Portable conservative reader; never executes the source-only operator."""
+    canonical = proof.get('support_proof') or {}
+    native = proof.get('workflow_run') or {}
+    extra = proof.get('supplemental_review') or {}
+    authority = proof.get('operator_authority') or {}
+    if not all(isinstance(v, dict) for v in (canonical, native, extra, authority)) or len(sources) != 1:
+        return False
+    artifact = native.get('artifact') or {}
+    upload = canonical.get('upload') or {}
+    if not isinstance(artifact, dict) or not isinstance(upload, dict) or set(authority) != {'operator', 'selected_provider'}:
+        return False
+    for key in ('operator', 'selected_provider'):
+        identity = authority[key]
+        if (not isinstance(identity, dict) or identity.get('repository') != 'MojoTheApe/task-tracker'
+                or not isinstance(identity.get('revision'), str) or not rules.SHA.fullmatch(identity['revision'])
+                or not re.fullmatch(r'\d+\.\d+\.\d+', str(identity.get('version', '')))
+                or type(identity.get('release')) is not int or identity['release'] < 1
+                or not re.fullmatch(r'[a-f0-9]{64}', str(identity.get('export_sha256', '')))):
+            return False
+    if any(not re.fullmatch(r'[a-f0-9]{64}', str(authority['selected_provider'].get(k, '')))
+           for k in ('descriptor_sha256', 'config_sha256')):
+        return False
+    from datetime import datetime
+    try:
+        created, expires = [datetime.strptime(artifact[k], '%Y-%m-%dT%H:%M:%SZ') for k in ('created_at', 'expires_at')]
+        if (type(upload.get('days')) is not int or not 1 <= upload['days'] <= 90
+                or abs((expires-created).total_seconds() - upload['days']*86400) > 60):
+            return False
+    except (KeyError, TypeError, ValueError):
+        return False
+    origin = artifact.get('workflow_run')
+    if (not isinstance(origin, dict) or origin.get('id') != native.get('id')
+            or origin.get('head_sha') != native.get('head_sha') or origin.get('head_branch') != native.get('head_branch')
+            or origin.get('repository_id') != native.get('repository_id')
+            or origin.get('head_repository_id') != native.get('head_repository_id')):
+        return False
+    return (all(type(native.get(k)) is int and native[k] > 0
+                for k in ('id', 'attempt', 'job_id', 'step_number', 'run_number', 'repository_id', 'head_repository_id'))
+        and native.get('result') == 'passed' and native.get('head_sha') in (sources[0]['merge_sha'], canonical.get('head_sha'))
+        and native.get('event') in ('pull_request', 'push')
+        and re.fullmatch(r'[\w.-]+/[\w.-]+', str(native.get('repository', ''))) is not None
+        and isinstance(canonical.get('head_sha'), str) and bool(rules.SHA.fullmatch(canonical['head_sha']))
+        and native.get('path') == canonical.get('workflow') and native.get('workflow_blob') == canonical.get('workflow_blob')
+        and isinstance(native.get('jobs'), list) and bool(native['jobs']) and native['jobs'] == canonical.get('jobs')
+        and native.get('step_number') == upload.get('step_number')
+        and native.get('tested_tree_sha') == canonical.get('tree_sha') == sources[0]['tree_sha']
+        and all(re.fullmatch(r'[a-f0-9]{40}', str(native.get(k, ''))) is not None
+                for k in ('checkout_sha', 'checkout_action_sha'))
+        and re.fullmatch(r'[a-f0-9]{40}', str(native.get('action_sha', ''))) is not None
+        and re.fullmatch(r'[a-f0-9]{64}', str(native.get('upload_log_sha256', ''))) is not None
+        and type(artifact.get('id')) is int and artifact['id'] > 0
+        and type(artifact.get('size_in_bytes')) is int and artifact['size_in_bytes'] > 0
+        and isinstance(upload.get('artifact_name'), str)
+        and artifact.get('name') == upload['artifact_name'].replace('${{ github.run_number }}', str(native.get('run_number')))
+        and re.fullmatch(r'sha256:[a-f0-9]{64}', str(artifact.get('digest', ''))) is not None
+        and all(re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', str(artifact.get(k, '')))
+                for k in ('created_at', 'expires_at'))
+        and extra.get('kind') == 'independent-artifact-retention'
+        and isinstance(extra.get('reviewer'), str) and bool(extra['reviewer'].strip())
+        and isinstance(extra.get('implementer'), str) and bool(extra['implementer'].strip())
+        and extra['reviewer'] != extra['implementer']
+        and extra.get('workflow_run') == {'id': native['id'], 'attempt': native['attempt'], 'artifact_id': artifact['id']}
+        and extra.get('process_support') == proof.get('assessment') and digest(extra) == proof.get('review_sha256'))
