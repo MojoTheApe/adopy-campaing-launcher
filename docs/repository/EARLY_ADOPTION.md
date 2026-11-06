@@ -76,6 +76,13 @@ the old operative866 instructions below describe ACL-1987's original source path
 
 ## Pause readiness and live boundary
 
+ACL-2414 completed this live boundary on 5 November 2026 using selected
+Tracker3.24.1 and the actually deployed Tracker3.25.0 reader. The maintained idle
+activation and same-owner maintenance resume succeeded. Five existing source
+approvals, their heads, 4,677 prior history entries and all delivery receipts
+were preserved. The source-preparation limitations below describe the earlier
+ACL-2026 handoff. See [current operation](TASK_PAUSE.md) and [history](CHANGELOG.md).
+
 The cumulative ACL-2026 source supplies compatible commands and the complete
 portable helper closure. It does not activate outer8, resume a stopped agent,
 stop foreign owners, select a new optional policy or publish an ACL product.
