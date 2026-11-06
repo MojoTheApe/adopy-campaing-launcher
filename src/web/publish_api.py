@@ -926,13 +926,17 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
         pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
-        for draft in drafts:
-            if draft.errors:
-                out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
-                out.error, out.stop_kind = "; ".join(draft.errors), "plan"
-                results.append(dry_run_result(out))
-                continue
-            results.append(pub.publish_draft(draft))
+        try:
+            for draft in drafts:
+                if draft.errors:
+                    out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
+                    out.error, out.stop_kind = "; ".join(draft.errors), "plan"
+                    results.append(dry_run_result(out))
+                    continue
+                results.append(pub.publish_draft(draft))
+        finally:
+            # ACL-2267: что взято из долгого кэша фактов и что выброшено (только числа, без терминов).
+            _record_facts(pub._resolver)
         if client.writes:
             raise _PlanReadContractError("Check plan must not write")
         if session_info is not None:   # ACL-2266: итог сессии для кэша вердиктов и телеметрии
@@ -949,6 +953,14 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
             sess.keep_convenience = _keep_profiles_open()
     return results
+
+
+def _record_facts(resolver: Any) -> None:
+    try:
+        stats = resolver.facts_stats()
+    except Exception:  # noqa: BLE001 — телеметрия не меняет ответ проверки
+        return
+    _record("api_plan_facts", True, diag={"facts": stats})
 
 
 class _PlanFlight:
