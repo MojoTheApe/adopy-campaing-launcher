@@ -1,5 +1,18 @@
 # Portable export contract 1
 
+## Optional lossless state archives — TT-188
+
+The prepared source adds one shared `tracker_state_archive.py` implementation:
+15raw/30separated helpers, contract1 and the actual Python3.9 runtime floor.
+`state_archive:[1]` advertises optional outer9 support. Native, receipt, admission
+and immutable CI readers restore complete logical state before existing checks;
+the sole portable receipt writer uses the same snapshot-bound encoder. Old
+formats/defaults remain unchanged. Compatible reader installation and all-writer
+consumer adoption precede separately owned idle activation. See
+[archive semantics and activation](STATE_ARCHIVE.md). The source reader inventory
+is maintained in `docs/implementation/TT188_ARCHIVE.md`. Older counts below describe
+their dated releases rather than the current prepared closure.
+
 ## One selection-task record — TT-203
 
 The3.13.1 source candidate adds `selection_task_fragment:[1]`, keeping contract1,

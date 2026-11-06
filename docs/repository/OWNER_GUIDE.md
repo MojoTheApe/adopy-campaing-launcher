@@ -1,5 +1,9 @@
 # ACL: requesting work and reading the Tracker
 
+Phase-preserving Pause is active in ACL from 5 November 2026. A confirmed stop
+keeps the task at its current stage and releases that executor's place. Resume
+continues the same task through the supported commands.
+
 Use the ACL board to see tasks and their recorded progress. GitHub keeps the
 original task, proposed change, review and result. Master Repo provides shared
 instructions; agents follow those instructions and ACL's existing local workflow.
