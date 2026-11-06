@@ -1,5 +1,16 @@
 # System history
 
+## ACL-2267 — Check plan remembers resolved targeting for 60 days — 2026-11-02
+
+Countries, audience languages and library terms that Meta matched exactly are now remembered on the
+machine for 60 days (`facts_cache.json` next to the machine config; `ACL_FACTS_CACHE_DAYS`, `0` turns it
+off), so a repeated check, or the first check of another account, does not search for them again.
+Interest ids from this cache are still confirmed by Meta on every check in the same batch that
+already runs; an id Meta rejects is dropped and the term is searched again, so a removed interest never
+fails the check. The ad account, pixels, Pages, currency and timezone are always read fresh, and an
+answer without an account id now counts as a different account. "Clear" on a term in Check plan
+forgets it in both caches. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1267).
+
 ## ACL-2084 — Square file in the Stories / Reels slot — 2026-11-04
 
 The Stories / Reels file may now be 9:16 or 1:1 (images and videos); the main file stays 1:1 or 4:5, so
