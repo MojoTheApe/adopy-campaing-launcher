@@ -6582,12 +6582,15 @@ def _targeting_gate() -> JSONResponse | None:
 
 @app.get("/targeting-resolver/cache")
 async def targeting_resolver_cache() -> JSONResponse:
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
-    return JSONResponse({"entries": ConfirmedStore().entries()})
+    try:
+        return JSONResponse({"entries": ConfirmedStore().entries()})
+    except ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
 
 
 @app.post("/targeting-resolver/confirm")
@@ -6609,6 +6612,8 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
         # Имя и состав берутся у кандидата, который показал сервер, а не из запроса.
         row = tr.ConfirmedStore().put(term, id=cand["id"], type=cand["type"], name=cand["name"],
                                       picks=cand.get("picks"))
+    except tr.ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _drop_plan_verdicts("targeting_confirm")
@@ -6618,21 +6623,24 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
 @app.post("/targeting-resolver/clear")
 async def targeting_resolver_clear(request: Request) -> JSONResponse:
     """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
     body = await _targeting_body(request)
     store = ConfirmedStore()
-    if body.get("all") is True:
-        removed = store.clear()
-        _drop_plan_verdicts("targeting_clear")
-        return JSONResponse({"ok": True, "removed": removed})
-    term = str(body.get("term") or "")
-    if not term.strip():
-        return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
-    removed = 1 if store.remove(term) else 0
+    try:
+        if body.get("all") is True:
+            removed = store.clear()
+            _drop_plan_verdicts("targeting_clear")
+            return JSONResponse({"ok": True, "removed": removed})
+        term = str(body.get("term") or "")
+        if not term.strip():
+            return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+        removed = 1 if store.remove(term) else 0
+    except ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     _drop_plan_verdicts("targeting_clear")
     return JSONResponse({"ok": True, "removed": removed})
 
