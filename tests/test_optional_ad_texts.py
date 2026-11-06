@@ -32,3 +32,23 @@ def test_missing_texts_only_warn():
         "budget": 10, "age_min": 18, "age_max": 65, "ads": ads})}
     assert got["primary_text"]["status"] == pf.WARNING and got["headline"]["status"] == pf.WARNING
     assert not any(v["status"] == pf.ERROR for v in got.values())
+
+
+def test_text_free_ad_gives_no_error():
+    ads = [{"name": "a", "file": "x.jpg", "cta": "LEARN_MORE"}]
+    got = {v["rule"]: v for v in pf.evaluate_client({
+        "destination": "website", "objective": "leads", "link": "https://e.com/?a=1", "country": "US",
+        "budget": 10, "age_min": 18, "age_max": 65, "ads": ads})}
+    assert got["feed_texts"]["status"] == pf.OK
+    assert not any(v["status"] == pf.ERROR for v in got.values())
+
+
+@pytest.mark.parametrize("missing", ["bodies", "titles"])
+def test_policy_still_refuses_a_feed_without_bodies_or_titles(missing):
+    """Решение D3 (ACL-2403): пока Meta не проверена вживую, лента без текстов отклоняется - и правило `feed_texts` предупреждает об этом заранее."""
+    from src.fb_api import write_policy as wp
+    spec = {"bodies": [{"text": "B"}], "titles": [{"text": "H"}], "images": [{"hash": "h"}]}
+    spec[missing] = []
+    creative = {"object_story_spec": {"page_id": "1"}}
+    with pytest.raises(wp.WriteRefused, match=missing):
+        wp._check_asset_feed(spec, creative)

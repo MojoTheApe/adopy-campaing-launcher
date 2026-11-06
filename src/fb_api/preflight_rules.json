@@ -479,6 +479,20 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
+      "hint": "an ad with several texts or a Stories / Reels file needs a primary text and a headline; add them, or use one text and one file",
+      "id": "feed_texts",
+      "label": "Several texts or a Stories / Reels file need a primary text and a headline",
+      "severity": "error",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
       "hint": "after 125 characters the text is folded behind 'See more'",
       "id": "primary_len",
       "label": "Text visible in full (up to 125)",

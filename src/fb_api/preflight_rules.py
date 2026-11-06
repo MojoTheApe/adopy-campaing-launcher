@@ -108,6 +108,7 @@ _TOPIC_OF = {
     "primary_text": "creative",
     "headline": "creative",
     "headline_len": "creative",
+    "feed_texts": "creative",
     "primary_len": "creative",
     "cta_allowed": "creative",
     "budget_set": "budget",
@@ -218,6 +219,9 @@ RULES: list[dict[str, Any]] = [
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("feed_texts", "Several texts or a Stories / Reels file need a primary text and a headline", ERROR, "client",
+       "an ad with several texts or a Stories / Reels file needs a primary text and a headline; "
+       "add them, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_len", "Text visible in full (up to 125)", WARNING, "client",
        "after 125 characters the text is folded behind 'See more'",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -288,6 +292,18 @@ def load_json() -> dict[str, Any]:
 def _multi_text(a: dict) -> bool:
     """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
     return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
+
+
+def _feed_missing_text(a: dict) -> bool:
+    """Объявление пойдёт через asset feed (несколько текстов или вертикальный файл), а основного текста или заголовка нет.
+
+    write_policy._check_asset_feed всё равно откажет такому фиду до первой записи; правило переносит отказ в Check plan (ACL-2403).
+    """
+    if not (_multi_text(a) or _s(a.get("vertical_file"))):
+        return False
+    has_body = bool(_s(a.get("body"))) or bool(_distinct(a.get("bodies")))
+    has_title = bool(_s(a.get("headline"))) or bool(_distinct(a.get("headlines")))
+    return not (has_body and has_title)
 
 
 def _s(v: Any) -> str:
@@ -431,6 +447,8 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline")), WARNING))
         elif rid == "headline_len":
             out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
+        elif rid == "feed_texts":
+            out.append(_per_ad(rid, inp, lambda a, st: _feed_missing_text(a)))
         elif rid == "primary_len":
             out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
