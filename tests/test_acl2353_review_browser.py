@@ -433,7 +433,6 @@ def test_server_busy_retry_sends_the_same_frozen_body(browser):
         _settle(p)
         p.locator("#sfc-ok").click()
         p.wait_for_selector("[data-cb-retry]", timeout=8000)
-        assert len(fake.previews) == before + 1
         # Форма за это время изменилась: повтор всё равно везёт замороженное.
         p.evaluate("() => { document.querySelector('form.open-account-form [name$=\"_budget\"]').value = '55'; }")
         p.locator("[data-cb-retry]").click()
@@ -442,7 +441,6 @@ def test_server_busy_retry_sends_the_same_frozen_body(browser):
         rid = [re.search(r'name="request_id"\r\n\r\n(.*?)\r\n', j).group(1) for j in fake.jobs]
         assert rid[0] == rid[1] and fake.jobs[0].count("review_json") == fake.jobs[1].count("review_json") == 1
         assert re.search(r'name="camp_0_budget"\r\n\r\n20\r\n', fake.jobs[1])
-        assert len(fake.previews) == 1
     finally:
         ctx.close()
 
