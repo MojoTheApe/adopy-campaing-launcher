@@ -293,7 +293,11 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         p.locator(".cbd-publish-all").click()
         p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"page_ok\"]').classList.contains('cbd-pf-error')")
         assert state["plan_posts"] == 2
-        assert p.locator("#sfc-ok").count() == 0, "окно подтверждения открылось при серверной ошибке"
+        # ACL-2353: окно ревью открывается всегда; кампания с ошибкой кабинета в нём не создаётся, Confirm выключен.
+        p.wait_for_function("() => window.cbReview.model() && !window.cbReview.model().checking")
+        assert "Will not be created (1)" in p.locator("#safe-confirm-modal").inner_text()
+        assert p.locator("#sfc-ok").is_disabled()
+        assert "Nothing can be created" in p.locator("#safe-confirm-modal").inner_text()
         assert not state["errors"], state["errors"]
     finally:
         state["ctx"].close()
