@@ -81,11 +81,15 @@ _SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 # ── Google Sheets helpers ──────────────────────────────────────────────────────
 
-def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout_seconds: Optional[int] = None):
+def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout_seconds: Optional[int] = None,
+                                login_hint: str = ""):
     """Create Google Sheets API service via OAuth2 user login.
 
     First run: opens browser so the user logs in with their Google account.
     Subsequent runs: reuses saved token automatically.
+
+    `login_hint` (ACL-1242): the work email already signed in to the dashboard, so Google
+    skips the account chooser and the second browser tab is one click.
     """
     try:
         import google.auth.transport.requests
@@ -141,7 +145,8 @@ def _build_sheets_service_oauth(oauth_client_path: str, token_path: str, timeout
                 file=sys.stderr,
             )
             flow = InstalledAppFlow.from_client_secrets_file(str(client_path), _SCOPES)
-            creds = flow.run_local_server(port=0, timeout_seconds=timeout_seconds)
+            extra = {"login_hint": login_hint} if login_hint else {}
+            creds = flow.run_local_server(port=0, timeout_seconds=timeout_seconds, **extra)
 
         # Save token for future runs
         token_file.parent.mkdir(parents=True, exist_ok=True)

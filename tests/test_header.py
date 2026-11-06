@@ -34,7 +34,8 @@ def test_the_manager_is_not_part_of_the_product_name():
     h = _header()
     brand = h[h.index('class="head-meta"'): h.index("</dl>", h.index('class="brand-meta"'))]
     assert "my_cm" not in brand, "имя менеджера вернулось под логотип"
-    assert "Logged as" in h, "исчезла подпись у выбора менеджера"
+    assert "Viewing" in h and "Logged as" not in h, "подпись у выбора менеджера должна быть Viewing (ACL-1242, D6)"
+    assert 'id="identity-chip"' in h, "исчезла плашка «Signed in as»"
     assert ">Buyer<" not in h, "вернулась подпись Buyer"
 
 

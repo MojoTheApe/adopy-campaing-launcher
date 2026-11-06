@@ -38,6 +38,7 @@
     box.innerHTML = '<div style="background:var(--bg-elev,#fff);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:1.1rem 1.2rem;width:min(32rem,92vw)">'
       + '<h3 style="margin:0 0 .5rem">Connections</h3>'
       + '<p style="margin:0 0 .7rem;color:var(--muted);font-size:var(--adopy-text-sm)">Sign in with your Adopy Google account. ACL reads the team connection file shared with you and saves the settings on this computer only. Nothing is shown or pasted.</p>'
+      + '<div id="cx-identity"></div>'
       + '<ul id="cx-lines" style="list-style:none;padding:0;margin:0 0 .6rem"></ul>'
       + '<p id="cx-msg" role="status" style="min-height:1.4em;margin:.4rem 0"></p>'
       + '<div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">'
@@ -81,6 +82,8 @@
     box.querySelector('#cx-go').onclick = function () { run('/api/connections/sign-in', 'Waiting for Google sign-in in your browser…'); };
     box.querySelector('#cx-check').onclick = function () { run('/api/connections/check', 'Checking…'); };
     box.querySelector('#cx-publish').onclick = publish;
+    // ACL-1242: действия входа Google (Sign in / Sign out / Change name) из identity.js.
+    if (window.aclIdentity && window.aclIdentity.mountActions) window.aclIdentity.mountActions(box.querySelector('#cx-identity'));
     run('/api/connections/check', 'Checking…');
   }
 

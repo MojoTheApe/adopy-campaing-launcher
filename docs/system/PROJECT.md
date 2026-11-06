@@ -225,7 +225,7 @@ Initial stage `09eb8af` passed CI 35603056418 and installer 35603056536; its rep
 verifies the exact source/tree, actual installed executable, all shortcuts and
 unchanged synthetic data. Changed activation content requires its own stage report.
 These results do not verify the published release/download channel or the deferred
-live Multilogin pilot. Company Google sign-in remains ACL-1242 and part of ACL-1239's scope;
+live Multilogin pilot. Company Google sign-in is built under ACL-1242 (identity label, no gate; live check pending) and remains part of ACL-1239's scope;
 shared-library provisioning remains ACL-1241. Do not mark either parent complete
 because its code exists. Media reuse remains governed by its explicit feature flags
 and outstanding acceptance, not by adoption.

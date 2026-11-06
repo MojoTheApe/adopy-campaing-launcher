@@ -158,9 +158,72 @@ def build_bi_setup(*, campaign_manager_name: str,
 
 CONNECTION_FILE_LABEL = "Team connection file"
 
+def identity_sign_in(config_directory: str | Path, *, sign_in: Callable | None = None) -> dict:
+    """ACL-1242: вход рабочим аккаунтом Google (отдельный грант, только имя и почта).
+
+    Работает с папкой настроек этого мастера. Возвращает ответ ``google_identity.sign_in``
+    (``ok``, ``message``, ``identity``) и не бросает: сбой — это просто ``ok: False``.
+    """
+    from src.analysis_agent import google_identity as gi
+
+    previous = os.environ.get("ACL_CONFIG_DIR")
+    os.environ["ACL_CONFIG_DIR"] = str(config_directory)
+    try:
+        gi.reset_cache()
+        try:
+            return (sign_in or gi.sign_in)()
+        except Exception:
+            return {"ok": False, "reason": "failed", "message": gi.MESSAGES["failed"]}
+    finally:
+        if previous is None:
+            os.environ.pop("ACL_CONFIG_DIR", None)
+        else:
+            os.environ["ACL_CONFIG_DIR"] = previous
+        gi.reset_cache()
+
+
+def identity_name_seed(identity: dict | None, known: list[str] | None = None) -> str:
+    """Имя для поля «Your name»: из claim ``name`` Google, ближайшее к списку CM, если он есть."""
+    claim = str((identity or {}).get("name") or "").strip()
+    if not claim:
+        return ""
+    if known:
+        close = similar_names(claim, known)
+        if close:
+            return close[0]
+    return claim
+
+
+def bind_identity_name(config_directory: str | Path, name: str, *, binder: Callable | None = None) -> bool:
+    """ACL-1242: привязать подтверждённое имя CM к вошедшему (identity.json и MY_CM_NAME вместе).
+
+    Ничего не делает, если вход не выполнялся. Имя уже проверено по книге или BI, поэтому
+    ``cm_checked=True``. Сбой привязки установку не останавливает: имя можно сменить в дешборде.
+    """
+    from src.analysis_agent import google_identity as gi
+
+    previous = os.environ.get("ACL_CONFIG_DIR")
+    os.environ["ACL_CONFIG_DIR"] = str(config_directory)
+    try:
+        gi.reset_cache()
+        if gi.current().state not in gi.ATTACHED_STATES:
+            return False
+        try:
+            (binder or gi.set_name)(name, cm_checked=True)
+            return True
+        except Exception:
+            return False
+    finally:
+        if previous is None:
+            os.environ.pop("ACL_CONFIG_DIR", None)
+        else:
+            os.environ["ACL_CONFIG_DIR"] = previous
+        gi.reset_cache()
+
+
 
 def connect_with_google(config_directory: str | Path, *, sign_in: Callable | None = None,
-                        checks: Callable | None = None) -> list[ReadinessCheck]:
+                        checks: Callable | None = None, login_hint: str = "") -> list[ReadinessCheck]:
     """Sign in with the employee's Google account, save the team connection settings
     on this machine only (never the checkout), then run one check per connection.
 
@@ -172,7 +235,7 @@ def connect_with_google(config_directory: str | Path, *, sign_in: Callable | Non
     os.environ["ACL_CONFIG_DIR"] = str(config_directory)
     try:
         try:
-            (sign_in or cs.sign_in)()
+            (sign_in or (lambda: cs.sign_in(login_hint=login_hint)))()
         except cs.SettingsError as exc:
             return [ReadinessCheck(CONNECTION_FILE_LABEL, False, str(exc))]
         return [ReadinessCheck(c["name"], bool(c["ok"]), c["line"]) for c in (checks or cs.check_connections)()]
@@ -393,6 +456,7 @@ class SetupWizard:
     STEPS = (
         "Welcome",
         "System check",
+        "Sign in",
         "Connections",
         "Your name",
         "Local files",
@@ -420,6 +484,9 @@ class SetupWizard:
         self.status = tk.StringVar()
         self.connection_lines: list[ReadinessCheck] = []
         self.bi_connected = False
+        # ACL-1242: вошёл ли менеджер на шаге «Sign in» и нажал ли «Not now».
+        self.identity: dict | None = None
+        self.identity_skipped = False
 
         root.title("Adopy Campaign Manager Setup")
         # 590 точек в высоту резали низ окна вместе с кнопкой «Next», и
@@ -499,6 +566,7 @@ class SetupWizard:
         renderers: tuple[Callable[[], None], ...] = (
             self._welcome,
             self._system,
+            self._sign_in_identity,
             self._connections,
             self._identity,
             self._files,
@@ -527,10 +595,71 @@ class SetupWizard:
                 color="#17663a" if check.ok else "#9b1c1c",
             )
 
+    def _sign_in_identity(self) -> None:
+        self._text("Sign in with your Adopy Google account. ACL reads only your name and email, so your reports "
+                   "and library edits show who made them. It adds no access to your Google files.")
+        self._text("Use your @adopy.com account. Your browser may offer other Google accounts; choose the Adopy one.")
+        row = self.tk.Frame(self.body)
+        row.pack(anchor="w", pady=(0, 12))
+        self.tk.Button(row, text="Sign in with Google", command=self._identity_sign_in).pack(side="left")
+        self.tk.Button(row, text="Not now", command=self._identity_not_now).pack(side="left", padx=(8, 0))
+        self.identity_label = self.tk.Label(self.body, anchor="w", justify="left", wraplength=700)
+        self.identity_label.pack(fill="x")
+        self._paint_identity()
+
+    def _paint_identity(self, message: str = "", bad: bool = False) -> None:
+        if self.identity:
+            who = self.identity.get("name") or self.identity.get("email") or ""
+            message, bad = f"✓  Signed in as {who}", False
+        elif self.identity_skipped and not message:
+            message = "You can sign in later in the dashboard (Connections)."
+        try:
+            self.identity_label.config(text=message, fg="#9b1c1c" if bad else "#17663a")
+        except Exception:
+            pass  # the step was left while signing in
+
+    def _identity_not_now(self) -> None:
+        self.identity_skipped = True
+        self._paint_identity()
+
+    def _identity_sign_in(self) -> None:
+        """Вход идёт вне потока Tk (ждёт браузер); окно остаётся живым."""
+        import queue
+        import threading
+
+        if getattr(self, "_identity_busy", False):
+            return
+        self._identity_busy = True
+        results: "queue.Queue" = queue.Queue()
+        self.status.set("Waiting for the Google sign-in in your browser...")
+
+        def work() -> None:
+            results.put(identity_sign_in(self.config_directory))
+
+        def poll() -> None:
+            try:
+                result = results.get_nowait()
+            except queue.Empty:
+                self.root.after(200, poll)
+                return
+            self._identity_busy = False
+            self.status.set("")
+            if result.get("ok"):
+                self.identity = result.get("identity") or {}
+                self.identity_skipped = False
+                self._paint_identity()
+            else:
+                self._paint_identity(str(result.get("message") or ""), bad=True)
+
+        threading.Thread(target=work, name="acl-wizard-identity", daemon=True).start()
+        self.root.after(200, poll)
+
     def _connections(self) -> None:
         self._text("Sign in with your Adopy Google account. ACL reads the team connection file your team lead "
                    "shared with you and connects the team library and BI. No key is typed or pasted.")
         self._text("You can skip this step and connect later in the dashboard (Connections).")
+        if self.identity:
+            self._text("You already signed in on the previous step, so the browser should need only one click.")
         self.tk.Button(self.body, text="Sign in with Google", command=self._sign_in).pack(anchor="w", pady=(0, 12))
         self.connection_box = self.tk.Frame(self.body)
         self.connection_box.pack(fill="x")
@@ -557,7 +686,8 @@ class SetupWizard:
 
         def work() -> None:
             try:
-                lines = connect_with_google(self.config_directory)
+                lines = connect_with_google(self.config_directory,
+                                            login_hint=str((self.identity or {}).get("email") or ""))
             except Exception:
                 lines = [ReadinessCheck(CONNECTION_FILE_LABEL, False, "Sign-in was not finished. Try again.")]
             results.put(lines)  # Tk is only touched from the main thread, via the poll below
@@ -584,6 +714,14 @@ class SetupWizard:
             pass  # the step was left while signing in
 
     def _identity(self) -> None:
+        if self.identity and not self.campaign_manager_name.get().strip():
+            try:
+                from src.analysis_agent.google_identity import known_cm_names
+
+                known = known_cm_names()
+            except Exception:
+                known = None
+            self.campaign_manager_name.set(identity_name_seed(self.identity, known))
         self._text("Enter your name exactly as it is written in the CM column of the Stats workbook "
                    "(or as BI knows you).")
         self.tk.Label(self.body, text="Your name", anchor="w").pack(fill="x")
@@ -672,9 +810,13 @@ class SetupWizard:
             failed = [check.label for check in self.system_checks if not check.ok]
             if failed:
                 raise WizardValidationError("Resolve failed system checks: " + ", ".join(failed))
-        elif self.step == 3:
-            self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
+        elif self.step == 2:
+            if not self.identity and not self.identity_skipped:
+                raise WizardValidationError(
+                    "Sign in with your Adopy Google account, or press Not now to sign in later in the dashboard.")
         elif self.step == 4:
+            self.campaign_manager_name.set(validate_campaign_manager_name(self.campaign_manager_name.get()))
+        elif self.step == 5:
             self.stats_path.set(validate_stats_workbook(self.stats_path.get(), optional=self.bi_connected))
             self.creatives_path.set(validate_creatives_directory(self.creatives_path.get(), create=True))
             if self.bi_connected:
@@ -684,7 +826,7 @@ class SetupWizard:
                     campaign_manager_name=self.campaign_manager_name.get(),
                     stats_workbook=self.stats_path.get(),
                 )
-        elif self.step == 5:
+        elif self.step == 6:
             if not self.configuration:
                 raise WizardValidationError("Go back and confirm your name and the Stats workbook.")
             apply_machine_configuration(
@@ -695,6 +837,8 @@ class SetupWizard:
             )
             version = self.version_text.splitlines()[0].rsplit(" ", 1)[-1]
             write_ready_state(self.config_directory, version)
+            if self.identity:
+                bind_identity_name(self.config_directory, self.configuration.campaign_manager_name)
             self.completed = True
 
     def _next(self) -> None:

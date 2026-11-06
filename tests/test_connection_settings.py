@@ -458,7 +458,7 @@ class StatusTests(Base):
         client.write_text('{"installed": {"client_id": "fake-id.apps.example"}}', encoding="utf-8")
         seen = {}
 
-        def fake(path, token, timeout_seconds=None):
+        def fake(path, token, timeout_seconds=None, login_hint=""):
             seen["t"] = timeout_seconds
             raise RuntimeError("timed out")
 

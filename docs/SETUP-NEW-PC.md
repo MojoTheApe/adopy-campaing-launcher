@@ -26,7 +26,7 @@ The installer already contains the Google sign-in client; you do not copy
 `oauth_client.json` yourself. Shared targets and ad texts, and the BI numbers,
 come with your Adopy Google account: your team lead shares the ACL connection
 file with it, and you press **Sign in with Google** in the setup window
-(Step 2, *Connections*). Nobody sends you a key. If you skip it, the library is
+(Step 2, *Connections*, right after *Sign in*). Nobody sends you a key. If you skip it, the library is
 local to this computer until you do it later in the dashboard (**Connections**).
 
 ---
@@ -59,21 +59,31 @@ window opens next to it.
 
 The setup window opens by itself the first time. Its title bar says
 **Adopy Campaign Manager Setup**, and the top of the window shows the step name
-and *Step N of 7*. Nothing is published during setup, and no campaign is touched.
+and *Step N of 8*. Nothing is published during setup, and no campaign is touched.
 
 1. **Welcome.** Shows the version. Click **Next**.
 2. **System check.** ACL checks four things for you: *Windows x64*, *Writable
    ACL data folder*, *Free disk space* and *Local dashboard port*.
    **You should see:** four green ✓ lines. Click **Next**.
    A red ✕ line has its reason next to it; see the table below.
-3. **Connections.** Click **Sign in with Google** and sign in with your Adopy
+3. **Sign in.** Click **Sign in with Google** and sign in with your
+   **@adopy.com** account in the browser. Your browser may offer a personal
+   Google account too: choose the Adopy one. ACL reads only your name and email,
+   so your reports and library edits show who made them; it adds no access to
+   your Google files. **You should see:** *Signed in as* and your name in green.
+   Click **Next**. If you cannot sign in now, press **Not now**, then **Next**,
+   and sign in later in the dashboard. A red line gives its reason; see the
+   table below.
+4. **Connections.** Click **Sign in with Google** and sign in with your Adopy
    account in the browser. ACL reads the team connection file and shows one line
    each: *Team library: connected (N targets, M texts)* and *BI: connected (last
    data date …)*. Click **Next**. You may skip this step and do it later in the
    dashboard (**Connections**). A red line gives its reason; see the table below.
-4. **Your name.** Type it exactly as in the CM column (or as BI knows you). ACL
-   finds your ad accounts by this name. Click **Next**.
-5. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
+5. **Your name.** Type it exactly as in the CM column (or as BI knows you). ACL
+   finds your ad accounts by this name. If you signed in on the previous step,
+   the field is already filled in from your Google name; check it and fix it if
+   needed. Click **Next**.
+6. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
    and looks for your name. If it cannot, a red line appears at the bottom of
    the window and you stay on this step.
    - **Stats workbook:** pick your Excel file with **Browse…**. If ACL finds it in
@@ -83,12 +93,24 @@ and *Step N of 7*. Nothing is published during setup, and no campaign is touched
      optional and your accounts come from BI.
    - **Creatives folder:** it is already filled in as `Documents\ACL\Creatives`,
      and ACL creates the folder. Keep it, or pick another folder.
-6. **Readiness.** **You should see:** green ✓ next to *Runtime*, *Your accounts*,
+7. **Readiness.** **You should see:** green ✓ next to *Runtime*, *Your accounts*,
    *Local files* and *Safety mode*, and a line *Found N account(s) for this
    campaign manager*. Check that N is the number of accounts you work with.
    Click **Finish**.
-7. **Finish.** **You should see:** *Adopy Campaign Manager is ready on this
+8. **Finish.** **You should see:** *Adopy Campaign Manager is ready on this
    computer* in green. Click **Close**. The dashboard opens in your browser.
+
+**Already installed, or you pressed Not now?** The dashboard shows the same
+sign-in screen, *Sign in to Adopy Campaign Manager*, when it opens. Press
+**Sign in with Google**. If ACL does not know which campaign manager you are, it
+asks *Confirm your name as it appears in the CM column of the Stats workbook (or
+as BI knows you).* Type the name and press **Continue**. If this computer was set
+up for someone else, it asks *Who works here?* **Not now** appears only if
+signing in did not work; nothing you run is stopped either way. The header then
+shows *Signed in as* your name (hover for the email). Under **Connections** you
+can **Sign in**, **Sign out** or **Change name** at any time; signing out keeps
+your settings and accounts. The header label *Viewing* only picks whose
+accounts you look at; it is not a login.
 
 You can run setup again at any time from **Start → Adopy Campaign Launcher →
 Setup Campaign Launcher**. It keeps your accounts and connected profiles.
@@ -173,6 +195,11 @@ The messages in the middle column are what ACL shows, word for word.
 | System check | ✕ *Free disk space* | ACL needs at least 500 MB free. Free up space, click **Back**, then **Next** to check again. |
 | System check | ✕ *Local dashboard port*, *ports 9090-9109 are all used by other applications* | Rare: another program is holding every port ACL may use. Close other programs that serve web pages, then click **Back** and **Next**. A busy port 9090 alone is not an error: ACL then uses the next free port and shows a ✓ *port … is available*. |
 | System check | *Resolve failed system checks: …* after **Next** | One of the lines above is ✕. Fix it as this table says for that line. |
+| Sign in | *Sign in with your Adopy Google account, or press Not now to sign in later in the dashboard.* | You pressed **Next** without signing in. Sign in, or press **Not now** first. |
+| Sign in | *That is not an Adopy Google account. Sign in with your @adopy.com account.* | The browser used another Google account. Press **Sign in with Google** again (or **Try another account**) and choose the Adopy one. |
+| Sign in | *Could not reach Google. Check the internet connection and try again. You can keep working and sign in later.* | No internet, or Google did not answer. Press **Not now** and sign in later in the dashboard. |
+| Sign in | *Google sign-in is not set up in this version. Update ACL, or ask your team lead. You can keep working.* | This build has no Google sign-in client. Press **Not now**; tell Evgeni. |
+| Sign in | *Sign-in was not finished. Try again.* | The browser sign-in was closed or took longer than three minutes. Press **Sign in with Google** again. |
 | Connections | *No access to the ACL connection file. Ask your team lead to share it with your Adopy Google account.* | Tell your team lead your Adopy email so they share the file with you, then press **Sign in with Google** again. |
 | Connections | *Google sign-in is not set up on this computer (oauth_client.json is missing). Ask your team lead for it.* | This build has no Google sign-in client. Tell Evgeni; you need a newer installer. |
 | Connections | *Sign-in was not finished. Try again.* | The browser sign-in was closed or took too long. Press **Sign in with Google** again. |

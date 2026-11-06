@@ -481,6 +481,8 @@
     .buyer-pick select option { background: var(--bg-elev); color: var(--text); }
     .buyer-pick #buyer-msg { flex-basis: 100%; font-size: 0.75rem; color: var(--muted); }
     .buyer-pick #buyer-msg:empty { display: none; }
+    .identity-chip { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .identity-chip[role="button"] { cursor: pointer; text-decoration: underline; }
 
     /* Служебные кнопки и главные действия. Robot health — ссылка, но
        выглядит как соседние кнопки: человек не должен гадать, что из этого
@@ -4197,11 +4199,13 @@
       Это не свойство продукта, а положение зрителя, и меняется оно чаще,
       чем всё остальное в шапке. -#}
   <div class="buyer-pick">
-    <label for="buyer-select">Logged as</label>
+    <label for="buyer-select">Viewing</label>
     <select id="buyer-select" title="Whose view to show: accounts, optimization, team comparison">
       <option value="{{ report.my_cm }}">{{ report.my_cm }}</option>
     </select>
     <span id="buyer-msg"></span>
+    {#- ACL-1242: кто вошёл (аккаунт Google). Заполняет /static/identity.js; почта — в подсказке. -#}
+    <span id="identity-chip" class="identity-chip" hidden></span>
   </div>
   <div class="head-support">
     {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
@@ -22889,5 +22893,6 @@ window.cwWorkbench = (function () {
 <script src="/static/warm_sessions.js"></script>
 <script src="/static/recent_runs.js"></script>
 <script src="/static/connections.js"></script>
+<script src="/static/identity.js"></script>
 </body>
 </html>

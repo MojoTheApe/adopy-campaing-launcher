@@ -137,8 +137,21 @@ def has_google_token() -> bool:
         return False
 
 
-def _service(interactive: bool):
-    """Sheets service as the employee's own Google account; None when not signed in."""
+def _identity_email() -> str:
+    """ACL-1242: почта, с которой менеджер уже вошёл в дешборд (подсказка для окна Google)."""
+    try:
+        from src.analysis_agent import google_identity
+
+        return google_identity.current().email
+    except Exception:
+        return ""
+
+
+def _service(interactive: bool, login_hint: str = ""):
+    """Sheets service as the employee's own Google account; None when not signed in.
+
+    `login_hint` is only a hint for the Google account chooser; it grants nothing.
+    """
     token = _token_path()
     if not interactive:
         if not has_google_token():
@@ -163,7 +176,8 @@ def _service(interactive: bool):
         raise SettingsError("Google sign-in is not set up on this computer (oauth_client.json is missing or "
                             "empty). Ask your team lead for it, or update ACL to the latest version.")
     try:
-        service = ga._build_sheets_service_oauth(str(client), str(token), timeout_seconds=SIGN_IN_TIMEOUT_SECONDS)
+        service = ga._build_sheets_service_oauth(str(client), str(token), timeout_seconds=SIGN_IN_TIMEOUT_SECONDS,
+                                                 login_hint=login_hint or _identity_email())
     except Exception:
         service = None
     if service is None:
@@ -179,13 +193,13 @@ def _http_status(exc: BaseException) -> int:
         return 0
 
 
-def read_remote(service=None, *, interactive: bool = False) -> dict:
+def read_remote(service=None, *, interactive: bool = False, login_hint: str = "") -> dict:
     """Rows `KEY | value` of the team connection sheet, validated."""
     sid = sheet_id()
     if not sid:
         raise SettingsError("The team connection file is not configured in this build. Ask your team lead.")
     if service is None:
-        service = _service(interactive)
+        service = _service(interactive, login_hint)
     if service is None:
         raise SettingsError("Not signed in with Google. Press Sign in with Google.")
     try:
@@ -225,9 +239,9 @@ def apply(values: dict, writer: Callable[[dict], Any] | None = None) -> dict:
     return {"updated": len(changed), "library": "ACL_LIBRARY_TOKEN" in clean, "bi": "BI_MYSQL_HOST" in clean}
 
 
-def sign_in(writer: Callable[[dict], Any] | None = None, service=None) -> dict:
+def sign_in(writer: Callable[[dict], Any] | None = None, service=None, login_hint: str = "") -> dict:
     """Interactive: Google sign-in, read the sheet, save the values. Checks are separate."""
-    values = read_remote(service, interactive=True)
+    values = read_remote(service, interactive=True, login_hint=login_hint)
     return apply(values, writer)
 
 

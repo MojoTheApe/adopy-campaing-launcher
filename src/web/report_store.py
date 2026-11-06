@@ -326,6 +326,7 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
         'onclick="if(window.aclConnections){window.aclConnections.open()}">Connections</button>'
         "</div>"
         '<script src="/static/connections.js"></script>'
+        '<script src="/static/identity.js"></script>'
     )
     frame = (
         '<style>html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""

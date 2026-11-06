@@ -193,6 +193,22 @@ def check_google_client() -> None:
     )
 
 
+def check_identity() -> None:
+    """ACL-1242: вошёл ли менеджер рабочим аккаунтом Google. Необязательно: это метка, не замок."""
+    try:
+        from src.analysis_agent import google_identity
+        who = google_identity.current()
+    except Exception as exc:
+        report(WARN, "Google sign-in", f"unavailable: {exc}")
+        return
+    if who.state in ("verified", "stale"):
+        report(OK, "Google sign-in", f"{who.state} — {who.cm_name or 'name not confirmed'}")
+    elif who.state == "unavailable":
+        report(WARN, "Google sign-in", "this build has no Google sign-in client", "Update ACL.")
+    else:
+        report(WARN, "Google sign-in", who.state, "Open the dashboard and press Sign in with Google.")
+
+
 def check_telemetry() -> None:
     """Optional, never required: a machine that never reports still runs fine."""
     try:
@@ -401,6 +417,7 @@ def main() -> int:
         fix="Set FB_CREATIVES_ROOT in .env — RPA looks up creative files by name here.",
     )
     check_google_client()
+    check_identity()
     check_telemetry()
     check_event_log()
 
