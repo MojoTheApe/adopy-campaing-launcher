@@ -2063,6 +2063,15 @@ def _render_report(
     try:
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
+        # Без BI и без книги (свежая установка) тупика быть не должно:
+        # показываем страницу подключения; путь к книге в основной текст не идёт.
+        if not bi_stats.bi_enabled():
+            return templates.TemplateResponse(
+                request,
+                "error.html",
+                {"request": request, "title": "Connect your data", "message": "", "connect": True},
+                status_code=200,
+            )
         return templates.TemplateResponse(
             request,
             "error.html",

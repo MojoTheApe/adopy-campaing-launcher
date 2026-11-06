@@ -545,3 +545,59 @@ def test_mapping_document_names_every_column_and_the_assumption():
     for bi_col, book_col in bi_stats.COLUMN_MAP.items():
         assert f"`{bi_col}`" in doc and book_col in doc
     assert "BI_ASSUMPTIONS_CONFIRMED" in doc and "Granularity" in doc
+
+
+# --- Свежая установка: без BI и без книги страница подключения, а не тупик ---
+
+def _home_request():
+    from starlette.requests import Request
+
+    return Request({"type": "http", "method": "GET", "path": "/", "headers": [],
+                    "query_string": b"", "server": ("testserver", 80), "scheme": "http"})
+
+
+def test_no_bi_no_workbook_renders_connect_page(monkeypatch):
+    from src.web import app as web
+
+    monkeypatch.setattr(bi_stats, "bi_enabled", lambda: False)
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("Excel file not found: /secret/path/stats.xlsx")
+
+    monkeypatch.setattr(web, "get_cached_report", missing)
+    response = web._render_report(_home_request())
+    html = response.body.decode("utf-8")
+    assert response.status_code == 200
+    assert "Connect your data" in html
+    assert "/static/connections.js" in html
+    assert "Connections" in html
+    assert "Reload" in html
+    assert "/secret/path" not in html
+
+
+def test_bi_enabled_keeps_no_data_file_page(monkeypatch):
+    from src.web import app as web
+
+    monkeypatch.setattr(bi_stats, "bi_enabled", lambda: True)
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("BI unavailable")
+
+    monkeypatch.setattr(web, "get_cached_report", missing)
+    html = web._render_report(_home_request()).body.decode("utf-8")
+    assert "No data file" in html
+    assert "Connect your data" not in html
+
+
+def test_value_error_page_unchanged(monkeypatch):
+    from src.web import app as web
+
+    monkeypatch.setattr(bi_stats, "bi_enabled", lambda: False)
+
+    def bad(*args, **kwargs):
+        raise ValueError("bad columns")
+
+    monkeypatch.setattr(web, "get_cached_report", bad)
+    html = web._render_report(_home_request()).body.decode("utf-8")
+    assert "Excel format problem" in html
+    assert "Connect your data" not in html
