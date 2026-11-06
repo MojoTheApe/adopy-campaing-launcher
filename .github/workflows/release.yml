@@ -162,6 +162,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "release.json could not be written." }
           Copy-Item $installer.FullName packaging/windows/.artifacts/release/
 
+      # Mac installs come from git, not from the Windows installer, so they get
+      # the same Google sign-in client as a release asset (Install ACL.command
+      # downloads it only when the machine has no valid one).
+      - name: Ship the Google sign-in client for Mac installs
+        shell: pwsh
+        run: |
+          $client = 'packaging/windows/.build/oauth_client.json'
+          if ((Test-Path $client) -and (Get-Item $client).Length -gt 2) {
+            Copy-Item $client packaging/windows/.artifacts/release/google-oauth-client.json
+          } else {
+            Write-Warning "No Google OAuth client in this build: Mac installs will ask for oauth_client.json."
+          }
+
       # ACL-1357: release.json.sig — Ed25519 signature checked by clients with
       # the key pinned in src/web/release_signing.py. The private key exists
       # only in the secret ACL_RELEASE_SIGNING_KEY (ideally an environment
