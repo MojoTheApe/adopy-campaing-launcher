@@ -130,3 +130,47 @@ def test_machine_local_oauth_is_accepted(tmp_path, monkeypatch) -> None:
     doctor.check_google_client()
 
     assert doctor._failed == 0
+
+
+def test_missing_account_map_file_is_only_a_warning(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(doctor, "get_ad_account_map_path", lambda: str(tmp_path / "absent.csv"))
+
+    doctor.check_account_map()
+
+    out = capsys.readouterr().out
+    assert doctor._failed == 0
+    assert "[warn] Account map" in out and "Accounts" in out
+
+
+@pytest.mark.parametrize("provider", ["multilogin", "multilogin_attach"])
+def test_missing_multilogin_token_is_only_a_warning(provider, monkeypatch, capsys) -> None:
+    monkeypatch.delenv("MULTILOGIN_AUTOMATION_TOKEN_A", raising=False)
+    monkeypatch.setattr("src.fb_ads_rpa.config.get_browser_provider", lambda: provider)
+
+    doctor.check_multilogin_token()
+
+    assert doctor._failed == 0
+    assert "[warn] MULTILOGIN_AUTOMATION_TOKEN_A" in capsys.readouterr().out
+
+
+def test_dashboard_setup_items_do_not_block_a_fresh_install(tmp_path, monkeypatch, capsys) -> None:
+    """Workbooks and the creatives folder are chosen on the dashboard, not before it."""
+    gone = str(tmp_path / "absent")
+    monkeypatch.setattr(doctor, "get_excel_path", lambda: gone)
+    monkeypatch.setattr(doctor, "get_upload_fb_excel_path", lambda: gone)
+    monkeypatch.setattr(doctor, "get_creatives_root", lambda: gone)
+    monkeypatch.setattr(doctor, "ensure_machine_config", lambda: [])
+    monkeypatch.setattr(doctor, "load_env", lambda: [])
+    for name in (
+        "check_python", "check_playwright", "check_form_parser", "check_account_map",
+        "check_env_location", "check_runtime_safety", "check_multilogin_token",
+        "check_multilogin", "check_campaign_manager_identity", "check_accounts_sheet",
+        "check_google_client", "check_telemetry", "check_event_log",
+    ):
+        monkeypatch.setattr(doctor, name, lambda: None)
+
+    assert doctor.main() == 0
+
+    out = capsys.readouterr().out
+    for label in ("Stats workbook", "Upload FB workbook", "Creatives folder"):
+        assert f"[warn] {label}" in out

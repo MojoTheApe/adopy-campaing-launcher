@@ -76,12 +76,9 @@ def check_path(label: str, path: str, *, required: bool, fix: str) -> None:
 def check_account_map() -> None:
     path = get_ad_account_map_path()
     if not os.path.exists(path):
-        report(
-            MISSING,
-            "Account map",
-            path,
-            f"Copy {_ROOT / 'config' / 'ad_account_map.example.csv'} there and fill in your accounts.",
-        )
+        # Accounts are linked on the dashboard (Accounts), which a fresh install
+        # can only reach if this does not block it.
+        report(WARN, "Account map", path, "Link your accounts on the dashboard: Accounts.")
         return
     info = inspect_account_map(path)
     if not info["valid"]:
@@ -343,10 +340,11 @@ def check_multilogin_token() -> None:
     from src.fb_ads_rpa.config import get_browser_provider
 
     provider = get_browser_provider()
-    required = provider in {"multilogin", "multilogin_attach"}
+    # Connected on the dashboard (Multilogin panel), so a fresh install without
+    # it must still reach the dashboard.
     check_env_key(
         "MULTILOGIN_AUTOMATION_TOKEN_A",
-        required=required,
+        required=False,
         fix=f"Provider {provider} needs an automation token; connect Multilogin in the dashboard.",
     )
 
@@ -385,20 +383,20 @@ def main() -> int:
     check_path(
         "Stats workbook",
         get_excel_path(),
-        required=True,
-        fix="Set FB_STATS_EXCEL in .env if your report workbook lives elsewhere.",
+        required=False,
+        fix="Optional when BI is connected (dashboard → Connections). Otherwise set FB_STATS_EXCEL in .env.",
     )
     check_path(
         "Upload FB workbook",
         get_upload_fb_excel_path(),
-        required=True,
-        fix="Set UPLOAD_FB_EXCEL in .env if yours lives elsewhere.",
+        required=False,
+        fix="Optional; campaigns are built on the dashboard. Set UPLOAD_FB_EXCEL in .env only if you still use one.",
     )
     check_path(
         "Creatives folder",
         get_creatives_root(),
-        required=True,
-        fix="Set FB_CREATIVES_ROOT in .env — RPA looks up creative files by name here.",
+        required=False,
+        fix="Choose it on the dashboard: Accounts → This computer (e.g. ~/Documents/ACL/Creatives).",
     )
     check_google_client()
     check_telemetry()
