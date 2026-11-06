@@ -1,10 +1,4 @@
 {
-  "environments": {
-    "production": {
-      "target": "ACL stable Windows installer and update channel",
-      "verify": "docs/runtime/DELIVERY.md; published immutable release plus verified Windows installation/update and recovery, before record-delivery."
-    }
-  },
   "workflow": {
     "staging": false,
     "main_branch": "main",
@@ -22,13 +16,34 @@
       "batch_limit": 5
     },
     "process_instructions": {
-      "schema_version": 1,
+      "schema_version": 2,
       "required_checks": [
         "descriptor",
         "tracker-link",
         "Process instructions"
       ]
+    },
+    "process_support": {
+      "schema_version": 1,
+      "control_files": [
+        ".github/workflows/complete-delivery.yml",
+        "scripts/acl_complete_delivery.py",
+        "scripts/acl_publish_release.py",
+        "scripts/acl_pr_check.py"
+      ],
+      "verification_files": [
+        "tests/test_acl_complete_delivery.py",
+        "tests/test_acl_ci_workflows.py",
+        "tests/test_master_adoption.py"
+      ]
     }
+  },
+  "tracker": {
+    "revision": "e94e9a4c7f5291631cf9e6046dc3a719e7e04d35",
+    "registration": "verified",
+    "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
+    "workspace_id": "acl",
+    "repository": "MojoTheApe/task-tracker"
   },
   "delivery": {
     "procedure": "docs/runtime/DELIVERY.md; authorized frozen --deliver batch continues through exact-main CI, immutable annotated tag, published installer, isolated published-channel acceptance and native Tracker receipt.",
@@ -36,12 +51,7 @@
     "rollback": "Existing Windows updater restores the previous installed version and shortcuts on verified failure. Preserve machine configuration and newer data; docs/runtime/DELIVERY.md.",
     "backup": "Preserve %LOCALAPPDATA%/ACL and user workbooks/creatives; isolated stage uses its own directories. Retain compatible recovery material before authorized runtime changes."
   },
-  "project": {
-    "name": "Adopy Campaign Launcher",
-    "repository": "https://github.com/MojoTheApe/adopy-campaing-launcher"
-  },
-  "adoption": "draft",
-  "profile": "package",
+  "schema_version": 2,
   "checks": [
     "python scripts/acl_scan_secrets.py",
     "python scripts/acl_smoke.py",
@@ -50,12 +60,17 @@
     "Windows CI on Python 3.11 and 3.13 plus packaged install/repair/uninstall; docs/runtime/STAGING.md",
     "Pinned Task Tracker scripts/workflow_provider.py validate --root . --allow-draft; scripts/acl_adoption.py audit"
   ],
-  "tracker": {
-    "registration": "verified",
-    "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
-    "repository": "MojoTheApe/task-tracker",
-    "revision": "9dc08c3e31ef1204130f43b0740d173e733d5cb7",
-    "workspace_id": "acl"
+  "environments": {
+    "production": {
+      "target": "ACL stable Windows installer and update channel",
+      "verify": "docs/runtime/DELIVERY.md; published immutable release plus verified Windows installation/update and recovery, before record-delivery."
+    }
+  },
+  "completion": "verified-stable-package",
+  "workflow_provider": {
+    "schema_version": 1,
+    "repository": "https://github.com/MojoTheApe/task-tracker",
+    "revision": "e94e9a4c7f5291631cf9e6046dc3a719e7e04d35"
   },
   "exceptions": [
     {
@@ -79,17 +94,16 @@
       "reference": "docs/repository/POST_MAIN_DELIVERY.md"
     }
   ],
-  "workflow_provider": {
-    "schema_version": 1,
-    "repository": "https://github.com/MojoTheApe/task-tracker",
-    "revision": "9dc08c3e31ef1204130f43b0740d173e733d5cb7"
+  "project": {
+    "name": "Adopy Campaign Launcher",
+    "repository": "https://github.com/MojoTheApe/adopy-campaing-launcher"
   },
-  "workflow_provider_transport": "private-checkout",
-  "schema_version": 2,
-  "completion": "verified-stable-package",
+  "adoption": "draft",
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
     "revision": "fddcdd0d60db2e14cce0a53e6af23e12356c3bc7",
     "version": "1.8.0"
-  }
+  },
+  "profile": "package",
+  "workflow_provider_transport": "private-checkout"
 }
