@@ -41,7 +41,7 @@ from tests.test_acl1798_campaign_inventory import ad, adset, camp, snapshot  # n
 D = "2026-10-08"
 REPORT = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
 #: Монтирование таблицы страны и кнопка «Read campaigns in <Country>» — из настоящего шаблона страницы.
-MOUNT_JS = REPORT[REPORT.index("function amapCampaignSlug("): REPORT.index("function amapPollSpend(")]
+MOUNT_JS = REPORT[REPORT.index("function amapCampaignTree("): REPORT.index("function amapPollSpend(")]
 ACCOUNTS = ["Acc", "Fresh"]
 #: Настоящие правила карты аккаунтов из report.html: проверяем, что они не протекают во вложенные таблицы кампаний.
 AMAP_CSS = REPORT[REPORT.index("    .amap table { width: 100%"): REPORT.index("    .amap-caret-off {")]
@@ -94,7 +94,7 @@ class Site:
                 + AMAP_CSS +
                 "</style></head><body style='margin:24px'>" + comp +
                 '<div class="amap"><details class="amap-country" data-country="Kuwait" open>'
-                '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait"><nav class="hc-tabs" data-hc-tabs></nav>'
+                '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait">'
                 '<div class="hc-mount" data-hc-mount></div></section>'
                 f'<table class="amap-grid"><thead><tr><th>Account</th><th>Campaign list</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
                 "</details></div>"
@@ -312,8 +312,7 @@ def test_one_tree_the_account_row_is_the_parent_and_there_is_no_separate_table(p
     assert accounts == ["Acc"]
     assert page.evaluate("document.querySelector('tr.hc-acct-child').previousElementSibling.querySelector('td.amap-list').dataset.account") == "Acc"
     assert page.get_attribute(f'{row_of("Acc")}', "aria-expanded") == "true" and page.get_attribute(f'{row_of("Fresh")}', "aria-expanded") == "false"
-    tabs = page.locator(".hc-tabs .hc-tab").all_inner_texts()
-    assert tabs == ["Campaigns", "Winning setups", "Landings", "Targets", "Creatives", "Buyers"]
+    assert page.locator(".hc-tabs, .hc-tab").count() == 0                          # полосы вкладок над таблицей аккаунтов нет (Workbench)
 
 
 def test_clicking_the_row_toggles_but_buttons_and_keys_behave(page, site):
@@ -528,10 +527,10 @@ def test_the_tabs_line_up_and_the_expanded_tree_does_not_overflow_the_page(page)
       const L = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().left * 10) / 10 : null; };
       const R = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().right * 10) / 10 : null; };
       const textLeft = sel => { const e = document.querySelector(sel); const r = document.createRange(); r.selectNodeContents(e); return Math.round(r.getBoundingClientRect().left * 10) / 10; };
-      return {tabs: textLeft('.hc-tabs .hc-tab'), section: L('.amap-campaigns'), grid: L('table.amap-grid'), gridR: R('table.amap-grid'),
+      return {section: L('.amap-campaigns'), grid: L('table.amap-grid'), gridR: R('table.amap-grid'),
               frame: L('.hc-frame'), frameR: R('.hc-frame'), doc: document.documentElement.scrollWidth, win: innerWidth};
     }""")
-    assert left["tabs"] - left["section"] >= 8 and page.locator(".hc-toolbar, [data-hc-after], .hc-foot").count() == 0   # панели и сноски нет
+    assert page.locator(".hc-toolbar, [data-hc-after], .hc-foot").count() == 0   # панели и сноски нет
     assert left["frame"] >= left["grid"] - 1 and left["frameR"] <= left["gridR"] + 1      # таблица кампаний лежит внутри списка аккаунтов
     assert left["doc"] <= left["win"]
     assert page.evaluate("getComputedStyle(document.querySelector('.hc-table thead th')).position") == "sticky"

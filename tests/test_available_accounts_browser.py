@@ -149,6 +149,8 @@ def test_select_remove_restore_and_counts(app_client):
 
         page.route("**/*", route)
         page.goto("http://acl.test/")
+        # The first render of Home builds the default-period report; the check below is about refreshes only.
+        app_client.periods.clear()
         page.evaluate("window._amapPick = {from: '2026-09-01', to: '2026-09-20', span: ''}")
         # Метка страницы: перерисовка должна идти фрагментом. Запасной путь
         # скрипта — полная перезагрузка — сотрёт метку, и тест это увидит,

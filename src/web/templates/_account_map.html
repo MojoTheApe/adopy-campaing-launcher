@@ -31,6 +31,14 @@
     <div class="amap-search-row" role="search">
       <label class="amap-search"><svg class="amap-search-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
         <input type="search" id="amap-search-all" placeholder="Find account or profile" aria-label="Find account" autocomplete="off" spellcheck="false"></label>
+      {%- if not compare and amap.state_totals is defined %}
+      {#- Переключатель вида Home (Expanded / Compact): `acl.aov.view`, логика — `aov*` в report.html. -#}
+      <span class="aov-view" role="radiogroup" aria-label="Account map view">
+        <button type="button" role="radio" class="aov-vbtn" data-aov-view="expanded" aria-checked="true" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Expanded</button>
+        <button type="button" role="radio" class="aov-vbtn" data-aov-view="compact" aria-checked="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg>Compact</button>
+      </span>
+      <span class="aov-sr" id="aov-view-live" aria-live="polite"></span>
+      {%- endif %}
       <span class="amap-search-count" id="amap-search-count" aria-live="polite"></span>
     </div>
     <div class="amap-empty" id="amap-search-empty" hidden></div>
@@ -43,6 +51,8 @@
     {#- ACL-1652: шесть метрик (Spend · Leads · FTDs · CPL · CPA · CR) из
         `_metrics.html`, как и во всех таблицах атрибуции. -#}
     {% import "_metrics.html" as mx with context %}
+    {#- Старая разметка — только при сравнении периодов и для карты без состояний (), её собирают вручную некоторые тесты. -#}
+    {% if not compare and amap.state_totals is defined %}{% include "_home_accounts.html" %}{% else %}
     <div class="amap-grid-head" aria-hidden="true">
       <span></span>
       <span>Country</span>
@@ -129,6 +139,7 @@
       <span class="num"><b>{{ amap.countries | sum(attribute='rows', start=[]) | length }}</b></span>
       <span></span>
     </div>
+    {% endif %}
     {% endif %}
 
     {% include "_account_map_available.html" %}
