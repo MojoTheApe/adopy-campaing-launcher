@@ -6,7 +6,7 @@ JSON line is appended to `<ACL config dir>/publish_history.jsonl`:
 
     {"v": 1, "job_id", "account_label", "country", "status", "created_at",
      "started_at", "finished_at", "build", "fb_backend", "total", "done_count",
-     "publishable", "errors": [...],
+     "reviewed" (ACL-2353), "publishable", "errors": [...],
      "results": [{"campaign_name", "success", "publishable", "status",
                   "campaign_id", "adset_id", "ad_id", "ad_ids", "creative_id",
                   "warnings", "blocking_failures", "error", "steps"}]}
@@ -146,6 +146,7 @@ def entry_from_job(job: dict[str, Any]) -> dict[str, Any]:
         "finished_at": job.get("finished_at"),
         "build": _build_id(),
         "fb_backend": _text(job.get("fb_backend")),
+        "reviewed": bool(job.get("reviewed")),
         "total": int(job.get("total") or 0),
         "done_count": int(job.get("done_count") or 0),
         "publishable": bool(job.get("publishable")),

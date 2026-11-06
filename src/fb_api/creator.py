@@ -1424,6 +1424,8 @@ class CampaignCreator:
         self.client = client
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
+        #: ACL-2353: снимок ревью задания (имя кампании -> fp, Page, пиксель); None - без ревью.
+        self.reviewed: dict | None = None
         self.facts = facts
         self.resolver = resolver
         self.cancelled = cancelled
@@ -2667,6 +2669,18 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
+    def _check_reviewed_ids(self, plan: CampaignPlan) -> None:
+        """ACL-2353: Page и пиксель, выбранные сейчас («Automatic», «account default»), совпадают с показанными
+        в ревью. Иначе стоп ДО первой записи: человек одобрял другое."""
+        if self.reviewed is None:
+            return
+        from src.web import publish_review
+
+        problem = publish_review.ids_mismatch(self.reviewed, plan.name, page_id=plan.page_id,
+                                              pixel_id=plan.pixel_id)
+        if problem:
+            raise CreationStopped(problem, kind="review_stale")
+
     @staticmethod
     def _left_in_meta(plan: CampaignPlan, out: Outcome) -> str:
         """ACL-2301: what a Graph stop left in Meta and what was not reached (English only).
@@ -3289,6 +3303,7 @@ class CampaignCreator:
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
         targetings, files = self._prepare(plan, out)
+        self._check_reviewed_ids(plan)
 
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
