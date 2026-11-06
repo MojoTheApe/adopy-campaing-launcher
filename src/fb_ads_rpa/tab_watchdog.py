@@ -543,9 +543,10 @@ class RawCdp:
 
     # -- вызов
     def call(self, method: str, params: dict | None = None, *, session_id: str = "",
-             timeout: float = CALL_S) -> dict:
+             timeout: float = CALL_S, on_event: Callable[[dict], None] | None = None) -> dict:
         self._id += 1
-        msg: dict[str, Any] = {"id": self._id, "method": method, "params": params or {}}
+        my_id = self._id        # обработчик события может вызвать call() внутри и сдвинуть _id
+        msg: dict[str, Any] = {"id": my_id, "method": method, "params": params or {}}
         if session_id:
             msg["sessionId"] = session_id
         deadline = time.monotonic() + timeout
@@ -559,7 +560,9 @@ class RawCdp:
                 got = json.loads(data)
             except ValueError:
                 continue
-            if got.get("id") != self._id:
+            if got.get("id") != my_id:
+                if on_event is not None and "method" in got and "id" not in got:
+                    on_event(got)
                 continue   # событие или чужой ответ
             if "error" in got:
                 err = got.get("error") or {}

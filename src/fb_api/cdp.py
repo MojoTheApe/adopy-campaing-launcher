@@ -167,10 +167,11 @@ def command_budget(seconds):
 
 
 def _call(cdp: Any, method: str, params: dict | None = None, *, session_id: str = "",
-          timeout: float = CALL_S) -> dict:
+          timeout: float = CALL_S, on_event: Callable[[dict], None] | None = None) -> dict:
     try:
         timeout = _budget_timeout(timeout)
-        return cdp.call(method, params or {}, session_id=session_id, timeout=timeout)
+        extra = {"on_event": on_event} if on_event is not None else {}
+        return cdp.call(method, params or {}, session_id=session_id, timeout=timeout, **extra)
     except TimeoutError as exc:
         if isinstance(exc, CdpTimeout):
             raise
@@ -471,11 +472,13 @@ class PageTab:
         """Keep strict identity checks across helper replacements after recovery."""
         return self._recovery_attempted
 
-    def call(self, method: str, params: dict | None = None, *, timeout: float = CALL_S) -> dict:
+    def call(self, method: str, params: dict | None = None, *, timeout: float = CALL_S,
+             on_event: Callable[[dict], None] | None = None) -> dict:
         if self.closed:
             raise CdpError("the tab is closed")
         try:
-            return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
+            return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout,
+                         on_event=on_event)
         except CdpError as exc:
             if "session with given id not found" in str(exc).lower():
                 raise SessionLostError("the owned tab's browser session was detached") from exc
