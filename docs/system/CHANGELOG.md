@@ -1,5 +1,9 @@
 # System history
 
+## ACL-2400 / ACL-2356 — Memory limit 92%, instant memory message, new-profile check — 2026-11-06
+
+The memory limit now defaults to 92% on every dashboard; machines that still had 75 or 85 from an earlier release are moved to 92 once (the old value is kept in a backup next to the settings). A busy computer now says at once how much memory to free instead of waiting minutes. A new profile also no longer starts when it would take total memory use above 85%; the first profile is never held by this.
+
 ## ACL-2369 — Memory limit no longer stops actions on an open profile — 2026-11-04
 
 Account actions (Check plan and the like) on a profile that is already open are no longer stopped by the memory limit; the limit now applies only to opening a profile or running a second action at the same time, and the message says how much memory to free.

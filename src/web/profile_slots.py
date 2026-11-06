@@ -95,9 +95,14 @@ DEFAULT_PROFILE_MEMORY_GB = 3.5
 DEFAULT_PROFILE_FLOOR_GB = 3.5
 DEFAULT_RESERVE_GB = 3.0
 #: ACL-2255: решение по ДОЛЕ занятой памяти, а не по «N ГБ на профиль»: новый профиль можно
-#: (ACL-2345: порог 75 %, не 90 — три профиля сами держат ноутбук на ~80 %, и 90 % значило «никогда»)
+#: (ACL-2345: порог 75 %, не 90 — три профиля сами держат ноутбук на ~80 %, и 90 % значило «никогда»;
+#: ACL-2400: решение владельца 04.11 — 92 %, иначе действия на уже открытых профилях не пускало)
 #: стартовать, пока занято не больше стольких процентов всей памяти (`ACL_MEMORY_MAX_USED_PCT`).
-DEFAULT_MAX_USED_PCT = 75.0
+DEFAULT_MAX_USED_PCT = 92.0
+#: ACL-2356: жёсткая доля с учётом памяти НОВОГО профиля: «занято сейчас + профиль» не выше. Не настройка.
+HARD_PROJECTED_PCT = 85.0
+#: ACL-2356: замеренный профиль для прогноза не легче этого (МБ); пола 3,5 ГБ здесь нет.
+MIN_PROJECTED_PROFILE_MB = 1536
 #: ...но на машине с малой памятью свободного остаётся не меньше этого (МБ).
 MIN_FREE_MB = 1024
 DEFAULT_WARMUP_S = 90.0
@@ -229,6 +234,19 @@ def format_mb(mb: int) -> str:
     if mb >= 1024:
         return f"{math.ceil(mb / 1024 * 10 - 1e-9) / 10:.1f} GB"
     return f"{math.ceil(mb / 50) * 50} MB"
+
+
+def projected_pct(memory: MemoryReading, profile_mb: int, warming: int = 0) -> float:
+    """ACL-2356: доля занятой памяти, когда новый профиль (и ещё прогревающиеся) займёт свою."""
+    if memory.total_mb <= 0:
+        return 100.0
+    return round(used_pct(memory) + 100.0 * int(profile_mb) * (int(warming) + 1) / memory.total_mb, 1)
+
+
+def projected_short_mb(memory: MemoryReading, profile_mb: int, warming: int = 0) -> int:
+    """ACL-2356: сколько МБ освободить, чтобы прогноз уложился в `HARD_PROJECTED_PCT`."""
+    over = projected_pct(memory, profile_mb, warming) - HARD_PROJECTED_PCT
+    return max(0, int(math.ceil(over * memory.total_mb / 100.0)))
 
 
 def used_pct(memory: MemoryReading) -> float:
@@ -609,8 +627,10 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
                            "reserve_mb": settings.reserve_mb, "profile_open": bool(profile_open)}
     if memory is not None:
         out.update(total_mb=memory.total_mb, available_mb=memory.available_mb)
+    proj_mb = settings.profile_mb
     if settings.override is None:
         if measured_mb is not None:
+            proj_mb = max(int(measured_mb), MIN_PROJECTED_PROFILE_MB)
             settings = replace(settings, profile_mb=max(int(measured_mb), settings.profile_floor_mb))
             out.update(measured_mb=int(measured_mb), profile_mb_source="measured")
         else:
@@ -648,6 +668,15 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         # не вернётся (идущие профили при этом не трогаем).
         out.update(limit=running, allow=False, reason="below_reserve")
         return out
+    # ACL-2356: прогноз «занято + новый профиль» не выше жёсткой доли. Первое задание (ничего не
+    # идёт и не прогревается) этим не блокируется. Причина та же `memory_low` — потребители не меняются.
+    if running > 0 or warming > 0:
+        proj = projected_pct(memory, proj_mb, warming)
+        out.update(projected_pct=proj, hard_pct=HARD_PROJECTED_PCT)
+        if proj > HARD_PROJECTED_PCT:
+            out.update(limit=running, allow=False, reason="memory_low", projected=True,
+                       short_mb=projected_short_mb(memory, proj_mb, warming))
+            return out
     limit = _auto_limit(running, warming, memory, settings, growth)
     ok = memory.available_mb >= need
     out.update(limit=limit, allow=ok, reason="memory_ok" if ok else "memory_low")

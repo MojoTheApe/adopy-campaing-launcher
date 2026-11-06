@@ -439,7 +439,9 @@ class HeavyGate:
                 if ok:
                     self._active[profile_id] = 1
                     return
-                if self._clock() >= deadline:
+                # ACL-2400: a UI action (finite wait) held by memory is told at once - waiting does not
+                # bring memory back. A job (wait_s=inf) stays queued with the live line.
+                if self._clock() >= deadline or (why == "memory_low" and wait_s != float("inf")):
                     if why == "memory_low":
                         view = self.wait_view(why)
                         free = self._ps.format_mb(view.get("short_mb") or 0)
@@ -1107,39 +1109,59 @@ class WarmRegistry:
 
         ACL-2278: задание (publish job) не получает отказ по времени: оно стоит в очереди (жёлтое, с
         цифрами «свободно / нужно»), пока память не появится или его не остановят. Остальные ждут
-        `START_MEMORY_WAIT_S`; запрос подготовки соединения (`defer_memory_wait`) не ждёт вовсе.
+        отказ сразу (ACL-2400); START_MEMORY_WAIT_S больше не используется.
         """
         job = _JOB_WAIT.get()
-        defer = _DEFER_MEMORY.get() and job is None
-        deadline = self._mono() + START_MEMORY_WAIT_S
         try:
             while True:
                 memory, settings, _ps = self._memory_state()
                 if memory is None:
                     return ""
                 need, growth = self._memory_need(settings, _ps)
-                if memory.available_mb >= need:
+                proj, proj_short = self._projected_hold(memory, _ps)
+                if memory.available_mb >= need and not proj_short:
                     return ""
                 used = _ps.used_pct(memory)
-                text = (f"Not started: {memory.available_mb / 1024:.1f} GB free, "
-                        f"{need / 1024:.1f} GB needed for another profile (memory is {used:.0f}% used; "
-                        f"a profile starts while at most {settings.max_used_pct:.0f}% is used"
-                        f"{', counting profiles still warming up' if growth else ''}). "
-                        f"{self._free_more_sentence(memory, settings, _ps, growth)}")
+                if proj_short and memory.available_mb >= need:
+                    text = (f"Not started: memory is {used:.0f}% used and a new profile would bring it to "
+                            f"{proj:.0f}% (limit {_ps.HARD_PROJECTED_PCT:.0f}%). "
+                            f"Free about {_ps.format_mb(proj_short)} more, for example by closing a Multilogin "
+                            "profile you don't need, then try again.")
+                else:
+                    text = (f"Not started: {memory.available_mb / 1024:.1f} GB free, "
+                            f"{need / 1024:.1f} GB needed for another profile (memory is {used:.0f}% used; "
+                            f"a profile starts while at most {settings.max_used_pct:.0f}% is used"
+                            f"{', counting profiles still warming up' if growth else ''}). "
+                            f"{self._free_more_sentence(memory, settings, _ps, growth)}")
                 if cancelled():
                     return "Stopped while waiting for memory. " + text if job is not None else text
                 if job is None:
-                    if defer or self._mono() >= deadline:
-                        return text
+                    # ACL-2400: a UI start is told at once; waiting (the old START_MEMORY_WAIT_S) did not help.
+                    return text
                 else:
                     _show(job, {"hold": "memory_low", "available_mb": int(memory.available_mb),
                                 "need_mb": int(need), "reserve_mb": int(settings.reserve_mb),
                                 "profile_mb": int(settings.profile_mb), "growth_mb": int(growth),
                                 "max_used_pct": settings.max_used_pct, "used_pct": used,
-                                "total_mb": int(memory.total_mb)})
+                                "total_mb": int(memory.total_mb),
+                                **({"projected_pct": proj, "hard_pct": _ps.HARD_PROJECTED_PCT,
+                                    "short_mb": int(proj_short)} if proj_short else {})})
                 self._sleep(2.0)
         finally:
             _show(job, None)
+
+    def _projected_hold(self, memory, _ps) -> tuple[float, int]:
+        """ACL-2356: (projected share %, MB to free) when a new profile would break the hard share, else (0, 0).
+
+        Only when something already runs or warms: the first profile is never held by this test.
+        """
+        running, profile_mb, warming = getattr(self, "_proj", (0, 0, 0))
+        if memory is None or not (running > 0 or warming > 0) or profile_mb <= 0:
+            return 0.0, 0
+        proj = _ps.projected_pct(memory, profile_mb, warming)
+        if proj <= _ps.HARD_PROJECTED_PCT:
+            return 0.0, 0
+        return proj, _ps.projected_short_mb(memory, profile_mb, warming)
 
     def _memory_fits_now(self) -> bool:
         """One look, no waiting: is there room for one more profile by the ACL-2255 rule?"""
@@ -1147,7 +1169,7 @@ class WarmRegistry:
         if memory is None:
             return True
         need, _growth = self._memory_need(settings, _ps)
-        return memory.available_mb >= need
+        return memory.available_mb >= need and not self._projected_hold(memory, _ps)[1]
 
     def _memory_need(self, settings: Any, _ps: Any) -> tuple[int, int]:
         now = self._mono()
@@ -1168,6 +1190,11 @@ class WarmRegistry:
         # used). A profile already measured is in that share; only one started so recently that no
         # measurement sees it yet is charged by the estimate.
         growth = sum(settings.profile_mb for p in settling if p not in measured)
+        # ACL-2356: facts for the projected-share test (profiles running, size of the next one, warming count).
+        next_mb = settings.profile_mb
+        if measured:
+            next_mb = max(sum(measured.values()) // len(measured), _ps.MIN_PROJECTED_PROFILE_MB)
+        self._proj = (len(warm_ids), next_mb, len([p for p in settling if p not in measured]))
         memory = (self._memory or _ps.read_memory)()
         keep = _ps.keep_free_mb(memory.total_mb, settings) if memory is not None else settings.reserve_mb
         return keep + growth, growth

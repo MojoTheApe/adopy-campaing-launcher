@@ -20,6 +20,12 @@ sys.path.insert(0, str(ROOT))
 
 from src.fb_api import warm  # noqa: E402
 from src.web import profile_slots as ps  # noqa: E402
+
+@pytest.fixture(autouse=True)
+def _no_projected_share(monkeypatch):
+    """ACL-2356: these tests pin the other memory rules; the projected share has its own file (acl2400)."""
+    monkeypatch.setattr(ps, "HARD_PROJECTED_PCT", 1000.0)
+
 from src.web import publish_jobs as pj  # noqa: E402
 
 GB = 1024
@@ -104,11 +110,11 @@ def test_a_laptop_with_little_memory_always_keeps_one_gigabyte_free(total_gb, us
 
 
 def test_the_setting_is_read_from_the_machine_env_and_garbage_falls_back():
-    assert ps.load_settings({}).max_used_pct == 75.0
+    assert ps.load_settings({}).max_used_pct == 92.0      # ACL-2400
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "85"}).max_used_pct == 85.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "92,5"}).max_used_pct == 92.5
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 75.0
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 75.0     # ниже 10 — мусор
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 92.0
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 92.0     # ниже 10 — мусор
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "150"}).max_used_pct == 99.0
 
 

@@ -31,6 +31,12 @@ from src.fb_api import warm  # noqa: E402
 from src.fb_api.cdp import CdpError, PageTab  # noqa: E402
 from src.web import profile_slots as ps  # noqa: E402
 
+@pytest.fixture(autouse=True)
+def _no_projected_share(monkeypatch):
+    """ACL-2356: these tests pin the other memory rules; the projected share has its own file (acl2400)."""
+    monkeypatch.setattr(ps, "HARD_PROJECTED_PCT", 1000.0)
+
+
 
 def _s90(**kw):
     """ACL-2345: the product default is 75 %; these tests were written for the 90 % limit and pin it."""
@@ -432,15 +438,13 @@ def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(
     rig.warm_up(b)
     first = rig.checkout(a)
     free[0] = 1400                          # ACL-2255: занято 91 % из 16 ГБ (порог 90 %), а не «6 ГБ на профиль»
-    got = []
-    t = threading.Thread(target=lambda: got.append(rig.checkout(b)))
-    t.start()
-    time.sleep(0.2)
-    assert got == [], "started while more than 90% of memory was in use"
-    free[0] = 3000                          # занято 81 % — можно, хотя замер профиля 6 ГБ
-    t.join(3)
-    assert len(got) == 1
-    got[0].release()
+    # ACL-2400: a UI action held by memory is told at once (waiting does not bring memory back).
+    with pytest.raises(warm.WarmError) as ei:
+        rig.checkout(b)
+    assert ei.value.code == "memory_low" and "Free about" in str(ei.value)
+    free[0] = 3000                          # занято 81 % - можно, хотя замер профиля 6 ГБ
+    got = rig.checkout(b)
+    got.release()
     first.release()
 
 
@@ -1211,12 +1215,24 @@ def test_opening_waits_for_the_growth_of_profiles_still_warming_up(tmp_path, mon
 
     rig.reg._sleep = sleeping
     res = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
-    assert res["code"] == "memory_low" and "warming up" in res["message"] and calls
+    assert res["code"] == "memory_low" and "warming up" in res["message"]   # ACL-2400: at once, no waiting
     # После прогрева (settle) тот же объём свободной памяти уже хватает.
     monkeypatch.setenv(warm.SETTLE_ENV, "10")
     rig.now[0] += 200
     again = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
     assert again["ok"] is True
+
+
+def test_opening_is_refused_at_once_when_the_new_profile_would_pass_the_hard_share(tmp_path, monkeypatch):
+    """ACL-2356: 16 GB, 70 % used, one profile open: 70 % + 3.5 GB profile = ~92 % > 85 % -> told at once."""
+    monkeypatch.setattr(ps, "HARD_PROJECTED_PCT", 85.0)
+    monkeypatch.setenv(warm.SETTLE_ENV, "0")
+    rig = Rig(tmp_path, reg_memory=lambda: ps.MemoryReading(16000, 4800))
+    first = rig.reg.open_one("A1", entry("a" * 8 + "-0000-4000-8000-000000000000"))
+    assert first["started"] is True
+    res = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
+    assert res["code"] == "memory_low"
+    assert "would bring it to" in res["message"] and "(limit 85%)" in res["message"] and "Free about" in res["message"]
 
 
 def test_orphaned_session_is_not_used_after_close(rig):

@@ -1315,6 +1315,10 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         # ACL-2255: the rule is the share of memory in use: now / the most at which a profile may start.
         "used_pct": verdict.get("used_pct"),
         "max_used_pct": verdict.get("max_used_pct"),
+        # ACL-2356: «занято + новый профиль» против жёсткой доли; short_mb - сколько освободить.
+        "projected_pct": verdict.get("projected_pct") if verdict.get("projected") else None,
+        "hard_pct": verdict.get("hard_pct") if verdict.get("projected") else None,
+        "short_mb": verdict.get("short_mb"),
         "running": verdict.get("running"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),

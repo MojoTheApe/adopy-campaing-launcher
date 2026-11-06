@@ -117,6 +117,7 @@ def test_env_files_are_merged_by_key_and_a_second_env_is_warned_about(tmp_path, 
     merged = dict(
         line.split("=", 1) for line in (real / ".env").read_text(encoding="utf-8").splitlines() if "=" in line
     )
+    merged.pop("ACL_MEMORY_PCT_MIGRATED", None)      # ACL-2400 marker, written once at start
     assert merged == {"MLX_TOKEN": "fresh", "ONLY_REAL": "1", "MEMORY_MB": "512"}
     assert result.env_merged == [".env"]
     assert (next((real / "backups").rglob(".env"))).read_text(encoding="utf-8").startswith("MLX_TOKEN=expired")

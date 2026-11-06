@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import sys
+import pytest
 import threading
 import time
 from pathlib import Path
@@ -21,6 +22,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.web import profile_slots as ps  # noqa: E402
+
+@pytest.fixture(autouse=True)
+def _no_projected_share(monkeypatch):
+    """ACL-2356: these tests pin the other memory rules; the projected share has its own file (acl2400)."""
+    monkeypatch.setattr(ps, "HARD_PROJECTED_PCT", 1000.0)
+
 from src.web import publish_jobs as pj  # noqa: E402
 
 GB = 1024

@@ -168,6 +168,45 @@ def _env_values(path: Path) -> dict[str, str]:
         return {}
 
 
+MEMORY_PCT_KEY = "ACL_MEMORY_MAX_USED_PCT"
+MEMORY_PCT_MARKER = "ACL_MEMORY_PCT_MIGRATED"
+MEMORY_PCT_NEW = "92"
+_MEMORY_PCT_OLD = frozenset({75.0, 85.0})
+
+
+def migrate_memory_default(real_dir: Path, *, now: float | None = None) -> str:
+    """ACL-2400: once, move an explicit 75 / 85 (earlier releases, hand-set) to the new default 92.
+
+    The marker is written whatever the value is, so a value set later (Settings or by hand) is never
+    touched again. The old `.env` is copied to `backups/env-memory-2400-<stamp>/` first. Returns a
+    one-line note, or "" when nothing changed. Never raises: a locked file only skips the step.
+    """
+    env_path = Path(real_dir) / ENV_NAME
+    try:
+        if not env_path.is_file():
+            return ""
+        values = _env_values(env_path)
+        if values.get(MEMORY_PCT_MARKER):
+            return ""
+        raw = str(values.get(MEMORY_PCT_KEY, "")).strip().strip("\"'").replace(",", ".")
+        try:
+            old = float(raw) if raw else None
+        except ValueError:
+            old = None
+        change = {MEMORY_PCT_MARKER: "2400"}
+        note = ""
+        if old in _MEMORY_PCT_OLD:
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(now if now is not None else time.time()))
+            _backup(env_path, Path(real_dir) / "backups" / f"env-memory-2400-{stamp}", Path(ENV_NAME))
+            change[MEMORY_PCT_KEY] = MEMORY_PCT_NEW
+            note = f"{MEMORY_PCT_KEY} {raw} -> {MEMORY_PCT_NEW} (memory limit default, ACL-2400)"
+        paths.update_machine_env(change)
+        return note
+    except Exception as exc:  # noqa: BLE001 - a settings migration must never stop the start
+        log.warning("memory limit migration skipped: %s", exc)
+        return ""
+
+
 def prepare_config_dir() -> UnifyResult:
     """Pin the real folder, merge package copies into it, log and warn."""
     real = Path(paths.pin_config_dir_env())
@@ -198,6 +237,10 @@ def prepare_config_dir() -> UnifyResult:
                 result.warnings.append(msg)
                 log.warning(msg)
                 print(f"[acl] WARNING: {msg}")
+        moved = migrate_memory_default(real)
+        if moved:
+            log.info(moved)
+            print(f"[acl] {moved}")
         if paths.is_virtualized_environment():
             note = (
                 "this process runs inside an MSIX package (virtual %LOCALAPPDATA%); "
