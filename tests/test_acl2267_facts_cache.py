@@ -393,6 +393,34 @@ def test_clear_forgets_the_term_in_both_caches(tmp_path, monkeypatch):
     assert warm_id(f, "Golf") is None
 
 
+def test_clear_resets_facts_and_plan_verdicts(tmp_path, monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
+    from src.web import app as web
+
+    reasons = []
+    monkeypatch.setattr(web, "_drop_plan_verdicts", lambda reason: reasons.append(reason))
+
+    class Req:
+        def __init__(self, body):
+            self.body = body
+
+        async def json(self):
+            return self.body
+
+    f = fc.default()
+    warm(f, "Yoga", YOGA)
+    warm(f, "Golf", GOLF)
+    asyncio.run(web.targeting_resolver_clear(Req({"term": "yoga"})))
+    assert warm_id(f, "Yoga") is None and warm_id(f, "Golf") == GOLF
+    assert reasons == ["targeting_clear"]
+    asyncio.run(web.targeting_resolver_clear(Req({"all": True})))
+    assert warm_id(f, "Golf") is None
+    assert reasons == ["targeting_clear", "targeting_clear"]
+
+
 def test_cached_all_group_without_members_stays_a_group(facts):
     # ACL-1907: «Spanish (All)» без известных членов должна оставаться группой и после чтения из кэша
     class OnlyAll(Meta):
