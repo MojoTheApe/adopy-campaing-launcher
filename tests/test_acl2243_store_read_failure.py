@@ -55,3 +55,38 @@ def test_resolution_stops_when_store_state_is_unknown(tmp_path):
         resolver.prefetch(["yoga"])
     with pytest.raises(tr.ConfirmedStoreUnreadable):
         resolver.resolve("yoga")
+
+
+def _damaged_store_routes(monkeypatch, tmp_path):
+    from src.web import app as web
+
+    monkeypatch.setattr(web, "_targeting_gate", lambda: None)
+    from config import paths
+    monkeypatch.setattr(paths, "get_local_config_dir", lambda: tmp_path)
+    (tmp_path / tr.CACHE_FILE).write_text("{broken", encoding="utf-8")
+    return web
+
+
+def test_cache_route_reports_unreadable_store_not_empty(monkeypatch, tmp_path):
+    import asyncio
+    import json
+
+    web = _damaged_store_routes(monkeypatch, tmp_path)
+    resp = asyncio.run(web.targeting_resolver_cache())
+    assert resp.status_code == 409
+    assert "could not be read" in json.loads(resp.body)["error"]
+    assert (tmp_path / tr.CACHE_FILE).read_text(encoding="utf-8") == "{broken"
+
+
+def test_clear_route_reports_unreadable_store_and_keeps_file(monkeypatch, tmp_path):
+    import asyncio
+
+    web = _damaged_store_routes(monkeypatch, tmp_path)
+
+    class Req:
+        async def json(self):
+            return {"all": True}
+
+    resp = asyncio.run(web.targeting_resolver_clear(Req()))
+    assert resp.status_code == 409
+    assert (tmp_path / tr.CACHE_FILE).read_text(encoding="utf-8") == "{broken"

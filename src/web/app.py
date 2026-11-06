@@ -6582,7 +6582,7 @@ def _targeting_gate() -> JSONResponse | None:
 
 @app.get("/targeting-resolver/cache")
 async def targeting_resolver_cache() -> JSONResponse:
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable
 
     blocked = _targeting_gate()
     if blocked:
