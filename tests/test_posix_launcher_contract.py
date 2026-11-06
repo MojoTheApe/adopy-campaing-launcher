@@ -190,3 +190,127 @@ def test_one_file_installer_checks_mac_scripts_exist() -> None:
     tail = text[check:check + 400]
     assert "|| fail" in tail and "does not support macOS" in tail
     assert "]         ||" not in text
+
+
+# --- выбор релиза в "Install ACL.command" -----------------------------------
+
+_GIT = shutil.which("git")
+_BASH = shutil.which("bash")
+_REPO = "MojoTheApe/adopy-campaing-launcher"
+_RUN = f"https://github.com/{_REPO}/actions/runs/123"
+
+
+def _pick_release_function() -> str:
+    text = _text("Install ACL.command")
+    start = text.index("pick_release() {")
+    end = text.index("\n}\n", start) + 3
+    return text[start:end]
+
+
+def _git(repo: Path, *args: str) -> str:
+    env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+    import os
+    out = subprocess.run([_GIT, "-C", str(repo), *args], check=True, capture_output=True,
+                         text=True, env={**os.environ, **env})
+    return out.stdout.strip()
+
+
+def _commit(repo: Path, msg: str, when: int = 0) -> str:
+    import os
+    env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@example.invalid",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+    if when:  # release order is by the tagged commit's date
+        env["GIT_COMMITTER_DATE"] = f"{1700000000 + when} +0000"
+    subprocess.run([_GIT, "-C", str(repo), "commit", "--allow-empty", "-q", "-m", msg],
+                   check=True, capture_output=True, env=env)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _tag(repo: Path, name: str, commit: str, note: str, when: int) -> None:
+    import os
+    date = f"{1700000000 + when} +0000"
+    env = {**os.environ, "GIT_COMMITTER_DATE": date, "GIT_COMMITTER_NAME": "T",
+           "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+    subprocess.run([_GIT, "-C", str(repo), "tag", "-a", name, commit, "-m", note],
+                   check=True, capture_output=True, env=env)
+
+
+def _pick(repo: Path) -> subprocess.CompletedProcess:
+    main = _git(repo, "rev-parse", "origin/main^{commit}")
+    script = _pick_release_function() + f'\npick_release "{repo.as_posix()}" "{main}" "{_REPO}"\n'
+    return subprocess.run([_BASH, "-c", script], capture_output=True, text=True)
+
+
+@pytest.fixture()
+def release_repo(tmp_path: Path):
+    if not (_GIT and _BASH):
+        pytest.skip("git and bash are required to run the release picker")
+    repo = tmp_path / "r"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    first = _commit(repo, "released", 1)
+    _git(repo, "update-ref", "refs/remotes/origin/main", first)
+    return repo, first
+
+
+def test_pick_release_tag_on_tip(release_repo) -> None:
+    repo, first = release_repo
+    _tag(repo, "acl-release-1", first, f"CI success {_RUN}", 1)
+    result = _pick(repo)
+    assert result.returncode == 0 and result.stdout.split() == ["acl-release-1", first]
+
+
+def test_pick_release_main_ahead_picks_tagged_ancestor(release_repo) -> None:
+    repo, first = release_repo
+    _tag(repo, "acl-release-1", first, f"CI success {_RUN}", 1)
+    tip = _commit(repo, "main moved on", 100)
+    _git(repo, "update-ref", "refs/remotes/origin/main", tip)
+    result = _pick(repo)
+    assert result.returncode == 0 and result.stdout.split() == ["acl-release-1", first]
+
+
+def test_pick_release_invalid_newer_tag_falls_back_to_older(release_repo) -> None:
+    repo, first = release_repo
+    _tag(repo, "acl-release-1", first, f"CI success {_RUN}", 1)
+    tip = _commit(repo, "main moved on", 100)
+    _git(repo, "update-ref", "refs/remotes/origin/main", tip)
+    _tag(repo, "acl-release-2", tip, f"Built {_RUN}", 2)  # no success recorded
+    result = _pick(repo)
+    assert result.returncode == 0 and result.stdout.split() == ["acl-release-1", first]
+    # a valid newer tag wins
+    _git(repo, "tag", "-d", "acl-release-2")
+    _tag(repo, "acl-release-2", tip, f"CI success {_RUN}", 2)
+    result = _pick(repo)
+    assert result.stdout.split() == ["acl-release-2", tip]
+
+
+def test_pick_release_ignores_tags_not_reachable_from_main(release_repo) -> None:
+    repo, first = release_repo
+    side = _commit(repo, "side commit not on main")
+    _tag(repo, "acl-release-9", side, f"CI success {_RUN}", 9)
+    result = _pick(repo)
+    assert result.returncode != 0 and result.stdout.strip() == ""
+
+
+def test_pick_release_without_tags_fails(release_repo) -> None:
+    repo, _ = release_repo
+    result = _pick(repo)
+    assert result.returncode != 0 and result.stdout.strip() == ""
+
+
+def test_pick_release_rejects_lightweight_and_foreign_run(release_repo) -> None:
+    repo, first = release_repo
+    _git(repo, "tag", "acl-release-light", first)
+    _tag(repo, "acl-release-foreign", first, "CI success https://github.com/org/repo/actions/runs/1", 5)
+    assert _pick(repo).returncode != 0
+
+
+def test_pick_release_retagged_old_commit_does_not_downgrade(release_repo) -> None:
+    repo, first = release_repo
+    tip = _commit(repo, "main moved on", 100)
+    _git(repo, "update-ref", "refs/remotes/origin/main", tip)
+    _tag(repo, "acl-release-2", tip, f"CI success {_RUN}", 2)
+    _tag(repo, "acl-release-old-retag", first, f"CI success {_RUN}", 999)  # newest tag object
+    result = _pick(repo)
+    assert result.returncode == 0 and result.stdout.split() == ["acl-release-2", tip]
