@@ -1,5 +1,6 @@
 """Exact release identities, retries and truthful post-publication acceptance."""
 import copy
+import base64
 import importlib.util
 import json
 from pathlib import Path
@@ -9,6 +10,7 @@ import pytest
 import yaml
 
 from scripts import acl_complete_delivery as driver
+from scripts import acl_publish_release as publisher
 from scripts.acl_delivery_evidence import evidence
 from src.web.release_updates import is_newer
 
@@ -245,3 +247,160 @@ def test_manual_tag_verification_reuses_verify_steps_without_authorizing():
     # It never resolves, authorizes, publishes or records a delivery.
     for forbidden in ("tracker_delivery_receipt", "release.yml", "--apply", "contents: write", "workflow_run"):
         assert forbidden not in text
+
+
+@pytest.fixture
+def instruction_delivery(request_document, monkeypatch):
+    request_document.update(schema_version=1, repository=driver.REPOSITORY,
+        workflow="complete-delivery.yml", job="Verify published Windows package",
+        authorization_sha256="f" * 64)
+    original = copy.deepcopy(request_document)
+    config = json.loads((ROOT / "tracker/config.json").read_text())
+    config["process_instructions"]["schema_version"] = 2
+    state = {"original": original, "request": request_document, "config": config,
+             "current": "e" * 40, "local": "e" * 40, "calls": [], "resolved": [],
+             "eligible": True, "existing": False, "error": False, "race": False}
+
+    def api(path):
+        if path.endswith("/git/ref/heads/main"):
+            return {"object": {"sha": state["current"]}}
+        if "/contents/tracker/config.json?ref=" in path:
+            assert path.endswith(state["current"])
+            return {"encoding": "base64", "content": base64.b64encode(json.dumps(config).encode()).decode()}
+        if path.endswith("/actions/runs/123"):
+            return dict(ci_for(original), head_repository={"full_name": driver.REPOSITORY})
+        raise AssertionError("Unexpected actual API contract: " + path)
+
+    def resolve(repo, product, ci_run, *, request, include_delivered=False):
+        assert (repo, product, ci_run) == (driver.REPOSITORY, original["merge_sha"], 123)
+        assert include_delivered is False, "Publication must use the strict instruction-chain path"
+        state["resolved"].append((repo, product, ci_run))
+        if state["error"]:
+            raise ValueError("Only retained independently admitted instructions may follow the product")
+        if state["race"]:
+            state["current"] = "9" * 40
+        return dict(copy.deepcopy(original), eligible=state["eligible"])
+
+    monkeypatch.setattr(driver.receipt, "resolve", resolve)
+    annotation = json.dumps({key: original[key] for key in ("batch_id", "issues", "target", "policy")}, sort_keys=True)
+    state["note"] = "CI success https://github.com/" + driver.REPOSITORY + "/actions/runs/123\n" + annotation
+
+    def execute(*args):
+        state["calls"].append(args)
+        if args[:2] == ("gh", "api"): return json.dumps(api(args[2]))
+        if args == ("git", "rev-parse", "HEAD"): return state["local"]
+        if args == ("git", "rev-parse", "origin/main"): return "e" * 40
+        if args[1:3] == ("ls-remote", "origin"): return "existing" if state["existing"] else ""
+        if args[1:3] == ("cat-file", "-t"): return "tag"
+        if args[1:3] == ("cat-file", "-p"): return state["note"]
+        if args[1] == "rev-parse": return original["merge_sha"]
+        return ""
+    state.update(api=api, execute=execute)
+    return state
+
+
+def test_original_native_ci_source_survives_later_main_checkout(instruction_delivery):
+    state = instruction_delivery
+    assert driver.ci_source(123, "a" * 40, request=state["api"]) == "a" * 40
+    assert state["local"] == "e" * 40
+    assert driver.ci_source(123, request=state["api"]) == "a" * 40
+
+
+@pytest.mark.parametrize("change", [
+    {"head_sha": "short"}, {"head_branch": "stage"}, {"event": "pull_request"},
+    {"event": "workflow_run"}, {"path": ".github/workflows/other.yml"},
+    {"status": "in_progress"}, {"conclusion": "failure"},
+    {"head_repository": {"full_name": "foreign/repository"}},
+])
+def test_ci_source_refuses_wrong_or_unfinished_native_run(request_document, change):
+    run = dict(ci_for(request_document), head_repository={"full_name": driver.REPOSITORY})
+    run.update(change)
+    with pytest.raises(ValueError): driver.ci_source(123, request=lambda _: run)
+
+
+def test_ci_source_event_and_repository_cannot_substitute_the_original(instruction_delivery):
+    with pytest.raises(ValueError, match="event"):
+        driver.ci_source(123, "e" * 40, request=instruction_delivery["api"])
+    with pytest.raises(ValueError, match="official"):
+        driver.ci_source(123, repository="foreign/repository", request=lambda _: pytest.fail("foreign lookup"))
+
+
+def test_admitted_instruction_continuation_tags_only_original_product_and_reuses_tag(instruction_delivery):
+    state = instruction_delivery
+    tag = driver.ensure_tag(state["request"], 123, execute=state["execute"])
+    writes = [call for call in state["calls"] if "tag" in call and "-a" in call]
+    assert len(writes) == 1 and writes[0][writes[0].index("-a") + 2] == "a" * 40
+    assert state["resolved"] == [(driver.REPOSITORY, "a" * 40, 123)]
+    state["existing"] = True
+    assert driver.ensure_tag(state["request"], 123, execute=state["execute"]) == tag
+    assert len([call for call in state["calls"] if "push" in call]) == 1
+    assert not any("--force" in call for call in state["calls"])
+    assert state["local"] == "e" * 40
+
+
+@pytest.mark.parametrize("mode", ["schema1", "mixed", "ineligible", "race", "wrong-checkout"])
+def test_unproven_continuation_never_writes_a_tag(instruction_delivery, mode):
+    state = instruction_delivery
+    if mode == "schema1": state["config"]["process_instructions"]["schema_version"] = 1
+    if mode == "mixed": state["error"] = True
+    if mode == "ineligible": state["eligible"] = False
+    if mode == "race": state["race"] = True
+    if mode == "wrong-checkout": state["local"] = "a" * 40
+    with pytest.raises(ValueError): driver.ensure_tag(state["request"], 123, execute=state["execute"])
+    assert not any("push" in call or "-a" in call for call in state["calls"])
+    if mode == "schema1": assert state["resolved"] == []
+
+
+@pytest.mark.parametrize("field,value", [
+    ("target", "another target"), ("policy", "0" * 64), ("tree_sha", "0" * 40),
+    ("authorization_sha256", "0" * 64), ("workflow", "other.yml"), ("job", "Another job"),
+    ("issues", [925]), ("main_pr", 931), ("requested_at", "2026-10-16T07:00:00+00:00"),
+    ("schema_version", True), ("extra", "unbound"),
+])
+def test_continuation_binds_the_entire_typed_original_request(instruction_delivery, field, value):
+    state = instruction_delivery
+    state["request"][field] = value
+    with pytest.raises(ValueError, match="full original"):
+        driver.ensure_tag(state["request"], 123, execute=state["execute"])
+    assert not any("push" in call or "-a" in call for call in state["calls"])
+
+
+@pytest.fixture
+def publisher_instruction_delivery(instruction_delivery, monkeypatch):
+    state = instruction_delivery
+    jobs = json.loads((ROOT / "tests/fixtures/ci_reuse/ci_full_jobs.json").read_text())
+    for job in jobs["jobs"]: job["run_id"] = 123
+    def api(path):
+        if path.endswith("/runs/123/jobs?filter=latest&per_page=100"): return jobs
+        return state["api"](path)
+    def git(*args):
+        if args[:2] == ("cat-file", "-t"): return "tag"
+        if args[:2] == ("cat-file", "-p"): return state["note"]
+        if args == ("rev-parse", "origin/main"): return "e" * 40
+        return "a" * 40
+    monkeypatch.setattr(publisher, "_git", git)
+    monkeypatch.setattr(publisher, "_gh", lambda *args: json.dumps(api(args[1])))
+    return state
+
+
+def test_publisher_keeps_original_tag_ci_and_full_matrix_after_docs(publisher_instruction_delivery):
+    state = publisher_instruction_delivery
+    reports = []
+    assert publisher.verify_promotion(driver.release_tag(state["original"]), driver.REPOSITORY, reports.append) == "a" * 40
+    assert state["resolved"] == [(driver.REPOSITORY, "a" * 40, 123)]
+    assert reports and reports[0].endswith("/actions/runs/123")
+
+
+@pytest.mark.parametrize("mode", ["schema1", "mixed", "race", "wrong-tag", "target", "extra", "duplicate", "missing"])
+def test_publisher_refuses_unbound_docs_or_tag_authority(publisher_instruction_delivery, mode):
+    state = publisher_instruction_delivery
+    tag = driver.release_tag(state["original"])
+    if mode == "schema1": state["config"]["process_instructions"]["schema_version"] = 1
+    if mode == "mixed": state["error"] = True
+    if mode == "race": state["race"] = True
+    if mode == "wrong-tag": tag += "x"
+    if mode == "target": state["note"] = state["note"].replace("stable installer", "other target")
+    if mode == "extra": state["note"] = state["note"].replace('{"batch_id"', '{"extra":1,"batch_id"')
+    if mode == "duplicate": state["note"] = state["note"].replace('{"batch_id"', '{"target":"stable installer","batch_id"')
+    if mode == "missing": state["note"] = state["note"].split("\n")[0]
+    with pytest.raises(ValueError): publisher.verify_promotion(tag, driver.REPOSITORY)

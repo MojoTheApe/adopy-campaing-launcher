@@ -94,9 +94,17 @@ Use the exact official Tracker source and its isolated
 Preserve all local rules below, true pristine ancestry, independent review and
 full applicable checks. The native configuration, adopted execution3, capacities,
 target, required checks, IDs, existing owners and original task scope are unchanged.
-No optional policy is activated: the current outer8 state, instruction schema1
-and existing local publisher/CI adapters stay selected. Project adapter declarations,
-independent documentation continuation and archive activation are separate changes.
+ACL-2423 separately declared the four existing process controls and three tests
+in `delivery.json`; that local boundary grants no approval by itself. TT-188
+activated lossless outer9 storage, retaining the unchanged inner pause8 contract,
+all history and existing ownership. See [the archive guide](STATE_ARCHIVE.md).
+ACL-2424 connects the existing bounded review-handoff wait and prepares delivery
+continuation through the published original-request proof. The normal receipt
+writer uses current-main helpers; product verification and publication keep the
+original product checkout, CI, tag, target and actual acceptance.
+Instruction schema1 remains selected: only the later separately reviewed
+ACL-2425 selection can enable independent instructions while a product waits.
+Until then the existing pending-release admission guard remains active.
 ACL-2099 is a separate preparation-only selection;
 its own package must be verified through the retained actual preselection config
 before any separately authorized owned idle adoption.

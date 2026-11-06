@@ -1,5 +1,20 @@
 # Repository process history
 
+## 2026-11-06 — ACL-2424 original delivery and review handoff
+
+Resolve the product from its actual successful native CI rather than the later
+checkout. Both tag and publication guards accept later main only through actual
+instruction schema2 and the published complete original-request/receipt chain;
+the immutable tag, product, full CI/reuse proof, target and authorization stay
+original. The receipt writer uses current-main compatible helpers, while product
+verification and the existing release workflow keep the original tag checkout.
+Normal adopted PR feedback uses the existing bounded handoff wait with immutable
+target-base configuration; prepared bootstrap and final admission remain strict.
+Descriptor/config/pins/pristine, instruction schema1 and all application inputs
+are unchanged. Explicit schema2 activation remains ACL-2425. Current provider
+guidance now reflects the separately completed outer9 archive retaining pause8.
+No ACL release, live package acceptance or new retry/reuse framework is introduced.
+
 ## 2026-11-05 — ACL-2423 project-owned process boundary
 
 Declare the four existing delivery/CI controls and three existing verification
