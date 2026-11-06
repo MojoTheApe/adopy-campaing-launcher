@@ -84,7 +84,9 @@ if [ "$FRESH" = "1" ]; then
     trap cleanup EXIT
     echo "Downloading ACL (a GitHub sign-in may be requested)..."
     # Start from production even though GitHub's default branch is a feature.
-    git clone --quiet --no-checkout --branch main "$REPO_URL" "$CHECKOUT" \
+    # Full history is ~900 MB of file versions: take commits and tags only; the
+    # release's own files arrive at checkout (seconds instead of many minutes).
+    git clone --quiet --filter=blob:none --no-checkout --branch main "$REPO_URL" "$CHECKOUT" \
         || fail "Download failed. You need access to ${REPO_NAME}: sign in with the company GitHub account ('brew install gh' then 'gh auth login'), and check your connection."
 else
     CHECKOUT="$TARGET"
