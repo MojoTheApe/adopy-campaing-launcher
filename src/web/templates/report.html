@@ -19489,20 +19489,21 @@ function cbPlanFormData(form, only) {
   return fd;
 }
 
-/* ACL-1443: lifetime идёт по датам, а не «с включения» - строка плана говорит это прямо. */
-function cbPlanIsLifetime(s) { return !!(s && (s.lifetime_preview || Number(s.lifetime_budget) > 0)); }
-function cbPlanLifetimeRun(s) {
-  var win = s.lifetime_run || (s.start_time && s.end_time ? s.start_time + ' to ' + s.end_time
-    + (s.timezone_name ? ' (' + s.timezone_name + ')' : '') : '');
-  return 'Runs ' + (win ? 'from ' + win + ' ' : '') + 'even while paused — turning it on late spends the whole budget in the time left; '
-    + 'after the end date it completes without delivery.';
-}
 function cbPlanMoney(s) {
   /* ACL-1443: у Lifetime строка собрана на странице (cbLifetime.annotate) или пришла из плана. */
   if (s && s.lifetime_preview) return s.lifetime_preview;
   if (s && Number(s.lifetime_budget) > 0) return Number(s.lifetime_budget).toFixed(2) + ' ' + (s.currency || '') + ' lifetime';
   var n = Number(s && s.daily_budget);
   return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
+}
+/* ACL-1443: lifetime идёт по датам, а не «с включения» - строка плана говорит это прямо.
+ * Стоят после cbPlanMoney: node-проверка шаблона вырезает блок плана начиная с неё. */
+function cbPlanIsLifetime(s) { return !!(s && (s.lifetime_preview || Number(s.lifetime_budget) > 0)); }
+function cbPlanLifetimeRun(s) {
+  var win = s.lifetime_run || (s.start_time && s.end_time ? s.start_time + ' to ' + s.end_time
+    + (s.timezone_name ? ' (' + s.timezone_name + ')' : '') : '');
+  return 'Runs ' + (win ? 'from ' + win + ' ' : '') + 'even while paused — turning it on late spends the whole budget in the time left; '
+    + 'after the end date it completes without delivery.';
 }
 
 /* ACL-1771: термины таргетинга. Точное имя берётся само; всё остальное - «picked X for Y?»
