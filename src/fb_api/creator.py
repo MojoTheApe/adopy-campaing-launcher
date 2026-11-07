@@ -30,7 +30,7 @@ import os
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -78,6 +78,9 @@ DEVICE_CHOICES = ("mobile", "desktop")
 OS_CHOICES = ("all", "ios", "android")
 _OS_MIN_RE = re.compile(r"^[0-9]{1,2}(\.[0-9]{1,2})?$")
 _START_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$")
+#: ACL-1443: тип бюджета кампании.
+BUDGET_DAILY, BUDGET_LIFETIME = "daily", "lifetime"
+DAY_NAMES = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 #: Multi-advertiser ads (ACL-1767): всегда явно выключены.
 MULTI_ADS_OPT_OUT = {"enroll_status": "OPT_OUT"}
 
@@ -396,6 +399,9 @@ class AdSetPlan:
     device: str = ""                 # "mobile" | "desktop"
     os_min: str = ""                 # минимальная версия iOS/Android: "14" или "14.0"
     start_time: str = ""             # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    #: ACL-1443 (lifetime): конец и расписание; пусто = как у daily (ключей в параметрах нет).
+    end_time: str = ""               # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    schedule: list = field(default_factory=list)   # [{"days": [0..6], "start_minute", "end_minute"}]
     #: ACL-1768: номер набора и поля уровня набора; пусто = как у кампании.
     index: int = 1                   # 1-based порядковый номер набора в кампании
     language: str = ""               # язык набора вместо языка кампании
@@ -430,10 +436,27 @@ class CampaignPlan:
     pixel_source: str = ""
     #: Предупреждения черновика (смешанный таргетинг/бюджет) — в итог (ревью, minor 7).
     warnings: list[str] = field(default_factory=list)
+    #: ACL-1443: "daily" (как всегда) | "lifetime"; при lifetime сумма на весь срок - `lifetime_budget`,
+    #: а `daily_budget` равен 0.
+    budget_type: str = BUDGET_DAILY
+    lifetime_budget: float = 0.0
 
     @property
     def label(self) -> str:
         return f"acl-{self.tag}"
+
+    @property
+    def lifetime(self) -> bool:
+        return self.budget_type == BUDGET_LIFETIME
+
+    @property
+    def budget_amount(self) -> float:
+        """Сумма бюджета того типа, что задан (в валюте кабинета)."""
+        return self.lifetime_budget if self.lifetime else self.daily_budget
+
+    @property
+    def has_schedule(self) -> bool:
+        return any(s.schedule for s in self.ad_sets)
 
 
 def _interest_groups(raw: str) -> list[list[str]]:
@@ -672,6 +695,52 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
             problems.append(f"Ad set {name!r}: start time {start!r} is not a date and time")
 
 
+def _plan_period(plan_set: AdSetPlan, src: Any, lifetime: bool, problems: list[str]) -> None:
+    """Lifetime (ACL-1443): старт и конец набора обязательны, расписание - сетка окон. Ошибки вслух.
+
+    При daily конец и расписание не принимаются (Meta: срок < 24 ч у daily отвергается, а расписание
+    работает только с lifetime). Поля плана остаются пустыми - прежние планы не меняются.
+    """
+    name = plan_set.name
+    end = str(getattr(src, "end_time", "") or "").strip()
+    raw = getattr(src, "schedule", None) or []
+    if not lifetime:
+        if end:
+            problems.append(f"Ad set {name!r}: an end time needs a lifetime budget")
+        if raw:
+            problems.append(f"Ad set {name!r}: a schedule needs a lifetime budget")
+        return
+    if not plan_set.start_time:
+        problems.append(f"Ad set {name!r}: a lifetime budget needs a start time")
+    if not end:
+        problems.append(f"Ad set {name!r}: a lifetime budget needs an end time")
+    else:
+        try:
+            if not _START_RE.match(end):
+                raise ValueError(end)
+            end_dt = datetime.strptime(end, "%Y-%m-%dT%H:%M")
+            plan_set.end_time = end
+            if plan_set.start_time and end_dt <= datetime.strptime(plan_set.start_time, "%Y-%m-%dT%H:%M"):
+                problems.append(f"Ad set {name!r}: the end time {end} must be after the start time {plan_set.start_time}")
+        except ValueError:
+            problems.append(f"Ad set {name!r}: end time {end!r} is not a date and time")
+    if not raw:
+        return
+    if not isinstance(raw, list):
+        problems.append(f"Ad set {name!r}: the schedule must be a list of windows")
+        return
+    if all(isinstance(w, dict) and not w.get("days") for w in raw):
+        problems.append(f"Ad set {name!r}: the schedule is empty; select at least one hour or turn the schedule off")
+        return
+    for w in raw:
+        why = _wpol.schedule_window_problem(w, with_tz=False)
+        if why:
+            problems.append(f"Ad set {name!r}: {why}")
+            return
+    plan_set.schedule = [{"days": sorted(w["days"]), "start_minute": w["start_minute"],
+                          "end_minute": w["end_minute"]} for w in raw]
+
+
 def _source(draft: Any, what: str) -> str:
     """Источник страницы/пикселя: enrich ставит map/draft; без него — draft, если значение есть."""
     got = str(getattr(draft, f"{what}_source", "") or "")
@@ -709,8 +778,10 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     if len(ad_sets_src) > MAX_AD_SETS:
         problems.append(MAX_AD_SETS_ERROR)      # ACL-1768: потолок наборов
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
+    lifetime = (str(getattr(ad_sets_src[0], "budget_type", "") or "").strip().lower() == BUDGET_LIFETIME
+                if ad_sets_src else False)
     if not budget or float(budget) <= 0:
-        problems.append("Daily budget missing")
+        problems.append("Lifetime budget missing" if lifetime else "Daily budget missing")
     ad_sets: list[AdSetPlan] = []
     ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
     for set_no, s in enumerate(ad_sets_src, start=1):
@@ -731,6 +802,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             plan_set.destination = dest
         plan_set.placements = _plan_placements(s, problems, plan_set.name)
         _plan_audience(plan_set, s, problems)
+        _plan_period(plan_set, s, lifetime, problems)
         if not s.ads:
             problems.append(f"No ads in ad set {plan_set.name!r}")
         for ad in s.ads:
@@ -809,9 +881,24 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         language=str(getattr(draft, "language", "") or "").strip(), link=link,
         page_id=str(getattr(draft, "page_id", "") or "").strip(),
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
-        daily_budget=float(budget), ad_sets=ad_sets,
+        daily_budget=0.0 if lifetime else float(budget), ad_sets=ad_sets,
         page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
-        warnings=warnings)
+        warnings=warnings,
+        **({"budget_type": BUDGET_LIFETIME, "lifetime_budget": float(budget)} if lifetime else {}))
+
+
+def _minor_or_none(value: Any) -> int | None:
+    """Сумма в мелких единицах из ответа Meta ("100" -> 100); нет или не число - None."""
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def minor_to_major(minor: int, currency: str) -> float:
+    """Мелкие единицы -> единицы валюты кабинета (центы /100, ZERO_DECIMAL - как есть)."""
+    return float(minor) if (currency or "").upper() in ZERO_DECIMAL else minor / 100
 
 
 def budget_minor(amount: float, currency: str) -> int:
@@ -834,6 +921,8 @@ class AccountFacts:
     #: IANA-имя часового пояса кабинета (`timezone_name`, тот же ответ, что и смещение).
     #: Время старта переводится по нему, а не по текущему смещению (ACL-1767: переход на летнее время).
     timezone_name: str = ""
+    #: Минимальный дневной бюджет кабинета в мелких единицах (`min_daily_budget` Meta); None - не прочитан (ACL-1443).
+    min_daily_budget: int | None = None
     page_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
@@ -883,7 +972,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                          pixels=[str(p.get("id")) for p in pixels if p.get("id")],
                          pages=[], page_names={}, page_sources={},
-                         utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip())
+                         utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip(),
+                         min_daily_budget=_minor_or_none(acc.get("min_daily_budget")))
     _apply_pages(facts, merged)
     facts.profile_loaded = merged.profile_read
 
@@ -2336,10 +2426,18 @@ class CampaignCreator:
 
     # -- описание объектов (одно на запись и на сверку)
     def campaign_params(self, plan: CampaignPlan) -> dict:
-        return {"name": plan.name, "objective": OBJECTIVE, "status": PAUSED,
-                "special_ad_categories": [], "buying_type": "AUCTION",
-                "daily_budget": budget_minor(plan.daily_budget, self.facts.currency),
-                "bid_strategy": BID_STRATEGY, "adlabels": [{"name": plan.label}]}
+        params = {"name": plan.name, "objective": OBJECTIVE, "status": PAUSED,
+                  "special_ad_categories": [], "buying_type": "AUCTION"}
+        if plan.lifetime:
+            # ACL-1443: сумма на весь срок; расписание - pacing_type=day_parting (так хранит Meta).
+            params["lifetime_budget"] = budget_minor(plan.lifetime_budget, self.facts.currency)
+        else:
+            params["daily_budget"] = budget_minor(plan.daily_budget, self.facts.currency)
+        params["bid_strategy"] = BID_STRATEGY
+        if plan.lifetime and plan.has_schedule:
+            params["pacing_type"] = ["day_parting"]
+        params["adlabels"] = [{"name": plan.label}]
+        return params
 
     def adset_params(self, plan: CampaignPlan, ad_set: AdSetPlan, campaign_id: str, targeting: dict) -> dict:
         if ad_set.instant:
@@ -2359,13 +2457,21 @@ class CampaignCreator:
         if ad_set.start_time:
             # ACL-1767: ключа нет, пока старт не задан - прежние планы не меняются.
             params["start_time"] = self.start_iso(ad_set)
+        if ad_set.end_time:
+            # ACL-1443: lifetime - конец набора с явным смещением; у daily ключа нет.
+            params["end_time"] = self.end_iso(ad_set)
+        if ad_set.schedule:
+            params["adset_schedule"] = self.schedule_windows(ad_set)
         if ad_set.dynamic:
             # ACL-1774: несколько текстов - Dynamic Creative на уровне набора; ключа нет у прежних планов.
             params[_wpol.DYNAMIC_KEY] = True
         return params
 
-    def _start_dt(self, ad_set: AdSetPlan) -> datetime:
-        """Время старта набора как момент: введено по часовому поясу кабинета."""
+    def _local_dt(self, ad_set: AdSetPlan, value: str, what: str) -> datetime:
+        """Время набора как момент: введено по часовому поясу кабинета, смещение - на САМУ дату (ACL-1443).
+
+        Несуществующее время (дыра перевода часов) - отказ; неоднозначное (час повторяется) - первое.
+        """
         name = self.facts.timezone_name
         zone = None
         if name:
@@ -2376,13 +2482,54 @@ class CampaignCreator:
         if zone is None:
             # Не угадываем по текущему смещению: на дату старта оно может быть другим (летнее время).
             raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
-                            f"({name or 'not returned by Meta'}) is not known here, so the start time "
-                            "cannot be set. Clear the start time or try again.")
-        return datetime.strptime(ad_set.start_time, "%Y-%m-%dT%H:%M").replace(tzinfo=zone)
+                            f"({name or 'not returned by Meta'}) is not known here, so the {what} time "
+                            f"cannot be set. Clear the {what} time or try again.")
+        naive = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+        local = naive.replace(tzinfo=zone, fold=0)
+        if local.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) != naive:
+            raise PlanError(f"Ad set {ad_set.name!r}: the {what} time {value} does not exist in the ad account "
+                            f"time zone ({name}): clocks skip that hour. Pick another time.")
+        return local
+
+    def _start_dt(self, ad_set: AdSetPlan) -> datetime:
+        """Время старта набора как момент: введено по часовому поясу кабинета."""
+        return self._local_dt(ad_set, ad_set.start_time, "start")
+
+    def _end_dt(self, ad_set: AdSetPlan) -> datetime:
+        return self._local_dt(ad_set, ad_set.end_time, "end")
 
     def start_iso(self, ad_set: AdSetPlan) -> str:
         """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
         return self._start_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
+
+    def end_iso(self, ad_set: AdSetPlan) -> str:
+        return self._end_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
+
+    @staticmethod
+    def schedule_windows(ad_set: AdSetPlan) -> list[dict]:
+        """Окна расписания набора для записи: пояс кабинета (`ADVERTISER`) добавляет бэкенд."""
+        return [{"days": list(w["days"]), "start_minute": w["start_minute"], "end_minute": w["end_minute"],
+                 "timezone_type": _wpol.SCHEDULE_TZ} for w in ad_set.schedule]
+
+    def budget_floor_problem(self, plan: CampaignPlan) -> str:
+        """Lifetime ниже `min_daily_budget` кабинета x число дней (ACL-1443). Нет факта - пусто."""
+        minimum = self.facts.min_daily_budget
+        if not plan.lifetime or not minimum:
+            return ""
+        spans = []
+        for ad_set in plan.ad_sets:
+            if ad_set.start_time and ad_set.end_time:
+                spans.append((self._end_dt(ad_set) - self._start_dt(ad_set)).total_seconds())
+        if not spans:
+            return ""
+        days = max(1, math.ceil(min(spans) / 86400))
+        need = minimum * days
+        if budget_minor(plan.lifetime_budget, self.facts.currency) >= need:
+            return ""
+        cur = self.facts.currency
+        return (f"The lifetime budget {plan.lifetime_budget:g} {cur} is below the ad account minimum "
+                f"{minor_to_major(minimum, cur):g} {cur} a day x {days} day{'s' if days != 1 else ''} = "
+                f"{minor_to_major(need, cur):g} {cur}")
 
     def creative_params(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict, name: str) -> dict:
         """Запись креатива: одно описание на запись, предпроверку политикой и сверку (ACL-1767)."""
@@ -2519,7 +2666,14 @@ class CampaignCreator:
         check("name", want["name"], camp.get("name"))
         check("status", PAUSED, camp.get("status"))
         check("objective", OBJECTIVE, camp.get("objective"))
-        check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
+        if plan.lifetime:
+            # ACL-1443: проверяем тот тип бюджета, что задан; у daily прежние проверки без изменений.
+            check("lifetime_budget", str(want["lifetime_budget"]), _amount(camp.get("lifetime_budget")))
+            check("daily_budget", "0", _amount(camp.get("daily_budget")))
+            if "pacing_type" in want:
+                check("pacing_type", want["pacing_type"], camp.get("pacing_type") if "pacing_type" in camp else None)
+        else:
+            check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
         # ACL-1772: агрегат ENABLED только когда ВСЕ наборы без ограничений площадок.
@@ -2536,6 +2690,15 @@ class CampaignCreator:
                 for s in plan.ad_sets)
             check("advantage_placement_state", "ENABLED" if automatic else "DISABLED", state)
         return checks
+
+    def _schedule_check(self, checks: list[dict], obj: str, ad_set: AdSetPlan, row: dict) -> None:
+        """Расписание набора как множество окон (день, начало, конец), без учёта порядка и группировки дней."""
+        if not ad_set.schedule and not row.get("adset_schedule"):
+            return
+        want = _window_set(self.schedule_windows(ad_set))
+        got = _window_set(row["adset_schedule"]) if "adset_schedule" in row else None
+        self._mk_check(checks, obj, "adset_schedule", want, got)
+        checks[-1]["show_diff"] = True
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
                       campaign_id: str, *, reused: bool = False) -> list[dict]:
@@ -2565,9 +2728,17 @@ class CampaignCreator:
         # Оба направления: набор прошлого запуска мог быть динамическим, а объявление теперь с одним текстом.
         check("dynamic_creative", ad_set.dynamic,
               bool(row.get("is_dynamic_creative")) if ("is_dynamic_creative" in row or not ad_set.dynamic) else None)
-        check("schedule", "starts on activation, no end date",
-              "starts on activation, no end date" if not row.get("end_time") else
-              f"ends {row.get('end_time')}")
+        if ad_set.end_time:
+            # ACL-1443: lifetime - Meta должна вернуть тот же конец (сравнение в UTC, смещения разные).
+            check("schedule", f"ends {_utc(self.end_iso(ad_set))}",
+                  f"ends {_utc(row.get('end_time'))}" if row.get("end_time") else
+                  "starts on activation, no end date")
+            checks[-1]["show_diff"] = True
+            self._schedule_check(checks, obj, ad_set, row)
+        else:
+            check("schedule", "starts on activation, no end date",
+                  "starts on activation, no end date" if not row.get("end_time") else
+                  f"ends {row.get('end_time')}")
         t = row.get("targeting") or {}
         check("geo", targeting["geo_locations"]["countries"], (t.get("geo_locations") or {}).get("countries"))
         check("age_min", targeting["age_min"], t.get("age_min"))
@@ -2610,6 +2781,7 @@ class CampaignCreator:
         """
         found: list[dict] = []
         camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
+        self._budget_type_conflict(plan, camp)
         diffs = _describe_diffs(self._campaign_checks(plan, camp))
         if diffs:
             found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
@@ -2621,6 +2793,23 @@ class CampaignCreator:
             if diffs:
                 found.append({"object": f"ad set {ad_set.name!r}", "kind": "adset", "differences": diffs})
         return found
+
+    @staticmethod
+    def _budget_type_conflict(plan: CampaignPlan, camp: dict) -> None:
+        """ACL-1443: наша кампания с этим именем уже есть, но с бюджетом другого типа - отказ вслух.
+
+        Тип бюджета у существующего объекта мы не меняем (Meta это не подтверждает), поэтому
+        повтор не молчит и не уходит в _2: человек переименует кампанию.
+        """
+        daily, life = _amount(camp.get("daily_budget")) != "0", _amount(camp.get("lifetime_budget")) != "0"
+        if plan.lifetime and daily and not life:
+            have = "a daily budget"
+        elif not plan.lifetime and life and not daily:
+            have = "a lifetime budget"
+        else:
+            return
+        raise CreationStopped(f"A campaign with this name already exists with {have} — rename the campaign. "
+                              "Nothing was created.", kind="budget_type_taken")
 
     def _find_sets(self, plan: CampaignPlan, campaign_id: str) -> list[dict | None]:
         return [self._find_child(campaign_id, "adsets", s.name) for s in plan.ad_sets]
@@ -2986,6 +3175,9 @@ class CampaignCreator:
                 raise PlanError(f"{what}: {exc}") from exc
 
         ok("campaigns", self.campaign_params(plan), "campaign")
+        floor = self.budget_floor_problem(plan)
+        if floor:
+            raise PlanError(floor)
         done_forms: set[str] = set()
         for ad_set in plan.ad_sets:
             for ad in ad_set.ads:
@@ -3001,6 +3193,14 @@ class CampaignCreator:
             if ad_set.start_time and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
                                 "(ad account time zone) is not in the future")
+            if ad_set.end_time:
+                # ACL-1443: конец позже старта по настоящим моментам (смещения на свои даты) и в будущем.
+                if ad_set.start_time and self._end_dt(ad_set) <= self._start_dt(ad_set):
+                    raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} must be "
+                                    f"after the start time {ad_set.start_time} (ad account time zone)")
+                if self._end_dt(ad_set) <= self.now():
+                    raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} "
+                                    "(ad account time zone) is not in the future")
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
             if needs_manual_page(plan):
                 continue  # No creative/ad write is planned until a Page is available.
@@ -3188,6 +3388,10 @@ class CampaignCreator:
             row["os_min"] = (t.get("user_os") or [""])[0]
         if ad_set.start_time:
             row["start_time"] = self.start_iso(ad_set)
+        if ad_set.end_time:
+            row["end_time"] = self.end_iso(ad_set)
+        if ad_set.schedule:
+            row["schedule"] = _window_set(self.schedule_windows(ad_set))
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
@@ -3261,12 +3465,18 @@ class CampaignCreator:
             "campaign": plan.name, "status": PAUSED, "children_status": CHILD_STATUS,
             "status_note": STATUS_NOTE, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
-            "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
+            "budget_minor": budget_minor(plan.budget_amount, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
             "page_source": plan.page_source, "pixel_source": plan.pixel_source,
             "existing": existing, "existing_differences": list(existing_differences or []),
             "tag": plan.label, "ad_sets": sets,
         }
+        if plan.lifetime:
+            # ACL-1443: ключи только у lifetime-плана; суммарный итог - на весь срок.
+            summary["budget_type"] = BUDGET_LIFETIME
+            summary["lifetime_budget"] = plan.lifetime_budget
+            summary["time_zone"] = self.facts.timezone_name
+            del summary["daily_budget"]
         if requested_name:
             # ACL-1902: имя из билдера занято - публикуем под выбранным (`campaign`), прежнее здесь.
             summary["requested_name"] = requested_name
@@ -3682,10 +3892,10 @@ class CampaignCreator:
 
 
 # ACL-2050: advantage_state_info и value_rules_* - только чтение, для сверки площадок после записи.
-CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,bid_strategy,adlabels{name},"
+CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,lifetime_budget,pacing_type,bid_strategy,adlabels{name},"
                    "advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state}")
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,is_dynamic_creative,adlabels{name},"
+                "promoted_object,targeting,start_time,end_time,adset_schedule,is_dynamic_creative,adlabels{name},"
                 "value_rules_applied,value_rule_set_id")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
@@ -3696,7 +3906,27 @@ _FIELD_TITLES = {"dynamic_creative": "Dynamic Creative", "geo": "countries", "ag
                  "optimization_goal": "optimization goal", "billing_event": "billing event",
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set", "gender": "gender", "start_time": "start time",
-                 "bid_strategy": "bid strategy"}
+                 "bid_strategy": "bid strategy", "lifetime_budget": "lifetime budget",
+                 "pacing_type": "pacing", "schedule": "end time", "adset_schedule": "time-of-day schedule"}
+
+
+def _amount(value: Any) -> str:
+    """Сумма Meta как строка; нет поля, пусто и "0" - одно и то же: бюджета этого типа нет (ACL-1443)."""
+    text = str(value or "").strip()
+    return text if text and text != "0" else "0"
+
+
+def _window_set(windows: Any) -> list[str]:
+    """Окна расписания -> отсортированный список «Mon 09:00-12:00» по одному на день (порядок и группы дней не важны)."""
+    out: set[str] = set()
+    for w in windows if isinstance(windows, list) else []:
+        try:
+            a, b = int(w["start_minute"]), int(w["end_minute"])
+            for d in w["days"]:
+                out.add(f"{DAY_NAMES[int(d)]} {a // 60:02d}:{a % 60:02d}-{b // 60:02d}:{b % 60:02d}")
+        except (KeyError, TypeError, ValueError, IndexError):
+            out.add(f"unreadable {w!r}")
+    return sorted(out)
 
 
 def _utc(value: Any) -> str:
@@ -3739,7 +3969,7 @@ def _show(value: Any) -> str:
 
 def _describe_diffs(checks: list[dict]) -> list[str]:
     """Расхождения одного объекта человеческим языком (площадки — одной строкой)."""
-    bad = [c for c in checks if not c["ok"] and c["field"] not in _SKIP_DIFF]
+    bad = [c for c in checks if not c["ok"] and (c["field"] not in _SKIP_DIFF or c.get("show_diff"))]
     out: list[str] = []
     place = [c for c in bad if c["field"] in _PLACEMENT_FIELDS]
     if place:
