@@ -2205,6 +2205,8 @@ def _render_report(
             "preflight_rules_json": _preflight_rules(),
             # ACL-1443: пояс и валюта кабинетов из кэша чтений (без вызовов Meta) для полей Lifetime.
             "account_facts_json": _account_facts_for_page(),
+            # ACL-1448: пояс команды (Израиль), в котором билдер принимает Start/End и сетку Lifetime.
+            "team_timezone": _team_timezone(),
             # ACL-1807: допустимые Meta цели/CTA/destination из реестра (только ga).
             "meta_caps_json": _meta_capabilities(),
         },
@@ -2228,6 +2230,12 @@ def _facts_of_reading(reading) -> dict:
     currency = str(getattr(reading, "currency_code", "") or "").strip().upper()
     return {"currency": currency, "timezone_name": zone_name, "timezone_offset_hours_utc": offset,
             "zero_decimal": currency in ZERO_DECIMAL}
+
+
+def _team_timezone() -> str:
+    from src.fb_api.team_time import team_timezone
+
+    return team_timezone()
 
 
 def _account_facts_for_page() -> dict:
@@ -2590,12 +2598,15 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             adset_count = MAX_AD_SETS
         first_slot = len(slots)
         # ACL-1443 (только API-бэкенд): lifetime-бюджет, срок и расписание кампании. Нет поля или пусто - daily,
-        # и слоты остаются прежними ни байтом. Время - настенное время кабинета, не браузера.
+        # и слоты остаются прежними ни байтом. ACL-1448: время и сетка - по поясу команды (Израиль), в пояс
+        # кабинета их переводит бэкенд при плане и сборке.
         budget_type = (form.get(f"camp_{idx}_budget_type") or "").strip().lower()
         if budget_type not in ("", "daily", "lifetime"):
             form_errors.append(f"Unknown budget type {budget_type!r} (use Daily or Lifetime)")
         life_start = (form.get(f"camp_{idx}_start_time") or "").strip()
         life_end = (form.get(f"camp_{idx}_end_time") or "").strip()
+        # ACL-1448: пояс, в котором введены сроки и сетка (пояс команды); ключ только у Lifetime.
+        life_zone = (form.get(f"camp_{idx}_time_zone") or "").strip()
         schedule: list = []
         raw_schedule = (form.get(f"camp_{idx}_schedule") or "").strip()
         if raw_schedule:
@@ -2722,6 +2733,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                         slot["start_time"] = life_start
                     if life_end:
                         slot["end_time"] = life_end
+                    if life_zone:
+                        slot["time_zone"] = life_zone
                 if schedule:
                     # Расписание есть и при daily - план откажет вслух ("needs a lifetime budget").
                     slot["schedule"] = schedule

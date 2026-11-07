@@ -45,6 +45,7 @@ from src.fb_api import forms as _forms
 from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
+from src.fb_api import team_time as _tt
 
 from src.fb_api import creative_recovery as _cr
 from src.fb_api import pages as _pg
@@ -402,6 +403,9 @@ class AdSetPlan:
     #: ACL-1443 (lifetime): конец и расписание; пусто = как у daily (ключей в параметрах нет).
     end_time: str = ""               # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
     schedule: list = field(default_factory=list)   # [{"days": [0..6], "start_minute", "end_minute"}]
+    #: ACL-1448: пояс, в котором введены старт, конец и сетка (пояс команды); только у lifetime, у daily пусто
+    #: и время по-прежнему читается в поясе кабинета.
+    time_zone: str = ""
     #: ACL-1768: номер набора и поля уровня набора; пусто = как у кампании.
     index: int = 1                   # 1-based порядковый номер набора в кампании
     language: str = ""               # язык набора вместо языка кампании
@@ -704,6 +708,10 @@ def _plan_period(plan_set: AdSetPlan, src: Any, lifetime: bool, problems: list[s
     name = plan_set.name
     end = str(getattr(src, "end_time", "") or "").strip()
     raw = getattr(src, "schedule", None) or []
+    if lifetime:
+        # ACL-1448: время вводят по поясу команды. Имя из формы принимаем, только если оно настоящее.
+        asked = str(getattr(src, "time_zone", "") or "").strip()
+        plan_set.time_zone = asked if _tt.load_zone(asked) else _tt.team_timezone()
     if not lifetime:
         if end:
             problems.append(f"Ad set {name!r}: an end time needs a lifetime budget")
@@ -2472,17 +2480,19 @@ class CampaignCreator:
         return params
 
     def _local_dt(self, ad_set: AdSetPlan, value: str, what: str) -> datetime:
-        """Время набора как момент: введено по часовому поясу кабинета, смещение - на САМУ дату (ACL-1443).
+        """Время набора как момент, смещение - на САМУ дату (ACL-1443).
 
+        Lifetime (ACL-1448): введено по поясу команды (Израиль), `ad_set.time_zone`. Daily: по поясу кабинета.
         Несуществующее время (дыра перевода часов) - отказ; неоднозначное (час повторяется) - первое.
         """
+        if ad_set.time_zone:
+            local = _tt.localize(value, ad_set.time_zone)
+            if local is None:
+                raise PlanError(f"Ad set {ad_set.name!r}: the {what} time {value} does not exist in Israel time "
+                                f"({ad_set.time_zone}): clocks skip that hour. Pick another time.")
+            return local
         name = self.facts.timezone_name
-        zone = None
-        if name:
-            try:
-                zone = ZoneInfo(name)
-            except (ZoneInfoNotFoundError, ValueError, OSError):
-                zone = None
+        zone = _tt.load_zone(name)
         if zone is None:
             # Не угадываем по текущему смещению: на дату старта оно может быть другим (летнее время).
             raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
@@ -2494,6 +2504,10 @@ class CampaignCreator:
             raise PlanError(f"Ad set {ad_set.name!r}: the {what} time {value} does not exist in the ad account "
                             f"time zone ({name}): clocks skip that hour. Pick another time.")
         return local
+
+    @staticmethod
+    def _zone_note(ad_set: AdSetPlan) -> str:
+        return "Israel time" if ad_set.time_zone else "ad account time zone"
 
     def _start_dt(self, ad_set: AdSetPlan) -> datetime:
         """Время старта набора как момент: введено по часовому поясу кабинета."""
@@ -2509,11 +2523,42 @@ class CampaignCreator:
     def end_iso(self, ad_set: AdSetPlan) -> str:
         return self._end_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
 
-    @staticmethod
-    def schedule_windows(ad_set: AdSetPlan) -> list[dict]:
-        """Окна расписания набора для записи: пояс кабинета (`ADVERTISER`) добавляет бэкенд."""
-        return [{"days": list(w["days"]), "start_minute": w["start_minute"], "end_minute": w["end_minute"],
-                 "timezone_type": _wpol.SCHEDULE_TZ} for w in ad_set.schedule]
+    def schedule_windows(self, ad_set: AdSetPlan) -> list[dict]:
+        """Окна расписания набора для записи: пояс кабинета (`ADVERTISER`) добавляет бэкенд.
+
+        ACL-1448: сетка в плане - по поясу команды; в окна кабинета её переводит `team_grid_to_account_windows`
+        по разнице поясов на момент старта. Нецелая разница часов или неизвестный пояс кабинета - отказ.
+        """
+        if not ad_set.time_zone:
+            return [{"days": list(w["days"]), "start_minute": w["start_minute"], "end_minute": w["end_minute"],
+                     "timezone_type": _wpol.SCHEDULE_TZ} for w in ad_set.schedule]
+        account = self.facts.timezone_name
+        if _tt.load_zone(account) is None:
+            raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
+                            f"({account or 'not returned by Meta'}) is not known here, so the hours of the "
+                            "schedule cannot be converted. Clear the schedule or try again.")
+        try:
+            return _tt.team_grid_to_account_windows(ad_set.schedule, ad_set.time_zone, account,
+                                                    self._start_dt(ad_set))
+        except _tt.ShiftError as exc:
+            raise PlanError(f"Ad set {ad_set.name!r}: {exc}.") from exc
+
+    def schedule_shift_warnings(self, plan: CampaignPlan) -> list[str]:
+        """ACL-1448: предупреждения (не ошибки), если разница Израиль-кабинет меняется между стартом и концом."""
+        account = self.facts.timezone_name
+        if not plan.lifetime or _tt.load_zone(account) is None:
+            return []
+        found: list[str] = []
+        for s in plan.ad_sets:
+            if not (s.schedule and s.time_zone and s.start_time and s.end_time):
+                continue
+            try:
+                note = _tt.shift_change_warning(s.time_zone, account, self._start_dt(s), self._end_dt(s))
+            except PlanError:
+                continue     # дыра часов покажет свой отказ в предпроверке
+            if note and note not in found:
+                found.append(note)
+        return found
 
     def lifetime_days(self, plan: CampaignPlan) -> int | None:
         """Число суток срока (вверх) по самому короткому набору; нет сроков - None (ACL-1443)."""
@@ -2953,6 +2998,7 @@ class CampaignCreator:
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
         out.warnings += resolve_page_pixel(plan, self.facts)
+        out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
@@ -3207,15 +3253,15 @@ class CampaignCreator:
             reused = pos < len(found) and bool(found[pos])
             if ad_set.start_time and not early and not reused and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
-                                "(ad account time zone) is not in the future")
+                                f"({self._zone_note(ad_set)}) is not in the future")
             if ad_set.end_time:
                 # ACL-1443: конец позже старта по настоящим моментам (смещения на свои даты) и в будущем.
                 if ad_set.start_time and self._end_dt(ad_set) <= self._start_dt(ad_set):
                     raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} must be "
-                                    f"after the start time {ad_set.start_time} (ad account time zone)")
+                                    f"after the start time {ad_set.start_time} ({self._zone_note(ad_set)})")
                 if self._end_dt(ad_set) <= self.now():
                     raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} "
-                                    "(ad account time zone) is not in the future")
+                                    f"({self._zone_note(ad_set)}) is not in the future")
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
             if needs_manual_page(plan):
                 continue  # No creative/ad write is planned until a Page is available.
@@ -3407,6 +3453,9 @@ class CampaignCreator:
             row["end_time"] = self.end_iso(ad_set)
         if ad_set.schedule:
             row["schedule"] = _window_set(self.schedule_windows(ad_set))
+        if ad_set.time_zone:
+            # ACL-1448: время введено по поясу команды; расписание выше уже в часах кабинета.
+            row["time_zone"] = ad_set.time_zone
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:

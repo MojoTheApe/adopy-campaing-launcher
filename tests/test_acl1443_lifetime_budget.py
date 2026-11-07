@@ -58,6 +58,8 @@ def _life(tmp_path, *, budget=50.0, start="2026-10-20T09:00", end="2026-10-25T09
     s.daily_budget = budget
     s.budget_type = "lifetime"
     s.start_time, s.end_time = start, end
+    # ACL-1448: сроки вводят по поясу команды; эти тесты считают в поясе кабинета (разница 0), Израиль - в test_acl1448.
+    s.time_zone = "America/New_York"
     s.schedule = [dict(w) for w in schedule] if schedule else []
     for k, v in over.items():
         setattr(s, k, v)
