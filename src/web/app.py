@@ -2605,8 +2605,6 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             form_errors.append(f"Unknown budget type {budget_type!r} (use Daily or Lifetime)")
         life_start = (form.get(f"camp_{idx}_start_time") or "").strip()
         life_end = (form.get(f"camp_{idx}_end_time") or "").strip()
-        # ACL-1448: пояс, в котором введены сроки и сетка (пояс команды); ключ только у Lifetime.
-        life_zone = (form.get(f"camp_{idx}_time_zone") or "").strip()
         schedule: list = []
         raw_schedule = (form.get(f"camp_{idx}_schedule") or "").strip()
         if raw_schedule:
@@ -2733,8 +2731,6 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                         slot["start_time"] = life_start
                     if life_end:
                         slot["end_time"] = life_end
-                    if life_zone:
-                        slot["time_zone"] = life_zone
                 if schedule:
                     # Расписание есть и при daily - план откажет вслух ("needs a lifetime budget").
                     slot["schedule"] = schedule

@@ -709,9 +709,8 @@ def _plan_period(plan_set: AdSetPlan, src: Any, lifetime: bool, problems: list[s
     end = str(getattr(src, "end_time", "") or "").strip()
     raw = getattr(src, "schedule", None) or []
     if lifetime:
-        # ACL-1448: время вводят по поясу команды. Имя из формы принимаем, только если оно настоящее.
-        asked = str(getattr(src, "time_zone", "") or "").strip()
-        plan_set.time_zone = asked if _tt.load_zone(asked) else _tt.team_timezone()
+        # ACL-1448: время вводят по поясу команды; пояс задаёт сервер, из формы он не приходит.
+        plan_set.time_zone = _tt.team_timezone()
     if not lifetime:
         if end:
             problems.append(f"Ad set {name!r}: an end time needs a lifetime budget")

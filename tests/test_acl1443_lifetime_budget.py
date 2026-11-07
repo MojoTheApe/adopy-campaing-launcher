@@ -26,6 +26,12 @@ NOW = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
 WINDOW = {"days": [1, 2, 3, 4, 5], "start_minute": 540, "end_minute": 1080}
 
 
+@pytest.fixture(autouse=True)
+def _team_zone_is_the_account_zone(monkeypatch):
+    """ACL-1448: сроки вводят по поясу команды; эти тесты считают в поясе кабинета (разница 0), Израиль - в test_acl1448."""
+    monkeypatch.setenv("ACL_TEAM_TIMEZONE", "America/New_York")
+
+
 class ZoneMeta(FakeMeta):
     """FakeMeta + пояс, валюта и минимум дневного бюджета кабинета."""
 
@@ -58,8 +64,6 @@ def _life(tmp_path, *, budget=50.0, start="2026-10-20T09:00", end="2026-10-25T09
     s.daily_budget = budget
     s.budget_type = "lifetime"
     s.start_time, s.end_time = start, end
-    # ACL-1448: сроки вводят по поясу команды; эти тесты считают в поясе кабинета (разница 0), Израиль - в test_acl1448.
-    s.time_zone = "America/New_York"
     s.schedule = [dict(w) for w in schedule] if schedule else []
     for k, v in over.items():
         setattr(s, k, v)

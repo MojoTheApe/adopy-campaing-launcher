@@ -166,8 +166,6 @@ def slots_to_campaign_drafts(
                 budget_type=budget_type,
                 end_time=(first.get("end_time") or "").strip(),
                 schedule=[dict(w) for w in schedule],
-                # ACL-1448: пояс сроков и сетки; ключ в слоте только у lifetime.
-                time_zone=(first.get("time_zone") or "").strip() if budget_type else "",
                 placements=first.get("placements"),
                 adset_index=idx,
                 # Язык набора 0 - язык кампании; у остальных свой, пусто = как у кампании.

@@ -89,11 +89,6 @@ def test_days_with_the_same_window_share_one_record_in_day_order():
     assert got == [_w([1, 3], 9, 10)]
 
 
-def test_the_conversion_is_deterministic():
-    runs = [tt.team_grid_to_account_windows(NO_01_05, ISRAEL, "America/New_York", _at(2026, 11, 10)) for _ in range(3)]
-    assert runs[0] == runs[1] == runs[2]
-
-
 def test_a_half_hour_difference_is_refused():
     # Индия UTC+5:30, Израиль в ноябре +2 -> 3.5 часа.
     with pytest.raises(tt.ShiftError, match="not a whole number of hours"):
@@ -110,6 +105,16 @@ def test_a_change_of_the_difference_gives_a_warning_with_the_date():
     assert "changes on 2026-11-01" in back and "1 hour later than planned" in back
 
 
+def test_the_difference_that_leaves_and_returns_inside_the_term_is_one_warning_with_until():
+    # Нью-Йорк: -7, с 25.10 (Израиль) -6, с 01.11 (Нью-Йорк) снова -7. Start и End сравнивать мало.
+    note = tt.shift_change_warning(ISRAEL, "America/New_York", _at(2026, 10, 20), _at(2026, 11, 5))
+    assert note == ("The time difference between Israel and the account changes on 2026-10-25 until 2026-11-01; "
+                    "during that time ads run 1 hour earlier than planned.")
+    spring = tt.shift_change_warning(ISRAEL, "America/New_York", _at(2027, 3, 1), _at(2027, 4, 15))
+    assert "changes on 2027-03-14 until 2027-03-26" in spring and "during that time" in spring
+    assert len(tt.shift_changes(ISRAEL, "America/New_York", _at(2026, 10, 20), _at(2026, 11, 5))) == 2
+
+
 def test_no_warning_when_the_difference_stays():
     assert tt.shift_change_warning(ISRAEL, "America/New_York", _at(2026, 11, 3), _at(2026, 11, 9)) == ""
 
@@ -118,7 +123,6 @@ def test_no_warning_when_the_difference_stays():
 
 def _israel(tmp_path, **over):
     d = _life(tmp_path, start="2026-11-10T09:00", end="2026-11-15T09:00", schedule=NO_01_05, **over)
-    d.ad_sets[0].time_zone = ""            # как с формы без явного пояса: берётся пояс команды
     return d
 
 
@@ -146,7 +150,6 @@ def test_the_plan_summary_shows_converted_windows_and_the_zone(tmp_path, monkeyp
 def test_the_change_of_the_difference_is_a_warning_not_an_error_in_check_plan(tmp_path, monkeypatch):
     monkeypatch.delenv("ACL_TEAM_TIMEZONE", raising=False)
     d = _life(tmp_path, start="2026-10-20T09:00", end="2026-10-30T09:00", schedule=NO_01_05)
-    d.ad_sets[0].time_zone = ""
     out = _creator(ZoneMeta()).plan_only(_plan(d))
     assert out.error == ""
     assert any("changes on 2026-10-25" in w and "earlier than planned" in w for w in out.warnings)
@@ -168,7 +171,6 @@ def test_an_unknown_account_zone_stops_the_schedule_but_not_the_start(tmp_path):
 def test_a_time_in_the_israeli_dst_gap_is_refused_naming_israel(tmp_path):
     creator = _creator(ZoneMeta())
     d = _life(tmp_path, start="2027-03-26T02:30", end="2027-04-02T09:00")
-    d.ad_sets[0].time_zone = ""
     plan = _plan(d)
     with pytest.raises(cr.PlanError, match="does not exist in Israel time"):
         creator.start_iso(plan.ad_sets[0])
@@ -178,10 +180,8 @@ def test_start_in_the_past_is_judged_in_absolute_time_of_israel(tmp_path, monkey
     monkeypatch.delenv("ACL_TEAM_TIMEZONE", raising=False)
     # NOW = 12.10.2026 12:00 UTC = 15:00 в Израиле: 14:00 уже прошло, 16:00 - нет.
     past = _life(tmp_path, start="2026-10-12T14:00", end="2026-10-20T09:00")
-    past.ad_sets[0].time_zone = ""
     assert "Israel time" in _creator(ZoneMeta()).plan_only(_plan(past)).error
     ok = _life(tmp_path, start="2026-10-12T16:00", end="2026-10-20T09:00")
-    ok.ad_sets[0].time_zone = ""
     assert _creator(ZoneMeta()).plan_only(_plan(ok)).error == ""
 
 
@@ -225,21 +225,18 @@ def _fields(**over):
     return f
 
 
-def test_the_time_zone_is_stored_only_for_lifetime():
+def test_the_zone_never_comes_from_the_form(tmp_path):
     from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
     from src.web import app as web
 
     country, label, slots = web._parse_build_upload_form(_fields(
         camp_0_budget_type="lifetime", camp_0_start_time="2026-11-10T09:00", camp_0_end_time="2026-11-15T09:00",
-        camp_0_time_zone=ISRAEL, camp_0_schedule=json.dumps(NO_01_05)))
-    assert slots[0]["time_zone"] == ISRAEL
+        camp_0_time_zone="UTC", camp_0_schedule=json.dumps(NO_01_05)))
+    assert "time_zone" not in slots[0]
     [draft] = slots_to_campaign_drafts(slots, account_label=label, country=country)
-    assert draft.ad_sets[0].time_zone == ISRAEL and draft.ad_sets[0].to_preview_dict()["time_zone"] == ISRAEL
-    # Daily: поле пришло, но в слот и черновик не попадает.
+    assert not hasattr(draft.ad_sets[0], "time_zone") and "time_zone" not in draft.ad_sets[0].to_preview_dict()
     _c, _l, daily = web._parse_build_upload_form(_fields(camp_0_budget_type="daily", camp_0_time_zone=ISRAEL))
     assert "time_zone" not in daily[0]
-    [d2] = slots_to_campaign_drafts(daily, account_label=label, country=country)
-    assert "time_zone" not in d2.ad_sets[0].to_preview_dict()
 
 
 # ───────────────────────── страница: пресет, подписи и строка «что получит Meta» ─────────────────────────
@@ -300,11 +297,8 @@ def test_labels_and_aria_say_israel_time(lt):
         lt.inner_text("[data-lt-tz]") or "Times are Israel time (Asia/Jerusalem). Account: unknown" in lt.inner_text("[data-lt-tz]")
 
 
-def test_the_time_zone_field_follows_the_budget_type(lt):
-    assert lt.evaluate("(() => { const f = document.querySelector('[name$=\"_time_zone\"]');"
-                       " return [f.value, f.disabled]; })()") == ["Asia/Jerusalem", False]
-    lt.click('[data-budget-type="daily"]')
-    assert lt.evaluate("document.querySelector('[name$=\"_time_zone\"]').disabled") is True
+def test_the_page_has_no_time_zone_field(lt):
+    assert lt.evaluate("document.querySelectorAll('[name$=\"_time_zone\"]').length") == 0
 
 
 def test_the_preset_clears_01_to_05_on_every_day_and_the_preview_shows_account_time(lt):
@@ -324,14 +318,50 @@ def test_the_preview_asks_to_wait_for_check_plan_when_the_account_zone_is_unknow
     assert lt.inner_text("[data-lt-acc-preview]") == "Account time zone is read on Check plan; hours are converted then."
 
 
-def test_the_page_algorithm_matches_the_server_one(lt):
-    got = lt.evaluate("cbLifetime.convertWindows([{days:[1],start_minute:60,end_minute:300}], -7)")
-    assert got == [{"days": [0], "start_minute": 18 * 60, "end_minute": 22 * 60}]
-    got = lt.evaluate("cbLifetime.convertWindows([{days:[0],start_minute:0,end_minute:120}], -7)")
-    assert got == [{"days": [6], "start_minute": 17 * 60, "end_minute": 19 * 60}]
-    got = lt.evaluate("cbLifetime.convertWindows([{days:[6],start_minute:1320,end_minute:1440}], 7)")
-    assert got == [{"days": [0], "start_minute": 5 * 60, "end_minute": 7 * 60}]
-    # Разные часы по дням: дни с одинаковым текстом сжаты в диапазон.
+def _random_grids():
+    import random
+    rng = random.Random(1448)
+    out = []
+    for _ in range(10):
+        wins = []
+        for _ in range(rng.randint(1, 4)):
+            a = rng.randint(0, 23)
+            b = rng.randint(a + 1, 24)
+            wins.append({"days": sorted(rng.sample(range(7), rng.randint(1, 7))),
+                         "start_minute": a * 60, "end_minute": b * 60})
+        out.append((wins, rng.choice([-12, -7, -5, -1, 1, 3, 7, 11])))
+    return out
+
+
+PARITY = [
+    ([{"days": [1], "start_minute": 60, "end_minute": 300}], -7),
+    ([{"days": [3], "start_minute": 23 * 60, "end_minute": 1440}], -7),            # час 23, сдвиг назад
+    ([{"days": [3], "start_minute": 23 * 60, "end_minute": 1440}], 5),
+    ([{"days": [2], "start_minute": 0, "end_minute": 1440}], 7),                    # целые сутки со сдвигом
+    ([{"days": [2], "start_minute": 0, "end_minute": 1440}], -7),
+    ([{"days": [1, 2], "start_minute": 60, "end_minute": 180},
+      {"days": [1], "start_minute": 600, "end_minute": 900},
+      {"days": [2, 5], "start_minute": 1200, "end_minute": 1320}], -3),             # несколько отрезков в дне
+    ([{"days": [0], "start_minute": 0, "end_minute": 120}], -7),                    # воскресенье -> суббота
+    ([{"days": [6], "start_minute": 1320, "end_minute": 1440}], 7),                 # суббота -> воскресенье
+    ([{"days": [0, 6], "start_minute": 0, "end_minute": 1440}], 1),
+    (NO_01_05, -7),
+    (NO_01_05, 0),
+] + _random_grids()
+
+
+@pytest.mark.parametrize("wins,shift", PARITY)
+def test_the_page_algorithm_gives_the_same_windows_as_the_server_one(lt, wins, shift):
+    # Часы кабинета = часы команды + shift: подбираем момент и пару поясов с нужной целой разницей не нужно,
+    # поэтому серверная функция вызывается с фиктивным поясом без перехода часов (Etc/GMT).
+    acc = f"Etc/GMT{-(shift + 2):+d}" if shift + 2 else "Etc/GMT"
+    team = "Etc/GMT-2"
+    server = tt.team_grid_to_account_windows(wins, team, acc, datetime(2026, 11, 10, tzinfo=ZoneInfo("UTC")))
+    server = [{k: v for k, v in w.items() if k != "timezone_type"} for w in server]
+    assert lt.evaluate("([w, h]) => cbLifetime.convertWindows(w, h)", [wins, shift]) == server
+
+
+def test_the_account_preview_reads_the_start_date_difference(lt):
     lt.evaluate("""() => { const hid = document.querySelector('[name$="_schedule"]');
         hid.disabled = false;
         hid.value = JSON.stringify([{days:[1,2,3,4,5], start_minute:540, end_minute:1080}]);

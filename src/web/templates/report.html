@@ -6613,7 +6613,7 @@ window.cbKeep = (function () {
   }
 
   /* ACL-1443: поля Lifetime в черновике (версию черновика не поднимаем: старые читают как Daily). */
-  var LT_KEYS = ['budget_type', 'start_time', 'end_time', 'schedule', 'schedule_on', 'time_zone'];
+  var LT_KEYS = ['budget_type', 'start_time', 'end_time', 'schedule', 'schedule_on'];
   function readSlot(slot) {
     var fields = {};
     slot.querySelectorAll('[name]').forEach(function (el) {
@@ -7853,7 +7853,6 @@ window.cbLifetime = (function () {
     };
     return dt('start_time', 'Start (Israel time)', 'Start time, Israel time')
       + dt('end_time', 'End (Israel time)', 'End time, Israel time')
-      + '<input type="hidden" name="camp_' + idx + '_time_zone" value="' + teamZone() + '" disabled>'
       + '<span class="cb-label cb-lt-only" hidden></span>'
       + '<div class="cb-lt-only cb-lt-note" hidden data-lt-tz></div>'
       + '<span class="cb-label cb-lt-only" hidden>Schedule</span>'
@@ -7899,8 +7898,6 @@ window.cbLifetime = (function () {
     slot.querySelectorAll('.cb-lt-only').forEach(function (el) { setHidden(el, !life); });
     var s = fld(slot, 'start_time'), e = fld(slot, 'end_time'), sch = fld(slot, 'schedule');
     setDisabled(s, !life); setDisabled(e, !life);
-    var tzf = fld(slot, 'time_zone');            // ACL-1448: пояс сроков уходит на сервер только у Lifetime
-    if (tzf) { setDisabled(tzf, !life); if (tzf.value !== teamZone()) tzf.value = teamZone(); }
     setDisabled(sch, !(on && sch && sch.value));
     setHidden(q(slot, '.cb-sg'), !on);
     paintGrid(slot);
