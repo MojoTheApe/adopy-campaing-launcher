@@ -988,8 +988,12 @@ class ProfileSlots:
         cancelled: Callable[[], bool] = lambda: False,
         on_wait: Callable[[dict[str, Any]], None] | None = None,
         share_profile: bool = False,
+        once: bool = False,
     ) -> dict[str, Any] | None:
         """Ждать места для задания. None — задание отменили, пока ждало.
+
+        ACL-2268: `once=True` (фоновый автопрогрев) — один вопрос без ожидания и без вытеснения чужого
+        окна: первый же отказ возвращает None, в `_waiting` ничего не остаётся.
 
         Ответ: `waited_s`, `decision` (что разрешило старт), `first_hold`
         (почему пришлось ждать; None — не ждало), `shared`.
@@ -1020,6 +1024,8 @@ class ProfileSlots:
                                 "decision": {"allow": True, "reason": "shared_profile"},
                                 "first_hold": first_hold, "shared": True}
                     verdict = self._verdict(job_id)
+                    if once and not verdict.get("allow"):
+                        return None
                     probe_wait_s = 0.0
                     if (self._evictor is not None and verdict.get("profile_open_pending")
                             and verdict.get("reason") in ("memory_low", "below_reserve",

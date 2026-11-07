@@ -144,7 +144,7 @@
       chip.setAttribute('data-state', info.state);
       var st = chip.querySelector('.warm-state');
       st.textContent = info.text;
-      st.title = info.title || '';
+      st.title = (info.title || '') + (info.auto_note ? (info.title ? ' — ' : '') + info.auto_note : '');
       var act = chip.querySelector('.warm-act');
       // Одна кнопка на строку: открыть закрытый / закрыть поднятый дешбордом.
       if (info.state === 'closed' || info.state === 'open') {

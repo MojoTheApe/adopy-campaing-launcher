@@ -102,6 +102,28 @@ def defer_memory_wait():
         _DEFER_MEMORY.reset(token)
 
 
+#: ACL-2268: тихий старт фонового автопрогрева из билдера: не ждёт, не вытесняет, не трогает окно,
+#: открытое человеком вручную.
+_QUIET = ContextVar("acl_warm_quiet_start",default=False)
+
+
+@contextmanager
+def quiet_start():
+    """Inside: `open_one` never waits (memory, closing, slot), never evicts another window and never
+    restarts a hand-opened one. Memory shortage returns `memory_low` at once."""
+    tq = _QUIET.set(True)
+    td = _DEFER_MEMORY.set(True)
+    try:
+        yield
+    finally:
+        _DEFER_MEMORY.reset(td)
+        _QUIET.reset(tq)
+
+
+def is_quiet() -> bool:
+    return _QUIET.get()
+
+
 def memory_deferred(code: str) -> bool:
     return code == "memory_low"
 
@@ -731,6 +753,11 @@ class WarmRegistry:
                 "available_mb": avail, "used_pct": used,
                 "running": len(others), "warming": len(warming)}
 
+    def open_profile_ids(self) -> set[str]:
+        """ACL-2268: profiles this registry holds as open (for the auto-warm ceiling)."""
+        with self._lock:
+            return set(self._sessions)
+
     def warming_others(self, profile_id: str = "") -> list[str]:
         """Other profiles of ours that were started a moment ago and whose tab has not answered yet."""
         now = self._mono()
@@ -866,9 +893,12 @@ class WarmRegistry:
             return self._adopt(label, pid, int(port))
         if kind == "no_port":
             from src.fb_api.connection import may_reopen_manual
-            if may_reopen_manual():
+            if may_reopen_manual():     # ACL-2268: в тихом режиме всегда False
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
+        if kind == "closing" and _QUIET.get():
+            return _result(False, f"The {label} profile is still closing in Multilogin; nothing was "
+                           "started.", "profile_closing")
         if kind == "closing":
             # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
             # released it ends in "can't lock profile". Wait (bounded, one local look every few seconds,
@@ -930,7 +960,8 @@ class WarmRegistry:
             if queue is not None and not own_slot:
                 # ACL-2278: a job waits for the place as long as it takes; others keep the time limit.
                 grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
-                                      or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
+                                      or (job is None and time.monotonic() - began > START_SLOT_WAIT_S),
+                                      **({"once": True} if _QUIET.get() else {}))
                 if grant is None:
                     return _result(False, "Not started: not enough free memory for another profile. "
                                    "Close something and try again.", "memory_low")

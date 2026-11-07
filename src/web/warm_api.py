@@ -105,7 +105,308 @@ def state(labels: list[str]) -> dict:
     except Exception:  # noqa: BLE001 — экран не должен падать из-за подсказки
         log.exception("Could not work out the warm session states")
         got = {}
+    # ACL-2268: статус автопрогрева рядом с чипом реестра (копия, реестр не трогаем).
+    with _AUTO_LOCK:
+        auto = {l: dict(v) for l, v in _AUTO.items()}
+    for label, info_one in list(got.items()):
+        mark = auto.get(label)
+        if not mark:
+            continue
+        extra = {"auto": mark["status"]}
+        if mark["status"] == "refused" and mark.get("code") in AUTO_REASONS:
+            extra["auto_code"] = mark["code"]
+            extra["auto_note"] = ("Not opened automatically: " + AUTO_REASONS[mark["code"]]
+                                  + ". It opens when you run Check plan or Publish.")
+        got[label] = {**info_one, **extra}
     return {**info, "accounts": got}
+
+
+# ───────────── ACL-2268: автопрогрев из билдера — профиль поднимается, пока человек заполняет кампанию
+#
+# Тот же путь, что у Publish и Check plan (`prepare_existing`), но «тихий»: ничего не ждёт, никого не
+# вытесняет, окно, открытое вручную, не трогает. Неудачный запуск не повторяется; единственный повтор —
+# один взгляд через 60 с, если замок профиля был занят (запуска не было вовсе).
+
+AUTO_TRIGGERS = ("add", "duplicate", "edit")
+AUTO_REQUEUE_S = 60.0
+
+#: Причины тихого отказа — текст для подсказки на чипе аккаунта.
+AUTO_REASONS = {
+    "busy": "another action is using this profile",
+    "cooldown": "Meta paused this account",
+    "open_by_hand": "it is open in a window started by hand",
+    "closing": "it is still closing",
+    "ceiling": "the profile limit is reached",
+    "memory": "the computer is short of memory",
+    "machine_busy": "the computer is busy",
+    "jobs_waiting": "other runs are waiting",
+    "start_failed": "Multilogin did not start it",
+}
+
+_AUTO: dict[str, dict] = {}     # label -> {status: queued|opening|done|refused, code, trigger, at}
+_AUTO_QUEUE: list[tuple[str, bool]] = []     # (label, это повторный взгляд)
+_AUTO_LOCK = threading.Lock()
+_AUTO_WORKER: threading.Thread | None = None
+
+
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _timer(delay: float, fn) -> None:
+    t = threading.Timer(delay, fn)
+    t.daemon = True
+    t.start()
+
+
+def auto_enabled() -> bool:
+    """Настройка `auto_warm` (по умолчанию выключена) при включённых управляемых сессиях."""
+    try:
+        from src.fb_api.connection import settings
+
+        cfg = settings()
+        return bool(cfg.get("auto_warm")) and bool(cfg.get("managed_sessions"))
+    except Exception:  # noqa: BLE001 — настройки нечитаемы -> ничего не открываем
+        return False
+
+
+def _publish_busy(label: str) -> bool:
+    """Идёт ли публикация в этом профиле: тогда его не трогаем."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.web import publish_jobs
+
+        return bool(publish_jobs.profile_in_use(account_spend._profile_key(label)))  # noqa: SLF001
+    except Exception:  # noqa: BLE001 — не уверены -> не открываем
+        log.exception("Could not tell whether %s is publishing", label)
+        return True
+
+
+def _auto_set(label: str, status: str, code: str = "", trigger: str = "") -> None:
+    with _AUTO_LOCK:
+        prev = _AUTO.get(label, {})
+        _AUTO[label] = {"status": status, "code": code, "trigger": trigger or prev.get("trigger", ""),
+                        "at": prev.get("at", time.time())}
+
+
+def ensure_open(accounts: Any, trigger: Any = "", campaigns: Any = 0) -> tuple[dict, int]:
+    """Поставить профиль ОДНОГО аккаунта в очередь автопрогрева. Ничего не ждёт."""
+    refused = _guard()
+    if refused:
+        return refused
+    labels = _clean_labels(accounts)
+    if len(labels) != 1:
+        return {"error": "Warm exactly one account at a time."}, 400
+    if trigger not in AUTO_TRIGGERS:
+        return {"error": "Unknown trigger."}, 400
+    if isinstance(campaigns, bool) or not isinstance(campaigns, int) or campaigns < 1:
+        return {"error": "There is no campaign card to warm for."}, 400
+    label = labels[0]
+    if not auto_enabled():
+        return {"accounts": {label: "off"}}, 200
+    try:
+        entry = _entry(label)
+    except Exception:  # noqa: BLE001
+        entry = None
+    if entry is None:
+        return {"accounts": {label: "not_in_map"}}, 200
+    pid = (getattr(entry, "profile_id", "") or "").strip()
+    if not pid:
+        return {"accounts": {label: "no_profile"}}, 200
+    with _AUTO_LOCK:
+        prev = _AUTO.get(label)
+        if prev and prev["status"] in ("queued", "opening"):
+            return {"accounts": {label: prev["status"]}}, 200
+    from src.web import auto_warm_store
+
+    # Любой исход (и отказ) тратит попытку на 30 минут; нечитаемый файл — попытки нет.
+    if not auto_warm_store.take_attempt(pid):
+        return {"accounts": {label: "skipped"}}, 200
+    with _AUTO_LOCK:
+        _AUTO[label] = {"status": "queued", "code": "", "trigger": trigger, "at": time.time()}
+        _AUTO_QUEUE.append((label, False))
+        _start_worker_locked()
+    return {"accounts": {label: "queued"}}, 202
+
+
+def _start_worker_locked() -> None:
+    """Запустить рабочую нить, если очередь не пуста и нити нет. Вызывать под `_AUTO_LOCK`."""
+    global _AUTO_WORKER
+    if _AUTO_QUEUE and (_AUTO_WORKER is None or not _AUTO_WORKER.is_alive()):
+        _AUTO_WORKER = threading.Thread(target=_auto_worker, daemon=True, name="acl-warm-auto")
+        _AUTO_WORKER.start()
+
+
+def _manual_job_running() -> bool:
+    with _JOBS_LOCK:
+        return bool(_ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running")
+
+
+def _auto_worker() -> None:
+    """Открывает по одному; ручное «Open profiles» не прерываем — ждём, пока оно закончится."""
+    global _AUTO_WORKER
+    while True:
+        with _AUTO_LOCK:
+            if not _AUTO_QUEUE:
+                if _AUTO_WORKER is threading.current_thread():
+                    _AUTO_WORKER = None
+                return
+            label, retried = _AUTO_QUEUE.pop(0)
+        started = False
+        try:
+            while _manual_job_running():
+                _sleep(1.0)
+            started = _auto_one(label, retried)
+        except Exception as exc:  # noqa: BLE001 — очередь не должна умереть на одном аккаунте
+            log.exception("Automatic warm-up of %s failed", label)
+            _auto_finish(label, "start_failed", False, 0.0, {"error": type(exc).__name__})
+        if started:
+            try:
+                _sleep(_registry()._stagger())      # пауза 5–10 с после настоящего запуска
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _requeue_later(label: str) -> None:
+    def again() -> None:
+        with _AUTO_LOCK:
+            if _AUTO.get(label, {}).get("status") != "queued" or any(l == label for l, _r in _AUTO_QUEUE):
+                return
+            _AUTO_QUEUE.append((label, True))
+            _start_worker_locked()
+
+    _timer(AUTO_REQUEUE_S, again)
+
+
+def _auto_finish(label: str, code: str, started: bool, duration_s: float, extra: dict | None = None) -> None:
+    """Итог попытки: статус для экрана, строка телеметрии и событие. Только числа и коды."""
+    ok_codes = ("started", "already_open")
+    _auto_set(label, "done" if code in ok_codes else "refused", code)
+    with _AUTO_LOCK:
+        trigger = _AUTO.get(label, {}).get("trigger", "")
+    payload = {"account": label, "trigger": trigger, "outcome": code, "started": bool(started),
+               **(extra or {})}
+    try:
+        from src.fb_ads_rpa import run_telemetry
+
+        run_telemetry.record("job_phase", code in ok_codes, note="auto_warm",
+                             duration_s=round(duration_s, 1), diag=payload)
+    except Exception:  # noqa: BLE001 — телеметрия не ломает прогрев
+        log.exception("auto warm telemetry failed")
+    try:
+        from src.acl_event_log.writer import emit
+
+        emit("profile_auto_warm", payload, account=label)
+    except Exception:  # noqa: BLE001
+        log.exception("auto warm event failed")
+
+
+def _auto_one(label: str, retried: bool) -> bool:
+    """Одна попытка. True — профиль реально запущен (после него нужна пауза)."""
+    from src.fb_ads_rpa.operations import profile_lock
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    began = time.monotonic()
+    try:
+        entry = _entry(label)
+    except Exception:  # noqa: BLE001
+        entry = None
+    pid = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
+    if not pid:
+        _auto_finish(label, "start_failed", False, 0.0)
+        return False
+    _auto_set(label, "opening")
+    try:
+        with profile_lock(pid).holding(timeout=0):
+            code, started, facts = _auto_locked(label, entry, pid)
+    except ProfileLeaseError:
+        if not retried:
+            _auto_set(label, "queued")      # на экране ничего не меняется; один повторный взгляд
+            _requeue_later(label)
+            return False
+        code, started, facts = "busy", False, {}
+    _auto_finish(label, code, started, time.monotonic() - began, {**facts, "retried": retried})
+    return started
+
+
+def _admission(reg: Any, pid: str) -> tuple[str, dict]:
+    """Строже, чем для действия человека. Только локальные данные. ("", facts) — можно."""
+    facts: dict = {}
+    queue = None
+    try:
+        queue = reg._slot_queue()  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        queue = None
+    snap = queue.snapshot() if queue is not None else {}
+    if snap.get("waiting"):
+        return "jobs_waiting", facts
+    running = {r.get("profile") for r in snap.get("running", [])}
+    open_now = (set(reg.open_profile_ids()) | {p for p in running if p}) - {pid}
+    ceiling = int((snap.get("settings") or {}).get("ceiling") or 0)
+    if not ceiling:
+        from src.web import profile_slots
+
+        ceiling = int(profile_slots.load_settings().ceiling)
+    facts.update(open_profiles=len(open_now), ceiling=ceiling)
+    if len(open_now) >= ceiling:
+        return "ceiling", facts
+    if snap and not (snap.get("next") or {}).get("allow", True):
+        return "memory", facts
+    if reg.warming_others(pid):
+        return "machine_busy", facts
+    load = reg.load_snapshot(pid)
+    facts["used_pct"] = load.get("used_pct")
+    if load.get("memory_high"):
+        return "memory", facts
+    if load.get("busy"):
+        return "machine_busy", facts
+    return "", facts
+
+
+def _auto_locked(label: str, entry: Any, pid: str) -> tuple[str, bool, dict]:
+    """Под замком профиля. Возвращает (код исхода, запущен ли, факты)."""
+    from src.fb_api import mlx_session as _mlx
+    from src.fb_api import stop_log, warm
+    from src.fb_api.connection import opening_closed_profile, prepare_existing
+
+    reg = _registry()
+    kind, _port = reg._scan([pid]).get(pid, ("unknown", None))  # noqa: SLF001
+    if kind == "port" and reg.is_warm(pid):
+        return "already_open", False, {}
+    if kind == "no_port":
+        return "open_by_hand", False, {}
+    if kind == "closing":
+        return "closing", False, {}
+    if _publish_busy(label):
+        return "busy", False, {}
+    try:
+        from src.web import publish_api
+
+        if publish_api._cooldown(label)[0] > 0:  # noqa: SLF001
+            return "cooldown", False, {}
+    except Exception:  # noqa: BLE001
+        log.exception("Could not read the Meta stop of %s", label)
+        return "cooldown", False, {}
+    if stop_log.default().restart_wait_s(pid) > 0:
+        return "cooldown", False, {}
+    why, facts = _admission(reg, pid)
+    if why:
+        return why, False, facts
+    was_warm = reg.is_warm(pid)
+    batch = f"auto-{uuid.uuid4().hex[:6]}"
+    _mlx.begin_batch(batch)
+    try:
+        with _mlx.scope(account=label, batch=batch), warm.quiet_start(), opening_closed_profile():
+            ok = prepare_existing(reg, entry, label)
+    except warm.WarmError as exc:
+        code = {"memory_low": "memory", "profile_closing": "closing", "open_by_hand": "open_by_hand",
+                "busy": "busy", "restart_cooldown": "cooldown"}.get(getattr(exc, "code", ""), "start_failed")
+        return code, False, facts
+    if not ok:
+        return "start_failed", False, facts
+    sess = reg.session(pid)
+    started = bool(sess is not None and sess.dashboard_started and not was_warm)
+    return ("started" if started else "already_open"), started, facts
 
 
 def _job_view(job: dict) -> dict:

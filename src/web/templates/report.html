@@ -8896,7 +8896,7 @@ window.cbTree = (function () {
     paint();
   }
 
-  function addCampaign(country, account) {
+  function addCampaign(country, account, trusted) {
     var row = window.aclFindAccountRow ? window.aclFindAccountRow(country, account) : null;
     if (!row) return null;
     var form = accountForm(row);
@@ -8910,6 +8910,8 @@ window.cbTree = (function () {
       if (!before[id]) made = id;
     });
     if (made) openCampaign(made);   // заведённую пришли заполнять
+    // ACL-2268: автопрогрев профиля — только по настоящему клику человека (форму отдаём сами).
+    if (made && trusted === true && window.aclWarmAutoUser) window.aclWarmAutoUser(form, 'add');
     return made;
   }
 
@@ -8968,7 +8970,7 @@ window.cbTree = (function () {
           paint();
         });
     } else if (act === 'add-here') {
-      addCampaign(hit.dataset.country, hit.dataset.account);
+      addCampaign(hit.dataset.country, hit.dataset.account, e.isTrusted);
     } else if (act === 'connect' || act === 'connect-picked') {
       var picked = foot.querySelector('.cbd-pick-country');
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
@@ -9012,7 +9014,7 @@ window.cbTree = (function () {
       /* Вкладку не переключаем: ящик затем и сделан, чтобы не уходить с
          того, что читаешь. Блок аккаунта найдётся и в скрытой вкладке — на
          странице отрисованы все. */
-      addCampaign(countrySel.value, accountSel.value);
+      addCampaign(countrySel.value, accountSel.value, e.isTrusted);
     }
   });
 
@@ -23326,6 +23328,7 @@ window.cwWorkbench = (function () {
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
 <script src="/static/account_pages.js"></script>
 <script src="/static/warm_sessions.js"></script>
+<script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>
 <script src="/static/connections.js"></script>
 </body>

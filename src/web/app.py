@@ -6695,6 +6695,17 @@ async def warm_open(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.post("/warm/ensure")
+async def warm_ensure(request: Request) -> JSONResponse:
+    # ACL-2268: автопрогрев из билдера; источник запроса проверяет тот же разбор тела, что у соседних POST.
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.ensure_open, body.get("accounts"), body.get("trigger"),
+                                         body.get("campaigns"))
+    return JSONResponse(data, status_code=code)
+
+
 @app.post("/connection/prepare")
 async def connection_prepare(request: Request) -> JSONResponse:
     from src.web import warm_api
