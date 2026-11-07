@@ -18203,9 +18203,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* Бюджет — на кампании (CBO): выбор ABO/CBO владелец снял. */
       /* ACL-1443: Daily (прежнее поведение) или Lifetime со сроками и расписанием. */
       '<span class="cb-label" data-lt-budget-label>Campaign budget ($/day)</span>' +
-      '<div class="cb-inline cb-budget-box">' + window.cbLifetime.segHtml(idx) +
+      '<div class="cb-inline cb-budget-box">' + (window.cbLifetime ? window.cbLifetime.segHtml(idx) : '') +
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
-      '</div>' + window.cbLifetime.rowsHtml(idx) +
+      '</div>' + (window.cbLifetime ? window.cbLifetime.rowsHtml(idx) : '') +
       '<span class="cb-label">Facebook Page</span>' +
       '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
       '<select class="cb-input cb-page-select" aria-label="Facebook Page" onfocus="cbLoadPages(this.closest(\'.cb-slot\'))" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
