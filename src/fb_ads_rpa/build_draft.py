@@ -106,6 +106,9 @@ def slots_to_campaign_drafts(
         first_campaign = (by_set[order[0]] if order else group)[0]
         # Бюджет - на кампании (CBO): берётся у первого слота и общий для всех наборов.
         budget = _parse_budget(str(first_campaign.get("budget") or ""))
+        # ACL-1443: тип бюджета и расписание - на кампании; ключи в слоте только при lifetime/расписании.
+        budget_type = "lifetime" if str(first_campaign.get("budget_type") or "").strip().lower() == "lifetime" else ""
+        schedule = [dict(w) for w in (first_campaign.get("schedule") or []) if isinstance(w, dict)]
 
         ad_sets: list[AdSetDraft] = []
         for idx in order:
@@ -119,6 +122,8 @@ def slots_to_campaign_drafts(
                     warnings.append(f"Mixed targeting in {campaign_name!r} — using first slot")
                 if (slot.get("budget") or "").strip() and _parse_budget(str(slot.get("budget"))) != budget:
                     warnings.append(f"Mixed budget in {campaign_name!r} — using first slot")
+                if str(slot.get("budget_type") or "").strip().lower() == "lifetime" and not budget_type:
+                    warnings.append(f"Mixed budget type in {campaign_name!r} — using first slot")
 
             # ACL-1775: Instant Form - ключи есть только у слотов с формой; старые слоты прежние.
             destination = (first.get("destination") or "website").strip()
@@ -158,6 +163,9 @@ def slots_to_campaign_drafts(
                 device=(first.get("device") or "").strip(),
                 os_min=(first.get("os_min") or "").strip(),
                 start_time=(first.get("start_time") or "").strip(),
+                budget_type=budget_type,
+                end_time=(first.get("end_time") or "").strip(),
+                schedule=[dict(w) for w in schedule],
                 placements=first.get("placements"),
                 adset_index=idx,
                 # Язык набора 0 - язык кампании; у остальных свой, пусто = как у кампании.
