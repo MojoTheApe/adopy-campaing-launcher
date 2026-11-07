@@ -6601,7 +6601,7 @@ window.cbKeep = (function () {
   }
 
   /* ACL-1443: поля Lifetime в черновике (версию черновика не поднимаем: старые читают как Daily). */
-  var LT_KEYS = ['budget_type', 'end_time', 'schedule', 'schedule_on'];   // start_time у черновиков v3 уже есть (пустой)
+  var LT_KEYS = ['budget_type', 'start_time', 'end_time', 'schedule', 'schedule_on'];
   function readSlot(slot) {
     var fields = {};
     slot.querySelectorAll('[name]').forEach(function (el) {
@@ -6628,11 +6628,17 @@ window.cbKeep = (function () {
     if (ov) fields.name_override = ov.value;
     /* ACL-1443: поля Lifetime живут в черновике только у кампании с Lifetime - черновик Daily
        остаётся таким, каким был; флажок расписания не имеет `name`, поэтому едет отдельно. */
+    var stash = fields.start_time;
     if (fields.budget_type === 'lifetime') {
       var so = slot.querySelector('.cb-sched-on');
       fields.schedule_on = so && so.checked ? '1' : '';
     } else {
+      var isDaily = fields.budget_type === 'daily';
       LT_KEYS.forEach(function (k) { delete fields[k]; });
+      /* start_time есть у черновиков v3 (пустой): Daily с этой страницы пишет его пустым, без старта lifetime;
+         карточка без поля budget_type (старая раскладка) своё значение сохраняет. */
+      if (isDaily) fields.start_time = '';
+      else if (typeof stash === 'string') fields.start_time = stash;
     }
     var hint = slot.querySelector('.cb-targeting-hint');
     /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
@@ -6664,7 +6670,7 @@ window.cbKeep = (function () {
       var f = field(el);
       if (!f || !(f in data.fields)) return;
       /* ACL-1443: сроки и расписание берём только из черновика с Lifetime. */
-      if (LT_KEYS.indexOf(f) !== -1 && data.fields.budget_type !== 'lifetime') return;
+      if (f !== 'start_time' && LT_KEYS.indexOf(f) !== -1 && data.fields.budget_type !== 'lifetime') return;
       if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
       else el.value = data.fields[f];
     });
@@ -7548,7 +7554,7 @@ window.cbLifetime = (function () {
   }
 
   function tzLabel(f, startIso) {
-    if (!f.timezone_name && f.offset == null) return 'Account time zone: unknown — Check plan will read it';
+    if (!f.timezone_name && f.offset == null) return 'Account time zone: unknown — Check plan will read it. Enter start and end by hand.';
     var off = offsetText(f, startIso);
     return 'Account time zone: ' + (f.timezone_name || 'UTC offset') + (off ? ' (' + off + ')' : '');
   }
@@ -7688,6 +7694,8 @@ window.cbLifetime = (function () {
     });
   }
 
+  function scheduleEmpty(slot) { return isLifetime(slot) && scheduleOn(slot) && !parseWindows(slot).length; }
+
   /* Поля Lifetime для входа аудита (как их ждёт evaluate_client): только у Lifetime.
      Включённый флажок с пустой сеткой уходит окном без дней - правило отвечает "empty". */
   function auditFields(slot) {
@@ -7810,13 +7818,12 @@ window.cbLifetime = (function () {
     if (type === 'lifetime') {
       var f = builderAccountFacts(accountOf(slot));
       var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+      /* Пояс кабинета неизвестен - умолчание не угадываем по часам браузера: поля пустые, подпись просит ввести. */
       var now = nowInAccount(f);
-      if (!now) {
-        var d = new Date();
-        now = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T00:00';
+      if (now) {
+        if (s && !s.value) s.value = addDays(now, 1) + 'T00:00';
+        if (e && !e.value && s && s.value) e.value = addDays(s.value, 7) + 'T00:00';
       }
-      if (s && !s.value) s.value = addDays(now, 1) + 'T00:00';
-      if (e && !e.value && s && s.value) e.value = addDays(s.value, 7) + 'T00:00';
     }
     sync(slot);
     fire(hid);
@@ -7909,12 +7916,17 @@ window.cbLifetime = (function () {
       if (!s || !form) return;
       form.querySelectorAll('.cb-slot').forEach(function (slot) {
         var nm = slot.querySelector('.cb-name-hidden');
-        if (nm && nm.value === r.campaign_name && isLifetime(slot)) s.lifetime_preview = previewText(slot);
+        if (nm && nm.value === r.campaign_name && isLifetime(slot)) {
+          s.lifetime_preview = previewText(slot);
+          var fa = builderAccountFacts(accountOf(slot));
+          s.lifetime_run = dateText((fld(slot, 'start_time') || {}).value) + ' to ' + dateText((fld(slot, 'end_time') || {}).value)
+            + (fa.timezone_name ? ' (' + fa.timezone_name + ')' : '');
+        }
       });
     });
   }
 
-  return { facts: builderAccountFacts, auditFields: auditFields, segHtml: segHtml, rowsHtml: rowsHtml, sync: sync, lines: lines, problems: problems,
+  return { facts: builderAccountFacts, scheduleEmpty: scheduleEmpty, auditFields: auditFields, segHtml: segHtml, rowsHtml: rowsHtml, sync: sync, lines: lines, problems: problems,
            preview: previewText, ingestPlan: ingestPlan, annotate: annotate, gridToWindows: gridToWindows,
            windowsToGrid: windowsToGrid, scheduleText: scheduleText, nowInAccount: nowInAccount };
 })();
@@ -19477,6 +19489,14 @@ function cbPlanFormData(form, only) {
   return fd;
 }
 
+/* ACL-1443: lifetime идёт по датам, а не «с включения» - строка плана говорит это прямо. */
+function cbPlanIsLifetime(s) { return !!(s && (s.lifetime_preview || Number(s.lifetime_budget) > 0)); }
+function cbPlanLifetimeRun(s) {
+  var win = s.lifetime_run || (s.start_time && s.end_time ? s.start_time + ' to ' + s.end_time
+    + (s.timezone_name ? ' (' + s.timezone_name + ')' : '') : '');
+  return 'Runs ' + (win ? 'from ' + win + ' ' : '') + 'even while paused — turning it on late spends the whole budget in the time left; '
+    + 'after the end date it completes without delivery.';
+}
 function cbPlanMoney(s) {
   /* ACL-1443: у Lifetime строка собрана на странице (cbLifetime.annotate) или пришла из плана. */
   if (s && s.lifetime_preview) return s.lifetime_preview;
@@ -19548,7 +19568,7 @@ function cbPlanHtml(data) {
       + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
       + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
-      + (s ? ' · Campaign PAUSED · ad sets and ads active, start when you turn the campaign on · ' + aclEscHtml(cbPlanMoney(s))
+      + (s ? ' · Campaign PAUSED · ' + (cbPlanIsLifetime(s) ? aclEscHtml(cbPlanLifetimeRun(s)) : 'ad sets and ads active, start when you turn the campaign on') + ' · ' + aclEscHtml(cbPlanMoney(s))
            + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
       + '</div>';
     if (r.cached && r.checked_at) h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">· checked at '
@@ -19866,6 +19886,17 @@ window.cbCheckPlan = function (picked, out, btn, force) {
   });
   out.hidden = false;
   if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
+  /* ACL-1443: расписание включено, а часов нет - не проверять и не отправлять lifetime «круглые сутки». */
+  var noHours = [];
+  forms.forEach(function (x) {
+    Array.prototype.forEach.call(x.only || x.form.querySelectorAll('.cb-slot'), function (slot) {
+      if (window.cbLifetime && window.cbLifetime.scheduleEmpty(slot)) noHours.push(cbSlotTitle(slot) || 'a campaign');
+    });
+  });
+  if (noHours.length) {
+    out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Pick at least one hour in the ad schedule of ' + aclEscHtml(noHours.join(', ')) + ' (or turn the schedule off).</div>');
+    return;
+  }
   out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Opening the Multilogin profile and checking the plan'
     + ' through the Graph API (usually 30 s – 3 min per account); nothing is written. Publishing never starts by itself after a check.</div>');
   // ACL-1990: на кнопке — сколько идёт проверка; refreshTicks перерисовывает подпись.
