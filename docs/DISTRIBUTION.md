@@ -173,3 +173,7 @@
 ## Parallel draft building
 
 Each concurrent account uses its own Multilogin browser and may also run a video encoder. Three accounts can therefore occupy three browser processes and up to three encoders, increasing memory, CPU and disk usage. On smaller Windows machines, build fewer accounts at once or start them individually. Jobs sharing the same profile still queue; keep the desktop unlocked during a run. Cancelling one job does not cancel other jobs already submitted.
+
+## Settings folder on developer machines (ACL-2334)
+
+Code run from inside a Claude Desktop session sees a virtual `%LOCALAPPDATA%` and writes its settings into the Claude package copy (`...\Packages\Claude_*\LocalCache\Local\ACL`). On a normal start the launcher merges that copy into the real `ACL` folder. When `ACL_CONFIG_DIR` points at a folder other than the default (for example `C:\acl-test-config`), the merge is skipped: that folder is the operator's choice and the package copy must not rewrite it. A merge never replaces an absolute path with a relative one or an explicit machine setting with the code default, and it logs only the names of the keys it changed.
