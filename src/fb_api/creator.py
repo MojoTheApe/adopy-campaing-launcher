@@ -2518,17 +2518,23 @@ class CampaignCreator:
         return max(1, math.ceil(min(spans) / 86400)) if spans else None
 
     def budget_floor_problem(self, plan: CampaignPlan) -> str:
-        """Lifetime ниже `min_daily_budget` кабинета x число дней (ACL-1443). Нет факта - пусто."""
+        """Lifetime ниже минимума кабинета, посчитанного по ЦЕЛЫМ часам срока (ACL-1443). Нет факта - пусто.
+
+        Минимум при записи мягче вердикта Check plan (тот считает сутки вверх): отказ только если
+        бюджет меньше `min_daily_budget` x часы / 24, округлённого вверх в мелких единицах.
+        """
         minimum = self.facts.min_daily_budget
-        days = self.lifetime_days(plan)
-        if not plan.lifetime or not minimum or days is None:
+        spans = [(self._end_dt(s) - self._start_dt(s)).total_seconds()
+                 for s in plan.ad_sets if s.start_time and s.end_time]
+        if not plan.lifetime or not minimum or not spans:
             return ""
-        need = minimum * days
+        hours = max(1, int(min(spans) // 3600))
+        need = max(minimum, -(-minimum * hours // 24))
         if budget_minor(plan.lifetime_budget, self.facts.currency) >= need:
             return ""
         cur = self.facts.currency
         return (f"The lifetime budget {plan.lifetime_budget:g} {cur} is below the ad account minimum "
-                f"{minor_to_major(minimum, cur):g} {cur} a day x {days} day{'s' if days != 1 else ''} = "
+                f"{minor_to_major(minimum, cur):g} {cur} a day x {hours} hours / 24 = "
                 f"{minor_to_major(need, cur):g} {cur}")
 
     def creative_params(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict, name: str) -> dict:
@@ -3032,7 +3038,7 @@ class CampaignCreator:
                     f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
                     f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
                     "for this run (upper bound; the file may be compressed before upload).")
-        self._check_planned(plan, targetings)
+        self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
         return targetings, files
@@ -3157,7 +3163,8 @@ class CampaignCreator:
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
-    def _check_planned(self, plan: CampaignPlan, targetings: list[dict]) -> None:
+    def _check_planned(self, plan: CampaignPlan, targetings: list[dict],
+                       found_sets: list | None = None, *, early: bool = False) -> None:
         """Политика записи над КАЖДЫМ запланированным объектом — до первой записи (R2-B1).
 
         Отказ здесь — `PlanError` этой кампании: к Meta ничего не ушло, и клиент
@@ -3189,8 +3196,12 @@ class CampaignCreator:
                                               _ft.form_params(tpl), None, plan.page_id)
                     except _wp.WriteRefused as exc:
                         raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
-        for ad_set, targeting in zip(plan.ad_sets, targetings):
-            if ad_set.start_time and self._start_dt(ad_set) <= self.now():
+        found = list(found_sets or [])
+        for pos, (ad_set, targeting) in enumerate(zip(plan.ad_sets, targetings)):
+            # Набор из прошлого прогона уже стартовал: его старт в прошлом - не причина отказа.
+            # `early` - вызов до поиска по имени (found_sets ещё неизвестны): старт проверит поздний вызов.
+            reused = pos < len(found) and bool(found[pos])
+            if ad_set.start_time and not early and not reused and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
                                 "(ad account time zone) is not in the future")
             if ad_set.end_time:
@@ -3284,7 +3295,7 @@ class CampaignCreator:
             choice = self._resolve_name(plan, targetings)
             plan, existing, skipped = choice.plan, choice.existing, choice.skipped
             out.published_as = plan.name
-            self._check_planned(plan, targetings)
+            self._check_planned(plan, targetings, choice.found_sets)
             differences = []
             if choice.renamed:
                 renamed = _rename_message(requested, plan.name, skipped, future=True)
@@ -3508,7 +3519,7 @@ class CampaignCreator:
         choice = self._resolve_name(plan, targetings)
         requested, plan = plan.name, choice.plan
         out.published_as = plan.name
-        self._check_planned(plan, targetings)
+        self._check_planned(plan, targetings, choice.found_sets)
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.skipped, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
