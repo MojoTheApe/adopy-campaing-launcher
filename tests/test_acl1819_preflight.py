@@ -549,9 +549,9 @@ def test_an_existing_campaign_with_other_settings_is_a_rename_warning(tmp_path):
     d2 = _draft(tmp_path, ads=1)
     d2.ad_sets[0].daily_budget = 35.0
     got = _by(_audit(meta, d2))["existing_diffs"]
-    # ACL-1902: другая кампания с этим именем - не ошибка, а предупреждение: робот возьмёт NAME_2.
-    assert got["status"] == "warning" and "Will be published as" in got["detail"]
-    assert "daily budget" in got["detail"] and not pf.blocks([got])
+    # ACL-2250: кампания с этим именем уже есть - не ошибка, а предупреждение: робот опубликует `NAME copy 1`.
+    assert got["status"] == "warning" and "Will be published as 'MX Leads 1 copy 1'" in got["detail"]
+    assert "already on the ad account" in got["detail"] and not pf.blocks([got])
 
 
 def test_existing_check_is_unknown_when_an_earlier_check_failed(tmp_path):
