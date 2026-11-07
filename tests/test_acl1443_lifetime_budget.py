@@ -345,7 +345,7 @@ def test_the_end_must_be_in_the_future_at_write_time_and_nothing_is_written(tmp_
 def test_a_lifetime_below_the_account_minimum_times_the_days_is_refused(tmp_path):
     meta = ZoneMeta(min_daily="100")
     out = _run(meta, _life(tmp_path, budget=4.0))       # 5 суток x $1.00 = $5.00
-    assert "below the ad account minimum" in out.error and "5 days" in out.error and meta.posts == []
+    assert "below the ad account minimum" in out.error and "120 hours" in out.error and meta.posts == []
     ok = _run(ZoneMeta(min_daily="100"), _life(tmp_path, budget=5.0))
     assert ok.error == ""
     no_fact = _run(ZoneMeta(min_daily=None), _life(tmp_path, budget=1.0))
@@ -488,3 +488,60 @@ def test_the_plan_cache_key_follows_the_lifetime_fields(tmp_path):
     daily = _draft(tmp_path, ads=1)
     digests = {pc.draft_digest(x) for x in (a, b, c, daily)}
     assert len(digests) == 4
+
+
+# ───────────────────────── правки после ревью ─────────────────────────
+
+def test_the_write_time_minimum_counts_whole_hours_the_check_plan_one_counts_days(tmp_path):
+    """5 суток + 1 минута при бюджете минимум x 5: запись проходит (120 целых часов), Check plan просит 6 суток."""
+    kw = dict(start="2026-10-20T09:00", end="2026-10-25T09:01")
+    ok = _run(ZoneMeta(min_daily="100"), _life(tmp_path, budget=5.0, **kw))
+    assert ok.error == ""
+    low = _run(ZoneMeta(min_daily="100"), _life(tmp_path, budget=4.99, **kw))
+    assert "below the ad account minimum" in low.error and "120 hours" in low.error
+    verdict = {v["rule"]: v for v in _creator(ZoneMeta(min_daily="100")).plan_only(
+        _plan(_life(tmp_path, budget=5.0, **kw))).audit}["budget_min"]
+    assert verdict["status"] == "error" and "6 days" in verdict["detail"]
+
+
+def test_a_repeat_after_the_start_passed_reuses_the_campaign_without_a_new_name(tmp_path):
+    meta = ZoneMeta()
+    first = _run(meta, _life(tmp_path))
+    assert first.error == ""
+    later = datetime(2026, 10, 21, 0, 0, tzinfo=timezone.utc)      # старт 10-20 09:00 уже в прошлом
+    plan = _plan(_life(tmp_path))
+    again = _creator(meta, now=later).run(plan)
+    assert again.error == "" and again.published_as == plan.name, again.error
+    # новый (не найденный) набор с прошедшим стартом по-прежнему отказ
+    fresh = _run(ZoneMeta(), _life(tmp_path), now=later)
+    assert "not in the future" in fresh.error
+    # конец в прошлом отказ и для найденного набора
+    after_end = datetime(2026, 10, 26, tzinfo=timezone.utc)
+    assert "end time" in _creator(meta, now=after_end).run(_plan(_life(tmp_path))).error
+
+
+def test_the_event_spec_has_lifetime_keys_only_for_lifetime(tmp_path):
+    from src.acl_event_log.clean import canonical_hash
+    from src.acl_event_log.events import spec_payload
+
+    facts = _creator(ZoneMeta()).facts
+    daily = spec_payload(_plan(_draft(tmp_path, ads=1)), facts)
+    assert not {"budget_type", "lifetime_budget"} & set(daily)
+    assert not {"end_time", "schedule"} & set(daily["adsets"][0])
+    body = {k: v for k, v in daily.items() if k != "spec_hash"}
+    assert daily["spec_hash"] == canonical_hash(body)           # хэш daily считается как прежде
+    life = spec_payload(_plan(_life(tmp_path, schedule=[WINDOW])), facts)
+    assert life["budget_type"] == "lifetime" and life["lifetime_budget"] == 50.0
+    assert life["adsets"][0]["end_time"] == "2026-10-25T09:00" and life["adsets"][0]["schedule"] == [WINDOW]
+    assert life["spec_hash"] != daily["spec_hash"]
+
+
+def test_a_mixed_budget_type_warns_in_both_directions():
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+
+    def slot(**kw):
+        return {"name": "C", "targeting": "t", "budget": "10", "creative_type": "Image", "creative_file": "a.png",
+                "copy": "x", **kw}
+    for first, second in (({"budget_type": "lifetime"}, {}), ({}, {"budget_type": "lifetime"})):
+        [d] = slots_to_campaign_drafts([slot(**first), slot(**second)], account_label="A", country="MX")
+        assert any("Mixed budget type" in w for w in d.warnings)

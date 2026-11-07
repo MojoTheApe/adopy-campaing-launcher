@@ -122,7 +122,7 @@ def slots_to_campaign_drafts(
                     warnings.append(f"Mixed targeting in {campaign_name!r} — using first slot")
                 if (slot.get("budget") or "").strip() and _parse_budget(str(slot.get("budget"))) != budget:
                     warnings.append(f"Mixed budget in {campaign_name!r} — using first slot")
-                if str(slot.get("budget_type") or "").strip().lower() == "lifetime" and not budget_type:
+                if (str(slot.get("budget_type") or "").strip().lower() == "lifetime") != bool(budget_type):
                     warnings.append(f"Mixed budget type in {campaign_name!r} — using first slot")
 
             # ACL-1775: Instant Form - ключи есть только у слотов с формой; старые слоты прежние.
