@@ -137,8 +137,9 @@ class AdSetDraft:
     # ACL-1443 (только API-бэкенд): lifetime-бюджет кампании и расписание. Пусто = daily, как раньше;
     # ключи в слотах, черновиках и планах появляются только при lifetime.
     budget_type: str = ""       # "" (daily) | "lifetime"
-    end_time: str = ""          # "YYYY-MM-DDTHH:MM", время часового пояса кабинета
+    end_time: str = ""          # "YYYY-MM-DDTHH:MM"; ACL-1448: время пояса команды (time_zone), у daily - кабинета
     schedule: list = field(default_factory=list)   # [{"days": [0..6], "start_minute", "end_minute"}]
+    time_zone: str = ""         # ACL-1448: пояс, в котором введены start/end/сетка (пояс команды); только lifetime
     # ACL-1768: номер набора в кампании (явный, не по порядку слотов) и поля уровня набора.
     adset_index: int = 0
     language: str = ""          # язык набора; пусто = язык кампании (CampaignDraft.language)
@@ -159,7 +160,7 @@ class AdSetDraft:
         if self.destination != "website":
             out["destination"] = self.destination
         for key in ("gender", "languages", "device", "os_min", "start_time", "language", "pixel_id", "placements",
-                    "budget_type", "end_time", "schedule"):
+                    "budget_type", "end_time", "schedule", "time_zone"):
             if getattr(self, key):
                 out[key] = getattr(self, key)
         return out
