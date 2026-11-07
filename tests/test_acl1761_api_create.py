@@ -466,7 +466,9 @@ class FakeMeta:
             body = {"id": oid}
         elif edge == "campaigns":
             p = dict(params)
-            p["daily_budget"] = str(p["daily_budget"])
+            for key in ("daily_budget", "lifetime_budget"):    # ACL-1443: у кампании один из двух
+                if key in p:
+                    p[key] = str(p[key])
             body = {"id": self._store("campaign", p)}
         elif edge == "adsets":
             body = {"id": self._store("adset", params)}

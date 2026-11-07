@@ -56,6 +56,7 @@
     try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
+    try { window.CB_ACCOUNT_FACTS = {{ (account_facts_json or {}) | tojson }}; } catch(e) {}
     // ACL-1807: допустимые значения из реестра Meta (только ga); пусто — не ограничиваем.
     try { window.CB_META_CAPS = {{ (meta_caps_json or {}) | tojson }}; } catch(e) {}
     function aclEscHtml(value) {

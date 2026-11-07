@@ -3465,6 +3465,10 @@ class CampaignCreator:
             "campaign": plan.name, "status": PAUSED, "children_status": CHILD_STATUS,
             "status_note": STATUS_NOTE, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
+            # ACL-1443: пояс и минимум кабинета - страница считает по ним сроки и минимум (минимум в мелких единицах).
+            "timezone_name": self.facts.timezone_name,
+            "timezone_offset_hours_utc": self.facts.utc_offset_hours,
+            "min_daily_budget": self.facts.min_daily_budget,
             "budget_minor": budget_minor(plan.budget_amount, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
             "page_source": plan.page_source, "pixel_source": plan.pixel_source,
@@ -3475,7 +3479,6 @@ class CampaignCreator:
             # ACL-1443: ключи только у lifetime-плана; суммарный итог - на весь срок.
             summary["budget_type"] = BUDGET_LIFETIME
             summary["lifetime_budget"] = plan.lifetime_budget
-            summary["time_zone"] = self.facts.timezone_name
             del summary["daily_budget"]
         if requested_name:
             # ACL-1902: имя из билдера занято - публикуем под выбранным (`campaign`), прежнее здесь.
