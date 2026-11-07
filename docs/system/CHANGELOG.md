@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2330 — Vault migration cleans up clear-text secret lines — 2026-11-06
+
+The migration now drops an earlier duplicate of a secret key (dotenv ignores it; the encrypted backup keeps it). A connection-sheet sign-in or startup refresh rewrites a clear-text secret line even when the value is unchanged, so it gets encrypted. The migration notes now match each case and point to Connections -> Sign in with Google.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1330).
+
+## ACL-2243 — Failed read of the confirmed targeting store is not an empty store — 2026-11-06
+
+A damaged or unreadable confirmed-targeting file is now reported as a read failure with a plain-English message and is never overwritten; a missing file is still an empty store. Resolution stops instead of guessing, and the `/targeting-resolver/cache`, `confirm` and `clear` routes answer 409. Python changed: restart the dashboard after deploy.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1243).
+
 ## ACL-2439 — Event log tests no longer depend on a fixed date — 2026-11-06
 
 The event log store tests built their events with a fixed date (2026-10-30) while asking for the last 7 days against the real clock, so three of them failed on every branch after that window passed. Fixture timestamps are now computed from the current time (one day ago for events that must stay in the window, 30 days ago for the one that must be dropped). Tests only; no production code changed.

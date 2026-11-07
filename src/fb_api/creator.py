@@ -1246,8 +1246,12 @@ class TargetingResolver:
         с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
         """
         terms = [n for g in groups for n in g]
-        self.terms.prefetch(terms)
-        results = {n: self.terms.resolve(n) for n in terms}
+        try:
+            self.terms.prefetch(terms)
+            results = {n: self.terms.resolve(n) for n in terms}
+        except _tr.ConfirmedStoreUnreadable as exc:
+            # ACL-2243: unknown store state must stop the plan, not resolve as if nothing was confirmed.
+            raise PlanError(str(exc)) from exc
         bad: list[dict] = []
         for r in results.values():
             if r["state"] in ("exact", "confirmed"):

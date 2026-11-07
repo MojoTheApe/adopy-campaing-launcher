@@ -8,7 +8,7 @@ const html = fs.readFileSync(process.argv[2], 'utf8');
 const a = html.indexOf('/* CW-PURE-BEGIN */'), b = html.indexOf('/* CW-PURE-END */');
 assert(a > 0 && b > a, 'чистая часть Workbench не найдена в шаблоне');
 const code = html.slice(a, b) +
-  '\nreturn {kpiTile, volumeTile, refsHtml, destinationPath, planUse, pickCreativeFile, valueText, metricCells};';
+  '\nreturn {kpiTile, volumeTile, refsHtml, destinationPath, planUse, useField, useTitle, pickCreativeFile, valueText, metricCells};';
 const L = vm.runInNewContext('(function(){' + code + '})()', {});
 
 const cmp = (over) => Object.assign({
@@ -66,6 +66,30 @@ p = L.planUse('target', { country: 'colombia', countryName: 'Colombia', asset: '
 assert.equal(p.ok, true); assert.equal(p.mismatch, '');
 assert.equal(p.destination, 'Colombia / A1 / Camp 1 / Ad set 1');
 assert.equal(L.planUse('creative', { country: 'colombia' }, active).destination, 'Colombia / A1 / Camp 1 / Ad set 1 / Ad 2');
+// номера набора и объявления — настоящие, а с отмеченным полем путь доходит до него
+const marked = Object.assign({}, active, { setIndex: 1, adIndex: 2, field: 'vertical' });
+assert.equal(L.destinationPath(marked, 'target'), 'Colombia / A1 / Camp 1 / Ad set 2');
+assert.equal(L.destinationPath(marked, 'creative'), 'Colombia / A1 / Camp 1 / Ad set 2 / Ad 3 / Stories / Reels file');
+assert.equal(L.destinationPath(marked, 'builder'), 'Colombia / A1 / Camp 1 / Ad set 2 / Ad 3 / Stories / Reels file');
+assert.equal(L.destinationPath(Object.assign({}, marked, { field: '' }), 'builder'), 'Colombia / A1 / Camp 1 / Ad set 2 / Ad 3');
+assert.equal(L.destinationPath(Object.assign({}, marked, { field: 'targeting' }), 'builder'), 'Colombia / A1 / Camp 1 / Ad set 2 / Targeting');
+
+// ── поле-цель: что куда пишется ────────────────────────────────────────
+const withText = { pack: '1121', version: '2', text: 'T1' }, noText = { pack: '1121', version: '2', text: '' };
+const at = (field) => Object.assign({}, active, { field });
+assert.deepEqual(L.useField('creative', withText, at('')), { field: '', ok: true, reason: '' }, 'не отмечено -> файл + Primary text 1');
+assert.equal(L.useField('creative', withText, at('file')).field, 'file');
+assert.equal(L.useField('creative', withText, at('vertical')).field, 'vertical');
+assert.equal(L.useField('creative', noText, at('vertical')).ok, true, 'файл без текста — не помеха');
+assert.equal(L.useField('creative', withText, at('text2')).field, 'text2');
+let u = L.useField('creative', noText, at('text2'));
+assert(!u.ok && /no ad text/.test(u.reason), 'text2 без текста версии — нельзя');
+assert.equal(L.useField('creative', withText, at('targeting')).field, '', 'Targeting при креативе -> умолчание');
+assert.equal(L.useField('target', { target: 'FX' }, at('text3')).field, 'targeting', 'таргет всегда в Targeting набора');
+assert.equal(L.planUse('creative', { ev: noText }, at('text4')).reason, 'field');
+assert.equal(L.planUse('creative', { ev: withText }, at('text4')).field, 'text4');
+assert(/Stories \/ Reels file/.test(L.useTitle('creative', withText, Object.assign({}, active, { field: 'vertical', adIndex: 1 }))));
+assert(/Ad set 2 · Targeting/.test(L.useTitle('target', {}, marked)));
 p = L.planUse('landing', { country: 'peru', countryName: 'Peru', asset: 'Beta' }, active);
 assert(p.ok && p.mismatch.includes('Peru') && p.mismatch.includes('Colombia') && p.mismatch.includes('Beta'), p.mismatch);
 assert.equal(L.planUse('nonsense', {}, active).ok, false);
