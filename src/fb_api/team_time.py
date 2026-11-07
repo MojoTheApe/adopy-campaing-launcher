@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 log = logging.getLogger(__name__)
@@ -95,22 +95,31 @@ def team_grid_to_account_windows(windows: list[dict], team_zone: str, account_zo
             for (a, b), days in sorted(by_span.items(), key=lambda kv: (kv[0], kv[1]))]
 
 
-def shift_change_date(team_zone: str, account_zone: str, start: datetime, end: datetime):
-    """Если разница поясов на `end` не та, что на `start`: (дата смены в поясе команды, прежняя разница с,
-    новая разница с) - в секундах. Иначе None. Момент смены ищется делением пополам (до секунды)."""
-    d0 = offset_difference_seconds(team_zone, account_zone, start)
-    d1 = offset_difference_seconds(team_zone, account_zone, end)
-    if d0 == d1:
-        return None
-    lo, hi = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
-    while (hi - lo).total_seconds() > 1:
-        mid = lo + (hi - lo) / 2
-        if offset_difference_seconds(team_zone, account_zone, mid) == d0:
-            lo = mid
-        else:
-            hi = mid
+def shift_changes(team_zone: str, account_zone: str, start: datetime, end: datetime) -> list[tuple]:
+    """Все смены разницы поясов внутри срока: [(дата смены в поясе команды, прежняя, новая)] в секундах.
+
+    Израиль и кабинет переводят часы в разные даты, поэтому разница может уйти и вернуться внутри срока:
+    сравнения start/end мало. Срок режется на сутки по UTC, в каждых сутках со сменой момент ищется
+    делением пополам (до секунды).
+    """
     team = load_zone(team_zone)
-    return hi.astimezone(team).date(), d0, d1
+    lo_end, hi_end = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+    found: list[tuple] = []
+    left, d_left = lo_end, offset_difference_seconds(team_zone, account_zone, lo_end)
+    while left < hi_end:
+        right = min(left + timedelta(days=1), hi_end)
+        d_right = offset_difference_seconds(team_zone, account_zone, right)
+        if d_right != d_left:
+            lo, hi = left, right
+            while (hi - lo).total_seconds() > 1:
+                mid = lo + (hi - lo) / 2
+                if offset_difference_seconds(team_zone, account_zone, mid) == d_left:
+                    lo = mid
+                else:
+                    hi = mid
+            found.append((hi.astimezone(team).date(), d_left, d_right))
+        left, d_left = right, d_right
+    return found
 
 
 def shift_change_warning(team_zone: str, account_zone: str, start: datetime, end: datetime) -> str:
@@ -118,15 +127,20 @@ def shift_change_warning(team_zone: str, account_zone: str, start: datetime, end
 
     Окна уходят в Meta по времени кабинета и дальше не пересчитываются; после смены часов они сдвигаются
     относительно Израиля на delta = новая_разница - старая: delta > 0 - показ раньше, delta < 0 - позже.
+    Называется первая смена; если разница потом возвращается к прежней - "until <дата возврата>".
     """
-    got = shift_change_date(team_zone, account_zone, start, end)
-    if got is None:
+    changes = shift_changes(team_zone, account_zone, start, end)
+    if not changes:
         return ""
-    when, d0, d1 = got
+    when, d0, d1 = changes[0]
     delta = (d1 - d0) / 3600
     amount = f"{abs(delta):g} hour{'' if abs(delta) == 1 else 's'}"
-    return (f"The time difference between {TEAM_LABEL} and the account changes on {when.isoformat()}; "
-            f"from then on ads run {amount} {'earlier' if delta > 0 else 'later'} than planned.")
+    way = "earlier" if delta > 0 else "later"
+    back = next((c[0] for c in changes[1:] if c[2] == d0), None)
+    head = f"The time difference between {TEAM_LABEL} and the account changes on {when.isoformat()}"
+    if back is not None:
+        return f"{head} until {back.isoformat()}; during that time ads run {amount} {way} than planned."
+    return f"{head}; from then on ads run {amount} {way} than planned."
 
 
 def localize(value: str, zone_name: str) -> datetime | None:
@@ -142,5 +156,5 @@ def localize(value: str, zone_name: str) -> datetime | None:
 
 
 __all__ = ["DEFAULT_TEAM_TIMEZONE", "ShiftError", "team_timezone", "team_grid_to_account_windows",
-           "shift_change_warning", "shift_change_date", "whole_hour_shift", "offset_difference_seconds",
+           "shift_change_warning", "shift_changes", "whole_hour_shift", "offset_difference_seconds",
            "localize", "load_zone", "TEAM_LABEL"]
