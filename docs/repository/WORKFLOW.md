@@ -21,6 +21,19 @@
   version, the run link and the actual resolution. If GitHub merged the PR
   outside Tracker, follow the [manual-merge recovery checklist](#recover-a-manual-github-merge).
 
+### Keep small work proportionate
+
+Use the existing Issue and a short plan stating the result, affected area and checks.
+A small task needs no extra architecture report or second specification. Material
+scope/architecture/operating changes still use the existing owner decision; routine
+implementation choices do not need another permission. Read the adopted
+[engineering rules](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/engineering-standards.md)
+and local examples in [verification](VERIFICATION.md#engineering-context-and-examples).
+The actual whole diff determines the existing instruction/product route, never line count.
+Independent review and all applicable checks remain mandatory. A blocking complexity
+finding names the concrete unnecessary part and violated requirement or R1–R8 rule;
+preferences remain advice and do not expand the task.
+
 ### Hand off a tested local result
 
 Before another executor takes over, push the tested source to an accessible
@@ -84,7 +97,7 @@ The original ACL-2156 selection of Tracker3.14.1 remains in the
 [dated provider history](STANDALONE_PROVIDER_ACL.md#historical-adoption--acl-2156-24-october-2026).
 `delivery.json.workflow_provider`, the engine lock and immutable private-provider checkout name the
 same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed.
-[AGENTS.md](../../AGENTS.md) links the current Master Repo 1.9.0 guidance.
+[AGENTS.md](../../AGENTS.md) links the current Master Repo 1.11.0 guidance.
 The descriptor and template baseline retain the provider's audited Master 1.8.0 ancestry.
 
 Use the exact official Tracker source and its isolated
