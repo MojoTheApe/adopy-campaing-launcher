@@ -462,6 +462,12 @@ def test_the_daily_plan_summary_is_unchanged(tmp_path):
     summary = out.plan["summary"]
     assert summary["daily_budget"] == 20.0 and not {"budget_type", "lifetime_budget"} & set(summary)
     assert not {"end_time", "schedule"} & set(summary["ad_sets"][0])
+    # Daily не получает ни одного нового ключа: пояс и минимум кабинета только у lifetime-плана.
+    assert not {"timezone_name", "timezone_offset_hours_utc", "min_daily_budget"} & set(summary)
+    assert set(summary) == {
+        "campaign", "status", "children_status", "status_note", "objective", "daily_budget", "currency",
+        "budget_minor", "page_id", "pixel_id", "page_source", "pixel_source", "existing",
+        "existing_differences", "tag", "ad_sets"} | (set(summary) & {"requested_name", "forms", "manual_required"})
 
 
 def test_server_budget_min_counts_the_days_of_a_lifetime(tmp_path):
