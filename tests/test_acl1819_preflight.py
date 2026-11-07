@@ -182,6 +182,28 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "start_today_ok": (_with(start_time="2026-10-12T08:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
     "start_bad_format": (_with(start_time="20.10.2026 10:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
     "start_in_the_past": (_with(start_time="2026-10-11T23:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
+    # ACL-1443: lifetime-бюджет - конец, расписание, обязательный старт.
+    "life_end_ok": (_with(budget_type="lifetime", start_time="2026-10-20T10:00", end_time="2026-10-25T10:00",
+                          now="2026-10-12T12:00"), "end_time_valid", "ok", []),
+    "life_end_missing": (_with(budget_type="lifetime", start_time="2026-10-20T10:00", now="2026-10-12T12:00"),
+                         "end_time_valid", "error", []),
+    "life_end_before_start": (_with(budget_type="lifetime", start_time="2026-10-20T10:00",
+                                    end_time="2026-10-20T10:00", now="2026-10-12T12:00"),
+                              "end_time_valid", "error", []),
+    "life_end_in_the_past": (_with(budget_type="lifetime", start_time="2026-10-01T10:00",
+                                   end_time="2026-10-05T10:00", now="2026-10-12T12:00"), "end_time_valid", "error", []),
+    "life_end_ignored_for_daily": (_with(), "end_time_valid", "ok", []),
+    "life_start_required": (_with(budget_type="lifetime", end_time="2026-10-25T10:00", now="2026-10-12T12:00"),
+                           "start_time_valid", "error", []),
+    "life_schedule_ok": (_with(budget_type="lifetime", schedule=[{"days": [1, 2], "start_minute": 540, "end_minute": 720}]),
+                         "schedule_valid", "ok", []),
+    "life_schedule_none_ok": (_with(budget_type="lifetime"), "schedule_valid", "ok", []),
+    "life_schedule_needs_lifetime": (_with(schedule=[{"days": [1], "start_minute": 0, "end_minute": 60}]),
+                                     "schedule_valid", "error", []),
+    "life_schedule_empty_grid": (_with(budget_type="lifetime", schedule=[{"days": [], "start_minute": 0, "end_minute": 60}]),
+                                 "schedule_valid", "error", []),
+    "life_schedule_half_hour": (_with(budget_type="lifetime", schedule=[{"days": [1], "start_minute": 30, "end_minute": 90}]),
+                                "schedule_valid", "error", []),
     "budget_ok": (_with(), "budget_set", "ok", []),
     "budget_missing": (_with(budget=None), "budget_set", "error", []),
     "budget_zero": (_with(budget="0"), "budget_set", "error", []),
@@ -667,7 +689,7 @@ def test_topics_take_the_worst_status_of_their_checks():
     assert "meta" not in got, "под RPA нет проверки с Meta"
     assert got["creative"]["status"] == "error" and "primary_text" in got["creative"]["rules"]
     assert got["destination"]["status"] == "warning"
-    assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set", "start_time_valid"]
+    assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set", "start_time_valid", "end_time_valid", "schedule_valid"]
     # Новое правило main участвует в максимуме своего раздела, а не теряется.
     invalid_start = _with(start_time="bad")
     timed = {t["id"]: t for t in _topics({"input": invalid_start, "opts": {"backend": "rpa"}})}

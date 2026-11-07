@@ -23,6 +23,16 @@
       ]
     },
     "default_objective": "leads",
+    "lifetime_text": {
+      "budget_min": {
+        "hint": "raise the lifetime budget to Meta's minimum for the account currency times the number of days",
+        "label": "Budget is at least Meta's minimum for the whole period"
+      },
+      "budget_set": {
+        "hint": "enter a lifetime budget above zero",
+        "label": "Lifetime budget"
+      }
+    },
     "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
     "max_headline": 40,
     "max_primary_visible": 125,
@@ -566,6 +576,34 @@
       "hint": "enter the start as date and time, not earlier than today (ad account time zone)",
       "id": "start_time_valid",
       "label": "Start time",
+      "severity": "error",
+      "side": "client",
+      "topic": "budget",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_end_time\"]"
+      },
+      "hint": "a lifetime budget needs an end date and time after the start, not in the past (ad account time zone)",
+      "id": "end_time_valid",
+      "label": "End time (lifetime budget)",
+      "severity": "error",
+      "side": "client",
+      "topic": "budget",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_schedule\"]"
+      },
+      "hint": "a schedule needs a lifetime budget and at least one selected hour",
+      "id": "schedule_valid",
+      "label": "Ad schedule",
       "severity": "error",
       "side": "client",
       "topic": "budget",

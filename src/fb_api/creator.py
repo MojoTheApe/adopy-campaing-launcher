@@ -2511,18 +2511,18 @@ class CampaignCreator:
         return [{"days": list(w["days"]), "start_minute": w["start_minute"], "end_minute": w["end_minute"],
                  "timezone_type": _wpol.SCHEDULE_TZ} for w in ad_set.schedule]
 
+    def lifetime_days(self, plan: CampaignPlan) -> int | None:
+        """Число суток срока (вверх) по самому короткому набору; нет сроков - None (ACL-1443)."""
+        spans = [(self._end_dt(s) - self._start_dt(s)).total_seconds()
+                 for s in plan.ad_sets if s.start_time and s.end_time]
+        return max(1, math.ceil(min(spans) / 86400)) if spans else None
+
     def budget_floor_problem(self, plan: CampaignPlan) -> str:
         """Lifetime ниже `min_daily_budget` кабинета x число дней (ACL-1443). Нет факта - пусто."""
         minimum = self.facts.min_daily_budget
-        if not plan.lifetime or not minimum:
+        days = self.lifetime_days(plan)
+        if not plan.lifetime or not minimum or days is None:
             return ""
-        spans = []
-        for ad_set in plan.ad_sets:
-            if ad_set.start_time and ad_set.end_time:
-                spans.append((self._end_dt(ad_set) - self._start_dt(ad_set)).total_seconds())
-        if not spans:
-            return ""
-        days = max(1, math.ceil(min(spans) / 86400))
         need = minimum * days
         if budget_minor(plan.lifetime_budget, self.facts.currency) >= need:
             return ""
