@@ -587,6 +587,11 @@ class FakeMeta:
                 return {"data": rows}
             if parts[1] == "thumbnails":
                 return {"data": [{"uri": "https://example.invalid/t.jpg", "is_preferred": True}]}
+        if oid not in self.objects:
+            # ACL-2250: как Meta - неизвестный id это ошибка 100, а не падение подставки; квитанция
+            # имени от прошлого запуска на другой подставке тогда молча не используется.
+            return {"error": {"code": 100, "type": "OAuthException",
+                              "message": f"(#100) Object with ID '{oid}' does not exist"}}
         obj = self.objects[oid]
         if obj["_kind"] == "video" and params.get("fields") == "title":
             return {"id": oid, "title": obj.get("title")}
