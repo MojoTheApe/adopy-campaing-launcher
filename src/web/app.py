@@ -603,7 +603,8 @@ def _build_account_map_view(
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
-    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    known = list(map_entries)
     all_known = sorted(set(known) | labels_in_report, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
@@ -716,6 +717,8 @@ def _build_account_map_view(
                     excel = _numbers(country_name, resolved) or excel
             rows.append({
                 "account": label,
+                # номер кабинета из карты аккаунтов — Home показывает его второй строкой под именем
+                "act_id": (getattr(map_entries.get(label), "ad_account_id", "") or "").strip(),
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
@@ -872,6 +875,29 @@ def _build_account_map_view(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
     )
 
+    # Home «таблица как в Google»: состояние каждого аккаунта и счётчики. Только
+    # сохранённые данные (статус кабинета, спенд периода) — ни Meta, ни Multilogin
+    # здесь не читаются. `rows` не переставляем (их же рисует Manage), для Home —
+    # отдельный порядок `rows_aov`.
+    from src.web import account_state as _astate
+
+    seen_accounts: dict[str, dict] = {}
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            r["state"] = _astate.account_state(r)
+            seen_accounts.setdefault(r["account"], r["state"])
+        mc["rows_aov"] = _astate.sort_rows(mc.get("rows") or [])
+        mc["state_counts"] = _astate.state_counts(r["state"] for r in mc.get("rows") or [])
+        mc["active"] = mc["state_counts"]["active"] > 0 and not mc.get("virtual")
+    countries.sort(key=lambda mc: (
+        not mc["active"],
+        -float(((mc.get("book") or {}).get("spend") or mc.get("spend") or 0)),
+        (mc["country"] or "").casefold(),
+    ))
+    state_totals = _astate.state_counts(seen_accounts.values())
+    state_totals["countries_total"] = len(countries)
+    state_totals["countries_active"] = sum(1 for mc in countries if mc["active"])
+
     # ACL-1319: Available accounts — только те, с кем есть смысл работать.
     # `all_known` остаётся прежним: из него строятся выпадающие списки
     # привязки, и там нужен каждый аккаунт. Сужается только этот список и его
@@ -930,6 +956,7 @@ def _build_account_map_view(
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),
+        "state_totals": state_totals,
         # ACL-1656: «Campaign managers» внизу Home.
         "cm_section": _amap_cm_section(report),
         "available": available,
@@ -1436,6 +1463,8 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
+templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 
 
 def _campaign_table_api() -> bool:
@@ -4301,6 +4330,13 @@ async def account_map_patch(request: Request) -> JSONResponse:
             rows.append(new_row)
 
         write_csv_atomic(map_path, fieldnames, rows)
+
+        # Saving or adding an account is an explicit "I want this one": bring
+        # it back if it was removed from ACL (or hidden) earlier.
+        from src.web import hidden_accounts as _hidden
+
+        if _hidden.is_hidden(account_name):
+            _hidden.set_hidden(account_name, False)
     except PermissionError:
         # Same class of bug fixed in /account-link-patch below: an unhandled
         # exception here previously made FastAPI's default 500 come back as
@@ -5247,12 +5283,15 @@ def account_map_fragment(
 
     base_report = report
     period_cmp, compare_note = None, ""
+    # Отчёт тоже считается за выбранный период — как на самой странице: строки аккаунтов карта пересчитывает сама,
+    # а «Total · all countries» и книжные тоталы страны берутся из отчёта. С отчётом без периода итог показывал
+    # все даты книги рядом со строками за выбранные (ACL-2384).
+    date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+    try:
+        report = report_for_period(base_report, df, date_from, date_to)
+    except PeriodReportError:
+        return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
     if compare.strip():
-        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
-        try:
-            report = report_for_period(base_report, df, date_from, date_to)
-        except PeriodReportError:
-            return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
         period_cmp, compare_note = _build_compare(
             base_report, df, date_from, date_to, span.strip(),
             compare.strip(), cmp_from.strip(), cmp_to.strip())
@@ -5622,9 +5661,11 @@ def _accounts_spending_today(accounts: list[str]) -> list[str]:
 
 @app.post("/account-map-remove")
 async def account_map_remove(request: Request) -> JSONResponse:
-    """Disconnect an account from THIS machine. Body JSON: {account_name}.
+    """Remove an account from ACL on THIS machine. Body JSON: {account_name}.
 
-    Removes the row from the machine-local map only. The account keeps
+    Removes the row from the machine-local map (if there is one) and sets the
+    per-machine hidden flag, so a sheet-only account leaves the Accounts list
+    too. The account keeps
     existing in the company's sheet, keeps its history and its campaigns —
     this machine simply stops knowing how to reach it. Nothing here can or
     should delete a shared record.
@@ -5701,12 +5742,16 @@ async def account_map_remove(request: Request) -> JSONResponse:
                         if account_links.unlink(name, kind, place):
                             unlinked.append({"account": name, "kind": kind, "value": place})
 
-        if not removed and not unlinked:
-            shown = "«" + "», «".join(wanted[:3]) + "»"
-            return JSONResponse(
-                {"ok": False, "error": f"{shown} is not in the map of this machine"},
-                status_code=404,
-            )
+        # Remove means "remove from ACL": the account must also leave the
+        # Accounts list. A row that comes from the shared sheet has nothing in
+        # the map to delete, so every removed name gets the same per-machine
+        # hidden flag that /api/accounts-hidden sets. The shared sheet is
+        # never touched; saving the account again (/account-map-patch) clears
+        # the flag.
+        from src.web import hidden_accounts as _hidden
+
+        for name in dict.fromkeys(wanted):
+            _hidden.set_hidden(name, True)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
@@ -6569,12 +6614,15 @@ def _targeting_gate() -> JSONResponse | None:
 
 @app.get("/targeting-resolver/cache")
 async def targeting_resolver_cache() -> JSONResponse:
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
-    return JSONResponse({"entries": ConfirmedStore().entries()})
+    try:
+        return JSONResponse({"entries": ConfirmedStore().entries()})
+    except ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
 
 
 @app.post("/targeting-resolver/confirm")
@@ -6596,6 +6644,8 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
         # Имя и состав берутся у кандидата, который показал сервер, а не из запроса.
         row = tr.ConfirmedStore().put(term, id=cand["id"], type=cand["type"], name=cand["name"],
                                       picks=cand.get("picks"))
+    except tr.ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _drop_plan_verdicts("targeting_confirm")
@@ -6604,22 +6654,32 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
 
 @app.post("/targeting-resolver/clear")
 async def targeting_resolver_clear(request: Request) -> JSONResponse:
-    """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    """Забыть один подтверждённый термин (`term`) или все (`all: true`).
+
+    ACL-2267: заодно и из долгого кэша точных находок - «забыть» значит искать заново.
+    """
+    from src.fb_api import facts_cache
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable, norm
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
     body = await _targeting_body(request)
     store = ConfirmedStore()
-    if body.get("all") is True:
-        removed = store.clear()
-        _drop_plan_verdicts("targeting_clear")
-        return JSONResponse({"ok": True, "removed": removed})
-    term = str(body.get("term") or "")
-    if not term.strip():
-        return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
-    removed = 1 if store.remove(term) else 0
+    facts = facts_cache.default()
+    try:
+        if body.get("all") is True:
+            removed = store.clear()
+            facts.clear()
+            _drop_plan_verdicts("targeting_clear")
+            return JSONResponse({"ok": True, "removed": removed})
+        term = str(body.get("term") or "")
+        if not term.strip():
+            return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+        removed = 1 if store.remove(term) else 0
+    except ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    facts.drop_terms([facts.term_key("term", norm(term))])
     _drop_plan_verdicts("targeting_clear")
     return JSONResponse({"ok": True, "removed": removed})
 

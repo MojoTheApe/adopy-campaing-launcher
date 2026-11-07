@@ -652,7 +652,7 @@ def _page():
 
 def test_the_builder_has_the_fields_with_stable_names_and_no_leftover_stubs():
     page = _page()
-    for name in ("_gender", "_languages", "_device", "_os_min", "_start_time"):
+    for name in ("_gender", "_languages", "_device", "_os_min"):
         # ACL-1768: поля набора строит одна функция с префиксом (набор 0 - прежние имена camp_N_*).
         assert f"name=\"' + pfx + '{name[1:]}\"" in page, name
     assert "pfx + 'cta\"" in page

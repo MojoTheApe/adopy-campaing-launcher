@@ -353,7 +353,7 @@
         "level": "ad",
         "sel": ".cb-creative-search"
       },
-      "hint": "no 9:16 file: without one Facebook crops the picture itself",
+      "hint": "no 9:16 or square Stories / Reels file: without one Facebook crops the picture itself",
       "id": "media_vertical",
       "label": "Vertical file for Stories and Reels",
       "severity": "warning",
@@ -381,9 +381,9 @@
         "level": "ad",
         "sel": ".cb-vertical-search"
       },
-      "hint": "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+      "hint": "with a Stories / Reels file the main file must be 1:1 or 4:5, the Stories / Reels one 9:16 or 1:1, both images or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
       "id": "vertical_ratio",
-      "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16",
+      "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16 or 1:1",
       "severity": "error",
       "side": "server",
       "topic": "creative",

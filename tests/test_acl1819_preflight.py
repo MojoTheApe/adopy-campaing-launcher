@@ -382,6 +382,9 @@ class AuditMeta(FormMeta):
 
 
 def _audit(meta, draft, *, creator_kw=None):
+    from src.fb_api import facts_cache
+
+    facts_cache.default().clear()   # у каждого фейкового кабинета свои факты: прежний кэш не нужен
     client = g.GraphClient(meta, allow_writes=False, sleep=lambda s: None, min_interval_s=0.0, max_calls=60)
     facts = cr.preflight_account(client, ACT)
     creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=lambda s: None,

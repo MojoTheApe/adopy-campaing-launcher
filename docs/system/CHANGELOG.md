@@ -1,5 +1,42 @@
 # System history
 
+## ACL-2330 — Vault migration cleans up clear-text secret lines — 2026-11-06
+
+The migration now drops an earlier duplicate of a secret key (dotenv ignores it; the encrypted backup keeps it). A connection-sheet sign-in or startup refresh rewrites a clear-text secret line even when the value is unchanged, so it gets encrypted. The migration notes now match each case and point to Connections -> Sign in with Google.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1330).
+
+## ACL-2243 — Failed read of the confirmed targeting store is not an empty store — 2026-11-06
+
+A damaged or unreadable confirmed-targeting file is now reported as a read failure with a plain-English message and is never overwritten; a missing file is still an empty store. Resolution stops instead of guessing, and the `/targeting-resolver/cache`, `confirm` and `clear` routes answer 409. Python changed: restart the dashboard after deploy.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1243).
+
+## ACL-2439 — Event log tests no longer depend on a fixed date — 2026-11-06
+
+The event log store tests built their events with a fixed date (2026-10-30) while asking for the last 7 days against the real clock, so three of them failed on every branch after that window passed. Fixture timestamps are now computed from the current time (one day ago for events that must stay in the window, 30 days ago for the one that must be dropped). Tests only; no production code changed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1439).
+
+## ACL-2267 — Check plan remembers resolved targeting for 60 days — 2026-11-02
+
+Countries, audience languages and library terms that Meta matched exactly are now remembered on the
+machine for 60 days (`facts_cache.json` next to the machine config; `ACL_FACTS_CACHE_DAYS`, `0` turns it
+off), so a repeated check, or the first check of another account, does not search for them again.
+Interest ids from this cache are still confirmed by Meta on every check in the same batch that
+already runs; an id Meta rejects is dropped and the term is searched again, so a removed interest never
+fails the check. The ad account, pixels, Pages, currency and timezone are always read fresh, and an
+answer without an account id now counts as a different account. "Clear" on a term in Check plan
+forgets it in both caches. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1267).
+
+## ACL-2084 — Square file in the Stories / Reels slot — 2026-11-04
+
+The Stories / Reels file may now be 9:16 or 1:1 (images and videos); the main file stays 1:1 or 4:5, so
+4:5 or 1:1 in Feed with a separate square file in Stories / Reels publishes as a two-file pair.
+The same file in both slots (the same path, or a copy with the same bytes under another name) is used once
+as the main file with a warning: Meta refuses one asset under two placement labels ("All ad asset values
+must be unique", live run on Doc120, 2026-11-04). Changing or clearing the main file clears a slot that
+still held it. Check plan shows the Stories / Reels file of every pair. A restored Video ad now searches
+videos, not images.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1084).
+
 ## ACL-2266 — Check plan asks Meta only about changed campaigns — 2026-11-02
 
 Check plan now remembers the clean result of every campaign on the server (in memory, 60 minutes by

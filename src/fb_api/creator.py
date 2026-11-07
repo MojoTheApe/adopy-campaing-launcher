@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -36,6 +37,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import error_catalog as _catalog
+from src.fb_api import facts_cache as _facts_cache
 from src.fb_api import form_create as _fc
 from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
@@ -134,7 +136,8 @@ VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
-#: Запас вызовов на всё остальное в кампании при проверке бюджета кусков (ACL-1891).
+#: Прежний фиксированный запас на остальную кампанию в Check plan (ACL-1891); с ACL-2370 не используется -
+#: остаток считает `estimate_create_calls`. Имя оставлено для старых тестов.
 CALLS_RESERVE_OTHER = 40
 
 
@@ -200,6 +203,41 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
     return total
 
 
+#: ACL-2370: запас на повторы кусков (ACL-2000, докачка со смещения): 5% кусков, не меньше двух вызовов.
+CHUNK_RETRY_SLACK_FRACTION = 0.05
+CHUNK_RETRY_SLACK_MIN = 2
+
+
+def video_files_of(plan: "CampaignPlan") -> list[str]:
+    """Видеофайлы плана без повторов: главный и вертикальный (Stories / Reels) каждого видео-объявления.
+
+    Один путь в нескольких объявлениях грузится ОДИН раз: `_video` ищет видео в кабинете по заголовку
+    (тег + md5), и второе объявление находит уже загруженное. Поэтому считаем по уникальному пути.
+    """
+    seen: dict[str, None] = {}
+    for ad_set in plan.ad_sets:
+        for ad in ad_set.ads:
+            if ad.kind == "video":
+                seen.setdefault(ad.path, None)
+            if ad.vertical_path and ad.vertical_kind == "video":
+                seen.setdefault(ad.vertical_path, None)
+    return list(seen)
+
+
+def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
+    """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
+
+    Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
+    `estimate_create_calls`). Верхняя оценка: проверка плана читает исходный файл, а запуск может
+    сжать его до загрузки.
+    """
+    size_of = size_of or _disk_size
+    chunks = sum(upload_calls(size_of(path)) for path in video_files_of(plan))
+    if not chunks:
+        return 0
+    return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
+
+
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
 #: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
@@ -229,9 +267,9 @@ RECEIPT_UNKNOWN_S = 900
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
 LABEL_VERTICAL = "acl_vertical"
-#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, вертикальный — 9:16 (допуск 1,5 %).
+#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, Stories / Reels — 9:16 или 1:1 (ACL-2084), допуск 1,5 %.
 MAIN_RATIOS = (1.0, 0.8)
-VERTICAL_RATIO = 9 / 16
+VERTICAL_RATIOS = (9 / 16, 1.0)
 RATIO_TOLERANCE = 0.015
 #: Площадки вертикального файла (Stories и Reels); остальные из ручного списка — основному файлу.
 VERTICAL_FACEBOOK = ("story", "facebook_reels")
@@ -444,7 +482,7 @@ def _near(ratio: float, target: float) -> bool:
 
 
 def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[str]:
-    """Основной файл 1:1 или 4:5 и вертикальный 9:16 — проверка ДО любой загрузки (ACL-1774).
+    """Основной файл 1:1 или 4:5, Stories / Reels 9:16 или 1:1 — проверка ДО любой загрузки (ACL-1774, ACL-2084).
 
     Не прочитали размер — тоже отказ: пару, которую нельзя проверить, Meta обрежет молча.
     """
@@ -458,9 +496,9 @@ def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[s
                    "the main file must be 1:1 or 4:5")
     if not v or not v[1]:
         out.append(f"Ad {index}: the size of the Stories / Reels file cannot be read; {hint}")
-    elif not _near(v[0] / v[1], VERTICAL_RATIO):
+    elif not any(_near(v[0] / v[1], r) for r in VERTICAL_RATIOS):
         out.append(f"Ad {index}: the Stories / Reels file is {v[0]}x{v[1]}; it must be 9:16 "
-                   "(for example 1080x1920)")
+                   "(for example 1080x1920) or 1:1 (for example 1080x1080)")
     return out
 
 
@@ -838,7 +876,7 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
                         "Nothing was created.")
     acc = client.account(act)
     got = str(acc.get("account_id") or "").strip()
-    if got and got != digits:
+    if got != digits:      # ACL-2267: пустой account_id в ответе - тоже несовпадение
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
     started = time.monotonic()
     merged = _pg.read_merged(client, act, always_profile=False)
@@ -1002,14 +1040,19 @@ class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
     def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
-                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = ""):
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None):
         self.client = client
+        #: ACL-2267: долгий кэш разобранных терминов (страна, язык, интерес); по умолчанию - кэш машины.
+        self._facts = facts if facts is not None else _facts_cache.default()
+        #: Ключи долгого кэша, использованные этим резолвером: при отказе Meta по таргетингу сбрасываются.
+        self._touched: set[str] = set()
+        self._facts_hits = 0
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
-        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope)
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts)
         #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
         #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
         self.locale_groups: dict[int, dict[int, str]] = {}
@@ -1021,6 +1064,13 @@ class TargetingResolver:
         if key.upper() in self._geo:
             return self._geo[key.upper()]
         up = key.upper()
+        wkey = self._facts.term_key("country", _tr.norm(key))
+        warm = self._facts.get_term(wkey)
+        if warm and re.fullmatch(r"[A-Z]{2}", str(warm.get("code") or "")):
+            self._touched.add(wkey)
+            self._facts_hits += 1
+            self._geo[up] = str(warm["code"])
+            return self._geo[up]
         code = ""
         # Для двухбуквенного кода «q=AR» отдаёт десятки стран с «ar» в названии, и нужная может
         # выпасть из страницы, поэтому: сначала код с широкой выдачей, затем английские названия.
@@ -1043,13 +1093,43 @@ class TargetingResolver:
         if not code:
             raise PlanError(f"Country {key!r} was not found by Meta targeting search")
         self._geo[key.upper()] = code
+        self._facts.put_term(wkey, {"code": code})
+        self._touched.add(wkey)
         return code
+
+    def drop_cached(self) -> int:
+        """Meta отвергла таргетинг: забыть всё, что этот резолвер взял из долгого кэша или положил в него."""
+        keys = sorted(self._touched | self.terms.touched_keys)
+        self._facts.drop_terms(keys)
+        self._touched.clear()
+        self.terms.touched_keys.clear()
+        return len(keys)
+
+    def facts_stats(self) -> dict:
+        """Счётчики долгого кэша за задание (для телеметрии Check plan, без имён терминов)."""
+        st = dict(self.terms.facts_stats)
+        st["warm_hits"] += self._facts_hits
+        st["targeting_reads"] = self.terms.reads
+        return st
 
     def locale(self, language: str) -> int | None:
         lang = (language or "").strip()
         if not lang:
             return None
         if lang in self._locale:
+            return self._locale[lang]
+        wkey = self._facts.term_key("locale", _tr.norm(lang))
+        warm = self._facts.get_term(wkey)
+        if warm and re.fullmatch(r"[0-9]+", str(warm.get("id") or "")):
+            self._touched.add(wkey)
+            self._facts_hits += 1
+            self._locale[lang] = int(warm["id"])
+            self.locale_names[lang] = str(warm.get("name") or lang)
+            groups = warm.get("groups") if isinstance(warm.get("groups"), dict) else {}
+            if groups or self.locale_names[lang].casefold().endswith(" (all)"):
+                # группа «X (All)» без известных членов тоже группа: без пометки сравнение станет нестрогим
+                self.locale_groups[self._locale[lang]] = {int(k): str(v) for k, v in groups.items()
+                                                          if re.fullmatch(r"[0-9]+", str(k))}
             return self._locale[lang]
         rows = _tr.named_search("adlocale", lambda: self.client.get_all(
             "/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1))
@@ -1071,6 +1151,10 @@ class TargetingResolver:
                 and str(r.get("name") or "").strip().casefold() != pick_name.casefold()
                 and (str(r.get("name") or "").strip().casefold() == base
                      or str(r.get("name") or "").strip().casefold().startswith(base + " ("))}
+        self._facts.put_term(wkey, {"id": str(self._locale[lang]), "name": self.locale_names[lang],
+                                    "groups": {str(k): v for k, v in
+                                               self.locale_groups.get(self._locale[lang], {}).items()}})
+        self._touched.add(wkey)
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
@@ -1080,8 +1164,12 @@ class TargetingResolver:
         с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
         """
         terms = [n for g in groups for n in g]
-        self.terms.prefetch(terms)
-        results = {n: self.terms.resolve(n) for n in terms}
+        try:
+            self.terms.prefetch(terms)
+            results = {n: self.terms.resolve(n) for n in terms}
+        except _tr.ConfirmedStoreUnreadable as exc:
+            # ACL-2243: unknown store state must stop the plan, not resolve as if nothing was confirmed.
+            raise PlanError(str(exc)) from exc
         bad: list[dict] = []
         for r in results.values():
             if r["state"] in ("exact", "confirmed"):
@@ -2673,6 +2761,21 @@ class CampaignCreator:
     def _find_sets(self, plan: CampaignPlan, campaign_id: str) -> list[dict | None]:
         return [self._find_child(campaign_id, "adsets", s.name) for s in plan.ad_sets]
 
+    def _reset_stale_facts(self, exc: BaseException) -> None:
+        """ACL-2267: Meta отвергла таргетинг (по коду) - забыть термины задания из долгого кэша."""
+        try:
+            if "targeting" in _facts_cache.kinds_for_error(exc):
+                drop = getattr(self.resolver, "drop_cached", None)
+                n = drop() if drop is not None else 0
+                if n:
+                    log.info("facts cache: %s targeting entries dropped after a Meta refusal", n)
+                    from src.fb_ads_rpa import run_telemetry
+
+                    run_telemetry.record("api_facts_dropped", True, diag={"source": "api", "dropped": n,
+                                                                          "reason": "meta_refused_targeting"})
+        except Exception:  # noqa: BLE001
+            log.debug("facts cache reset failed", exc_info=True)
+
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
         self._recovery_rows = None
@@ -2693,6 +2796,7 @@ class CampaignCreator:
             out.error += self._left_in_meta(plan, out)
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
+            self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
@@ -2838,6 +2942,15 @@ class CampaignCreator:
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB")
+                    if len(vdata) == len(data) and _md5(vdata) == _md5(data):
+                        # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
+                        # хэшем под двумя метками («All ad asset values must be unique», живой прогон
+                        # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
+                        # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        ad.vertical_path = ad.vertical_kind = ""
+                        out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
+                                            "it will be used once as the main file.")
+                        continue
                     bad = pair_problems(ad.index, ad.kind, data, vdata)
                     if bad:
                         raise PlanError("; ".join(bad))
@@ -2848,14 +2961,24 @@ class CampaignCreator:
         chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
-        # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
+        # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
+        # и запуск (раньше - фиксированные 40, и проверка принимала то, что запуск потом отказывал).
+        # Здесь куски без запаса на повторы: это страховка, размер после сжатия может отличаться.
         if isinstance(budget, int) and chunk_calls:
-            rest = estimate_create_calls(plan) if writing else CALLS_RESERVE_OTHER
+            rest = estimate_create_calls(plan)
             if chunk_calls + rest > budget:
                 raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
                                 f"and the rest of the campaign about {rest}, more than "
                                 f"one run allows ({budget}). Use a smaller video or split the campaign. "
                                 "Nothing was created.")
+            if not writing:
+                # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
+                sizes = [len(v) for v in files.values() if isinstance(v, LargeFile)]
+                n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
+                out.warnings.append(
+                    f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
+                    f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                    "for this run (upper bound; the file may be compressed before upload).")
         self._check_planned(plan, targetings)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
@@ -3143,6 +3266,7 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
         except GraphError as exc:
+            self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
         out.targeting = self._targeting_report()

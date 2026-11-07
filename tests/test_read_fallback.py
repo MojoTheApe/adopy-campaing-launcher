@@ -63,7 +63,7 @@ def test_no_reading_for_the_dates_on_screen_shows_the_latest_marked(store):
     assert view["fallback"]["A"]["spend"] == 1044.82
     country = _country(view)
     assert country["live_read"] == 0 and country["live_sums"] == [], "запасное чтение попало в итог страны"
-    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={}) + "".join(app.templates.env.get_template("_account_map_country.html").render(mc=mc, amap=view, mlx={}) for mc in view["countries"])
     # ACL-2063 сохраняет совместимые записи, но экран показывает BI и список,
     # не расход Meta за другой период под текущими датами.
     assert 'class="amap-list" data-account="A"' in html and 'Campaign list' in html
@@ -83,7 +83,7 @@ def test_never_read_stays_a_dash(store):
     links.link("A", "country", "KW")
     view = app._build_account_map_view({"countries": []}, date_from="2026-09-01", date_to="2026-09-22")
     assert view["fallback"] == {}
-    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={}) + "".join(app.templates.env.get_template("_account_map_country.html").render(mc=mc, amap=view, mlx={}) for mc in view["countries"])
     assert 'class="amap-list" data-account="A"' in html and 'list not read' in html
     assert 'data-read-state=' not in html
 
@@ -166,7 +166,7 @@ def test_a_failed_reading_shows_the_old_one_too(store):
     view = app._build_account_map_view({"countries": []}, date_from="2026-09-01", date_to="2026-09-22")
     assert view["fallback"]["A"]["spend"] == 1044.82
     assert _country(view)["live_read"] == 0
-    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+    html = app.templates.env.get_template("_account_map.html").render(amap=view, mlx={}) + "".join(app.templates.env.get_template("_account_map_country.html").render(mc=mc, amap=view, mlx={}) for mc in view["countries"])
     assert 'class="amap-list" data-account="A"' in html and 'list not read' in html
     assert 'data-read-state=' not in html and "$1,044.82" not in html
     assert "amap-live-old" not in html and "failed · retry" not in html

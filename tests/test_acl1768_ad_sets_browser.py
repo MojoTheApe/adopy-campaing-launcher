@@ -61,7 +61,7 @@ def test_a_new_campaign_has_one_ad_set_node_and_the_old_field_names(page):
     assert _sets(page).count() == 1 and _sets(page).first.get_attribute("aria-current") == "true"
     names = _names(page)
     # прежние имена полей набора 0 не тронуты
-    for f in ("targeting", "os", "age", "language", "gender", "languages", "device", "os_min", "start_time", "destination"):
+    for f in ("targeting", "os", "age", "language", "gender", "languages", "device", "os_min", "destination"):
         assert f"camp_0_{f}" in names, f
     assert "camp_0_adset_count" in names and "camp_0_ad_0_adset" in names and "camp_0_adset_0_name" in names
     # одна кампания - один набор: «Remove ad set» выключен
@@ -74,7 +74,7 @@ def test_plus_ad_set_adds_a_tree_node_a_section_and_one_ad(page):
     assert _sets(page).count() == 2
     assert _sets(page).nth(1).get_attribute("aria-current") == "true", "новый набор не открыт"
     names = _names(page)
-    for f in ("targeting", "os", "age", "language", "gender", "languages", "device", "os_min", "start_time", "destination", "name"):
+    for f in ("targeting", "os", "age", "language", "gender", "languages", "device", "os_min", "destination", "name"):
         assert f"camp_0_adset_1_{f}" in names, f
     assert dict(_entries(page))["camp_0_adset_count"] == "2"
     assert _ad_sets(page) == ["0", "1"], "у нового набора должно быть своё объявление"

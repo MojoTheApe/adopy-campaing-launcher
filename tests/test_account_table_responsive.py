@@ -92,14 +92,14 @@ def test_scroll_region_holds_only_the_table_beside_the_campaign_sections(browser
         page.set_content(f'<html data-theme="light"><style>{styles}</style><main class="main-content">{render_section(route, True, True)}</main></html>')
         scroll = page.locator(".amap-table-scroll")
         assert scroll.count() == 1
-        assert page.locator(".amap-campaigns").count() == 1 and page.locator("[data-hc-after]").count() == 1
+        assert page.locator(".amap-campaigns").count() == 1 and page.locator("[data-hc-after]").count() == 0
         assert scroll.evaluate("el => el.children.length === 1 && el.children[0].tagName === 'TABLE'")
-        assert scroll.locator(".amap-campaigns, [data-hc-after]").count() == 0
+        assert scroll.locator(".amap-campaigns").count() == 0
         order = page.evaluate("""() => {
             const y = s => document.querySelector(s).getBoundingClientRect().top;
-            return [y('.amap-campaigns'), y('.amap-table-scroll'), y('[data-hc-after]')];
+            return [y('.amap-campaigns'), y('.amap-table-scroll')];
         }""")
-        assert order[0] <= order[1] <= order[2]
+        assert order[0] <= order[1]
         scroll.focus()
         scroll.evaluate("el => { el.scrollLeft = el.scrollWidth; }")
         page.wait_for_timeout(200)
