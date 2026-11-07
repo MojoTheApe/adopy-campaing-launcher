@@ -369,7 +369,10 @@ jobs:
   test-macos:
     name: macOS install smoke (Apple Silicon)
     needs: scope
-    if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.linux != 'false') }}
+    # Paused: the hosted macOS runner is unavailable for this repository and a cancelled
+    # advisory job still turns the whole main run into "cancelled", which blocks delivery.
+    # Remove "false &&" once macOS runners work again.
+    if: ${{ false && always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.linux != 'false') }}
     continue-on-error: true
     runs-on: macos-14
     timeout-minutes: 20

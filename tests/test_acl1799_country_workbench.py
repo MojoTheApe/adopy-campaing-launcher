@@ -238,7 +238,7 @@ def test_workbench_styles_are_one_block_and_every_selector_is_cw_prefixed():
     blocks = re.findall(r'<style id="cw-styles">(.*?)</style>', page, re.S)
     assert len(blocks) == 1
     css = re.sub(r"/\*.*?\*/", "", blocks[0], flags=re.S)
-    css = re.sub(r"@media[^{]*\{", "", css)          # заголовок медиа-запроса
+    css = re.sub(r"@(?:media|container)[^{]*\{", "", css)   # заголовок медиа-/container-запроса
     for selectors in re.findall(r"([^{}]+)\{", css):
         for sel in selectors.split(","):
             sel = sel.strip()

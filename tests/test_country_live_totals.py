@@ -41,6 +41,8 @@ def test_sums_use_only_successful_finite_readings_and_do_not_mix_units(monkeypat
         {'currency':'$','spend':1044.82,'account':'J'},
     ]
     html=app.templates.env.get_template('_account_map.html').render(amap=view,mlx={'A':'A','B':'B'})
+    # Список кампаний с Home переехал в Manage страны (тот же partial).
+    html+=''.join(app.templates.env.get_template('_account_map_country.html').render(mc=mc,amap=view,mlx={'A':'A','B':'B'}) for mc in view['countries'])
     # ACL-2063 supersedes the Meta totals display, not the finite/unit model above.
     assert 'Campaign list' in html and 'list not read' in html
     assert 'amap-live-summary-values' not in html and 'spend read' not in html
@@ -56,8 +58,10 @@ def test_maximum_does_not_include_dated_readings(monkeypatch, setup_map):
     country=view['countries'][0]
     assert country['live_read']==0 and country['live_sums']==[]
     html=app.templates.env.get_template('_account_map.html').render(amap=view,mlx={'A':'A','B':'B'})
+    # Список кампаний с Home переехал в Manage страны (тот же partial).
+    html+=''.join(app.templates.env.get_template('_account_map_country.html').render(mc=mc,amap=view,mlx={'A':'A','B':'B'}) for mc in view['countries'])
     assert 'spend read' not in html and 'Campaign list' in html
-    assert '<b>—</b>' in html
+    assert '>—</b>' in html  # прочерк вместо суммы чтений (на Home тег <b> с классом)
     read.assert_not_called()
 
 
