@@ -1916,6 +1916,129 @@
     .amap-shot:hover { color: inherit; }
     .amap-shot:disabled { cursor: not-allowed; opacity: 0.55; }
     .amap-shot:disabled:hover { color: var(--muted); }
+    /* ── Home: Account map «таблица как в Google» (Expanded) и плитки (Compact). Классы .aov-*, цвета только --adopy-*. ── */
+    .aov { --st-active: var(--adopy-success); --st-active-bg: var(--adopy-success-bg);
+      --st-issue: var(--adopy-warning); --st-issue-bg: var(--adopy-warning-bg);
+      --st-dead: var(--adopy-danger); --st-dead-bg: var(--adopy-danger-bg);
+      --st-new: var(--adopy-selected-text); --st-new-bg: var(--adopy-selected-bg);
+      --st-unknown: var(--adopy-text-muted); --st-unknown-bg: var(--adopy-neutral-bg); padding: 0 0.85rem 0.85rem; }
+    .aov [hidden] { display: none !important; }
+    .aov-view { display: inline-flex; border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-sm); overflow: hidden; height: 36px; flex: none; }
+    .aov-vbtn { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; background: var(--adopy-surface); color: var(--adopy-text-muted);
+      font: inherit; font-size: var(--adopy-text-table); cursor: pointer; }
+    .aov-vbtn + .aov-vbtn { border-left: 1px solid var(--adopy-control-border); }
+    .aov-vbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .aov-vbtn[aria-checked="true"] { background: var(--adopy-selected-bg); color: var(--adopy-selected-text); font-weight: 600; }
+    .aov-vbtn:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: -2px; }
+    .aov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .aov-fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 12px; }
+    .aov-fb { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border: 1px solid var(--adopy-border-strong); border-radius: 999px;
+      background: var(--adopy-surface); color: var(--adopy-text); font: inherit; font-size: var(--adopy-text-table); cursor: pointer; }
+    .aov-fb small { font-size: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; }
+    .aov-fb b { font-variant-numeric: tabular-nums; }
+    .aov-fb[aria-pressed="true"] { background: var(--adopy-selected-bg); border-color: var(--adopy-primary); color: var(--adopy-selected-text); }
+    .aov-sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--adopy-border-strong); }
+    .aov-sw.active { background: var(--st-active); } .aov-sw.issue { background: var(--st-issue); } .aov-sw.dead { background: var(--st-dead); } .aov-sw.new { background: var(--st-new); }
+    .aov-gl { display: none; }
+    .aov-fnote, .aov-live { font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
+    .aov-live { margin: -6px 0 8px; min-height: 0; }
+    .aov-block { border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface); box-shadow: var(--adopy-shadow-sm); margin-bottom: 16px; overflow: hidden; }
+    .aov-bh { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 10px 14px; background: var(--adopy-surface-subtle); border-bottom: 1px solid var(--adopy-border); }
+    .aov-bh > b { font-size: var(--adopy-text-section); }
+    .aov-sp { flex: 1; }
+    .aov-cnt { display: inline-flex; align-items: baseline; gap: 4px; font-size: var(--adopy-text-sm); white-space: nowrap; }
+    .aov-cnt b { font-size: var(--adopy-text-body); font-variant-numeric: tabular-nums; }
+    .aov-cnt.active b { color: var(--st-active); } .aov-cnt.issue b { color: var(--st-issue); } .aov-cnt.dead b { color: var(--st-dead); }
+    .aov-cnt.new b { color: var(--st-new); } .aov-cnt.unknown b { color: var(--st-unknown); }
+    .aov-cnt.zero { opacity: .45; }
+    .aov-btn { border: 1px solid var(--adopy-control-border); background: var(--adopy-surface); color: var(--adopy-text); border-radius: var(--adopy-radius-sm);
+      min-height: 28px; padding: 0 10px; font: inherit; font-size: var(--adopy-text-sm); font-weight: 500; cursor: pointer; }
+    .aov-btn.q { border-color: transparent; background: transparent; color: var(--adopy-link); }
+    .aov-btn:focus-visible, .aov-fb:focus-visible, .aov-tile:focus-visible, .aov-more:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: var(--adopy-focus-offset); }
+    .aov-scroll { overflow-x: auto; }
+    .aov-table { width: 100%; min-width: 880px; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: var(--adopy-text-table); }
+    .aov-table th, .aov-table td { padding: 7px 12px; border-bottom: 1px solid var(--adopy-border); text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .aov-table th { font-size: var(--adopy-text-sm); font-weight: 600; color: var(--adopy-text-muted); background: var(--adopy-surface); }
+    .aov-table th.num, .aov-table td.num { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
+    .aov-table col.c1 { width: 104px; } .aov-table col.c3 { width: 88px; } .aov-table col.c4 { width: 64px; } .aov-table col.c6 { width: 60px; } .aov-table col.c7 { width: 230px; } .aov-table col.c8 { width: 100px; }
+    .aov-row.s-issue td { background: var(--adopy-warning-bg); } .aov-row.s-dead td { background: var(--adopy-danger-bg); }
+    .aov-row.s-dead td.acc { text-decoration: line-through; text-decoration-thickness: 1px; }
+    .aov-row.s-new td.acc, .aov-row.s-unknown td.acc { color: var(--adopy-text-muted); }
+    .aov-row td.why { color: var(--adopy-text-muted); } .aov-row.s-issue td.why, .aov-row.s-dead td.why { color: var(--adopy-text); }
+    .aov-row .aov-read.stale { color: var(--adopy-text-muted); opacity: .75; } .aov-nz { color: var(--adopy-text-muted); }
+    .aov-row.aov-hit td.acc { box-shadow: inset 3px 0 0 var(--adopy-primary); font-weight: 600; }
+    .aov-table tr.tot td { font-weight: 600; background: var(--adopy-surface-subtle); border-bottom: 0; }
+    .aov-foldrow td { text-align: center; background: var(--adopy-surface-subtle); }
+    .aov-more { border: 1px dashed var(--adopy-border-strong); background: transparent; color: var(--adopy-link); border-radius: 999px; min-height: 26px; padding: 0 12px; font: inherit; font-size: var(--adopy-text-sm); cursor: pointer; }
+    .aov-st { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 9px; min-height: 22px; font-size: var(--adopy-text-sm); font-weight: 600; white-space: nowrap; }
+    .aov-st.active { background: var(--st-active-bg); color: var(--st-active); } .aov-st.issue { background: var(--st-issue-bg); color: var(--st-issue); }
+    .aov-st.dead { background: var(--st-dead-bg); color: var(--st-dead); } .aov-st.new { background: var(--st-new-bg); color: var(--st-new); }
+    .aov-st.unknown { background: var(--st-unknown-bg); color: var(--st-unknown); border: 1px dashed var(--adopy-border-strong); }
+    .aov-empty { padding: 10px 14px; font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
+    .aov-warn { padding: 10px 14px; background: var(--adopy-danger-bg); color: var(--adopy-danger); font-size: var(--adopy-text-table); }
+    .aov-virtual { border-color: var(--adopy-danger); }
+    .aov-totalbar { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; padding: 10px 14px; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md);
+      background: var(--adopy-surface-subtle); font-size: var(--adopy-text-table); }
+    .aov-totalbar small { color: var(--adopy-text-muted); font-size: var(--adopy-text-sm); }
+    /* Compact: крупные карточки-фильтры и плитки 128×62 */
+    .aov[data-view="compact"] .aov-fbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+    .aov[data-view="compact"] .aov-fb { flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; min-height: 64px; border-radius: var(--adopy-radius-md); border-color: var(--adopy-border); }
+    .aov[data-view="compact"] .aov-fb small { color: var(--adopy-text-muted); } .aov[data-view="compact"] .aov-fb .aov-sw { display: none; } .aov[data-view="compact"] .aov-fb .aov-gl { display: inline; }
+    .aov[data-view="compact"] .aov-fb b { order: 2; font-size: var(--adopy-text-kpi); line-height: 1.1; letter-spacing: -.5px; }
+    .aov[data-view="compact"] .aov-fb.active b { color: var(--st-active); } .aov[data-view="compact"] .aov-fb.issue b { color: var(--st-issue); }
+    .aov[data-view="compact"] .aov-fb.dead b { color: var(--st-dead); } .aov[data-view="compact"] .aov-fb.new b { color: var(--st-new); }
+    .aov[data-view="compact"] .aov-fb.unknown.zero { display: none; }
+    .aov[data-view="compact"] .aov-fb[aria-pressed="true"] { outline: 2px solid var(--adopy-primary); outline-offset: -1px; background: var(--adopy-selected-bg); }
+    .aov[data-view="compact"] .aov-fnote { grid-column: 1 / -1; }
+    .aov-compact { border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface); box-shadow: var(--adopy-shadow-sm); margin-bottom: 14px; }
+    .aov-crow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--adopy-border); align-items: start; }
+    .aov-crow:last-child { border-bottom: 0; }
+    .aov-who b { display: block; font-size: var(--adopy-text-body); }
+    .aov-who small { display: block; color: var(--adopy-text-muted); font-size: var(--adopy-text-sm); font-variant-numeric: tabular-nums; }
+    .aov-btn.sm { min-height: 24px; padding: 0; margin-top: 2px; }
+    .aov-tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+    .aov-tile { width: 128px; height: 62px; border-radius: var(--adopy-radius-sm); padding: 4px 8px; border: 1px solid transparent; border-left-width: 4px; text-align: left;
+      display: flex; flex-direction: column; justify-content: center; min-width: 0; background: var(--adopy-surface-subtle); font: inherit; cursor: pointer; }
+    .aov-tile > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+    .aov-tile .n { font-size: var(--adopy-text-sm); font-weight: 600; } .aov-tile .v { font-size: var(--adopy-text-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .aov-tile .w { font-size: var(--adopy-text-xs); opacity: .85; font-variant-numeric: tabular-nums; } .aov-tile .w.stale { opacity: .6; }
+    .aov-tile.active { background: var(--st-active-bg); color: var(--st-active); border-left-color: var(--st-active); }
+    .aov-tile.issue { background: var(--st-issue-bg); color: var(--st-issue); border-left-color: var(--st-issue); }
+    .aov-tile.dead { background: var(--st-dead-bg); color: var(--st-dead); border-left-color: var(--st-dead); } .aov-tile.dead .n { text-decoration: line-through; text-decoration-thickness: 1px; }
+    .aov-tile.new { background: var(--st-new-bg); color: var(--st-new); border-left-color: var(--st-new); }
+    .aov-tile.unknown { background: var(--st-unknown-bg); color: var(--st-unknown); border-left-color: var(--adopy-border-strong); border-style: dashed; border-left-width: 4px; }
+    .aov-tile.dim { opacity: .18; } .aov-tile.aov-hit { outline: 2px solid var(--adopy-primary); outline-offset: 1px; } .aov-tile[aria-expanded="true"] { outline: 2px solid var(--adopy-primary); outline-offset: 1px; }
+    .aov-pop { position: fixed; z-index: var(--adopy-z-popover); width: 300px; max-width: calc(100vw - 16px); padding: 12px 14px; border: 1px solid var(--adopy-border-strong);
+      border-radius: var(--adopy-radius-md); background: var(--adopy-surface-raised); color: var(--adopy-text); box-shadow: var(--adopy-shadow-popover); font-size: var(--adopy-text-table); }
+    .aov-pop h4 { margin: 6px 0 2px; font-size: var(--adopy-text-body); word-break: break-all; } .aov-pop .sub { color: var(--adopy-text-muted); font-size: var(--adopy-text-sm); }
+    .aov-pop dl { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px 8px; margin: 10px 0; } .aov-pop dt { font-size: var(--adopy-text-xs); color: var(--adopy-text-muted); }
+    .aov-pop dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; } .aov-pop .why { margin: 6px 0 10px; }
+    @media (max-width: 1099px) { .aov-table col.c7 { width: 170px; } }
+    /* Колонки CPA / Campaigns / Note и дерево кампаний в таблице страны (ACL-2384). Дерево берёт те же классы, что в Manage. */
+    .aov-btn.danger { color: var(--adopy-danger-text, var(--adopy-danger, #b42318)); border-color: currentColor; }
+    .aov-table col.c10 { width: 210px; }
+    /* Имя и номер кабинета читаются целиком: перенос вместо многоточия, номер мелкой второй строкой. */
+    .aov-table td.acc { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+    .aov-table td.acc .aov-acc { display: inline-flex; flex-direction: column; vertical-align: middle; }
+    .aov-table td.acc .aov-act { color: var(--adopy-text-muted); font-size: var(--adopy-text-xs); font-variant-numeric: tabular-nums; }
+    /* Хост таблицы кампаний нужен только как точка монтирования: без рамки и отступов он рисовался пустой скруглённой полосой над шапкой. */
+    .aov .hc.hc-scoped.amap-campaigns { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; border-radius: 0; }
+    .aov-table td.amap-list { color: var(--adopy-text-muted); } .aov-table td.amap-list .nodata, .aov-table td.amap-list .hc-snap { font-size: var(--adopy-text-sm); }
+    .aov-table td.aov-note { padding-top: 3px; padding-bottom: 3px; }
+    .aov-table td.aov-note .amap-note-box { height: 1.6rem; line-height: calc(1.6rem - 2px); }
+    .aov-table td.acc .amap-caret, .aov-table td.acc .amap-caret-off { margin-right: 4px; }
+    .aov-row.hc-acct-row { cursor: pointer; }
+    .aov-row[hidden] + .hc-acct-child { display: none; }
+    .aov-table tr.hc-acct-child > td { padding: 0; white-space: normal; background: var(--adopy-surface); }
+    /* На Home аккаунты не опрашиваются: кнопки чтения и открытия профиля дерева живут только в Manage. */
+    .aov .hc-rc, .aov .hc-ro, .aov .amap-pstate { display: none !important; }
+    @media (max-width: 699px) {
+      .aov { padding: 0 var(--adopy-space-3) var(--adopy-space-3); }
+      .aov-view { width: 100%; height: var(--adopy-touch-target); } .aov-vbtn { flex: 1; justify-content: center; }
+      .aov-crow { grid-template-columns: 1fr; } .aov-tile { width: calc(50% - 3px); }
+      .aov[data-view="compact"] .aov-fbar { grid-template-columns: repeat(2, 1fr); }
+      .aov-pop { left: 8px !important; right: 8px; bottom: 8px; top: auto !important; width: auto; max-width: none; }
+    }
     .amap td { padding: 0.42rem 0.85rem; border-bottom: 1px solid var(--border); }
     .amap tbody tr:last-child td { border-bottom: 0; }
     .amap tbody tr:hover { background: var(--bg-hover); }
@@ -2877,6 +3000,17 @@
     }
     .cbd-root[data-open="1"] { right: 0; }
     .cbd-root > * { pointer-events: auto; }
+    /* Мягкий спад страницы слева от панели. Рисуется отдельным слоем, чтобы
+       ширина тени не зависела от размера панели; без blur и backdrop-filter —
+       они дороги при протяжке. Анимируется только opacity. */
+    .cbd-root::before {
+      content: ""; position: absolute; top: 0; bottom: 0; right: 100%;
+      width: clamp(48px, 8vw, 140px); pointer-events: none;
+      background: linear-gradient(to left, var(--adopy-drawer-fade), transparent);
+      opacity: 0; transition: opacity 220ms var(--ease-out);
+    }
+    .cbd-root[data-open="1"]::before { opacity: 1; }
+    body.cbd-overlay .cbd-root::before { width: clamp(80px, 12vw, 220px); }
 
     /* Язычок: единственное, что видно, пока ящик закрыт. */
     .cbd-tab {
@@ -2885,9 +3019,9 @@
       background: var(--bg-elev);
       border: 1px solid var(--border); border-right: none;
       border-radius: var(--radius-md) 0 0 var(--radius-md);
-      box-shadow: var(--shadow-md);
     }
     .cbd-root.cbd-dragging { transition: none; }
+    .cbd-root.cbd-dragging::before { transition: none; }
     body.cbd-resizing { user-select: none; }
     .cbd-handle {
       width: 100%; box-sizing: border-box;
@@ -3789,7 +3923,7 @@
       body.cbd-open { padding-right: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .cbd-root, .cbd-handle-arrow { transition: none; }
+      .cbd-root, .cbd-root::before, .cbd-handle-arrow { transition: none; }
     }
     /* ── Второстепенные кнопки — ссылками (ACL-1455, вариант C 01.10) ──────
        Были нарисованы рамкой полей (--field-border), почти тем же фоном и
@@ -3935,7 +4069,9 @@
        только из токенов страницы (--bg-elev, --border, --text, --muted,
        --accent, --good, --bad, --warn…), поэтому светлая и тёмная темы и
        будущая перекраска токенов подхватываются сами. */
-    .cw-panel { min-width: 0; }
+    /* Статистика перестраивается по ширине СВОЕГО контейнера, а не окна:
+       открытый билдер отъедает полэкрана, окно при этом остаётся широким. */
+    .cw-panel { min-width: 0; container: cw / inline-size; }
     .cw-title { margin: 0; font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
     .cw-crumb { font-size: 0.72rem; color: var(--muted); margin: 0 0 0.25rem; }
     .cw-sub { font-size: 0.75rem; color: var(--muted); margin: 0.3rem 0 0; max-width: 62ch; }
@@ -4008,11 +4144,21 @@
     .cw-foot { font-size: 0.7rem; color: var(--muted); padding: 0.7rem 1rem; line-height: 1.6; border-top: 1px solid var(--border); }
     .cw-links { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin-top: var(--space-lg); font-size: 0.75rem; color: var(--muted); }
     .cw-link { border: 0; background: transparent; color: var(--accent-strong); font: inherit; padding: 0; cursor: pointer; text-decoration: underline; }
-    @media (max-width: 900px) {
+    @container cw (max-width: 760px) {
       .cw-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .cw-kpi:nth-child(2) { border-right: 0; }
+      .cw-kpi:nth-child(2n) { border-right: 0; }
+      .cw-kpi:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
       .cw-refs { grid-template-columns: 1fr; }
       .cw-ref { border-right: 0; border-bottom: 1px solid var(--border); }
+    }
+    @container cw (max-width: 440px) {
+      .cw-kpis { grid-template-columns: minmax(0, 1fr); }
+      .cw-kpi { border-right: 0; }
+      .cw-kpi:not(:last-child) { border-bottom: 1px solid var(--border); }
+      .cw-kpi-you { font-size: 1.3rem; white-space: normal; overflow-wrap: anywhere; }
+      .cw-kpi-you small { display: block; margin-left: 0; }
+      .cw-kpi-label, .cw-kpi-peer { flex-wrap: wrap; }
+      .cw-kpi-label > span:last-child { display: none; }
     }
   </style>
   <style id="shell-1827">
@@ -4078,7 +4224,7 @@
     .sb-empty[hidden] { display: none; }
 
     /* Home: полоса «Вы / Другие» — шесть плиток, три в ряд. */
-    .hk-row { margin: 0 0 var(--adopy-space-6); }
+    .hk-row { margin: 0 0 var(--adopy-space-6); container: cw / inline-size; }
     .hk-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--adopy-space-1) var(--adopy-space-3); margin-bottom: var(--adopy-space-3); }
     .hk-title { margin: 0; font-size: var(--adopy-text-section); font-weight: var(--adopy-weight-semibold); }
     .hk-sub { font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
@@ -4105,12 +4251,19 @@
     .hk-cap { margin-top: var(--adopy-space-2); font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
     .hk-cap.hk-good { color: var(--adopy-success); }
     .hk-cap.hk-bad { color: var(--adopy-danger); }
-    @media (max-width: 900px) {
+    @container cw (max-width: 760px) {
       .hk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .hk-tile:nth-child(3n) { border-right: 1px solid var(--adopy-border); }
       .hk-tile:nth-child(2n) { border-right: 0; }
       .hk-tile:nth-last-child(-n+3) { border-bottom: 1px solid var(--adopy-border); }
       .hk-tile:nth-last-child(-n+2) { border-bottom: 0; }
+    }
+    @container cw (max-width: 440px) {
+      .hk-grid { grid-template-columns: minmax(0, 1fr); }
+      .hk-tile, .hk-tile:nth-child(3n), .hk-tile:nth-child(2n) { border-right: 0; }
+      .hk-tile, .hk-tile:nth-last-child(-n+3), .hk-tile:nth-last-child(-n+2) { border-bottom: 1px solid var(--adopy-border); }
+      .hk-tile:last-child { border-bottom: 0; }
+      .hk-label, .hk-others { flex-wrap: wrap; }
     }
 
     /* Robot health: панель под шапкой (ссылка на страницу остаётся). */
@@ -5095,7 +5248,7 @@ async function dashRefresh(ev) {
     иначе за этим пришлось бы уходить на Home и искать её среди двадцати. -#}
 {%- set mc = (amap.countries | selectattr('country', 'equalto', c.country) | list | first) if amap.countries else none %}
 <h3 class="amap-inline-title">Accounts in {{ c.country }}</h3>
-<div class="amap amap-inline">
+<div class="amap amap-inline" data-country-name="{{ c.country | e }}">
   {%- if mc %}
     {% include "_account_map_country.html" %}
   {%- else %}
@@ -6085,6 +6238,10 @@ window.cbDrawer = (function () {
   var SIZE_KEY = 'acl.builder.width';
   var NORMAL_W = 480, MIN_W = 320, WIDE_AT = 800, DRAG_PX = 4, STEP = 40;
   var HANDLE_W = 40, EDGE = 16;
+  /* Сколько страницы должно остаться видимым при протяжке (сайдбар 232 + не
+     меньше 320 под контент). Это же порог, с которого широкий ящик ложится
+     поверх страницы, а не сдвигает её. */
+  var MIN_PAGE = 560;
 
   var root = document.getElementById('cbd-root');
   if (!root) return null;
@@ -6124,10 +6281,16 @@ window.cbDrawer = (function () {
   function isOpen() { return root.getAttribute('data-open') === '1'; }
   function viewport() { return (window.innerWidth | 0) || 1280; }
   /* Почти всё окно, но язычок остаётся на виду — за него ящик и тянут. */
-  function maxWidth() { return Math.max(240, viewport() - HANDLE_W - EDGE); }
+  function fullWidth() { return Math.max(240, viewport() - HANDLE_W - EDGE); }
+  /* Протяжкой дашборд не сузить меньше MIN_PAGE. В окне, где и обычная ширина
+     с MIN_PAGE не помещаются, остаётся прежнее поведение (ящик поверх). */
+  function maxWidth() {
+    if (viewport() < NORMAL_W + HANDLE_W + MIN_PAGE) return fullWidth();
+    return Math.max(NORMAL_W, viewport() - HANDLE_W - MIN_PAGE);
+  }
   function clamp(w) { return Math.max(Math.min(MIN_W, maxWidth()), Math.min(maxWidth(), w)); }
   function width() {
-    if (mode === 'wide') return Math.max(maxWidth(), Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W)));
+    if (mode === 'wide') return Math.max(fullWidth(), Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W)));
     if (mode === 'custom') return clamp(custom);
     return Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W));
   }
@@ -6157,7 +6320,7 @@ window.cbDrawer = (function () {
     document.documentElement.style.setProperty('--cbd-w', w + 'px');
     root.setAttribute('data-expanded', wide ? '1' : '0');
     document.body.classList.toggle('cbd-expanded', wide);
-    document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < 600);
+    document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < MIN_PAGE);
     syncHeaderTop();
     var open = isOpen();
     pressed(presetClosed, !open);
@@ -8658,6 +8821,12 @@ window.cbTree = (function () {
       var name = d.dataset.countryName || '';
       if (name === countryName) found = d.querySelector('.amap-add');
     });
+    if (!found) {
+      // Home больше не раскрывает страну: форма подключения лежит в Manage (`.amap-inline`).
+      document.querySelectorAll('.amap-inline[data-country-name]').forEach(function (d) {
+        if (!found && d.dataset.countryName === countryName) found = d.querySelector('.amap-add');
+      });
+    }
     return found;
   }
 
@@ -11153,6 +11322,9 @@ function amapSearchApply() {
       d.open = d.dataset.wasOpen === '1'; delete d.dataset.searchOpen; delete d.dataset.wasOpen;
     }
   });
+  // Home «таблица как в Google»: блоки и плитки считает aovSearch (только активный вид — плитки не удваивают счёт).
+  var aov = typeof window.aovSearch === 'function' ? window.aovSearch(words) : null;
+  if (aov && active) { shownRows += aov.rows; shownCountries += aov.countries; }
   var count = document.getElementById('amap-search-count'), empty = document.getElementById('amap-search-empty');
   if (count) count.textContent = active ? shownRows + ' account' + (shownRows === 1 ? '' : 's') + ' in ' + shownCountries + ' countr' + (shownCountries === 1 ? 'y' : 'ies') : '';
   if (empty) {
@@ -11176,6 +11348,208 @@ if (document.readyState === 'loading') {
   amapSearchInit();
 }
 document.addEventListener('acl:viewchange', function () { setTimeout(function () { amapSearchInit(); amapSearchApply(); }, 0); });
+</script>
+<script>
+/* ── Home: Account map, два вида (Expanded / Compact). Один фильтр по состоянию, один поиск (`amapSearchApply` зовёт `aovSearch`),
+   «Show N more», поповер плитки. Состояние фильтра и слов поиска живёт в `window.__aov` и переживает подмену `#amap-slot`;
+   вид — в `acl.aov.view`, раскрытые блоки — в `acl.aov.open` (ключ не пересекается с `acl.amap.open`). Каждая функция терпит
+   «ноль совпадений»: на странице без #aov (сравнение периодов) ничего не делает. ── */
+(function () {
+  var VIEW_KEY = 'acl.aov.view', OPEN_KEY = 'acl.aov.open';
+  var st = window.__aov = window.__aov || { filter: 'all', words: [], popFor: null };
+  var NAMES = { active: 'active', issue: 'issue', dead: 'dead', new: 'new', unknown: 'unknown' };
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function openList() {
+    try { var l = JSON.parse(lsGet(OPEN_KEY) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; }
+  }
+  function root() { return document.getElementById('aov'); }
+  function narrow() { return window.matchMedia && window.matchMedia('(max-width: 699px)').matches; }
+  function chosenView() { var v = lsGet(VIEW_KEY); return v === 'expanded' || v === 'compact' ? v : ''; }
+  function effectiveView() { return chosenView() || (narrow() ? 'compact' : 'expanded'); }
+  function matches(el, attr) {
+    if (st.filter !== 'all' && el.getAttribute('data-state') !== st.filter) return false;
+    var hay = el.getAttribute(attr) || '';
+    return st.words.every(function (w) { return hay.indexOf(w) !== -1; });
+  }
+
+  function apply() {
+    var r = root();
+    if (!r) return { rows: 0, countries: 0 };
+    var view = effectiveView();
+    r.dataset.view = view;
+    var ex = document.getElementById('aov-expanded'), co = document.getElementById('aov-compact');
+    if (ex) ex.hidden = view !== 'expanded';
+    if (co) co.hidden = view !== 'compact';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-aov-view]'), function (b) {
+      var on = b.getAttribute('data-aov-view') === view;
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    Array.prototype.forEach.call(r.querySelectorAll('[data-aov-filter]'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-aov-filter') === st.filter ? 'true' : 'false');
+    });
+    var searching = st.filter !== 'all' || st.words.length > 0, open = openList();
+    var rowsShown = 0, countriesShown = 0;
+    if (view === 'expanded') {
+      Array.prototype.forEach.call(r.querySelectorAll('.aov-block'), function (blk) {
+        var hits = 0;
+        Array.prototype.forEach.call(blk.querySelectorAll('tr.aov-row'), function (tr) {
+          var ok = matches(tr, 'data-search');
+          var folded = tr.hasAttribute('data-folded');
+          var expanded = open.indexOf(blk.getAttribute('data-aov-country')) !== -1;
+          tr.hidden = searching ? !ok : (folded && !expanded);
+          tr.classList.toggle('aov-hit', st.words.length > 0 && ok);
+          if (ok) hits++;
+        });
+        var more = blk.querySelector('[data-aov-more]');
+        if (more) {
+          var isOpen = open.indexOf(blk.getAttribute('data-aov-country')) !== -1;
+          more.closest('tr').hidden = searching;
+          more.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          more.textContent = isOpen ? 'Show fewer' : more.getAttribute('data-more');
+        }
+        blk.hidden = searching && hits === 0;
+        if (hits) { countriesShown++; rowsShown += hits; }
+      });
+    } else {
+      Array.prototype.forEach.call(r.querySelectorAll('.aov-crow'), function (row) {
+        var alive = 0;
+        Array.prototype.forEach.call(row.querySelectorAll('.aov-tile'), function (t) {
+          var stateOk = st.filter === 'all' || t.getAttribute('data-state') === st.filter;
+          var searchOk = st.words.every(function (w) { return (t.getAttribute('data-search-tile') || '').indexOf(w) !== -1; });
+          t.hidden = !searchOk;
+          t.classList.toggle('dim', searchOk && !stateOk);
+          t.classList.toggle('aov-hit', st.words.length > 0 && searchOk && stateOk);
+          if (searchOk && stateOk) alive++;
+        });
+        row.hidden = searching && alive === 0;
+        if (alive) { countriesShown++; rowsShown += alive; }
+      });
+    }
+    var live = document.getElementById('aov-live');
+    if (live) {
+      live.textContent = st.filter === 'all' ? '' :
+        'Showing ' + rowsShown + ' ' + NAMES[st.filter] + ' account' + (rowsShown === 1 ? '' : 's') +
+        ' in ' + countriesShown + ' countr' + (countriesShown === 1 ? 'y' : 'ies');
+    }
+    mountTrees();
+    return { rows: rowsShown, countries: countriesShown };
+  }
+
+  /* Дерево кампаний создаётся для видимых блоков (хосты в скрытом виде не монтируются), только сохранённое. */
+  function mountTrees() {
+    if (typeof window.amapCampaignMountVisible === 'function' && window.AMAP_CAMPAIGN_TABLE) {
+      try { window.amapCampaignMountVisible(); } catch (e) {}
+    }
+  }
+
+  function setView(v, persist) {
+    if (persist) lsSet(VIEW_KEY, v);
+    closePop(false);
+    apply();
+    var live = document.getElementById('aov-view-live');
+    if (live) live.textContent = (v === 'compact' ? 'Compact' : 'Expanded') + ' view';
+  }
+
+  /* поповер плитки */
+  function pop() { return document.getElementById('aov-pop'); }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function closePop(restore) {
+    var p = pop();
+    if (!p || p.hidden) return;
+    p.hidden = true;
+    var t = st.popFor; st.popFor = null;
+    if (t) { t.setAttribute('aria-expanded', 'false'); if (restore && document.body.contains(t)) t.focus(); }
+  }
+  function openPop(tile) {
+    var p = pop();
+    if (!p) return;
+    if (st.popFor === tile && !p.hidden) { closePop(true); return; }
+    closePop(false);
+    var d = tile.dataset;
+    p.textContent = '';
+    p.appendChild(el('span', 'aov-st ' + d.key, d.label));
+    p.appendChild(el('h4', '', d.name));
+    p.appendChild(el('div', 'sub', (d.alias ? 'Workbook: ' + d.alias + ' · ' : '') + d.country));
+    var dl = el('dl');
+    [['Spend', d.spend], ['Leads', d.leads], ['CPL', d.cpl], ['FTDs', d.ftd], ['CPA', d.cpa]].forEach(function (kv) {
+      var box = el('div'); box.appendChild(el('dt', '', kv[0])); box.appendChild(el('dd', '', kv[1])); dl.appendChild(box);
+    });
+    p.appendChild(dl);
+    var why = d.why || (d.key === 'active' ? 'Spending in the selected period.' : '');
+    p.appendChild(el('div', 'why', 'What happened: ' + (why || '—') + (d.read ? ' · read ' + d.read : '')));
+    var go = el('button', 'aov-btn', 'Open in Manage →');
+    go.type = 'button'; go.setAttribute('data-aov-go', d.slug);
+    p.appendChild(go);
+    p.hidden = false;
+    tile.setAttribute('aria-expanded', 'true');
+    st.popFor = tile;
+    var rc = tile.getBoundingClientRect();
+    if (!narrow()) {
+      var w = p.offsetWidth, h = p.offsetHeight;
+      var left = Math.max(8, Math.min(rc.left, window.innerWidth - w - 8));
+      var top = rc.bottom + 6;
+      if (top + h > window.innerHeight - 8) top = Math.max(8, rc.top - h - 6);
+      p.style.left = left + 'px'; p.style.top = top + 'px';
+    }
+    go.focus();
+  }
+
+  function goManage(slug) {
+    var link = document.querySelector('.sidebar-link[data-view="country-' + slug + '-manage"]');
+    if (link) { closePop(false); link.click(); }
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target : e.target.parentNode;
+    var f = t.closest('[data-aov-filter]');
+    if (f) { var k = f.getAttribute('data-aov-filter'); st.filter = (k === st.filter ? 'all' : k); closePop(false); apply(); return; }
+    var v = t.closest('[data-aov-view]');
+    if (v) { setView(v.getAttribute('data-aov-view'), true); return; }
+    var m = t.closest('[data-aov-more]');
+    if (m) {
+      var key = m.closest('.aov-block').getAttribute('data-aov-country'), l = openList(), i = l.indexOf(key);
+      if (i === -1) l.push(key); else l.splice(i, 1);
+      lsSet(OPEN_KEY, JSON.stringify(l)); apply(); return;
+    }
+    var g = t.closest('[data-aov-go]');
+    if (g) { goManage(g.getAttribute('data-aov-go')); return; }
+    var tile = t.closest('.aov-tile');
+    if (tile) { openPop(tile); return; }
+    if (!t.closest('#aov-pop')) closePop(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { var p = pop(); if (p && !p.hidden) { closePop(true); e.stopPropagation(); } return; }
+    var rb = e.target.closest && e.target.closest('[data-aov-view]');
+    if (rb && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      var next = rb.getAttribute('data-aov-view') === 'expanded' ? 'compact' : 'expanded';
+      setView(next, true);
+      var nb = document.querySelector('[data-aov-view="' + next + '"]');
+      if (nb) nb.focus();
+    }
+  }, true);
+
+  /* вызывается поиском соседа (amapSearchApply): слова уже в нижнем регистре */
+  window.aovSearch = function (words) {
+    st.words = words || [];
+    return root() ? apply() : null;
+  };
+  window.aovApply = apply;
+
+  function again() { setTimeout(function () { if (st.popFor && !document.body.contains(st.popFor)) st.popFor = null; apply(); }, 0); }
+  document.addEventListener('htmx:afterSwap', again);
+  document.addEventListener('acl:viewchange', again);
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(max-width: 699px)');
+    if (mq.addEventListener) mq.addEventListener('change', function () { if (!chosenView()) apply(); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+})();
+</script>
+<script>
 
 /* Раскрытие билдера переживает перезагрузку — тем же способом, что страны на
    карте аккаунтов. Дешборд обновляет себя сам, и схлопывать билдер посреди
@@ -11438,7 +11812,7 @@ function amapRefreshCountryLines(per) {
       var totNow = fresh.querySelector('#amap-totals .amap-cell-read');
       if (totWas && totNow) totWas.innerHTML = totNow.innerHTML;
       var count = map.querySelector('.amap-head > .amap-note');
-      if (count) count.textContent = map.querySelectorAll('details.amap-country[data-country]').length + ' countries · numbers from ' + AMAP_SOURCE;
+      if (count) count.textContent = (map.querySelectorAll('details.amap-country[data-country]').length || map.querySelectorAll('.aov-block').length) + ' countries · numbers from ' + AMAP_SOURCE;
       if (typeof amapWatchOpen === 'function') amapWatchOpen();
       if (typeof amapSearchApply === 'function') amapSearchApply();
     });
@@ -12759,30 +13133,6 @@ document.addEventListener('click', function (e) {
    Таблица создаётся при первом показе блока страны и читает только локальный снимок
    (GET своего сервера). Мета читается только нажатием «Read campaigns» — в строке
    аккаунта внутри таблицы или в заголовке страны («Read campaigns in <страна>»). */
-/* Вкладки над таблицей: Campaigns (эта) и разделы той же страны, которые есть на странице
-   (панель `view-country-<slug>-<раздел>`); нет раздела — вкладка выключена и говорит почему.
-   Слаг считается так же, как `anchor_slug` на сервере. */
-function amapCampaignSlug(country) {
-  return String(country || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
-}
-function amapCampaignTabs(host) {
-  var nav = host.querySelector('[data-hc-tabs]');
-  if (!nav) return;
-  var slug = amapCampaignSlug(host.dataset.country);
-  var tabs = [['Campaigns', 'manage'], ['Winning setups', 'assets'], ['Landings', 'landings'],
-              ['Targets', 'targeting'], ['Creatives', 'creatives'], ['Buyers', '']];
-  nav.innerHTML = '';
-  tabs.forEach(function (t) {
-    var has = t[1] && document.getElementById('view-country-' + slug + '-' + t[1]);
-    var el = document.createElement(has ? 'a' : 'span');
-    el.className = 'hc-tab' + (has ? '' : ' hc-tab-off');
-    el.textContent = t[0];
-    if (has) { el.href = '#country-' + slug + '-' + t[1]; if (t[1] === 'manage') el.setAttribute('aria-current', 'page'); }
-    else el.title = t[1] ? 'This section has no data for ' + host.dataset.country + ' on this page' : 'Buyer comparison is not part of this build';
-    nav.appendChild(el);
-  });
-}
-
 /* Дерево аккаунтов страны: строка аккаунта — родитель, под ней раскрывается таблица её кампаний.
    Страница создаёт узлы (стрелка, строка снимка, кнопки, рамка прокрутки, таблица) и отдаёт компоненту;
    под rpa ничего этого нет. Раскрытие строки ничего не читает у Meta. */
@@ -12832,7 +13182,6 @@ function amapCampaignTree(grid, accounts) {
 
 function amapCampaignMount(host) {
   if (host._hc) return host._hc;
-  amapCampaignTabs(host);
   var mount = host.querySelector('[data-hc-mount]');
   var tpl = document.getElementById('hc-scoped-tpl');
   if (!mount || !tpl || typeof window.hcMount !== 'function') {
@@ -12846,11 +13195,11 @@ function amapCampaignMount(host) {
   host.dataset.periodTo = per.to || '';
   host.dataset.periodSpan = per.span || '';
   var seen = {}, accounts = [];
-  scope.querySelectorAll('table.amap-grid td.amap-list[data-account]').forEach(function (c) {
+  scope.querySelectorAll('table.amap-grid td.amap-list[data-account], table.aov-table td.amap-list[data-account]').forEach(function (c) {
     var a = c.dataset.account;
     if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
   });
-  var grid = scope.querySelector('table.amap-grid');
+  var grid = scope.querySelector('table.amap-grid, table.aov-table');
   host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
                                    rows: grid ? amapCampaignTree(grid, accounts) : {}});
   host._hc.ready = host._hc.init();
