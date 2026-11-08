@@ -479,6 +479,17 @@ def test_server_budget_min_counts_the_days_of_a_lifetime(tmp_path):
     assert {v["rule"]: v for v in ok.audit}["budget_min"]["status"] == "ok"
 
 
+def test_the_daily_path_ignores_the_account_minimum_fact(tmp_path):
+    """ACL-2443: min_daily_budget кабинета ($5) не поднимает порог дневного бюджета; таблица валюты ($1) остаётся."""
+    d = _draft(tmp_path, ads=1)
+    d.ad_sets[0].daily_budget = 3.0
+    out = _creator(ZoneMeta(min_daily="500")).plan_only(_plan(d))
+    assert {v["rule"]: v for v in out.audit}["budget_min"]["status"] == "ok"
+    d.ad_sets[0].daily_budget = 0.5
+    low = _creator(ZoneMeta(min_daily="500")).plan_only(_plan(d))
+    assert {v["rule"]: v for v in low.audit}["budget_min"]["status"] == "error"
+
+
 def test_the_new_client_rules_are_in_the_table_with_english_texts():
     ids = {r["id"]: r for r in pf.RULES}
     assert ids["end_time_valid"]["side"] == "client" and ids["schedule_valid"]["side"] == "client"

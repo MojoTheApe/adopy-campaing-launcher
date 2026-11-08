@@ -893,8 +893,10 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         put("media_vertical", OK)
 
     # Бюджет против минимума валюты кабинета.
+    # ACL-2443: минимум кабинета из факта относится только к lifetime; дневной бюджет проверяется по таблице валюты.
     fact_minor = getattr(facts, "min_daily_budget", None)
-    minimum = cr.minor_to_major(fact_minor, facts.currency) if fact_minor else min_budget_for(facts.currency)
+    minimum = (cr.minor_to_major(fact_minor, facts.currency)
+               if (fact_minor and plan.lifetime) else min_budget_for(facts.currency))
     if plan.lifetime:
         # ACL-1443: минимум дня x число суток срока (Meta: 5 суток при $5 в день - не меньше $25).
         guarded("budget_min", lambda: _lifetime_min(put, creator, plan, facts, minimum))
