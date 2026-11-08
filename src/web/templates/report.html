@@ -4053,10 +4053,14 @@
     .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
     /* Out of the flow and keyboard-revealed: the campaign Move-to button must not narrow the row or cover its click target (320px tree has no spare width). Mouse users drag by the grip. */
     .cbd-camp-head { position: relative; }
-    /* ACL-2237: 32px hit area, out of the flow: overlays the row's right edge and adds no width (320px tree has no spare width). */
-    .cbd-camp-head .cbm-grip { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; min-width: 0; padding: 0; z-index: 1; }
+    /* ACL-2237: the campaign handle is a real 32x32 box, stacked above the tick in its own column (the tree is 149px wide at any window width), so it covers nothing and the row gets almost the old width. */
+    .cbd-camp-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; padding-right: 0.1rem; }
+    .cbd-camp-head .cbm-grip { grid-column: 1; grid-row: 1; padding: 0; align-self: end; }
+    .cbd-camp-head .cbd-tick { grid-column: 1; grid-row: 2; justify-content: center; padding: 0 0 0.3rem; align-self: start; }
+    .cbd-camp-head .cbd-tick + .cbd-camp-row { grid-column: 2; grid-row: 1 / span 2; padding-left: 0.25rem; padding-right: 0.15rem; }
+    .cbd-camp-head .cbd-camp-drop { grid-column: 3; grid-row: 1 / span 2; }
     .cbd-camp-head .cbm-moveto { position: absolute; right: 1.8rem; top: 50%; transform: translateY(-50%); background: var(--bg-elev); opacity: 0; pointer-events: none; }
-    .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; }
+    .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; z-index: 2; }
     .cb-ad-row-header .cbm-moveto { margin-left: auto; }
     .cb-ad-row-header .cbm-moveto + .cb-dup-ad-btn { margin-left: 0; }
     .cbm-moveto:hover { color: var(--accent); border-color: var(--accent); }
