@@ -543,6 +543,7 @@
     home: { availability: availability, controlState: controlState, statusTarget: statusTarget,
             stepValue: stepValue, batchPlan: batchPlan, flow: flow, classify: classify,
             applySaved: applySaved, editValue: editValue, actor: actor, AUTOMATIC: AUTOMATIC,
-            settle: settle, FRIENDLY: FRIENDLY, UNKNOWN_TEXT: UNKNOWN_TEXT, CHECK_TEXT: CHECK_TEXT }
+            settle: settle, FRIENDLY: FRIENDLY, UNKNOWN_TEXT: UNKNOWN_TEXT, CHECK_TEXT: CHECK_TEXT },
+    kit: { el: el, ensureStyle: ensureStyle, post: post, execute: execute, poll: poll, refuse: refuse, isZeroDecimal: isZeroDecimal, UNKNOWN_TEXT: UNKNOWN_TEXT }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
