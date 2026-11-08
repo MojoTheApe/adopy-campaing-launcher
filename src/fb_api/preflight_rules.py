@@ -62,6 +62,13 @@ MIN_DAILY_BUDGET: dict[str, float] = {"USD": 1.00}
 MIN_DAILY_BUDGET_SOURCE = ("Meta: minimum daily budget for impressions billing is 1.00 USD; "
                            "other currencies are not listed here and stay 'unknown'.")
 
+#: ACL-1443: те же правила бюджета при lifetime - другая подпись и подсказка.
+LIFETIME_TEXT = {
+    "budget_set": {"label": "Lifetime budget", "hint": "enter a lifetime budget above zero"},
+    "budget_min": {"label": "Budget is at least Meta's minimum for the whole period",
+                   "hint": "raise the lifetime budget to Meta's minimum for the account currency times the number of days"},
+}
+
 #: Видео: потолок длины в секундах (Meta: до 241 минуты); дольше минуты Stories/Reels обрежут.
 VIDEO_MAX_SECONDS = 241 * 60
 VIDEO_STORY_SECONDS = 60
@@ -128,6 +135,8 @@ _TOPIC_OF = {
     "texts_dynamic": "creative",
     "devices_consistent": "audience",
     "start_time_valid": "budget",
+    "end_time_valid": "budget",
+    "schedule_valid": "budget",
     "adset_names_unique": "names",
     "adset_has_ads": "names",
 }
@@ -234,6 +243,12 @@ RULES: list[dict[str, Any]] = [
     _r("start_time_valid", "Start time", ERROR, "client",
        "enter the start as date and time, not earlier than today (ad account time zone)",
        sel='[name$="_start_time"]', level="adset"),
+    _r("end_time_valid", "End time (lifetime budget)", ERROR, "client",
+       "a lifetime budget needs an end date and time after the start, not in the past (ad account time zone)",
+       sel='[name$="_end_time"]', level="campaign"),
+    _r("schedule_valid", "Ad schedule", ERROR, "client",
+       "a schedule needs a lifetime budget and at least one selected hour",
+       sel='[name$="_schedule"]', level="campaign"),
     _r("ad_names_unique", "Ad names are unique", ERROR, "client",
        "give the ads different creatives or texts: their names must differ inside a campaign",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -261,7 +276,9 @@ def export_rules() -> dict[str, Any]:
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
                    "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
                    "os_min_re": _OS_MIN_RE, "os_versions": {k: list(v) for k, v in _wp.OS_VERSIONS.items()},
-                   "start_re": _START_RE, "max_texts": MAX_TEXTS},
+                   "start_re": _START_RE, "max_texts": MAX_TEXTS,
+                   # ACL-1443: подписи правил бюджета при lifetime (страница подставляет их вместо daily).
+                   "lifetime_text": LIFETIME_TEXT},
     }
 
 
@@ -283,6 +300,8 @@ def load_json() -> dict[str, Any]:
 #             "vertical_file": str}],
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
+#    ACL-1443 (необязательные, уровень кампании): "budget_type": "daily"|"lifetime" (нет = daily),
+#    "start_time"/"end_time": "YYYY-MM-DDTHH:MM" (при lifetime; пояс команды, ACL-1448; "now" - в том же поясе), "schedule": [{"days","start_minute","end_minute"}]
 
 def _multi_text(a: dict) -> bool:
     """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
@@ -382,6 +401,8 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
     sets = audit_sets(inp)
     dests = campaign_dests(inp)
     out: list[dict[str, Any]] = []
+    lifetime = _s(inp.get("budget_type")).lower() == "lifetime"
+    start_value = _s(inp.get("start_time")) if lifetime else ""
     link = _s(inp.get("link"))
     link_ok = bool(re.match(_LINK_RE, link, re.I))
     for rule in RULES:
@@ -445,7 +466,34 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 good = b is not None and b != "" and float(b) > 0
             except (TypeError, ValueError):
                 good = False
-            out.append(_v(rid, OK if good else ERROR))
+            out.append(_v(rid, OK if good else ERROR, "" if good or not lifetime else "lifetime"))
+        elif rid == "end_time_valid":
+            def end_bad():
+                if not lifetime:
+                    return ""
+                end, now = _s(inp.get("end_time")), _s(inp.get("now"))
+                if not end:
+                    return "required"
+                if not re.fullmatch(_START_RE, end):
+                    return "format"
+                if start_value and re.fullmatch(_START_RE, start_value) and end <= start_value:
+                    return "before_start"
+                if re.fullmatch(_START_RE, now) and end[:10] < now[:10]:
+                    return "past"
+                return ""
+            code = end_bad()
+            out.append(_v(rid, ERROR if code else OK, code))
+        elif rid == "schedule_valid":
+            code = ""
+            raw = inp.get("schedule")
+            if raw:
+                if not lifetime:
+                    code = "needs_lifetime"
+                elif not isinstance(raw, list) or all(isinstance(w, dict) and not w.get("days") for w in raw):
+                    code = "empty"
+                elif any(_wp.schedule_window_problem(w, with_tz=False) for w in raw):
+                    code = "bad_window"
+            out.append(_v(rid, ERROR if code else OK, code))
         elif rid == "age_range":
             def age_bad(st):
                 try:
@@ -471,9 +519,10 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             now = _s(inp.get("now"))
 
             def start_bad(st, now=now):
-                stt = _s(st.get("start_time"))
+                # ACL-1443: при lifetime старт общий на кампанию и обязателен; он главнее старта набора.
+                stt = (start_value or _s(st.get("start_time"))) if lifetime else _s(st.get("start_time"))
                 if not stt:
-                    return ""
+                    return "required" if lifetime else ""
                 if not re.fullmatch(_START_RE, stt):
                     return "format"
                 if re.fullmatch(_START_RE, now) and stt[:10] < now[:10]:
@@ -581,6 +630,20 @@ def video_info(data: bytes) -> dict[str, float] | None:
 
 def min_budget_for(currency: str) -> float | None:
     return MIN_DAILY_BUDGET.get((currency or "").strip().upper())
+
+
+def _lifetime_min(put, creator: Any, plan: Any, facts: Any, minimum: float | None) -> None:
+    days = creator.lifetime_days(plan)
+    if minimum is None:
+        put("budget_min", UNKNOWN, f"Meta's minimum for {facts.currency or 'this currency'} is not in our table")
+    elif days is None:
+        put("budget_min", UNKNOWN, "Not checked: the start and end time are needed to count the days")
+    elif float(plan.lifetime_budget) < minimum * days:
+        put("budget_min", ERROR, f"{plan.lifetime_budget:g} {facts.currency} is below the minimum "
+                                 f"{minimum:g} {facts.currency} a day x {days} day{'s' if days != 1 else ''} "
+                                 f"= {minimum * days:g} {facts.currency}")
+    else:
+        put("budget_min", OK)
 
 
 def _item_text(item: dict) -> str:
@@ -831,8 +894,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         put("media_vertical", OK)
 
     # Бюджет против минимума валюты кабинета.
-    minimum = min_budget_for(facts.currency)
-    if minimum is None:
+    # ACL-2443: минимум кабинета из факта относится только к lifetime; дневной бюджет проверяется по таблице валюты.
+    fact_minor = getattr(facts, "min_daily_budget", None)
+    minimum = (cr.minor_to_major(fact_minor, facts.currency)
+               if (fact_minor and plan.lifetime) else min_budget_for(facts.currency))
+    if plan.lifetime:
+        # ACL-1443: минимум дня x число суток срока (Meta: 5 суток при $5 в день - не меньше $25).
+        guarded("budget_min", lambda: _lifetime_min(put, creator, plan, facts, minimum))
+    elif minimum is None:
         put("budget_min", UNKNOWN, f"Meta's minimum for {facts.currency or 'this currency'} is not in our table")
     elif float(plan.daily_budget) < minimum:
         put("budget_min", ERROR, f"{plan.daily_budget:g} {facts.currency} is below the minimum {minimum:g} {facts.currency}")

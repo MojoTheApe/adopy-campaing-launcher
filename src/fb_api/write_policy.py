@@ -41,10 +41,10 @@ from typing import Any
 #: Ребро → ключи, которые можно передать. Ничего сверх.
 EDGE_KEYS: dict[str, frozenset[str]] = {
     "campaigns": frozenset({"name", "objective", "status", "special_ad_categories", "buying_type",
-                            "daily_budget", "bid_strategy", "adlabels"}),
+                            "daily_budget", "lifetime_budget", "pacing_type", "bid_strategy", "adlabels"}),
     "adsets": frozenset({"name", "campaign_id", "status", "optimization_goal", "billing_event",
                          "destination_type", "promoted_object", "targeting", "start_time",
-                         "adlabels", "is_dynamic_creative"}),
+                         "end_time", "adset_schedule", "adlabels", "is_dynamic_creative"}),
     "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels",
                               "contextual_multi_ads", "asset_feed_spec"}),
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
@@ -562,6 +562,83 @@ def _check_upload(params: dict, files: dict) -> None:
         raise WriteRefused(f"write refused: upload phase {phase} takes no file")
 
 
+# ───────────────────────── lifetime-бюджет и расписание (ACL-1443) ─────────────────────────
+
+#: `pacing_type` кампании: обычный показ или показ по расписанию (живое чтение Meta, 07.11.2026).
+PACING_VALUES = (("standard",), ("day_parting",))
+#: Окно `adset_schedule`: ровно эти ключи (с поясом кабинета). 0 = воскресенье.
+SCHEDULE_KEYS = frozenset({"days", "start_minute", "end_minute", "timezone_type"})
+SCHEDULE_TZ = "ADVERTISER"
+#: Момент времени с явным смещением: «2026-11-10T09:00:00-0500».
+_ISO_OFFSET_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}", re.ASCII)
+
+
+def _int_only(v: Any) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def schedule_window_problem(w: Any, *, with_tz: bool = True) -> str:
+    """Одно окно расписания: пустая строка, если всё верно; иначе причина (English).
+
+    Минуты кратны 60 (граница часа), 0..1440, start < end; дни - непустое множество 0..6.
+    `with_tz=False` - окно плана (пояс добавляет бэкенд при записи).
+    """
+    keys = set(SCHEDULE_KEYS) if with_tz else set(SCHEDULE_KEYS) - {"timezone_type"}
+    if not isinstance(w, dict) or set(w) != keys:
+        return "each schedule window needs exactly days, start_minute and end_minute"
+    days = w["days"]
+    if (not isinstance(days, list) or not days or len(set(days)) != len(days)
+            or any(not _int_only(d) or not 0 <= d <= 6 for d in days)):
+        return "schedule days must be a non-empty list of different numbers 0-6 (0 = Sunday)"
+    a, b = w["start_minute"], w["end_minute"]
+    if not (_int_only(a) and _int_only(b)) or not 0 <= a < b <= 1440:
+        return "schedule minutes must be whole numbers with 0 <= start < end <= 1440"
+    if a % 60 or b % 60:
+        return "schedule windows must start and end on a full hour"
+    if with_tz and w["timezone_type"] != SCHEDULE_TZ:
+        return "schedule windows must use the ad account time zone"
+    return ""
+
+
+def schedule_problem(windows: Any, *, with_tz: bool = True) -> str:
+    """Список окон: непустой, каждое окно верно. Пустая строка - всё в порядке."""
+    if not isinstance(windows, list) or not windows:
+        return "the schedule must be a non-empty list of windows"
+    for w in windows:
+        why = schedule_window_problem(w, with_tz=with_tz)
+        if why:
+            return why
+    return ""
+
+
+def _check_lifetime_fields(edge: str, checked: dict) -> None:
+    """Бюджет кампании - ровно один тип; расписание и конец - только вместе с lifetime."""
+    if edge == "campaigns":
+        daily, life = "daily_budget" in checked, "lifetime_budget" in checked
+        # Оба сразу Meta не принимает; ни одного - прежние тесты/пути без бюджета (план всегда кладёт ровно один).
+        if daily and life:
+            raise WriteRefused("write refused: a campaign takes either daily_budget or lifetime_budget, not both")
+        for key in ("daily_budget", "lifetime_budget"):
+            if key in checked and not amount_ok(checked[key]):
+                raise WriteRefused(f"write refused: {key} must be a positive whole number in minor units")
+        if "pacing_type" in checked:
+            pacing = checked["pacing_type"]
+            if not (isinstance(pacing, list) and tuple(pacing) in PACING_VALUES):
+                raise WriteRefused('write refused: pacing_type may only be ["standard"] or ["day_parting"]')
+            if pacing == ["day_parting"] and not life:
+                raise WriteRefused("write refused: day_parting needs a lifetime budget")
+    elif edge == "adsets":
+        end = checked.get("end_time")
+        if "end_time" in checked and not (isinstance(end, str) and _ISO_OFFSET_RE.fullmatch(end)):
+            raise WriteRefused("write refused: end_time must be a date and time with an explicit UTC offset")
+        if "adset_schedule" in checked:
+            why = schedule_problem(checked["adset_schedule"])
+            if why:
+                raise WriteRefused(f"write refused: adset_schedule: {why}")
+            if "end_time" not in checked:
+                raise WriteRefused("write refused: adset_schedule needs end_time (lifetime budget)")
+
+
 def check(act: str, method: str, path: str, params: dict | None,
           files: dict | None = None, *, on_ad: bool = False, children_active: bool = False) -> str:
     """Проверить запись. Возвращает ребро; иначе `WriteRefused`.
@@ -623,6 +700,7 @@ def check(act: str, method: str, path: str, params: dict | None,
         if not (isinstance(creative, dict) and set(creative) == {"creative_id"}
                 and isinstance(creative["creative_id"], (str, int))):
             raise WriteRefused("write refused: an ad may only reference a creative by creative_id")
+    _check_lifetime_fields(edge, checked)
     _check_instagram(edge, checked)
     _walk(_without_lead_form(edge, checked, on_ad), edge)
     files = dict(files or {})
