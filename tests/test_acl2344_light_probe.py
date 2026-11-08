@@ -10,7 +10,7 @@ import urllib.request
 
 import pytest
 
-from src.fb_api import light_probe
+from src.fb_ads_rpa import light_probe
 from src.fb_ads_rpa.tab_watchdog import CdpError, RawCdp
 
 
@@ -98,6 +98,33 @@ def test_rawcdp_nested_call_never_drops_outer_reply_or_later_events():
     assert [m["method"] for m in sent] == ["Page.navigate", "Fetch.failRequest"]
 
 
+def test_rawcdp_leftover_events_survive_the_outer_call():
+    # during the nested call the browser sends: outer reply, a second paused event, nested reply
+    msgs = [{"method": "Fetch.requestPaused", "params": {"n": 1}},
+            {"id": 1, "result": {}},
+            {"method": "Fetch.requestPaused", "params": {"n": 2}},
+            {"id": 2, "result": {}}]
+    cdp, _ = _raw(msgs)
+    handled = []
+
+    def on_event(msg):
+        handled.append(msg["params"]["n"])
+        cdp.call("Fetch.failRequest", {})
+
+    cdp.call("Page.navigate", {}, on_event=on_event)
+    assert handled == [1]
+    cdp._buf = b""
+    cdp._sock = object()
+    import select as _sel
+    orig = _sel.select
+    _sel.select = lambda r, w, x, t: ([], [], [])
+    try:
+        cdp.drain(0.05, lambda m: handled.append(m["params"]["n"]))
+    finally:
+        _sel.select = orig
+    assert handled == [1, 2]                         # event 2 was kept for the next drain, not lost
+
+
 def test_rawcdp_drain_handles_events_and_returns_on_deadline():
     cdp = RawCdp.__new__(RawCdp)
     cdp._deferred = [{"method": "Fetch.requestPaused", "params": {"n": 1}}]
@@ -152,7 +179,7 @@ def test_interception_covers_every_request_and_is_never_disabled():
     assert enable["patterns"] == [{"urlPattern": "*", "requestStage": "Request"}]
     assert ("Network.setBypassServiceWorker", {"bypass": True}) in tab.calls
     assert "Fetch.disable" not in methods
-    assert methods.index("Network.setBypassServiceWorker") < methods.index("Page.navigate")
+    assert methods.index("Network.enable") < methods.index("Network.setBypassServiceWorker")         < methods.index("Page.navigate")
     assert tab.on_event is not None
 
 
@@ -167,6 +194,17 @@ def test_paused_requests_other_than_the_document_are_failed():
     failed = [p["requestId"] for m, p in tab.calls if m == "Fetch.failRequest"]
     assert failed == ["a", "b", "c"]
     assert tab.light_seen["blocked"] == 3
+
+
+def test_synthetic_document_is_inert():
+    tab = FakeTab()
+    light_probe.open_light_document(tab)
+    tab.on_event(_paused("d", light_probe.LIGHT_URL, "Document"))
+    params = [p for m, p in tab.calls if m == "Fetch.fulfillRequest"][0]
+    csp = [h["value"] for h in params["responseHeaders"] if h["name"] == "Content-Security-Policy"][0]
+    assert "script-src 'none'" in csp and "worker-src 'none'" in csp and "default-src 'none'" in csp
+    import base64
+    assert b"<script" not in base64.b64decode(params["body"]).lower()
 
 
 def test_failure_reason_names_the_method_only():
@@ -204,8 +242,10 @@ def test_light_document_and_dummy_handover(browser):
     assert "DUMMY" not in repr(result)
 
 
-def test_other_requests_of_the_probe_tab_are_failed(browser):
+def test_other_requests_of_the_probe_tab_are_failed(browser, monkeypatch):
     from src.fb_api.cdp import PageTab
+
+    monkeypatch.setattr(light_probe, "_CSP", "")      # CSP off: the interception alone must hold
 
     tab = PageTab.open(browser, call_s=60.0)
     try:
@@ -221,3 +261,66 @@ def test_other_requests_of_the_probe_tab_are_failed(browser):
         assert tab.light_seen["fulfilled"] == 1
     finally:
         tab.close()
+
+
+_SW_INDEX = b"""<!doctype html><title>reg</title><script>
+navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready).then(()=>{document.title='ready'});
+</script>"""
+_SW_JS = b"""self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+self.addEventListener('fetch', e => e.respondWith(new Response('<title>FROM_SW</title>', {headers: {'content-type': 'text/html'}})));
+"""
+
+
+def test_service_worker_cannot_serve_or_leak_the_probe_document(browser, monkeypatch):
+    import http.server
+    import threading
+    from src.fb_api.cdp import PageTab
+
+    hits = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            body, ctype = (_SW_JS, "text/javascript") if self.path == "/sw.js" else (_SW_INDEX, "text/html")
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    origin = f"http://127.0.0.1:{srv.server_address[1]}"
+    # the browser fixture uses a dead proxy; localhost bypasses it only when listed, so register via a
+    # separate tab of the same browser that talks to the local server directly
+    reg = probe = None
+    try:
+        reg = PageTab.open(browser, call_s=60.0)
+        reg.call("Page.navigate", {"url": origin + "/"}, timeout=60)
+        for _ in range(150):
+            t = reg.call("Runtime.evaluate", {"expression": "document.title", "returnByValue": True})
+            if t.get("result", {}).get("value") == "ready":
+                break
+            time.sleep(0.2)
+        else:
+            pytest.skip("service worker could not be registered on this machine")
+        reg.call("Page.navigate", {"url": origin + "/ctl"}, timeout=60)
+        time.sleep(1.5)
+        ctl = reg.call("Runtime.evaluate", {"expression": "document.title", "returnByValue": True})
+        assert ctl["result"]["value"] == "FROM_SW"                       # control: the SW is really active
+        monkeypatch.setattr(light_probe, "LIGHT_URL", origin + "/__acl_work")
+        before = len(hits)
+        probe = PageTab.open(browser, call_s=60.0)
+        res = light_probe.open_light_document(probe, settle_s=30)
+        title = probe.call("Runtime.evaluate", {"expression": "document.title", "returnByValue": True})
+        assert res["ok"] is True and res["fulfilled"] == 1, res
+        assert title["result"]["value"] == "ACL"                          # not FROM_SW
+        assert hits[before:] == []                                        # nothing reached the server
+    finally:
+        for t in (probe, reg):
+            if t is not None:
+                t.close()
+        srv.shutdown()

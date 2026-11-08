@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from src.fb_api import light_probe
+from src.fb_ads_rpa import light_probe
 
 USAGE = ("usage: ACL_2344_P1_CONFIRMED=doc120 python -m scripts.probe_2344_p1 "
          "http://127.0.0.1:<port> --profile-id <Doc120 profile id>")

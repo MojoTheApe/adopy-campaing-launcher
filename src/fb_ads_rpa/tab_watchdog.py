@@ -598,7 +598,8 @@ class RawCdp:
             if nested:
                 self._deferred = kept + backlog + list(self._deferred or [])
             else:
-                self._deferred = []
+                # события, оставшиеся в очереди, достанутся следующему вызову/drain (пауза запроса не теряется)
+                self._deferred = [m for m in backlog if "method" in m and "id" not in m] +                     [m for m in (self._deferred or []) if "method" in m and "id" not in m]
 
     def drain(self, seconds: float, on_event: Callable[[dict], None]) -> int:
         """Подождать `seconds`, отдавая пришедшие события в `on_event`; вернуть их число."""

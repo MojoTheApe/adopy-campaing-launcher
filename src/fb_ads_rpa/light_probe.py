@@ -3,6 +3,9 @@
 Ничего не уходит в Meta: документ `__acl_work` на origin Ads Manager отдаёт сам
 браузер через `Fetch.fulfillRequest`, ЛЮБОЙ другой запрос вкладки (шаблон `*`)
 обрывается (`Fetch.failRequest`); перехват не снимается, пока жива вкладка. Вместо токена передаётся случайная строка-заглушка.
+Модуль живёт вне `src/fb_api`: там строка `Network.enable` запрещена тестом (в продакшн-коде нет перехвата
+сети и токенов). Здесь Network включается ТОЛЬКО на вкладке пробы: без него `setBypassServiceWorker` не
+действует. События Network не читаются, токены не трогаются.
 Наружу (в Python, лог, телеметрию) возвращаются только булевы значения и коды причин.
 """
 from __future__ import annotations
@@ -17,6 +20,7 @@ from src.fb_api.cdp import CdpError, PageTab
 LIGHT_ORIGIN = "https://adsmanager.facebook.com"
 LIGHT_URL = LIGHT_ORIGIN + "/__acl_work"
 WORLD = "acl_light_probe"
+_CSP = "default-src 'none'; script-src 'none'; worker-src 'none'"
 _BODY = b"<!doctype html><meta charset=utf-8><title>ACL</title>"
 
 _LISTEN_JS = """(() => {
@@ -67,7 +71,9 @@ def open_light_document(tab: PageTab, *, timeout: float = 30.0, settle_s: float 
                 tab.call("Fetch.fulfillRequest", {
                     "requestId": rid, "responseCode": 200,
                     "responseHeaders": [{"name": "Content-Type", "value": "text/html; charset=utf-8"},
-                                        {"name": "Cache-Control", "value": "no-store"}],
+                                        {"name": "Cache-Control", "value": "no-store"},
+                                        # документ инертен: ни скриптов, ни воркеров, ни подресурсов
+                                        *([{"name": "Content-Security-Policy", "value": _CSP}] if _CSP else [])],
                     "body": base64.b64encode(_BODY).decode()}, timeout=timeout)
             else:
                 seen["blocked"] += 1          # ни одного запроса наружу
@@ -80,7 +86,15 @@ def open_light_document(tab: PageTab, *, timeout: float = 30.0, settle_s: float 
     ok, reason = False, "light_doc_failed"
     try:
         tab.on_event = on_event
-        # service worker профиля не должен отвечать/ходить в сеть мимо перехвата
+        # service worker профиля не должен отвечать/ходить в сеть мимо перехвата;
+        # без Network.enable setBypassServiceWorker не действует (проверено на локальном SW)
+        step = "Network.enable"
+        tab.call("Network.enable", timeout=timeout)
+        step = "Network.emulateNetworkConditions"
+        # запасной рубеж: даже освобождённый запрос упрётся в «офлайн»
+        tab.call("Network.emulateNetworkConditions", {"offline": True, "latency": 0,
+                                                      "downloadThroughput": -1, "uploadThroughput": -1},
+                 timeout=timeout)
         step = "Network.setBypassServiceWorker"
         tab.call("Network.setBypassServiceWorker", {"bypass": True}, timeout=timeout)
         step = "Fetch.enable"
@@ -112,6 +126,14 @@ def open_light_document(tab: PageTab, *, timeout: float = 30.0, settle_s: float 
     if ok and seen["fulfilled"] != 1:
         ok, reason = False, "light_doc_unexpected_request"
     return {"ok": ok, "reason": reason, "fulfilled": seen["fulfilled"], "blocked": seen["blocked"]}
+
+
+def settle_before_close(tab: PageTab, seconds: float = 0.5) -> None:
+    """Разобрать оставшиеся события перехвата до закрытия вкладки: ничего не остаётся «на паузе»."""
+    try:
+        tab.pump(seconds)
+    except (CdpError, TimeoutError):
+        pass
 
 
 def handover_dummy(work: PageTab, capture: PageTab, *, wait_s: float = 5.0) -> dict:
@@ -195,6 +217,7 @@ def run_p1(cdp_url: str, profile_id: str = "", *, _gate: bool = True) -> dict:
         for tab in (capture, work):
             if tab is not None:
                 try:
+                    settle_before_close(tab)
                     tab.close()
                 except Exception:  # noqa: BLE001
                     pass
