@@ -270,7 +270,7 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         if x.known:
             return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
         return _make("unknown", ctx, details=details)
-    if exc is not None and raw and type(exc).__name__ in _OWN_TEXT:
+    if exc is not None and raw and any(c.__name__ in _OWN_TEXT for c in type(exc).__mro__):
         return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details, stage=stage)
     if exc is not None and not isinstance(exc, str) and not isinstance(exc, (GraphError, GraphStop)):
         # Not a Meta answer at all (a bug or a local failure): do not blame Meta.

@@ -18,7 +18,7 @@ FIXTURES = sorted((Path(__file__).parent / "fixtures" / "acl2392").glob("*.json"
 TEMPLATE = Path(__file__).resolve().parent.parent / "src" / "web" / "templates" / "report.html"
 
 #: What must never reach the panel text (it lives in `failure.details`).
-FORBIDDEN = [r"fbtrace", r"error_subcode", r"Graph API", r"graph\.facebook\.com", r"\bv\d+\.\d",
+FORBIDDEN = [r"fbtrace", r"error_subcode", r"Graph API", r"graph[.]facebook[.]com", r"\bv\d+[.]\d",
              r"\berror[ _]?code\b", r"http[ _]?\d{3}", r"\b\d{6,}\b"]
 
 
