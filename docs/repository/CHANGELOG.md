@@ -1,5 +1,12 @@
 # Repository process history
 
+## 2026-11-08 — ACL-2450 shared engineering guidance
+
+Adopt published Master1.11.0 author/reviewer guidance with short small-task planning
+and concrete local engineering examples. Preserve the standalone provider and
+audited ancestry, existing task ownership, exact checks and instruction/product
+delivery boundaries. No product, helper, policy or runtime change.
+
 ## 2026-11-06 — ACL-2425 independent instruction selection
 
 Select instruction schema2 in matching descriptor/config, preserving the exact
