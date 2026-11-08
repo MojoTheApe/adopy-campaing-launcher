@@ -102,6 +102,11 @@ def defer_memory_wait():
         _DEFER_MEMORY.reset(token)
 
 
+#: ACL-2400: one short line when memory holds an action that nobody queued (Check plan, a read, Add account).
+#: It is said at once instead of after a 5 minute wait.
+MEMORY_HOLD_MESSAGE = "Not enough free memory - close a profile and retry"
+
+
 def memory_deferred(code: str) -> bool:
     return code == "memory_low"
 
@@ -419,8 +424,12 @@ class HeavyGate:
     def acquire(self, profile_id: str, *, wait_s: float = DEFAULT_GATE_WAIT_S,
                 on_wait: Callable[[str], None] | None = None,
                 cancelled: Callable[[], bool] | None = None,
-                on_tick: Callable[[str], None] | None = None) -> None:
+                on_tick: Callable[[str], None] | None = None,
+                fail_on_memory: bool = False) -> None:
         """Ждать места. Не дождались за `wait_s` — `WarmError(code="gate_wait")`.
+
+        ACL-2400: `fail_on_memory` - a memory hold (`below_reserve`/`memory_low`) is refused at once with
+        `MEMORY_HOLD_MESSAGE`; the wait for a busy account gate stays.
 
         ACL-2278: `cancelled` - the caller stops waiting (`code="cancelled"`); `on_tick(why)` is called on
         every look so the wait can show live numbers. A job passes `wait_s=inf`: it waits until it can go.
@@ -439,6 +448,8 @@ class HeavyGate:
                 if ok:
                     self._active[profile_id] = 1
                     return
+                if fail_on_memory and why in ("below_reserve", "memory_low"):
+                    raise WarmError(MEMORY_HOLD_MESSAGE, code=why)
                 if self._clock() >= deadline:
                     if why == "below_reserve":
                         raise WarmError(
@@ -1086,6 +1097,7 @@ class WarmRegistry:
         job = _JOB_WAIT.get()
         defer = _DEFER_MEMORY.get() and job is None
         deadline = self._mono() + START_MEMORY_WAIT_S
+        immediate = job is None   # ACL-2400: nobody queued this start - say it at once, do not wait 2 minutes
         try:
             while True:
                 memory, settings, _ps = self._memory_state()
@@ -1103,8 +1115,9 @@ class WarmRegistry:
                 if cancelled():
                     return "Stopped while waiting for memory. " + text if job is not None else text
                 if job is None:
-                    if defer or self._mono() >= deadline:
-                        return text
+                    if immediate or defer or self._mono() >= deadline:
+                        log.info("%s", text)
+                        return MEMORY_HOLD_MESSAGE
                 else:
                     _show(job, {"hold": "memory_low", "available_mb": int(memory.available_mb),
                                 "need_mb": int(need), "reserve_mb": int(settings.reserve_mb),
@@ -1243,7 +1256,7 @@ class WarmRegistry:
         try:
             if job is None:
                 self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
-                                  on_wait=on_wait)
+                                  on_wait=on_wait, fail_on_memory=True)
             else:
                 # ACL-2278: a job never fails for a busy gate or short memory: it stays queued until it can
                 # go, or until the user stops it. Only local memory reads; no account is touched.

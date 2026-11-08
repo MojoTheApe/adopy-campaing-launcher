@@ -17,6 +17,7 @@ It never raises: a convenience merge must not stop anyone from launching.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -77,7 +78,11 @@ _DEFAULT_VALUES = {
     "ACL_PROFILE_MEMORY_GB": "3.5",
     "ACL_PROFILE_MEMORY_FLOOR_GB": "3.5",
     "ACL_MEMORY_RESERVE_GB": "3.0",
-    "ACL_MEMORY_MAX_USED_PCT": "75",
+    "ACL_MEMORY_MAX_USED_PCT": "92",
+}
+#: Older code defaults of the same settings: a package copy of an older release must not bring them back.
+_OLD_DEFAULT_VALUES = {
+    "ACL_MEMORY_MAX_USED_PCT": ("75", "90"),
 }
 
 
@@ -101,6 +106,9 @@ def _shadow_may_replace(key: str, real_value: str, shadow_value: str) -> bool:
     default = _DEFAULT_VALUES.get(key)
     if default is not None and (shadow_value.strip() == default or _same_number(shadow_value.strip(), default)):
         return False
+    for old in _OLD_DEFAULT_VALUES.get(key, ()):
+        if shadow_value.strip() == old or _same_number(shadow_value.strip(), old):
+            return False
     return True
 
 
@@ -217,6 +225,80 @@ def _env_values(path: Path) -> dict[str, str]:
         return {}
 
 
+#: ACL-2400: one-time update migration of the memory threshold (done-marker so a later Settings value is kept).
+MEMORY_PCT_KEY = "ACL_MEMORY_MAX_USED_PCT"
+MEMORY_PCT_NEW = "92"
+MIGRATIONS_FILE = "migrations.json"
+MEMORY_PCT_MIGRATION_ID = "acl-2400-memory-92"
+
+
+def _migration_done(real_dir: Path, migration_id: str) -> bool:
+    try:
+        data = json.loads((real_dir / MIGRATIONS_FILE).read_text(encoding="utf-8"))
+        return isinstance(data, dict) and migration_id in data
+    except (OSError, ValueError):
+        return False
+
+
+def _mark_migration_done(real_dir: Path, migration_id: str, note: str, *, now: float | None = None) -> None:
+    path = real_dir / MIGRATIONS_FILE
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    data[migration_id] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now or time.time())), "note": note}
+    _atomic_write(path, json.dumps(data, indent=2, sort_keys=True).encode("utf-8"))
+
+
+def migrate_memory_threshold(real_dir: Path, *, now: float | None = None) -> str | None:
+    """ACL-2400: an explicit ACL_MEMORY_MAX_USED_PCT below 92 in the machine ``.env`` (75/85 from earlier
+    releases or set by hand) becomes 92 - once. The old value stays in ``.env`` inside the backup folder.
+
+    The migration is recorded in ``migrations.json`` whether or not it changed anything, so a value the owner
+    sets later in Settings (even 75 again) is never overwritten, and a machine without the key is left alone.
+    Values above 92 and values that are not numbers are kept. Returns a one-line note, or None.
+    """
+    if _migration_done(real_dir, MEMORY_PCT_MIGRATION_ID):
+        return None
+    env_path = real_dir / ENV_NAME
+    note: str | None = None
+    try:
+        text = env_path.read_text(encoding="utf-8", errors="replace") if env_path.is_file() else ""
+        lines = text.splitlines()
+        changed = False
+        old_value = ""
+        for i, ln in enumerate(lines):
+            stripped = ln.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, _, value = stripped.partition("=")
+            if key.strip() != MEMORY_PCT_KEY:
+                continue
+            try:
+                below = float(value.strip().strip("\"'")) < float(MEMORY_PCT_NEW)
+            except ValueError:
+                below = False
+            if below:
+                old_value = value.strip()
+                lines[i] = f"{MEMORY_PCT_KEY}={MEMORY_PCT_NEW}"
+                changed = True
+        if changed:
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(now or time.time()))
+            backup_root = real_dir / "backups" / f"memory-92-{stamp}"
+            _backup(env_path, backup_root, Path(ENV_NAME))
+            _atomic_write(env_path, ("\n".join(lines) + "\n").encode("utf-8"))
+            note = (f"memory threshold {MEMORY_PCT_KEY} {old_value} -> {MEMORY_PCT_NEW} (ACL-2400); "
+                    f"the old .env is in {backup_root}")
+            log.info(note)
+        _mark_migration_done(real_dir, MEMORY_PCT_MIGRATION_ID, note or "nothing to change")
+    except OSError as exc:  # not marked done: tried again at the next launch
+        log.warning("memory threshold migration failed: %s", exc)
+        return None
+    return note
+
+
 def prepare_config_dir() -> UnifyResult:
     """Pin the real folder, merge package copies into it, log and warn."""
     real = Path(paths.pin_config_dir_env())
@@ -253,6 +335,10 @@ def prepare_config_dir() -> UnifyResult:
                 result.warnings.append(msg)
                 log.warning(msg)
                 print(f"[acl] WARNING: {msg}")
+        mem_note = migrate_memory_threshold(real)
+        if mem_note:
+            result.env_merged.append(f"{ENV_NAME} (memory threshold)")
+            print(f"[acl] {mem_note}")
         if paths.is_virtualized_environment():
             note = (
                 "this process runs inside an MSIX package (virtual %LOCALAPPDATA%); "
