@@ -134,6 +134,11 @@ class AdSetDraft:
     device: str = ""            # "mobile" | "desktop" (пусто = все устройства)
     os_min: str = ""            # минимальная версия ОС, например "14"
     start_time: str = ""        # "YYYY-MM-DDTHH:MM", время часового пояса кабинета
+    # ACL-1443 (только API-бэкенд): lifetime-бюджет кампании и расписание. Пусто = daily, как раньше;
+    # ключи в слотах, черновиках и планах появляются только при lifetime.
+    budget_type: str = ""       # "" (daily) | "lifetime"
+    end_time: str = ""          # "YYYY-MM-DDTHH:MM", время часового пояса кабинета
+    schedule: list = field(default_factory=list)   # [{"days": [0..6], "start_minute", "end_minute"}]
     # ACL-1768: номер набора в кампании (явный, не по порядку слотов) и поля уровня набора.
     adset_index: int = 0
     language: str = ""          # язык набора; пусто = язык кампании (CampaignDraft.language)
@@ -153,7 +158,8 @@ class AdSetDraft:
         }
         if self.destination != "website":
             out["destination"] = self.destination
-        for key in ("gender", "languages", "device", "os_min", "start_time", "language", "pixel_id", "placements"):
+        for key in ("gender", "languages", "device", "os_min", "start_time", "language", "pixel_id", "placements",
+                    "budget_type", "end_time", "schedule"):
             if getattr(self, key):
                 out[key] = getattr(self, key)
         return out

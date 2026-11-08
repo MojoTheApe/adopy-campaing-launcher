@@ -9,8 +9,10 @@ from pathlib import Path
 
 try:
     from scripts import acl_ci_reuse as reuse
+    from scripts import acl_complete_delivery as continuation
 except ImportError:  # запуск как python scripts/acl_publish_release.py
     import acl_ci_reuse as reuse
+    import acl_complete_delivery as continuation
 
 
 def _git(*args: str) -> str:
@@ -32,8 +34,9 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
     if _git("cat-file", "-t", ref) != "tag":
         raise ValueError("A release requires an annotated tag")
     sha = _git("rev-parse", f"{ref}^{{commit}}")
-    if sha != _git("rev-parse", "origin/main") or sha != _git("rev-parse", "HEAD"):
-        raise ValueError("The tag, checkout and current origin/main must name the same commit")
+    current = _git("rev-parse", "origin/main")
+    if sha != _git("rev-parse", "HEAD"):
+        raise ValueError("The immutable tag and checkout must name the same product commit")
     annotation = _git("cat-file", "-p", ref)
     if not re.search(r"\bsuccess\b", annotation, re.I):
         raise ValueError("Tag annotation must record successful CI")
@@ -45,6 +48,17 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
             and run.get("conclusion") == "success" and run.get("path") == ".github/workflows/ci.yml"
             and run.get("head_branch") == "main" and run.get("event") in {"push", "workflow_dispatch"}):
         raise ValueError("Recorded CI must be a successful full main run on the exact release commit")
+    if current != sha:
+        original = continuation.continuation_request(source_repo, sha, current, int(match[1]), request=_api)
+        if continuation.release_tag(original) != tag:
+            raise ValueError("The tag differs from the original authorized release identity")
+        metadata = [line.strip() for line in annotation.splitlines() if line.lstrip().startswith("{")]
+        if len(metadata) != 1:
+            raise ValueError("The original tag needs one exact delivery authorization annotation")
+        recorded = json.loads(metadata[0], object_pairs_hook=continuation.receipt.rules.direct_module().unique_object)
+        expected = {key: original[key] for key in ("batch_id", "issues", "target", "policy")}
+        if continuation.receipt.digest(recorded) != continuation.receipt.digest(expected):
+            raise ValueError("The immutable tag authorization differs from its original request")
     # ACL-1565: main-прогон может переиспользовать полный зелёный прогон того же
     # дерева (тесты пропущены). Принимаем его, только если полный прогон доказуем.
     run = dict(run, id=int(match[1]))

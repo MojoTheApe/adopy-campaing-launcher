@@ -10,6 +10,11 @@ import re
 import subprocess
 import sys
 
+try:
+    from scripts import tracker_delivery_receipt as receipt
+except ImportError:
+    import tracker_delivery_receipt as receipt
+
 REPOSITORY = "MojoTheApe/adopy-campaing-launcher"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 
@@ -28,6 +33,47 @@ def release_tag(request):
     return "acl-release-" + date + "." + str(int(request["main_pr"]))
 
 
+def ci_source(ci_run, event_sha="", *, repository=REPOSITORY, request=None):
+    """The successful original CI identifies the product, not this checkout."""
+    if repository != REPOSITORY:
+        raise ValueError("Use the official ACL repository for delivery")
+    request = request or receipt.github
+    ci = receipt.native_main_run(request, repository, ci_run)
+    if (ci.get("path") != ".github/workflows/ci.yml"
+            or ci.get("event") not in {"push", "workflow_dispatch"}
+            or ci.get("status") != "completed" or ci.get("conclusion") != "success"):
+        raise ValueError("Delivery needs the successful original native main CI")
+    if event_sha and event_sha != ci["head_sha"]:
+        raise ValueError("The CI event differs from its actual native run")
+    return ci["head_sha"]
+
+
+def continuation_request(repo, product, current, ci_run, *, request):
+    """Use the published original-request proof only after actual schema2 adoption."""
+    if repo != REPOSITORY or not SHA.fullmatch(product) or not SHA.fullmatch(current):
+        raise ValueError("Use the official ACL repository and exact original/current main")
+
+    def require_current():
+        ref = request(f"repos/{repo}/git/ref/heads/main")
+        if (not isinstance(ref, dict) or not isinstance(ref.get("object"), dict)
+                or ref["object"].get("sha") != current):
+            raise ValueError("The actual current main changed during delivery continuation")
+
+    require_current()
+    config = receipt.configuration(request, repo, current)
+    if (receipt.rules.process_module().policy(config) or {}).get("schema_version") != 2:
+        raise ValueError("Continuation across current main requires explicit instruction schema2")
+    # The shared resolver validates the complete retained instruction chain,
+    # real authorization, scope, original product/CI/target and idle composition.
+    resolved = receipt.resolve(repo, product, ci_run, request=request)
+    if (not isinstance(resolved, dict) or resolved.get("eligible") is not True
+            or resolved.get("repository") != repo or resolved.get("merge_sha") != product
+            or resolved.get("ci_run") != ci_run):
+        raise ValueError("The original authorized delivery is no longer eligible")
+    require_current()
+    return resolved
+
+
 def ensure_tag(request, ci_run, *, execute=run):
     tag = release_tag(request)
     sha = request["merge_sha"]
@@ -36,8 +82,16 @@ def ensure_tag(request, ci_run, *, execute=run):
             or ci.get("path") != ".github/workflows/ci.yml" or ci.get("event") not in {"push", "workflow_dispatch"}
             or ci.get("status") != "completed" or ci.get("conclusion") != "success"):
         raise ValueError("The release tag needs its exact successful native main CI run")
-    if execute("git", "rev-parse", "HEAD") != sha or execute("git", "rev-parse", "origin/main") != sha:
+    head = execute("git", "rev-parse", "HEAD")
+    current = execute("git", "rev-parse", "origin/main")
+    if head != current:
         raise ValueError("Release continuation requires the exact current main checkout")
+    if current != sha:
+        def api(path):
+            return json.loads(execute("gh", "api", path))
+        resolved = continuation_request(REPOSITORY, sha, current, ci_run, request=api)
+        if receipt.digest(resolved) != receipt.digest(request):
+            raise ValueError("The full original authorized delivery request changed")
     annotation = json.dumps({"batch_id": request["batch_id"], "issues": request["issues"],
                              "target": request["target"], "policy": request["policy"]}, sort_keys=True)
     note = f"CI success https://github.com/{REPOSITORY}/actions/runs/{int(ci_run)}\n{annotation}"
@@ -112,8 +166,14 @@ def main():
     existing = sub.add_parser("published")
     existing.add_argument("--tag", required=True)
     existing.add_argument("--repo", required=True)
+    source = sub.add_parser("ci-source")
+    source.add_argument("--ci-run", type=int, required=True)
+    source.add_argument("--event-sha", default="")
+    source.add_argument("--repository", default=REPOSITORY)
     args = parser.parse_args()
-    if args.command == "tag":
+    if args.command == "ci-source":
+        print(ci_source(args.ci_run, args.event_sha, repository=args.repository))
+    elif args.command == "tag":
         print(ensure_tag(json.loads(args.request.read_text()), args.ci_run))
     else:
         print("true" if published(args.tag, args.repo) else "false")

@@ -10,8 +10,8 @@ Split mixed changes and use only the pinned supported completion proof.
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
-Follow the [shared verification guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/verification.md)
-in Master Repo 1.9.0. `delivery.json` defines actual product
+Follow the [shared verification guidance](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/verification.md)
+in Master Repo 1.11.0. `delivery.json` defines actual product
 commands/required CI names; retain matching Tracker settings, runtime checks and
 local exceptions. These compatible local wording clarifications require no new
 standard release, pin/helper upgrade or policy selection. Separate fast source
@@ -24,7 +24,7 @@ ready handoff and admission need all applicable full coverage. Group related
 corrections into a meaningful ready submission on the owned task branch; retain
 useful intermediate feedback and normal review fixes. Explain manual expensive
 launches or unexpected repeats through existing task/PR/run links. Apply the
-[shared submission guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/verification-submission.md)
+[shared submission guidance](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/verification-submission.md)
 through ACL's [selected Tracker guide](TRACKER.md).
 
 Preserve the adopted collector's existing bounded reuse rules. Expand context
@@ -48,7 +48,7 @@ request. Shared retry/evidence export does not opt ACL in.
 
 For a separately authorized provider upgrade, use the
 [ACL standalone provider procedure](STANDALONE_PROVIDER_ACL.md) and the
-[shared coordination guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/workflow-upgrades.md).
+[shared coordination guidance](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/workflow-upgrades.md).
 Use the selected Tracker guide for supported commands and capabilities.
 
 ## ACL checks and preserved boundaries
@@ -158,3 +158,49 @@ defined in [POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.md). Complete combined/mai
 checks and actual published-package acceptance remain required; skipping Stage
 does not turn a successful build into a delivery receipt. Initial source ACL-1924
 used its old-stage route before the separately recorded idle activation.
+
+## Engineering context and examples
+
+Read the existing [system context](../system/AGENT_CONTEXT.md),
+[components](../system/PROJECT.md) and [runtime controls](../runtime/DELIVERY.md).
+The shared engineering rules guide author and reviewer; the selected provider,
+local delivery contract and checks above remain executable authority.
+
+- ACL is a Windows-installed Python application with a local FastAPI/Starlette
+  dashboard and browser JavaScript/templates in `src/web/`. The existing CI tests
+  Python3.11/3.13 and Windows; local macOS checks do not establish Windows behavior.
+  Keep the actual pinned runtime dependencies in `requirements.txt`; do not add
+  packages or introduce newer syntax merely to satisfy a style preference.
+- Typical dashboard changes belong to the existing handlers/templates in
+  `src/web/`; workbook/report logic belongs to `src/analysis_agent`. Read actual
+  callers and component ownership before adding another handler or abstraction.
+  Python/browser sources and tests are authored here. Shared `.workflow/tools`,
+  compatibility wrappers and template ancestry are provider-owned; installer/build
+  outputs and historical snapshots are not independent editable product sources.
+- Keep `config.paths` as the machine-path authority. Preserve machine data and
+  configuration; validate inputs before writes and expose useful local errors.
+  Retain existing locks/revision fencing where state is shared. External timeouts,
+  partial success and unknown outcomes need explicit handling, not blind replay.
+  Product/runtime context retains draft-only RPA, single-profile ownership and
+  synthetic test resources; process guidance authorizes no live external action.
+- For machine-setting work, follow [machine_paths.py](../../src/web/machine_paths.py):
+  `save` validates requested values before one `update_machine_env` operation and
+  maps local failures to `MachinePathError`. Reuse the path authority rather than
+  adding a second environment/config store; preserve its observable behavior and
+  [regressions](../../tests/test_machine_paths.py).
+- For request/form boundaries, follow [request_limits.py](../../src/web/request_limits.py):
+  the shared `read_form` applies explicit limits and the existing request-body
+  middleware bounds input before buffering. Reuse these at existing callers;
+  do not create an alternate parsing layer. [Boundary tests](../../tests/test_request_limits.py)
+  cover the actual behavior. These examples illustrate responsibilities and reuse,
+  not a requirement to copy every implementation detail or refactor unrelated code.
+
+Run applicable commands from the repository root. Local instruction checks use
+`python3 scripts/acl_process_instructions.py` and `git diff --check`; the secret
+scanner and existing tooling test list above remain applicable. Tooling tests need
+Python3.11+ with the listed pytest/PyYAML/cryptography development dependencies,
+Git and a writable temporary directory. Provider validation additionally needs
+an exact clean official checkout of the selected Tracker and its documented
+isolated `scripts/workflow_provider.py` procedure; the guarded Tracker CLI needs
+authenticated GitHub access. None of these local checks establishes hosted scope,
+independent approval, Windows installation or published-package acceptance.
