@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2403 — Primary text and headline are optional — 2026-11-05
+
+An ad can be published without a primary text or a headline: Check plan only warns, and the ad is sent without the empty field. An ad with several texts or a Stories / Reels file still needs both (new Check plan error "Several texts or a Stories / Reels file need a primary text and a headline", instead of a refusal at Publish). The RPA flow with empty texts is unverified.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1403).
+
 ## ACL-2462 — Builder: Lifetime start time for today no longer goes stale — 2026-11-08
 
 Lifetime form: the start time for "today" is recomputed on every sync and once a minute, so the form no longer says "First day is in the past"; the Lifetime summary updates as the budget is typed. Template only: reload the page.
