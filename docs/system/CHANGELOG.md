@@ -1,10 +1,97 @@
 # System history
 
-## ACL-2393 — Warning when the campaign name and the targeting differ — 2026-11-05
+## ACL-2403 — Primary text and headline are optional — 2026-11-05
 
-The builder now warns when a campaign name mentions a targeting preset (for example Green) and a different one is selected (for example Mix2). It is only a warning; you can still publish.
-A line under the name shows `Name says Green, targeting is Mix2 – fix one of them` (or `…but no targeting is selected – pick one`), with a `Use Green` button when the name has exactly one preset. The same text appears in the Publish confirmation (button "Build anyway") and as a note above the Check plan result. Presets are matched as whole words of the name; the card's own parts (country, OS, creative type, asset, age, date) never count, and any ad set's targeting satisfies the name. Dashboard page only; nothing is sent to the server.
-[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1393).
+An ad can be published without a primary text or a headline: Check plan only warns, and the ad is sent without the empty field. An ad with several texts or a Stories / Reels file still needs both (new Check plan error "Several texts or a Stories / Reels file need a primary text and a headline", instead of a refusal at Publish). The RPA flow with empty texts is unverified.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1403).
+
+## ACL-2462 — Builder: Lifetime start time for today no longer goes stale — 2026-11-08
+
+Lifetime form: the start time for "today" is recomputed on every sync and once a minute, so the form no longer says "First day is in the past"; the Lifetime summary updates as the budget is typed. Template only: reload the page.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1462).
+
+## ACL-2457 — Dashboard: bulk edit of budget, age, gender, languages and placements — 2026-11-08
+
+On the Home campaigns table, tick several campaigns of one account and press "Bulk edit": budget (daily or lifetime, as each campaign has it), age range, gender, languages and a placements preset (Advantage+ or the ACL default). A preview shows before and after per campaign and nothing is written until you press Confirm. Only the fields you filled in are written, through the same human-confirmed command path as ACL-1800 (re-read before writing, one write per object, readback after). A failed or skipped campaign is listed with its reason and does not stop the others. API backend only; with the RPA backend the control is disabled with the reason "API backend only". The in-page write policy now also allows `lifetime_budget` and a validated `targeting` object on an existing object (ad sets keep every other targeting setting as read). Restart the dashboard after release (Python changes).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1457).
+
+## ACL-2456 — Builder: copy a campaign to other ad accounts — 2026-11-08
+
+"Copy to accounts" on the campaign card now works with the API backend (it is disabled with the reason "API backend only" on RPA). Pick one or more other accounts; the dialog reads the account map and the cached account readings (no Meta call) and shows the target pixel. The copy goes into the target account's own builder form as an ordinary draft: its tracking link, Page Automatic, Instant Form ids cleared. When the target currency differs from the source, or either is unknown, the source amount is not copied; the buyer types the budget for the target. Nothing is created by the copy: Preview and Check plan still apply and campaigns are created PAUSED. One Undo takes back all copies of one action. Python change: restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1456).
+
+## ACL-2455 — Lifetime run is a range of days, hours are picked for every day — 2026-11-08
+
+The owner found it confusing that a Lifetime campaign's Start and End carried a time of day, which read
+as the hours the ads run. The builder now asks for a First day and a Last day (date only, Israel time):
+the run starts at 00:00 on the first day (at the next full hour when the first day is today) and ends at
+the end of the last day. The hours grid ("Hours (every day, Israel time)") is always shown under the dates
+with every hour on; switching hours off makes a schedule that repeats on every day of the run, and with
+all hours on no schedule is sent. The form still sends `start_time`/`end_time`/`schedule`/`schedule_on`
+as before, so the server, drafts and plans are unchanged; drafts with a time of day show their dates.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1455).
+
+## ACL-2443 — Builder: lifetime budget and delivery schedule in the account time zone — 2026-11-07
+
+The Builder budget block now has a Daily / Lifetime switch. Lifetime takes a start and an end date-time in the ad account time zone (read from the new `GET /api/account-facts`), and an optional 7x24 hour grid that is sent as `adset_schedule` (`pacing_type` ADVERTISER time zone). Write policy, draft, creator, Graph calls and preflight know the lifetime fields; the plan cache schema is now 2, so cached plans from older versions are rebuilt. A live Lifetime publish in Meta and non-USD minimums are not verified yet. Python changed: restart the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1443).
+
+## ACL-1448 — Lifetime start, end and hours are entered in Israel time — 2026-11-07
+
+In the campaign builder the Start and End of a Lifetime budget and the hours grid are now Israel time
+(`Asia/Jerusalem`; `ACL_TEAM_TIMEZONE` overrides it, an invalid name falls back with a warning in the log).
+Before this they were read as wall-clock time of the ad account. Check plan and the build convert them to the
+account time zone: Start and End by their own dates, the grid by the difference between Israel and the account
+at the campaign start (shifted hours cross midnight into the neighbouring weekday, Sunday and Saturday wrap
+around). A difference that is not a whole number of hours is refused. If the difference changes inside the
+term (Israel and the account change clocks on different dates), Check plan shows a warning with the first date
+(and "until <date>" when it returns) and does not stop. The read-back compares what Meta stores with the
+converted windows. The grid has a preset "Don't run 01:00-05:00 every day" and a line under it that shows what
+Meta gets in account time. The zone is set by the server (`ACL_TEAM_TIMEZONE`), not by the form, so slots and
+drafts have no new keys and Daily campaigns are unchanged. Lifetime drafts saved before this change keep their
+times, which are now read as Israel time.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1448).
+
+## ACL-2334 — Package shadow config no longer overwrites the real machine config — 2026-11-06
+
+The merge of the Claude MSIX package copy is skipped when ACL_CONFIG_DIR is set explicitly. A shadow value never turns an absolute path into a relative one or an explicit setting into a code default. Each merge logs the key names only (no values).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1334).
+
+## ACL-2250 — Duplicates get a `copy 1, 2, 3 …` counter and always publish — 2026-11-04
+
+A campaign name that is already on the ad account no longer stops the run or becomes `NAME_2`: the robot
+publishes `NAME copy 1`, `copy 2`, … (highest live number + 1) on the campaign and every ad set, with no
+limit on the count. A finished job published again always makes the next copy; a stopped run is finished
+(not copied) by a small local name record that lives until the end of the job, so Publish all after a
+stopped job does not copy the finished campaigns. A copy reuses the uploaded video. A name over the limit is
+a clear `name_too_long` stop (also an ERROR in Check plan). The stats parsers ignore the counter.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1250).
+
+## ACL-2330 — Vault migration cleans up clear-text secret lines — 2026-11-06
+
+The migration now drops an earlier duplicate of a secret key (dotenv ignores it; the encrypted backup keeps it). A connection-sheet sign-in or startup refresh rewrites a clear-text secret line even when the value is unchanged, so it gets encrypted. The migration notes now match each case and point to Connections -> Sign in with Google.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1330).
+
+## ACL-2243 — Failed read of the confirmed targeting store is not an empty store — 2026-11-06
+
+A damaged or unreadable confirmed-targeting file is now reported as a read failure with a plain-English message and is never overwritten; a missing file is still an empty store. Resolution stops instead of guessing, and the `/targeting-resolver/cache`, `confirm` and `clear` routes answer 409. Python changed: restart the dashboard after deploy.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1243).
+
+## ACL-2439 — Event log tests no longer depend on a fixed date — 2026-11-06
+
+The event log store tests built their events with a fixed date (2026-10-30) while asking for the last 7 days against the real clock, so three of them failed on every branch after that window passed. Fixture timestamps are now computed from the current time (one day ago for events that must stay in the window, 30 days ago for the one that must be dropped). Tests only; no production code changed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1439).
+
+## ACL-2267 — Check plan remembers resolved targeting for 60 days — 2026-11-02
+
+Countries, audience languages and library terms that Meta matched exactly are now remembered on the
+machine for 60 days (`facts_cache.json` next to the machine config; `ACL_FACTS_CACHE_DAYS`, `0` turns it
+off), so a repeated check, or the first check of another account, does not search for them again.
+Interest ids from this cache are still confirmed by Meta on every check in the same batch that
+already runs; an id Meta rejects is dropped and the term is searched again, so a removed interest never
+fails the check. The ad account, pixels, Pages, currency and timezone are always read fresh, and an
+answer without an account id now counts as a different account. "Clear" on a term in Check plan
+forgets it in both caches. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1267).
 
 ## ACL-2084 — Square file in the Stories / Reels slot — 2026-11-04
 

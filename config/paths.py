@@ -78,6 +78,10 @@ def get_local_config_dir() -> str:
     explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
     if explicit:
         return unvirtualize_path(explicit)
+    return _default_config_dir()
+
+
+def _default_config_dir() -> str:
     base = get_real_local_appdata()
     if base:  # Windows — every buyer machine today
         return os.path.join(base, "ACL")
@@ -170,6 +174,19 @@ def get_real_local_appdata() -> str:
     if profile and os.name == "nt":
         return os.path.join(profile, "AppData", "Local")
     return ""
+
+
+def is_config_dir_explicit() -> bool:
+    """True when ACL_CONFIG_DIR points somewhere other than the OS default folder (ACL-2334).
+
+    The launchers pin the default folder into ACL_CONFIG_DIR themselves, so a value equal to the default
+    does not count as an operator's choice.
+    """
+    explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
+    if not explicit:
+        return False
+    norm = lambda p: os.path.normcase(os.path.normpath(p))  # noqa: E731
+    return norm(unvirtualize_path(explicit)) != norm(_default_config_dir())
 
 
 def is_virtualized_environment() -> bool:

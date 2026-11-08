@@ -206,10 +206,22 @@ def read_remote(service=None, *, interactive: bool = False) -> dict:
 
 # -- writing the machine settings --------------------------------------------
 
+def _clear_text_secrets() -> set:
+    try:
+        from config import token_vault
+
+        return token_vault.clear_text_secret_keys(paths.get_machine_env_path())
+    except Exception:
+        return set()
+
+
 def apply(values: dict, writer: Callable[[dict], Any] | None = None) -> dict:
     """Validate, then save to the machine settings only. Nothing is saved on error."""
     clean = validate(values)
-    changed = {k: v for k, v in clean.items() if (os.environ.get(k) or "").strip() != v}
+    # ACL-2330: a secret whose stored line is still clear text is rewritten even when the value is the same,
+    # so it gets encrypted (the vault migration leaves such lines it cannot move on its own).
+    clear = _clear_text_secrets()
+    changed = {k: v for k, v in clean.items() if (os.environ.get(k) or "").strip() != v or k in clear}
     if changed:
         try:
             (writer or paths.update_machine_env)(changed)

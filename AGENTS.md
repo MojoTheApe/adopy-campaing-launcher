@@ -19,15 +19,19 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
-- [Master Repo 1.9.0 shared guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/standard.md):
-  [document map](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/project-documents.md)
-  and [workflow evolution](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/workflow-evolution.md).
-  Follow ACL's local workflow and selected Tracker guide for operations.
+- [Master Repo 1.11.0 shared guidance](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/standard.md):
+  [document map](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/project-documents.md)
+  and [workflow evolution](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/workflow-evolution.md).
+  Read its [engineering rules](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/engineering-standards.md)
+  with the [local engineering references](docs/repository/VERIFICATION.md#engineering-context-and-examples).
+  These are the adopted author/reviewer guidance; the existing descriptor/provider
+  pins and ACL's local workflow still own executable operations.
+  Make the actual task and these applicable instructions available to delegated agents.
 - [ACL standalone workflow provider](docs/repository/STANDALONE_PROVIDER_ACL.md):
   the current executable source is the exact published revision in
   [tracker/engine.json](tracker/engine.json) and [delivery.json](delivery.json).
   The Master 1.8.0 reference in the descriptor and template baseline records
-  the audited provider ancestry required by Tracker 3.24.1. Provider, engine, private checkout and canonical
+  the audited provider ancestry retained by the selected Tracker. Provider, engine, private checkout and canonical
   export must agree. Use the immutable official provider entry point for rendering and
   validation; do not run consumer-controlled validation with credentials or
   rewrite global skills. Existing task ownership and all review/check/package
@@ -54,11 +58,12 @@ Keep ordinary source/frozen-batch admission and all applicable checks. Proven
 isolated process completion does not publish an ACL installer; actual product
 changes and explicit publication requests retain their existing delivery controls.
 
-Read the selected [task pause support](docs/repository/TASK_PAUSE.md). Phase-preserving
-`pause stop/resume` is usable only after separately verified reader/every-writer
-readiness and an owned idle outer8 activation. Source pins do not activate it.
-Until then retain the adopted pre-activation stop/reclaim procedure and its
-recorded phase-changing semantics; never call that a phase-preserving Pause.
+Read the selected [task pause support](docs/repository/TASK_PAUSE.md). ACL-2414
+activated phase-preserving `pause stop/resume` on 5 November 2026 after verified
+reader/every-writer readiness and an owned idle transition. The actual stop and
+resume retain the task phase and use the returned fresh authority. Keep the
+outer8 fence and underlying guards. The earlier stop/reclaim procedure remains
+dated history in [the workflow](docs/repository/WORKFLOW.md).
 
 Preserve employee data, existing installers and draft-only advertising controls.
 Implementation requires a real Issue and a durable Worker claim. After the
