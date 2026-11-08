@@ -75,6 +75,13 @@ def spec_payload(plan: Any, facts: Any) -> dict:
         "adsets": adsets, "ads": ads, "link": link_fingerprint(plan.link),
         "currency": getattr(facts, "currency", ""),
     }
+    if getattr(plan, "lifetime", False):
+        # ACL-1443: ключи только у lifetime-плана; daily-хэш остаётся прежним.
+        spec["budget_type"] = "lifetime"
+        spec["lifetime_budget"] = plan.lifetime_budget
+        for row, s in zip(adsets, plan.ad_sets):
+            row["end_time"] = s.end_time
+            row["schedule"] = [dict(w) for w in s.schedule]
     spec["spec_hash"] = canonical_hash(spec)
     return spec
 

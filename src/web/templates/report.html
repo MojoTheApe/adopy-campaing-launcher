@@ -56,6 +56,9 @@
     try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
+    try { window.CB_ACCOUNT_FACTS = {{ (account_facts_json or {}) | tojson }}; } catch(e) {}
+    // ACL-1448: пояс команды (Израиль): в нём билдер принимает Start/End и сетку часов Lifetime.
+    try { window.CB_TEAM_TIMEZONE = {{ (team_timezone or 'Asia/Jerusalem') | tojson }}; } catch(e) {}
     // ACL-1807: допустимые значения из реестра Meta (только ga); пусто — не ограничиваем.
     try { window.CB_META_CAPS = {{ (meta_caps_json or {}) | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
@@ -1215,6 +1218,26 @@
        чтобы обе карточки брали её из одного места. */
     .cb-inline .cb-sel-wrap { width: 6.5rem; flex: 0 0 auto; }
     .cb-input-sm { width: 4.5rem !important; }
+    /* ACL-1443: Daily / Lifetime и расписание показа. */
+    .cb-lt-only[hidden] { display: none !important; }
+    .cb-seg { display: inline-flex; border: 1px solid var(--field-border); border-radius: var(--radius-sm); overflow: hidden; }
+    .cb-seg-btn { background: var(--field-bg); color: var(--muted); border: 0; padding: 0.3rem 0.65rem; font: inherit; font-size: var(--adopy-text-sm); cursor: pointer; }
+    .cb-seg-btn + .cb-seg-btn { border-left: 1px solid var(--field-border); }
+    .cb-seg-btn[aria-pressed="true"] { background: var(--adopy-selected-bg); color: var(--adopy-selected-text); font-weight: 600; }
+    .cb-seg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cb-lt-note { color: var(--muted); font-size: var(--adopy-text-sm); line-height: 1.3; overflow-wrap: anywhere; }
+    .cb-lt-err { color: var(--bad); font-size: var(--adopy-text-sm); }
+    .cb-lt-preset { margin-top: 0.4rem; margin-right: 0.5rem; padding: 0.15rem 0.6rem; font: inherit; font-size: var(--adopy-text-sm); color: var(--text); background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 4px; cursor: pointer; }
+    .cb-lt-preset:hover { color: var(--accent); }
+    .cb-lt-err:empty { display: none; }
+    .cb-lt-check { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text); }
+    .cb-sg { margin-top: 0.4rem; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .cb-sg-row { display: grid; grid-template-columns: 2.4rem repeat(24, minmax(0, 1fr)); gap: 1px; margin-bottom: 1px; align-items: stretch; }
+    .cb-sg-hour { font-size: 0.6875rem; color: var(--muted); line-height: 1.2; white-space: nowrap; overflow: visible; }
+    .cb-sg-day { background: transparent; border: 0; color: var(--muted); font: inherit; font-size: var(--adopy-text-sm); text-align: left; padding: 0; cursor: pointer; }
+    .cb-sg-day:hover { color: var(--accent); }
+    .cb-sg-cell { height: 1.05rem; background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 2px; cursor: pointer; }
+    .cb-sg-cell.is-on { background: var(--adopy-primary); border-color: var(--adopy-primary); }
     /* Язык аудитории. Пустое поле — законный выбор («не трогать язык»), но
        для стран вне GCC и LatAm оно пустое не потому, что так решили, а
        потому, что правила для них нет. Подсветка спрашивает, а не запрещает:
@@ -1265,7 +1288,10 @@
       cursor: pointer; line-height: 1.4;
     }
     .cb-dup-slot-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: var(--adopy-text-table); }
-    .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-copyto-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: var(--adopy-text-table); background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--accent); font-weight: 500; font-family: inherit; cursor: pointer; line-height: 1.4; }
+    .cb-copyto-btn:hover:not(:disabled), .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-copyto-btn:disabled { color: var(--muted); cursor: not-allowed; }
+    .cb-copyto-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     .cb-dup-slot-btn:focus-visible, .cb-dup-ad-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     /* В ящике кампанию добавляет его «+ Campaign» у аккаунта; кнопка формы
        была второй дорогой туда же. На странице страны она остаётся. */
@@ -1373,6 +1399,14 @@
 
     /* Searchable select */
     .cb-sel-wrap { position: relative; width: 100%; }
+    /* Поле, куда пойдёт «Use» из Country Workbench: обводка и метка внутри поля, правее текста, левее стрелки. */
+    .cb-sel-wrap.cb-use-target { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+    .cb-use-tag { position: absolute; right: 1.5rem; top: 0.28rem; display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 0 0.1rem 0 0.45rem; border-radius: 999px; background: var(--accent); color: var(--bg-elev);
+      font-size: var(--adopy-text-xs); line-height: 1.3; z-index: 2; pointer-events: none; }
+    .cb-use-tag-x { pointer-events: auto; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 0 0.3rem; line-height: 1.3; }
+    .cb-use-target > [class~="cb-sel-text"] { padding-right: 7.5rem; }
+    .cb-use-tag-x:focus-visible { outline: 2px solid var(--focus-ring); border-radius: 999px; }
     .cb-sel-text {
       width: 100%;
       background: var(--field-bg);
@@ -6581,6 +6615,8 @@ window.cbKeep = (function () {
     return m ? m[1] : '';
   }
 
+  /* ACL-1443: поля Lifetime в черновике (версию черновика не поднимаем: старые читают как Daily). */
+  var LT_KEYS = ['budget_type', 'start_time', 'end_time', 'schedule', 'schedule_on'];
   function readSlot(slot) {
     var fields = {};
     slot.querySelectorAll('[name]').forEach(function (el) {
@@ -6605,6 +6641,20 @@ window.cbKeep = (function () {
        уходит на сервер ровно с теми полями, что и раньше. */
     var ov = slot.querySelector('.cb-name-override');
     if (ov) fields.name_override = ov.value;
+    /* ACL-1443: поля Lifetime живут в черновике только у кампании с Lifetime - черновик Daily
+       остаётся таким, каким был; флажок расписания не имеет `name`, поэтому едет отдельно. */
+    var stash = fields.start_time;
+    if (fields.budget_type === 'lifetime') {
+      var so = slot.querySelector('.cb-sched-on');
+      fields.schedule_on = so && so.checked ? '1' : '';
+    } else {
+      var isDaily = fields.budget_type === 'daily';
+      LT_KEYS.forEach(function (k) { delete fields[k]; });
+      /* start_time есть у черновиков v3 (пустой): Daily с этой страницы пишет его пустым, без старта lifetime;
+         карточка без поля budget_type (старая раскладка) своё значение сохраняет. */
+      if (isDaily) fields.start_time = '';
+      else if (typeof stash === 'string') fields.start_time = stash;
+    }
     var hint = slot.querySelector('.cb-targeting-hint');
     /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
     var hints = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hint'), function (h) { return h.textContent; });
@@ -6634,9 +6684,14 @@ window.cbKeep = (function () {
     slot.querySelectorAll('[name]').forEach(function (el) {
       var f = field(el);
       if (!f || !(f in data.fields)) return;
+      /* ACL-1443: сроки и расписание берём только из черновика с Lifetime. */
+      if (f !== 'start_time' && LT_KEYS.indexOf(f) !== -1 && data.fields.budget_type !== 'lifetime') return;
       if (el.type === 'radio') el.checked = (el.value === data.fields[f]);
       else el.value = data.fields[f];
     });
+    var schedOn = slot.querySelector('.cb-sched-on');
+    if (schedOn) schedOn.checked = data.fields.budget_type === 'lifetime' && data.fields.schedule_on === '1';
+    if (window.cbLifetime) window.cbLifetime.sync(slot);
     /* Тип файла объявления восстанавливается и в окнах поиска: иначе после перезагрузки
        видео-объявление ищет файл среди картинок и не находит ничего (найдено на ACL-2084). */
     slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
@@ -6843,9 +6898,7 @@ window.cbLayout = (function () {
   /* Что в дизайне есть, а бэкенда под ним пока нет. Такой элемент рисуется
      выключенным, без `name` (в форму не попадает, значения не подменяет), с
      подсказкой, называющей задачу. Подставлять ему состояние нельзя. */
-  var FUTURE = {
-    copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
-  };
+  var FUTURE = {};
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -6872,6 +6925,44 @@ window.cbLayout = (function () {
         + ' title="' + tip + '">' + esc(text || f.what) + '</button>';
     return '<span class="cb-future-wrap" data-future="' + esc(key) + '" title="' + tip + '">' + ctl
       + '<span class="cb-future-tag">' + esc(f.task) + '</span></span>';
+  }
+
+  /* ACL-2456: «Copy to accounts». Кнопка живая только с API-бэкендом; с RPA она выключена с причиной. */
+  var COPY_API_ONLY = 'API backend only';
+  function copyToButtonHtml(api) {
+    var base = '<button type="button" class="cb-copyto-btn" data-copy-to';
+    return api
+      ? base + ' title="Copy this campaign to other ad accounts. The copies are PAUSED drafts: Preview and Check plan still apply.">Copy to accounts…</button>'
+      : base + ' disabled aria-disabled="true" title="' + COPY_API_ONLY + '">Copy to accounts…</button>';
+  }
+
+  /* Сумма бюджета из поля: только положительное число, иначе null. Запятая - десятичный разделитель. */
+  function copyBudgetValue(raw) {
+    var t = String(raw == null ? '' : raw).trim().replace(',', '.');
+    if (!/^\d+(\.\d+)?$/.test(t)) return null;
+    var n = Number(t);
+    return isFinite(n) && n > 0 ? n : null;
+  }
+
+  /* Строка выбора: {picked, blocked, mode: 'keep'|'confirm', currency, entered}. '' - строка в порядке. */
+  function copyRowProblem(row) {
+    if (!row || !row.picked) return '';
+    if (row.blocked) return row.blocked;
+    if (row.mode === 'confirm' && copyBudgetValue(row.entered) === null) {
+      return 'Enter the budget' + (row.currency ? ' in ' + row.currency : '') + ' for ' + (row.label || 'this account');
+    }
+    return '';
+  }
+
+  /* Итог диалога: выбранные строки и первая причина, по которой копировать нельзя. */
+  function copyPlan(rows) {
+    var picked = (rows || []).filter(function (r) { return r && r.picked; });
+    if (!picked.length) return { picked: [], why: 'Pick at least one account' };
+    for (var i = 0; i < picked.length; i += 1) {
+      var why = copyRowProblem(picked[i]);
+      if (why) return { picked: picked, why: why };
+    }
+    return { picked: picked, why: '' };
   }
 
   /* Кампания: имя. Ручное имя используется, только если заполнено. */
@@ -7092,6 +7183,7 @@ window.cbLayout = (function () {
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
     FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
+    COPY_API_ONLY: COPY_API_ONLY, copyToButtonHtml: copyToButtonHtml, copyBudgetValue: copyBudgetValue, copyRowProblem: copyRowProblem, copyPlan: copyPlan,
     accountState: accountState, adsetName: adsetName, adsetLabel: adsetLabel, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
 })();
@@ -7180,6 +7272,9 @@ window.cbPreflight = (function () {
     var linkRe = new RegExp(C.link_re || '^$', 'i'), trackRe = new RegExp(C.track_re || '^$');
     var linkOk = linkRe.test(link);
     var out = [];
+    /* ACL-1443: бюджет lifetime - поля уровня кампании budget_type / start_time / end_time / schedule. */
+    var lifetime = s(inp.budget_type).toLowerCase() === 'lifetime';
+    var startValue = lifetime ? s(inp.start_time) : '';
     rules.forEach(function (rule) {
       if (rule.side !== 'client' || !(rule.applies === 'always' || dests[rule.applies])) return;
       var id = rule.id;
@@ -7215,7 +7310,8 @@ window.cbPreflight = (function () {
         }));
       } else if (id === 'budget_set') {
         var b = inp.budget, n = Number(b);
-        out.push(v(id, b !== null && b !== undefined && b !== '' && isFinite(n) && n > 0 ? 'ok' : 'error'));
+        var bOk = b !== null && b !== undefined && b !== '' && isFinite(n) && n > 0;
+        out.push(v(id, bOk ? 'ok' : 'error', bOk || !lifetime ? '' : 'lifetime'));
       } else if (id === 'age_range') {
         out.push(perSet(id, inp, function (st) {
           var lo = parseInt(st.age_min, 10), hi = parseInt(st.age_max, 10);
@@ -7236,12 +7332,47 @@ window.cbPreflight = (function () {
       } else if (id === 'start_time_valid') {
         var nw = s(inp.now), stRe = new RegExp(C.start_re || '^$');
         out.push(perSet(id, inp, function (st) {
-          var t = s(st.start_time);
-          if (!t) return '';
+          /* ACL-1443: при lifetime старт общий на кампанию и обязателен (зеркало start_bad). */
+          var t = lifetime ? (startValue || s(st.start_time)) : s(st.start_time);
+          if (!t) return lifetime ? 'required' : '';
           if (!stRe.test(t)) return 'format';
           if (stRe.test(nw) && t.slice(0, 10) < nw.slice(0, 10)) return 'past';
           return '';
         }));
+      } else if (id === 'end_time_valid') {
+        var nowE = s(inp.now), reE = new RegExp(C.start_re || '^$'), endV = s(inp.end_time), codeE = '';
+        if (lifetime) {
+          if (!endV) codeE = 'required';
+          else if (!reE.test(endV)) codeE = 'format';
+          else if (startValue && reE.test(startValue) && endV <= startValue) codeE = 'before_start';
+          else if (reE.test(nowE) && endV.slice(0, 10) < nowE.slice(0, 10)) codeE = 'past';
+        }
+        out.push(v(id, codeE ? 'error' : 'ok', codeE));
+      } else if (id === 'schedule_valid') {
+        /* Зеркало schedule_window_problem(with_tz=False): ровно три ключа, дни 0-6 без повторов,
+           минуты целые, 0 <= start < end <= 1440, на границах часа. */
+        var codeS = '', rawS = inp.schedule;
+        function windowBad(w) {
+          if (!w || typeof w !== 'object' || Array.isArray(w)) return true;
+          var ks = Object.keys(w).sort().join(',');
+          if (ks !== 'days,end_minute,start_minute') return true;
+          if (!Array.isArray(w.days) || !w.days.length) return true;
+          var seen = {};
+          for (var di = 0; di < w.days.length; di += 1) {
+            var d = w.days[di];
+            if (typeof d !== 'number' || d % 1 !== 0 || d < 0 || d > 6 || seen[d]) return true;
+            seen[d] = 1;
+          }
+          var a = w.start_minute, b2 = w.end_minute;
+          if (typeof a !== 'number' || typeof b2 !== 'number' || a % 1 !== 0 || b2 % 1 !== 0) return true;
+          return !(a >= 0 && a < b2 && b2 <= 1440) || a % 60 !== 0 || b2 % 60 !== 0;
+        }
+        if (Array.isArray(rawS) ? rawS.length : !!rawS) {
+          if (!lifetime) codeS = 'needs_lifetime';
+          else if (!Array.isArray(rawS) || rawS.every(function (w) { return w && typeof w === 'object' && !(w.days && w.days.length); })) codeS = 'empty';
+          else if (rawS.some(windowBad)) codeS = 'bad_window';
+        }
+        out.push(v(id, codeS ? 'error' : 'ok', codeS));
       } else if (id === 'ad_names_unique') {
         /* Имена различаются внутри набора (так создатель ищет и сверяет объявления). */
         var bad = [], all = numbered(inp);
@@ -7294,7 +7425,8 @@ window.cbPreflight = (function () {
           : notChecked ? 'Could not check' : fresh ? 'Not checked' : 'Not checked yet';
         got = v(rule.id, 'unknown', why);
       }
-      out.push({ rule: rule.id, label: rule.label, hint: rule.hint, status: got.status, detail: got.detail,
+      var ltTxt = s(inp.budget_type).toLowerCase() === 'lifetime' ? ((consts().lifetime_text || {})[rule.id] || {}) : {};
+      out.push({ rule: rule.id, label: ltTxt.label || rule.label, hint: ltTxt.hint || rule.hint, status: got.status, detail: got.detail,
                  ads: got.ads || [], sets: got.sets || [], field: rule.field, side: rule.side, severity: rule.severity, topic: rule.topic });
     });
     if (serverOn) out.push(planLine(opts, fresh, notChecked, out));
@@ -7387,6 +7519,659 @@ window.cbPreflight = (function () {
   return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
            lineText: lineText, table: table, topics: topics };
 })();
+</script>
+
+<script>
+/* ACL-1443: Lifetime-бюджет и расписание показа новой кампании.
+ *
+ * Daily (по умолчанию) не меняет ничего: поля Lifetime выключены (`disabled`) и в форму
+ * не попадают вовсе, значит запрос и ревизия черновика прежние. Время Start/End - настенное
+ * время рекламного кабинета: строка "YYYY-MM-DDTHH:MM" уходит как есть, через Date и пояс
+ * браузера она не проходит. Пояс браузера не нужен и для проверок: «сейчас» в кабинете
+ * считается через Intl по IANA-имени кабинета (или по смещению, если имени нет).
+ * Расписание: сетка 7x24, в данных 0 = Sunday ... 6 = Saturday, в окна сворачивается
+ * по тем же правилам, что у Meta (adset_schedule без timezone_type).
+ */
+window.cbLifetime = (function () {
+  var ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+  /* Порядок строк сетки (как в Ads Manager): Mon..Sun; в данных 0 = Sunday. */
+  var UI_DAYS = [1, 2, 3, 4, 5, 6, 0];
+  var DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var ZERO_DECIMAL = ['CLP', 'COP', 'CRC', 'HUF', 'ISK', 'IDR', 'JPY', 'KRW', 'PYG', 'TWD', 'VND'];
+  var learned = {};     // факты кабинетов, прочитанные из ответа Check plan
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  /* Единственное место, где билдер узнаёт пояс и валюту кабинета.
+     Источники: window.CB_ACCOUNT_FACTS[account] (если бэкенд положит на страницу) и то,
+     что принёс Check plan (summary.timezone_name / currency / timezone_offset_hours_utc).
+     Возвращает {currency, timezone_name, offset} с пустыми значениями, когда не знаем. */
+  function builderAccountFacts(account) {
+    var seed = (window.CB_ACCOUNT_FACTS || {})[account] || {};
+    var got = learned[account] || {};
+    function pick(k) { return got[k] != null && got[k] !== '' ? got[k] : (seed[k] != null ? seed[k] : ''); }
+    var off = pick('timezone_offset_hours_utc');
+    if (off === '') off = pick('utc_offset_hours');
+    return { currency: String(pick('currency') || '').toUpperCase(), timezone_name: String(pick('timezone_name') || ''),
+             offset: off === '' || !isFinite(Number(off)) ? null : Number(off) };
+  }
+
+  function validZone(name) {
+    if (!name) return false;
+    try { new Intl.DateTimeFormat('en-US', { timeZone: name }); return true; } catch (e) { return false; }
+  }
+
+  /* ACL-1448: Start/End и сетка вводятся по поясу команды (Израиль); в пояс кабинета их переводит бэкенд.
+     Пояс приходит с сервера (window.CB_TEAM_TIMEZONE), без него - Asia/Jerusalem. */
+  var TEAM_DEFAULT = 'Asia/Jerusalem';
+  function teamZone() { return validZone(window.CB_TEAM_TIMEZONE) ? window.CB_TEAM_TIMEZONE : TEAM_DEFAULT; }
+  /* Смещение пояса от UTC в минутах на момент ms (через Intl, как смещения на сервере - через zoneinfo). */
+  function zoneOffsetMin(zone, ms) {
+    var p = {};
+    new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(ms)).forEach(function (x) { p[x.type] = x.value; });
+    var wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return Math.round((wall - Math.floor(ms / 1000) * 1000) / 60000);
+  }
+  /* "YYYY-MM-DDTHH:MM" по часам пояса zone -> момент в мс; не дата - null. */
+  function isoToMs(iso, zone) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(iso || '');
+    if (!m || !validZone(zone)) return null;
+    var guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    var ms = guess - zoneOffsetMin(zone, guess) * 60000;
+    return guess - zoneOffsetMin(zone, ms) * 60000;
+  }
+  /* Смещение кабинета минус смещение команды на момент ms, в часах (может быть дробным). */
+  function shiftHoursAt(accountZone, ms) {
+    return (zoneOffsetMin(accountZone, ms) - zoneOffsetMin(teamZone(), ms)) / 60;
+  }
+  /* Тот же алгоритм, что team_grid_to_account_windows на сервере: сдвиг каждой часовой клетки,
+     перенос через полночь на соседний день недели (0 = Sunday, кольцо), склейка клеток дня в окна,
+     одинаковые окна разных дней - в одной записи; порядок: начало, конец, первый день. */
+  function convertWindows(wins, shift) {
+    var hours = [], d, h;
+    for (d = 0; d < 7; d += 1) hours.push({});
+    (wins || []).forEach(function (w) {
+      (w.days || []).forEach(function (day) {
+        for (var k = Math.floor(w.start_minute / 60); k < Math.ceil(w.end_minute / 60); k += 1) {
+          var t = day * 24 + k + shift;
+          hours[(((Math.floor(t / 24)) % 7) + 7) % 7][((t % 24) + 24) % 24] = true;
+        }
+      });
+    });
+    var bySpan = {}, order = [];
+    for (d = 0; d < 7; d += 1) {
+      h = 0;
+      while (h < 24) {
+        if (!hours[d][h]) { h += 1; continue; }
+        var a = h;
+        while (h < 24 && hours[d][h]) h += 1;
+        var key = a + '-' + h;
+        if (!bySpan[key]) { bySpan[key] = { days: [], start_minute: a * 60, end_minute: h * 60 }; order.push(key); }
+        bySpan[key].days.push(d);
+      }
+    }
+    return order.map(function (k) { return bySpan[k]; }).sort(function (x, y) {
+      return x.start_minute - y.start_minute || x.end_minute - y.end_minute || x.days[0] - y.days[0];
+    });
+  }
+
+  /* Настенное «сейчас» кабинета как "YYYY-MM-DDTHH:MM"; null - не знаем пояса. */
+  function nowInAccount(f) {
+    var now = new Date();
+    if (validZone(f.timezone_name)) {
+      var parts = new Intl.DateTimeFormat('en-GB', { timeZone: f.timezone_name, hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(now);
+      var p = {};
+      parts.forEach(function (x) { p[x.type] = x.value; });
+      return p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute;
+    }
+    if (f.offset != null) {
+      var d = new Date(now.getTime() + f.offset * 3600000);
+      return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate())
+        + 'T' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+    }
+    return null;
+  }
+
+  /* «Сейчас» по часам команды (Израиль): в этом поясе вводятся Start/End и сравниваются с датой аудита. */
+  function nowInTeam() { return nowInAccount({ timezone_name: teamZone(), offset: null }); }
+
+  function addDays(iso, n) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n));
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+
+  /* "UTC-5" / "UTC+5:30" на дату начала (смещение меняется с переводом часов). */
+  function offsetText(f, startIso) {
+    if (validZone(f.timezone_name)) {
+      try {
+        var at = ISO_RE.test(startIso || '') ? new Date(isoToMs(startIso, teamZone())) : new Date();
+        var txt = new Intl.DateTimeFormat('en-US', { timeZone: f.timezone_name, timeZoneName: 'longOffset' })
+          .formatToParts(at).filter(function (x) { return x.type === 'timeZoneName'; })[0].value;
+        var m = /GMT([+-])(\d{2}):(\d{2})/.exec(txt);
+        if (!m) return 'UTC';
+        return 'UTC' + m[1] + (+m[2]) + (m[3] !== '00' ? ':' + m[3] : '');
+      } catch (e) { /* ниже - по смещению */ }
+    }
+    if (f.offset != null) {
+      var h = f.offset, whole = Math.trunc(h), mins = Math.round(Math.abs(h - whole) * 60);
+      return 'UTC' + (h < 0 ? '-' : '+') + Math.abs(whole) + (mins ? ':' + pad2(mins) : '');
+    }
+    return '';
+  }
+
+  function tzLabel(f, startIso) {
+    var team = 'Times are Israel time (' + teamZone() + '). ';
+    if (!f.timezone_name && f.offset == null) return team + 'Account: unknown — Check plan will read it.';
+    var off = offsetText(f, startIso);
+    return team + 'Account: ' + (f.timezone_name || 'UTC offset') + (off ? ' (' + off + ')' : '');
+  }
+
+  function accountOf(slot) {
+    var row = slot && slot.closest ? slot.closest('.cb-acc-row') : null;
+    return row ? (row.dataset.accLabel || '') : '';
+  }
+  function q(slot, sel) { return slot.querySelector(sel); }
+  function fld(slot, suffix) { return q(slot, '[name$="_' + suffix + '"]'); }
+  function isLifetime(slot) { var h = fld(slot, 'budget_type'); return !!h && h.value === 'lifetime'; }
+  function scheduleOn(slot) { var c = q(slot, '.cb-sched-on'); return !!(c && c.checked); }
+
+  /* ── сетка <-> окна ────────────────────────────────────────────────── */
+  /* grid[d][h] (d: 0 = Sunday) -> [{days, start_minute, end_minute}]: соседние часы склеены,
+     одинаковые окна разных дней - в одном объекте. */
+  function gridToWindows(grid) {
+    var byKey = {}, order = [];
+    for (var d = 0; d < 7; d += 1) {
+      var h = 0;
+      while (h < 24) {
+        if (!grid[d][h]) { h += 1; continue; }
+        var start = h;
+        while (h < 24 && grid[d][h]) h += 1;
+        var key = (start * 60) + '-' + (h * 60);
+        if (!byKey[key]) { byKey[key] = { days: [], start_minute: start * 60, end_minute: h * 60 }; order.push(key); }
+        byKey[key].days.push(d);
+      }
+    }
+    return order.map(function (k) { return byKey[k]; }).sort(function (a, b) {
+      return a.start_minute - b.start_minute || a.end_minute - b.end_minute || a.days[0] - b.days[0];
+    });
+  }
+  function emptyGrid() {
+    var grid = [];
+    for (var d = 0; d < 7; d += 1) { grid.push([]); for (var h = 0; h < 24; h += 1) grid[d].push(false); }
+    return grid;
+  }
+  function windowsToGrid(wins) {
+    var grid = emptyGrid();
+    (Array.isArray(wins) ? wins : []).forEach(function (w) {
+      if (!w || !Array.isArray(w.days)) return;
+      w.days.forEach(function (d) {
+        if (!(d >= 0 && d <= 6)) return;
+        for (var h = Math.floor(w.start_minute / 60); h < Math.ceil(w.end_minute / 60) && h < 24; h += 1) grid[d][h] = true;
+      });
+    });
+    return grid;
+  }
+  function readGrid(slot) {
+    var grid = emptyGrid();
+    slot.querySelectorAll('.cb-sg-cell.is-on').forEach(function (c) { grid[+c.dataset.d][+c.dataset.h] = true; });
+    return grid;
+  }
+  function parseWindows(slot) {
+    var hid = fld(slot, 'schedule');
+    if (!hid || !hid.value) return [];
+    try { var w = JSON.parse(hid.value); return Array.isArray(w) ? w : []; } catch (e) { return []; }
+  }
+
+  /* "Mon–Fri 08–19, Sat–Sun 08–17" */
+  function daysText(days) {
+    var pos = days.map(function (d) { return UI_DAYS.indexOf(d); }).sort(function (a, b) { return a - b; });
+    var runs = [], i = 0;
+    while (i < pos.length) {
+      var j = i;
+      while (j + 1 < pos.length && pos[j + 1] === pos[j] + 1) j += 1;
+      var a = DAY_NAMES[UI_DAYS[pos[i]]], b = DAY_NAMES[UI_DAYS[pos[j]]];
+      runs.push(j === i ? a : a + '–' + b);
+      i = j + 1;
+    }
+    return runs.join(', ');
+  }
+  function firstPos(w) {
+    return Math.min.apply(null, w.days.map(function (d) { return UI_DAYS.indexOf(d); }));
+  }
+  function scheduleText(wins) {
+    return wins.slice().sort(function (x, y) {
+      return firstPos(x) - firstPos(y) || x.start_minute - y.start_minute;
+    }).map(function (w) {
+      return daysText(w.days) + ' ' + pad2(w.start_minute / 60) + '–' + pad2(w.end_minute / 60);
+    }).join(', ');
+  }
+
+  function moneyText(amount, currency) {
+    var n = Number(amount);
+    if (!isFinite(n) || n <= 0) return '?';
+    var t = String(Math.round(n * 100) / 100);
+    return currency === 'USD' ? '$' + t : t + (currency ? ' ' + currency : '');
+  }
+  function dateText(iso) {
+    if (!ISO_RE.test(iso || '')) return '?';
+    return iso.slice(8, 10) + ' ' + MONTHS[+iso.slice(5, 7) - 1] + ' ' + iso.slice(11, 16);
+  }
+  function dayText(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}/.test(iso || '')) return '?';
+    return iso.slice(8, 10) + ' ' + MONTHS[+iso.slice(5, 7) - 1];
+  }
+
+  /* Предпросмотр: "$840 lifetime · 05 Nov 09:53 – 12 Nov 09:45 (Israel time) · Mon–Fri 08–19, Sat–Sun 08–17" */
+  function previewText(slot) {
+    if (!isLifetime(slot)) return '';
+    var f = builderAccountFacts(accountOf(slot));
+    var b = fld(slot, 'budget'), s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+    var sv = s ? s.value : '', ev = e ? e.value : '';
+    var first = ISO_RE.test(sv) ? (sv.slice(11) === '00:00' ? dayText(sv) : dateText(sv)) : '?';
+    var last = ISO_RE.test(ev) ? dayText(endDateOf(ev)) : '?';
+    var out = [moneyText(b ? b.value : '', f.currency) + ' lifetime', first + ' – ' + last + ' (Israel time)'];
+    if (scheduleOn(slot)) {
+      var w = parseWindows(slot);
+      out.push(w.length ? scheduleText(w) : 'no hours picked');
+    } else {
+      out.push('all hours');
+    }
+    return out.join(' · ');
+  }
+
+  /* "00:00–18:00, 22:00–24:00" для окон одного дня. */
+  function runsText(wins) {
+    return wins.slice().sort(function (x, y) { return x.start_minute - y.start_minute; }).map(function (w) {
+      return pad2(w.start_minute / 60) + ':00–' + pad2(w.end_minute / 60) + ':00';
+    }).join(', ');
+  }
+  /* "Every day: 00:00–18:00, 22:00–24:00" или "Mon–Fri 00:00–18:00; Sat–Sun 02:00–24:00": дни с одинаковыми часами сжаты. */
+  function convertedText(conv) {
+    var perDay = {}, groups = {}, order = [];
+    conv.forEach(function (w) { w.days.forEach(function (d) { (perDay[d] = perDay[d] || []).push(w); }); });
+    UI_DAYS.forEach(function (d) {
+      if (!perDay[d]) return;
+      var t = runsText(perDay[d]);
+      if (!groups[t]) { groups[t] = []; order.push(t); }
+      groups[t].push(d);
+    });
+    if (order.length === 1 && groups[order[0]].length === 7) return 'Every day: ' + order[0];
+    return order.map(function (t) { return daysText(groups[t]) + ' ' + t; }).join('; ');
+  }
+  /* Что получит Meta: сетка Израиля в часах кабинета (разница поясов - на дату старта). */
+  function accountPreview(slot) {
+    if (!isLifetime(slot) || !scheduleOn(slot)) return '';
+    var wins = parseWindows(slot);
+    if (!wins.length) return '';
+    var f = builderAccountFacts(accountOf(slot));
+    if (!validZone(f.timezone_name)) return 'Account time zone is read on Check plan; hours are converted then.';
+    var ms = isoToMs(String((fld(slot, 'start_time') || {}).value || '').trim(), teamZone());
+    var shift = shiftHoursAt(f.timezone_name, ms == null ? Date.now() : ms);
+    if (shift !== Math.round(shift)) {
+      return 'The time difference to the account (' + f.timezone_name + ') is not a whole number of hours; Check plan will refuse this schedule.';
+    }
+    return 'Meta gets account time (' + f.timezone_name + '): ' + convertedText(convertWindows(wins, shift));
+  }
+
+  /* Клиентская предпроверка (зеркало серверной): [{id, text}]. */
+  function problems(slot) {
+    var out = [];
+    if (!isLifetime(slot)) return out;
+    var s = String((fld(slot, 'start_time') || {}).value || '').trim();
+    var e = String((fld(slot, 'end_time') || {}).value || '').trim();
+    if (!s) out.push({ id: 'lt_start', text: 'Lifetime budget needs a first day' });
+    else if (!ISO_RE.test(s)) out.push({ id: 'lt_start', text: 'First day is not a valid date' });
+    if (!e) out.push({ id: 'lt_end', text: 'Lifetime budget needs a last day' });
+    else if (!ISO_RE.test(e)) out.push({ id: 'lt_end', text: 'Last day is not a valid date' });
+    if (ISO_RE.test(s) && ISO_RE.test(e) && e <= s) out.push({ id: 'lt_order', text: 'Last day must not be before the first day' });
+    if (ISO_RE.test(s)) {
+      /* Сравнение по абсолютному времени: Start введён по Израилю, "сейчас" - настоящий момент. */
+      var sMs = isoToMs(s, teamZone());
+      if (sMs != null && sMs < Date.now()) out.push({ id: 'lt_past', text: 'First day is in the past (Israel time)' });
+    }
+    if (scheduleOn(slot) && !parseWindows(slot).length) out.push({ id: 'lt_schedule', text: 'Pick at least one hour' });
+    return out;
+  }
+
+  /* Строки для карточки pre-flight audit (тот же вид, что у таблицы правил). */
+  function lines(slot) {
+    return problems(slot).map(function (p) {
+      var sel = p.id === 'lt_end' || p.id === 'lt_order' ? '[data-lt-part="end"]'
+        : p.id === 'lt_schedule' ? '.cb-sg' : '[data-lt-part="start"]';
+      return { rule: p.id, label: p.text, hint: '', status: 'error', detail: '', ads: [], sets: [],
+               field: { sel: sel, level: 'campaign' }, side: 'client', severity: 'error', topic: 'budget' };
+    });
+  }
+
+  function scheduleEmpty(slot) { return isLifetime(slot) && scheduleOn(slot) && !parseWindows(slot).length; }
+
+  /* Поля Lifetime для входа аудита (как их ждёт evaluate_client): только у Lifetime.
+     Включённый флажок с пустой сеткой уходит окном без дней - правило отвечает "empty". */
+  function auditFields(slot) {
+    if (!isLifetime(slot)) return null;
+    refreshTodayStart(slot);
+    var out = {
+      budget_type: 'lifetime',
+      start_time: String((fld(slot, 'start_time') || {}).value || '').trim(),
+      end_time: String((fld(slot, 'end_time') || {}).value || '').trim()
+    };
+    /* ACL-1448: даты аудита сравниваются в одном поясе - команды, как и введены. */
+    var now = nowInTeam();
+    if (now) out.now = now;
+    if (scheduleOn(slot)) {
+      var w = parseWindows(slot);
+      out.schedule = w.length ? w : [{ days: [], start_minute: 0, end_minute: 0 }];
+    }
+    return out;
+  }
+
+  /* ── разметка ──────────────────────────────────────────────────────── */
+  function gridHtml() {
+    var h = '<div class="cb-sg" hidden onpointerdown="cbLtDown(event, this)" role="group" aria-label="Hours when ads run, Israel time">';
+    h += '<div class="cb-sg-row cb-sg-head"><span></span>';
+    for (var hr = 0; hr < 24; hr += 1) h += '<span class="cb-sg-hour">' + (hr % 3 === 0 ? hr : '') + '</span>';
+    h += '</div>';
+    UI_DAYS.forEach(function (d) {
+      h += '<div class="cb-sg-row"><button type="button" class="cb-sg-day" onclick="cbLtDay(this)" title="Select or clear the whole day">' + DAY_NAMES[d] + '</button>';
+      for (var k = 0; k < 24; k += 1) {
+        h += '<span class="cb-sg-cell" role="checkbox" aria-checked="false" data-d="' + d + '" data-h="' + k + '" title="' + DAY_NAMES[d] + ' ' + pad2(k) + ':00–' + pad2(k + 1) + ':00"></span>';
+      }
+      h += '</div>';
+    });
+    h += '<button type="button" class="cb-lt-preset" onclick="cbLtPreset(this)">Don\'t run 01:00–05:00 every day</button>';
+    h += '<div class="cb-lt-note" data-lt-acc-preview aria-live="polite"></div>';
+    return h + '</div>';
+  }
+  /* Переключатель Daily / Lifetime (вставляется рядом с полем бюджета). */
+  function segHtml(idx) {
+    return '<div class="cb-seg" role="group" aria-label="Budget type">'
+      + '<button type="button" class="cb-seg-btn" data-budget-type="daily" aria-pressed="true" onclick="cbLtType(this)">Daily</button>'
+      + '<button type="button" class="cb-seg-btn" data-budget-type="lifetime" aria-pressed="false" onclick="cbLtType(this)">Lifetime</button>'
+      + '</div><input type="hidden" name="camp_' + idx + '_budget_type" value="daily" disabled>';
+  }
+  /* Строки Lifetime (скрыты и выключены, пока выбран Daily). */
+  /* ACL-2448: Start/End - только даты (период), часы показа - сетка ниже, каждый день периода.
+     В форму уходят скрытые start_time/end_time: начало первого дня и конец последнего (00:00 следующего). */
+  function rowsHtml(idx) {
+    var dt = function (part, suffix, label, aria) {
+      return '<span class="cb-label cb-lt-only" hidden>' + label + '</span>'
+        + '<div class="cb-lt-only" hidden><input type="date" class="cb-input cb-lt-date" data-lt-part="' + part + '" value=""'
+        + ' aria-label="' + aria + '" oninput="cbLtDate(this)" onchange="cbLtDate(this)" title="Date in Israel (' + teamZone() + ')">'
+        + '<input type="hidden" name="camp_' + idx + '_' + suffix + '" value="" disabled></div>';
+    };
+    return dt('start', 'start_time', 'First day (Israel time)', 'First day, Israel time')
+      + dt('end', 'end_time', 'Last day (Israel time)', 'Last day, Israel time')
+      + '<span class="cb-label cb-lt-only" hidden></span>'
+      + '<div class="cb-lt-only cb-lt-note" hidden data-lt-tz></div>'
+      + '<span class="cb-label cb-lt-only" hidden>Hours (every day, Israel time)</span>'
+      + '<div class="cb-lt-only" hidden>'
+      + '<input type="checkbox" class="cb-sched-on" hidden tabindex="-1" aria-hidden="true">'
+      + '<div class="cb-lt-note">Ads run only in the highlighted hours, on every day from the first to the last day. Click or drag to switch hours off.</div>'
+      + gridHtml()
+      + '<input type="hidden" name="camp_' + idx + '_schedule" value="" disabled>'
+      + '</div>'
+      + '<span class="cb-label cb-lt-only" hidden></span>'
+      + '<div class="cb-lt-only" hidden><div class="cb-lt-err" data-lt-errors role="alert"></div><div class="cb-lt-note" data-lt-preview></div></div>';
+  }
+
+  /* ── синхронизация DOM ─────────────────────────────────────────────── */
+  function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
+  function setHidden(el, v) { if (el && el.hidden !== v) el.hidden = v; }
+  function setDisabled(el, v) { if (el && el.disabled !== v) el.disabled = v; }
+
+  /* Скрытые start_time/end_time -> видимые даты (черновик, повтор кампании). Конец 00:00 = предыдущий день включительно. */
+  function startDateOf(iso) { return ISO_RE.test(iso || '') ? iso.slice(0, 10) : ''; }
+  function endDateOf(iso) {
+    if (!ISO_RE.test(iso || '')) return '';
+    return iso.slice(11) === '00:00' ? addDays(iso, -1) : iso.slice(0, 10);
+  }
+  function paintDates(slot) {
+    var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+    var ds = q(slot, '[data-lt-part="start"]'), de = q(slot, '[data-lt-part="end"]');
+    var doc = slot.ownerDocument;
+    if (ds && s && doc.activeElement !== ds) { var vs = startDateOf(s.value); if (ds.value !== vs) ds.value = vs; }
+    if (de && e && doc.activeElement !== de) { var ve = endDateOf(e.value); if (de.value !== ve) de.value = ve; }
+  }
+  /* Даты -> скрытые поля. Первый день = сегодня: старт со следующего целого часа (00:00 уже прошло). */
+  function writeDates(slot) {
+    var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+    var ds = q(slot, '[data-lt-part="start"]'), de = q(slot, '[data-lt-part="end"]');
+    var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    if (s && ds) {
+      var sv = '';
+      if (DATE_RE.test(ds.value)) {
+        sv = ds.value + 'T00:00';
+        var now = nowInTeam();
+        if (now && now.slice(0, 10) === ds.value) {
+          var hr = +now.slice(11, 13) + 1;
+          sv = hr >= 24 ? addDays(ds.value, 1) + 'T00:00' : ds.value + 'T' + pad2(hr) + ':00';
+        }
+      }
+      s.value = sv;
+    }
+    if (e && de) e.value = DATE_RE.test(de.value) ? addDays(de.value, 1) + 'T00:00' : '';
+  }
+  /* Первый день = сегодня: старт "со следующего часа" устаревает, пока форма открыта (введено в 14:40 -
+     старт 15:00, в 15:08 он уже в прошлом). Пересчитываем при каждой синхронизации и перед аудитом. */
+  function refreshTodayStart(slot) {
+    var s = fld(slot, 'start_time'), ds = q(slot, '[data-lt-part="start"]');
+    if (!s || !ds || !/^\d{4}-\d{2}-\d{2}$/.test(ds.value)) return;
+    var now = nowInTeam();
+    if (now && now.slice(0, 10) === ds.value && s.value && s.value <= now) writeDates(slot);
+  }
+
+  function paintGrid(slot) {
+    /* Без расписания (флажок снят) сетка показывает все часы включёнными - кампания крутится круглые сутки. */
+    var grid = scheduleOn(slot) ? windowsToGrid(parseWindows(slot)) : windowsToGrid([{ days: [0, 1, 2, 3, 4, 5, 6], start_minute: 0, end_minute: 1440 }]);
+    slot.querySelectorAll('.cb-sg-cell').forEach(function (c) {
+      var on = grid[+c.dataset.d][+c.dataset.h];
+      if (c.classList.contains('is-on') !== on) c.classList.toggle('is-on', on);
+      if (c.getAttribute('aria-checked') !== String(on)) c.setAttribute('aria-checked', String(on));
+    });
+  }
+
+  function sync(slot) {
+    if (!slot || !slot.querySelector) return;
+    var hid = fld(slot, 'budget_type');
+    if (!hid) return;
+    var life = isLifetime(slot), on = life && scheduleOn(slot);
+    var api = window.ACL_FB_BACKEND === 'api';
+    setDisabled(hid, !life);              // Daily: поле в форму не идёт вовсе
+    slot.querySelectorAll('.cb-seg-btn').forEach(function (b) {
+      var want = b.dataset.budgetType === (life ? 'lifetime' : 'daily');
+      if (b.getAttribute('aria-pressed') !== String(want)) b.setAttribute('aria-pressed', String(want));
+      if (b.dataset.budgetType === 'lifetime') {
+        setDisabled(b, !api && !life);
+        var tip = !api && !life ? 'API backend only: lifetime budget is set through the Graph API' : '';
+        if (b.title !== tip) b.title = tip;
+      }
+    });
+    slot.querySelectorAll('.cb-lt-only').forEach(function (el) { setHidden(el, !life); });
+    var s = fld(slot, 'start_time'), e = fld(slot, 'end_time'), sch = fld(slot, 'schedule');
+    setDisabled(s, !life); setDisabled(e, !life);
+    setDisabled(sch, !(on && sch && sch.value));
+    setHidden(q(slot, '.cb-sg'), !life);
+    paintGrid(slot);
+    paintDates(slot);
+    if (life) refreshTodayStart(slot);
+    var f = builderAccountFacts(accountOf(slot));
+    var b = fld(slot, 'budget');
+    setText(q(slot, '[data-lt-budget-label]'), life ? 'Lifetime budget (' + (f.currency || 'account currency') + ')' : 'Campaign budget ($/day)');
+    if (b) {
+      var step = life && ZERO_DECIMAL.indexOf(f.currency) === -1 ? '0.01' : '1';
+      if (b.step !== step) b.step = step;
+      var tt = life ? 'Total budget for the whole run, in the account currency' : 'Daily budget of the whole campaign';
+      if (b.title !== tt) b.title = tt;
+    }
+    setText(q(slot, '[data-lt-tz]'), life ? tzLabel(f, s ? s.value : '') : '');
+    setText(q(slot, '[data-lt-errors]'), problems(slot).map(function (p) { return p.text; }).join('. '));
+    setText(q(slot, '[data-lt-preview]'), life ? previewText(slot) : '');
+    setText(q(slot, '[data-lt-acc-preview]'), on ? accountPreview(slot) : '');
+  }
+
+  function fire(el) { el.dispatchEvent(new Event('input', { bubbles: true })); }
+
+  /* Тип бюджета: при первом входе в Lifetime подставляется явно видимое умолчание
+     (старт завтра 00:00, конец +7 дней - по часам кабинета, если пояс известен). */
+  function setType(slot, type) {
+    var hid = fld(slot, 'budget_type');
+    if (!hid) return;
+    hid.value = type;
+    if (type === 'lifetime') {
+      var f = builderAccountFacts(accountOf(slot));
+      var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+      /* Умолчание считается по часам команды (Израиль), не браузера. */
+      var now = nowInTeam();
+      if (now) {
+        if (s && !s.value) s.value = addDays(now, 1) + 'T00:00';
+        if (e && !e.value && s && s.value) e.value = addDays(s.value, 7) + 'T00:00';
+      }
+    }
+    sync(slot);
+    fire(hid);
+  }
+
+  /* ── обработчики разметки ──────────────────────────────────────────── */
+  window.cbLtType = function (btn) {
+    var slot = btn.closest('.cb-slot');
+    if (slot && !btn.disabled) setType(slot, btn.dataset.budgetType);
+  };
+  window.cbLtChanged = function (el) { sync(el.closest('.cb-slot')); };
+  /* Открытая без действий форма тоже не держит устаревший старт сегодняшнего дня (раз в минуту). */
+  setInterval(function () {
+    document.querySelectorAll('.cb-slot').forEach(function (slot) {
+      var s = fld(slot, 'start_time');
+      if (!isLifetime(slot) || !s) return;
+      var before = s.value;
+      sync(slot);
+      if (s.value !== before) fire(s);
+    });
+  }, 60000);
+  window.cbLtDate = function (el) {
+    var slot = el.closest('.cb-slot');
+    if (!slot) return;
+    writeDates(slot);
+    sync(slot);
+    var s = fld(slot, 'start_time');
+    if (s) fire(s);
+  };
+  /* Пресет «не крутить 01:00-05:00 каждый день»: все часы, кроме 1-4, во все дни (по времени команды). */
+  window.cbLtPreset = function (btn) {
+    var slot = btn.closest('.cb-slot');
+    if (!slot) return;
+    slot.querySelectorAll('.cb-sg-cell').forEach(function (c) {
+      var on = !(+c.dataset.h >= 1 && +c.dataset.h <= 4);
+      c.classList.toggle('is-on', on);
+      c.setAttribute('aria-checked', String(on));
+    });
+    writeSchedule(slot);
+  };
+  window.cbLtSchedToggle = function (box) {
+    var slot = box.closest('.cb-slot');
+    sync(slot);
+    var hid = fld(slot, 'schedule');
+    if (hid) fire(hid);
+  };
+
+  /* ACL-2448: все 168 часов включены = расписания нет (Meta крутит круглые сутки); иначе флажок включается сам. */
+  function writeSchedule(slot) {
+    var grid = readGrid(slot);
+    var full = grid.every(function (row) { return row.every(Boolean); });
+    var box = q(slot, '.cb-sched-on');
+    if (box) box.checked = !full;
+    var wins = full ? [] : gridToWindows(grid);
+    var hid = fld(slot, 'schedule');
+    if (!hid) return;
+    hid.value = wins.length ? JSON.stringify(wins) : '';
+    sync(slot);
+    fire(hid);
+  }
+  /* Протяжка закрашивает прямоугольник от нажатой клетки до текущей (как в Ads Manager):
+     быстрое движение мыши не пропускает клетки; клетки вне прямоугольника возвращаются. */
+  var drag = null;
+  function paintRect(cur) {
+    if (!cur || !cur.classList || !cur.classList.contains('cb-sg-cell')) return;
+    var r0 = UI_DAYS.indexOf(+drag.from.dataset.d), r1 = UI_DAYS.indexOf(+cur.dataset.d);
+    var h0 = +drag.from.dataset.h, h1 = +cur.dataset.h;
+    var rLo = Math.min(r0, r1), rHi = Math.max(r0, r1), hLo = Math.min(h0, h1), hHi = Math.max(h0, h1);
+    drag.cells.forEach(function (c) {
+      var r = UI_DAYS.indexOf(+c.dataset.d), h = +c.dataset.h;
+      var inside = r >= rLo && r <= rHi && h >= hLo && h <= hHi;
+      var on = inside ? drag.on : c._was;
+      if (c.classList.contains('is-on') !== on) c.classList.toggle('is-on', on);
+      if (c.getAttribute('aria-checked') !== String(on)) c.setAttribute('aria-checked', String(on));
+    });
+  }
+  window.cbLtDown = function (ev, grid) {
+    var c = ev.target.closest ? ev.target.closest('.cb-sg-cell') : null;
+    if (!c || (ev.button != null && ev.button > 0)) return;
+    ev.preventDefault();
+    var cells = Array.prototype.slice.call(grid.querySelectorAll('.cb-sg-cell'));
+    cells.forEach(function (x) { x._was = x.classList.contains('is-on'); });
+    drag = { slot: grid.closest('.cb-slot'), on: !c._was, from: c, cells: cells };
+    paintRect(c);
+  };
+  document.addEventListener('pointermove', function (ev) {
+    if (!drag) return;
+    paintRect(document.elementFromPoint(ev.clientX, ev.clientY));
+  });
+  function endDrag() {
+    if (!drag) return;
+    var slot = drag.slot;
+    drag = null;
+    writeSchedule(slot);
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+  /* Подпись дня: весь день включить или выключить. */
+  window.cbLtDay = function (btn) {
+    var slot = btn.closest('.cb-slot'), cells = btn.parentNode.querySelectorAll('.cb-sg-cell');
+    var allOn = Array.prototype.every.call(cells, function (c) { return c.classList.contains('is-on'); });
+    cells.forEach(function (c) { c.classList.toggle('is-on', !allOn); c.setAttribute('aria-checked', String(!allOn)); });
+    writeSchedule(slot);
+  };
+
+  /* Ответ Check plan: запоминаем пояс/валюту кабинета и обновляем подписи. */
+  function ingestPlan(form, data) {
+    var row = form && form.closest ? form.closest('.cb-acc-row') : null;
+    var account = row ? (row.dataset.accLabel || '') : '';
+    ((data && data.results) || []).forEach(function (r) {
+      var s = r && r.plan && r.plan.summary;
+      if (!s || !account) return;
+      var got = learned[account] || (learned[account] = {});
+      ['currency', 'timezone_name', 'timezone_offset_hours_utc'].forEach(function (k) {
+        if (s[k] != null && s[k] !== '') got[k] = s[k];
+      });
+    });
+    if (form) form.querySelectorAll('.cb-slot').forEach(sync);
+  }
+  /* Строка предпросмотра кладётся в summary плана - её печатает cbPlanMoney. */
+  function annotate(form, data) {
+    ((data && data.results) || []).forEach(function (r) {
+      var s = r && r.plan && r.plan.summary;
+      if (!s || !form) return;
+      form.querySelectorAll('.cb-slot').forEach(function (slot) {
+        var nm = slot.querySelector('.cb-name-hidden');
+        if (nm && nm.value === r.campaign_name && isLifetime(slot)) {
+          s.lifetime_preview = previewText(slot);
+          s.lifetime_run = dateText((fld(slot, 'start_time') || {}).value) + ' to ' + dateText((fld(slot, 'end_time') || {}).value)
+            + ' (Israel time)';
+        }
+      });
+    });
+  }
+
+  return { facts: builderAccountFacts, scheduleEmpty: scheduleEmpty, auditFields: auditFields, segHtml: segHtml, rowsHtml: rowsHtml, sync: sync, lines: lines, problems: problems,
+           preview: previewText, ingestPlan: ingestPlan, annotate: annotate, gridToWindows: gridToWindows,
+           windowsToGrid: windowsToGrid, scheduleText: scheduleText, nowInAccount: nowInAccount,
+           nowInTeam: nowInTeam, teamZone: teamZone, convertWindows: convertWindows, accountPreview: accountPreview,
+           isoToMs: isoToMs };
+})();
+window.builderAccountFacts = window.cbLifetime.facts;
 </script>
 
 <script>
@@ -7525,6 +8310,10 @@ window.cbTree = (function () {
   var adIdx = 0, lastAdFor = '', lastAdCount = 0;
   /* ACL-1768: выбранный набор выбранной кампании (интерфейс, не данные). */
   var setIdx = 0, lastSetFor = '', lastSetCount = 0;
+  /* Поле-цель для «Use» из Country Workbench: `{campId, field, el}` — отмеченное кликом
+     поле билдера. Набор и объявление считаются по самому элементу, поэтому
+     удаление или перенос ряда их не «ломает». Интерфейс, не данные. */
+  var useField = null, lastAnnounce = '';
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -8338,13 +9127,19 @@ window.cbTree = (function () {
         os_min: val(sec, '[name$="_os_min"]').trim(), start_time: val(sec, '[name$="_start_time"]').trim()
       };
     });
-    return {
+    var out = {
       objective: 'leads',
       link: val(form, 'input[name="tracking_link"]'), country: val(form, '[name="country"]'),
       budget: budget === '' ? null : budget, ad_sets: sets,
       /* «Сейчас» - часы страницы (сверка по дате). */
       now: cbNowLocal()
     };
+    /* ACL-1443: Lifetime - поля только при lifetime (у Daily вход прежний); «сейчас» - по часам кабинета. */
+    if (window.cbLifetime) {
+      var lt = window.cbLifetime.auditFields(slot);
+      if (lt) Object.keys(lt).forEach(function (k) { out[k] = lt[k]; });
+    }
+    return out;
   }
 
   /* Строки карточки кампании: клиентские + серверные, что лежит на форме. */
@@ -8360,7 +9155,10 @@ window.cbTree = (function () {
       opts.accountAudit = hit.accountAudit || null;
       opts.stale = hit.rev !== pfRev(slot);
     }
-    return window.cbPreflight.lines(auditInput(slot), opts);
+    var base = window.cbPreflight.lines(auditInput(slot), opts);
+    /* ACL-1443: сроки и расписание Lifetime (клиентская предпроверка). */
+    var haveRules = window.cbPreflight.table().some(function (r) { return r.id === 'end_time_valid'; });
+    return window.cbLifetime && !haveRules ? base.concat(window.cbLifetime.lines(slot)) : base;
   }
 
   function auditCounts(slot) { return window.cbPreflight.count(auditLines(slot)); }
@@ -8635,6 +9433,8 @@ window.cbTree = (function () {
       edEmpty.hidden = false;
       lastHead = '';
       paintAudit(null);
+      useField = null;
+      announceUse(null);
       return;
     }
     edEmpty.hidden = true;
@@ -8645,7 +9445,120 @@ window.cbTree = (function () {
     if (html !== lastHead) { edHead.innerHTML = html; lastHead = html; }
     paintAudit(found);
     refreshAudit();
+    paintUseMark(found);
   }
+
+  /* ── Поле-цель для «Use» (Country Workbench) ────────────────────────────
+     Клик или фокус в поле, которое принимает «Use», делает его целью; Workbench
+     кладёт туда и больше никуда. Ключи совпадают с FIELD_LABEL в cwWorkbench. */
+  function useFieldKey(el) {
+    if (!el || !el.classList) return '';
+    if (el.classList.contains('cb-targeting-search')) return 'targeting';
+    if (el.classList.contains('cb-vertical-search')) return 'vertical';
+    if (el.classList.contains('cb-creative-search')) return 'file';
+    if (el.classList.contains('cb-adtitle-search')) return 'text1';
+    if (el.classList.contains('cb-text2-search')) {
+      var w = el.closest('.cb-sel-wrap');
+      var n = w && w.dataset.textx;
+      return 'text' + (n || '2');
+    }
+    return '';
+  }
+
+  /* Набор, объявление и поле цели — по живому элементу. null — цели нет или она устарела. */
+  function useResolve(found) {
+    if (!useField || !found || useField.campId !== openId) return null;
+    var el = useField.el, slot = found.camp.slot;
+    if (!el || !el.isConnected || !slot.contains(el)) return null;
+    var rows = slot.querySelectorAll('.cb-ad-row');
+    var row = el.closest('.cb-ad-row');
+    var sec = el.closest('.cb-adset-sec');
+    var ai = row ? Array.prototype.indexOf.call(rows, row) : -1;
+    var si = sec ? (parseInt(sec.dataset.adset, 10) || 0) : (row && window.cbRowSet ? window.cbRowSet(row) : 0);
+    return { setIndex: si, adIndex: Math.max(0, ai), field: useField.field, el: el };
+  }
+
+  /* Куда пойдёт «Use» сейчас: цель, иначе выбранный набор и его объявление. */
+  function useAt(found) {
+    var u = useResolve(found);
+    if (u) return u;
+    var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
+    var ai = Math.max(0, Math.min(adIdx, rows.length - 1));
+    var inSet = [];
+    Array.prototype.forEach.call(rows, function (r, i) {
+      if ((window.cbRowSet ? window.cbRowSet(r) : 0) === setIdx) inSet.push(i);
+    });
+    if (inSet.length && inSet.indexOf(ai) === -1) ai = inSet[0];
+    return { setIndex: setIdx, adIndex: ai, field: '' };
+  }
+
+  /* Событие для Workbench — только когда что-то из показанного изменилось. */
+  function announceUse(found) {
+    var sig = '';
+    if (found) {
+      var at = useAt(found);
+      sig = [openId, at.setIndex, at.adIndex, at.field, level, ticks().on.length].join('|');
+    }
+    if (sig === lastAnnounce) return;
+    lastAnnounce = sig;
+    try { document.dispatchEvent(new CustomEvent('acl:cbtarget')); } catch (e) { /* окружение без CustomEvent (юнит-харнесс) */ }
+  }
+
+  /* Обводка и метка «Use goes here» — только у текущей цели; в DOM пишем при изменении
+     (наблюдатель формы услышит мутацию, безусловная запись зациклила бы страницу). */
+  function paintUseMark(found) {
+    var u = useResolve(found);
+    if (useField && !u) useField = null;
+    var want = u ? u.el.closest('.cb-sel-wrap') : null;
+    host.querySelectorAll('.cb-use-target').forEach(function (w) {
+      if (w !== want) {
+        w.classList.remove('cb-use-target');
+        var old = w.querySelector(':scope > .cb-use-tag');
+        if (old) old.remove();
+      }
+    });
+    if (want) {
+      if (!want.classList.contains('cb-use-target')) want.classList.add('cb-use-target');
+      if (!want.querySelector(':scope > .cb-use-tag')) {
+        var tag = document.createElement('span');
+        tag.className = 'cb-use-tag';
+        tag.innerHTML = 'Use goes here <button type="button" class="cb-use-tag-x" aria-label="Clear the Use target" title="Clear the Use target">×</button>';
+        want.insertBefore(tag, want.firstChild);
+      }
+    }
+    announceUse(found);
+  }
+
+  function markUseField(el) {
+    var key = useFieldKey(el);
+    if (!key || !openId || !host.contains(el)) return;
+    var found = findCampaign(openId);
+    if (!found) return;
+    var same = useField && useField.el === el;
+    useField = { campId: openId, field: key, el: el };
+    var at = useResolve(found);
+    if (!same && at) { adIdx = at.adIndex; setIdx = at.setIndex; }
+    paintUseMark(found);
+  }
+
+  function clearUseField() {
+    if (!useField) return;
+    useField = null;
+    var found = openId ? findCampaign(openId) : null;
+    paintUseMark(found);
+  }
+
+  editor.addEventListener('pointerdown', function (e) {
+    if (e.target.closest && e.target.closest('.cb-use-tag-x')) return;
+    markUseField(e.target);
+  });
+  editor.addEventListener('focusin', function (e) { markUseField(e.target); });
+  editor.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && useField && e.target === useField.el) clearUseField();
+  });
+  editor.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.cb-use-tag-x')) clearUseField();
+  });
 
   function setLevel(next) {
     level = L.level(next);
@@ -8871,6 +9784,7 @@ window.cbTree = (function () {
   /* ── что делают руками ────────────────────────────────────────────── */
 
   function rememberOpen(id) {
+    if ((id || '') !== openId) useField = null;
     openId = id || '';
     try { localStorage.setItem(OPEN_KEY, openId); } catch (e) { /* не помним */ }
   }
@@ -9193,8 +10107,10 @@ window.cbTree = (function () {
     active: function () {
       var f = (openId && BORROWED) ? findCampaign(openId) : null;
       if (!f) return null;
+      var at = useAt(f);
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
-        countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
+        countryName: f.group.countryName, slot: f.camp.slot, adIndex: at.adIndex, setIndex: at.setIndex,
+        field: at.field, ticked: ticks().on.length, level: level };
     }
   };
 })();
@@ -9467,6 +10383,7 @@ window.cbMove = (function () {
       settleHidden(copy);
       return { label: 'copied campaign', slot: copy, notes: notes,
         text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
+        canUndo: function () { return copy.isConnected && !formBusy(destForm); },
         undo: function () {
           if (!copy.isConnected || formBusy(destForm)) return false;
           copy.remove();
@@ -9854,6 +10771,183 @@ window.cbMove = (function () {
     grip.title = locked ? MSG_BUILDING : DRAG_TIP;
   });
 
+  /* ═══ ACL-2456: «Copy to accounts» ═════════════════════════════════════
+     Копия кампании в формы других аккаунтов тем же узлом, что «Move to… → Copy» (doCamp): ссылка - своя у формы
+     аккаунта, Страница снова Automatic, id готовых Instant Form сняты. Сверх этого: сервер по карте аккаунтов
+     говорит про пиксель и валюту (/api/copy-to-accounts/targets), а бюджет в другой или неизвестной валюте
+     не переносится - его вводит человек. Копия - обычный черновик: Preview и Check plan, как у любого. */
+  var CTA_STYLE = false;
+  function budgetInputOf(slot) {
+    return $all(slot, 'input').filter(function (i) { return /_budget$/.test(i.name || ''); })[0] || null;
+  }
+  function ctaStyle() {
+    if (CTA_STYLE) return;
+    CTA_STYLE = true;
+    var st = document.createElement('style');
+    st.textContent = '.cbcp-back{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:1rem}'
+      + '.cbcp{background:var(--bg-elev);border:1px solid var(--field-border);border-radius:var(--radius-sm);box-shadow:var(--adopy-shadow-popover);width:min(34rem,100%);max-height:90vh;overflow:auto;padding:0.8rem;display:flex;flex-direction:column;gap:0.5rem;font-size:var(--adopy-text-table)}'
+      + '.cbcp h3{margin:0;font-size:1rem}.cbcp-note{color:var(--muted);font-size:var(--adopy-text-xs)}'
+      + '.cbcp-row{border:1px solid var(--border-strong);border-radius:4px;padding:0.4rem 0.5rem;display:flex;flex-direction:column;gap:0.25rem}'
+      + '.cbcp-row.cbcp-off{opacity:.6}.cbcp-head{display:flex;gap:0.5rem;align-items:center}'
+      + '.cbcp-why{color:var(--danger);font-size:var(--adopy-text-xs)}.cbcp-budget{display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap}'
+      + '.cbcp-btns{display:flex;gap:0.5rem;justify-content:flex-end}';
+    document.head.appendChild(st);
+  }
+  function ctaEl(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function ctaRowsForLayout(rows) {
+    return rows.map(function (r) {
+      return { picked: r.picked, blocked: r.blocked, mode: r.mode, currency: r.currency, entered: r.entered, label: r.label };
+    });
+  }
+
+  async function openCopyTo(slot) {
+    var L = window.cbLayout;
+    if (window.ACL_FB_BACKEND !== 'api') { toast(L.COPY_API_ONLY, { warn: true }); return; }
+    if (!slot || activeBuild(slot)) { toast(MSG_BUILDING, { warn: true }); return; }
+    var srcForm = slot.closest('form'), srcAcct = cbFormAccount(srcForm);
+    var cands = forms().filter(function (f) {
+      var a = cbFormAccount(f);
+      return a && a !== '?' && a !== srcAcct;
+    });
+    if (!cands.length) { toast('There is no other account to copy to.', { warn: true }); return; }
+    var info = {};
+    try {
+      var resp = await fetch('/api/copy-to-accounts/targets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: srcAcct, targets: cands.map(cbFormAccount) }) });
+      var data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error(data.error || 'Could not read the account map.');
+      (data.targets || []).forEach(function (t) { info[t.label] = t; });
+    } catch (err) { toast(String(err.message || err), { warn: true }); return; }
+    var srcBudget = budgetInputOf(slot), srcAmount = srcBudget ? String(srcBudget.value || '').trim() : '';
+    var rows = cands.map(function (f) {
+      var t = info[cbFormAccount(f)] || { ok: false, blockers: ['This account is not in the account map.'], notes: [], budget: { mode: 'confirm' } };
+      var blocked = !t.ok ? (t.blockers || []).join(' ') : (formBusy(f) ? busyMsg(f) : '');
+      var why = check({ kind: 'camp', mode: 'copy', slot: slot, destForm: f });
+      if (!blocked && why && why !== NOOP) blocked = why;
+      return { form: f, label: acctLabel(f), picked: false, blocked: blocked, mode: (t.budget || {}).mode || 'confirm',
+               currency: (t.budget || {}).target_currency || '', reason: (t.budget || {}).reason || '', notes: t.notes || [],
+               entered: '', countryChange: countryOf(f) !== countryOf(srcForm) ? countryOf(f) : '' };
+    });
+    ctaStyle();
+    var back = ctaEl('div', 'cbcp-back'), box = ctaEl('div', 'cbcp');
+    box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Copy to accounts');
+    back.appendChild(box);
+    box.appendChild(ctaEl('h3', '', 'Copy “' + niceName(slot) + '” to accounts'));
+    box.appendChild(ctaEl('div', 'cbcp-note', 'Each copy is a draft in that account’s builder. Its tracking link is the account’s own, the Page is Automatic, '
+      + 'existing Instant Form ids are cleared. Nothing is created until you run Preview and Check plan there; created campaigns are PAUSED.'));
+    var list = ctaEl('div', '');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:0.35rem';
+    box.appendChild(list);
+    var warn = ctaEl('div', 'cbcp-why');
+    warn.setAttribute('role', 'status');
+    var btns = ctaEl('div', 'cbcp-btns'), cancel = ctaEl('button', 'btn', 'Cancel'), go = ctaEl('button', 'btn', 'Copy');
+    cancel.type = 'button'; go.type = 'button';
+    btns.appendChild(cancel); btns.appendChild(go);
+    box.appendChild(warn); box.appendChild(btns);
+
+    function refresh() {
+      var plan = L.copyPlan(ctaRowsForLayout(rows));
+      go.disabled = !!plan.why;
+      warn.textContent = plan.picked.length ? plan.why : '';
+    }
+    rows.forEach(function (r) {
+      var row = ctaEl('div', 'cbcp-row' + (r.blocked ? ' cbcp-off' : '')), head = ctaEl('label', 'cbcp-head');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.disabled = !!r.blocked;
+      head.appendChild(cb); head.appendChild(ctaEl('span', '', r.label)); row.appendChild(head);
+      if (r.blocked) row.appendChild(ctaEl('div', 'cbcp-why', r.blocked));
+      var more = ctaEl('div', '');
+      more.hidden = true; row.appendChild(more);
+      r.notes.forEach(function (n) { more.appendChild(ctaEl('div', 'cbcp-note', n)); });
+      if (r.countryChange) more.appendChild(ctaEl('div', 'cbcp-note', 'Audience country becomes ' + r.countryChange + ' and the name is rebuilt.'));
+      var bud = ctaEl('div', 'cbcp-budget');
+      if (r.mode === 'confirm') {
+        bud.appendChild(ctaEl('div', 'cbcp-why', r.reason || 'Enter the budget for this account.'));
+        var lab = ctaEl('label', '', 'Budget' + (r.currency ? ' (' + r.currency + ')' : '') + (srcAmount ? ' · source: ' + srcAmount : '') + ' ');
+        var inp = document.createElement('input');
+        inp.type = 'text'; inp.inputMode = 'decimal'; inp.className = 'cb-input cb-input-sm';
+        inp.setAttribute('aria-label', 'Budget for ' + r.label);
+        inp.addEventListener('input', function () { r.entered = inp.value; refresh(); });
+        lab.appendChild(inp); bud.appendChild(lab);
+      } else {
+        bud.appendChild(ctaEl('div', 'cbcp-note', 'Same currency' + (r.currency ? ' (' + r.currency + ')' : '') + ': the budget ' + (srcAmount || '') + ' is kept. Check it for this account.'));
+      }
+      more.appendChild(bud);
+      cb.addEventListener('change', function () { r.picked = cb.checked; more.hidden = !cb.checked; refresh(); });
+      list.appendChild(row);
+    });
+    function close() { back.remove(); document.removeEventListener('keydown', onKey, true); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+    document.addEventListener('keydown', onKey, true);
+    cancel.addEventListener('click', close);
+    back.addEventListener('mousedown', function (e) { if (e.target === back) close(); });
+    go.addEventListener('click', function () {
+      var plan = L.copyPlan(ctaRowsForLayout(rows));
+      if (plan.why) { warn.textContent = plan.why; return; }
+      close();
+      applyCopy(slot, rows.filter(function (r) { return r.picked; }));
+    });
+    document.body.appendChild(back);
+    refresh();
+    var first = box.querySelector('input:not([disabled])');
+    if (first) first.focus();
+  }
+
+  function applyCopy(slot, picked) {
+    var L = window.cbLayout, done = [], notes = [], skipped = [], warn = false;
+    picked.forEach(function (r) {
+      var plan = { kind: 'camp', mode: 'copy', slot: slot, destForm: r.form };
+      var why = check(plan);
+      if (why) { skipped.push(r.label + ': ' + (why === NOOP ? 'already there' : why)); return; }
+      var res = doCamp(plan);
+      if (!res) { skipped.push(r.label + ': the copy could not be made'); return; }
+      /* Id формы источника снят в doCamp; видимый список форм перерисовывается сразу, а не при следующей правке. */
+      if (window.cbFillFormSelects) window.cbFillFormSelects(res.slot);
+      if (r.mode === 'confirm') {
+        /* Сумма источника не остаётся: на её месте то, что ввёл человек. */
+        var inp = budgetInputOf(res.slot), amount = L.copyBudgetValue(r.entered);
+        if (!inp || amount === null) { res.undo(); skipped.push(r.label + ': the budget field could not be set'); return; }
+        inp.value = String(amount);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (twinClash(res.slot)) {
+        notes.push(r.label + ' already has a campaign named “' + slotName(res.slot) + '”. Publish all will combine them into one campaign.');
+        warn = true;
+      }
+      done.push({ r: r, res: res });
+    });
+    notes = notes.concat(skipped.map(function (s) { return 'Not copied — ' + s; }));
+    if (skipped.length) warn = true;
+    if (!done.length) { toast('Nothing was copied.', { warn: true, notes: notes }); return; }
+    var names = done.map(function (d) { return d.r.label; }).join(', ');
+    var entry = push({ label: 'copied campaign to ' + done.length + (done.length === 1 ? ' account' : ' accounts'),
+      undo: function () {
+        /* Всё или ничего: пока хоть одну копию нельзя снять (форма занята, копии уже нет), не снимается ни одна,
+           запись остаётся в стеке, а человек видит «Can't undo». */
+        if (!done.every(function (d) { return d.res.canUndo(); })) return false;
+        var ok = true;
+        done.slice().reverse().forEach(function (d) { if (!d.res.undo()) ok = false; });
+        return ok;
+      } });
+    toast('Copied “' + niceName(slot) + '” to ' + names + '. Run Preview and Check plan there before creating.', { entry: entry, notes: notes, warn: warn });
+    repaintTree();
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-copy-to]') : null;
+    if (!b || b.disabled) return;
+    var slot = b.closest('.cb-slot');
+    if (!slot) return;
+    e.preventDefault();
+    openCopyTo(slot);
+  });
+
   return {
     dragging: function () { return !!(drag && !drag.paintOk); },
     deferPaint: function () { pendingPaint = true; },
@@ -9861,7 +10955,8 @@ window.cbMove = (function () {
     check: check,
     undoLatest: undoLatest,
     undoDepth: function () { return undoStack.length; },
-    menuOpen: function () { return !!menu; }
+    menuOpen: function () { return !!menu; },
+    copyTo: openCopyTo
   };
 })();
 </script>
@@ -15811,6 +16906,19 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (vh) vh.value = v;
   };
 
+  /* «Use» из Country Workbench: вертикальная пара файла и имена файлов выбранного типа
+     (CREATIVES виден только этому блоку). Только чтение. */
+  window.cbVerticalPartnerOf = function (picked) {
+    var f = CREATIVES.filter(function (c) { return c.filename === picked || c.rel_path === picked; })[0];
+    var pf = f && f.vertical_partner ? CREATIVES.filter(function (c) { return c.rel_path === f.vertical_partner; })[0] : null;
+    if (!pf || pf.type !== f.type) return '';
+    var dup = CREATIVES.filter(function (c) { return c.filename.toLowerCase() === pf.filename.toLowerCase(); }).length > 1;
+    return dup ? pf.rel_path : pf.filename;
+  };
+  window.cbCreativeNames = function (ctype) {
+    return CREATIVES.filter(function (c) { return c.type === ctype; }).map(function (c) { return c.rel_path || c.filename; });
+  };
+
   // close creative dropdown on blur
   document.addEventListener('click', function(e) {
     document.querySelectorAll('.cb-creative-sel-wrap .cb-sel-dropdown').forEach(function(d) {
@@ -17196,6 +18304,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var srcOv = srcSlot.querySelector('.cb-name-override');
     var newOv = newSlot.querySelector('.cb-name-override');
     if (srcOv && newOv) newOv.value = srcOv.value;
+    // ACL-1443: флажок расписания не имеет `name` - копируется отдельно, затем подписи и сетка.
+    var srcSched = srcSlot.querySelector('.cb-sched-on'), newSched = newSlot.querySelector('.cb-sched-on');
+    if (srcSched && newSched) newSched.checked = srcSched.checked;
+    if (window.cbLifetime) window.cbLifetime.sync(newSlot);
     // Пустой язык подсвечивается сразу, а не после первой правки.
     var dupLang = newSlot.querySelector('[name="camp_' + idx + '_language"]');
     if (dupLang && typeof cbLanguageChanged === 'function') cbLanguageChanged(dupLang);
@@ -17644,8 +18756,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<span class="cb-label">Asset / Offer</span>' +
       '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
       /* Бюджет — на кампании (CBO): выбор ABO/CBO владелец снял. */
-      '<span class="cb-label">Campaign budget ($/day)</span>' +
-      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
+      /* ACL-1443: Daily (прежнее поведение) или Lifetime со сроками и расписанием. */
+      '<span class="cb-label" data-lt-budget-label>Campaign budget ($/day)</span>' +
+      '<div class="cb-inline cb-budget-box">' + (window.cbLifetime ? window.cbLifetime.segHtml(idx) : '') +
+      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign" oninput="if (window.cbLtChanged) cbLtChanged(this)">' +
+      '</div>' + (window.cbLifetime ? window.cbLifetime.rowsHtml(idx) : '') +
       '<span class="cb-label">Facebook Page</span>' +
       '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
       '<select class="cb-input cb-page-select" aria-label="Facebook Page" onfocus="cbLoadPages(this.closest(\'.cb-slot\'))" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
@@ -17656,7 +18771,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* Дублирование кампании живёт в её карточке (ACL-1459). */
       '<div class="cb-lvl-actions">' +
       '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
-      future('copyTo', 'button', 'Copy to accounts') +
+      (window.cbLayout ? window.cbLayout.copyToButtonHtml(window.ACL_FB_BACKEND === 'api') : '') +
       '</div>' +
       '</section>' +
       '<div class="cb-adsets">' + buildAdsetSectionHTML(idx, 0) + '</div>' +
@@ -18930,8 +20045,20 @@ function cbPlanFormData(form, only) {
 }
 
 function cbPlanMoney(s) {
+  /* ACL-1443: у Lifetime строка собрана на странице (cbLifetime.annotate) или пришла из плана. */
+  if (s && s.lifetime_preview) return s.lifetime_preview;
+  if (s && Number(s.lifetime_budget) > 0) return Number(s.lifetime_budget).toFixed(2) + ' ' + (s.currency || '') + ' lifetime';
   var n = Number(s && s.daily_budget);
   return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
+}
+/* ACL-1443: lifetime идёт по датам, а не «с включения» - строка плана говорит это прямо.
+ * Стоят после cbPlanMoney: node-проверка шаблона вырезает блок плана начиная с неё. */
+function cbPlanIsLifetime(s) { return !!(s && (s.lifetime_preview || Number(s.lifetime_budget) > 0)); }
+function cbPlanLifetimeRun(s) {
+  var win = s.lifetime_run || (s.start_time && s.end_time ? s.start_time + ' to ' + s.end_time
+    + (s.timezone_name ? ' (' + s.timezone_name + ')' : '') : '');
+  return 'Runs ' + (win ? 'from ' + win + ' ' : '') + 'even while paused — turning it on late spends the whole budget in the time left; '
+    + 'after the end date it completes without delivery.';
 }
 
 /* ACL-1771: термины таргетинга. Точное имя берётся само; всё остальное - «picked X for Y?»
@@ -18997,8 +20124,8 @@ function cbPlanHtml(data) {
       + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
       + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
-      + (s ? ' · Campaign PAUSED · ad sets and ads active, start when you turn the campaign on · ' + aclEscHtml(cbPlanMoney(s))
-           + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
+      + (s ? ' · Campaign PAUSED · ' + (cbPlanIsLifetime(s) ? aclEscHtml(cbPlanLifetimeRun(s)) : 'ad sets and ads active, start when you turn the campaign on') + ' · ' + aclEscHtml(cbPlanMoney(s))
+           + (s.existing ? ' · <em>unfinished earlier run; a publish would finish it</em>' : '') : '')
       + '</div>';
     if (r.cached && r.checked_at) h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">· checked at '
       + aclEscHtml(window.cbPfTime(Date.parse(r.checked_at))) + ', unchanged</div>';
@@ -19315,6 +20442,17 @@ window.cbCheckPlan = function (picked, out, btn, force) {
   });
   out.hidden = false;
   if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
+  /* ACL-1443: расписание включено, а часов нет - не проверять и не отправлять lifetime «круглые сутки». */
+  var noHours = [];
+  forms.forEach(function (x) {
+    Array.prototype.forEach.call(x.only || x.form.querySelectorAll('.cb-slot'), function (slot) {
+      if (window.cbLifetime && window.cbLifetime.scheduleEmpty(slot)) noHours.push(cbSlotTitle(slot) || 'a campaign');
+    });
+  });
+  if (noHours.length) {
+    out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Pick at least one hour in the ad schedule of ' + aclEscHtml(noHours.join(', ')) + ' (or turn the schedule off).</div>');
+    return;
+  }
   out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Opening the Multilogin profile and checking the plan'
     + ' through the Graph API (usually 30 s – 3 min per account); nothing is written. Publishing never starts by itself after a check.</div>');
   // ACL-1990: на кнопке — сколько идёт проверка; refreshTicks перерисовывает подпись.
@@ -19365,6 +20503,7 @@ window.cbCheckPlan = function (picked, out, btn, force) {
         if (!data.account) data.account = cbFormTitle(x.form);
         // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
         if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);
+        if (window.cbLifetime) { window.cbLifetime.ingestPlan(x.form, data); window.cbLifetime.annotate(x.form, data); }
         parts[i] = cbPlanHtml(data);
         planDatas.push(data);
         pending[i] = '';
@@ -22753,13 +23892,52 @@ window.cwWorkbench = (function () {
       + '<div class="cw-ref" data-ref="peer"><b>Observed peers</b>' + esc(peer) + '</div></div>';
   }
 
-  /* Куда уйдёт улика: Country / Account / Campaign / Ad set (/ Ad). */
+  var FIELD_LABEL = { file: 'File', vertical: 'Stories / Reels file', text1: 'Primary text 1', text2: 'Primary text 2',
+    text3: 'Primary text 3', text4: 'Primary text 4', text5: 'Primary text 5', targeting: 'Targeting' };
+
+  /* В какое поле реально пойдёт улика. kind — target / creative / landing; active.field —
+     отмеченное в билдере поле ('' — не отмечено). */
+  function useField(kind, ev, active) {
+    var f = (active && active.field) || '';
+    if (kind === 'target') return { field: 'targeting', ok: true, reason: '' };
+    if (kind !== 'creative') return { field: '', ok: true, reason: '' };
+    if (f === 'file' || f === 'vertical') return { field: f, ok: true, reason: '' };
+    if (/^text[1-5]$/.test(f)) {
+      if (ev && ev.text) return { field: f, ok: true, reason: '' };
+      return { field: f, ok: false, reason: 'This version has no ad text — mark a file field instead' };
+    }
+    return { field: '', ok: true, reason: '' };   // не отмечено (или Targeting): файл + Primary text 1
+  }
+
+  /* Куда уйдёт улика: Country / Account / Campaign / Ad set N (/ Ad M (/ поле)).
+     kind 'builder' — строка «Builder destination»: объявление и отмеченное поле, если оно есть. */
   function destinationPath(active, kind) {
     if (!active) return '';
     var parts = [active.countryName || active.country || '', active.account || '',
-      active.name || 'Untitled campaign', 'Ad set 1'];
-    if (kind === 'creative') parts.push('Ad ' + ((active.adIndex || 0) + 1));
+      active.name || 'Untitled campaign', 'Ad set ' + ((active.setIndex || 0) + 1)];
+    var f = active.field || '';
+    if (kind === 'creative') {
+      parts.push('Ad ' + ((active.adIndex || 0) + 1));
+      if (f && f !== 'targeting') parts.push(FIELD_LABEL[f]);
+    } else if (kind === 'builder') {
+      if (f && f !== 'targeting') parts.push('Ad ' + ((active.adIndex || 0) + 1), FIELD_LABEL[f]);
+      else if (f === 'targeting') parts.push(FIELD_LABEL[f]);
+      else parts.push('Ad ' + ((active.adIndex || 0) + 1));
+    }
     return parts.filter(Boolean).join(' / ');
+  }
+
+  /* Подсказка кнопки Use: что и куда она положит (или почему не может). */
+  function useTitle(kind, ev, active) {
+    if (!active) return 'No draft is selected in the builder';
+    var set = 'Ad set ' + ((active.setIndex || 0) + 1), ad = 'Ad ' + ((active.adIndex || 0) + 1);
+    if (kind === 'landing') return 'Noted on the draft — the builder has no landing field';
+    if (kind === 'target') return 'Puts the target into: ' + set + ' · Targeting';
+    var u = useField(kind, ev, active);
+    if (!u.ok) return u.reason;
+    if (!u.field) return 'Puts the file and its ad text into: ' + ad + ' · File + Primary text 1';
+    if (u.field === 'vertical' || u.field === 'file') return 'Puts the file into: ' + ad + ' · ' + FIELD_LABEL[u.field];
+    return 'Puts the ad text into: ' + ad + ' · ' + FIELD_LABEL[u.field];
   }
 
   /* Решение «можно ли и куда» — без DOM. active == null — выбора нет. */
@@ -22771,6 +23949,8 @@ window.cwWorkbench = (function () {
       return { ok: false, reason: 'no_target',
         message: 'No draft is selected in the builder. Open a campaign there (or add one), then press Use again. Evidence is never added to the last campaign automatically.' };
     }
+    var fld = useField(kind, ctx.ev, active);
+    if (!fld.ok) return { ok: false, reason: 'field', message: fld.reason + '.' };
     var notes = [];
     if (ctx.country && active.country && ctx.country !== active.country) {
       notes.push('This evidence is from ' + (ctx.countryName || ctx.country) + ', the selected draft is in ' + (active.countryName || active.country) + '.');
@@ -22778,12 +23958,12 @@ window.cwWorkbench = (function () {
     if (ctx.asset && active.asset && String(ctx.asset).toLowerCase() !== String(active.asset).toLowerCase()) {
       notes.push('The evidence asset is “' + ctx.asset + '”, the draft asset is “' + active.asset + '”.');
     }
-    return { ok: true, destination: destinationPath(active, kind),
+    return { ok: true, destination: destinationPath(active, kind), field: fld.field,
       mismatch: notes.length ? notes.join(' ') + ' Use it anyway?' : '' };
   }
 
   /* Какой файл из выпадающего списка билдера — точно этот пакет и версия. */
-  function pickCreativeFile(names, pack, version) {
+  function pickCreativeFiles(names, pack, version) {
     var hits = [];
     names.forEach(function (n, i) {
       var base = String(n).split(/[\\/]/).pop().toLowerCase();
@@ -22793,6 +23973,10 @@ window.cwWorkbench = (function () {
       var v = lead ? String(parseInt(lead[1], 10)) : '';
       if (version ? v === String(version) : true) hits.push(i);
     });
+    return hits;
+  }
+  function pickCreativeFile(names, pack, version) {
+    var hits = pickCreativeFiles(names, pack, version);
     return hits.length === 1 ? hits[0] : -1;
   }
 
@@ -23014,12 +24198,33 @@ window.cwWorkbench = (function () {
     if (!box) return;
     var a = activeTarget();
     var cid = panel.dataset.country;
-    var path = a ? destinationPath(a, 'campaign') : '';
-    box.className = 'cw-dest' + (a ? '' : ' cw-dest-empty');
-    box.innerHTML = '<span class="cw-dest-label">Builder destination</span>'
+    var path = a ? destinationPath(a, 'builder') : '';
+    var cls = 'cw-dest' + (a ? '' : ' cw-dest-empty');
+    var html = '<span class="cw-dest-label">Builder destination</span>'
       + '<span class="cw-dest-path">' + (a ? esc(path) : 'No draft selected — evidence is not added anywhere until you pick one') + '</span>'
       + '<button type="button" class="cw-link" data-cw-open-builder>' + (a ? 'Change in builder' : 'Open builder') + '</button>'
+      + (a && a.ticked > 1 ? '<span class="cw-dest-status">Only the open campaign gets it; ticked campaigns are not changed.</span>' : '')
       + (statusText[cid] ? '<span class="cw-dest-status' + (statusText[cid].warn ? ' cw-warn' : '') + '">' + esc(statusText[cid].text) + '</span>' : '');
+    /* Только при изменении: строка обновляется по событию и раз в секунду, без лишних перерисовок. */
+    if (box.className !== cls) box.className = cls;
+    if (box._cwHtml !== html) { box._cwHtml = html; box.innerHTML = html; }
+    refreshUseButtons(panel, a);
+  }
+
+  /* Подсказка и доступность каждой кнопки Use — по отмеченному полю. */
+  function refreshUseButtons(panel, a) {
+    var cid = panel.dataset.country, st = states[cid];
+    var d = dataOf(panel);
+    if (!st || !d.data || !d.data.slices) return;
+    var sl = d.data.slices[st.asset] || d.data.slices[''];
+    panel.querySelectorAll('.cw-use').forEach(function (btn) {
+      var ev = evidenceFor(st.tab, sl, btn);
+      var kind = btn.dataset.cwUse;
+      var title = ev ? useTitle(kind, ev, a) : '';
+      var off = !!(a && ev && kind === 'creative' && !useField(kind, ev, a).ok);
+      if (btn.title !== title) btn.title = title;
+      if (btn.disabled !== off) btn.disabled = off;
+    });
   }
 
   function say(panel, text, warn) {
@@ -23027,10 +24232,10 @@ window.cwWorkbench = (function () {
     refreshDest(panel);
   }
 
-  function stamp(slot, kind, value, ctx, panel) {
+  function stamp(slot, kind, field, value, ctx, panel) {
     var list = [];
     try { list = JSON.parse(slot.dataset.cwEvidence || '[]'); } catch (e) { list = []; }
-    list.push({ kind: kind, value: value, country: ctx.countryName, asset: ctx.asset || 'All assets',
+    list.push({ kind: kind, field: field || '', value: value, country: ctx.countryName, asset: ctx.asset || 'All assets',
       from: panel.dataset.cwFrom || '', to: panel.dataset.cwTo || '', component: 'revision ' + (list.length + 1) });
     slot.dataset.cwEvidence = JSON.stringify(list);
     slot.dataset.cwCombination = 'new';   // изменённая комбинация: CPA источника её не предсказывает
@@ -23041,54 +24246,100 @@ window.cwWorkbench = (function () {
   }
 
   function applyTarget(a, ev) {
-    var input = a.slot.querySelector('.cb-targeting-search');
+    var sec = a.slot.querySelector('.cb-adset-sec[data-adset="' + (a.setIndex || 0) + '"]');
+    var input = (sec || a.slot).querySelector('.cb-targeting-search');
     if (!input) return { done: false, text: 'This draft has no targeting field.' };
     input.value = ev.target;
     var ok = typeof window.cbTargetingCommit === 'function' && window.cbTargetingCommit(input);
-    if (ok) { changed(input); return { done: true, text: 'Target “' + ev.target + '” set on the draft’s ad set.' }; }
+    if (ok) { changed(input); return { done: true, text: 'Target “' + ev.target + '” set on Ad set ' + ((a.setIndex || 0) + 1) + '.' }; }
     if (typeof window.cbTargetingSearch === 'function') window.cbTargetingSearch(input);
     changed(input);
     return { done: false, text: 'No saved target is named “' + ev.target + '”. The text is in the field — pick a saved target from the list; nothing was guessed.' };
   }
 
-  function applyCreative(a, ev) {
+  /* Выбрать из выпадающего списка поля единственную опцию-файл пакета/версии (или partner). */
+  function fillFileField(input, ev, want) {
+    var wrap = input.closest('.cb-sel-wrap');
+    input.value = want || ev.pack;
+    /* ACL-1903: текст положен кодом, а не человеком, но прежний выбранный файл в скрытом поле
+       от него не должен остаться: если подходящего файла не нашлось, в окне — искомый пакет,
+       а в плане — старый файл. cbCreativeTyped снимает выбор, потом поиск ставит новый. */
+    if (typeof window.cbCreativeTyped === 'function') window.cbCreativeTyped(input);
+    else if (typeof window.cbCreativeSearch === 'function') window.cbCreativeSearch(input);
+    var opts = Array.prototype.slice.call(wrap.querySelectorAll('.cb-sel-opt[data-val]'));
+    var ix = want
+      ? opts.map(function (o) { return o.dataset.val; }).indexOf(want)
+      : pickCreativeFile(opts.map(function (o) { return o.dataset.val; }), ev.pack, ev.version);
+    changed(input);
+    if (ix >= 0) {
+      opts[ix].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      return { ok: true, msg: 'file ' + opts[ix].dataset.val };
+    }
+    return { ok: false, msg: opts.length + ' file' + (opts.length === 1 ? '' : 's') + ' match pack ' + ev.pack + (ev.version ? ' version ' + ev.version : '') + ' — pick the file from the list' };
+  }
+
+  /* Текст версии — в поле Primary text N (1: .cb-adtitle-search, 2: .cb-text2-search, 3-5: по data-textx). */
+  function textInputOf(row, field) {
+    if (field === 'text1') return row.querySelector('.cb-adtitle-search');
+    if (field === 'text2') return row.querySelector('.cb-sel-wrap.cb-text2-sel-wrap:not([data-textx]) .cb-text2-search');
+    return row.querySelector('.cb-textx-sel-wrap[data-textx="' + field.slice(4) + '"] .cb-text2-search');
+  }
+
+  function applyCreative(a, ev, field) {
     var rows = a.slot.querySelectorAll('.cb-ad-row');
     // 1769: карточки объявлений стоят стопкой, скрытых нет — берём нужную по номеру.
     var row = rows[a.adIndex || 0] || rows[0];
     if (!row) return { done: false, text: 'This draft has no ad to put a creative on.' };
     var msgs = [], done = true;
+    field = field || '';
+    var no = Array.prototype.indexOf.call(rows, row) + 1;
 
-    var fileIn = row.querySelector('.cb-creative-search');
-    if (fileIn && ev.pack) {
-      fileIn.value = ev.pack;
-      /* ACL-1903: текст положен кодом, а не человеком, но прежний выбранный файл в скрытом поле
-         от него не должен остаться: если подходящего файла не нашлось, в окне — искомый пакет,
-         а в плане — старый файл. cbCreativeTyped снимает выбор, потом поиск ставит новый. */
-      if (typeof window.cbCreativeTyped === 'function') window.cbCreativeTyped(fileIn);
-      else if (typeof window.cbCreativeSearch === 'function') window.cbCreativeSearch(fileIn);
-      var opts = Array.prototype.slice.call(row.querySelectorAll('.cb-creative-sel-wrap .cb-sel-opt[data-val]'));
-      var ix = pickCreativeFile(opts.map(function (o) { return o.dataset.val; }), ev.pack, ev.version);
-      if (ix >= 0) {
-        opts[ix].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        msgs.push('file ' + opts[ix].dataset.val);
-      } else {
-        done = false;
-        msgs.push(opts.length + ' file' + (opts.length === 1 ? '' : 's') + ' match pack ' + ev.pack + (ev.version ? ' version ' + ev.version : '') + ' — pick the file from the list');
+    if (field === 'vertical') {
+      var vIn = row.querySelector('.cb-vertical-search');
+      if (!vIn) return { done: false, text: 'Ad ' + no + ' has no Stories / Reels file field (API mode only).' };
+      var partner = '';
+      var mainWrap = row.querySelector('.cb-creative-sel-wrap:not(.cb-vertical-sel-wrap)');
+      if (mainWrap && typeof window.cbCreativeNames === 'function' && typeof window.cbVerticalPartnerOf === 'function') {
+        var names = window.cbCreativeNames(mainWrap.dataset.ctype || 'Image');
+        /* Файлов пакета/версии может быть несколько (квадрат и вертикаль): берём пару, если она одна. */
+        var found = [];
+        pickCreativeFiles(names, ev.pack, ev.version).forEach(function (i) {
+          var pr = window.cbVerticalPartnerOf(names[i]);
+          if (pr && found.indexOf(pr) === -1) found.push(pr);
+        });
+        if (found.length === 1) partner = found[0];
       }
-      changed(fileIn);
+      var vr = fillFileField(vIn, ev, partner);
+      if (!vr.ok && partner) vr = fillFileField(vIn, ev, '');
+      if (!vr.ok) done = false;
+      msgs.push(vr.msg);
+      return { done: done, text: (done ? 'Stories / Reels file set on Ad ' : 'Stories / Reels file started on Ad ') + no + ': ' + msgs.join('; ') + '.' };
     }
-    var textIn = row.querySelector('.cb-adtitle-search');
+
+    if (!field || field === 'file') {
+      var fileIn = row.querySelector('.cb-creative-search');
+      if (fileIn && ev.pack) {
+        var fr = fillFileField(fileIn, ev, '');
+        if (!fr.ok) done = false;
+        msgs.push(fr.msg);
+      }
+    }
+    var textField = !field ? 'text1' : (/^text/.test(field) ? field : '');
+    var textIn = textField ? textInputOf(row, textField) : null;
     if (textIn && ev.text) {
       textIn.value = ev.text;
       if (typeof window.cbAdTitleSearch === 'function') window.cbAdTitleSearch(textIn);
-      var hit = Array.prototype.filter.call(row.querySelectorAll('.cb-adtitle-sel-wrap .cb-sel-opt[data-val]'), function (o) {
+      var hit = Array.prototype.filter.call(textIn.closest('.cb-sel-wrap').querySelectorAll('.cb-sel-opt[data-val]'), function (o) {
         return (o.dataset.val || '').toLowerCase() === ev.text.toLowerCase();
       })[0];
       if (hit) { hit.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); msgs.push('ad text ' + ev.text); }
       else { done = false; msgs.push('no saved ad text named “' + ev.text + '” — pick one from the list'); }
       changed(textIn);
+    } else if (textField && field && !textIn) {
+      done = false;
+      msgs.push('Ad ' + no + ' has no ' + FIELD_LABEL[field] + ' field');
     }
-    return { done: done, text: (done ? 'Creative set on Ad ' : 'Creative started on Ad ') + (Array.prototype.indexOf.call(rows, row) + 1) + ': ' + msgs.join('; ') + '.' };
+    return { done: done, text: (done ? 'Creative set on Ad ' : 'Creative started on Ad ') + no + ': ' + msgs.join('; ') + '.' };
   }
 
   function applyLanding(a, ev) {
@@ -23102,15 +24353,15 @@ window.cwWorkbench = (function () {
     var cid = panel.dataset.country;
     var ctx = { country: cid, countryName: panel.dataset.cwCountry, asset: (states[cid] || {}).asset || '' };
     var active = activeTarget();
-    var plan = planUse(kind, ctx, active);
+    var plan = planUse(kind, Object.assign({ ev: ev }, ctx), active);
     if (!plan.ok) { say(panel, plan.message, true); return plan; }
     if (plan.mismatch && !await aclConfirm(plan.mismatch.replace(/\s*Use it anyway\?$/, ''),
         { title: 'Use it anyway?', okLabel: 'Use it' })) {
       say(panel, 'Cancelled — nothing was added.', false);
       return { ok: false, reason: 'declined' };
     }
-    var res = kind === 'target' ? applyTarget(active, ev) : (kind === 'creative' ? applyCreative(active, ev) : applyLanding(active, ev));
-    stamp(active.slot, kind, kind === 'target' ? ev.target : (kind === 'landing' ? ev.landing : (ev.pack + (ev.version ? ' v' + ev.version : ''))), ctx, panel);
+    var res = kind === 'target' ? applyTarget(active, ev) : (kind === 'creative' ? applyCreative(active, ev, plan.field) : applyLanding(active, ev));
+    stamp(active.slot, kind, plan.field, kind === 'target' ? ev.target : (kind === 'landing' ? ev.landing : (ev.pack + (ev.version ? ' v' + ev.version : ''))), ctx, panel);
     if (window.cbTree && typeof window.cbTree.refreshEditor === 'function') window.cbTree.refreshEditor();
     say(panel, plan.destination + ' — ' + res.text + ' New combination: the source CPA does not predict it.', !res.done && !res.noted);
     return { ok: true, applied: !!res.done, destination: plan.destination, text: res.text };
@@ -23176,6 +24427,11 @@ window.cwWorkbench = (function () {
       var p = document.querySelector('.cw-panel.active');
       if (p && !document.hidden) refreshDest(p);
     }, 1000);
+    /* Билдер сообщает о смене кампании, уровня, набора, объявления и поля-цели. */
+    document.addEventListener('acl:cbtarget', function () {
+      var p = document.querySelector('.cw-panel.active');
+      if (p) refreshDest(p);
+    });
     document.addEventListener('acl:viewchange', function () {
       var p = document.querySelector('.cw-panel.active');
       if (p) refreshDest(p);
@@ -23183,7 +24439,7 @@ window.cwWorkbench = (function () {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  return { planUse: planUse, destinationPath: destinationPath, useEvidence: useEvidence, render: render,
+  return { planUse: planUse, pickCreativeFiles: pickCreativeFiles, destinationPath: destinationPath, useField: useField, useTitle: useTitle, useEvidence: useEvidence, render: render,
     select: selectAsset, selected: selectedAsset };
 })();
 </script>
