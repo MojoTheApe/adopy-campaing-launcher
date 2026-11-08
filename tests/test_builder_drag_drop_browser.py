@@ -62,6 +62,8 @@ def _seed(p, account=0, count=2, ads=1):
               r.querySelector('input[name$="_creative_file"]').value = 'offline-' + (c * 10 + a) + '.png';
             });
           });
+          // Имя кампании собирается из полей; пересобираем до снимка "до", иначе оно устаревшее.
+          document.querySelectorAll('.cb-slot').forEach(s => cbUpdateName(s));
         }""",
         [account, ads],
     )
