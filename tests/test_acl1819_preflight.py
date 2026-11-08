@@ -155,10 +155,20 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "texts_dynamic_alone_ok": (_with(ads=_ad(0, bodies=["a", "b", "c", "d", "e"])[:1]), "texts_dynamic", "ok", []),
     "texts_dynamic_not_with_vertical": (_with(ads=_ad(0, vertical_file="v.png", bodies=["a", "b"])),
                                         "texts_dynamic", "ok", []),
+    # ACL-2403: лента ассетов по-прежнему требует и основной текст, и заголовок - отказ заранее, а не при Publish.
+    "feed_texts_ok_plain": (_with(), "feed_texts", "ok", []),
+    "feed_texts_ok_multi": (_with(ads=_ad(0, bodies=["a", "b"], headlines=["h"])), "feed_texts", "ok", []),
+    "feed_texts_vertical_no_headline": (_with(ads=_ad(0, vertical_file="v.png", headline="", headlines=[])),
+                                        "feed_texts", "error", [1]),
+    "feed_texts_vertical_no_body": (_with(ads=_ad(1, vertical_file="v.png", body="", bodies=[])),
+                                    "feed_texts", "error", [2]),
+    "feed_texts_multi_no_headline": (_with(ads=_ad(0, bodies=["a", "b"], headline="", headlines=[])),
+                                     "feed_texts", "error", [1]),
+    "feed_texts_one_text_no_headline_ok": (_with(ads=_ad(0, headline="")), "feed_texts", "ok", []),
     "primary_ok": (_with(), "primary_text", "ok", []),
-    "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "error", [1]),
+    "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "warning", [1]),
     "headline_ok": (_with(), "headline", "ok", []),
-    "headline_missing": (_with(ads=_ad(0, headline="")), "headline", "error", [1]),
+    "headline_missing": (_with(ads=_ad(0, headline="")), "headline", "warning", [1]),
     "headline_40_ok": (_with(ads=_ad(0, headline="x" * 40)), "headline_len", "ok", []),
     "headline_41_warns": (_with(ads=_ad(0, headline="x" * 41)), "headline_len", "warning", [1]),
     "primary_125_ok": (_with(ads=_ad(0, body="y" * 125)), "primary_len", "ok", []),
@@ -684,10 +694,10 @@ def _topics(case: dict) -> list:
 
 
 def test_topics_take_the_worst_status_of_their_checks():
-    broken = _with(link="https://track.example.com/c", ads=_ad(0, body=""))
+    broken = _with(link="https://track.example.com/c", ads=_ad(0, file=""))
     got = {t["id"]: t for t in _topics({"input": broken, "opts": {"backend": "rpa"}})}
     assert "meta" not in got, "под RPA нет проверки с Meta"
-    assert got["creative"]["status"] == "error" and "primary_text" in got["creative"]["rules"]
+    assert got["creative"]["status"] == "error" and "media_chosen" in got["creative"]["rules"]
     assert got["destination"]["status"] == "warning"
     assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set", "start_time_valid", "end_time_valid", "schedule_valid"]
     # Новое правило main участвует в максимуме своего раздела, а не теряется.
