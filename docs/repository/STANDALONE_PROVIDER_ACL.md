@@ -13,7 +13,7 @@ The provider, engine and trusted private-checkout workflow select the same sourc
 Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/e94e9a4c7f5291631cf9e6046dc3a719e7e04d35/docs/STANDALONE_WORKFLOW_PROVIDER.md)
 and the [current ACL workflow](WORKFLOW.md). The provider validates the exact
 Master 1.8.0 ancestry in the descriptor and template baseline. For current
-shared guidance, use Master Repo 1.9.0 from [AGENTS.md](../../AGENTS.md).
+shared guidance, use Master Repo 1.11.0 from [AGENTS.md](../../AGENTS.md).
 
 The two-provider upgrade reuses ACL-2351's reviewed ancestry procedure: the exact
 old official source reproduces all92 pristine files, then the new official
