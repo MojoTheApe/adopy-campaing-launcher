@@ -96,12 +96,40 @@ assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не �
 assert.equal(L.futureTip('texts'), '', 'ACL-1774: тексты 3-5 больше не заглушка');
 assert.equal(L.futureTip('media'), '', 'ACL-1774: файл Stories / Reels больше не заглушка');
 assert.equal(L.futureTip('placements'), '', 'ACL-1772: placement editor is implemented');
-assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');
+assert.equal(L.futureTip('copyTo'), '', 'ACL-2456: Copy to accounts is a real control now');
 assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не заглушка');
 ['gender', 'languages'].forEach((k) => assert.equal(L.futureTip(k), '', k + ': ACL-1767 больше не заглушка'));
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
-assert.ok(!/<script/.test(L.futureHtml('copyTo', 'select', '<script>x</script>')));
+assert.equal(L.futureHtml('copyTo', 'select', 'x'), '', 'ACL-2456: no disabled stub is drawn for copyTo any more');
+
+// ── ACL-2456: Copy to accounts ────────────────────────────────────────
+const on = L.copyToButtonHtml(true), off = L.copyToButtonHtml(false);
+assert.ok(/data-copy-to/.test(on) && !/ disabled/.test(on), 'API backend: the button is live');
+assert.ok(/ disabled /.test(off) && /title="API backend only"/.test(off), 'RPA backend: disabled with the reason');
+assert.equal(L.COPY_API_ONLY, 'API backend only');
+assert.equal(L.copyBudgetValue('50'), 50);
+assert.equal(L.copyBudgetValue(' 12,5 '), 12.5, 'comma is a decimal separator');
+['', '0', '-3', 'abc', '1e3', '5 USD', null, undefined].forEach((v) =>
+  assert.equal(L.copyBudgetValue(v), null, 'not a budget: ' + String(v)));
+// no pick, nothing to do
+assert.equal(L.copyPlan([]).why, 'Pick at least one account');
+assert.equal(L.copyPlan([{ picked: false, mode: 'keep' }]).why, 'Pick at least one account');
+// same known currency: the amount is kept, no input is needed
+assert.equal(L.copyPlan([{ picked: true, mode: 'keep' }]).why, '');
+// a currency mismatch (or unknown currency) is never copied silently: the buyer must type the amount
+const needs = L.copyPlan([{ picked: true, mode: 'confirm', currency: 'EUR', label: 'UL1', entered: '' }]);
+assert.equal(needs.why, 'Enter the budget in EUR for UL1');
+assert.equal(L.copyPlan([{ picked: true, mode: 'confirm', currency: '', label: 'UL1', entered: '' }]).why,
+  'Enter the budget for UL1');
+assert.equal(L.copyPlan([{ picked: true, mode: 'confirm', currency: 'EUR', label: 'UL1', entered: '0' }]).why !== '', true);
+assert.equal(L.copyPlan([{ picked: true, mode: 'confirm', currency: 'EUR', label: 'UL1', entered: '45' }]).why, '');
+// a blocked account that is picked stops the copy with its own reason; an unpicked one does not
+assert.equal(L.copyPlan([{ picked: true, blocked: 'Same ad account as the source.', mode: 'keep' }]).why, 'Same ad account as the source.');
+assert.equal(L.copyPlan([{ picked: true, mode: 'keep' }, { picked: false, blocked: 'x', mode: 'confirm' }]).why, '');
+// one bad row among good ones stops the whole copy
+assert.equal(L.copyPlan([{ picked: true, mode: 'keep' }, { picked: true, mode: 'confirm', currency: 'EUR', label: 'B', entered: '' }]).why,
+  'Enter the budget in EUR for B');
 
 // ── сообщения сервера → поля ──────────────────────────────────────────
 const sels = (m) => L.routes(m).map((r) => r.sel);
