@@ -349,10 +349,13 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
         for x in spec.get(kind_name) or []:
             if isinstance(x, dict) and isinstance(x.get("text"), str) and len(x["text"]) > limit:
                 refuse(f"{kind_name} text is {len(x['text'])} characters long, the limit is {limit}")
-    if not _is_text_list(spec.get("bodies"), "bodies", required=True, limit_count=cap):
-        refuse(f"bodies must hold 1-{cap} non-empty texts")
+    # ACL-2474: Meta принял ленту без основного текста, но с заголовком (живой прогон 08.11, job 893dd606), поэтому
+    # `bodies` можно не давать вовсе. Случаи «основной текст есть, заголовка нет» и «текстов нет совсем» живьём не
+    # проверены - отказ по ним сохранён: `titles` обязателен.
+    if "bodies" in spec and not _is_text_list(spec["bodies"], "bodies", required=True, limit_count=cap):
+        refuse(f"bodies must hold 1-{cap} non-empty texts, or be left out")
     if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):
-        refuse(f"titles must hold 1-{cap} non-empty texts")
+        refuse(f"titles must hold 1-{cap} non-empty texts (a headline is required in an asset-feed ad)")
     if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True,
                                                     limit_count=cap):
         refuse(f"descriptions must hold 1-{cap} non-empty texts")

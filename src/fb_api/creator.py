@@ -2769,10 +2769,12 @@ class CampaignCreator:
             return row
 
         spec: dict[str, Any] = {
-            "bodies": [{"text": t} for t in ad.bodies], "titles": [{"text": t} for t in ad.titles],
+            "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
             "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
+        if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
+            spec["bodies"] = [{"text": t} for t in ad.bodies]
         if ad.descriptions:
             spec["descriptions"] = [{"text": t} for t in ad.descriptions]
         if ad.vertical_path:

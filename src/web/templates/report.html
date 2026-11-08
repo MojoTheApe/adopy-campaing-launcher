@@ -7304,7 +7304,7 @@ window.cbPreflight = (function () {
       else if (id === 'feed_texts') out.push(perAd(id, inp, function (a) {
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
         if (!multi && !s(a.vertical_file)) return false;
-        return !((s(a.body) || distinct(a.bodies).length) && (s(a.headline) || distinct(a.headlines).length));
+        return !(s(a.headline) || distinct(a.headlines).length); // ACL-2474: основной текст не обязателен
       }));
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
