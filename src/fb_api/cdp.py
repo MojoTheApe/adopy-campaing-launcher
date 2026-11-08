@@ -476,6 +476,8 @@ class PageTab:
              on_event: Callable[[dict], None] | None = None) -> dict:
         if self.closed:
             raise CdpError("the tab is closed")
+        if on_event is None:
+            on_event = self.on_event
         try:
             return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout,
                          on_event=on_event)
@@ -483,6 +485,16 @@ class PageTab:
             if "session with given id not found" in str(exc).lower():
                 raise SessionLostError("the owned tab's browser session was detached") from exc
             raise
+
+    #: Optional handler for CDP events of this tab (used only by the offline light-tab probe).
+    on_event: Callable[[dict], None] | None = None
+
+    def pump(self, seconds: float) -> int:
+        """Handle `on_event` events for `seconds` without sending anything (probe only)."""
+        if self.on_event is None or self.closed:
+            time.sleep(max(0.0, seconds))
+            return 0
+        return self._cdp.drain(seconds, self.on_event)
 
     @staticmethod
     def _check_url(actual: str, expected: str) -> None:

@@ -1,8 +1,8 @@
 """ACL-2344, шаг P1/P2 (вариант A'): проба «лёгкой» рабочей вкладки.
 
 Ничего не уходит в Meta: документ `__acl_work` на origin Ads Manager отдаёт сам
-браузер через `Fetch.fulfillRequest`, любой другой перехваченный запрос
-обрывается (`Fetch.failRequest`). Вместо токена передаётся случайная строка-заглушка.
+браузер через `Fetch.fulfillRequest`, ЛЮБОЙ другой запрос вкладки (шаблон `*`)
+обрывается (`Fetch.failRequest`); перехват не снимается, пока жива вкладка. Вместо токена передаётся случайная строка-заглушка.
 Наружу (в Python, лог, телеметрию) возвращаются только булевы значения и коды причин.
 """
 from __future__ import annotations
@@ -44,9 +44,16 @@ def _js(value: str) -> str:
     return json.dumps(value)
 
 
-def open_light_document(tab: PageTab, *, timeout: float = 15.0) -> dict:
-    """Открыть синтетический документ в `tab`; вернуть {ok, reason, blocked, fulfilled}."""
-    seen = {"fulfilled": 0, "blocked": 0}
+def open_light_document(tab: PageTab, *, timeout: float = 30.0, settle_s: float = 60.0) -> dict:
+    """Открыть синтетический документ в `tab`; вернуть {ok, reason, blocked, fulfilled}.
+
+    Перехват (`Fetch.enable`, шаблон `*`) включён на всё время жизни вкладки: он НЕ выключается
+    после загрузки. Документ отдаёт браузер, всякий другой запрос обрывается; события
+    `Fetch.requestPaused` обрабатываются при каждом вызове вкладки (`tab.on_event`) и в `tab.pump`.
+    Причина отказа — код вида `light_doc_failed:<метод CDP>`, без текста ошибки и данных.
+    """
+    seen = {"fulfilled": 0, "blocked": 0, "errors": 0}
+    tab.light_seen = seen
 
     def on_event(msg: dict) -> None:
         if msg.get("method") != "Fetch.requestPaused":
@@ -55,7 +62,7 @@ def open_light_document(tab: PageTab, *, timeout: float = 15.0) -> dict:
         rid = params.get("requestId")
         url = str((params.get("request") or {}).get("url") or "")
         try:
-            if url == LIGHT_URL and params.get("resourceType") == "Document":
+            if url == LIGHT_URL and params.get("resourceType") == "Document" and not seen["fulfilled"]:
                 seen["fulfilled"] += 1
                 tab.call("Fetch.fulfillRequest", {
                     "requestId": rid, "responseCode": 200,
@@ -66,37 +73,43 @@ def open_light_document(tab: PageTab, *, timeout: float = 15.0) -> dict:
                 seen["blocked"] += 1          # ни одного запроса наружу
                 tab.call("Fetch.failRequest", {"requestId": rid, "errorReason": "BlockedByClient"},
                          timeout=timeout)
-        except CdpError:
-            pass
+        except (CdpError, TimeoutError):
+            seen["errors"] += 1
 
+    step = "Fetch.enable"
     ok, reason = False, "light_doc_failed"
     try:
-        tab.call("Fetch.enable", {"patterns": [{"urlPattern": LIGHT_URL, "requestStage": "Request"}]},
+        tab.on_event = on_event
+        # service worker профиля не должен отвечать/ходить в сеть мимо перехвата
+        step = "Network.setBypassServiceWorker"
+        tab.call("Network.setBypassServiceWorker", {"bypass": True}, timeout=timeout)
+        step = "Fetch.enable"
+        tab.call("Fetch.enable", {"patterns": [{"urlPattern": "*", "requestStage": "Request"}]},
                  timeout=timeout)
-        try:
-            tab.call("Page.navigate", {"url": LIGHT_URL}, timeout=timeout, on_event=on_event)
-        finally:
-            try:
-                tab.call("Fetch.disable", timeout=timeout)
-            except CdpError:
-                pass
-        deadline = time.monotonic() + timeout
+        step = "Page.navigate"
+        tab.call("Page.navigate", {"url": LIGHT_URL}, timeout=timeout)
+        deadline = time.monotonic() + settle_s
         while time.monotonic() < deadline:
-            frame = (tab.call("Page.getFrameTree").get("frameTree") or {}).get("frame") or {}
+            step = "Page.getFrameTree"
+            frame = (tab.call("Page.getFrameTree", timeout=timeout).get("frameTree") or {}).get("frame") or {}
             url = str(frame.get("url") or "")
             if url and url != "about:blank":
                 if url != LIGHT_URL:
                     reason = "light_doc_wrong_origin"
                     break
+                step = "Runtime.evaluate"
                 state = tab.evaluate_in(tab.create_isolated_world(WORLD + "_rs"), "document.readyState",
-                                        timeout=5.0)
+                                        timeout=timeout)
                 if state == "complete":
                     ok, reason = True, ""
                     break
-            time.sleep(0.2)
-    except CdpError:
-        reason = "light_doc_failed"
-    if ok and (seen["fulfilled"] != 1 or seen["blocked"]):
+            step = "pump"
+            tab.pump(0.2)
+        else:
+            reason = "light_doc_timeout"
+    except (CdpError, TimeoutError):
+        reason = "light_doc_failed:" + step
+    if ok and seen["fulfilled"] != 1:
         ok, reason = False, "light_doc_unexpected_request"
     return {"ok": ok, "reason": reason, "fulfilled": seen["fulfilled"], "blocked": seen["blocked"]}
 
@@ -124,15 +137,54 @@ def handover_dummy(work: PageTab, capture: PageTab, *, wait_s: float = 5.0) -> d
     return out
 
 
-def run_p1(cdp_url: str) -> dict:
+class ProbeGateError(PermissionError):
+    """Проба разрешена только на профиле Doc120; причина — код без данных."""
+
+
+def doc120_profile_id() -> str:
+    """profile_id аккаунта Doc120 из карты аккаунтов машины; пусто, если не найден однозначно."""
+    import csv
+
+    from config.paths import get_ad_account_map_path
+
+    try:
+        with open(get_ad_account_map_path(), encoding="utf-8-sig", newline="") as f:
+            ids = {str(r.get("profile_id") or "").strip() for r in csv.DictReader(f)
+                   if "doc120" in str(r.get("account_name") or "").lower()}
+    except OSError:
+        return ""
+    ids.discard("")
+    return ids.pop() if len(ids) == 1 else ""
+
+
+def require_doc120(cdp_url: str, profile_id: str) -> None:
+    """Ворота пробы: loopback-порт и явный profile_id, равный profile_id Doc120 из карты аккаунтов.
+
+    Офлайн привязать порт к профилю нельзя, поэтому profile_id — обязательный явный аргумент.
+    """
+    from urllib.parse import urlparse
+
+    host = urlparse(cdp_url if "://" in cdp_url else "http://" + cdp_url).hostname or ""
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise ProbeGateError("probe_not_loopback")
+    expected = doc120_profile_id()
+    if not expected:
+        raise ProbeGateError("probe_doc120_unknown")
+    if not profile_id or profile_id != expected:
+        raise ProbeGateError("probe_not_doc120")
+
+
+def run_p1(cdp_url: str, profile_id: str = "", *, _gate: bool = True) -> dict:
     """P1+A'-часть P2: две свои вкладки, обе на синтетическом документе, передача заглушки.
 
     Запрос к Meta не уходит; токен не читается; вкладки закрываются в конце.
     """
-    work = PageTab.open(cdp_url)
+    if _gate:       # только тесты на своём браузере с мёртвым прокси отключают ворота
+        require_doc120(cdp_url, profile_id)
+    work = PageTab.open(cdp_url, call_s=60.0)
     capture = None
     try:
-        capture = PageTab.open(cdp_url)
+        capture = PageTab.open(cdp_url, call_s=60.0)
         w = open_light_document(work)
         c = open_light_document(capture)
         result: dict[str, Any] = {"work_doc": w, "capture_doc": c}
