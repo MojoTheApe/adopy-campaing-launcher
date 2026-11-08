@@ -1,5 +1,16 @@
 # System history
 
+## ACL-2455 — Lifetime run is a range of days, hours are picked for every day — 2026-11-08
+
+The owner found it confusing that a Lifetime campaign's Start and End carried a time of day, which read
+as the hours the ads run. The builder now asks for a First day and a Last day (date only, Israel time):
+the run starts at 00:00 on the first day (at the next full hour when the first day is today) and ends at
+the end of the last day. The hours grid ("Hours (every day, Israel time)") is always shown under the dates
+with every hour on; switching hours off makes a schedule that repeats on every day of the run, and with
+all hours on no schedule is sent. The form still sends `start_time`/`end_time`/`schedule`/`schedule_on`
+as before, so the server, drafts and plans are unchanged; drafts with a time of day show their dates.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1455).
+
 ## ACL-2443 — Builder: lifetime budget and delivery schedule in the account time zone — 2026-11-07
 
 The Builder budget block now has a Daily / Lifetime switch. Lifetime takes a start and an end date-time in the ad account time zone (read from the new `GET /api/account-facts`), and an optional 7x24 hour grid that is sent as `adset_schedule` (`pacing_type` ADVERTISER time zone). Write policy, draft, creator, Graph calls and preflight know the lifetime fields; the plan cache schema is now 2, so cached plans from older versions are rebuilt. A live Lifetime publish in Meta and non-USD minimums are not verified yet. Python changed: restart the dashboard.
