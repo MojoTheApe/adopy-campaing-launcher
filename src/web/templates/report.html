@@ -3895,6 +3895,8 @@
     .cbm-over[data-cbm-chip]::after { content: attr(data-cbm-chip); position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); background: var(--accent); color: #fff; font-size: var(--adopy-text-xs); border-radius: 3px; padding: 0 0.35rem; pointer-events: none; }
     .cbm-bad { cursor: not-allowed; opacity: 0.6; }
     .cbm-ghosts { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .cbm-ghost.cbm-ghost-none { border-style: none; font-style: italic; }
+    .cbm-none { padding: 0.4rem 0.5rem; color: var(--muted); font-size: var(--adopy-text-table); font-style: italic; }
     .cbm-ghost { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 0.4rem 0.5rem; color: var(--muted); font-size: var(--adopy-text-table); opacity: 0.8; }
     .cbm-toast { max-width: 32rem; }
     .cbm-toast.cbm-warn { border-color: var(--danger); }
@@ -9083,6 +9085,17 @@ window.cbMove = (function () {
     forms().forEach(function (f) { if (!hit && cbFormKey(f) === key) hit = f; });
     return hit;
   }
+  /* Блок аккаунта в дереве подписан «slug-страны|аккаунт» (saudi-arabia|Demo), а ключ формы -
+     «Страна|аккаунт» (Saudi Arabia|Demo): сравниваем по одинаковому слагу (ACL-2441). */
+  function slugOf(x) { return String(x || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+  function formByTreeKey(key) {
+    var i = String(key).indexOf('|'), hit = null;
+    var slug = slugOf(key.slice(0, i)), account = key.slice(i + 1);
+    forms().forEach(function (f) {
+      if (!hit && cbFormAccount(f) === account && slugOf(countryOf(f)) === slug) hit = f;
+    });
+    return hit;
+  }
   function activeBuild(slot) {
     var d = window.cbBuild && window.cbBuild.dot ? window.cbBuild.dot(slot, slotName(slot)) : null;
     return !!(d && /^build-(run|attn|wait)$/.test(d.state));
@@ -9331,14 +9344,25 @@ window.cbMove = (function () {
   function srcSlotOf(n) { return n.kind === 'ad' ? (n.node && n.node.closest('.cb-slot')) : n.node; }
 
   /* ── перетаскивание ────────────────────────────────────────────────── */
+  /* Аккаунты, куда эту кампанию можно скопировать: страна в карте аккаунтов совпадает
+     со страной кампании, свой аккаунт не предлагаем (ACL-2441). */
+  function targetForms(srcSlot) {
+    var srcForm = srcSlot.closest('form'), country = countryOf(srcForm);
+    return forms().filter(function (f) {
+      return f !== srcForm && cbFormAccount(f) && cbFormAccount(f) !== '?' && countryOf(f) === country;
+    });
+  }
+  function noAccountNote(srcSlot) {
+    return 'No other account for ' + (countryOf(srcSlot.closest('form')) || 'this country');
+  }
   function ghosts() {
     var body = document.getElementById('cbd-body');
-    if (!body || body.querySelector('.cbm-ghosts')) return;
+    if (!body || body.querySelector('.cbm-ghosts') || !drag || drag.kind !== 'camp') return;
     var wrap = document.createElement('div');
     wrap.className = 'cbm-ghosts';
     var any = false;
-    forms().forEach(function (f) {
-      if (f.querySelector('.cb-slot') || !cbFormAccount(f) || cbFormAccount(f) === '?') return;
+    targetForms(drag.node).forEach(function (f) {
+      if (f.querySelector('.cb-slot')) return;      // аккаунт с кампаниями принимает дроп на свой блок
       any = true;
       var d = document.createElement('div');
       d.className = 'cbm-ghost';
@@ -9346,6 +9370,13 @@ window.cbMove = (function () {
       d.textContent = acctLabel(f) + ' — Drop here';
       wrap.appendChild(d);
     });
+    if (!any && !targetForms(drag.node).length) {
+      var n = document.createElement('div');
+      n.className = 'cbm-ghost cbm-ghost-none';
+      n.textContent = noAccountNote(drag.node);
+      wrap.appendChild(n);
+      any = true;
+    }
     if (any) body.appendChild(wrap);
   }
   function clearOver(except) {
@@ -9376,10 +9407,12 @@ window.cbMove = (function () {
       return { el: camp.querySelector('.cbd-camp-head') || camp, slot: slot, k: 0, camp: camp };
     }
     var ghost = target.closest('.cbm-ghost');
+    if (ghost && ghost.classList.contains('cbm-ghost-none')) return null;
     if (ghost) return { el: ghost, form: formByKey(ghost.dataset.key) };
     var acc = target.closest('.cbd-acc');
     if (!acc) return null;
-    return { el: acc.querySelector('.cbd-account') || acc, form: formByKey(acc.dataset.acc) };
+    /* Подсвечиваем весь блок аккаунта: дроп на карточку кампании = дроп на аккаунт (ACL-2441). */
+    return { el: acc, form: formByTreeKey(acc.dataset.acc) };
   }
   function planFor(hit) {
     if (!hit) return null;
@@ -9462,7 +9495,9 @@ window.cbMove = (function () {
     function item(label, o) { out.push({ label: label, reason: o.reason || '', go: o.go, back: !!o.back, sub: o.sub }); }
     if (m.step > 0) item('‹ Back', { back: true });
     if (m.step === 0) {
-      forms().forEach(function (f) {
+      /* Кампанию предлагаем только аккаунтам её страны, как и при перетаскивании (ACL-2441). */
+      var accounts = m.kind === 'camp' ? targetForms(m.node) : forms();
+      accounts.forEach(function (f) {
         if (!cbFormAccount(f) || cbFormAccount(f) === '?') return;
         var reason = formBusy(f) ? busyMsg(f) : '';
         if (m.kind === 'camp') {
@@ -9509,7 +9544,13 @@ window.cbMove = (function () {
     function fill() {
       list.textContent = '';
       var q = f.value.trim().toLowerCase();
-      menuItems().forEach(function (it) {
+      var items = menuItems();
+      if (m.kind === 'camp' && m.step === 0 && !items.length) {
+        var none = document.createElement('div');
+        none.className = 'cbm-none'; none.textContent = noAccountNote(m.node);
+        list.appendChild(none);
+      }
+      items.forEach(function (it) {
         if (q && !it.back && it.label.toLowerCase().indexOf(q) === -1) return;
         var b = document.createElement('button');
         b.type = 'button'; b.className = 'cbm-item'; b.setAttribute('role', 'menuitem');
