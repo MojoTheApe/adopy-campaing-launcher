@@ -447,10 +447,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "choose a primary text in each ad",
+      "hint": "no primary text: the ad runs without it (fine for a headline-only or text-free ad)",
       "id": "primary_text",
       "label": "Primary text",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -461,10 +461,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "the chosen text has no headline: pick another library entry",
+      "hint": "no headline: the ad runs without it (fine for a primary-text-only or text-free ad)",
       "id": "headline",
       "label": "Headline",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"

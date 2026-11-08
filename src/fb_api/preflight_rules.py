@@ -219,9 +219,11 @@ RULES: list[dict[str, Any]] = [
     _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
        _wp.MSG_TEXTS_DYNAMIC_SET,
        sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
+    _r("primary_text", "Primary text", WARNING, "client",
+       "no primary text: the ad runs without it (fine for a headline-only or text-free ad)",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("headline", "Headline", ERROR, "client", "the chosen text has no headline: pick another library entry",
+    _r("headline", "Headline", WARNING, "client",
+       "no headline: the ad runs without it (fine for a primary-text-only or text-free ad)",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -446,9 +448,9 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))
                                       and len(st.get("ads") or []) > 1))
         elif rid == "primary_text":
-            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body")), WARNING))
         elif rid == "headline":
-            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline")), WARNING))
         elif rid == "headline_len":
             out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "primary_len":
