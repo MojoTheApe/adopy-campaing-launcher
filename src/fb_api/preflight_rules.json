@@ -447,10 +447,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "choose a primary text in each ad",
+      "hint": "no primary text: the ad runs without it (fine for a headline-only or text-free ad)",
       "id": "primary_text",
       "label": "Primary text",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -461,10 +461,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "the chosen text has no headline: pick another library entry",
+      "hint": "no headline: the ad runs without it (fine for a primary-text-only or text-free ad)",
       "id": "headline",
       "label": "Headline",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -479,6 +479,20 @@
       "id": "headline_len",
       "label": "Headline up to 40 characters",
       "severity": "warning",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "an ad with several texts or a Stories / Reels file needs a primary text and a headline; add them, or use one text and one file",
+      "id": "feed_texts",
+      "label": "Several texts or a Stories / Reels file need a primary text and a headline",
+      "severity": "error",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
