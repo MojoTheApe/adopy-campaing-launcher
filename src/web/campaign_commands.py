@@ -13,6 +13,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Any
 
+from src.fb_api import bulk_edit as _bulk  # noqa: F401 - registers the bulk-edit runner (ACL-2457)
 from src.fb_api import commands as _cmd
 from src.fb_api.graph import GraphError, GraphStop
 
@@ -65,17 +66,25 @@ def _guard() -> tuple[dict, int] | None:
     return None
 
 
+#: ACL-2457: the reason the bulk-edit control shows on the RPA backend.
+BULK_RPA_REASON = "API backend only"
+
+
 def availability() -> dict:
     """Что страница может предлагать: включены ли команды и почему нет. Ничего не читает у Meta."""
     if not api_enabled():
         return {"available": False, "code": "rpa_backend", "reason": "Needs ACL_FB_BACKEND=api",
-                "max_targets": 0}
+                "max_targets": 0, "bulk": {"available": False, "reason": BULK_RPA_REASON, "max_campaigns": 0}}
     if not bound_to_loopback():
-        return {"available": False, "code": "not_loopback",
-                "reason": "Only when the dashboard listens on this computer alone (127.0.0.1)",
-                "max_targets": 0}
+        reason = "Only when the dashboard listens on this computer alone (127.0.0.1)"
+        return {"available": False, "code": "not_loopback", "reason": reason, "max_targets": 0,
+                "bulk": {"available": False, "reason": reason, "max_campaigns": 0}}
+    from src.fb_api import bulk_edit
+
     return {"available": True, "code": "", "reason": "",
-            "max_targets": min(_cmd.MAX_TARGETS, _cmd.max_targets_for_ceiling())}
+            "max_targets": min(_cmd.MAX_TARGETS, _cmd.max_targets_for_ceiling()),
+            "bulk": {"available": True, "reason": "",
+                     "max_campaigns": min(bulk_edit.MAX_CAMPAIGNS, max(1, (_cmd.call_ceiling() - 5) // 3))}}
 
 
 def run_preview(body: dict[str, Any]) -> tuple[dict, int]:
@@ -97,6 +106,27 @@ def run_preview(body: dict[str, Any]) -> tuple[dict, int]:
     except _cmd.CommandRefused as exc:
         if exc.code == "stale":
             _refresh_stale({"account": account})
+        return _refusal(exc)
+    except (GraphStop, GraphError) as exc:
+        return {"error": _failure(account, exc), "code": getattr(exc, "kind", "")}, 502
+    except Exception as exc:  # noqa: BLE001 — профиль не открылся и т. п.
+        return {"error": _failure(account, exc), "code": getattr(exc, "code", "")}, 503
+    return op, 200
+
+
+def run_bulk_preview(body: dict[str, Any]) -> tuple[dict, int]:
+    """ACL-2457: preview of one change set over several campaigns of one account. Writes nothing."""
+    refused = _guard()
+    if refused:
+        return {**refused[0], "error": BULK_RPA_REASON if refused[0].get("code") == "rpa_backend"
+                else refused[0]["error"]}, refused[1]
+    account = str(body.get("account") or "")
+    try:
+        from src.fb_api import bulk_edit
+
+        op = bulk_edit.preview(_cmd.get_store(), _sessions(), account=account, actor=body.get("actor"),
+                               changes=body.get("changes"), campaigns=body.get("campaigns"))
+    except _cmd.CommandRefused as exc:
         return _refusal(exc)
     except (GraphStop, GraphError) as exc:
         return {"error": _failure(account, exc), "code": getattr(exc, "kind", "")}, 502

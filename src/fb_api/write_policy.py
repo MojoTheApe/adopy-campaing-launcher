@@ -909,7 +909,16 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
 # никогда не создание) ровно с одним из трёх полей. Ничего больше, никогда DELETE.
 
 #: Поля, которые можно менять у существующего объекта.
-OBJECT_FIELDS = frozenset({"status", "daily_budget", "bid_amount"})
+OBJECT_FIELDS = frozenset({"status", "daily_budget", "bid_amount", "lifetime_budget", "targeting"})
+#: ACL-2457 (bulk edit): ключи `targeting`, которые массовая правка вообще меняет. Остальное в
+#: `targeting` существующего набора (аудитории, интересы, гео) передаётся как прочитано: POST
+#: заменяет объект целиком, и без этого пропали бы чужие настройки.
+BULK_TARGETING_KEYS = frozenset({"age_min", "age_max", "genders", "locales", "publisher_platforms",
+                                 "facebook_positions", "instagram_positions"})
+_BULK_PLATFORMS = frozenset({"facebook", "instagram"})
+_BULK_FACEBOOK = frozenset({"feed", "story", "facebook_reels", "instream_video"})
+_BULK_INSTAGRAM = frozenset({"stream", "story", "reels"})
+TARGETING_UPDATE_MAX_CHARS = 20000
 #: Допустимые значения `status` (в отличие от создания, ACTIVE тут можно —
 #: но только по команде человека; решение о подтверждении — выше, в `commands`).
 OBJECT_STATUSES = frozenset({"ACTIVE", "PAUSED"})
@@ -934,8 +943,61 @@ def policy_for_commands(act: str) -> dict:
         "json_keys": [],
         "opt_out_keys": [],
         "dof_features": [],
-        "object_update": {"fields": sorted(OBJECT_FIELDS), "statuses": sorted(OBJECT_STATUSES)},
+        "object_update": {"fields": sorted(OBJECT_FIELDS), "statuses": sorted(OBJECT_STATUSES),
+                          "targeting": {"max_chars": TARGETING_UPDATE_MAX_CHARS,
+                                        "genders": sorted(GENDER_VALUES),
+                                        "platforms": sorted(_BULK_PLATFORMS),
+                                        "facebook_positions": sorted(_BULK_FACEBOOK),
+                                        "instagram_positions": sorted(_BULK_INSTAGRAM)}},
     }
+
+
+def _check_update_targeting(value: Any) -> None:
+    """`targeting` существующего набора (ACL-2457): прочитанный объект с проверенными ключами правки.
+
+    Ключи, которые меняет массовая правка, проверяются строго (возраст, пол, языки, площадки);
+    остальные проходят как есть, но без запрещённых ключей на любой глубине и в разумном размере.
+    """
+    if isinstance(value, str):
+        value = _parsed(value, "targeting")
+    if not isinstance(value, dict) or not value:
+        raise WriteRefused("write refused: targeting must be a non-empty object")
+    if len(json.dumps(value, ensure_ascii=False)) > TARGETING_UPDATE_MAX_CHARS:
+        raise WriteRefused("write refused: targeting is too large")
+    _forbidden_walk(value, "targeting")
+    for key in ("age_min", "age_max"):
+        if key in value:
+            v = value[key]
+            if not (type(v) is int and 13 <= v <= 65):
+                raise WriteRefused(f"write refused: targeting.{key} must be a whole number from 13 to 65")
+    if "age_min" in value and "age_max" in value and value["age_min"] > value["age_max"]:
+        raise WriteRefused("write refused: targeting.age_min is above age_max")
+    if "genders" in value:
+        g = value["genders"]
+        if not (isinstance(g, list) and g and all(type(x) is int and x in GENDER_VALUES for x in g)):
+            raise WriteRefused("write refused: targeting.genders may hold only 1 and 2")
+    if "locales" in value:
+        loc = value["locales"]
+        if not (isinstance(loc, list) and loc and len(loc) <= 50
+                and all(type(x) is int and x > 0 for x in loc)):
+            raise WriteRefused("write refused: targeting.locales must be a list of numeric ids")
+    for key, allowed in (("publisher_platforms", _BULK_PLATFORMS), ("facebook_positions", _BULK_FACEBOOK),
+                         ("instagram_positions", _BULK_INSTAGRAM)):
+        if key in value:
+            v = value[key]
+            if not (isinstance(v, list) and v and all(isinstance(x, str) and x in allowed for x in v)):
+                raise WriteRefused(f"write refused: targeting.{key} holds a value that is not allowed")
+
+
+def _forbidden_walk(value: Any, where: str) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if str(key).lower() in FORBIDDEN_ANYWHERE:
+                raise WriteRefused(f"write refused: key {key!r} is not allowed ({where})")
+            _forbidden_walk(item, where)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _forbidden_walk(item, where)
 
 
 def amount_ok(value: Any) -> bool:
@@ -966,6 +1028,8 @@ def check_object_update(method: str, path: str, params: dict | None,
     if key == "status":
         if not isinstance(value, str) or value not in OBJECT_STATUSES:
             raise WriteRefused("write refused: status may only be ACTIVE or PAUSED")
+    elif key == "targeting":
+        _check_update_targeting(value)
     elif not amount_ok(value):
         raise WriteRefused(f"write refused: {key} must be a positive whole number in minor units")
     return key
