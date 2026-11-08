@@ -444,8 +444,9 @@ def test_a_repeat_with_a_changed_end_is_a_difference_and_gets_a_new_name(tmp_pat
     assert _run(meta, _life(tmp_path)).error == ""
     plan = _plan(_life(tmp_path, end="2026-10-27T09:00"))
     out = _creator(meta).plan_only(plan)
-    assert out.error == "" and out.published_as == plan.name + "_2"
-    assert any("end time" in w for w in out.warnings), out.warnings
+    assert out.error == "" and out.published_as == plan.name + " copy 1"
+    # ACL-2250: различия идут в шаги, а не в предупреждения
+    assert any("end time" in str(st) for st in out.steps), out.steps
 
 
 # ───────────────────────── Check plan ─────────────────────────

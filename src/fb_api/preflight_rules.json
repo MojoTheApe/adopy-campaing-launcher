@@ -657,9 +657,9 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... (up to _20); an error only when all 20 names are taken: rename the campaign",
+      "hint": "if a campaign with this name is already on the ad account, the robot publishes a copy named 'NAME copy 1', 'NAME copy 2' ... (the campaign and its ad sets); an error only when the name is too long or the copy number cannot be told: rename the campaign",
       "id": "existing_diffs",
-      "label": "Campaign name is free, or gets a _2, _3 suffix",
+      "label": "Campaign name is free, or gets a copy 1, copy 2 counter",
       "severity": "error",
       "side": "server",
       "topic": "names",

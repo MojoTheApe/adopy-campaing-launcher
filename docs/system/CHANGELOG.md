@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2334 — Package shadow config no longer overwrites the real machine config — 2026-11-06
+
+The merge of the Claude MSIX package copy is skipped when ACL_CONFIG_DIR is set explicitly. A shadow value never turns an absolute path into a relative one or an explicit setting into a code default. Each merge logs the key names only (no values).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1334).
+
+## ACL-2250 — Duplicates get a `copy 1, 2, 3 …` counter and always publish — 2026-11-04
+
+A campaign name that is already on the ad account no longer stops the run or becomes `NAME_2`: the robot
+publishes `NAME copy 1`, `copy 2`, … (highest live number + 1) on the campaign and every ad set, with no
+limit on the count. A finished job published again always makes the next copy; a stopped run is finished
+(not copied) by a small local name record that lives until the end of the job, so Publish all after a
+stopped job does not copy the finished campaigns. A copy reuses the uploaded video. A name over the limit is
+a clear `name_too_long` stop (also an ERROR in Check plan). The stats parsers ignore the counter.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1250).
+
 ## ACL-2330 — Vault migration cleans up clear-text secret lines — 2026-11-06
 
 The migration now drops an earlier duplicate of a secret key (dotenv ignores it; the encrypted backup keeps it). A connection-sheet sign-in or startup refresh rewrites a clear-text secret line even when the value is unchanged, so it gets encrypted. The migration notes now match each case and point to Connections -> Sign in with Google.
