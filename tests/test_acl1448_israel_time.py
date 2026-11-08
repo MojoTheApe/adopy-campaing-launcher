@@ -186,7 +186,7 @@ def test_start_in_the_past_is_judged_in_absolute_time_of_israel(tmp_path, monkey
 
 
 def test_a_passed_start_of_today_is_moved_forward_not_refused(tmp_path, monkeypatch):
-    # ACL-2462: задание ждало очереди - старт 14:00 сегодня прошёл к 15:00 (NOW): старт = 15:15, не отказ.
+    # ACL-2465: задание ждало очереди - старт 14:00 сегодня прошёл к 15:00 (NOW): старт = 15:15, не отказ.
     monkeypatch.delenv("ACL_TEAM_TIMEZONE", raising=False)
     creator = _creator(ZoneMeta())
     plan = _plan(_life(tmp_path, start="2026-10-12T14:00", end="2026-10-20T00:00"))
