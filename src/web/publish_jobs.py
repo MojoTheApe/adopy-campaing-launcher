@@ -923,6 +923,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
     replaced = False
     resumed = False         # ACL-2345: one automatic resume per job
     requeues = 0
+    clean = True            # ACL-2250: no campaign of the job stopped or failed
     while pending:
         if _is_cancelled(job_id):
             raise job_cancel.JobCancelled()
@@ -950,6 +951,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
                 resumed = True      # ACL-2345: the same campaign runs again; what exists is reused
                 replaced = False
                 continue
+            clean = clean and _result_clean(res)
             _append_result(job_id, res)
             pending.pop(0)
             replaced = False
@@ -969,6 +971,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
                 resumed = True      # ACL-2345
                 replaced = False
                 continue
+            clean = clean and _result_clean(res)
             _append_result(job_id, res)
             pending.pop(0)
             replaced = False
@@ -984,6 +987,14 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
             raise job_cancel.JobCancelled()
         replaced = False
         _open_with_load_requeue(job_id, publisher, account_label)
+    finish = getattr(publisher, "finish_name_records", None)
+    if clean and finish is not None:
+        finish()            # ACL-2250: the whole job ended without a stop or failure: its name records are done
+
+
+def _result_clean(res: dict[str, Any]) -> bool:
+    """ACL-2250: a campaign result that does not keep the job's name records alive (readback mismatches count as done)."""
+    return not res.get("error") and not res.get("not_started")
 
 
 AUTO_RESUME_WAIT_ENV = "ACL_AUTO_RESUME_WAIT_S"

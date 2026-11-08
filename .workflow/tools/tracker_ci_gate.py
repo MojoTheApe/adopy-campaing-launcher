@@ -32,6 +32,7 @@ def read_state(request, repository):
         raise ValueError('CI state ref must identify an immutable commit')
     row = request(root + '/contents/.tracker-state.json?ref=' + target['sha'])
     value = json.loads(rules.file_bytes(request, root, row), object_pairs_hook=ci.unique_object)
+    value, _ = rules.archive_module().hydrate(value, repository, row.get('sha'), request)
     if rules.state_schema(value) not in (1, 2) or not isinstance(value.get('todo_order'), list):
         raise ValueError('CI shared state is invalid; inspect the maintained state before retrying')
     return value

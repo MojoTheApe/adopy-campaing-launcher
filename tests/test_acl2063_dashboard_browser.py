@@ -22,7 +22,7 @@ from tests.test_acl1798_campaign_inventory import snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = (ROOT / 'src/web/templates/report.html').read_text()
-MOUNT_JS = REPORT[REPORT.index('function amapCampaignSlug('):REPORT.index('function amapPollSpend(')]
+MOUNT_JS = REPORT[REPORT.index('function amapCampaignTree('):REPORT.index('function amapPollSpend(')]
 # Use the complete production cascade: the action-cell wrapping rule comes
 # after the caret styles and is essential when Retry joins the removal controls.
 AMAP_CSS = (ROOT / 'src/web/templates/adopy-tokens.css').read_text() + re.search(r'<style>(.*?)</style>', REPORT, re.S).group(1)

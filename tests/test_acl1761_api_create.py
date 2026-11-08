@@ -466,7 +466,9 @@ class FakeMeta:
             body = {"id": oid}
         elif edge == "campaigns":
             p = dict(params)
-            p["daily_budget"] = str(p["daily_budget"])
+            for key in ("daily_budget", "lifetime_budget"):    # ACL-1443: у кампании один из двух
+                if key in p:
+                    p[key] = str(p[key])
             body = {"id": self._store("campaign", p)}
         elif edge == "adsets":
             body = {"id": self._store("adset", params)}
@@ -587,6 +589,11 @@ class FakeMeta:
                 return {"data": rows}
             if parts[1] == "thumbnails":
                 return {"data": [{"uri": "https://example.invalid/t.jpg", "is_preferred": True}]}
+        if oid not in self.objects:
+            # ACL-2250: как Meta - неизвестный id это ошибка 100, а не падение подставки; квитанция
+            # имени от прошлого запуска на другой подставке тогда молча не используется.
+            return {"error": {"code": 100, "type": "OAuthException",
+                              "message": f"(#100) Object with ID '{oid}' does not exist"}}
         obj = self.objects[oid]
         if obj["_kind"] == "video" and params.get("fields") == "title":
             return {"id": oid, "title": obj.get("title")}
@@ -751,8 +758,8 @@ def test_existing_campaign_with_the_same_name_but_not_ours_is_not_touched(tmp_pa
     meta = FakeMeta()
     foreign = meta._new("campaign", name="MX Leads 1", status="ACTIVE")
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    # ACL-1902: чужую не трогаем и не блокируемся - публикуем под свободным именем.
-    assert out.error == "" and out.published_as == "MX Leads 1_2"
+    # ACL-1902: чужую не трогаем и не блокируемся - публикуем копию со счётчиком (ACL-2250).
+    assert out.error == "" and out.published_as == "MX Leads 1 copy 1"
     assert meta.objects[foreign]["status"] == "ACTIVE"
     assert not any(o.get("campaign_id") == foreign for o in meta.objects.values())
 

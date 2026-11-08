@@ -87,7 +87,7 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
     остановка на полпути.
     """
-    from src.fb_api.creator import estimate_create_calls, estimate_targeting_reads
+    from src.fb_api.creator import estimate_create_calls, estimate_targeting_reads, estimate_upload_calls
 
     # Записи кампании - не больше DEFAULT_CREATE_MAX_CALLS; сверх них бюджет несёт запас на чтения
     # таргетинга (ACL-1771), которые идут из того же счётчика вызовов.
@@ -101,7 +101,17 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
     # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
     # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
-    return min(max(need + estimate_targeting_reads(plan), CREATE_BUDGET_FLOOR), ceiling), ""
+    reads = estimate_targeting_reads(plan)
+    # ACL-2370: куски больших видео (>200 МБ) идут из того же счётчика вызовов; без них бюджет малого
+    # плана был полом 150, и видео 1,3 ГБ (158 вызовов) отказывалось. Без больших видео chunks = 0 и
+    # результат прежний. Пол 150 и потолок не меняются: растёт только сумма реальной ограниченной работы.
+    chunks = estimate_upload_calls(plan)
+    if chunks and need + reads + chunks > ceiling:
+        total = need + reads + chunks
+        return ceiling, (f"This campaign needs about {total} Meta calls ({chunks} to upload large videos in "
+                         f"chunks, {need + reads} for the rest), more than one run allows ({ceiling}). "
+                         "Use a smaller or shorter video, or split the campaign. Nothing was created.")
+    return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:
@@ -363,6 +373,8 @@ class ApiPublisher:
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
+        #: ACL-2250: квитанции имён кампаний, дошедших до конца сверки; удаляются в конце задания (`finish_name_records`).
+        self._finished_receipts: list[tuple[str, str]] = []
         #: ACL-2283: local load reading taken right before the profile start (None - unknown).
         self._load_before: dict[str, Any] | None = None
 
@@ -740,6 +752,8 @@ class ApiPublisher:
             self.stop = self._client.stopped
             _start_cooldown(self.account_label, self.stop)
             _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
+        if outcome.name_receipt_done and not outcome.error:
+            self._finished_receipts.append(tuple(outcome.name_receipt_done))
         res = result_dict(outcome)
         # ACL-2192: заметка «Automatic Facebook Page» выбрана раньше creator - в итог она переносится здесь.
         res["warnings"] = [n for n in early_notes if n not in res["warnings"]] + res["warnings"]
@@ -748,6 +762,7 @@ class ApiPublisher:
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      "copy_number": outcome.copy_number,
                       **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
@@ -756,6 +771,21 @@ class ApiPublisher:
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
         self._log_stats(name, spec, began, outcome=outcome, plan=plan)
         return res
+
+    def finish_name_records(self) -> None:
+        """ACL-2250: конец задания, где ни одна кампания не остановилась и не упала: квитанции имён удаляются.
+
+        Тогда следующая публикация того же имени - повтор, и получает следующую копию. Не удалилась квитанция -
+        остаётся (безопасная сторона: следующий запуск допишет ту же кампанию). Check plan это не зовёт.
+        """
+        from src.fb_api import name_receipt
+
+        done, self._finished_receipts = self._finished_receipts, []
+        for act, base in done:
+            try:
+                name_receipt.delete(act, base)
+            except name_receipt.NameReceiptError:
+                pass
 
     def _log_spec(self, plan: Any, name: str) -> dict:
         """ACL-2347: полный план в общий журнал перед созданием; пробный запуск ничего не пишет."""
@@ -939,13 +969,17 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
         pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
-        for draft in drafts:
-            if draft.errors:
-                out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
-                out.error, out.stop_kind = "; ".join(draft.errors), "plan"
-                results.append(dry_run_result(out))
-                continue
-            results.append(pub.publish_draft(draft))
+        try:
+            for draft in drafts:
+                if draft.errors:
+                    out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
+                    out.error, out.stop_kind = "; ".join(draft.errors), "plan"
+                    results.append(dry_run_result(out))
+                    continue
+                results.append(pub.publish_draft(draft))
+        finally:
+            # ACL-2267: что взято из долгого кэша фактов и что выброшено (только числа, без терминов).
+            _record_facts(pub._resolver)
         if client.writes:
             raise _PlanReadContractError("Check plan must not write")
         if session_info is not None:   # ACL-2266: итог сессии для кэша вердиктов и телеметрии
@@ -962,6 +996,14 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
             sess.keep_convenience = _keep_profiles_open()
     return results
+
+
+def _record_facts(resolver: Any) -> None:
+    try:
+        stats = resolver.facts_stats()
+    except Exception:  # noqa: BLE001 — телеметрия не меняет ответ проверки
+        return
+    _record("api_plan_facts", True, diag={"facts": stats})
 
 
 class _PlanFlight:

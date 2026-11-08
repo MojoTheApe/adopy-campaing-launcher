@@ -8,7 +8,7 @@ JSON line is appended to `<ACL config dir>/publish_history.jsonl`:
      "started_at", "finished_at", "build", "fb_backend", "total", "done_count",
      "publishable", "errors": [...], "error_details": [{...}|null],
      "results": [{"campaign_name", "success", "publishable", "status",
-                  "campaign_id", "adset_id", "ad_id", "ad_ids", "creative_id",
+                  "campaign_id", "adset_id", "ad_id", "ad_ids", "creative_id", "published_as",
                   "warnings", "blocking_failures", "error", "steps", "failure"}]}
 
 ACL-2392: `errors` / `error` hold the plain line; `failure` and `error_details` carry the
@@ -137,7 +137,7 @@ def _result_line(result: dict[str, Any]) -> dict[str, Any]:
     blocking = result.get("blocking_failures") or []
     publishable = (result.get("success") is True and result.get("publishable") is True and not blocking)
     ad_ids = result.get("ad_ids") or ([result["ad_id"]] if result.get("ad_id") else [])
-    return {
+    line = {
         "campaign_name": _text(result.get("campaign_name")),
         "success": result.get("success") is True,
         "publishable": publishable,
@@ -153,6 +153,9 @@ def _result_line(result: dict[str, Any]) -> dict[str, Any]:
         "steps": _texts(result.get("steps_completed")),
         "failure": _failure(result.get("failure")),
     }
+    if result.get("published_as"):      # ACL-2250: имя со счётчиком (`X copy 2`) не теряется после перезапуска
+        line["published_as"] = _text(result.get("published_as"))
+    return line
 
 
 def _build_id() -> str:
