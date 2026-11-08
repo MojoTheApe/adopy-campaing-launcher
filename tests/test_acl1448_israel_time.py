@@ -279,9 +279,8 @@ def lt(browser):
         const slot = document.getElementById('slot');
         slot.insertAdjacentHTML('beforeend', cbLifetime.segHtml(0) + cbLifetime.rowsHtml(0));
         slot.querySelector('[data-budget-type="lifetime"]').click();
-        slot.querySelector('[name$="_start_time"]').value = '2026-11-10T09:00';
-        slot.querySelector('[name$="_end_time"]').value = '2026-11-15T09:00';
-        const on = slot.querySelector('.cb-sched-on'); on.checked = true; on.dispatchEvent(new Event('change'));
+        const ds = slot.querySelector('[data-lt-part="start"]'); ds.value = '2026-11-10'; cbLtDate(ds);
+        const de = slot.querySelector('[data-lt-part="end"]'); de.value = '2026-11-15'; cbLtDate(de);
     }""")
     yield pg
     assert not errors, errors
@@ -290,11 +289,46 @@ def lt(browser):
 
 def test_labels_and_aria_say_israel_time(lt):
     text = lt.evaluate("document.getElementById('slot').innerText")
-    assert "Start (Israel time)" in text and "End (Israel time)" in text
+    assert "First day (Israel time)" in text and "Last day (Israel time)" in text
+    assert "Hours (every day, Israel time)" in text
     assert lt.get_attribute(".cb-sg", "aria-label") == "Hours when ads run, Israel time"
-    assert lt.get_attribute("[name$='_start_time']", "aria-label") == "Start time, Israel time"
+    assert lt.get_attribute("[data-lt-part='start']", "aria-label") == "First day, Israel time"
+    assert lt.get_attribute("[data-lt-part='start']", "type") == "date"
     assert "Times are Israel time (Asia/Jerusalem). Account: America/New_York (UTC-5)" in \
         lt.inner_text("[data-lt-tz]") or "Times are Israel time (Asia/Jerusalem). Account: unknown" in lt.inner_text("[data-lt-tz]")
+
+
+def test_dates_are_a_period_first_day_from_midnight_last_day_inclusive(lt):
+    assert lt.input_value("[name$='_start_time']") == "2026-11-10T00:00"
+    assert lt.input_value("[name$='_end_time']") == "2026-11-16T00:00"
+    assert "10 Nov – 15 Nov (Israel time)" in lt.inner_text("[data-lt-preview]")
+
+
+def test_the_hours_grid_is_open_with_every_hour_on_and_no_schedule_is_sent(lt):
+    assert lt.evaluate("document.querySelector('.cb-sg').hidden") is False
+    assert lt.evaluate("[...document.querySelectorAll('.cb-sg-cell')].every(c => c.classList.contains('is-on'))")
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is False
+    assert lt.evaluate("document.querySelector('[name$=\"_schedule\"]').disabled") is True
+    assert "all hours" in lt.inner_text("[data-lt-preview]")
+
+
+def test_switching_an_hour_off_turns_the_schedule_on_and_back(lt):
+    lt.click(".cb-sg-day")          # Mon: весь день выкл
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is True
+    wins = json.loads(lt.input_value("[name$='_schedule']"))
+    assert wins == [{"days": [0, 2, 3, 4, 5, 6], "start_minute": 0, "end_minute": 1440}]
+    lt.click(".cb-sg-day")          # снова вкл: все часы -> расписания нет
+    assert lt.evaluate("document.querySelector('.cb-sched-on').checked") is False
+    assert lt.evaluate("document.querySelector('[name$=\"_schedule\"]').disabled") is True
+
+
+def test_a_saved_draft_fills_the_date_fields_back(lt):
+    lt.evaluate("""() => { const s = document.getElementById('slot');
+        s.querySelector('[name$="_start_time"]').value = '2026-12-01T00:00';
+        s.querySelector('[name$="_end_time"]').value = '2026-12-08T00:00';
+        cbLifetime.sync(s); }""")
+    assert lt.input_value("[data-lt-part='start']") == "2026-12-01"
+    assert lt.input_value("[data-lt-part='end']") == "2026-12-07"
 
 
 def test_the_page_has_no_time_zone_field(lt):
@@ -364,6 +398,7 @@ def test_the_page_algorithm_gives_the_same_windows_as_the_server_one(lt, wins, s
 def test_the_account_preview_reads_the_start_date_difference(lt):
     lt.evaluate("""() => { const hid = document.querySelector('[name$="_schedule"]');
         hid.disabled = false;
+        document.querySelector('.cb-sched-on').checked = true;
         hid.value = JSON.stringify([{days:[1,2,3,4,5], start_minute:540, end_minute:1080}]);
         cbLifetime.sync(document.getElementById('slot')); }""")
     assert lt.inner_text("[data-lt-acc-preview]") == "Meta gets account time (America/New_York): Mon–Fri 02:00–11:00"
