@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -231,70 +232,89 @@ MEMORY_PCT_NEW = "92"
 MIGRATIONS_FILE = "migrations.json"
 MEMORY_PCT_MIGRATION_ID = "acl-2400-memory-92"
 
+#: One assignment of the key in every form python-dotenv reads (`export`, quotes, an inline comment), matched on
+#: bytes like `_STALE_GRAPH_PIN` (ACL-2123): only the value changes; BOM, encoding, line endings and other lines stay.
+_MEMORY_PCT_LINE = re.compile(
+    rb"^(?P<bom>\xef\xbb\xbf)?(?P<head>[ \t]*(?:export[ \t]+)?" + MEMORY_PCT_KEY.encode() + rb"[ \t]*=[ \t]*)"
+    rb"(?P<q>[\"']?)(?P<val>[^\s\"'#]*)(?P=q)(?P<tail>(?:[ \t]+#[^\r\n]*)?[ \t]*)(?P<eol>\r\n|\n|\r|)$"
+)
 
-def _migration_done(real_dir: Path, migration_id: str) -> bool:
+
+def _migration_state(real_dir: Path, migration_id: str) -> str:
+    """`todo` (no marker file), `done`, or `broken` (the marker file cannot be read: treated as done, never
+    rewritten, so a value the owner set later in Settings can not be overwritten by a repeated run)."""
+    path = real_dir / MIGRATIONS_FILE
+    if not path.exists():
+        return "todo"
     try:
-        data = json.loads((real_dir / MIGRATIONS_FILE).read_text(encoding="utf-8"))
-        return isinstance(data, dict) and migration_id in data
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return False
+        return "broken"
+    if not isinstance(data, dict):
+        return "broken"
+    return "done" if migration_id in data else "todo"
 
 
 def _mark_migration_done(real_dir: Path, migration_id: str, note: str, *, now: float | None = None) -> None:
     path = real_dir / MIGRATIONS_FILE
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            data = {}
-    except (OSError, ValueError):
-        data = {}
+    data: dict = {}
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))   # a state check just proved it readable
     data[migration_id] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now or time.time())), "note": note}
-    _atomic_write(path, json.dumps(data, indent=2, sort_keys=True).encode("utf-8"))
+    paths._atomic_write(path, json.dumps(data, indent=2, sort_keys=True).encode("utf-8"))
 
 
 def migrate_memory_threshold(real_dir: Path, *, now: float | None = None) -> str | None:
     """ACL-2400: an explicit ACL_MEMORY_MAX_USED_PCT below 92 in the machine ``.env`` (75/85 from earlier
-    releases or set by hand) becomes 92 - once. The old value stays in ``.env`` inside the backup folder.
+    releases or set by hand) becomes 92 - once. The old ``.env`` stays in the backup folder.
 
-    The migration is recorded in ``migrations.json`` whether or not it changed anything, so a value the owner
-    sets later in Settings (even 75 again) is never overwritten, and a machine without the key is left alone.
-    Values above 92 and values that are not numbers are kept. Returns a one-line note, or None.
+    Read, edit and replace happen under the same ``.env.lock`` as every other writer of the machine ``.env``, on
+    bytes (CRLF, BOM, non-UTF-8 comments survive; only the value of the matched lines changes).
+    The migration is recorded in ``migrations.json`` whether or not it changed anything, so a value the owner sets
+    later in Settings (even 75) is never overwritten, and a machine without the key is left alone. An unreadable
+    ``migrations.json`` counts as done (warning in the log), never as "run again". Values above 92 and values that
+    are not numbers are kept. A failed lock or write leaves ``.env`` as it was, leaves no temp file and no backup
+    folder, and is tried again at the next launch. Returns a one-line note, or None.
     """
-    if _migration_done(real_dir, MEMORY_PCT_MIGRATION_ID):
+    state = _migration_state(real_dir, MEMORY_PCT_MIGRATION_ID)
+    if state == "broken":
+        log.warning("%s is unreadable; the memory threshold migration is treated as done", MIGRATIONS_FILE)
+    if state != "todo":
         return None
     env_path = real_dir / ENV_NAME
     note: str | None = None
+    backup_root: Path | None = None
     try:
-        text = env_path.read_text(encoding="utf-8", errors="replace") if env_path.is_file() else ""
-        lines = text.splitlines()
-        changed = False
-        old_value = ""
-        for i, ln in enumerate(lines):
-            stripped = ln.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            key, _, value = stripped.partition("=")
-            if key.strip() != MEMORY_PCT_KEY:
-                continue
-            try:
-                below = float(value.strip().strip("\"'")) < float(MEMORY_PCT_NEW)
-            except ValueError:
-                below = False
-            if below:
-                old_value = value.strip()
-                lines[i] = f"{MEMORY_PCT_KEY}={MEMORY_PCT_NEW}"
-                changed = True
-        if changed:
-            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(now or time.time()))
-            backup_root = real_dir / "backups" / f"memory-92-{stamp}"
-            _backup(env_path, backup_root, Path(ENV_NAME))
-            _atomic_write(env_path, ("\n".join(lines) + "\n").encode("utf-8"))
-            note = (f"memory threshold {MEMORY_PCT_KEY} {old_value} -> {MEMORY_PCT_NEW} (ACL-2400); "
-                    f"the old .env is in {backup_root}")
-            log.info(note)
-        _mark_migration_done(real_dir, MEMORY_PCT_MIGRATION_ID, note or "nothing to change")
-    except OSError as exc:  # not marked done: tried again at the next launch
+        with paths.machine_file_lock(env_path.with_name(".env.lock")):
+            if _migration_state(real_dir, MEMORY_PCT_MIGRATION_ID) != "todo":   # another process was first
+                return None
+            lines = env_path.read_bytes().splitlines(keepends=True) if env_path.is_file() else []
+            old_values: list[str] = []
+            for n, line in enumerate(lines):
+                m = _MEMORY_PCT_LINE.match(line)
+                if not m:
+                    continue
+                try:
+                    below = float(m.group("val").decode("ascii")) < float(MEMORY_PCT_NEW)
+                except (ValueError, UnicodeDecodeError):
+                    below = False
+                if below:
+                    old_values.append(m.group("val").decode("ascii"))
+                    lines[n] = (m.group("bom") or b"") + m.group("head") + m.group("q") + MEMORY_PCT_NEW.encode() \
+                        + m.group("q") + m.group("tail") + m.group("eol")
+            if old_values:
+                stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(now or time.time()))
+                backup_root = real_dir / "backups" / f"memory-92-{stamp}"
+                _backup(env_path, backup_root, Path(ENV_NAME))
+                paths._atomic_write(env_path, b"".join(lines))
+                note = (f"memory threshold {MEMORY_PCT_KEY} {old_values[-1]} -> {MEMORY_PCT_NEW} (ACL-2400); "
+                        f"the old .env is in {backup_root}")
+                log.info(note)
+            _mark_migration_done(real_dir, MEMORY_PCT_MIGRATION_ID, note or "nothing to change")
+    except (OSError, ValueError) as exc:  # not marked done: tried again at the next launch
         log.warning("memory threshold migration failed: %s", exc)
+        if backup_root is not None and note is None:
+            shutil.rmtree(backup_root, ignore_errors=True)   # no new backup folder per failing launch
         return None
     return note
 

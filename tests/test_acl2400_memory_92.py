@@ -143,11 +143,6 @@ def test_starting_a_closed_profile_reports_memory_at_once(tmp_path):
     assert sum(rig.sleeps) == 0, "no waiting for memory"
 
 
-def test_a_job_still_waits_queued_for_memory(tmp_path):
-    # ACL-2278 is untouched: only actions nobody queued are refused at once (see test_acl2278_queue_not_fail).
-    assert warm.START_MEMORY_WAIT_S > 0
-
-
 def test_check_plan_failure_carries_the_memory_reason_not_the_class_name():
     from src.analysis_agent import account_spend_api as api
 

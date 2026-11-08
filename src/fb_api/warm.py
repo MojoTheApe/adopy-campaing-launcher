@@ -449,6 +449,14 @@ class HeavyGate:
                     self._active[profile_id] = 1
                     return
                 if fail_on_memory and why in ("below_reserve", "memory_low"):
+                    try:   # ACL-2400: the numbers of the refusal (the message itself is one short line)
+                        v = self.wait_view(why)
+                        log.info("memory holds the action (%s): %.1f GB free, %.1f GB needed, %s%% used, "
+                                 "limit %s%%, %.1f GB total", why, (v.get("available_mb") or 0) / 1024,
+                                 (v.get("need_mb") or 0) / 1024, v.get("used_pct"), v.get("max_used_pct"),
+                                 (v.get("total_mb") or 0) / 1024)
+                    except Exception:  # noqa: BLE001 - logging must never change the refusal
+                        log.info("memory holds the action (%s)", why)
                     raise WarmError(MEMORY_HOLD_MESSAGE, code=why)
                 if self._clock() >= deadline:
                     if why == "below_reserve":
