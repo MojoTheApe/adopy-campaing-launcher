@@ -19713,7 +19713,7 @@ function cbPlanHtml(data) {
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
       + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
       + (s ? ' · Campaign PAUSED · ' + (cbPlanIsLifetime(s) ? aclEscHtml(cbPlanLifetimeRun(s)) : 'ad sets and ads active, start when you turn the campaign on') + ' · ' + aclEscHtml(cbPlanMoney(s))
-           + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
+           + (s.existing ? ' · <em>unfinished earlier run; a publish would finish it</em>' : '') : '')
       + '</div>';
     if (r.cached && r.checked_at) h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">· checked at '
       + aclEscHtml(window.cbPfTime(Date.parse(r.checked_at))) + ', unchanged</div>';

@@ -75,8 +75,8 @@ def test_rerun_does_not_reuse_an_incomplete_known_expansion(tmp_path):
     original = deepcopy({k: o for k, o in meta.objects.items()
                          if o["_kind"] in ("campaign", "adset")})
     out, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert out.error == "" and any("Published as" in w and "_2" in w for w in out.warnings)
-    assert any("languages (builder: 1002, Meta: 7)" in w for w in out.warnings)
+    assert out.error == "" and any("Published as" in w and "copy 1" in w for w in out.warnings)
+    assert any("languages (builder: 1002, Meta: 7)" in st for st in out.steps)     # ACL-2250: причина - в шагах
     assert {k: meta.objects[k] for k in original} == original
     assert sum(o["_kind"] == "campaign" for o in meta.objects.values()) == 2
     assert sum(o["_kind"] == "adset" for o in meta.objects.values()) == 2
@@ -102,8 +102,8 @@ def test_rerun_still_stops_on_a_genuinely_different_language(tmp_path):
     before = len(meta.posts)
     out, _ = _run(meta, _draft(tmp_path, ads=2))
     # ACL-1902: a campaign that differs is left as is and the run publishes under a new name.
-    assert out.error == "" and any("Published as" in w and "_2" in w for w in out.warnings)
-    assert any("languages (builder: 1002, Meta: 6)" in w for w in out.warnings)
+    assert out.error == "" and any("Published as" in w and "copy 1" in w for w in out.warnings)
+    assert any("languages (builder: 1002, Meta: 6)" in st for st in out.steps)
     assert len(meta.posts) > before
 
 
@@ -112,8 +112,8 @@ def test_unknown_members_keep_strict_compare_and_say_so(tmp_path):
     _run(meta, _draft(tmp_path, ads=1))
     next(o for o in meta.objects.values() if o["_kind"] == "adset")["targeting"]["locales"] = [7, 23]
     out, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert out.error == "" and any("Published as" in w and "_2" in w for w in out.warnings)
-    text = " ".join(out.warnings)
+    assert out.error == "" and any("Published as" in w and "copy 1" in w for w in out.warnings)
+    text = " ".join(out.steps)
     assert "languages (builder: 1002, Meta: 7, 23)" in text
     assert "compared strictly" in text and "did not list the locales" in text
 
