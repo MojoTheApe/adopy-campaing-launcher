@@ -1,5 +1,42 @@
 # System history
 
+## ACL-2471 — Targeting resolver: category in parentheses — 2026-11-08
+
+Targeting resolver: an interest name that Meta returns with a category in parentheses, for example "swing trading (investing)", now matches exactly when it is the only one with that base name; two or more stay candidates for a human.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1471).
+
+## ACL-2467 — Builder: Publish buttons show a spinner while the plan check runs — 2026-11-08
+
+Builder: after Publish is pressed both Publish buttons show a spinner and the elapsed time while the plan check runs, and stay disabled until the confirm window opens, the gate blocks or an error happens.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1467).
+
+## ACL-2465 — Builder: Lifetime start of today that passed in the queue is moved forward — 2026-11-08
+
+The server no longer refuses a Lifetime job whose start of today passed while it waited in the queue (owner's run on Doc280: sent 17:51 with start 18:00, checked at 18:06). Such a start moves to the next quarter hour that is at least 5 minutes ahead (seconds count: 09:10:30 gives 09:30), and the run result and Check plan say so ("start 18:00 had passed ... moved to 18:15", Israel time). A repeat or resume of the same draft recognises the moved start in Meta and reuses the campaign instead of creating "copy 1"; any other start edit is still a difference. A start on an earlier day is still refused, Daily is unchanged. Needs a server restart.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1465).
+
+## ACL-2400 — Memory threshold 92 % on every dashboard, and an immediate memory message — 2026-11-08
+
+- **Default 92 %.** `ACL_MEMORY_MAX_USED_PCT` now defaults to 92 (was 75). With the usual work open (Claude sessions, a
+  browser, one or two Multilogin profiles) memory in use stays at 86-89 %, so with 75 or 85 Check plan and campaign reads
+  waited about 5 minutes for memory and then failed. At least 1 GB always stays free on small laptops.
+- **One-time update migration.** On the first start of this version a machine `.env` that holds an explicit
+  `ACL_MEMORY_MAX_USED_PCT` below 92 (75 or 85 from earlier releases, or set by hand) gets 92. The old `.env` is kept in
+  `backups\memory-92-<time>\` inside the settings folder. The edit is made under the `.env` lock, byte for byte (line endings, BOM and other text stay; `export`, quotes
+  and a trailing comment are handled). The migration is recorded in `migrations.json`, so it runs once:
+  a value set later in Settings (even 75) is never overwritten, and a machine without the key is left alone. Values of 92
+  and above are not touched. A package copy of the settings never brings an old default (75/90) back.
+- **Immediate memory message.** When memory holds an action nobody queued on a profile that is already open (Check
+  plan, a campaign read) or the memory check before a profile start fails, it says at once
+  `Not enough free memory - close a profile and retry` instead of waiting 2-5 minutes and then showing a generic read
+  error. Check plan's response and its `api_plan_check` record carry the memory code and text, and the log keeps the
+  numbers (free GB, used %, limit). Publish jobs still wait queued for memory (ACL-2278). Not changed: a closed
+  profile that must wait for a free slot in the profile queue (a read or a start without a job) still waits there
+  as before. The gate maths is unchanged.
+- `.env.example` shows `ACL_MEMORY_MAX_USED_PCT=92`.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1400).
+
 ## ACL-2403 — Primary text and headline are optional — 2026-11-05
 
 An ad can be published without a primary text or a headline: Check plan only warns, and the ad is sent without the empty field. An ad with several texts or a Stories / Reels file still needs both (new Check plan error "Several texts or a Stories / Reels file need a primary text and a headline", instead of a refusal at Publish). The RPA flow with empty texts is unverified.
