@@ -22,7 +22,7 @@ import os
 import shutil
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from config import paths
 
@@ -70,25 +70,71 @@ def _parse_env(text: str) -> tuple[list[str], dict[str, str]]:
     return lines, values
 
 
-def merge_env_text(real_text: str, shadow_text: str, *, shadow_newer: bool) -> str:
-    """Union of keys. On conflict the newer file wins; empty values never win."""
+#: Code defaults of settings seen overwriting a real value (ACL-2334): a package copy that merely carries
+#: the default must not replace an explicit machine setting.
+_DEFAULT_VALUES = {
+    "ACL_MAX_PARALLEL_PROFILES": "2",
+    "ACL_PROFILE_MEMORY_GB": "3.5",
+    "ACL_PROFILE_MEMORY_FLOOR_GB": "3.5",
+    "ACL_MEMORY_RESERVE_GB": "3.0",
+    "ACL_MEMORY_MAX_USED_PCT": "75",
+}
+
+
+def _is_absolute(value: str) -> bool:
+    v = value.strip().strip("\"'")
+    return bool(v) and (os.path.isabs(v) or PureWindowsPath(v).is_absolute() or PurePosixPath(v).is_absolute())
+
+
+def _same_number(a: str, b: str) -> bool:
+    try:
+        return float(a) == float(b)
+    except ValueError:
+        return False
+
+
+def _shadow_may_replace(key: str, real_value: str, shadow_value: str) -> bool:
+    """ACL-2334: a newer package value still never turns an absolute path into a relative one
+    or an explicit setting into the code default."""
+    if _is_absolute(real_value) and shadow_value.strip() and not _is_absolute(shadow_value):
+        return False
+    default = _DEFAULT_VALUES.get(key)
+    if default is not None and (shadow_value.strip() == default or _same_number(shadow_value.strip(), default)):
+        return False
+    return True
+
+
+def merge_env_text_keys(real_text: str, shadow_text: str, *, shadow_newer: bool) -> tuple[str, list[str]]:
+    """Union of keys. On conflict the newer file wins; empty values never win.
+
+    Returns the merged text and the names (never values) of the keys that were added or changed.
+    """
     lines, real = _parse_env(real_text)
     _, shadow = _parse_env(shadow_text)
     out = list(lines)
+    changed: list[str] = []
+
+    def replace(key: str, value: str) -> None:
+        nonlocal out
+        out = [
+            f"{key}={value}" if ln.strip().partition("=")[0].strip() == key and not ln.strip().startswith("#") else ln
+            for ln in out
+        ]
+        changed.append(key)
+
     for key, value in shadow.items():
         if key not in real:
             out.append(f"{key}={value}")
-        elif real[key] != value and shadow_newer and value.strip():
-            out = [
-                f"{key}={value}" if ln.strip().partition("=")[0].strip() == key and not ln.strip().startswith("#") else ln
-                for ln in out
-            ]
+            changed.append(key)
+        elif real[key] != value and shadow_newer and value.strip() and _shadow_may_replace(key, real[key], value):
+            replace(key, value)
         elif real[key] != value and not real[key].strip() and value.strip():
-            out = [
-                f"{key}={value}" if ln.strip().partition("=")[0].strip() == key and not ln.strip().startswith("#") else ln
-                for ln in out
-            ]
-    return "\n".join(out) + "\n"
+            replace(key, value)
+    return "\n".join(out) + "\n", changed
+
+
+def merge_env_text(real_text: str, shadow_text: str, *, shadow_newer: bool) -> str:
+    return merge_env_text_keys(real_text, shadow_text, shadow_newer=shadow_newer)[0]
 
 
 def _backup(target: Path, backup_root: Path, rel: Path) -> None:
@@ -135,7 +181,7 @@ def merge_shadow_into(real_dir: Path, shadow_dir: Path, *, now: float | None = N
                 continue
             shadow_newer = src_mtime > dest.stat().st_mtime + _MTIME_TOLERANCE
             if rel.as_posix() == ENV_NAME:
-                merged = merge_env_text(
+                merged, keys = merge_env_text_keys(
                     dest.read_text(encoding="utf-8", errors="replace"),
                     src.read_text(encoding="utf-8", errors="replace"),
                     shadow_newer=shadow_newer,
@@ -145,6 +191,9 @@ def merge_shadow_into(real_dir: Path, shadow_dir: Path, *, now: float | None = N
                     note_backup()
                     _atomic_write(dest, merged.encode("utf-8"))
                     result.env_merged.append(rel.as_posix())
+                    # Key names only, never values (ACL-2334).
+                    log.info("merged %s from the package copy; keys: %s", rel.as_posix(),
+                             ", ".join(keys) or "(none)")
                 continue
             if shadow_newer:
                 _backup(dest, backup_root, rel)
@@ -175,7 +224,13 @@ def prepare_config_dir() -> UnifyResult:
     try:
         log.info("ACL settings folder: %s", real)
         print(f"[acl] settings folder: {real}")
-        for shadow in paths.get_shadow_config_dirs():
+        explicit = paths.is_config_dir_explicit()
+        if explicit:
+            # ACL-2334: the operator pointed the app at one directory; a package copy (dev machines: app code
+            # run inside a Claude session writes there) must not rewrite it.
+            log.info("ACL_CONFIG_DIR is set explicitly; package copies are not merged")
+            print("[acl] ACL_CONFIG_DIR is set explicitly: package copies are not merged")
+        for shadow in ([] if explicit else paths.get_shadow_config_dirs()):
             merged = merge_shadow_into(real, Path(shadow))
             result.copied += merged.copied
             result.replaced += merged.replaced

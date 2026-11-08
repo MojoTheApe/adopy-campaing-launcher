@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.fb_api.facts_cache import plausible_pick
 from src.fb_api.graph import GraphError
 
 #: Куда кладётся тип попадания в `flexible_spec`.
@@ -65,6 +66,10 @@ STRONG_SCORE = 0.78
 WEAK_SCORE = 0.5
 MAX_CANDIDATES = 8
 UNKNOWN_MESSAGE = "Couldn't check all interests — press Check plan again"
+#: ACL-2267: тёплая находка, которую Meta больше не отдаёт, а поиск точного имени не нашёл.
+WARM_GONE_REASON = "The saved match is no longer offered by Meta; pick a candidate"
+#: Строк в ответе adinterestvalid (без limit Meta отдаёт страницу по умолчанию, и хвост пакета теряется).
+VALID_LIMIT = 200
 
 #: ACL-1920. Какие поиски резолвера НЕОБЯЗАТЕЛЬНЫ: отказ Meta (код 10 «Permission Denied», 200-299)
 #: пропускает этот поиск на всё задание и становится предупреждением с названием поиска. Остальные
@@ -186,6 +191,10 @@ def picks_of(entry: dict) -> list[dict]:
     return [{"id": entry["id"], "type": entry["type"], "name": entry.get("name") or ""}]
 
 
+class ConfirmedStoreUnreadable(RuntimeError):
+    """The confirmed-targeting file exists but could not be read (ACL-2243): its state is unknown, not empty."""
+
+
 class ConfirmedStore:
     """Локальный кэш подтверждённых человеком соответствий: (тип, термин) → id + имя."""
 
@@ -201,12 +210,23 @@ class ConfirmedStore:
         return Path(paths.get_local_config_dir()) / CACHE_FILE
 
     def _read(self) -> dict[str, dict]:
+        # A missing file is a first run (empty store); any other failure leaves the state unknown.
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except FileNotFoundError:
             return {}
+        except (OSError, ValueError) as exc:
+            raise self._unreadable() from exc
         entries = data.get("entries") if isinstance(data, dict) else None
-        return entries if isinstance(entries, dict) else {}
+        if not isinstance(entries, dict):
+            raise self._unreadable()
+        return entries
+
+    def _unreadable(self) -> ConfirmedStoreUnreadable:
+        return ConfirmedStoreUnreadable(
+            f"Confirmed targeting could not be read from {self.path}. Nothing was changed or deleted. "
+            "Close other programs using that file or restore it from a backup, then try again; "
+            "if the file is damaged, move it away and confirm the targeting again.")
 
     def _write(self, entries: dict[str, dict]) -> None:
         p = self.path
@@ -335,9 +355,30 @@ class TermResolver:
 
     def __init__(self, client: Any, store: ConfirmedStore | None = None, *,
                  term_cap: int = TERM_READ_CAP, job_cap: int | None = None,
-                 cache: SearchCache | None = None, scope: str = ""):
+                 cache: SearchCache | None = None, scope: str = "", facts: Any = None):
         self.client = client
         self.store = store if store is not None else ConfirmedStore()
+        #: ACL-2267: долгий кэш точных находок (term -> picks), см. facts_cache; по умолчанию - кэш машины.
+        if facts is None:
+            from src.fb_api import facts_cache
+
+            facts = facts_cache.default()
+        self._facts = facts
+        #: Ключи долгого кэша, которых коснулся этот резолвер: сбрасываются при отказе Meta по таргетингу.
+        self.touched_keys: set[str] = set()
+        #: id интересов, о которых Meta ответила полным пакетом (valid или нет).
+        self._ids_asked: set[str] = set()
+        #: id, ответ о которых пришёл обрезанным: в этом задании не переспрашиваются и не считаются отвергнутыми.
+        self._ids_cut: set[str] = set()
+        #: Последний пакет adinterestvalid пришёл не целиком (ставит `_get_all`).
+        self.valid_cut = False
+        #: id тёплых интересов (из долгого кэша) и подтверждённых человеком - их судьба при отказе разная.
+        self._warm_ids: set[str] = set()
+        self._confirmed_ids: set[str] = set()
+        #: Нормы терминов, чья тёплая запись удалена в этом задании (для причины в Check plan).
+        self._warm_dropped: set[str] = set()
+        #: Счётчики для телеметрии (без имён терминов).
+        self.facts_stats = {"warm_hits": 0, "warm_saved": 0, "warm_dropped": 0, "warm_dropped_unattributed": 0}
         self.term_cap = int(term_cap)
         #: Явный потолок задания (тесты) или None: тогда он растёт с числом строк (см. prefetch).
         self._fixed_job_cap = None if job_cap is None else int(job_cap)
@@ -414,6 +455,7 @@ class TermResolver:
         if isinstance(mx, int) and isinstance(used, int) and used + CLIENT_RESERVE + pages > mx:
             raise _Spent
         before = used if isinstance(used, int) else None
+        cut_before = len(getattr(cl, "truncated", None) or [])
         rows = cl.get_all("/search", params, max_pages=pages)
         after = getattr(cl, "calls", None)
         # Настоящие чтения: разница счётчика клиента (по странице на GET); без счётчика - как минимум одно.
@@ -422,44 +464,66 @@ class TermResolver:
         self.reads += spent
         if count_term:
             self._term_reads += spent
+        if params.get("type") == "adinterestvalid" and len(getattr(cl, "truncated", None) or []) > cut_before:
+            # ACL-2267: неполный ответ пакета не кэшируется - при повторе обрезка была бы уже не видна,
+            # и отсутствующий в нём id сочли бы отвергнутым.
+            self.valid_cut = True
+            return rows
         self._query_cache[key] = rows
         if self._shared is not None:
             self._shared.put(self._scope, key, rows)
         return rows
 
-    # -- пакет adinterestvalid: имена + перепроверка id подтверждённых интересов
+    # -- пакет adinterestvalid: имена + перепроверка id подтверждённых и тёплых интересов
     def _ask_valid(self, names: list[str], ids: list[str] | None = None) -> None:
         todo = [n for n in dict.fromkeys(names) if norm(n) not in self._valid_asked]
-        ids = [i for i in dict.fromkeys(ids or []) if i not in self._valid_ids]
+        ids = [i for i in dict.fromkeys(ids or [])
+               if i not in self._valid_ids and i not in self._ids_asked and i not in self._bad_ids
+               and i not in self._ids_cut]
         if "adinterestvalid" in self.refused:
-            self._ids_unverified = self._ids_unverified or bool(ids)
+            # Предупреждение - только о выборе человека; тёплые термины проверит поиск adinterest.
+            self._ids_unverified = self._ids_unverified or any(i in self._confirmed_ids for i in ids)
             return
         if not todo and not ids:
             return
-        params: dict[str, Any] = {"type": "adinterestvalid"}
+        params: dict[str, Any] = {"type": "adinterestvalid", "limit": VALID_LIMIT}
         if todo:
             params["interest_list"] = todo
         if ids:
             params["interest_fbid_list"] = ids
+        self.valid_cut = False
         try:
             rows = self._lookup("adinterestvalid", params, 1)
         except GraphError as exc:
             bad = self._rejected_ids(exc, ids)
             if not bad:
-                raise
-            # A cached interest id that Meta calls "Invalid id" (e.g. 61, never a real 13+ digit id) is
-            # dropped from the confirmed cache so the term is searched again, not failing the plan check.
+                # ACL-2267: GraphError вычищает длинные числа, и настоящий id в тексте не виден. Если в пакете
+                # были тёплые id (наша автоматическая находка, не выбор человека), убираем их все и
+                # спрашиваем без них; остался отказ - он про выбор человека, и проверка падает, как раньше.
+                warm = [i for i in ids if i in self._warm_ids and i not in self._confirmed_ids]
+                if "invalid id" not in str(exc).casefold() or not warm:
+                    raise
+                self.facts_stats["warm_dropped_unattributed"] += len(warm)
+                bad = set(warm)
+            # A cached interest id that Meta calls "Invalid id" is dropped from both caches so the term is
+            # searched again, not failing the plan check.
             self._drop_cached_ids(bad)
             self._bad_ids.update(bad)
             self._ask_valid(names, [i for i in ids if i not in bad])
             return
         if "adinterestvalid" in self.refused:
-            self._ids_unverified = bool(ids)    # поиск adinterest ниже найдёт точные имена сам
+            self._ids_unverified = any(i in self._confirmed_ids for i in ids)  # поиск adinterest найдёт имена сам
             return
+        # Обрезанный ответ (есть следующая страница или полная страница строк): отсутствие id в нём ничего
+        # не значит, такие id не считаются спрошенными и не объявляются устаревшими.
+        cut = self.valid_cut or len(rows) >= VALID_LIMIT
         for n in todo:
             self._valid_asked.add(norm(n))
-        if ids:
+        if ids and cut:
+            self._ids_cut.update(ids)
+        elif ids:
             self._ids_checked = True
+            self._ids_asked.update(ids)
         for r in rows:
             if r.get("valid") is not False and r.get("id"):
                 self._valid_ids.add(str(r["id"]))
@@ -470,8 +534,8 @@ class TermResolver:
     @staticmethod
     def _rejected_ids(exc: Exception, asked: list[str]) -> set[str]:
         """Asked ids that Meta itself named in an `Invalid id` answer; none named means none dropped."""
-        # GraphError scrubs digit runs of 10+ from its text, so only ids short enough to survive the scrub
-        # (never-real ones like 61) are recognised here; a long real id falls back to the old failure (safe).
+        # GraphError scrubs digit runs of 8+ from its text (telemetry.scrub), so only ids short enough to
+        # survive the scrub (never-real ones like 61) are recognised here; see _ask_valid for long ones.
         text = str(exc)
         if "invalid id" not in text.casefold():
             return set()
@@ -479,28 +543,93 @@ class TermResolver:
         return named
 
     def _drop_cached_ids(self, bad: set[str]) -> None:
+        """Единственная точка удаления отвергнутых id: и выбор человека, и долгий кэш (ACL-2258 + ACL-2267)."""
         # store.remove(term) forgets the term with all its confirmed choice kinds (interest, behavior, ...).
         for e in self.store.entries():
             if any(p["type"] == "interests" and str(p["id"]) in bad for p in picks_of(e)):
                 self.store.remove(str(e.get("term") or ""))
+        self._note_warm_dropped(self._facts.drop_interest_ids(bad))
+
+    def _note_warm_dropped(self, keys) -> None:
+        for k in keys or []:
+            self._warm_dropped.add(k.split("|", 2)[-1])
+            self.touched_keys.discard(k)
+            self.facts_stats["warm_dropped"] += 1
 
     def _cached_interest_ids(self, terms: list[str]) -> list[str]:
         ids: list[str] = []
         for t in terms:
             for e in self.store.get_all(t):
                 ids += [p["id"] for p in picks_of(e) if p["type"] == "interests" and p["id"] not in self._bad_ids]
+        self._confirmed_ids.update(ids)
         return ids
 
+    # -- долгий кэш точных находок (ACL-2267)
+    def _warm_key(self, term: str) -> str:
+        return self._facts.term_key("term", norm(term))
+
+    def _warm_hit(self, term: str) -> list[dict] | None:
+        """Точная находка из долгого кэша (или None). Битая или неправдоподобная запись = промах."""
+        value = self._facts.get_term(self._warm_key(term))
+        picks = value.get("picks") if isinstance(value, dict) else None
+        if not isinstance(picks, list) or not picks or not all(plausible_pick(p, BUCKETS) for p in picks):
+            return None
+        self.touched_keys.add(self._warm_key(term))
+        return [{"id": str(p["id"]), "type": p["type"], "name": str(p.get("name") or "")} for p in picks]
+
+    @staticmethod
+    def _interest_ids(picks: list[dict] | None) -> list[str]:
+        return [p["id"] for p in picks or [] if p.get("type") == "interests"]
+
+    def _warm_interest_ids(self, terms: list[str]) -> list[str]:
+        """id интересов из долгого кэша: их проверяет тот же пакет adinterestvalid (без лишнего вызова)."""
+        ids: list[str] = []
+        for t in terms:
+            ids += [i for i in self._interest_ids(self._warm_hit(t)) if i not in self._bad_ids]
+        self._warm_ids.update(ids)
+        return ids
+
+    def _warm_put(self, term: str, picks: list[dict]) -> None:
+        if not picks or not all(plausible_pick(p, BUCKETS) for p in picks):
+            return
+        self._facts.put_term(self._warm_key(term), {"picks": [
+            {"id": str(p["id"]), "type": p["type"], "name": str(p.get("name") or "")} for p in picks]})
+        self.touched_keys.add(self._warm_key(term))
+        self.facts_stats["warm_saved"] += 1
+
+    def _warm_verified(self, term: str, warm: list[dict]) -> bool:
+        """Интересы тёплой находки подтвердила Meta (adinterestvalid). Отвергла - запись удаляется, идёт поиск."""
+        ids = self._interest_ids(warm)
+        if not ids:
+            return True       # поведения, должности и пр.: доверяем до срока или отказа Meta (решение D1)
+        if not any(i in self._bad_ids for i in ids):
+            try:
+                self._ask_valid([], ids)     # обычно ответ уже получен prefetch-пакетом: вызова нет
+            except _Spent:
+                return False
+            if all(i in self._valid_ids for i in ids):
+                return True
+        if all(i in self._ids_asked or i in self._bad_ids for i in ids):
+            key = self._warm_key(term)
+            self._facts.drop_terms([key])    # Meta интерес не отдала: кэш недостоверен
+            self._note_warm_dropped([key])
+        return False     # не проверено (отказ, бюджет, обрезанный ответ): ищем как обычно, запись не трогаем
+
     def prefetch(self, terms: list[str]) -> None:
-        """Один пакетный adinterestvalid на все термины, их части и id подтверждённых интересов."""
+        """Один пакетный adinterestvalid на все термины, их части и id подтверждённых и тёплых интересов."""
         self._term_reads = 0
         try:
-            todo = [t for t in terms if norm(t) not in self._results]
+            pending = [t for t in terms if norm(t) not in self._results]
+            todo = [t for t in pending if self._warm_hit(t) is None]
             every = todo + [p for t in todo for p in split_term(t)]
+            # id подтверждённых и тёплых интересов проверяются в том же пакете, что и имена; термин,
+            # который и подтверждён, и в кэше, попадает сюда по обоим признакам.
+            id_terms = pending + [p for t in pending for p in split_term(t)]
             if self._fixed_job_cap is None:
-                n = len({norm(x) for x in every}) + len(self._results)
+                # потолок считается и по тёплым терминам: отвергнутый id потребует обычного поиска
+                n = len({norm(x) for x in id_terms}) + len(self._results)
                 self.job_cap = min(JOB_READ_ABS_CAP, max(self.job_cap, JOB_READ_BASE + JOB_READ_PER_TERM * n))
-            self._ask_valid(every, self._cached_interest_ids(every))
+            self._ask_valid(every, self._cached_interest_ids(id_terms) + self._warm_interest_ids(id_terms))
         except _Spent:
             pass
 
@@ -536,11 +665,19 @@ class TermResolver:
                 return {"term": term, "state": "confirmed", "candidates": [], "reason": "",
                         "picks": [p for e in ok for p in picks_of(e)]}
             stale = "the confirmed pick is no longer returned by Meta; confirm it again"
+        warm = self._warm_hit(term)
+        if warm and self._warm_verified(term, warm):
+            # точная находка прошлых прогонов; её интересы сверены с Meta пакетом adinterestvalid
+            self.facts_stats["warm_hits"] += 1
+            return {"term": term, "state": "exact", "picks": warm, "candidates": [], "reason": ""}
+        if not stale and key in self._warm_dropped:
+            stale = WARM_GONE_REASON
         cands: dict[tuple, dict] = {}
         try:
             self._ask_valid([term])
             hit = self._valid.get(key)
             if hit:
+                self._warm_put(term, [hit])
                 return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
             for bucket, rows in self._stages(term):
@@ -549,6 +686,7 @@ class TermResolver:
                     if not c:
                         continue
                     if norm(c["name"]) == key:
+                        self._warm_put(term, [c])
                         return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
                     sc = score(term, c["name"])
                     if sc >= WEAK_SCORE:
@@ -564,7 +702,9 @@ class TermResolver:
         """Интерес из кэша, которого Meta больше не отдаёт (проверено пакетом). Иные типы - доверяем."""
         if not self._ids_checked:
             return False
-        return any(p["type"] == "interests" and p["id"] not in self._valid_ids for p in picks_of(entry))
+        # Нет в ответе пакета только то, о чём Meta спросили полным ответом; не спрошенное доверяем как раньше.
+        return any(p["type"] == "interests" and p["id"] in self._ids_asked and p["id"] not in self._valid_ids
+                   for p in picks_of(entry))
 
     def resolve(self, term: str) -> dict:
         """Результат по термину: state exact|confirmed|pending|unresolved|unknown."""
