@@ -312,3 +312,27 @@ def test_copy_creates_nothing_in_meta(page):
     page.locator(".cbcp-btns button", has_text="Copy").click()
     page.wait_for_timeout(300)
     assert hits == [], hits
+
+
+def test_undo_is_all_or_nothing_when_one_target_is_busy(page):
+    _seed(page)
+    # a third target: Src -> Eur, UsdTwo and a second copy to Eur are enough to have three copies
+    _open_dialog(page)
+    for name in ("UsdTwo", "Eur"):
+        page.locator(".cbcp-row", has_text=name).locator("input[type=checkbox]").check()
+    page.locator(".cbcp-row", has_text="Eur").locator("input.cb-input").fill("40")
+    page.locator(".cbcp-btns button", has_text="Copy").click()
+    counts = ("Array.from(document.querySelectorAll('form.open-account-form'))"
+              ".map(f => f.querySelectorAll('.cb-slot').length)")
+    assert sorted(page.evaluate(counts)) == [1, 1, 1]
+    # make one target busy (the same signal a running build gives)
+    page.evaluate("window.__realBusy = window.cbAccountBusy; "
+                  "window.cbAccountBusy = (k) => /Eur$/.test(k) || window.__realBusy(k); 0")
+    depth = page.evaluate("cbMove.undoDepth()")
+    page.locator(".cbm-toast .cbm-undo").click()
+    assert sorted(page.evaluate(counts)) == [1, 1, 1], "nothing may be removed while one copy cannot be undone"
+    assert page.evaluate("cbMove.undoDepth()") == depth, "the Undo entry must stay on the stack"
+    assert "Can" in page.locator(".cbm-toast").inner_text()
+    page.evaluate("window.cbAccountBusy = window.__realBusy; 0")
+    assert page.evaluate("cbMove.undoLatest()") is True
+    assert sorted(page.evaluate(counts)) == [0, 0, 1]

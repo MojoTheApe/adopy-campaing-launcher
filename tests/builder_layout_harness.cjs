@@ -102,6 +102,12 @@ assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не �
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
 assert.equal(L.futureHtml('copyTo', 'select', 'x'), '', 'ACL-2456: no disabled stub is drawn for copyTo any more');
+// The escaping helper of the (now empty) FUTURE mechanism still escapes: a stub added later cannot inject markup.
+L.FUTURE.probe = { task: 'ACL-0', what: '<b>x</b>' };
+assert.ok(!/<script/.test(L.futureHtml('probe', 'select', '<script>x</script>')), 'select text is escaped');
+assert.ok(!/<script/.test(L.futureHtml('probe', 'button', '<script>x</script>')), 'button text is escaped');
+assert.ok(!/<b>/.test(L.futureHtml('probe', 'button', 'x')), 'the tip in the markup is escaped');
+delete L.FUTURE.probe;
 
 // ── ACL-2456: Copy to accounts ────────────────────────────────────────
 const on = L.copyToButtonHtml(true), off = L.copyToButtonHtml(false);

@@ -1288,7 +1288,10 @@
       cursor: pointer; line-height: 1.4;
     }
     .cb-dup-slot-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: var(--adopy-text-table); }
-    .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-copyto-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: var(--adopy-text-table); background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--accent); font-weight: 500; font-family: inherit; cursor: pointer; line-height: 1.4; }
+    .cb-copyto-btn:hover:not(:disabled), .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-copyto-btn:disabled { color: var(--muted); cursor: not-allowed; }
+    .cb-copyto-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     .cb-dup-slot-btn:focus-visible, .cb-dup-ad-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     /* В ящике кампанию добавляет его «+ Campaign» у аккаунта; кнопка формы
        была второй дорогой туда же. На странице страны она остаётся. */
@@ -10360,6 +10363,7 @@ window.cbMove = (function () {
       settleHidden(copy);
       return { label: 'copied campaign', slot: copy, notes: notes,
         text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
+        canUndo: function () { return copy.isConnected && !formBusy(destForm); },
         undo: function () {
           if (!copy.isConnected || formBusy(destForm)) return false;
           copy.remove();
@@ -10904,6 +10908,9 @@ window.cbMove = (function () {
     var names = done.map(function (d) { return d.r.label; }).join(', ');
     var entry = push({ label: 'copied campaign to ' + done.length + (done.length === 1 ? ' account' : ' accounts'),
       undo: function () {
+        /* Всё или ничего: пока хоть одну копию нельзя снять (форма занята, копии уже нет), не снимается ни одна,
+           запись остаётся в стеке, а человек видит «Can't undo». */
+        if (!done.every(function (d) { return d.res.canUndo(); })) return false;
         var ok = true;
         done.slice().reverse().forEach(function (d) { if (!d.res.undo()) ok = false; });
         return ok;
