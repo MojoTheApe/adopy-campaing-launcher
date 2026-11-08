@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2462 — Builder: Lifetime start time for today no longer goes stale — 2026-11-08
+
+Lifetime form: the start time for "today" is recomputed on every sync and once a minute, so the form no longer says "First day is in the past"; the Lifetime summary updates as the budget is typed. Template only: reload the page.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1462).
+
+## ACL-2457 — Dashboard: bulk edit of budget, age, gender, languages and placements — 2026-11-08
+
+On the Home campaigns table, tick several campaigns of one account and press "Bulk edit": budget (daily or lifetime, as each campaign has it), age range, gender, languages and a placements preset (Advantage+ or the ACL default). A preview shows before and after per campaign and nothing is written until you press Confirm. Only the fields you filled in are written, through the same human-confirmed command path as ACL-1800 (re-read before writing, one write per object, readback after). A failed or skipped campaign is listed with its reason and does not stop the others. API backend only; with the RPA backend the control is disabled with the reason "API backend only". The in-page write policy now also allows `lifetime_budget` and a validated `targeting` object on an existing object (ad sets keep every other targeting setting as read). Restart the dashboard after release (Python changes).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1457).
+
+## ACL-2456 — Builder: copy a campaign to other ad accounts — 2026-11-08
+
+"Copy to accounts" on the campaign card now works with the API backend (it is disabled with the reason "API backend only" on RPA). Pick one or more other accounts; the dialog reads the account map and the cached account readings (no Meta call) and shows the target pixel. The copy goes into the target account's own builder form as an ordinary draft: its tracking link, Page Automatic, Instant Form ids cleared. When the target currency differs from the source, or either is unknown, the source amount is not copied; the buyer types the budget for the target. Nothing is created by the copy: Preview and Check plan still apply and campaigns are created PAUSED. One Undo takes back all copies of one action. Python change: restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1456).
+
 ## ACL-2455 — Lifetime run is a range of days, hours are picked for every day — 2026-11-08
 
 The owner found it confusing that a Lifetime campaign's Start and End carried a time of day, which read
