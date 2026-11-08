@@ -570,8 +570,8 @@ def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(pag
           const sc = document.querySelector('.hc-scroll'), fr = document.querySelector('.hc-frame');
           const allowedPinned = e => e.matches('thead th, td.p1');
           const sticky = [...sc.querySelectorAll('*')].filter(e => ['sticky', 'absolute', 'fixed'].includes(getComputedStyle(e).position));
-          const other = sticky.filter(e => !allowedPinned(e) && !e.matches('.hc-band-in, .hc-rm-raw, .hc-resize, thead th > span'));
-          const partial = sticky.filter(e => e.matches('.hc-band-in, .hc-rm-raw')).filter(e => e.getBoundingClientRect().width < sc.clientWidth - 2);
+          const other = sticky.filter(e => !allowedPinned(e) && !e.matches('.hc-band-in, .hc-bulk-in, .hc-rm-raw, .hc-resize, thead th > span'));
+          const partial = sticky.filter(e => e.matches('.hc-band-in, .hc-bulk-in, .hc-rm-raw')).filter(e => e.getBoundingClientRect().width < sc.clientWidth - 2);
           const pinnedBg = [...sc.querySelectorAll('td.p1, thead th.p1, th.hc-pin-top')].map(e => getComputedStyle(e).backgroundColor);
           const cs = (pe) => { const c = getComputedStyle(fr, pe); return {content: c.content, position: c.position, events: c.pointerEvents, right: c.right}; };
           const pin = parseFloat(getComputedStyle(document.querySelector('.hc-scoped')).getPropertyValue('--hc-pin-w'));

@@ -4206,6 +4206,30 @@ def api_account_facts(account: str = "") -> JSONResponse:
     })
 
 
+@app.post("/api/copy-to-accounts/targets")
+async def api_copy_to_accounts_targets(request: Request) -> JSONResponse:
+    """ACL-2456: what the "Copy to accounts" dialog needs about the chosen targets. Reads the account map and
+    the cached readings only; no Meta call and nothing is created. Body JSON: {source, targets: [label]}."""
+    from src.web import copy_to_accounts as _cta, publish_api
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+    if not isinstance(body, dict) or not isinstance(body.get("targets"), list):
+        return JSONResponse({"ok": False, "error": "Expected {source, targets: [...]}"}, status_code=400)
+    map_path = get_ad_account_map_path()
+    account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    facts = _account_facts_for_page()
+    try:
+        out = _cta.describe_targets(str(body.get("source") or ""), [str(t) for t in body["targets"]],
+                                    account_map=account_map, facts_for=lambda label: facts.get(label),
+                                    api_backend=publish_api.api_enabled())
+    except _cta.CopyRefused as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+    return JSONResponse(out)
+
+
 @app.get("/api/account-notes")
 def api_account_notes_get() -> JSONResponse:
     """Все заметки менеджера: аккаунты и страны (ACL-1620, ACL-1633)."""
@@ -6630,6 +6654,16 @@ async def campaign_commands_preview(request: Request) -> JSONResponse:
 
     body = await _campaign_commands_body(request)
     data, code = await asyncio.to_thread(campaign_commands.run_preview, body)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/campaign-commands/bulk/preview")
+async def campaign_commands_bulk_preview(request: Request) -> JSONResponse:
+    """ACL-2457: bulk edit preview; confirming it goes through `/campaign-commands/execute`."""
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_bulk_preview, body)
     return JSONResponse(data, status_code=code)
 
 

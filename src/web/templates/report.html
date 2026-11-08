@@ -1288,7 +1288,10 @@
       cursor: pointer; line-height: 1.4;
     }
     .cb-dup-slot-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: var(--adopy-text-table); }
-    .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-copyto-btn { display: block; margin-top: 0.6rem; padding: 0.2rem 0.4rem; font-size: var(--adopy-text-table); background: transparent; border: 1px solid transparent; border-radius: 4px; color: var(--accent); font-weight: 500; font-family: inherit; cursor: pointer; line-height: 1.4; }
+    .cb-copyto-btn:hover:not(:disabled), .cb-dup-slot-btn:hover, .cb-dup-ad-btn:hover { background: var(--accent-soft); }
+    .cb-copyto-btn:disabled { color: var(--muted); cursor: not-allowed; }
+    .cb-copyto-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     .cb-dup-slot-btn:focus-visible, .cb-dup-ad-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     /* В ящике кампанию добавляет его «+ Campaign» у аккаунта; кнопка формы
        была второй дорогой туда же. На странице страны она остаётся. */
@@ -6895,9 +6898,7 @@ window.cbLayout = (function () {
   /* Что в дизайне есть, а бэкенда под ним пока нет. Такой элемент рисуется
      выключенным, без `name` (в форму не попадает, значения не подменяет), с
      подсказкой, называющей задачу. Подставлять ему состояние нельзя. */
-  var FUTURE = {
-    copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
-  };
+  var FUTURE = {};
 
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -6924,6 +6925,44 @@ window.cbLayout = (function () {
         + ' title="' + tip + '">' + esc(text || f.what) + '</button>';
     return '<span class="cb-future-wrap" data-future="' + esc(key) + '" title="' + tip + '">' + ctl
       + '<span class="cb-future-tag">' + esc(f.task) + '</span></span>';
+  }
+
+  /* ACL-2456: «Copy to accounts». Кнопка живая только с API-бэкендом; с RPA она выключена с причиной. */
+  var COPY_API_ONLY = 'API backend only';
+  function copyToButtonHtml(api) {
+    var base = '<button type="button" class="cb-copyto-btn" data-copy-to';
+    return api
+      ? base + ' title="Copy this campaign to other ad accounts. The copies are PAUSED drafts: Preview and Check plan still apply.">Copy to accounts…</button>'
+      : base + ' disabled aria-disabled="true" title="' + COPY_API_ONLY + '">Copy to accounts…</button>';
+  }
+
+  /* Сумма бюджета из поля: только положительное число, иначе null. Запятая - десятичный разделитель. */
+  function copyBudgetValue(raw) {
+    var t = String(raw == null ? '' : raw).trim().replace(',', '.');
+    if (!/^\d+(\.\d+)?$/.test(t)) return null;
+    var n = Number(t);
+    return isFinite(n) && n > 0 ? n : null;
+  }
+
+  /* Строка выбора: {picked, blocked, mode: 'keep'|'confirm', currency, entered}. '' - строка в порядке. */
+  function copyRowProblem(row) {
+    if (!row || !row.picked) return '';
+    if (row.blocked) return row.blocked;
+    if (row.mode === 'confirm' && copyBudgetValue(row.entered) === null) {
+      return 'Enter the budget' + (row.currency ? ' in ' + row.currency : '') + ' for ' + (row.label || 'this account');
+    }
+    return '';
+  }
+
+  /* Итог диалога: выбранные строки и первая причина, по которой копировать нельзя. */
+  function copyPlan(rows) {
+    var picked = (rows || []).filter(function (r) { return r && r.picked; });
+    if (!picked.length) return { picked: [], why: 'Pick at least one account' };
+    for (var i = 0; i < picked.length; i += 1) {
+      var why = copyRowProblem(picked[i]);
+      if (why) return { picked: picked, why: why };
+    }
+    return { picked: picked, why: '' };
   }
 
   /* Кампания: имя. Ручное имя используется, только если заполнено. */
@@ -7144,6 +7183,7 @@ window.cbLayout = (function () {
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
     FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
+    COPY_API_ONLY: COPY_API_ONLY, copyToButtonHtml: copyToButtonHtml, copyBudgetValue: copyBudgetValue, copyRowProblem: copyRowProblem, copyPlan: copyPlan,
     accountState: accountState, adsetName: adsetName, adsetLabel: adsetLabel, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
 })();
@@ -7813,6 +7853,7 @@ window.cbLifetime = (function () {
      Включённый флажок с пустой сеткой уходит окном без дней - правило отвечает "empty". */
   function auditFields(slot) {
     if (!isLifetime(slot)) return null;
+    refreshTodayStart(slot);
     var out = {
       budget_type: 'lifetime',
       start_time: String((fld(slot, 'start_time') || {}).value || '').trim(),
@@ -7914,6 +7955,14 @@ window.cbLifetime = (function () {
     }
     if (e && de) e.value = DATE_RE.test(de.value) ? addDays(de.value, 1) + 'T00:00' : '';
   }
+  /* Первый день = сегодня: старт "со следующего часа" устаревает, пока форма открыта (введено в 14:40 -
+     старт 15:00, в 15:08 он уже в прошлом). Пересчитываем при каждой синхронизации и перед аудитом. */
+  function refreshTodayStart(slot) {
+    var s = fld(slot, 'start_time'), ds = q(slot, '[data-lt-part="start"]');
+    if (!s || !ds || !/^\d{4}-\d{2}-\d{2}$/.test(ds.value)) return;
+    var now = nowInTeam();
+    if (now && now.slice(0, 10) === ds.value && s.value && s.value <= now) writeDates(slot);
+  }
 
   function paintGrid(slot) {
     /* Без расписания (флажок снят) сетка показывает все часы включёнными - кампания крутится круглые сутки. */
@@ -7948,6 +7997,7 @@ window.cbLifetime = (function () {
     setHidden(q(slot, '.cb-sg'), !life);
     paintGrid(slot);
     paintDates(slot);
+    if (life) refreshTodayStart(slot);
     var f = builderAccountFacts(accountOf(slot));
     var b = fld(slot, 'budget');
     setText(q(slot, '[data-lt-budget-label]'), life ? 'Lifetime budget (' + (f.currency || 'account currency') + ')' : 'Campaign budget ($/day)');
@@ -7991,6 +8041,16 @@ window.cbLifetime = (function () {
     if (slot && !btn.disabled) setType(slot, btn.dataset.budgetType);
   };
   window.cbLtChanged = function (el) { sync(el.closest('.cb-slot')); };
+  /* Открытая без действий форма тоже не держит устаревший старт сегодняшнего дня (раз в минуту). */
+  setInterval(function () {
+    document.querySelectorAll('.cb-slot').forEach(function (slot) {
+      var s = fld(slot, 'start_time');
+      if (!isLifetime(slot) || !s) return;
+      var before = s.value;
+      sync(slot);
+      if (s.value !== before) fire(s);
+    });
+  }, 60000);
   window.cbLtDate = function (el) {
     var slot = el.closest('.cb-slot');
     if (!slot) return;
@@ -10323,6 +10383,7 @@ window.cbMove = (function () {
       settleHidden(copy);
       return { label: 'copied campaign', slot: copy, notes: notes,
         text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
+        canUndo: function () { return copy.isConnected && !formBusy(destForm); },
         undo: function () {
           if (!copy.isConnected || formBusy(destForm)) return false;
           copy.remove();
@@ -10710,6 +10771,183 @@ window.cbMove = (function () {
     grip.title = locked ? MSG_BUILDING : DRAG_TIP;
   });
 
+  /* ═══ ACL-2456: «Copy to accounts» ═════════════════════════════════════
+     Копия кампании в формы других аккаунтов тем же узлом, что «Move to… → Copy» (doCamp): ссылка - своя у формы
+     аккаунта, Страница снова Automatic, id готовых Instant Form сняты. Сверх этого: сервер по карте аккаунтов
+     говорит про пиксель и валюту (/api/copy-to-accounts/targets), а бюджет в другой или неизвестной валюте
+     не переносится - его вводит человек. Копия - обычный черновик: Preview и Check plan, как у любого. */
+  var CTA_STYLE = false;
+  function budgetInputOf(slot) {
+    return $all(slot, 'input').filter(function (i) { return /_budget$/.test(i.name || ''); })[0] || null;
+  }
+  function ctaStyle() {
+    if (CTA_STYLE) return;
+    CTA_STYLE = true;
+    var st = document.createElement('style');
+    st.textContent = '.cbcp-back{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:1rem}'
+      + '.cbcp{background:var(--bg-elev);border:1px solid var(--field-border);border-radius:var(--radius-sm);box-shadow:var(--adopy-shadow-popover);width:min(34rem,100%);max-height:90vh;overflow:auto;padding:0.8rem;display:flex;flex-direction:column;gap:0.5rem;font-size:var(--adopy-text-table)}'
+      + '.cbcp h3{margin:0;font-size:1rem}.cbcp-note{color:var(--muted);font-size:var(--adopy-text-xs)}'
+      + '.cbcp-row{border:1px solid var(--border-strong);border-radius:4px;padding:0.4rem 0.5rem;display:flex;flex-direction:column;gap:0.25rem}'
+      + '.cbcp-row.cbcp-off{opacity:.6}.cbcp-head{display:flex;gap:0.5rem;align-items:center}'
+      + '.cbcp-why{color:var(--danger);font-size:var(--adopy-text-xs)}.cbcp-budget{display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap}'
+      + '.cbcp-btns{display:flex;gap:0.5rem;justify-content:flex-end}';
+    document.head.appendChild(st);
+  }
+  function ctaEl(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function ctaRowsForLayout(rows) {
+    return rows.map(function (r) {
+      return { picked: r.picked, blocked: r.blocked, mode: r.mode, currency: r.currency, entered: r.entered, label: r.label };
+    });
+  }
+
+  async function openCopyTo(slot) {
+    var L = window.cbLayout;
+    if (window.ACL_FB_BACKEND !== 'api') { toast(L.COPY_API_ONLY, { warn: true }); return; }
+    if (!slot || activeBuild(slot)) { toast(MSG_BUILDING, { warn: true }); return; }
+    var srcForm = slot.closest('form'), srcAcct = cbFormAccount(srcForm);
+    var cands = forms().filter(function (f) {
+      var a = cbFormAccount(f);
+      return a && a !== '?' && a !== srcAcct;
+    });
+    if (!cands.length) { toast('There is no other account to copy to.', { warn: true }); return; }
+    var info = {};
+    try {
+      var resp = await fetch('/api/copy-to-accounts/targets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: srcAcct, targets: cands.map(cbFormAccount) }) });
+      var data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error(data.error || 'Could not read the account map.');
+      (data.targets || []).forEach(function (t) { info[t.label] = t; });
+    } catch (err) { toast(String(err.message || err), { warn: true }); return; }
+    var srcBudget = budgetInputOf(slot), srcAmount = srcBudget ? String(srcBudget.value || '').trim() : '';
+    var rows = cands.map(function (f) {
+      var t = info[cbFormAccount(f)] || { ok: false, blockers: ['This account is not in the account map.'], notes: [], budget: { mode: 'confirm' } };
+      var blocked = !t.ok ? (t.blockers || []).join(' ') : (formBusy(f) ? busyMsg(f) : '');
+      var why = check({ kind: 'camp', mode: 'copy', slot: slot, destForm: f });
+      if (!blocked && why && why !== NOOP) blocked = why;
+      return { form: f, label: acctLabel(f), picked: false, blocked: blocked, mode: (t.budget || {}).mode || 'confirm',
+               currency: (t.budget || {}).target_currency || '', reason: (t.budget || {}).reason || '', notes: t.notes || [],
+               entered: '', countryChange: countryOf(f) !== countryOf(srcForm) ? countryOf(f) : '' };
+    });
+    ctaStyle();
+    var back = ctaEl('div', 'cbcp-back'), box = ctaEl('div', 'cbcp');
+    box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Copy to accounts');
+    back.appendChild(box);
+    box.appendChild(ctaEl('h3', '', 'Copy “' + niceName(slot) + '” to accounts'));
+    box.appendChild(ctaEl('div', 'cbcp-note', 'Each copy is a draft in that account’s builder. Its tracking link is the account’s own, the Page is Automatic, '
+      + 'existing Instant Form ids are cleared. Nothing is created until you run Preview and Check plan there; created campaigns are PAUSED.'));
+    var list = ctaEl('div', '');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:0.35rem';
+    box.appendChild(list);
+    var warn = ctaEl('div', 'cbcp-why');
+    warn.setAttribute('role', 'status');
+    var btns = ctaEl('div', 'cbcp-btns'), cancel = ctaEl('button', 'btn', 'Cancel'), go = ctaEl('button', 'btn', 'Copy');
+    cancel.type = 'button'; go.type = 'button';
+    btns.appendChild(cancel); btns.appendChild(go);
+    box.appendChild(warn); box.appendChild(btns);
+
+    function refresh() {
+      var plan = L.copyPlan(ctaRowsForLayout(rows));
+      go.disabled = !!plan.why;
+      warn.textContent = plan.picked.length ? plan.why : '';
+    }
+    rows.forEach(function (r) {
+      var row = ctaEl('div', 'cbcp-row' + (r.blocked ? ' cbcp-off' : '')), head = ctaEl('label', 'cbcp-head');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.disabled = !!r.blocked;
+      head.appendChild(cb); head.appendChild(ctaEl('span', '', r.label)); row.appendChild(head);
+      if (r.blocked) row.appendChild(ctaEl('div', 'cbcp-why', r.blocked));
+      var more = ctaEl('div', '');
+      more.hidden = true; row.appendChild(more);
+      r.notes.forEach(function (n) { more.appendChild(ctaEl('div', 'cbcp-note', n)); });
+      if (r.countryChange) more.appendChild(ctaEl('div', 'cbcp-note', 'Audience country becomes ' + r.countryChange + ' and the name is rebuilt.'));
+      var bud = ctaEl('div', 'cbcp-budget');
+      if (r.mode === 'confirm') {
+        bud.appendChild(ctaEl('div', 'cbcp-why', r.reason || 'Enter the budget for this account.'));
+        var lab = ctaEl('label', '', 'Budget' + (r.currency ? ' (' + r.currency + ')' : '') + (srcAmount ? ' · source: ' + srcAmount : '') + ' ');
+        var inp = document.createElement('input');
+        inp.type = 'text'; inp.inputMode = 'decimal'; inp.className = 'cb-input cb-input-sm';
+        inp.setAttribute('aria-label', 'Budget for ' + r.label);
+        inp.addEventListener('input', function () { r.entered = inp.value; refresh(); });
+        lab.appendChild(inp); bud.appendChild(lab);
+      } else {
+        bud.appendChild(ctaEl('div', 'cbcp-note', 'Same currency' + (r.currency ? ' (' + r.currency + ')' : '') + ': the budget ' + (srcAmount || '') + ' is kept. Check it for this account.'));
+      }
+      more.appendChild(bud);
+      cb.addEventListener('change', function () { r.picked = cb.checked; more.hidden = !cb.checked; refresh(); });
+      list.appendChild(row);
+    });
+    function close() { back.remove(); document.removeEventListener('keydown', onKey, true); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+    document.addEventListener('keydown', onKey, true);
+    cancel.addEventListener('click', close);
+    back.addEventListener('mousedown', function (e) { if (e.target === back) close(); });
+    go.addEventListener('click', function () {
+      var plan = L.copyPlan(ctaRowsForLayout(rows));
+      if (plan.why) { warn.textContent = plan.why; return; }
+      close();
+      applyCopy(slot, rows.filter(function (r) { return r.picked; }));
+    });
+    document.body.appendChild(back);
+    refresh();
+    var first = box.querySelector('input:not([disabled])');
+    if (first) first.focus();
+  }
+
+  function applyCopy(slot, picked) {
+    var L = window.cbLayout, done = [], notes = [], skipped = [], warn = false;
+    picked.forEach(function (r) {
+      var plan = { kind: 'camp', mode: 'copy', slot: slot, destForm: r.form };
+      var why = check(plan);
+      if (why) { skipped.push(r.label + ': ' + (why === NOOP ? 'already there' : why)); return; }
+      var res = doCamp(plan);
+      if (!res) { skipped.push(r.label + ': the copy could not be made'); return; }
+      /* Id формы источника снят в doCamp; видимый список форм перерисовывается сразу, а не при следующей правке. */
+      if (window.cbFillFormSelects) window.cbFillFormSelects(res.slot);
+      if (r.mode === 'confirm') {
+        /* Сумма источника не остаётся: на её месте то, что ввёл человек. */
+        var inp = budgetInputOf(res.slot), amount = L.copyBudgetValue(r.entered);
+        if (!inp || amount === null) { res.undo(); skipped.push(r.label + ': the budget field could not be set'); return; }
+        inp.value = String(amount);
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (twinClash(res.slot)) {
+        notes.push(r.label + ' already has a campaign named “' + slotName(res.slot) + '”. Publish all will combine them into one campaign.');
+        warn = true;
+      }
+      done.push({ r: r, res: res });
+    });
+    notes = notes.concat(skipped.map(function (s) { return 'Not copied — ' + s; }));
+    if (skipped.length) warn = true;
+    if (!done.length) { toast('Nothing was copied.', { warn: true, notes: notes }); return; }
+    var names = done.map(function (d) { return d.r.label; }).join(', ');
+    var entry = push({ label: 'copied campaign to ' + done.length + (done.length === 1 ? ' account' : ' accounts'),
+      undo: function () {
+        /* Всё или ничего: пока хоть одну копию нельзя снять (форма занята, копии уже нет), не снимается ни одна,
+           запись остаётся в стеке, а человек видит «Can't undo». */
+        if (!done.every(function (d) { return d.res.canUndo(); })) return false;
+        var ok = true;
+        done.slice().reverse().forEach(function (d) { if (!d.res.undo()) ok = false; });
+        return ok;
+      } });
+    toast('Copied “' + niceName(slot) + '” to ' + names + '. Run Preview and Check plan there before creating.', { entry: entry, notes: notes, warn: warn });
+    repaintTree();
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-copy-to]') : null;
+    if (!b || b.disabled) return;
+    var slot = b.closest('.cb-slot');
+    if (!slot) return;
+    e.preventDefault();
+    openCopyTo(slot);
+  });
+
   return {
     dragging: function () { return !!(drag && !drag.paintOk); },
     deferPaint: function () { pendingPaint = true; },
@@ -10717,7 +10955,8 @@ window.cbMove = (function () {
     check: check,
     undoLatest: undoLatest,
     undoDepth: function () { return undoStack.length; },
-    menuOpen: function () { return !!menu; }
+    menuOpen: function () { return !!menu; },
+    copyTo: openCopyTo
   };
 })();
 </script>
@@ -18520,7 +18759,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* ACL-1443: Daily (прежнее поведение) или Lifetime со сроками и расписанием. */
       '<span class="cb-label" data-lt-budget-label>Campaign budget ($/day)</span>' +
       '<div class="cb-inline cb-budget-box">' + (window.cbLifetime ? window.cbLifetime.segHtml(idx) : '') +
-      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
+      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign" oninput="if (window.cbLtChanged) cbLtChanged(this)">' +
       '</div>' + (window.cbLifetime ? window.cbLifetime.rowsHtml(idx) : '') +
       '<span class="cb-label">Facebook Page</span>' +
       '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
@@ -18532,7 +18771,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* Дублирование кампании живёт в её карточке (ACL-1459). */
       '<div class="cb-lvl-actions">' +
       '<button type="button" class="cb-dup-slot-btn" onclick="cbDuplicateCampaign(this)" title="Duplicate this campaign with its ads">⧉ Duplicate campaign</button>' +
-      future('copyTo', 'button', 'Copy to accounts') +
+      (window.cbLayout ? window.cbLayout.copyToButtonHtml(window.ACL_FB_BACKEND === 'api') : '') +
       '</div>' +
       '</section>' +
       '<div class="cb-adsets">' + buildAdsetSectionHTML(idx, 0) + '</div>' +
