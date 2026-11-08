@@ -6633,6 +6633,16 @@ async def campaign_commands_preview(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.post("/campaign-commands/bulk/preview")
+async def campaign_commands_bulk_preview(request: Request) -> JSONResponse:
+    """ACL-2457: bulk edit preview; confirming it goes through `/campaign-commands/execute`."""
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_bulk_preview, body)
+    return JSONResponse(data, status_code=code)
+
+
 @app.post("/campaign-commands/execute")
 async def campaign_commands_execute(request: Request) -> JSONResponse:
     from src.web import campaign_commands

@@ -183,6 +183,15 @@
     white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 0.6875rem/1.4 ui-monospace, Consolas, monospace; color: var(--adopy-text); border-top: 1px solid var(--adopy-border); background: var(--adopy-surface-subtle); }
   .hc-switch[aria-busy="true"] { opacity: 0.55; cursor: progress; }
   .hc-switch:not(:disabled), .hc-cmd:not(:disabled) { cursor: pointer; }
+  /* ACL-2457: bulk edit - a checkbox on campaign rows and one bar per account table. */
+  .hc-sel { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--adopy-primary); }
+  .hc-sel:not(:disabled) { cursor: pointer; }
+  .hc-table tr.hc-bulk > td { height: 34px; padding: 0; background: var(--adopy-surface-subtle); overflow: visible; }
+  .hc-bulk-in { position: sticky; left: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0 var(--adopy-cell-x); min-height: 34px; white-space: normal;
+    width: var(--hc-view-w, 900px); max-width: 100vw; overflow: hidden; }
+  .hc-bulk-in button { min-height: 26px; padding: 0 0.5rem; font-size: 0.75rem; }
+  .hc-bulk .hc-bulk-n { color: var(--adopy-text-muted); font-size: 0.75rem; }
+  .hc-bulk .hc-bulk-why { color: var(--adopy-text-muted); font-size: 0.75rem; }
   @media (max-width: 760px) { .hc { --hc-pin-w: 330px; } }
   /* Таблица страны под списком аккаунтов (карта аккаунтов на Home и вкладка страны, ACL-1800). */
   .hc.hc-scoped { margin: 0.5rem 0; padding: 0 var(--hc-inset) 0.5rem; white-space: normal; text-align: left; border: 1px solid var(--adopy-border);
@@ -243,6 +252,7 @@
 </template>
 
 <script src="/static/acm_commands.js"></script>
+<script src="/static/acm_bulk.js"></script>
 <script src="/static/account_refresh.js"></script>
 <script>
 (function () {
@@ -334,7 +344,8 @@
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
     ctx: {},                         // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
     warm: {available: false, actions: false, accounts: {}},   // ACL-1812: состояние профилей; нет API — чип и кнопка скрыты
-    warmBusy: {}, warmMsg: {}
+    warmBusy: {}, warmMsg: {},
+    sel: {}                          // ACL-2457: account -> {campaign key: true} chosen for bulk edit
   };
   var ACM = window.acmCommands && window.acmCommands.home ? window.acmCommands : null;
   seed.forEach(function (c) {
@@ -623,6 +634,30 @@
     }
     return {n: n, tone: tone};
   }
+  /* ACL-2457: the checkbox exists on campaign rows only; it is disabled (with the reason) when bulk edit is off. */
+  function bulkSt() { return ACM && ACM.bulk ? ACM.bulk.state(S.avail) : {enabled: false, reason: 'Commands unavailable: the command helper did not load', max: 0}; }
+  function selBox(r) {
+    if (r.level !== 'campaign') return '';
+    var st = bulkSt(), on = !!(S.sel[r.account] && S.sel[r.account][r.key]);
+    return '<input type="checkbox" class="hc-sel" data-sel="' + esc(r.key) + '"' + (on ? ' checked' : '') + (st.enabled && !r.busy ? '' : ' disabled aria-disabled="true"') +
+      ' aria-label="Select ' + esc(r.name) + ' for bulk edit' + (st.enabled ? '' : ' - ' + esc(st.reason)) + '" title="' + esc(st.enabled ? 'Select for bulk edit' : st.reason) + '">';
+  }
+  function selectedRows(account) {
+    var sel = S.sel[account] || {};
+    return (S.rows[account] || []).filter(function (r) { return r.level === 'campaign' && sel[r.key]; });
+  }
+  function bulkBar(account, cols) {
+    var rows = S.rows[account] || [];
+    if (!rows.length) return '';
+    var st = bulkSt(), picked = selectedRows(account), n = picked.length;
+    var pl = st.enabled && n ? ACM.bulk.plan(picked, S.avail) : {ok: false};
+    var why = !st.enabled ? st.reason : !n ? 'Tick campaigns to edit them together' : pl.ok ? '' : pl.reason;
+    var go = '<button type="button" class="hc-bulk-go" data-bulk="edit"' + (pl.ok ? '' : ' disabled aria-disabled="true"') + ' title="' + esc(pl.ok ? 'Edit the selected campaigns together (asks for confirmation)' : why) + '">Bulk edit' + (n ? ' (' + n + ')' : '') + '</button>';
+    var clear = n ? '<button type="button" data-bulk="clear">Clear</button>' : '';
+    var all = st.enabled ? '<button type="button" data-bulk="all">Select all campaigns</button>' : '';
+    return '<tr class="hc-bulk" data-bulk-bar="' + esc(account) + '"><td colspan="' + (1 + cols.length) + '"><div class="hc-bulk-in"><b>Bulk edit</b>' + go + all + clear +
+      '<span class="hc-bulk-n">' + (n ? n + ' selected' : '') + '</span>' + (why ? '<span class="hc-bulk-why" role="status">' + esc(why) + '</span>' : '') + '</div></td></tr>';
+  }
   function rowHtml(r, cols) {
     var lv = r.level, key = r.key, canOpen = lv !== 'ad', d = DEPTH[lv] > 0 ? DEPTH[lv] : DEPTH.campaign;
     var open = !!S.expanded[key];
@@ -647,7 +682,7 @@
     var count = '';
     if (r.child_count != null) count = r.child_state === 'not_read' ? ' · children not read' : ' · ' + r.child_count + (lv === 'campaign' ? ' ad sets' : ' ads') + (r.child_state === 'partial' ? ' (partial)' : '');
     var html = '<tr class="hc-r-' + lv + ' hc-lv-' + lv + (open && canOpen ? ' hc-open' : '') + '" style="--d:' + d + '" data-key="' + esc(key) + '" data-object-id="' + esc(r.id) + '" data-level="' + esc(lv) + '" data-account="' + esc(r.account) + '" data-parent-id="' + esc(r.parent_id || '') + '">' +
-      '<td class="p1"><div class="hc-id">' + (canOpen ? '<button type="button" class="hc-exp" data-exp="' + esc(key) + '" aria-expanded="' + open + '" aria-label="' + (open ? 'Collapse ' : 'Expand ') + esc(r.name) + '"></button>' : '<span class="hc-exp-none"></span>') +
+      '<td class="p1"><div class="hc-id">' + selBox(r) + (canOpen ? '<button type="button" class="hc-exp" data-exp="' + esc(key) + '" aria-expanded="' + open + '" aria-label="' + (open ? 'Collapse ' : 'Expand ') + esc(r.name) + '"></button>' : '<span class="hc-exp-none"></span>') +
       sw + '<span class="hc-mk-slot">' + slot + '</span>' +
       '<span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + '</b>' +
       '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span><span class="hc-badge">' + badge + '</span></div></td>' +
@@ -760,7 +795,7 @@
       h.row.setAttribute('aria-expanded', open ? 'true' : 'false');
       h.row.classList.toggle('amap-open', open);
       if (!open) return;
-      var html = colgroup(cols) + (rows.length ? headHtml(cols) : '') + '<tbody>' + accountMessage(a, cols) + vis.map(function (r) { return rowHtml(r, cols); }).join('') + '</tbody>';
+      var html = colgroup(cols) + (rows.length ? headHtml(cols) : '') + '<tbody>' + accountMessage(a, cols) + bulkBar(a.account, cols) + vis.map(function (r) { return rowHtml(r, cols); }).join('') + '</tbody>';
       var topv = h.scroll.scrollTop;
       /* table-layout: fixed работает только при заданной ширине: иначе закреплённые колонки расходятся с настоящими ширинами. */
       h.table.style.width = rows.length ? (pin + cols.reduce(function (n, c) { return n + c.w; }, 0)) + 'px' : '100%';
@@ -933,6 +968,45 @@
     });
   }
 
+  /* ACL-2457: one change set over the selected campaigns of one account: edit panel -> preview -> Confirm -> write -> readback. */
+  function refreshAfter(account) {
+    if (window.aclAccountRefresh) window.aclAccountRefresh.load();
+    return getJson('/campaign-inventory/status?account=' + encodeURIComponent(account)).then(function (j) {
+      var fresh = (j.accounts || {})[account], old = S.summaries[account] || {};
+      if (fresh && fresh.revision && fresh.revision !== old.revision) return refreshAccount(account);
+    }).then(render, render);
+  }
+  function runBulk(account) {
+    var plan = ACM.bulk.plan(selectedRows(account), S.avail);
+    if (!plan.ok) { say(selectedRows(account), plan.reason, 'warn'); render(); return Promise.resolve(); }
+    var rows = plan.rows;
+    return ACM.bulk.editDialog({count: rows.length, account: account, currency: currencyOf(rows)}).then(function (changes) {
+      if (!changes) return;
+      setBusy(rows, true); say(rows, 'Previewing…', 'busy'); render();
+      return ACM.bulk.flow({account: account, actor: ACM.home.actor(), changes: changes, campaigns: plan.ids}, {
+        onState: function (text) { say(rows, text, 'busy'); render(); }
+      }).then(function (res) {
+        var byId = {};
+        ACM.bulk.model(res.op).groups.forEach(function (g) { byId[g.id] = g; });
+        rows.forEach(function (r) {
+          var g = byId[r.id], n = g ? g.lines.length : 0;
+          if (res.kind === 'cancelled') delete S.notes[r.key];
+          else if (res.kind === 'nothing') S.notes[r.key] = noteFrom('Nothing to change', 'warn');
+          else if (g && g.state === 'saved') S.notes[r.key] = {text: 'Confirmed', tone: 'ok'};
+          else if (res.kind === 'unknown' || (g && g.state === 'unknown')) S.notes[r.key] = noteFrom(ACM.home.CHECK_TEXT, 'warn');
+          else if (g && n) S.notes[r.key] = noteFrom('Bulk edit: ' + g.lines.filter(function (l) { return l.result === 'saved'; }).length + ' of ' + n + ' changes saved - see the result', 'bad');
+          else if (g) S.notes[r.key] = noteFrom('Skipped: ' + (g.skipped[0] ? g.skipped[0].reason : 'nothing to change'), 'warn');
+          else delete S.notes[r.key];
+        });
+        if (res.kind === 'unknown') S.uncertain[account] = true;
+        if (res.kind !== 'cancelled' && res.kind !== 'nothing') { S.sel[account] = {}; return ACM.bulk.result(res.op); }
+      }, function (e) {
+        var nf = noteFrom('Not sent: ' + String(e && e.message || e), 'bad', e && e.code);
+        rows.forEach(function (r) { S.notes[r.key] = nf; });
+      }).then(function () { setBusy(rows, false); return refreshAfter(account); });
+    });
+  }
+
   function currencyOf(rows) { return (rows[0] && rows[0].currency) || ''; }
 
   function editThenRun(rows, kind, dir) {
@@ -1017,6 +1091,23 @@
   };
   var onTableClick = function (ev) {
     var t = ev.target;
+    var bk = t.closest ? t.closest('[data-bulk],[data-sel]') : null;
+    if (bk) {
+      var tr = bk.closest('tr'), acc = tr && (tr.dataset.account || tr.dataset.bulkBar);
+      if (bk.dataset.sel != null && acc) {
+        S.sel[acc] = S.sel[acc] || {};
+        if (bk.checked) S.sel[acc][bk.dataset.sel] = true; else delete S.sel[acc][bk.dataset.sel];
+        render();
+      } else if (bk.dataset.bulk && !bk.disabled && acc) {
+        if (bk.dataset.bulk === 'clear') { S.sel[acc] = {}; render(); }
+        else if (bk.dataset.bulk === 'all') {
+          S.sel[acc] = {};
+          (S.rows[acc] || []).forEach(function (r) { if (r.level === 'campaign' && !r.busy) S.sel[acc][r.key] = true; });
+          render();
+        } else if (bk.dataset.bulk === 'edit' && ACM && ACM.bulk) runBulk(acc);
+      }
+      return;
+    }
     var cb = t.closest ? t.closest('button[data-action]') : null;
     if (cb) { if (!cb.disabled) onCommand(cb); return; }
     var b = t.closest ? t.closest('[data-exp],[data-retry],[data-details]') : null;
