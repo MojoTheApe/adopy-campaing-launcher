@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.fb_api import creator as cr  # noqa: E402
-from tests.test_acl1761_api_create import FakeMeta, _draft, _publisher, _run  # noqa: E402
+from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _publisher, _run  # noqa: E402
 from tests.test_acl1761_plan_check import _PLAN_DATA, _run_plan_node  # noqa: E402
 
 
@@ -41,8 +41,8 @@ def test_reused_adset_with_advantage_plus_goes_to_a_new_name(tmp_path):
     # В плане теперь два объявления: второе было бы создано в старой группе.
     out, client = _run(meta, _draft(tmp_path, ads=2))
     # ACL-1902: расхождение у своей старой группы - не блокировка, а новое имя; под старую ничего не пишем.
-    assert out.error == "" and out.published_as == "MX Leads 1_2"
-    assert any("ad set 'MX Leads 1': placements (Advantage+ vs manual list)" in w for w in out.warnings)
+    assert out.error == "" and out.published_as == "MX Leads 1 copy 1"
+    assert any("Published as 'MX Leads 1 copy 1'" in w for w in out.warnings)    # ACL-2250: короткий текст
     old = next(o for o in meta.objects.values() if o["_kind"] == "campaign" and o["name"] == "MX Leads 1")
     assert len([o for o in meta.objects.values() if o["_kind"] == "ad"
                 and meta.objects[o["adset_id"]]["campaign_id"] == old["id"]]) == 1
@@ -55,8 +55,8 @@ def test_reused_campaign_with_other_budget_goes_to_a_new_name(tmp_path):
     camp["daily_budget"] = "999"
     before = _write_count(meta)
     out, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert out.error == "" and out.published_as == "MX Leads 1_2"
-    assert any("daily budget" in w for w in out.warnings)
+    assert out.error == "" and out.published_as == "MX Leads 1 copy 1"
+    assert any("Published as 'MX Leads 1 copy 1'" in w for w in out.warnings)    # ACL-2250: короткий текст
     assert camp["daily_budget"] == "999" and _write_count(meta) > before
 
 
@@ -76,8 +76,8 @@ def test_difference_in_a_later_adset_goes_to_a_new_name(tmp_path):
     second2.name = "MX Leads 1b"
     draft2.ad_sets.append(second2)
     out2, _ = _run(meta, draft2)
-    assert out2.error == "" and out2.published_as == "MX Leads 1_2"
-    assert any("'MX Leads 1b'" in w for w in out2.warnings)
+    assert out2.error == "" and out2.published_as == "MX Leads 1 copy 1"
+    assert any("Published as 'MX Leads 1 copy 1'" in w for w in out2.warnings)    # ACL-2250: короткий текст
     assert bad["targeting"]["age_max"] == 65 and _write_count(meta) > before
 
 
@@ -108,8 +108,9 @@ def test_check_plan_reports_the_differences_and_writes_nothing(tmp_path):
     summary = res["plan"]["summary"]
     # ACL-1902: расхождения теперь в предупреждении о новом имени, не в блоке «уже существует».
     assert summary["existing"] is False and summary["existing_differences"] == []
-    assert summary["campaign"] == "MX Leads 1_2" and summary["requested_name"] == "MX Leads 1"
-    assert any("Will be published as 'MX Leads 1_2'" in w and "placements (Advantage+ vs manual list)" in w
+    assert summary["campaign"] == "MX Leads 1 copy 1" and summary["requested_name"] == "MX Leads 1"
+    # ACL-2250: текст короткий и не растёт; сами расхождения видны в Ads Manager, а не в этой строке.
+    assert any("Will be published as 'MX Leads 1 copy 1'" in w and "already on the ad account" in w
                for w in res["warnings"])
 
 
@@ -118,6 +119,8 @@ def test_check_plan_without_differences_has_an_empty_list(tmp_path):
     res = _publisher(meta, dry_run=True).publish_draft(_draft(tmp_path, ads=1))
     assert res["plan"]["summary"]["existing"] is True
     assert res["plan"]["summary"]["existing_differences"] == []
+    from src.fb_api import name_receipt
+    name_receipt.delete(ACT, "MX Leads 1")                     # другая «Meta»: квитанцию прошлой убираем
     fresh = _publisher(FakeMeta(), dry_run=True).publish_draft(_draft(tmp_path, ads=1))
     assert fresh["plan"]["summary"]["existing_differences"] == []
 
@@ -147,8 +150,8 @@ def test_active_reused_campaign_goes_to_a_new_name(tmp_path):
     obj["status"] = "ACTIVE"
     before = _write_count(meta)
     out, client = _run(meta, _draft(tmp_path, ads=2))
-    assert out.error == "" and out.published_as == "MX Leads 1_2"
-    assert any("status (builder: PAUSED, Meta: ACTIVE)" in w for w in out.warnings)
+    assert out.error == "" and out.published_as == "MX Leads 1 copy 1"
+    assert any("Published as 'MX Leads 1 copy 1'" in w for w in out.warnings)
     assert obj["status"] == "ACTIVE" and _write_count(meta) > before
 
 

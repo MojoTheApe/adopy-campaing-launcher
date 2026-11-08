@@ -30,6 +30,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
+from .adset_name import strip_copy_counter
 from .creative_archive import UNATTRIBUTED
 
 # ── настраиваемые пороги ─────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ def parse_adset(name: str) -> tuple[str | None, str | None]:
     """
     if not name or name == "-":
         return None, None
-    parts = [p for p in name.split("_") if p]
+    parts = [p for p in strip_copy_counter(name).split("_") if p]     # ACL-2250: `X copy 1` читается как `X`
     age_i = None
     age_val = None
     for i in range(len(parts) - 1, -1, -1):

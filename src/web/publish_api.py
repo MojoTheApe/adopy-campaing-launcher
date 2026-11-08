@@ -355,6 +355,8 @@ class ApiPublisher:
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
+        #: ACL-2250: квитанции имён кампаний, дошедших до конца сверки; удаляются в конце задания (`finish_name_records`).
+        self._finished_receipts: list[tuple[str, str]] = []
         #: ACL-2283: local load reading taken right before the profile start (None - unknown).
         self._load_before: dict[str, Any] | None = None
 
@@ -727,6 +729,8 @@ class ApiPublisher:
             self.stop = self._client.stopped
             _start_cooldown(self.account_label, self.stop)
             _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
+        if outcome.name_receipt_done and not outcome.error:
+            self._finished_receipts.append(tuple(outcome.name_receipt_done))
         res = result_dict(outcome)
         # ACL-2192: заметка «Automatic Facebook Page» выбрана раньше creator - в итог она переносится здесь.
         res["warnings"] = [n for n in early_notes if n not in res["warnings"]] + res["warnings"]
@@ -735,6 +739,7 @@ class ApiPublisher:
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      "copy_number": outcome.copy_number,
                       **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
@@ -743,6 +748,21 @@ class ApiPublisher:
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
         self._log_stats(name, spec, began, outcome=outcome, plan=plan)
         return res
+
+    def finish_name_records(self) -> None:
+        """ACL-2250: конец задания, где ни одна кампания не остановилась и не упала: квитанции имён удаляются.
+
+        Тогда следующая публикация того же имени - повтор, и получает следующую копию. Не удалилась квитанция -
+        остаётся (безопасная сторона: следующий запуск допишет ту же кампанию). Check plan это не зовёт.
+        """
+        from src.fb_api import name_receipt
+
+        done, self._finished_receipts = self._finished_receipts, []
+        for act, base in done:
+            try:
+                name_receipt.delete(act, base)
+            except name_receipt.NameReceiptError:
+                pass
 
     def _log_spec(self, plan: Any, name: str) -> dict:
         """ACL-2347: полный план в общий журнал перед созданием; пробный запуск ничего не пишет."""
