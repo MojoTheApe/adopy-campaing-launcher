@@ -410,6 +410,27 @@ def test_a_half_hour_account_zone_is_flagged_in_the_preview(lt):
     assert "not a whole number of hours" in lt.inner_text("[data-lt-acc-preview]")
 
 
+def test_a_first_day_of_today_moves_its_start_on_when_the_hour_has_passed(lt):
+    # Введено в 14:40 -> старт 15:00; в 15:08 этот старт уже прошёл: страница сдвигает его на следующий час.
+    res = lt.evaluate("""() => { const slot = document.getElementById('slot');
+        const today = cbLifetime.nowInTeam().slice(0, 10);
+        const ds = slot.querySelector('[data-lt-part="start"]'); ds.value = today; cbLtDate(ds);
+        slot.querySelector('[name$="_start_time"]').value = today + 'T00:00';   // устаревший старт
+        cbLifetime.sync(slot);
+        return { start: slot.querySelector('[name$="_start_time"]').value, now: cbLifetime.nowInTeam(),
+                 day: ds.value, today: today,
+                 past: cbLifetime.problems(slot).some(p => p.id === 'lt_past') }; }""")
+    assert res["start"] > res["now"] and res["start"].endswith(":00")
+    assert res["day"] == res["today"] and res["past"] is False
+
+
+def test_the_preview_follows_the_budget_as_it_is_typed():
+    src = REPORT.read_text(encoding="utf-8")
+    assert 'name="camp_\' + idx + \'_budget"' in src
+    line = next(ln for ln in src.splitlines() if 'name="camp_\' + idx + \'_budget"' in ln)
+    assert "cbLtChanged(this)" in line
+
+
 def test_start_in_the_past_is_compared_by_the_absolute_time_of_israel(lt):
     lt.evaluate("document.querySelector('[name$=\"_start_time\"]').value = '2020-01-01T10:00'")
     assert any("Israel time" in p["text"] for p in lt.evaluate("cbLifetime.problems(document.getElementById('slot'))"))
