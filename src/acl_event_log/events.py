@@ -109,8 +109,21 @@ def stats_payload(name: str, spec_hash: str, *, outcome: Any = None, plan: Any =
 
 
 def result_payload(res: dict) -> dict:
-    """Итог кампании как есть, без новых полей."""
-    return {k: res.get(k) for k in _RESULT_KEYS}
+    """Итог кампании как есть, без новых полей.
+
+    ACL-2392: панель получает простой текст, а в журнал уходит прежний сырой (`failure.details.error_text`,
+    строки сверки `failure.details.readback_mismatches`): содержимое журнала не меняется.
+    """
+    out = {k: res.get(k) for k in _RESULT_KEYS}
+    details = (res.get("failure") or {}).get("details") if isinstance(res.get("failure"), dict) else None
+    if isinstance(details, dict):
+        if details.get("error_text"):
+            out["error"] = details["error_text"]
+        lines = details.get("readback_mismatches")
+        if lines and isinstance(out.get("blocking_failures"), list):
+            marker = "Meta saved different values than planned"
+            out["blocking_failures"] = [x for x in out["blocking_failures"] if marker not in str(x)] + list(lines)
+    return out
 
 
 def check_payload(result: dict, *, plan_hash_value: str, duration_s: float) -> dict:

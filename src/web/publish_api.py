@@ -267,6 +267,16 @@ def _published_as(outcome: Outcome) -> str:
     return chosen if chosen and chosen != outcome.campaign_name else ""
 
 
+def _failure_dict(failure: Any, raw_error: str = "") -> dict | None:
+    """`Failure.as_dict()` plus the raw stop text under `details.error_text` (scrubbed), so the event log keeps it."""
+    if not failure:
+        return None
+    out = failure.as_dict()
+    if raw_error:
+        out["details"] = {**out["details"], "error_text": _tm.scrub(str(raw_error))}
+    return out
+
+
 def dry_run_result(outcome: Outcome) -> dict[str, Any]:
     """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
     ok = not outcome.error
@@ -278,8 +288,8 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
         "blocking_failures": [], "problems": list(outcome.problems), "run_id": None, "campaign_id": None,
         "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
-        "error": (failure.text() if failure else outcome.error) or None,
-        "failure": failure.as_dict() if failure else None,
+        "error": ((failure.text() if failure else "") or outcome.error) or None,
+        "failure": _failure_dict(failure, outcome.error),
         "steps_completed": list(outcome.steps), "screenshots": [],
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
@@ -294,7 +304,7 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
     created = bool(outcome.campaign_id)
     # ACL-2392: the panel gets the plain line; the raw text goes to `failure.details`.
     failure = None if error else outcome.failure
-    error = error or (failure.text() if failure else outcome.error)
+    error = error or (failure.text() if failure else "") or outcome.error
     mismatches = outcome.mismatches
     mismatch_lines = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
                       f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
@@ -331,7 +341,7 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "ad_ids": list(outcome.ad_ids),
         "error": error or None,
         #: ACL-2392: key / short / next / left / details of the failure; the raw text lives only in `details`.
-        "failure": failure.as_dict() if failure else None,
+        "failure": _failure_dict(failure, outcome.error),
         #: ACL-2299: the campaign was never begun (an earlier stop) - the panel shows it as waiting, not failed.
         "not_started": bool(not_started),
         "steps_completed": list(outcome.steps),
@@ -645,13 +655,14 @@ class ApiPublisher:
         _start_cooldown(self.account_label, stop)
         _tm.report_stop(stop.kind, str(stop), {"source": "publish", "code": stop.code})
         raise ApiPublishError(f"{self.account_label}: Graph API stopped ({stop.kind}): {stop}",
-                              code=stop.kind, stage=getattr(stop, "stage", "") or "while loading Ads Manager")
+                              code=stop.kind, stage=getattr(stop, "stage", "") or "while loading Ads Manager") from stop
 
     # -- одна кампания
     def publish_draft(self, draft: Any) -> dict[str, Any]:
         began = time.monotonic()
         name = str(getattr(draft, "name", "") or "")
         if self.stop is not None:
+            # Only the stop kind is named here (no Meta text), so there is nothing raw to hide.
             return result_dict(Outcome(campaign_name=name), not_started=True,
                                error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
@@ -689,8 +700,9 @@ class ApiPublisher:
                     self.stop = exc
                     _start_cooldown(self.account_label, exc)
                     _tm.report_stop(exc.kind, str(exc), {"source": "publish", "code": exc.code})
-                return result_dict(Outcome(campaign_name=name), error=(
-                    f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created."))
+                stopped = _plain.classify(exc, kind=exc.kind, ctx={"stage": "while choosing the Page"})
+                return result_dict(Outcome(campaign_name=name, failure=stopped, error=(
+                    f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created.")))
             except ValueError as exc:
                 return result_dict(Outcome(campaign_name=name),
                                    error=f"The Page of this draft cannot be used in this run ({exc}). "

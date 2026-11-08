@@ -1851,19 +1851,16 @@ class CampaignCreator:
                         return self._write(out, what, path, params, find, files=files, filename=filename,
                                            id_of=id_of, on_ad=on_ad, children_active=children_active,
                                            form_page=form_page, upload=upload, _resent=True)
-                elif exc.subcode in _REJECTION_SUBCODES:
-                    # ACL-2392: Meta rejects this deterministically and the readback proves nothing was written.
-                    self._note_unknown_write(what, exc, began, first=True, outcome="rejected_not_found")
-                    self.client.reconciled(path)
-                    raise CreationStopped(
-                        f"{what}: Meta rejected the write ({exc}); nothing was found by readback.",
-                        created=out.created, kind="rejected", failure=_plain.classify(exc, kind="rejected", ctx={"stage": _plain.stage_of(what)})) from exc
                 else:
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
+                    # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
+                    rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
+                                 if exc.subcode in _REJECTION_SUBCODES else None)
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
-                        created=out.created, kind="unknown") from exc
+                        created=out.created, kind="unknown", failure=rejection) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)

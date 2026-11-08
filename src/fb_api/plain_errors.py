@@ -56,7 +56,7 @@ TABLE: dict[str, Plain] = {
                                  "blocking", "later"),
     "mlx_token_rejected": Plain("", "", "blocking", "after_fix"),  # text comes from mlx_session
     "tab_unresponsive": Plain("The Ads Manager tab stopped answering",
-                              "wait about {minutes} min, it will be reopened, then republish", "hold", "later"),
+                              "wait {wait}, then republish", "hold", "later"),
     "proxy_error": Plain("The profile's proxy or secure connection failed",
                          "check the proxy of this profile in Multilogin and republish"),
     "graph_read_timeout": Plain("Meta did not answer in time{stage}", "nothing was changed, republish in a few minutes",
@@ -64,11 +64,12 @@ TABLE: dict[str, Plain] = {
     "graph_write_unconfirmed": Plain("Meta did not confirm this step{stage}",
                                      "check the campaign in Ads Manager, then republish (it will not duplicate)",
                                      "blocking", "later"),
-    "rate_limited": Plain("Meta is limiting requests", "wait {minutes} min and republish", "hold", "later"),
+    "rate_limited": Plain("Meta is limiting requests", "wait {wait} and republish", "hold", "later"),
     "policy_block": Plain("Meta temporarily blocked this action", "wait before trying again, do not retry now",
                           "blocking", "never"),
-    "memory_hold": Plain("Waiting for free memory", "close a Multilogin profile you don't need", "hold", "later"),
-    "account_hold": Plain("Another action on this account is still running", "wait for it to finish", "hold",
+    # ACL-2400: the same words as warm.MEMORY_HOLD_MESSAGE, so the two can never show different texts.
+    "memory_hold": Plain("Not enough free memory", "close a profile and retry", "blocking", "later"),
+    "account_hold": Plain("Another action is still running", "wait for it to finish and republish", "hold",
                           "later"),
     "creative_file": Plain("A creative file cannot be used{ad}", "replace the file and republish"),
     "unknown": Plain("Meta refused this step{stage}", WHERE),
@@ -110,7 +111,7 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     ad = ctx.get("ad")
     fill = {"names": (": " + ", ".join(f'"{n}"' for n in names[:3])) if names else "",
             "ad": f": ad {ad}" if ad else "", "stage": f" ({ctx['stage']})" if ctx.get("stage") else "",
-            "minutes": ctx.get("minutes") or 10}
+            "wait": f"about {ctx['minutes']} min" if ctx.get("minutes") else "a few minutes"}
     short, nxt = plain.short, plain.next_step
     for k, v in fill.items():
         short = short.replace("{" + k + "}", str(v))
@@ -156,22 +157,21 @@ def offending_note(planned: list[str], user_msg: str) -> tuple[list[str], str]:
 
 # ───────────────────────── classification ─────────────────────────
 
+#: Only (sub)codes backed by a RECORDED Meta payload (tests/fixtures/acl2392/targeting_merged.json) are mapped here;
+#: every other code goes to the error catalog or the generic line, never to a guessed class.
 _CODE_KEYS = {
-    # (subcode) first
     1870226: "targeting_merged",
-    1487694: "targeting_term", 2446394: "targeting_term",
-    1885029: "page_unavailable", 1885557: "page_unavailable", 2446289: "page_unavailable",
-    2490155: "page_unavailable",
-    1404163: "account_blocked", 2607: "account_blocked",
-    1815629: "creative_file", 3858258: "creative_file",
-    1404078: "policy_block", 2859015: "policy_block",
 }
 _POLICY_CODES = {368}
+#: Codes WE put on ApiPublishError / WarmError / GraphStop.kind (not Meta codes).
 _API_CODE_KEYS = {
     "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_locked", "profile_locked": "profile_locked",
     "gate_wait": "account_hold", "below_reserve": "memory_hold", "memory_low": "memory_hold",
     "limit": "account_hold", "cdp": "profile_not_started", "launch": "profile_not_started",
-    "account": "account_blocked", "cdp_timeout": "graph_read_timeout",
+    "cdp_timeout": "graph_read_timeout",
+    # GraphStop.kind carried by ApiPublishError (publish_api._halt)
+    "rate_limited": "rate_limited", "call_budget": "rate_limited", "policy_block": "policy_block",
+    "page_failed": "unknown", "logged_out": "logged_out", "checkpoint": "checkpoint",
 }
 
 _SNIFFERS: list[tuple[re.Pattern, str]] = [
@@ -179,8 +179,7 @@ _SNIFFERS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"logged out|no session token|token is no longer valid", re.I), "logged_out"),
     (re.compile(r"checkpoint", re.I), "checkpoint"),
     (re.compile(r"stopped answering|did not finish loading|page_unresponsive", re.I), "tab_unresponsive"),
-    (re.compile(r"ad account is not active|not in /me/adaccounts|account_status|not in the account map", re.I),
-     "account_blocked"),
+    (re.compile(r"ad account is not active|account_status", re.I), "account_blocked"),
     (re.compile(r"is not among the pages|belongs to the profile|validation account differs|"
                 r"require a Facebook Page|Pages could not be fully loaded", re.I), "page_unavailable"),
     (re.compile(r"pixel.*(not on this ad account|datasets)", re.I), "pixel_unavailable"),
@@ -193,17 +192,38 @@ _SNIFFERS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy", re.I), "profile_locked"),
     (re.compile(r"could not be opened with automation|profile .*did not start", re.I), "profile_not_started"),
 ]
+#: Own-text exceptions (PlanError, ApiPublishError, ...) carry user data (interest, ad set, Page names), so they are
+#: matched ONLY against these phrases that exist solely in our own messages, after every quoted fragment was
+#: removed. The generic words (proxy, checkpoint, timeout, Instant Form, readback) are for opaque exceptions only.
+_OWN_SNIFFERS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"ERR_(PROXY|TUNNEL|CERT|SSL)\w*|PROXY_AUTH"), "proxy_error"),
+    (re.compile(r"no session token|token is no longer valid"), "logged_out"),
+    (re.compile(r"Ads Manager tab stopped answering|did not finish loading"), "tab_unresponsive"),
+    (re.compile(r"ad account is not active"), "account_blocked"),
+    (re.compile(r"is not among the pages|belongs to the profile|validation account differs|"
+                r"require a Facebook Page|Pages could not be fully loaded"), "page_unavailable"),
+    (re.compile(r"pixel from the draft .*is not on this ad account"), "pixel_unavailable"),
+    (re.compile(r"is not a form of this Page"), "form_unavailable"),
+    (re.compile(r"creative file is empty|Stories / Reels file"), "creative_file"),
+    (re.compile(r"was not found by Meta targeting search"), "targeting_term"),
+    (re.compile(r"earlier write has an unknown result|write result is unknown"), "graph_write_unconfirmed"),
+    (re.compile(r"the profile could not be opened with automation|profile did not start"), "profile_not_started"),
+]
+_QUOTED_ANY = re.compile(r"'[^']*'|\"[^\"]*\"|\[[^\]]*\]")
 #: Exceptions whose message is already our own English text (no Meta wording): passed through scrubbed.
 _OWN_TEXT = ("PlanError", "ApiPublishError", "CreationStopped", "ProfileLeaseError", "LoadRequeue", "RulesViolation")
 _QUOTED = re.compile(r"'([^']{1,60})'")
 
 
-def _by_text(text: str, ctx: dict) -> str:
+def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
+    """Last-resort free-text match. `own`: our message with user data inside: quoted parts removed, phrases only."""
+    if own:
+        text = _QUOTED_ANY.sub(" ", text)
     code = _mlx.classify(text, "")
     if code:
         ctx.setdefault("text", _mlx.message_for(code))
         return "mlx_token_rejected" if ctx["text"] else ""
-    for pat, key in _SNIFFERS:
+    for pat, key in (_OWN_SNIFFERS if own else _SNIFFERS):
         if pat.search(text):
             return key
     return ""
@@ -248,8 +268,15 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         key = "policy_block" if code in _POLICY_CODES else _CODE_KEYS.get(code, "")
     if not key and kind in ("page_unresponsive", "logged_out", "checkpoint"):
         key = {"page_unresponsive": "tab_unresponsive"}.get(kind, kind)
-    if not key and raw:
-        key = _by_text(raw, ctx)
+    names = [c.__name__ for c in type(exc).__mro__] if exc is not None and not isinstance(exc, str) else []
+    own = any(n in _OWN_TEXT for n in names)
+    if not key and (isinstance(exc, (GraphError, GraphStop)) or isinstance(code, int)):
+        # The catalog (Meta's own code) wins over any free-text match: error_user_title is Meta/user data.
+        x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
+        if x.known:
+            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+    if not key and raw and "TargetingUnresolved" not in names:
+        key = _by_text(raw, ctx, own=own)
     if key in ("tab_unresponsive", "rate_limited") and not ctx.get("minutes"):
         m = re.search(r"about (\d+) min", raw)
         if m:
@@ -270,7 +297,7 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         if x.known:
             return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
         return _make("unknown", ctx, details=details)
-    if exc is not None and raw and any(c.__name__ in _OWN_TEXT for c in type(exc).__mro__):
+    if exc is not None and raw and own:
         return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details, stage=stage)
     if exc is not None and not isinstance(exc, str) and not isinstance(exc, (GraphError, GraphStop)):
         # Not a Meta answer at all (a bug or a local failure): do not blame Meta.

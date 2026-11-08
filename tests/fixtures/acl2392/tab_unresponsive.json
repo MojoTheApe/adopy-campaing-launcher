@@ -5,7 +5,7 @@
   "expect": {
     "key": "tab_unresponsive",
     "short": "The Ads Manager tab stopped answering",
-    "next": "wait about 6 min, it will be reopened, then republish",
+    "next": "wait about 6 min, then republish",
     "severity": "hold",
     "retry": "later"
   },

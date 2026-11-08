@@ -1413,7 +1413,8 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
         cause = exc.__cause__
         if getattr(exc, "key", "") or not isinstance(cause, (GraphError, GraphStop, PlanError)):
             cause = exc
-        failure = plain_errors.classify(cause)
+        stage = getattr(exc, "stage", "") or getattr(cause, "stage", "")
+        failure = plain_errors.classify(cause, ctx={"stage": stage} if stage else None)
         if text != msg:  # Multilogin session / proxy text is already plain
             return text, failure.details
         return failure.text(), failure.details

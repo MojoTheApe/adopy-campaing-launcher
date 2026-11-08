@@ -21739,7 +21739,8 @@ function cbProblemsHtml(r) {
     tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
   }
   items.forEach(function(p) {
-    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
+    // ACL-2392: the raw Meta text (codes, fbtrace) is not shown in the builder; it lives in Recent runs.
+    tech.push('<div>' + aclEscHtml(p.step || '') + '</div>');
   });
   if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
   if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');

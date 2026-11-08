@@ -19,7 +19,8 @@ TEMPLATE = Path(__file__).resolve().parent.parent / "src" / "web" / "templates" 
 
 #: What must never reach the panel text (it lives in `failure.details`).
 FORBIDDEN = [r"fbtrace", r"error_subcode", r"Graph API", r"graph[.]facebook[.]com", r"\bv\d+[.]\d",
-             r"\berror[ _]?code\b", r"http[ _]?\d{3}", r"\b\d{6,}\b"]
+             r"\berror[ _]?code\b", r"http[ _]?\d{3}", r"\b\d{6,}\b",
+             r"access_token", r"\bact_", r"OAuthException", r"\(#\d+\)", r"\bcode \d+", r"\[\w+="]  # linux-ok: regex data
 
 
 def _exc(fx: dict) -> BaseException:
@@ -72,7 +73,7 @@ def _strings(value):
         yield value
     elif isinstance(value, dict):
         for k, v in value.items():
-            if k != "details":
+            if k not in ("details", "raw"):      # a problem's `raw` is shown only in Recent runs, never in the panel
                 yield from _strings(v)
     elif isinstance(value, (list, tuple)):
         for v in value:
@@ -85,7 +86,9 @@ def test_the_panel_text_never_shows_raw_fields(path):
     exc = _exc(fx)
     failure = pe.classify(exc)
     failure.left = pe.left_in_meta(campaign=True, adsets=1, ads=2)
-    out = cr.Outcome(campaign_name="C", campaign_id="1", error=str(exc), stop_kind="unknown", failure=failure)
+    problems = [cr.graph_problem(exc)] if isinstance(exc, (g.GraphError, g.GraphStop)) else []
+    out = cr.Outcome(campaign_name="C", campaign_id="1", error=str(exc), stop_kind="unknown", failure=failure,
+                     problems=problems)
     for payload in (publish_api.result_dict(out), publish_api.dry_run_result(out)):
         for key in ("error", "blocking_failures", "warnings", "problems", "failure"):
             for text in _strings(payload.get(key)):
@@ -143,11 +146,12 @@ class RejectingMeta(FakeMeta):
         return super().write(path, params, **kw)
 
 
-def test_1870226_is_a_rejection_after_the_readback_and_does_not_block_the_job(tmp_path):
+def test_1870226_is_worded_as_a_rejection_but_the_gating_is_unchanged(tmp_path):
     meta = RejectingMeta()
     out, client = _run(meta, _draft(tmp_path, ads=1))
-    assert out.stop_kind == "rejected"
-    assert client.unreconciled is None
+    # ACL-2392: classification only. Stop kind and the unreconciled mark are what they were before this task.
+    assert out.stop_kind == "unknown"
+    assert client.unreconciled is not None
     assert out.failure.key == "targeting_merged"
     assert out.failure.left == [
         "Left in Meta: an empty paused campaign. Publishing again reuses it, you do not need to delete it."]
@@ -173,18 +177,18 @@ def test_a_plain_unknown_result_still_blocks_the_job(tmp_path):
     assert out.failure.key == "graph_write_unconfirmed"
 
 
-def test_a_rejection_does_not_block_the_next_campaign_of_the_job(tmp_path):
+def test_a_1870226_stop_still_blocks_the_next_campaign_of_the_job(tmp_path):
     from tests.test_acl1761_api_create import _publisher
 
     meta = RejectingMeta()
     pub = _publisher(meta)
     first = pub.publish_draft(_draft(tmp_path, ads=1))
     assert first["failure"]["key"] == "targeting_merged"
-    assert pub.blocked in (None, "")
+    assert pub.blocked, "the job stays blocked until the unknown write is reconciled (unchanged gating)"
     d2 = _draft(tmp_path, ads=1)
     d2.name = d2.ad_sets[0].name = "MX Leads 2"
     second = pub.publish_draft(d2)
-    assert not (second["error"] or "").startswith("Not started")
+    assert second["not_started"] is True
 
 
 # -- owner delta: stage in the line, link to Recent runs, left text, history ----------------------
@@ -248,3 +252,131 @@ def test_recent_runs_popup_shows_details_and_copy_and_the_builder_only_links():
     start = html.index("function cbFailureDetailsHtml(")
     body = html[start:html.index("document.addEventListener('click'", start)]
     assert "Details in Recent runs" in body and "JSON.stringify" not in body and "Copy details" not in body
+
+
+# -- round 2 (review of PR 1477) ------------------------------------------------------------------
+
+import types  # noqa: E402
+
+RAW_TRACE = "fbtrace_id=AbCdEf123"
+
+
+def _halted_job_error(stop):
+    from tests.test_acl1761_api_create import _publisher
+
+    pub = _publisher(FakeMeta())
+    try:
+        pub._halt(stop)
+    except publish_api.ApiPublishError as exc:
+        assert exc.__cause__ is stop, "the Graph stop must stay chained so the job error is classified from it"
+        return publish_jobs._plain_error("j", f"Graph API publish error: {exc}", exc)
+    raise AssertionError("_halt did not raise")
+
+
+@pytest.mark.parametrize("stop,key_text", [
+    (g.RateLimited(f"Graph API rate limit (17): User request limit reached [type=OAuthException, {RAW_TRACE}]",
+                   code=17), "Meta is limiting requests"),
+    (g.PolicyBlocked(f"Graph API refused (368): temporarily blocked [{RAW_TRACE}]", code=368),
+     "do not retry now"),
+    (g.CallBudget(f"call budget used up [{RAW_TRACE}]", code=None), "Meta is limiting requests"),
+    (g.PageFailed(f"page helper failed (#100) [{RAW_TRACE}]", code=None), "see details in Recent runs"),
+])
+def test_job_level_graph_stops_show_the_plain_line_not_the_meta_text(stop, key_text):
+    text, details = _halted_job_error(stop)
+    assert key_text in text
+    for pattern in FORBIDDEN:
+        assert not re.search(pattern, text, re.I), (pattern, text)
+    assert details and RAW_TRACE in json.dumps(details), "the raw text stays in the details"
+
+
+def test_api_codes_of_graph_stops_map_even_without_the_chain():
+    for code, key in (("rate_limited", "rate_limited"), ("call_budget", "rate_limited"),
+                      ("policy_block", "policy_block")):
+        assert pe.classify(publish_api.ApiPublishError(f"x [{RAW_TRACE}]", code=code)).key == key
+
+
+@pytest.mark.parametrize("exc", [
+    cr.TargetingUnresolved([{"term": "Proxy servers", "state": "unresolved", "candidates": []}]),
+    cr.TargetingUnresolved([{"term": "Cars", "state": "unresolved", "candidates": [], "reason": "search timed out"}]),
+    cr.TargetingUnresolved([{"term": "Cars", "state": "unresolved",
+                             "candidates": [{"name": "checkpoint fans", "type": "interests"}]}]),
+    cr.PlanError("Ad set 'Timeout promo': the start time 2026-01-01 is not in the future"),
+])
+def test_user_data_inside_our_own_text_is_not_sniffed(exc):
+    failure = pe.classify(exc)
+    assert failure.key == "plan_text"
+    assert failure.short.startswith(str(exc)[:12])   # our own sentence, kept
+
+
+def test_the_catalog_wins_over_a_text_match_in_meta_data():
+    exc = g.GraphError("Graph API error 100: Invalid parameter [error_user_title=Instant Form privacy policy "
+                       "link is missing]", code=100, details={"error_user_title": "Instant Form privacy link"})
+    failure = pe.classify(exc)
+    assert failure.key != "form_unavailable"
+    assert "Instant Form" not in failure.short
+
+
+def test_a_local_map_problem_is_not_shown_as_a_disabled_account():
+    assert pe.classify(publish_api.ApiPublishError("Acc is not in the account map")).key == "plan_text"
+    assert pe.classify(cr.PlanError("This profile has no access to the ad account from the account map "
+                                    "(not in /me/adaccounts). Nothing was created.")).key == "plan_text"
+    assert pe.classify(cr.PlanError("The ad account is not active (account_status 2). Nothing was created.")
+                       ).key == "account_blocked"
+
+
+def test_no_reopen_timer_promise_without_a_known_wait_and_gate_text_is_not_account_level():
+    f = pe.classify(publish_api.ApiPublishError("Ads Manager did not finish loading (no Graph session in the page)"))
+    assert f.key == "tab_unresponsive" and "reopened" not in f.line() and "10 min" not in f.line()
+    assert "account" not in pe.classify(publish_api.ApiPublishError("busy", code="gate_wait")).line()
+
+
+def test_memory_text_is_the_acl2400_text():
+    expected = "Not enough free memory - close a profile and retry"     # warm.MEMORY_HOLD_MESSAGE (ACL-2400)
+    for code in ("below_reserve", "memory_low"):
+        assert pe.classify(publish_api.ApiPublishError("x", code=code)).line() == expected
+
+
+def test_unrecorded_meta_codes_are_not_guessed():
+    assert set(pe._CODE_KEYS) == {1870226}, "only the recorded subcode may map to a class by itself"
+    for sub in (1404163, 1404078, 2859015, 1815629, 3858258):
+        assert pe.classify(g.GraphError("odd", code=77, subcode=sub)).key in ("unknown", "catalog"), sub
+
+
+def test_an_empty_failure_text_can_never_turn_a_failed_campaign_into_success():
+    empty = pe.Failure("x", "")
+    out = cr.Outcome(campaign_name="C", campaign_id="1", error="raw stop text", failure=empty)
+    res = publish_api.result_dict(out)
+    assert res["success"] is False and res["error"] == "raw stop text"
+    assert publish_api.dry_run_result(out)["error"] == "raw stop text"
+
+
+def test_builder_panel_does_not_render_the_raw_problem_text():
+    text = TEMPLATE.read_text(encoding="utf-8")
+    start = text.index("function cbProblemsHtml(")
+    body = text[start:text.index("\n}\n", start)]
+    assert "p.raw" not in body
+
+
+def test_pin_page_stop_and_earlier_stop_are_plain():
+    from tests.test_acl1761_api_create import _publisher
+
+    pub = _publisher(FakeMeta())
+    pub.stop = g.PolicyBlocked(f"Graph API refused (368): blocked [{RAW_TRACE}]", code=368)
+    res = pub.publish_draft(types.SimpleNamespace(name="C"))
+    assert res["not_started"] is True and RAW_TRACE not in json.dumps(res["error"]) and "(368)" not in res["error"]
+
+
+def test_the_event_log_keeps_the_raw_stop_text_and_the_raw_readback_lines():
+    from src.acl_event_log.events import result_payload
+
+    raw = "ad set 'A': the write result is unknown (Graph API error 1 ... error_subcode=1870226) and nothing was found"
+    out = cr.Outcome(campaign_name="C", campaign_id="1", error=raw, stop_kind="unknown",
+                     failure=pe.classify(g.WriteUnknown("x", path="/p", code=1, subcode=1870226)))
+    payload = result_payload(publish_api.result_dict(out))
+    assert payload["error"] == raw          # what the event log always received
+    mism = [{"object": "ad set 'A'", "field": "daily_budget", "expected": "500", "actual": "400"}]
+    out2 = cr.Outcome(campaign_name="C", campaign_id="1", readback={"ok": False, "mismatches": mism})
+    lines = result_payload(publish_api.result_dict(out2))["blocking_failures"]
+    assert lines and lines[0].startswith("readback mismatch: ad set 'A' daily_budget")
+    ok = result_payload(publish_api.result_dict(cr.Outcome(campaign_name="C")))
+    assert ok["error"] is None
