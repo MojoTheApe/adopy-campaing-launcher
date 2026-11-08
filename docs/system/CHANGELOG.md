@@ -1,5 +1,37 @@
 # System history
 
+## ACL-2455 — Lifetime run is a range of days, hours are picked for every day — 2026-11-08
+
+The owner found it confusing that a Lifetime campaign's Start and End carried a time of day, which read
+as the hours the ads run. The builder now asks for a First day and a Last day (date only, Israel time):
+the run starts at 00:00 on the first day (at the next full hour when the first day is today) and ends at
+the end of the last day. The hours grid ("Hours (every day, Israel time)") is always shown under the dates
+with every hour on; switching hours off makes a schedule that repeats on every day of the run, and with
+all hours on no schedule is sent. The form still sends `start_time`/`end_time`/`schedule`/`schedule_on`
+as before, so the server, drafts and plans are unchanged; drafts with a time of day show their dates.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1455).
+
+## ACL-2443 — Builder: lifetime budget and delivery schedule in the account time zone — 2026-11-07
+
+The Builder budget block now has a Daily / Lifetime switch. Lifetime takes a start and an end date-time in the ad account time zone (read from the new `GET /api/account-facts`), and an optional 7x24 hour grid that is sent as `adset_schedule` (`pacing_type` ADVERTISER time zone). Write policy, draft, creator, Graph calls and preflight know the lifetime fields; the plan cache schema is now 2, so cached plans from older versions are rebuilt. A live Lifetime publish in Meta and non-USD minimums are not verified yet. Python changed: restart the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1443).
+
+## ACL-1448 — Lifetime start, end and hours are entered in Israel time — 2026-11-07
+
+In the campaign builder the Start and End of a Lifetime budget and the hours grid are now Israel time
+(`Asia/Jerusalem`; `ACL_TEAM_TIMEZONE` overrides it, an invalid name falls back with a warning in the log).
+Before this they were read as wall-clock time of the ad account. Check plan and the build convert them to the
+account time zone: Start and End by their own dates, the grid by the difference between Israel and the account
+at the campaign start (shifted hours cross midnight into the neighbouring weekday, Sunday and Saturday wrap
+around). A difference that is not a whole number of hours is refused. If the difference changes inside the
+term (Israel and the account change clocks on different dates), Check plan shows a warning with the first date
+(and "until <date>" when it returns) and does not stop. The read-back compares what Meta stores with the
+converted windows. The grid has a preset "Don't run 01:00-05:00 every day" and a line under it that shows what
+Meta gets in account time. The zone is set by the server (`ACL_TEAM_TIMEZONE`), not by the form, so slots and
+drafts have no new keys and Daily campaigns are unchanged. Lifetime drafts saved before this change keep their
+times, which are now read as Israel time.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1448).
+
 ## ACL-2334 — Package shadow config no longer overwrites the real machine config — 2026-11-06
 
 The merge of the Claude MSIX package copy is skipped when ACL_CONFIG_DIR is set explicitly. A shadow value never turns an absolute path into a relative one or an explicit setting into a code default. Each merge logs the key names only (no values).
