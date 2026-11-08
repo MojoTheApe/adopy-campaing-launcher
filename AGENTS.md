@@ -19,10 +19,14 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
-- [Master Repo 1.9.0 shared guidance](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/standard.md):
-  [document map](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/project-documents.md)
-  and [workflow evolution](https://github.com/MojoTheApe/master-repo/blob/416e93ce563223a26e5d417f9aeb8ce1c6bfc994/docs/workflow-evolution.md).
-  Follow ACL's local workflow and selected Tracker guide for operations.
+- [Master Repo 1.11.0 shared guidance](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/standard.md):
+  [document map](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/project-documents.md)
+  and [workflow evolution](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/workflow-evolution.md).
+  Read its [engineering rules](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/engineering-standards.md)
+  with the [local engineering references](docs/repository/VERIFICATION.md#engineering-context-and-examples).
+  These are the adopted author/reviewer guidance; the existing descriptor/provider
+  pins and ACL's local workflow still own executable operations.
+  Make the actual task and these applicable instructions available to delegated agents.
 - [ACL standalone workflow provider](docs/repository/STANDALONE_PROVIDER_ACL.md):
   the current executable source is the exact published revision in
   [tracker/engine.json](tracker/engine.json) and [delivery.json](delivery.json).
