@@ -7853,6 +7853,7 @@ window.cbLifetime = (function () {
      Включённый флажок с пустой сеткой уходит окном без дней - правило отвечает "empty". */
   function auditFields(slot) {
     if (!isLifetime(slot)) return null;
+    refreshTodayStart(slot);
     var out = {
       budget_type: 'lifetime',
       start_time: String((fld(slot, 'start_time') || {}).value || '').trim(),
@@ -7954,6 +7955,14 @@ window.cbLifetime = (function () {
     }
     if (e && de) e.value = DATE_RE.test(de.value) ? addDays(de.value, 1) + 'T00:00' : '';
   }
+  /* Первый день = сегодня: старт "со следующего часа" устаревает, пока форма открыта (введено в 14:40 -
+     старт 15:00, в 15:08 он уже в прошлом). Пересчитываем при каждой синхронизации и перед аудитом. */
+  function refreshTodayStart(slot) {
+    var s = fld(slot, 'start_time'), ds = q(slot, '[data-lt-part="start"]');
+    if (!s || !ds || !/^\d{4}-\d{2}-\d{2}$/.test(ds.value)) return;
+    var now = nowInTeam();
+    if (now && now.slice(0, 10) === ds.value && s.value && s.value <= now) writeDates(slot);
+  }
 
   function paintGrid(slot) {
     /* Без расписания (флажок снят) сетка показывает все часы включёнными - кампания крутится круглые сутки. */
@@ -7988,6 +7997,7 @@ window.cbLifetime = (function () {
     setHidden(q(slot, '.cb-sg'), !life);
     paintGrid(slot);
     paintDates(slot);
+    if (life) refreshTodayStart(slot);
     var f = builderAccountFacts(accountOf(slot));
     var b = fld(slot, 'budget');
     setText(q(slot, '[data-lt-budget-label]'), life ? 'Lifetime budget (' + (f.currency || 'account currency') + ')' : 'Campaign budget ($/day)');
@@ -8031,6 +8041,16 @@ window.cbLifetime = (function () {
     if (slot && !btn.disabled) setType(slot, btn.dataset.budgetType);
   };
   window.cbLtChanged = function (el) { sync(el.closest('.cb-slot')); };
+  /* Открытая без действий форма тоже не держит устаревший старт сегодняшнего дня (раз в минуту). */
+  setInterval(function () {
+    document.querySelectorAll('.cb-slot').forEach(function (slot) {
+      var s = fld(slot, 'start_time');
+      if (!isLifetime(slot) || !s) return;
+      var before = s.value;
+      sync(slot);
+      if (s.value !== before) fire(s);
+    });
+  }, 60000);
   window.cbLtDate = function (el) {
     var slot = el.closest('.cb-slot');
     if (!slot) return;
@@ -18739,7 +18759,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* ACL-1443: Daily (прежнее поведение) или Lifetime со сроками и расписанием. */
       '<span class="cb-label" data-lt-budget-label>Campaign budget ($/day)</span>' +
       '<div class="cb-inline cb-budget-box">' + (window.cbLifetime ? window.cbLifetime.segHtml(idx) : '') +
-      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
+      '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign" oninput="if (window.cbLtChanged) cbLtChanged(this)">' +
       '</div>' + (window.cbLifetime ? window.cbLifetime.rowsHtml(idx) : '') +
       '<span class="cb-label">Facebook Page</span>' +
       '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
