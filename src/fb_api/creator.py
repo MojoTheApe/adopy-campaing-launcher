@@ -2647,6 +2647,32 @@ class CampaignCreator:
     def _end_dt(self, ad_set: AdSetPlan) -> datetime:
         return self._local_dt(ad_set, ad_set.end_time, "end")
 
+    #: ACL-2462: запас до старта, сдвинутого «на сейчас» (запись в Meta ещё идёт), и шаг округления.
+    TODAY_START_MARGIN = timedelta(minutes=5)
+    TODAY_START_STEP_MIN = 15
+
+    def _move_passed_start_of_today(self, ad_set: AdSetPlan) -> None:
+        """Lifetime с первым днём «сегодня»: прошедший час старта сдвигается вперёд, а не стопорит публикацию.
+
+        ACL-2462: форма задаёт старт сегодняшнего дня как «следующий целый час», а задание может ждать
+        очереди (процессор, память) дольше - 17:51 отправлено со стартом 18:00, проверено в 18:06.
+        Старт того же дня (по поясу команды), уже прошедший, становится ближайшей четвертью часа
+        не раньше чем через 5 минут. Старт прошлых дней по-прежнему отказ; Daily не трогается.
+        """
+        if not ad_set.time_zone or not ad_set.end_time:
+            return
+        start, now = self._start_dt(ad_set), self.now()
+        if start > now:
+            return
+        local_now = now.astimezone(start.tzinfo)
+        if start.date() != local_now.date():
+            return
+        nxt = (local_now + self.TODAY_START_MARGIN).replace(second=0, microsecond=0)
+        nxt += timedelta(minutes=(-nxt.minute) % self.TODAY_START_STEP_MIN)
+        log.info("ACL-2462: ad set %r start %s (%s) has passed; moved to %s", ad_set.name,
+                 ad_set.start_time, ad_set.time_zone, nxt.strftime("%Y-%m-%dT%H:%M"))
+        ad_set.start_time = nxt.strftime("%Y-%m-%dT%H:%M")
+
     def start_iso(self, ad_set: AdSetPlan) -> str:
         """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
         return self._start_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -3382,6 +3408,8 @@ class CampaignCreator:
             # Набор из прошлого прогона уже стартовал: его старт в прошлом - не причина отказа.
             # `early` - вызов до поиска по имени (found_sets ещё неизвестны): старт проверит поздний вызов.
             reused = pos < len(found) and bool(found[pos])
+            if ad_set.start_time and not early and not reused:
+                self._move_passed_start_of_today(ad_set)
             if ad_set.start_time and not early and not reused and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
                                 f"({self._zone_note(ad_set)}) is not in the future")

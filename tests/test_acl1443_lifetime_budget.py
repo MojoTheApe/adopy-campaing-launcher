@@ -536,8 +536,9 @@ def test_a_repeat_after_the_start_passed_reuses_the_campaign_without_a_new_name(
     plan = _plan(_life(tmp_path))
     again = _creator(meta, now=later).run(plan)
     assert again.error == "" and again.published_as == plan.name, again.error
-    # новый (не найденный) набор с прошедшим стартом по-прежнему отказ
-    fresh = _run(ZoneMeta(), _life(tmp_path), now=later)
+    # новый (не найденный) набор со стартом прошлого дня по-прежнему отказ
+    # (старт ТОГО ЖЕ дня, уже прошедший, ACL-2462 сдвигает вперёд - см. test_acl1448)
+    fresh = _run(ZoneMeta(), _life(tmp_path), now=datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc))
     assert "not in the future" in fresh.error
     # конец в прошлом отказ и для найденного набора
     after_end = datetime(2026, 10, 26, tzinfo=timezone.utc)
