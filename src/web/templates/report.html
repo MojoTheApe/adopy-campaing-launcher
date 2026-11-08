@@ -8556,7 +8556,12 @@ window.cbTree = (function () {
   function refreshPublication(t) {
     var btn = foot.querySelector('.cbd-publish-all');
     if (!btn) return;
-    btn.textContent = publishLabel(t);
+    /* Пока идёт проверка, на кнопке бежит счётчик: новый текст запоминаем и вернём по окончании. */
+    if (window.cbPublishPending && window.cbPublishPending.active() && btn.dataset.cbIdleLabel !== undefined) {
+      btn.dataset.cbIdleLabel = publishLabel(t);
+    } else {
+      btn.textContent = publishLabel(t);
+    }
     var count = t.some ? t.send.length : t.open.length;
     var excluded = t.on.length ? t.on.length - t.send.length : t.total - t.open.length;
     var scope = foot.querySelector('.cbd-publication-scope');
@@ -20013,18 +20018,28 @@ window.cbPublishPending = (function () {
     if (typeof document === 'undefined' || !document.querySelectorAll) return;
     Array.prototype.forEach.call(document.querySelectorAll(SEL), function (b) {
       if (since) {
-        if (!b.dataset.cbIdleLabel) b.dataset.cbIdleLabel = b.textContent;
+        if (b.dataset.cbIdleLabel === undefined) {
+          b.dataset.cbIdleLabel = b.textContent;
+          b.dataset.cbPrevDisabled = b.disabled ? '1' : '0';
+          var pb = b.getAttribute('aria-busy');
+          b.dataset.cbPrevBusy = pb === null ? '' : pb;
+        }
         b.disabled = true;
         b.classList.add('is-pending');
         b.setAttribute('aria-busy', 'true');
         var t = label();
         if (b.textContent !== t) b.textContent = t;
-      } else if (b.dataset.cbIdleLabel) {
+      } else if (b.dataset.cbIdleLabel !== undefined) {
         b.textContent = b.dataset.cbIdleLabel;
-        delete b.dataset.cbIdleLabel;
         b.classList.remove('is-pending');
-        b.setAttribute('aria-busy', 'false');
-        b.disabled = false;              // настоящее состояние вернёт перерисовка ворот ниже
+        /* Возвращаем то, что было до нажатия (кнопка могла быть выключена проверкой формы,
+           aria-busy мог стоять от очереди); ворота потом пересчитают своё в refreshAudit. */
+        b.disabled = b.dataset.cbPrevDisabled === '1';
+        if (b.dataset.cbPrevBusy) b.setAttribute('aria-busy', b.dataset.cbPrevBusy);
+        else b.removeAttribute('aria-busy');
+        delete b.dataset.cbIdleLabel;
+        delete b.dataset.cbPrevDisabled;
+        delete b.dataset.cbPrevBusy;
       }
     });
   }
@@ -20078,6 +20093,14 @@ window.cbPreflightGate = function (items, proceed) {
   if (!bad) { cbPfUnavailable(); return; }
   if (bad.length) { stop(bad); return; }
   function done() {
+    try { doneInner(); } catch (err) {
+      window.CB_PF_RUNNING = false;
+      window.CB_CONFIRM_WAIT = false;
+      if (pend) pend.end();
+      throw err;
+    }
+  }
+  function doneInner() {
     var again = blocked();
     if (!again) { if (pend) pend.end(); cbPfUnavailable(); return; }
     if (again.length) { stop(again); return; }
@@ -20100,7 +20123,14 @@ window.cbPreflightGate = function (items, proceed) {
   window.CB_PF_RUNNING = true;
   var btn = document.querySelector('.cbd-publish-all');
   if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing… Publishing starts only after you confirm in the next window.'; }
-  var jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
+  var jobs;
+  try {
+    jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
+  } catch (err) {
+    window.CB_PF_RUNNING = false;
+    if (pend) pend.end();
+    throw err;
+  }
   Promise.all(jobs).then(function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); done(); },
     function () { window.CB_PF_RUNNING = false; if (pend) pend.end(); tree.refreshAudit(); });
 };
