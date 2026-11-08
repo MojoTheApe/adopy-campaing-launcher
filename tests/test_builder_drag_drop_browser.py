@@ -481,7 +481,7 @@ def test_the_source_card_is_untouched_by_a_drag(page):
     assert page.evaluate(grab) == before
 
 
-@pytest.mark.parametrize("width", [1280, 800])
+@pytest.mark.parametrize("width", [1280, 800, 370, 320])
 def test_handles_are_at_least_32px_and_hittable(page, width):
     _seed(page, account=0, count=2)
     _open_campaign(page, 0)

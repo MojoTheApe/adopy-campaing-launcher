@@ -4053,6 +4053,8 @@
     .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
     /* Out of the flow and keyboard-revealed: the campaign Move-to button must not narrow the row or cover its click target (320px tree has no spare width). Mouse users drag by the grip. */
     .cbd-camp-head { position: relative; }
+    /* ACL-2237: 32px hit area, out of the flow: overlays the row's right edge and adds no width (320px tree has no spare width). */
+    .cbd-camp-head .cbm-grip { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; min-width: 0; padding: 0; z-index: 1; }
     .cbd-camp-head .cbm-moveto { position: absolute; right: 1.8rem; top: 50%; transform: translateY(-50%); background: var(--bg-elev); opacity: 0; pointer-events: none; }
     .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; }
     .cb-ad-row-header .cbm-moveto { margin-left: auto; }
