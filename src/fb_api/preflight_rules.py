@@ -301,7 +301,7 @@ def load_json() -> dict[str, Any]:
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
 #    ACL-1443 (необязательные, уровень кампании): "budget_type": "daily"|"lifetime" (нет = daily),
-#    "start_time"/"end_time": "YYYY-MM-DDTHH:MM" (при lifetime; пояс кабинета), "schedule": [{"days","start_minute","end_minute"}]
+#    "start_time"/"end_time": "YYYY-MM-DDTHH:MM" (при lifetime; пояс команды, ACL-1448; "now" - в том же поясе), "schedule": [{"days","start_minute","end_minute"}]
 
 def _multi_text(a: dict) -> bool:
     """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""

@@ -57,6 +57,8 @@
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
     try { window.CB_ACCOUNT_FACTS = {{ (account_facts_json or {}) | tojson }}; } catch(e) {}
+    // ACL-1448: пояс команды (Израиль): в нём билдер принимает Start/End и сетку часов Lifetime.
+    try { window.CB_TEAM_TIMEZONE = {{ (team_timezone or 'Asia/Jerusalem') | tojson }}; } catch(e) {}
     // ACL-1807: допустимые значения из реестра Meta (только ga); пусто — не ограничиваем.
     try { window.CB_META_CAPS = {{ (meta_caps_json or {}) | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
@@ -1225,6 +1227,8 @@
     .cb-seg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .cb-lt-note { color: var(--muted); font-size: var(--adopy-text-sm); line-height: 1.3; overflow-wrap: anywhere; }
     .cb-lt-err { color: var(--bad); font-size: var(--adopy-text-sm); }
+    .cb-lt-preset { margin-top: 0.4rem; margin-right: 0.5rem; padding: 0.15rem 0.6rem; font: inherit; font-size: var(--adopy-text-sm); color: var(--text); background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 4px; cursor: pointer; }
+    .cb-lt-preset:hover { color: var(--accent); }
     .cb-lt-err:empty { display: none; }
     .cb-lt-check { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text); }
     .cb-sg { margin-top: 0.4rem; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -7518,6 +7522,61 @@ window.cbLifetime = (function () {
     try { new Intl.DateTimeFormat('en-US', { timeZone: name }); return true; } catch (e) { return false; }
   }
 
+  /* ACL-1448: Start/End и сетка вводятся по поясу команды (Израиль); в пояс кабинета их переводит бэкенд.
+     Пояс приходит с сервера (window.CB_TEAM_TIMEZONE), без него - Asia/Jerusalem. */
+  var TEAM_DEFAULT = 'Asia/Jerusalem';
+  function teamZone() { return validZone(window.CB_TEAM_TIMEZONE) ? window.CB_TEAM_TIMEZONE : TEAM_DEFAULT; }
+  /* Смещение пояса от UTC в минутах на момент ms (через Intl, как смещения на сервере - через zoneinfo). */
+  function zoneOffsetMin(zone, ms) {
+    var p = {};
+    new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(ms)).forEach(function (x) { p[x.type] = x.value; });
+    var wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+    return Math.round((wall - Math.floor(ms / 1000) * 1000) / 60000);
+  }
+  /* "YYYY-MM-DDTHH:MM" по часам пояса zone -> момент в мс; не дата - null. */
+  function isoToMs(iso, zone) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(iso || '');
+    if (!m || !validZone(zone)) return null;
+    var guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    var ms = guess - zoneOffsetMin(zone, guess) * 60000;
+    return guess - zoneOffsetMin(zone, ms) * 60000;
+  }
+  /* Смещение кабинета минус смещение команды на момент ms, в часах (может быть дробным). */
+  function shiftHoursAt(accountZone, ms) {
+    return (zoneOffsetMin(accountZone, ms) - zoneOffsetMin(teamZone(), ms)) / 60;
+  }
+  /* Тот же алгоритм, что team_grid_to_account_windows на сервере: сдвиг каждой часовой клетки,
+     перенос через полночь на соседний день недели (0 = Sunday, кольцо), склейка клеток дня в окна,
+     одинаковые окна разных дней - в одной записи; порядок: начало, конец, первый день. */
+  function convertWindows(wins, shift) {
+    var hours = [], d, h;
+    for (d = 0; d < 7; d += 1) hours.push({});
+    (wins || []).forEach(function (w) {
+      (w.days || []).forEach(function (day) {
+        for (var k = Math.floor(w.start_minute / 60); k < Math.ceil(w.end_minute / 60); k += 1) {
+          var t = day * 24 + k + shift;
+          hours[(((Math.floor(t / 24)) % 7) + 7) % 7][((t % 24) + 24) % 24] = true;
+        }
+      });
+    });
+    var bySpan = {}, order = [];
+    for (d = 0; d < 7; d += 1) {
+      h = 0;
+      while (h < 24) {
+        if (!hours[d][h]) { h += 1; continue; }
+        var a = h;
+        while (h < 24 && hours[d][h]) h += 1;
+        var key = a + '-' + h;
+        if (!bySpan[key]) { bySpan[key] = { days: [], start_minute: a * 60, end_minute: h * 60 }; order.push(key); }
+        bySpan[key].days.push(d);
+      }
+    }
+    return order.map(function (k) { return bySpan[k]; }).sort(function (x, y) {
+      return x.start_minute - y.start_minute || x.end_minute - y.end_minute || x.days[0] - y.days[0];
+    });
+  }
+
   /* Настенное «сейчас» кабинета как "YYYY-MM-DDTHH:MM"; null - не знаем пояса. */
   function nowInAccount(f) {
     var now = new Date();
@@ -7536,6 +7595,9 @@ window.cbLifetime = (function () {
     return null;
   }
 
+  /* «Сейчас» по часам команды (Израиль): в этом поясе вводятся Start/End и сравниваются с датой аудита. */
+  function nowInTeam() { return nowInAccount({ timezone_name: teamZone(), offset: null }); }
+
   function addDays(iso, n) {
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
     var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n));
@@ -7546,7 +7608,7 @@ window.cbLifetime = (function () {
   function offsetText(f, startIso) {
     if (validZone(f.timezone_name)) {
       try {
-        var at = ISO_RE.test(startIso || '') ? new Date(startIso + ':00Z') : new Date();
+        var at = ISO_RE.test(startIso || '') ? new Date(isoToMs(startIso, teamZone())) : new Date();
         var txt = new Intl.DateTimeFormat('en-US', { timeZone: f.timezone_name, timeZoneName: 'longOffset' })
           .formatToParts(at).filter(function (x) { return x.type === 'timeZoneName'; })[0].value;
         var m = /GMT([+-])(\d{2}):(\d{2})/.exec(txt);
@@ -7562,9 +7624,10 @@ window.cbLifetime = (function () {
   }
 
   function tzLabel(f, startIso) {
-    if (!f.timezone_name && f.offset == null) return 'Account time zone: unknown — Check plan will read it. Enter start and end by hand.';
+    var team = 'Times are Israel time (' + teamZone() + '). ';
+    if (!f.timezone_name && f.offset == null) return team + 'Account: unknown — Check plan will read it.';
     var off = offsetText(f, startIso);
-    return 'Account time zone: ' + (f.timezone_name || 'UTC offset') + (off ? ' (' + off + ')' : '');
+    return team + 'Account: ' + (f.timezone_name || 'UTC offset') + (off ? ' (' + off + ')' : '');
   }
 
   function accountOf(slot) {
@@ -7658,13 +7721,13 @@ window.cbLifetime = (function () {
     return iso.slice(8, 10) + ' ' + MONTHS[+iso.slice(5, 7) - 1] + ' ' + iso.slice(11, 16);
   }
 
-  /* Предпросмотр: "$840 lifetime · 05 Nov 09:53 – 12 Nov 09:45 (America/New_York) · Mon–Fri 08–19, Sat–Sun 08–17" */
+  /* Предпросмотр: "$840 lifetime · 05 Nov 09:53 – 12 Nov 09:45 (Israel time) · Mon–Fri 08–19, Sat–Sun 08–17" */
   function previewText(slot) {
     if (!isLifetime(slot)) return '';
     var f = builderAccountFacts(accountOf(slot));
     var b = fld(slot, 'budget'), s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
     var out = [moneyText(b ? b.value : '', f.currency) + ' lifetime',
-      dateText(s ? s.value : '') + ' – ' + dateText(e ? e.value : '') + (f.timezone_name ? ' (' + f.timezone_name + ')' : '')];
+      dateText(s ? s.value : '') + ' – ' + dateText(e ? e.value : '') + ' (Israel time)'];
     if (scheduleOn(slot)) {
       var w = parseWindows(slot);
       out.push(w.length ? scheduleText(w) : 'no hours picked');
@@ -7672,11 +7735,44 @@ window.cbLifetime = (function () {
     return out.join(' · ');
   }
 
+  /* "00:00–18:00, 22:00–24:00" для окон одного дня. */
+  function runsText(wins) {
+    return wins.slice().sort(function (x, y) { return x.start_minute - y.start_minute; }).map(function (w) {
+      return pad2(w.start_minute / 60) + ':00–' + pad2(w.end_minute / 60) + ':00';
+    }).join(', ');
+  }
+  /* "Every day: 00:00–18:00, 22:00–24:00" или "Mon–Fri 00:00–18:00; Sat–Sun 02:00–24:00": дни с одинаковыми часами сжаты. */
+  function convertedText(conv) {
+    var perDay = {}, groups = {}, order = [];
+    conv.forEach(function (w) { w.days.forEach(function (d) { (perDay[d] = perDay[d] || []).push(w); }); });
+    UI_DAYS.forEach(function (d) {
+      if (!perDay[d]) return;
+      var t = runsText(perDay[d]);
+      if (!groups[t]) { groups[t] = []; order.push(t); }
+      groups[t].push(d);
+    });
+    if (order.length === 1 && groups[order[0]].length === 7) return 'Every day: ' + order[0];
+    return order.map(function (t) { return daysText(groups[t]) + ' ' + t; }).join('; ');
+  }
+  /* Что получит Meta: сетка Израиля в часах кабинета (разница поясов - на дату старта). */
+  function accountPreview(slot) {
+    if (!isLifetime(slot) || !scheduleOn(slot)) return '';
+    var wins = parseWindows(slot);
+    if (!wins.length) return '';
+    var f = builderAccountFacts(accountOf(slot));
+    if (!validZone(f.timezone_name)) return 'Account time zone is read on Check plan; hours are converted then.';
+    var ms = isoToMs(String((fld(slot, 'start_time') || {}).value || '').trim(), teamZone());
+    var shift = shiftHoursAt(f.timezone_name, ms == null ? Date.now() : ms);
+    if (shift !== Math.round(shift)) {
+      return 'The time difference to the account (' + f.timezone_name + ') is not a whole number of hours; Check plan will refuse this schedule.';
+    }
+    return 'Meta gets account time (' + f.timezone_name + '): ' + convertedText(convertWindows(wins, shift));
+  }
+
   /* Клиентская предпроверка (зеркало серверной): [{id, text}]. */
   function problems(slot) {
     var out = [];
     if (!isLifetime(slot)) return out;
-    var f = builderAccountFacts(accountOf(slot));
     var s = String((fld(slot, 'start_time') || {}).value || '').trim();
     var e = String((fld(slot, 'end_time') || {}).value || '').trim();
     if (!s) out.push({ id: 'lt_start', text: 'Lifetime budget needs a start time' });
@@ -7685,8 +7781,9 @@ window.cbLifetime = (function () {
     else if (!ISO_RE.test(e)) out.push({ id: 'lt_end', text: 'End time is not a valid date and time' });
     if (ISO_RE.test(s) && ISO_RE.test(e) && e <= s) out.push({ id: 'lt_order', text: 'End time must be after the start time' });
     if (ISO_RE.test(s)) {
-      var now = nowInAccount(f);
-      if (now && s < now) out.push({ id: 'lt_past', text: 'Start time is in the past (account time zone)' });
+      /* Сравнение по абсолютному времени: Start введён по Израилю, "сейчас" - настоящий момент. */
+      var sMs = isoToMs(s, teamZone());
+      if (sMs != null && sMs < Date.now()) out.push({ id: 'lt_past', text: 'Start time is in the past (Israel time)' });
     }
     if (scheduleOn(slot) && !parseWindows(slot).length) out.push({ id: 'lt_schedule', text: 'Pick at least one hour' });
     return out;
@@ -7708,12 +7805,13 @@ window.cbLifetime = (function () {
      Включённый флажок с пустой сеткой уходит окном без дней - правило отвечает "empty". */
   function auditFields(slot) {
     if (!isLifetime(slot)) return null;
-    var f = builderAccountFacts(accountOf(slot)), out = {
+    var out = {
       budget_type: 'lifetime',
       start_time: String((fld(slot, 'start_time') || {}).value || '').trim(),
       end_time: String((fld(slot, 'end_time') || {}).value || '').trim()
     };
-    var now = nowInAccount(f);
+    /* ACL-1448: даты аудита сравниваются в одном поясе - команды, как и введены. */
+    var now = nowInTeam();
     if (now) out.now = now;
     if (scheduleOn(slot)) {
       var w = parseWindows(slot);
@@ -7724,7 +7822,7 @@ window.cbLifetime = (function () {
 
   /* ── разметка ──────────────────────────────────────────────────────── */
   function gridHtml() {
-    var h = '<div class="cb-sg" hidden onpointerdown="cbLtDown(event, this)" role="group" aria-label="Hours when ads run, account time zone">';
+    var h = '<div class="cb-sg" hidden onpointerdown="cbLtDown(event, this)" role="group" aria-label="Hours when ads run, Israel time">';
     h += '<div class="cb-sg-row cb-sg-head"><span></span>';
     for (var hr = 0; hr < 24; hr += 1) h += '<span class="cb-sg-hour">' + (hr % 3 === 0 ? hr : '') + '</span>';
     h += '</div>';
@@ -7735,6 +7833,8 @@ window.cbLifetime = (function () {
       }
       h += '</div>';
     });
+    h += '<button type="button" class="cb-lt-preset" onclick="cbLtPreset(this)">Don\'t run 01:00–05:00 every day</button>';
+    h += '<div class="cb-lt-note" data-lt-acc-preview aria-live="polite"></div>';
     return h + '</div>';
   }
   /* Переключатель Daily / Lifetime (вставляется рядом с полем бюджета). */
@@ -7749,10 +7849,10 @@ window.cbLifetime = (function () {
     var dt = function (suffix, label, aria) {
       return '<span class="cb-label cb-lt-only" hidden>' + label + '</span>'
         + '<div class="cb-lt-only" hidden><input type="datetime-local" name="camp_' + idx + '_' + suffix + '" class="cb-input" value="" disabled required'
-        + ' aria-label="' + aria + '" oninput="cbLtChanged(this)" title="Wall-clock time in the ad account time zone"></div>';
+        + ' aria-label="' + aria + '" oninput="cbLtChanged(this)" title="Wall-clock time in Israel (' + teamZone() + ')"></div>';
     };
-    return dt('start_time', 'Start', 'Start time, ad account time zone')
-      + dt('end_time', 'End', 'End time, ad account time zone')
+    return dt('start_time', 'Start (Israel time)', 'Start time, Israel time')
+      + dt('end_time', 'End (Israel time)', 'End time, Israel time')
       + '<span class="cb-label cb-lt-only" hidden></span>'
       + '<div class="cb-lt-only cb-lt-note" hidden data-lt-tz></div>'
       + '<span class="cb-label cb-lt-only" hidden>Schedule</span>'
@@ -7813,6 +7913,7 @@ window.cbLifetime = (function () {
     setText(q(slot, '[data-lt-tz]'), life ? tzLabel(f, s ? s.value : '') : '');
     setText(q(slot, '[data-lt-errors]'), problems(slot).map(function (p) { return p.text; }).join('. '));
     setText(q(slot, '[data-lt-preview]'), life ? previewText(slot) : '');
+    setText(q(slot, '[data-lt-acc-preview]'), on ? accountPreview(slot) : '');
   }
 
   function fire(el) { el.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -7826,8 +7927,8 @@ window.cbLifetime = (function () {
     if (type === 'lifetime') {
       var f = builderAccountFacts(accountOf(slot));
       var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
-      /* Пояс кабинета неизвестен - умолчание не угадываем по часам браузера: поля пустые, подпись просит ввести. */
-      var now = nowInAccount(f);
+      /* Умолчание считается по часам команды (Израиль), не браузера. */
+      var now = nowInTeam();
       if (now) {
         if (s && !s.value) s.value = addDays(now, 1) + 'T00:00';
         if (e && !e.value && s && s.value) e.value = addDays(s.value, 7) + 'T00:00';
@@ -7843,6 +7944,17 @@ window.cbLifetime = (function () {
     if (slot && !btn.disabled) setType(slot, btn.dataset.budgetType);
   };
   window.cbLtChanged = function (el) { sync(el.closest('.cb-slot')); };
+  /* Пресет «не крутить 01:00-05:00 каждый день»: все часы, кроме 1-4, во все дни (по времени команды). */
+  window.cbLtPreset = function (btn) {
+    var slot = btn.closest('.cb-slot');
+    if (!slot) return;
+    slot.querySelectorAll('.cb-sg-cell').forEach(function (c) {
+      var on = !(+c.dataset.h >= 1 && +c.dataset.h <= 4);
+      c.classList.toggle('is-on', on);
+      c.setAttribute('aria-checked', String(on));
+    });
+    writeSchedule(slot);
+  };
   window.cbLtSchedToggle = function (box) {
     var slot = box.closest('.cb-slot');
     sync(slot);
@@ -7926,9 +8038,8 @@ window.cbLifetime = (function () {
         var nm = slot.querySelector('.cb-name-hidden');
         if (nm && nm.value === r.campaign_name && isLifetime(slot)) {
           s.lifetime_preview = previewText(slot);
-          var fa = builderAccountFacts(accountOf(slot));
           s.lifetime_run = dateText((fld(slot, 'start_time') || {}).value) + ' to ' + dateText((fld(slot, 'end_time') || {}).value)
-            + (fa.timezone_name ? ' (' + fa.timezone_name + ')' : '');
+            + ' (Israel time)';
         }
       });
     });
@@ -7936,7 +8047,9 @@ window.cbLifetime = (function () {
 
   return { facts: builderAccountFacts, scheduleEmpty: scheduleEmpty, auditFields: auditFields, segHtml: segHtml, rowsHtml: rowsHtml, sync: sync, lines: lines, problems: problems,
            preview: previewText, ingestPlan: ingestPlan, annotate: annotate, gridToWindows: gridToWindows,
-           windowsToGrid: windowsToGrid, scheduleText: scheduleText, nowInAccount: nowInAccount };
+           windowsToGrid: windowsToGrid, scheduleText: scheduleText, nowInAccount: nowInAccount,
+           nowInTeam: nowInTeam, teamZone: teamZone, convertWindows: convertWindows, accountPreview: accountPreview,
+           isoToMs: isoToMs };
 })();
 window.builderAccountFacts = window.cbLifetime.facts;
 </script>

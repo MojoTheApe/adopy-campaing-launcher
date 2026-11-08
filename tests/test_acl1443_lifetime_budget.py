@@ -26,6 +26,12 @@ NOW = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
 WINDOW = {"days": [1, 2, 3, 4, 5], "start_minute": 540, "end_minute": 1080}
 
 
+@pytest.fixture(autouse=True)
+def _team_zone_is_the_account_zone(monkeypatch):
+    """ACL-1448: сроки вводят по поясу команды; эти тесты считают в поясе кабинета (разница 0), Израиль - в test_acl1448."""
+    monkeypatch.setenv("ACL_TEAM_TIMEZONE", "America/New_York")
+
+
 class ZoneMeta(FakeMeta):
     """FakeMeta + пояс, валюта и минимум дневного бюджета кабинета."""
 
