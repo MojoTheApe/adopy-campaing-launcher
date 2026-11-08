@@ -701,6 +701,7 @@ class ApiPublisher:
                     _start_cooldown(self.account_label, exc)
                     _tm.report_stop(exc.kind, str(exc), {"source": "publish", "code": exc.code})
                 stopped = _plain.classify(exc, kind=exc.kind, ctx={"stage": "while choosing the Page"})
+                stopped.left = ["Stopped while choosing the Page. Nothing was created."]
                 return result_dict(Outcome(campaign_name=name, failure=stopped, error=(
                     f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created.")))
             except ValueError as exc:
