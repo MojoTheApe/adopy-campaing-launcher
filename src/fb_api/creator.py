@@ -2872,13 +2872,21 @@ class CampaignCreator:
         else:
             cta = {"type": ad.cta, "value": {"link": plan.link}}
         if ad.kind == "video":
-            data = {"video_id": media["video_id"], "image_url": media["thumb"], "title": ad.title,
-                    "message": ad.body, "call_to_action": cta}
+            data = {"video_id": media["video_id"], "image_url": media["thumb"], "call_to_action": cta}
+            if ad.title:
+                data["title"] = ad.title
+            if ad.body:
+                data["message"] = ad.body
             if ad.description:
                 data["link_description"] = ad.description
             return {"page_id": plan.page_id, "video_data": data}
-        data = {"link": INSTANT_FORM_LINK if instant else plan.link, "message": ad.body,
-                "name": ad.title, "image_hash": media["image_hash"], "call_to_action": cta}
+        data = {"link": INSTANT_FORM_LINK if instant else plan.link,
+                "image_hash": media["image_hash"], "call_to_action": cta}
+        # Основной текст и заголовок необязательны: пустое поле не отправляем.
+        if ad.body:
+            data["message"] = ad.body
+        if ad.title:
+            data["name"] = ad.title
         if ad.description:
             data["description"] = ad.description
         return {"page_id": plan.page_id, "link_data": data}
