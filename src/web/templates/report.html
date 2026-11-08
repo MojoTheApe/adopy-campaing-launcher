@@ -3386,6 +3386,21 @@
     .cb-publish-btn[aria-busy="true"]:not(:disabled), .cbd-publish-all[aria-busy="true"]:not(:disabled) {
       cursor: progress;
     }
+    /* Нажатие Publish видно сразу: пока идёт проверка перед окном подтверждения - акцент, спиннер, отсчёт. */
+    .cb-publish-btn.is-pending, .cbd-publish-all.is-pending,
+    .cb-publish-btn.is-pending:disabled, .cbd-publish-all.is-pending:disabled {
+      background: var(--accent); color: var(--on-accent); border-color: var(--accent);
+      cursor: progress; font-variant-numeric: tabular-nums;
+    }
+    .cb-publish-btn.is-pending::before, .cbd-publish-all.is-pending::before {
+      content: ""; display: inline-block; width: 0.85em; height: 0.85em; margin-right: 0.45em;
+      vertical-align: -0.1em; border: 2px solid currentColor; border-right-color: transparent;
+      border-radius: 50%; animation: cb-pending-spin 0.8s linear infinite;
+    }
+    @keyframes cb-pending-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .cb-publish-btn.is-pending::before, .cbd-publish-all.is-pending::before { animation: none; }
+    }
     .cb-publish-btn:focus-visible, .cbd-publish-all:focus-visible,
     #sfc-ok:focus-visible, #sfc-cancel:focus-visible {
       outline: 2px solid var(--accent); outline-offset: 3px;
@@ -9344,8 +9359,10 @@ window.cbTree = (function () {
     if (btn) {
       var uncertain = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
       var tg = ticks();
-      btn.disabled = uncertain || g.blocked || !(tg.some ? tg.send.length : tg.open.length);
+      var pending = !!(window.cbPublishPending && window.cbPublishPending.active());
+      btn.disabled = pending || uncertain || g.blocked || !(tg.some ? tg.send.length : tg.open.length);
       btn.title = g.blocked ? g.reason : '';
+      if (pending) window.cbPublishPending.paint();
       if (g.blocked && !note) {
         note = document.createElement('div');
         note.className = 'cbd-gate-reason';
@@ -9366,6 +9383,8 @@ window.cbTree = (function () {
         }
       }
     }
+    /* Идёт проверка перед публикацией: обе кнопки Publish держат отметку «нажато». */
+    if (window.cbPublishPending && window.cbPublishPending.active()) window.cbPublishPending.paint();
   }
 
   /* Клик по строке: открыть нужный раздел и поставить фокус в поле. */
@@ -19774,8 +19793,14 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
-  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
-  else pfAsk(null);
+  window.CB_CONFIRM_WAIT = true;          // отметку на кнопке снимет pfAsk, когда откроется окно
+  var pfAskShown = function (pf) {
+    window.CB_CONFIRM_WAIT = false;
+    if (window.cbPublishPending) window.cbPublishPending.end();
+    pfAsk(pf);
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAskShown);
+  else pfAskShown(null);
 };
 
 /* ── ACL-1819: серверные проверки pre-flight audit ──────────────────────
@@ -19972,6 +19997,59 @@ function cbPfUnavailable() {
   aclAlert(CB_PF_UNAVAILABLE);
 }
 
+/* Нажатие Publish видно сразу. Между нажатием и окном подтверждения идёт проверка плана
+ * (секунды – минуты): без отметки владелец думал, что кнопка не нажалась (08.11). Пока
+ * ждём, кнопки Publish выключены и считают «Checking before publishing… 0:12». Отметка
+ * снимается, когда открывается окно подтверждения или проверка остановила публикацию;
+ * страховка — 5 минут. */
+window.cbPublishPending = (function () {
+  var since = 0, timer = 0, LIMIT_MS = 5 * 60 * 1000;
+  var SEL = '.cbd-publish-all, .cb-publish-btn';
+  function label() {
+    var s = Math.max(0, Math.floor((Date.now() - since) / 1000));
+    return 'Checking before publishing… ' + Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+  }
+  function paint() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    Array.prototype.forEach.call(document.querySelectorAll(SEL), function (b) {
+      if (since) {
+        if (!b.dataset.cbIdleLabel) b.dataset.cbIdleLabel = b.textContent;
+        b.disabled = true;
+        b.classList.add('is-pending');
+        b.setAttribute('aria-busy', 'true');
+        var t = label();
+        if (b.textContent !== t) b.textContent = t;
+      } else if (b.dataset.cbIdleLabel) {
+        b.textContent = b.dataset.cbIdleLabel;
+        delete b.dataset.cbIdleLabel;
+        b.classList.remove('is-pending');
+        b.setAttribute('aria-busy', 'false');
+        b.disabled = false;              // настоящее состояние вернёт перерисовка ворот ниже
+      }
+    });
+  }
+  var api = {
+    start: function () {
+      if (since) return;
+      since = Date.now();
+      paint();
+      if (typeof setInterval === 'function') timer = setInterval(function () {
+        if (Date.now() - since > LIMIT_MS) api.end(); else paint();
+      }, 1000);
+    },
+    end: function () {
+      if (!since) return;
+      since = 0;
+      if (timer) { clearInterval(timer); timer = 0; }
+      paint();
+      if (window.cbTree && window.cbTree.refreshAudit) window.cbTree.refreshAudit();
+    },
+    active: function () { return !!since; },
+    paint: paint
+  };
+  return api;
+})();
+
 /* Ворота Publish: клиентские ошибки блокируют сразу; при API — серверные проверки
  * обновляются перед отправкой (кроме свежих), и ошибка из них блокирует тоже.
  * items: [{form, slots}]. proceed() вызывается, только если ошибок нет. */
@@ -19989,7 +20067,9 @@ window.cbPreflightGate = function (items, proceed) {
       return null;                         // состояние аудита не читается — тоже запрет
     }
   }
+  var pend = window.cbPublishPending;
   function stop(bad) {
+    if (pend) pend.end();
     tree.refreshAudit();
     var id = bad[0] && bad[0].dataset.cbdId;
     if (id) tree.open(id);
@@ -19999,11 +20079,17 @@ window.cbPreflightGate = function (items, proceed) {
   if (bad.length) { stop(bad); return; }
   function done() {
     var again = blocked();
-    if (!again) { cbPfUnavailable(); return; }
+    if (!again) { if (pend) pend.end(); cbPfUnavailable(); return; }
     if (again.length) { stop(again); return; }
     window.CB_PF_WARN = cbPfWarnings(slots);
+    window.CB_CONFIRM_WAIT = false;
     proceed();
+    /* Окно подтверждения откроется после запроса готовности аккаунтов (pfAsk снимет отметку);
+       если публикация вернулась раньше (нечего собирать, уже собирается) — снимаем сразу. */
+    if (pend && !window.CB_CONFIRM_WAIT) pend.end();
   }
+  if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
+  if (pend) pend.start();
   if (!cbApiMode()) { done(); return; }
   /* ACL-2266: уходят ВСЕ выбранные кампании; нетронутые сервер отдаёт из своего кэша вердиктов (без Meta). */
   var pending = [];
@@ -20011,13 +20097,12 @@ window.cbPreflightGate = function (items, proceed) {
     if (it.slots.length) pending.push({ form: it.form, slots: it.slots });
   });
   if (!pending.length) { done(); return; }
-  if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
   window.CB_PF_RUNNING = true;
   var btn = document.querySelector('.cbd-publish-all');
   if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing… Publishing starts only after you confirm in the next window.'; }
   var jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
   Promise.all(jobs).then(function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); done(); },
-    function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); });
+    function () { window.CB_PF_RUNNING = false; if (pend) pend.end(); tree.refreshAudit(); });
 };
 
 /* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
@@ -21591,8 +21676,14 @@ window.cbPublish = function(form) {
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
-  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch([accLabel]).then(pfAsk);
-  else pfAsk(null);
+  window.CB_CONFIRM_WAIT = true;          // отметку на кнопке снимет pfAsk, когда откроется окно
+  var pfAskShown = function (pf) {
+    window.CB_CONFIRM_WAIT = false;
+    if (window.cbPublishPending) window.cbPublishPending.end();
+    pfAsk(pf);
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch([accLabel]).then(pfAskShown);
+  else pfAskShown(null);
 };
 
 // Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
