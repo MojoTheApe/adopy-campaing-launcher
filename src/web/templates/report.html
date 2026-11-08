@@ -7757,17 +7757,25 @@ window.cbLifetime = (function () {
     if (!ISO_RE.test(iso || '')) return '?';
     return iso.slice(8, 10) + ' ' + MONTHS[+iso.slice(5, 7) - 1] + ' ' + iso.slice(11, 16);
   }
+  function dayText(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}/.test(iso || '')) return '?';
+    return iso.slice(8, 10) + ' ' + MONTHS[+iso.slice(5, 7) - 1];
+  }
 
   /* Предпросмотр: "$840 lifetime · 05 Nov 09:53 – 12 Nov 09:45 (Israel time) · Mon–Fri 08–19, Sat–Sun 08–17" */
   function previewText(slot) {
     if (!isLifetime(slot)) return '';
     var f = builderAccountFacts(accountOf(slot));
     var b = fld(slot, 'budget'), s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
-    var out = [moneyText(b ? b.value : '', f.currency) + ' lifetime',
-      dateText(s ? s.value : '') + ' – ' + dateText(e ? e.value : '') + ' (Israel time)'];
+    var sv = s ? s.value : '', ev = e ? e.value : '';
+    var first = ISO_RE.test(sv) ? (sv.slice(11) === '00:00' ? dayText(sv) : dateText(sv)) : '?';
+    var last = ISO_RE.test(ev) ? dayText(endDateOf(ev)) : '?';
+    var out = [moneyText(b ? b.value : '', f.currency) + ' lifetime', first + ' – ' + last + ' (Israel time)'];
     if (scheduleOn(slot)) {
       var w = parseWindows(slot);
       out.push(w.length ? scheduleText(w) : 'no hours picked');
+    } else {
+      out.push('all hours');
     }
     return out.join(' · ');
   }
@@ -7812,15 +7820,15 @@ window.cbLifetime = (function () {
     if (!isLifetime(slot)) return out;
     var s = String((fld(slot, 'start_time') || {}).value || '').trim();
     var e = String((fld(slot, 'end_time') || {}).value || '').trim();
-    if (!s) out.push({ id: 'lt_start', text: 'Lifetime budget needs a start time' });
-    else if (!ISO_RE.test(s)) out.push({ id: 'lt_start', text: 'Start time is not a valid date and time' });
-    if (!e) out.push({ id: 'lt_end', text: 'Lifetime budget needs an end time' });
-    else if (!ISO_RE.test(e)) out.push({ id: 'lt_end', text: 'End time is not a valid date and time' });
-    if (ISO_RE.test(s) && ISO_RE.test(e) && e <= s) out.push({ id: 'lt_order', text: 'End time must be after the start time' });
+    if (!s) out.push({ id: 'lt_start', text: 'Lifetime budget needs a first day' });
+    else if (!ISO_RE.test(s)) out.push({ id: 'lt_start', text: 'First day is not a valid date' });
+    if (!e) out.push({ id: 'lt_end', text: 'Lifetime budget needs a last day' });
+    else if (!ISO_RE.test(e)) out.push({ id: 'lt_end', text: 'Last day is not a valid date' });
+    if (ISO_RE.test(s) && ISO_RE.test(e) && e <= s) out.push({ id: 'lt_order', text: 'Last day must not be before the first day' });
     if (ISO_RE.test(s)) {
       /* Сравнение по абсолютному времени: Start введён по Израилю, "сейчас" - настоящий момент. */
       var sMs = isoToMs(s, teamZone());
-      if (sMs != null && sMs < Date.now()) out.push({ id: 'lt_past', text: 'Start time is in the past (Israel time)' });
+      if (sMs != null && sMs < Date.now()) out.push({ id: 'lt_past', text: 'First day is in the past (Israel time)' });
     }
     if (scheduleOn(slot) && !parseWindows(slot).length) out.push({ id: 'lt_schedule', text: 'Pick at least one hour' });
     return out;
@@ -7829,8 +7837,8 @@ window.cbLifetime = (function () {
   /* Строки для карточки pre-flight audit (тот же вид, что у таблицы правил). */
   function lines(slot) {
     return problems(slot).map(function (p) {
-      var sel = p.id === 'lt_end' || p.id === 'lt_order' ? '[name$="_end_time"]'
-        : p.id === 'lt_schedule' ? '.cb-sched-on' : '[name$="_start_time"]';
+      var sel = p.id === 'lt_end' || p.id === 'lt_order' ? '[data-lt-part="end"]'
+        : p.id === 'lt_schedule' ? '.cb-sg' : '[data-lt-part="start"]';
       return { rule: p.id, label: p.text, hint: '', status: 'error', detail: '', ads: [], sets: [],
                field: { sel: sel, level: 'campaign' }, side: 'client', severity: 'error', topic: 'budget' };
     });
@@ -7882,19 +7890,23 @@ window.cbLifetime = (function () {
       + '</div><input type="hidden" name="camp_' + idx + '_budget_type" value="daily" disabled>';
   }
   /* Строки Lifetime (скрыты и выключены, пока выбран Daily). */
+  /* ACL-2448: Start/End - только даты (период), часы показа - сетка ниже, каждый день периода.
+     В форму уходят скрытые start_time/end_time: начало первого дня и конец последнего (00:00 следующего). */
   function rowsHtml(idx) {
-    var dt = function (suffix, label, aria) {
+    var dt = function (part, suffix, label, aria) {
       return '<span class="cb-label cb-lt-only" hidden>' + label + '</span>'
-        + '<div class="cb-lt-only" hidden><input type="datetime-local" name="camp_' + idx + '_' + suffix + '" class="cb-input" value="" disabled required'
-        + ' aria-label="' + aria + '" oninput="cbLtChanged(this)" title="Wall-clock time in Israel (' + teamZone() + ')"></div>';
+        + '<div class="cb-lt-only" hidden><input type="date" class="cb-input cb-lt-date" data-lt-part="' + part + '" value=""'
+        + ' aria-label="' + aria + '" oninput="cbLtDate(this)" onchange="cbLtDate(this)" title="Date in Israel (' + teamZone() + ')">'
+        + '<input type="hidden" name="camp_' + idx + '_' + suffix + '" value="" disabled></div>';
     };
-    return dt('start_time', 'Start (Israel time)', 'Start time, Israel time')
-      + dt('end_time', 'End (Israel time)', 'End time, Israel time')
+    return dt('start', 'start_time', 'First day (Israel time)', 'First day, Israel time')
+      + dt('end', 'end_time', 'Last day (Israel time)', 'Last day, Israel time')
       + '<span class="cb-label cb-lt-only" hidden></span>'
       + '<div class="cb-lt-only cb-lt-note" hidden data-lt-tz></div>'
-      + '<span class="cb-label cb-lt-only" hidden>Schedule</span>'
+      + '<span class="cb-label cb-lt-only" hidden>Hours (every day, Israel time)</span>'
       + '<div class="cb-lt-only" hidden>'
-      + '<label class="cb-lt-check"><input type="checkbox" class="cb-sched-on" onchange="cbLtSchedToggle(this)"> Run ads on a schedule</label>'
+      + '<input type="checkbox" class="cb-sched-on" hidden tabindex="-1" aria-hidden="true">'
+      + '<div class="cb-lt-note">Ads run only in the highlighted hours, on every day from the first to the last day. Click or drag to switch hours off.</div>'
       + gridHtml()
       + '<input type="hidden" name="camp_' + idx + '_schedule" value="" disabled>'
       + '</div>'
@@ -7907,8 +7919,42 @@ window.cbLifetime = (function () {
   function setHidden(el, v) { if (el && el.hidden !== v) el.hidden = v; }
   function setDisabled(el, v) { if (el && el.disabled !== v) el.disabled = v; }
 
+  /* Скрытые start_time/end_time -> видимые даты (черновик, повтор кампании). Конец 00:00 = предыдущий день включительно. */
+  function startDateOf(iso) { return ISO_RE.test(iso || '') ? iso.slice(0, 10) : ''; }
+  function endDateOf(iso) {
+    if (!ISO_RE.test(iso || '')) return '';
+    return iso.slice(11) === '00:00' ? addDays(iso, -1) : iso.slice(0, 10);
+  }
+  function paintDates(slot) {
+    var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+    var ds = q(slot, '[data-lt-part="start"]'), de = q(slot, '[data-lt-part="end"]');
+    var doc = slot.ownerDocument;
+    if (ds && s && doc.activeElement !== ds) { var vs = startDateOf(s.value); if (ds.value !== vs) ds.value = vs; }
+    if (de && e && doc.activeElement !== de) { var ve = endDateOf(e.value); if (de.value !== ve) de.value = ve; }
+  }
+  /* Даты -> скрытые поля. Первый день = сегодня: старт со следующего целого часа (00:00 уже прошло). */
+  function writeDates(slot) {
+    var s = fld(slot, 'start_time'), e = fld(slot, 'end_time');
+    var ds = q(slot, '[data-lt-part="start"]'), de = q(slot, '[data-lt-part="end"]');
+    var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    if (s && ds) {
+      var sv = '';
+      if (DATE_RE.test(ds.value)) {
+        sv = ds.value + 'T00:00';
+        var now = nowInTeam();
+        if (now && now.slice(0, 10) === ds.value) {
+          var hr = +now.slice(11, 13) + 1;
+          sv = hr >= 24 ? addDays(ds.value, 1) + 'T00:00' : ds.value + 'T' + pad2(hr) + ':00';
+        }
+      }
+      s.value = sv;
+    }
+    if (e && de) e.value = DATE_RE.test(de.value) ? addDays(de.value, 1) + 'T00:00' : '';
+  }
+
   function paintGrid(slot) {
-    var grid = windowsToGrid(parseWindows(slot));
+    /* Без расписания (флажок снят) сетка показывает все часы включёнными - кампания крутится круглые сутки. */
+    var grid = scheduleOn(slot) ? windowsToGrid(parseWindows(slot)) : windowsToGrid([{ days: [0, 1, 2, 3, 4, 5, 6], start_minute: 0, end_minute: 1440 }]);
     slot.querySelectorAll('.cb-sg-cell').forEach(function (c) {
       var on = grid[+c.dataset.d][+c.dataset.h];
       if (c.classList.contains('is-on') !== on) c.classList.toggle('is-on', on);
@@ -7936,8 +7982,9 @@ window.cbLifetime = (function () {
     var s = fld(slot, 'start_time'), e = fld(slot, 'end_time'), sch = fld(slot, 'schedule');
     setDisabled(s, !life); setDisabled(e, !life);
     setDisabled(sch, !(on && sch && sch.value));
-    setHidden(q(slot, '.cb-sg'), !on);
+    setHidden(q(slot, '.cb-sg'), !life);
     paintGrid(slot);
+    paintDates(slot);
     var f = builderAccountFacts(accountOf(slot));
     var b = fld(slot, 'budget');
     setText(q(slot, '[data-lt-budget-label]'), life ? 'Lifetime budget (' + (f.currency || 'account currency') + ')' : 'Campaign budget ($/day)');
@@ -7981,6 +8028,14 @@ window.cbLifetime = (function () {
     if (slot && !btn.disabled) setType(slot, btn.dataset.budgetType);
   };
   window.cbLtChanged = function (el) { sync(el.closest('.cb-slot')); };
+  window.cbLtDate = function (el) {
+    var slot = el.closest('.cb-slot');
+    if (!slot) return;
+    writeDates(slot);
+    sync(slot);
+    var s = fld(slot, 'start_time');
+    if (s) fire(s);
+  };
   /* Пресет «не крутить 01:00-05:00 каждый день»: все часы, кроме 1-4, во все дни (по времени команды). */
   window.cbLtPreset = function (btn) {
     var slot = btn.closest('.cb-slot');
@@ -7999,8 +8054,13 @@ window.cbLifetime = (function () {
     if (hid) fire(hid);
   };
 
+  /* ACL-2448: все 168 часов включены = расписания нет (Meta крутит круглые сутки); иначе флажок включается сам. */
   function writeSchedule(slot) {
-    var wins = gridToWindows(readGrid(slot));
+    var grid = readGrid(slot);
+    var full = grid.every(function (row) { return row.every(Boolean); });
+    var box = q(slot, '.cb-sched-on');
+    if (box) box.checked = !full;
+    var wins = full ? [] : gridToWindows(grid);
     var hid = fld(slot, 'schedule');
     if (!hid) return;
     hid.value = wins.length ? JSON.stringify(wins) : '';
