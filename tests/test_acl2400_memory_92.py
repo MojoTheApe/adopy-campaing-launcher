@@ -112,15 +112,20 @@ def _fail_if_slow(started: float, limit: float = 5.0) -> None:
 def test_a_held_action_gets_the_memory_message_at_once_without_waiting(tmp_path):
     import time
 
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
     rig.warm_up()
+    other = "660e8400-e29b-41d4-a716-446655440000"
+    rig.warm_up(other, account="Acc2")
+    first = rig.checkout(other, account="Acc2")   # ACL-2369: the first action on a warm profile is never held
     started = time.monotonic()
     with pytest.raises(warm.WarmError) as ei:
         rig.checkout()
     _fail_if_slow(started)
-    assert str(ei.value) == warm.MEMORY_HOLD_MESSAGE and ei.value.code in ("below_reserve", "memory_low")
+    # 16000 MB at the rig's 90 %: 1600 MB must stay free, 1000 free -> 600 MB more
+    assert str(ei.value) == warm.memory_hold_text("600 MB") and ei.value.code in ("below_reserve", "memory_low")
     assert "safety reserve" not in str(ei.value)
-    assert rig.gate.active() == []
+    assert rig.gate.active() == [other]
+    first.release()
 
 
 def test_a_busy_account_gate_still_waits_but_memory_does_not(tmp_path, monkeypatch):
@@ -139,7 +144,7 @@ def test_a_busy_account_gate_still_waits_but_memory_does_not(tmp_path, monkeypat
 def test_starting_a_closed_profile_reports_memory_at_once(tmp_path):
     rig = Rig(tmp_path, reg_memory=lambda: ps.MemoryReading(64000, 1600))
     res = rig.reg.open_one("Acc", entry("a" * 8 + "-0000-4000-8000-000000000000"))
-    assert res["ok"] is False and res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE
+    assert res["ok"] is False and res["code"] == "memory_low" and res["message"].startswith(warm.MEMORY_HOLD_MESSAGE + " (free about ")
     assert sum(rig.sleeps) == 0, "no waiting for memory"
 
 

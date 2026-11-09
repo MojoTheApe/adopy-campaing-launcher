@@ -174,8 +174,11 @@ def test_a_busy_lock_means_not_done_and_nothing_changed(tmp_path, monkeypatch):
 
 def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(tmp_path):
     free = [1000]
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, free[0]))
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, free[0]))
     rig.warm_up()
+    other = "660e8400-e29b-41d4-a716-446655440000"
+    rig.warm_up(other, account="Acc2")
+    holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     out: list = []
     err: list = []
 
@@ -194,13 +197,17 @@ def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(
     t.join(5)
     assert err == [] and len(out) == 1
     out[0].release()
+    holder.release()
 
 
 def test_the_gate_refusal_logs_its_numbers(tmp_path, caplog):
     import logging
 
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
+    other = "660e8400-e29b-41d4-a716-446655440000"
+    rig.warm_up(other, account="Acc2")
+    holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     with caplog.at_level(logging.INFO, logger=warm.log.name):
         with pytest.raises(warm.WarmError):
             rig.checkout()
@@ -219,8 +226,11 @@ def test_check_plan_on_a_held_gate_returns_the_memory_text_and_code(tmp_path, mo
     from tests.test_acl1761_plan_check import fake_profile
     from tests.test_acl1812_warm_sessions import ACT, PID
 
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
+    other = "660e8400-e29b-41d4-a716-446655440000"
+    rig.warm_up(other, account="Acc2")
+    holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     ent = SimpleNamespace(profile_id=PID, folder_id="", multilogin_instance="A", ad_account_id=ACT)
     monkeypatch.setattr(sp, "_entry_for", lambda account: ent)
     monkeypatch.setattr(sp, "_set_wait_note", lambda account, note: None)
@@ -236,8 +246,8 @@ def test_check_plan_on_a_held_gate_returns_the_memory_text_and_code(tmp_path, mo
     monkeypatch.setattr(publish_api, "_record", lambda step, ok, campaign="", diag=None, duration_s=None:
                         recorded.append((step, ok, diag or {})))
     out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX", force=True)
-    assert out["error"] == warm.MEMORY_HOLD_MESSAGE
+    assert out["error"] == warm.memory_hold_text("600 MB")
     assert out["connection_code"] in ("below_reserve", "memory_low")
     (step,) = [r for r in recorded if r[0] == "api_plan_check"]
     assert step[1] is False and step[2]["code"] == out["connection_code"]
-    assert step[2]["reason"] == warm.MEMORY_HOLD_MESSAGE
+    assert step[2]["reason"] == warm.memory_hold_text("600 MB")
