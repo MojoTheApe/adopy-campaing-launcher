@@ -337,3 +337,16 @@ def test_no_workflow_reruns_or_retries_itself(name):
 def test_the_scope_job_runs_the_chain_tests_too():
     run = workflow("ci.yml")["jobs"]["scope"]["steps"][-1]["run"]
     assert "tests/test_acl_ci_chain.py" in run and "tests/test_acl_ci_minutes.py" in run
+
+
+def test_delivery_continuation_keeps_product_checkout_and_current_receipt_writer():
+    jobs = workflow('complete-delivery.yml')['jobs']
+    checkout = lambda name: next(s['with']['ref'] for s in jobs[name]['steps']
+                                 if s.get('uses') == 'actions/checkout@v4')
+    assert checkout('resolve') == checkout('record') == checkout('resume-receipt') == 'main'
+    assert checkout('verify') == '${{ needs.resolve.outputs.merge_sha }}'
+    resolve = next(s['run'] for s in jobs['resolve']['steps'] if s.get('id') == 'request')
+    assert 'ci-source --repository "$SOURCE_REPO" --ci-run "$CI_RUN" --event-sha "$EVENT_SHA"' in resolve
+    assert 'sha=$(git rev-parse HEAD)' not in resolve
+    assert 'resolve --repository "$SOURCE_REPO" --merge-sha "$sha" --ci-run "$CI_RUN"' in resolve
+    assert jobs['publish']['uses'] == './.github/workflows/release.yml'

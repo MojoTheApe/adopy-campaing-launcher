@@ -206,7 +206,7 @@ def test_reused_campaign_turned_on_by_a_person_blocks_new_children(tmp_path):
     # а не получает новых ACTIVE-детей
     _objs(meta, "campaign")[0]["status"] = "ACTIVE"
     second, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert second.published_as == "MX Leads 1_2"
+    assert second.published_as == "MX Leads 1 copy 1"
     assert _objs(meta, "campaign")[0]["status"] == "ACTIVE"
     assert not any(p.endswith(("/adsets", "/ads")) and params.get("campaign_id") == _objs(meta, "campaign")[0]["id"]
                    for p, params in meta.posts[len(before):])

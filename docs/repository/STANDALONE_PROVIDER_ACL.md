@@ -4,13 +4,39 @@
 
 The current provider is the exact published revision in
 [delivery.json](../../delivery.json) and [tracker/engine.json](../../tracker/engine.json).
-ACL-2351 adopted Tracker3.24.1 at `9dc08c3e31ef1204130f43b0740d173e733d5cb7`
-through [PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383).
+ACL-2421 selects published Tracker3.27.3 at
+`e94e9a4c7f5291631cf9e6046dc3a719e7e04d35` with universal project-owned
+process support and compatible lossless-archive readers/writers. ACL-2417's
+Tracker3.26.0 recovery/handoff support and ACL-2351's earlier Tracker3.24.1 selection through
+[PR1383](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1383) remains history.
 The provider, engine and trusted private-checkout workflow select the same source.
-Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/9dc08c3e31ef1204130f43b0740d173e733d5cb7/docs/STANDALONE_WORKFLOW_PROVIDER.md)
+Use its [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/e94e9a4c7f5291631cf9e6046dc3a719e7e04d35/docs/STANDALONE_WORKFLOW_PROVIDER.md)
 and the [current ACL workflow](WORKFLOW.md). The provider validates the exact
 Master 1.8.0 ancestry in the descriptor and template baseline. For current
-shared guidance, use Master Repo 1.9.0 from [AGENTS.md](../../AGENTS.md).
+shared guidance, use Master Repo 1.11.0 from [AGENTS.md](../../AGENTS.md).
+
+The two-provider upgrade reuses ACL-2351's reviewed ancestry procedure: the exact
+old official source reproduces all92 pristine files, then the new official
+renderer/merger writes the genuine96-file baseline and15/30-helper exports.
+The root archive guide only forwards to its single current body under
+`docs/repository/`. Both immutable
+provider validations remain required. Native config, pause fence8, capacities,
+target and existing release behavior are unchanged. The canonical process proof
+and independent whole-outcome/import isolation assessment complete this support
+without publishing an ACL installer. The pin alone selected neither the local
+declaration nor storage/policy activation. Subsequent ACL-2423 declared the exact
+existing process controls, and TT-188 activated lossless outer9 storage around
+the retained pause8 state after compatible-reader/writer and owned-idle checks.
+All original task/history and delivery records remain available.
+ACL-2424 wires the published bounded handoff wait and original-product delivery
+continuation into the local adapters, including the current-main receipt writer.
+The product checkout, original CI/target/tag, real acceptance and full CI/reuse
+proof remain separate and unchanged. ACL-2425 separately selects instruction
+schema2 consistently in descriptor/config and the genuine96-file baseline.
+Independent reviewed instructions can finish while an original product delivery
+waits; its original request and acceptance remain pending. Ordinary product/mixed
+changes and held composition keep their existing guards. No new provider pin,
+consumer installer or service installation accompanies that metadata selection.
 
 ## Historical adoption — ACL-2156, 24 October 2026
 

@@ -80,7 +80,7 @@ def error_details(gerr: dict, reply: dict) -> dict:
                 "error_user_title", "error_user_msg"):
         value = gerr.get(key)
         if value not in (None, ""):
-            out[key] = scrub(str(value)[:200])
+            out[key] = scrub(str(value)[:600 if key == "error_user_msg" else 200])
     # ACL-1891: при неверном смещении загрузки Meta может назвать нужное - только цифры.
     data = gerr.get("error_data")
     if isinstance(data, dict):
@@ -188,9 +188,15 @@ class WriteUnknown(RuntimeError):
     клиент не делает НИ ОДНОЙ новой записи; чтения разрешены — ими и сверяют.
     """
 
-    def __init__(self, message: str, *, path: str = "", reason: str = ""):
+    def __init__(self, message: str, *, path: str = "", reason: str = "", code: int | None = None,
+                 subcode: int | None = None, status: int | None = None, details: dict | None = None):
         super().__init__(scrub(message))
         self.path = path
+        #: ACL-2392: what Meta said, so a deterministic rejection (see `REJECTION_SUBCODES`) can be told from "unknown".
+        self.code = code
+        self.subcode = subcode
+        self.status = status
+        self.details = details or {}
         #: ACL-2301: `network`/`network_timeout` - ответа не было, запись могла и не дойти;
         #: ACL-2338: `cdp_timeout` - то же для вызова в странице; `context_stale`/`page_closed` - причина,
         #: но не повод для повтора;
@@ -214,6 +220,9 @@ class WritesBlocked(RuntimeError):
 #: Ответы Graph, после которых неизвестно, создан ли объект: «неизвестная
 #: ошибка», «сервис временно недоступен», 5xx.
 UNKNOWN_RESULT_CODES = {1, 2}
+#: ACL-2392: подкоды, с которыми Meta отказывает детерминированно, хотя ответ выглядит как «неизвестная ошибка»
+#: (код 1 / http 500): после сверки чтением, что ничего не записано, это отказ, а не неизвестный результат.
+REJECTION_SUBCODES = frozenset({1870226})
 #: Отказы помощника страницы ДО отправки: к Meta ничего не ушло.
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
@@ -620,7 +629,9 @@ class GraphClient:
                                            code=code, subcode=sub))
             if code in UNKNOWN_RESULT_CODES or (isinstance(status, int) and status >= 500):
                 self.unreconciled = path
-                raise WriteUnknown(f"Graph API error {code} — the write result is unknown: {msg}", path=path)
+                raise WriteUnknown(f"Graph API error {code} — the write result is unknown: {msg}", path=path,
+                                   code=code, subcode=sub, status=status if isinstance(status, int) else None,
+                                   details=details)
             raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
                              details=details)
         if "non_json" in body or (isinstance(status, int) and status >= 500):
@@ -628,7 +639,8 @@ class GraphClient:
             # которая теперь может сама кинуть стоп (вкладка молчит, ACL-1761 B1).
             self.unreconciled = path
             self._check_page_after_write(path)
-            raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path)
+            raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path,
+                               status=status if isinstance(status, int) else None)
         return body
 
     def _check_page_after_write(self, path: str) -> None:
@@ -707,7 +719,7 @@ class GraphClient:
     def account(self, act_id: str) -> dict:
         """Сам кабинет: состояние, причина отключения, валюта."""
         return self.get(f"/{normalize_act(act_id)}", {
-            "fields": "account_id,name,account_status,disable_reason,currency,timezone_offset_hours_utc,timezone_name",
+            "fields": "account_id,name,account_status,disable_reason,currency,timezone_offset_hours_utc,timezone_name,min_daily_budget",
         })
 
     def insights_range(self, act_id: str, date_from: str, date_to: str, *, level: str = "account",

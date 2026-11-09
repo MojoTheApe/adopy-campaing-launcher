@@ -62,6 +62,8 @@ def _seed(p, account=0, count=2, ads=1):
               r.querySelector('input[name$="_creative_file"]').value = 'offline-' + (c * 10 + a) + '.png';
             });
           });
+          // Имя кампании собирается из полей; пересобираем до снимка "до", иначе оно устаревшее.
+          document.querySelectorAll('.cb-slot').forEach(s => cbUpdateName(s));
         }""",
         [account, ads],
     )
@@ -479,7 +481,7 @@ def test_the_source_card_is_untouched_by_a_drag(page):
     assert page.evaluate(grab) == before
 
 
-@pytest.mark.parametrize("width", [1280, 800])
+@pytest.mark.parametrize("width", [1280, 800, 370, 320])
 def test_handles_are_at_least_32px_and_hittable(page, width):
     _seed(page, account=0, count=2)
     _open_campaign(page, 0)
@@ -661,3 +663,49 @@ def test_a_country_without_other_accounts_shows_a_note_instead_of_an_empty_list(
     finally:
         assert not errors, errors
         ctx.close()
+
+
+@pytest.mark.parametrize("width", [1280, 800, 370, 320])
+def test_campaign_head_controls_do_not_cover_each_other(page, width):
+    _seed(page, account=0, count=2)
+    page.set_viewport_size({"width": width, "height": 900})
+    res = page.evaluate(
+        """() => {
+          const head = document.querySelector('#cbd-body .cbd-camp-head');
+          const out = { head: head.getBoundingClientRect().width };
+          for (const [name, sel] of [['grip', '.cbm-grip'], ['tick', '.cbd-tick-box'], ['drop', '.cbd-camp-drop'],
+                                     ['row', '.cbd-camp-row'], ['name', '.cbd-camp-name']]) {
+            const el = head.querySelector(sel), r = el.getBoundingClientRect(), h = head.getBoundingClientRect();
+            const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            out[name] = { x0: Math.round(r.left - h.left), x1: Math.round(r.right - h.left), w: r.width, h: r.height,
+                          own: !!e && (e === el || el.contains(e)) };
+          }
+          return out;
+        }"""
+    )
+    print("RANGES", width, res)
+    for name in ("grip", "tick", "drop"):
+        assert res[name]["own"], (name, res)
+    assert res["grip"]["w"] >= 32 and res["grip"]["h"] >= 32, res
+    assert res["row"]["x1"] <= res["drop"]["x0"] + 1 and res["grip"]["x1"] <= res["row"]["x0"] + 1, res
+    assert res["row"]["x1"] <= res["head"] + 1 and res["drop"]["x1"] <= res["head"] + 1, res
+
+
+@pytest.mark.parametrize("width", [1280, 370, 320])
+def test_a_real_click_on_the_x_removes_the_campaign_and_copy_to_stays_clickable(page, width):
+    _seed(page, account=0, count=2)
+    page.set_viewport_size({"width": width, "height": 900})
+    page.wait_for_timeout(800)                          # let the tree repaint after the resize, or it drops the focus
+    page.keyboard.press("Shift")                        # keyboard modality: a script focus then counts as :focus-visible
+    page.locator("#cbd-body .cbd-camp-head .cbm-moveto").first.evaluate("b => b.focus()")
+    assert page.evaluate("document.activeElement.classList.contains('cbm-moveto')")
+    # Revealed by keyboard focus, the Copy to button must be the top element at its centre (nothing covers it) and work.
+    assert page.evaluate("""() => { const b = document.activeElement, r = b.getBoundingClientRect();
+      const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e === b; }""")
+    page.keyboard.press("Enter")
+    assert page.evaluate("cbMove.menuOpen()")
+    page.keyboard.press("Escape")
+    n = page.evaluate("document.querySelectorAll('.cb-slot').length")
+    page.locator("#cbd-body .cbd-camp-drop").first.click(timeout=5000)
+    page.get_by_role("button", name="Remove", exact=True).click(timeout=5000)
+    assert page.evaluate("document.querySelectorAll('.cb-slot').length") == n - 1

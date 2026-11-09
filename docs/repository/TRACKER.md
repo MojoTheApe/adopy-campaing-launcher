@@ -198,7 +198,8 @@ and runs the exact process checks. It bypasses ordinary Stage/package delivery
 only for actual eligible proof; mixed automation/config/runtime/build changes keep
 the ordinary route. A batch-mode process source uses its real source Reviewer lane
 through main and never enters Approved/intake/batches. Held Stage/intake/integration
-and pending exact-target delivery still block conflicting admission. A post-main
+still block conflicting admission. Selected schema2 allows instructions while the
+original product waits; its publisher keeps the original authorized SHA and CI. A post-main
 acceptance edit needs fresh independent review under retained ownership.
 Read [instruction-only eligibility](PROCESS_INSTRUCTIONS.md).
 

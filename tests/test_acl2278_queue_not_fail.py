@@ -49,11 +49,11 @@ def test_job_waits_for_memory_past_the_old_limit_and_starts_when_it_frees(tmp_pa
     assert views[-1] is None, "the wait must be cleared when it ends"
 
 
-def test_without_a_job_the_memory_wait_still_gives_up(tmp_path):
+def test_without_a_job_the_memory_hold_is_reported_at_once(tmp_path):    # ACL-2400
     rig = _short_rig(tmp_path, [1600])
     rig.reg._sleep = lambda secs: rig.now.__setitem__(0, rig.now[0] + secs)
     res = rig.reg.open_one("Acc", entry(A))
-    assert res["ok"] is False and res["code"] == "memory_low" and "1.6 GB free" in res["message"]
+    assert res["ok"] is False and res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE
 
 
 def test_cancelling_a_job_waiting_for_memory_stops_the_wait(tmp_path):

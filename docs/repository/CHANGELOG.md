@@ -1,5 +1,100 @@
 # Repository process history
 
+## 2026-11-08 — ACL-2450 shared engineering guidance
+
+Adopt published Master1.11.0 author/reviewer guidance with short small-task planning
+and concrete local engineering examples. Preserve the standalone provider and
+audited ancestry, existing task ownership, exact checks and instruction/product
+delivery boundaries. No product, helper, policy or runtime change.
+
+## 2026-11-06 — ACL-2425 independent instruction selection
+
+Select instruction schema2 in matching descriptor/config, preserving the exact
+checks and every other choice. The immutable published E94 provider reproduces
+the genuine96-file ancestry and renders the selected guide/new baseline through
+its maintained three-way writer. Local declaration, controls, canonical helpers,
+pins and all application inputs remain unchanged. Reviewed instructions may
+finish while an original product request waits; its code, CI, target and real
+acceptance remain original. Product/mixed work and held composition retain their
+existing guards. No product release, package acceptance or live demo is needed.
+
+## 2026-11-06 — ACL-2424 original delivery and review handoff
+
+Resolve the product from its actual successful native CI rather than the later
+checkout. Both tag and publication guards accept later main only through actual
+instruction schema2 and the published complete original-request/receipt chain;
+the immutable tag, product, full CI/reuse proof, target and authorization stay
+original. The receipt writer uses current-main compatible helpers, while product
+verification and the existing release workflow keep the original tag checkout.
+Normal adopted PR feedback uses the existing bounded handoff wait with immutable
+target-base configuration; prepared bootstrap and final admission remain strict.
+Descriptor/config/pins/pristine, instruction schema1 and all application inputs
+are unchanged. Explicit schema2 activation remains ACL-2425. Current provider
+guidance now reflects the separately completed outer9 archive retaining pause8.
+No ACL release, live package acceptance or new retry/reuse framework is introduced.
+
+## 2026-11-05 — ACL-2423 project-owned process boundary
+
+Declare the four existing delivery/CI controls and three existing verification
+files in `delivery.json.workflow.process_support`. This project-owned metadata
+does not change their bytes, native configuration, canonical pins, pristine
+ancestry, instruction schema1 or application/build/runtime inputs. Later process
+changes retain genuine whole-scope isolation review and normal source/batch checks;
+this declaration alone changes no behavior and requests no ACL release.
+
+## 2026-11-05 — ACL-2421 universal Tracker support
+
+Select published Tracker3.27.3 at `e94e9a4c7f5291631cf9e6046dc3a719e7e04d35`.
+The original3.26.0 provider reproduces92 pristine files; the maintained new
+renderer/merger supplies the genuine96-file baseline and complete15/30-helper
+closure, including the common lossless-archive codec. Preserve native config,
+outer8 state, instruction schema1, all existing ownership/capacity, local
+publisher/CI code and every product/build/runtime input. This is compatible
+support adoption only: the static adapter declaration, publisher continuation
+and guarded archive activation remain separate outcomes. No ACL installer
+publication or repeated package acceptance is requested.
+The initial3.27.0 candidate was returned before approval/adoption after an
+independent Python3.13 fingerprint finding. Published3.27.1 corrects that
+serialization defect; its exact predecessor independently reproduces the
+96-file intermediate baseline. Neither earlier candidate nor source publication
+was treated as consumer delivery.
+The3.27.1 candidate passed its original pin-only isolation assessment but was
+returned before approval to include TT-258: actual add-Review/remove-In-Progress
+events exposed the dual-label handoff gap. Published3.27.2 covers that exact
+feedback phase with the same bounded wait and strict admission. Its exact
+predecessor reproduces the96-file intermediate baseline. The compatible central
+reader3.27.1 is installed; no second service installation is needed. The local
+wrapper and other activation outcomes remain separate.
+The valid3.27.2 source was returned before intake/main admission to include
+TT-254's final native receiver correction. A later trusted verification workflow
+keeps its actual identity while validating the original product; publication
+and receipt chains reach that exact original commit. Unknown equal-tree gaps
+refuse and genuine admitted doc roundtrips pass. Published3.27.3 changes no
+receipt/state shape; the installed3.27.1 reader remains compatible. All earlier
+source checks/reviews remain history, and no application release is requested.
+
+## 2026-11-05 — ACL-2417 Tracker recovery support
+
+Select published Tracker3.26.0 at `3f523b56ec6ad9efd4940efa6d315f5526872c33`.
+Reuse the independently audited old-provider92-file pristine ancestry and the
+maintained new renderer/three-way writer. Update only canonical workflow support,
+pins and current repository guidance; keep native config, capacities, pause8,
+existing release guards and all product/build/runtime inputs unchanged. Normal
+source/singleton batch review and applicable checks remain. Exact canonical
+process proof completes this support without a new ACL installer. ACL-2312's
+separate recovery retains its original history and reuses existing release proof.
+
+## 2026-11-05 — ACL-2414 phase-preserving pause activation
+
+After the owner confirmed five stopped review sessions and their Coordinator,
+the maintained takeover/cancellation released only their unstarted intake.
+All five source approvals and heads, 4,677 prior history entries and delivery
+receipts were preserved. Selected Tracker3.24.1 and the deployed Tracker3.25.0
+reader passed the readiness check. Owned idle activation enabled the outer8
+pause fence and the same maintenance owner resumed admission. The fresh shared
+board read the state successfully. An actual ACL-2414 stop/resume retained
+In Progress and saved work, revoked the old claim and returned fresh authority.
+
 ## 2026-11-04 — ACL-2405 Master Repo 1.9.0 guidance
 
 Point current ACL instructions to the published Master Repo 1.9.0 standard,
