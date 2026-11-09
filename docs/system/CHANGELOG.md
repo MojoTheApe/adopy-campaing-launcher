@@ -1,5 +1,31 @@
 # System history
 
+## ACL-2494 — Builder shows accounts whose country is set on the Accounts page — 2026-11-09
+
+The Campaign Builder now takes an account's country from the Accounts page links when the account map has none, and matches the sheet by (account, country), so accounts such as FacebookDoc283 appear in the builder.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1494).
+
+## ACL-2474 — Asset-feed ad without a primary text is accepted — 2026-11-09
+
+Check plan and the write guard no longer refuse an asset-feed ad (several texts or a Stories / Reels file) that has a headline but no primary text: Meta accepted it in the live run of 2026-11-08, so it is now only a "no primary text" warning. The rule `feed_texts` now fires only when the headline is missing; the request leaves out `bodies` when there is no primary text. A primary text without a headline and an ad with no texts at all are still refused (not yet verified live).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1474).
+
+## ACL-2293 — Run limits in Settings and a "ceiling reached" wait — 2026-11-09
+
+Settings → "Run limits" changes the profile ceiling (1-8), heavy actions at once (1-3) and the
+memory share that stops new profiles (50-95%) without restarting the dashboard. A change applies to
+the next start decision; running jobs are never stopped. More than 3 profiles or more than 80%
+asks for one confirmation (the server also requires `confirm: true` for such a raise); "Reset to default" writes the defaults explicitly. A run held by the
+ceiling now says so ("Waiting: 5 of 5 profiles in use (ceiling 5)"), and a run held by the heavy-action
+limit says "heavy actions in progress" instead of "another account". Telemetry: `run_limits_changed`
+(numbers only), `ceiling_reached` and `effective_limit` on `slot_decision`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1293).
+
+## ACL-2441 — Builder drag: drop on a campaign card, only accounts of the campaign's country — 2026-11-08
+
+A campaign dragged in the Builder drawer can now be dropped anywhere inside another account's block, including on one of its campaign cards; the copy is added as one more campaign and the whole account block is highlighted. While dragging, the grey "Drop here" zones and the account list of the `Copy to…` menu show only accounts of the campaign's country (the dragged campaign's own account is never offered). If there is no other account for that country, a note "No other account for <country>" is shown instead. Copy rules are unchanged. Dashboard only (`report.html`).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1441).
+
 ## ACL-2473 — Check plan: refused-lookups note only for terms without candidates — 2026-11-09
 
 The "Meta refused the … lookup … could not be checked there" note is now added only to
