@@ -784,10 +784,11 @@ ACT_ID = "act_123"
 class FakeAccountSearch(FakeSearch):
     """+ act_X/targetingsearch: строки со своим type, как отдаёт Meta."""
 
-    def __init__(self, *, account=None, refuse=False, **kw):
+    def __init__(self, *, account=None, refuse=False, fail_code=None, **kw):
         super().__init__(**kw)
         self.account = account or {}          # q -> [{id,name,type}]
         self.refuse = refuse
+        self.fail_code = fail_code            # иной код Graph (например 100) вместо отказа по правам
 
     def get_all(self, path, params=None, *, max_pages=5):
         if path == f"/{ACT_ID}/targetingsearch":
@@ -795,6 +796,8 @@ class FakeAccountSearch(FakeSearch):
             self.calls += 1
             if self.refuse:
                 raise g.GraphError("(#10) Permission Denied", code=10)
+            if self.fail_code is not None:
+                raise g.GraphError("(#100) Invalid parameter act_999888777 access_token=EAAB-SECRET", code=self.fail_code)
             return list(self.account.get(params["q"], []))
         return super().get_all(path, params, max_pages=max_pages)
 
@@ -829,3 +832,87 @@ def test_without_an_account_the_ads_manager_search_is_not_made(tmp_path):
                                                               "type": "interests"}]})
     assert _one(_resolver(c, tmp_path), "Real estate investing")["state"] == "unresolved"
     assert "targetingsearch" not in c.types()
+
+
+def test_rows_of_other_types_are_never_picked(tmp_path):
+    """ACL-2499: берутся только interests и behaviors; чужой тип, пустой type и отсутствие type - нет."""
+    rows = [{"id": str(i), "name": "Yoga mats", "type": t} for i, t in
+            enumerate(("work_positions", "demographics", "education_schools", "", None, "Interests"), start=10)]
+    rows.append({"id": "99", "name": "Yoga mats"})                       # поля type нет вовсе
+    c = FakeAccountSearch(interests={"Yoga mats": []}, account={"Yoga mats": rows})
+    res = _one(_resolver(c, tmp_path, act=ACT_ID), "Yoga mats")
+    assert res["state"] == "unresolved" and res["picks"] == [] and res["candidates"] == []
+    assert "targetingsearch" in c.types()                                  # поиск был, строки отвергнуты
+
+
+def test_the_job_budget_grows_by_one_read_per_term_when_the_account_is_known(tmp_path):
+    base = _resolver(FakeSearch(), tmp_path)
+    acct = _resolver(FakeSearch(), tmp_path, act=ACT_ID)
+    assert acct.per_term_reads == base.per_term_reads + 1 == tr.JOB_READ_PER_TERM + 1
+    assert acct.job_cap == base.job_cap + 1
+    names = [f"Nowhere topic {i}" for i in range(8)]
+    base.prefetch(names)
+    acct.prefetch(names)
+    assert acct.job_cap == tr.JOB_READ_BASE + (tr.JOB_READ_PER_TERM + 1) * 8
+    assert base.job_cap == tr.JOB_READ_BASE + tr.JOB_READ_PER_TERM * 8
+
+
+def test_job_cap_keeps_the_absolute_ceiling_with_the_extra_read(tmp_path):
+    r = _resolver(FakeSearch(), tmp_path, act=ACT_ID)
+    r.prefetch([f"Topic number {i}" for i in range(200)])
+    assert r.job_cap == tr.JOB_READ_ABS_CAP
+
+
+def test_eight_terms_found_nowhere_are_not_unknown_when_interest_search_reads_two_pages(tmp_path):
+    names = [f"Zzq{i} Wxv{i}" for i in range(8)]
+    far = [{"id": str(n), "name": f"Unrelated thing {n}"} for n in range(6)]       # 6 строк = 2 страницы
+    c = FakeAccountSearch(interests={n: far for n in names})
+    r = _resolver(c, tmp_path, act=ACT_ID)
+    r.prefetch(names)
+    out = [r.resolve(n) for n in names]
+    assert [x["state"] for x in out] == ["unresolved"] * 8
+    assert not any(x["reason"] == tr.UNKNOWN_MESSAGE for x in out)
+    assert c.types().count("targetingsearch") == 8
+    assert r.reads <= r.job_cap
+
+
+def test_the_read_context_names_the_targetingsearch_operation():
+    ctx = g._read_context(f"/{ACT_ID}/targetingsearch", {"q": "secret term", "limit": 50})
+    assert ctx == {"method": "GET", "operation": "targetingsearch"}
+    assert g._read_context("/act_1/targetingsearch/../x", None)["operation"] == "unknown"
+
+
+def test_any_error_of_the_ads_manager_search_is_a_warning_and_the_interest_result_stays(tmp_path):
+    c = FakeAccountSearch(fail_code=100, interests={"Real estate investing": [
+        {"id": "1", "name": "Real estate investors"}, {"id": "2", "name": "Real Estate Investment Network"}]})
+    r = _resolver(c, tmp_path, act=ACT_ID)
+    res = _one(r, "Real estate investing")
+    assert res["candidates"]       # результат поиска интересов не потерян
+    warns = r.warnings()
+    assert any("ad account targeting search (targetingsearch)" in w for w in warns)
+    text = " ".join(warns)
+    assert "act_999888777" not in text and "EAAB" not in text and "access_token" not in text
+    assert "100" not in text
+    before = c.types().count("targetingsearch")
+    r.resolve("Another topic")
+    assert c.types().count("targetingsearch") == before        # уже отказано в задании: повторов нет
+
+
+def test_a_failed_ads_manager_search_for_an_unmatched_term_names_it_in_the_reason(tmp_path):
+    c = FakeAccountSearch(fail_code=100, interests={"Qwertyuiop": []})
+    r = _resolver(c, tmp_path, act=ACT_ID)
+    res = _one(r, "Qwertyuiop")
+    assert res["state"] == "unresolved"
+    assert "ad account targeting search" in res["reason"] and "failed" in res["reason"]
+
+
+def test_an_error_of_a_required_search_still_fails(tmp_path):
+    class Broken(FakeAccountSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if path == "/search" and params.get("type") == "adinterest":
+                raise g.GraphError("(#100) bad", code=100)
+            return super().get_all(path, params, max_pages=max_pages)
+
+    r = _resolver(Broken(), tmp_path, act=ACT_ID)
+    with pytest.raises(g.GraphError):
+        _one(r, "Anything")
