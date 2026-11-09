@@ -22,7 +22,7 @@ def test_issue_statuses():
 
 
 def test_spend_is_active():
-    assert A.account_state(row({"status": "clear"}, 5, True), TODAY)["key"] == "active"
+    assert A.account_state(row({"status": "clear", "at": "2026-11-04 08:00:00"}, 5, True), TODAY)["key"] == "active"
 
 
 def test_not_in_workbook_is_new():
