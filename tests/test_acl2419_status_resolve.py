@@ -314,3 +314,91 @@ def test_open_never_breaks_when_the_queue_raises(monkeypatch):
 def test_open_trigger_is_known_to_the_queue_and_not_a_user_trigger():
     from src.analysis_agent import account_refresh
     assert "open" in account_refresh.PRIORITY and "open" not in ci.USER_TRIGGERS
+
+
+# ── Open: только статус, один запрос ────────────────────────────────────
+
+class _OneAccountClient:
+    """Любой вызов, кроме `account`, ломает тест: после Open дерева и Insights нет."""
+
+    def __init__(self, status=2, reason=1):
+        self.calls = 0
+        self.stopped = None
+        self.gets: list[str] = []
+        self._acc = {"account_id": "1234567890", "currency": "EUR", "account_status": status, "disable_reason": reason}
+
+    def account(self, act):
+        self.calls += 1
+        self.gets.append("account")
+        return dict(self._acc)
+
+    def get_all(self, *a, **k):
+        raise AssertionError("tree read after Open")
+
+    def get(self, *a, **k):
+        raise AssertionError("extra GET after Open")
+
+    def insights_range(self, *a, **k):
+        raise AssertionError("insights after Open")
+
+
+def _patch_session(monkeypatch, client):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    @contextmanager
+    def fake_session(account, **kw):
+        yield SimpleNamespace(client=client, act=ACT, notes={}, profile_id="p")
+
+    monkeypatch.setattr(api, "_session", fake_session)
+    monkeypatch.setattr(api, "_check_account", lambda acc, act: None)
+    monkeypatch.setattr(api, "_telemetry", lambda *a, **k: None)
+    monkeypatch.setattr("src.analysis_agent.account_refresh_machine.verify_session", lambda s: None)
+
+
+def test_open_reads_exactly_one_account_get_and_stores_the_status(monkeypatch, store):
+    client = _OneAccountClient()
+    _patch_session(monkeypatch, client)
+    snap = ci.read_status_only(ACC, trigger="open")
+    assert client.gets == ["account"] and client.calls == 1
+    assert ci.is_status_only_ok(snap) and not snap.campaigns and not snap.steps
+    got = sp.get_status(ACC)
+    assert got["status"] == "disabled" and got["source"] == "api"
+    assert got["disable_reason"] == "ads integrity policy"
+
+
+def test_open_trigger_goes_through_run_read_without_tree_or_insights(monkeypatch, store):
+    client = _OneAccountClient()
+    _patch_session(monkeypatch, client)
+    monkeypatch.setattr(ci, "backend_ready", lambda: True)
+    saved: list = []
+    monkeypatch.setattr(ci, "put_result", lambda done: saved.append(done))
+    monkeypatch.setattr(ci, "read_via_api", lambda *a, **k: (_ for _ in ()).throw(AssertionError("full read after Open")))
+    done = ci._run_read(ACC, trigger="open")
+    assert client.gets == ["account"]
+    assert ci.is_status_only_ok(done)
+    assert saved == []                     # сохранённая опись не заменяется пустой
+    assert sp.get_status(ACC)["status"] == "disabled"
+
+
+def test_failed_status_read_is_not_stored_as_a_status(monkeypatch, store):
+    class Boom(_OneAccountClient):
+        def account(self, act):
+            raise RuntimeError("down")
+
+    _patch_session(monkeypatch, Boom())
+    monkeypatch.setattr(api, "_failure", lambda account, exc: (str(exc), "x"))
+    snap = ci.read_status_only(ACC, trigger="open")
+    assert not ci.is_status_only_ok(snap) and snap.state == "failed"
+    assert not sp.get_status(ACC).get("status")
+
+
+def test_second_click_while_one_is_queued_adds_no_second_request(monkeypatch):
+    from src.analysis_agent import account_refresh as ar
+
+    q = ar.RefreshQueue(reader=lambda a, t: (_ for _ in ()).throw(AssertionError("must not run")),
+                        accounts=lambda: [ACC])
+    first = q.request(ACC, "open", force=True)
+    second = q.request(ACC, "open", force=True)
+    assert first["queued"] and second["queued"]
+    assert len(q._entries) == 1 and len(q._heap) == 1  # noqa: SLF001
