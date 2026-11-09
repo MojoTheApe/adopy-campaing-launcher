@@ -148,9 +148,9 @@ def test_tile_content_by_state(open_page):
     assert tile("Facebook_DQ-214")[2] == "1 FTD · CPA $117"          # есть FTD — вместо CPL строка про CPA
     assert tile("Facebook_DQ-213")[2].startswith("CPL ")              # FTD нет — остаётся CPL
     br = tile("Facebook_BR1")
-    assert br[1] == "not in BM" and br[2].startswith("read ") and br[2].endswith("· 5d")
+    assert br[1] == "not in BM" and br[2].startswith("not in BM · ") and br[2].endswith("· not refreshed")   # ACL-2419 §4: слово статуса · время чтения · not refreshed
     dead = tile("Facebook_DQ-212")
-    assert dead[1] == "disabled" and dead[2].startswith("$40 · read ")
+    assert dead[1] == "disabled" and dead[2].startswith("$40 · disabled · ")
     assert tile("Facebook_DQ-217")[1:] == ["New", "no spend yet"]
     assert tile("Facebook_CLU0")[1] == "Unknown"
     size = pg.evaluate("(() => { const r = document.querySelector('.aov-tile').getBoundingClientRect(); return [r.width, r.height]; })()")

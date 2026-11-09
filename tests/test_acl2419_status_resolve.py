@@ -17,7 +17,7 @@ from src.analysis_agent import status_resolve as R  # noqa: E402
 from src.web import account_state as A  # noqa: E402
 
 ACC = "FacebookDocXXX - Example"
-ACT = "act_100000000000001"
+ACT = "act_1234567890"
 NOW = datetime(2026, 11, 6, 12, 0, 0)
 
 
