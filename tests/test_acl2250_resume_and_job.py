@@ -248,7 +248,7 @@ def test_17c_check_plan_after_a_publish_job_shows_the_next_number_not_a_cached_o
     after = _check(api)
     row = after["results"][0]
     assert not row.get("cached") and row["published_as"] == BASE + " copy 1"
-    assert pc.SCHEMA == 2, "форма строки не менялась (ACL-2250); SCHEMA=2 поднят ACL-1443 (правила предпроверки)"
+    assert pc.SCHEMA == 3, "форма строки не менялась (ACL-2250); SCHEMA=2 поднят ACL-1443 (правила предпроверки), SCHEMA=3 поднят ACL-2474"
 
 
 def test_18_unwritable_receipt_stops_before_any_write(tmp_path, monkeypatch):
