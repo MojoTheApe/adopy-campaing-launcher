@@ -452,6 +452,39 @@ def latest_readings() -> dict[str, SpendReading]:
 _STATUS_PREFIX = "status|"
 
 
+def _merge_status_locked(data: dict, account: str, rec: dict) -> bool:
+    """Записать `status|<account>` по правилу слияния (ACL-2419 §2.4). Замок держит вызывающий."""
+    from src.analysis_agent.status_resolve import should_replace
+
+    key = _STATUS_PREFIX + account
+    old = data.get(key)
+    if not should_replace(old if isinstance(old, dict) else None, rec):
+        return False
+    data[key] = rec
+    return True
+
+
+def put_status(account: str, status: str, status_text: str, *, source: str = "api", at: str = "",
+               disable_reason: str = "", account_status: int | None = None) -> bool:
+    """Записать статус кабинета отдельно от показаний спенда (ACL-2419).
+
+    Второй писатель `status|…` — чтение списка кампаний, которое уже держит
+    `account_status` в руках. Все писатели идут через `_STORE_LOCK`: файл
+    грузится и сохраняется целиком, мимо замка писать нельзя.
+    """
+    if not status:
+        return False
+    rec = {"status": status, "status_text": status_text, "at": at or _now(),
+           "shot_id": "", "shot_at": "", "source": source, "disable_reason": disable_reason,
+           "account_status": account_status}
+    with _STORE_LOCK:
+        data = _load_all()
+        if not _merge_status_locked(data, account, rec):
+            return False
+        _save_all(data)
+    return True
+
+
 def _put(reading: SpendReading) -> None:
     with _STORE_LOCK:
         data = _load_all()
@@ -462,13 +495,16 @@ def _put(reading: SpendReading) -> None:
             reading.objects_prev = _last_good_tree(data, reading.account)
         data[key] = reading.to_dict()
         if reading.status:
-            data[_STATUS_PREFIX + reading.account] = {
+            _merge_status_locked(data, reading.account, {
                 "status": reading.status,
                 "status_text": reading.status_text,
                 "at": reading.finished_at or _now(),
                 "shot_id": reading.status_shot,
                 "shot_at": reading.status_shot_at,
-            }
+                # ACL-2419: откуда статус. Чтение из профиля идёт через Graph,
+                # остальное — текст страницы (RPA).
+                "source": "api" if getattr(reading, "source", "") == "api" else "page",
+            })
         _save_all(data)
         _UNSAVED.pop(key, None)
 
@@ -528,7 +564,49 @@ def get_status(account: str) -> dict[str, str]:
         out["stale"] = "1"
         out["tried_at"] = last_at
         out["tried_error"] = str(last.get("error") or "")[:200]
+    _add_resolution(out, raw, account)
     return out
+
+
+_REASON_IN_TEXT = re.compile(r"reason ([A-Z][A-Z_]+)")
+
+
+def _add_resolution(out: dict, raw: dict, account: str) -> None:
+    """ACL-2419: поля `shown/known/fresh/...` поверх прежних ключей (ключи не убираем)."""
+    from src.analysis_agent.status_resolve import disable_reason_label, read_label, resolve_status
+
+    failed_at = out["tried_at"]
+    if not failed_at:
+        # Неудачное чтение списка кампаний тоже делает статус «не обновлённым».
+        try:
+            from src.analysis_agent import campaign_inventory
+
+            attempt = campaign_inventory.get_attempt(account) or {}
+            tried = str(attempt.get("at") or "")
+            if tried and out["at"] and tried.replace("T", " ")[:19] > out["at"].replace("T", " ")[:19]:
+                failed_at = tried
+                out["stale"] = "1"
+                out["tried_at"] = tried
+                out["tried_error"] = str(attempt.get("error") or "")[:200]
+        except Exception:  # noqa: BLE001 — статус не должен падать из-за соседнего хранилища
+            log.debug("The list-read attempt could not be consulted for %s", account, exc_info=True)
+    res = resolve_status(raw, failed_at)
+    reason = str(raw.get("disable_reason") or "")
+    if not reason:
+        found = _REASON_IN_TEXT.search(out["status_text"])
+        reason = found.group(1) if found else ""
+    age = res["age_hours"]
+    out.update({
+        "source": str(raw.get("source") or "page"),
+        "shown": res["shown"],
+        "known": "1" if res["known"] else "",
+        "fresh": "1" if res["fresh"] else "",
+        "not_refreshed": "1" if res["stale"] else "",
+        "age_hours": "" if age is None else str(round(age, 1)),
+        "read_label": read_label(out["at"]),
+        "disable_reason": disable_reason_label(reason),
+        "account_status": "" if raw.get("account_status") is None else str(raw.get("account_status")),
+    })
 
 
 # ─────────────────────────── очередь ───────────────────────────

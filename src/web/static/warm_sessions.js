@@ -260,7 +260,11 @@
           return;
         }
         setBusy(false);
-        say(grid, s.ok + ' of ' + total + ' ready.' + (s.bad.length ? ' ' + s.bad.join(' · ') : ''),
+        // ACL-2419: после Open идёт одно статус-чтение через очередь; его исход видно в строке аккаунта.
+        var reads = Object.keys(job.results || {}).map(function (a) { return job.results[a].status_read; });
+        var statusNote = reads.indexOf('queued') >= 0 ? ' Opened. Checking the account status…'
+          : (reads.indexOf('skipped') >= 0 ? ' Opened. The status was not read now; it updates with the next list read.' : '');
+        say(grid, s.ok + ' of ' + total + ' ready.' + statusNote + (s.bad.length ? ' ' + s.bad.join(' · ') : ''),
             s.bad.length > 0 || s.stopped.length > 0);
         sayStopped(grid, s);
         var hand = Object.keys(job.results || {}).filter(function (a) { return job.results[a].code === 'open_by_hand'; });
