@@ -43,12 +43,30 @@ def test_text_free_ad_gives_no_error():
     assert not any(v["status"] == pf.ERROR for v in got.values())
 
 
-@pytest.mark.parametrize("missing", ["bodies", "titles"])
-def test_policy_still_refuses_a_feed_without_bodies_or_titles(missing):
-    """Решение D3 (ACL-2403): пока Meta не проверена вживую, лента без текстов отклоняется - и правило `feed_texts` предупреждает об этом заранее."""
+def test_policy_accepts_a_feed_without_bodies_when_headline_present():
+    """ACL-2474: Meta приняла ленту без основного текста, но с заголовком (живой прогон 08.11, job 893dd606)."""
     from src.fb_api import write_policy as wp
-    spec = {"bodies": [{"text": "B"}], "titles": [{"text": "H"}], "images": [{"hash": "h"}]}
-    spec[missing] = []
     creative = {"object_story_spec": {"page_id": "1"}}
-    with pytest.raises(wp.WriteRefused, match=missing):
+    for spec in ({"titles": [{"text": "H"}], "images": [{"hash": "a" * 32}]},):
+        spec.update({"call_to_action_types": ["LEARN_MORE"], "ad_formats": ["SINGLE_IMAGE"]})
         wp._check_asset_feed(spec, creative)
+
+
+@pytest.mark.parametrize("bodies", [[], [{"text": " "}]])
+def test_policy_refuses_present_but_empty_bodies(bodies):
+    from src.fb_api import write_policy as wp
+    spec = {"bodies": bodies, "titles": [{"text": "H"}], "images": [{"hash": "h"}]}
+    with pytest.raises(wp.WriteRefused, match="bodies"):
+        wp._check_asset_feed(spec, {"object_story_spec": {"page_id": "1"}})
+
+
+@pytest.mark.parametrize("spec", [
+    {"bodies": [{"text": "B"}], "titles": [], "images": [{"hash": "h"}]},
+    {"bodies": [{"text": "B"}], "images": [{"hash": "h"}]},
+    {"images": [{"hash": "h"}]},
+])
+def test_policy_still_refuses_a_feed_without_titles(spec):
+    """Не проверено вживую (ACL-2474): основной текст без заголовка и лента без текстов остаются отказом."""
+    from src.fb_api import write_policy as wp
+    with pytest.raises(wp.WriteRefused, match="titles"):
+        wp._check_asset_feed(spec, {"object_story_spec": {"page_id": "1"}})
