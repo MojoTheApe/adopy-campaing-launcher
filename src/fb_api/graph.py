@@ -122,7 +122,7 @@ def _read_context(path: str, params: dict | None) -> dict[str, str]:
         context["operation"] = "adaccounts"
     elif path == "/me/accounts":
         context["operation"] = "profile_pages"
-    elif match := re.fullmatch(r"/act_[0-9]{1,32}/(campaigns|promote_pages|adspixels|insights)", path):
+    elif match := re.fullmatch(r"/act_[0-9]{1,32}/(campaigns|promote_pages|adspixels|insights|targetingsearch)", path):
         context["operation"] = match.group(1)
     elif re.fullmatch(r"/[0-9]{1,32}/leadgen_forms", path):
         context["operation"] = "leadgen_forms"

@@ -568,7 +568,8 @@ class ApiPublisher:
         except GraphError as exc:
             raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}",
                                   stage="while checking the ad account") from exc
-        self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
+        self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
+                                           act=self.act)
         self.progress("ad account verified")
 
     def _open_warm(self, account_label: str, profile_id: str) -> bool:
@@ -981,7 +982,8 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
-        pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
+        pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
+                                          act=sess.act)
         try:
             for draft in drafts:
                 if draft.errors:

@@ -1149,7 +1149,8 @@ class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
     def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
-                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None):
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None,
+                 act: str = ""):
         self.client = client
         #: ACL-2267: долгий кэш разобранных терминов (страна, язык, интерес); по умолчанию - кэш машины.
         self._facts = facts if facts is not None else _facts_cache.default()
@@ -1161,7 +1162,8 @@ class TargetingResolver:
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
-        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts)
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts,
+                                      act=act)
         #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
         #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
         self.locale_groups: dict[int, dict[int, str]] = {}
