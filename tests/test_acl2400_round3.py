@@ -176,7 +176,7 @@ def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(
     free = [1000]
     rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, free[0]))
     rig.warm_up()
-    other = "660e8400-e29b-41d4-a716-446655440000"
+    other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
     holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     out: list = []
@@ -205,7 +205,7 @@ def test_the_gate_refusal_logs_its_numbers(tmp_path, caplog):
 
     rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
-    other = "660e8400-e29b-41d4-a716-446655440000"
+    other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
     holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     with caplog.at_level(logging.INFO, logger=warm.log.name):
@@ -228,7 +228,7 @@ def test_check_plan_on_a_held_gate_returns_the_memory_text_and_code(tmp_path, mo
 
     rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
-    other = "660e8400-e29b-41d4-a716-446655440000"
+    other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
     holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     ent = SimpleNamespace(profile_id=PID, folder_id="", multilogin_instance="A", ad_account_id=ACT)

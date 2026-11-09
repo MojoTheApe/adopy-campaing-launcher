@@ -114,7 +114,7 @@ def test_a_held_action_gets_the_memory_message_at_once_without_waiting(tmp_path)
 
     rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
     rig.warm_up()
-    other = "660e8400-e29b-41d4-a716-446655440000"
+    other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
     first = rig.checkout(other, account="Acc2")   # ACL-2369: the first action on a warm profile is never held
     started = time.monotonic()
@@ -184,7 +184,7 @@ def test_the_read_session_turns_the_memory_refusal_into_the_message(monkeypatch)
 
 # --- ACL-2470: 10 s grace before the refusal (fake clocks, no real sleeping) ------------------------
 
-OTHER = "660e8400-e29b-41d4-a716-446655440000"
+OTHER = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 
 
 def _second_action_rig(rig):
