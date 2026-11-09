@@ -178,11 +178,33 @@ def test_a_time_in_the_israeli_dst_gap_is_refused_naming_israel(tmp_path):
 
 def test_start_in_the_past_is_judged_in_absolute_time_of_israel(tmp_path, monkeypatch):
     monkeypatch.delenv("ACL_TEAM_TIMEZONE", raising=False)
-    # NOW = 12.10.2026 12:00 UTC = 15:00 в Израиле: 14:00 уже прошло, 16:00 - нет.
-    past = _life(tmp_path, start="2026-10-12T14:00", end="2026-10-20T09:00")
+    # NOW = 12.10.2026 12:00 UTC = 15:00 в Израиле: вчерашний день - отказ, 16:00 сегодня - как есть.
+    past = _life(tmp_path, start="2026-10-11T14:00", end="2026-10-20T09:00")
     assert "Israel time" in _creator(ZoneMeta()).plan_only(_plan(past)).error
     ok = _life(tmp_path, start="2026-10-12T16:00", end="2026-10-20T09:00")
     assert _creator(ZoneMeta()).plan_only(_plan(ok)).error == ""
+
+
+def test_a_passed_start_of_today_is_moved_forward_not_refused(tmp_path, monkeypatch):
+    # ACL-2465: задание ждало очереди - старт 14:00 сегодня прошёл к 15:00 (NOW): старт = 15:15, не отказ.
+    monkeypatch.delenv("ACL_TEAM_TIMEZONE", raising=False)
+    creator = _creator(ZoneMeta())
+    plan = _plan(_life(tmp_path, start="2026-10-12T14:00", end="2026-10-20T00:00"))
+    out = creator.plan_only(plan)
+    assert out.error == ""
+    assert plan.ad_sets[0].start_time == "2026-10-12T15:15"
+    assert creator.start_iso(plan.ad_sets[0]) == "2026-10-12T15:15:00+0300"
+
+
+def test_daily_start_of_today_in_the_past_is_still_refused(tmp_path):
+    # Daily (пояс кабинета, без time_zone) не сдвигается: прежнее поведение.
+    from datetime import timezone as _tz
+    creator = _creator(ZoneMeta())
+    plan = _plan(_life(tmp_path, start="2026-10-12T14:00", end="2026-10-20T00:00"))
+    plan.ad_sets[0].time_zone = ""
+    plan.ad_sets[0].end_time = ""
+    creator._move_passed_start_of_today(plan.ad_sets[0])
+    assert plan.ad_sets[0].start_time == "2026-10-12T14:00"
 
 
 def test_the_env_override_sets_the_zone_of_the_plan(tmp_path, monkeypatch):

@@ -2674,6 +2674,86 @@ class CampaignCreator:
     def _end_dt(self, ad_set: AdSetPlan) -> datetime:
         return self._local_dt(ad_set, ad_set.end_time, "end")
 
+    #: ACL-2465: запас до старта, сдвинутого «на сейчас» (запись в Meta ещё идёт), и шаг округления.
+    TODAY_START_MARGIN = timedelta(minutes=5)
+    TODAY_START_STEP_MIN = 15
+
+    def _moved_start(self, local_now: datetime, now: datetime) -> datetime:
+        """Ближайшая четверть часа не раньше now + 5 минут (секунды округляются вверх; расчёт в UTC)."""
+        t = now.astimezone(timezone.utc) + self.TODAY_START_MARGIN
+        if t.second or t.microsecond:
+            t = t.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        t += timedelta(minutes=(-t.minute) % self.TODAY_START_STEP_MIN)
+        return t.astimezone(local_now.tzinfo)
+
+    def _move_passed_start_of_today(self, ad_set: AdSetPlan) -> None:
+        """Lifetime с первым днём «сегодня»: прошедший час старта сдвигается вперёд, а не стопорит публикацию.
+
+        ACL-2465: форма задаёт старт сегодняшнего дня как «следующий целый час», а задание может ждать
+        очереди (процессор, память) дольше - 17:51 отправлено со стартом 18:00, проверено в 18:06.
+        Старт того же дня (по поясу команды), уже прошедший, становится ближайшей четвертью часа
+        не раньше чем через 5 минут. Старт прошлых дней по-прежнему отказ; Daily не трогается.
+        Сдвиг виден человеку (`_start_move_notes`), а повторный запуск сверяет такой старт мягко
+        (`_moved_start_matches`): в плане остаётся исходный старт, в Meta уже сдвинутый.
+        """
+        if not ad_set.time_zone or not ad_set.end_time:
+            return
+        start, now = self._start_dt(ad_set), self.now()
+        if start > now:
+            return
+        local_now = now.astimezone(start.tzinfo)
+        if start.date() != local_now.date():
+            return
+        nxt = self._moved_start(local_now, now)
+        new = nxt.strftime("%Y-%m-%dT%H:%M")
+        log.info("ACL-2465: ad set %r start %s (%s) has passed; moved to %s", ad_set.name,
+                 ad_set.start_time, ad_set.time_zone, new)
+        if not hasattr(self, "_start_move_notes"):
+            self._start_move_notes = []
+        self._start_move_notes.append(
+            f"Ad set {ad_set.name!r}: the start {ad_set.start_time[-5:]} ({self._zone_note(ad_set)}) had passed "
+            f"while the job waited in the queue; moved to {new[-5:]}"
+            + ("" if new[:10] == ad_set.start_time[:10] else f" on {new[:10]}") + ".")
+        if not hasattr(self, "_moved_from"):
+            self._moved_from = {}
+        self._moved_from[id(ad_set)] = ad_set.start_time[-5:]
+        ad_set.start_time = new
+
+    def _drain_start_move_notes(self, out: Outcome) -> None:
+        """Сдвиг старта - в предупреждения результата (запуск и Check plan)."""
+        for note in getattr(self, "_start_move_notes", []):
+            if note not in out.warnings:
+                out.warnings.append(note)
+        self._start_move_notes = []
+
+    def _moved_start_matches(self, ad_set: AdSetPlan, meta_start: Any) -> bool:
+        """Старт набора в Meta - это сдвинутый (ACL-2465) старт плана при повторе/продолжении?
+
+        Первый запуск сдвинул прошедший старт сегодняшнего дня, Meta хранит сдвинутый, а билдер
+        отдаёт прежний. Совпадением считается, только если ВСЁ верно: Lifetime в поясе команды;
+        старт плана уже прошёл; старт Meta не раньше старта плана; он в тот же день пояса команды
+        либо в первые минуты следующего (сдвиг через полночь); и не дальше, чем сдвиг мог уйти от
+        «сейчас». Будущий старт плана и любая другая правка сравниваются строго.
+        """
+        if not ad_set.time_zone or not ad_set.end_time or not ad_set.start_time:
+            return False
+        try:
+            plan_start = self._start_dt(ad_set)
+            got = datetime.strptime(str(meta_start), "%Y-%m-%dT%H:%M:%S%z")
+        except (ValueError, PlanError):
+            return False
+        now = self.now()
+        if plan_start > now or got < plan_start:
+            return False
+        if got > now + self.TODAY_START_MARGIN + timedelta(minutes=self.TODAY_START_STEP_MIN):
+            return False
+        gl = got.astimezone(plan_start.tzinfo)
+        day = plan_start.date()
+        if gl.date() == day:
+            return True
+        return gl.date() == day + timedelta(days=1) and gl.hour == 0 and gl.minute <= (
+            self.TODAY_START_MARGIN.seconds // 60 + self.TODAY_START_STEP_MIN)
+
     def start_iso(self, ad_set: AdSetPlan) -> str:
         """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
         return self._start_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -2974,7 +3054,10 @@ class CampaignCreator:
         if targeting.get("genders") or t.get("genders"):
             check("gender", targeting.get("genders") or [], t.get("genders") or [])
         if ad_set.start_time:
-            check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
+            if self._moved_start_matches(ad_set, row.get("start_time")):
+                check("start_time", _utc(row.get("start_time")), _utc(row.get("start_time")))
+            else:
+                check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
         # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
         check("publisher_platforms", targeting.get("publisher_platforms") or [],
               t.get("publisher_platforms") or [])
@@ -3450,14 +3533,18 @@ class CampaignCreator:
             # Набор из прошлого прогона уже стартовал: его старт в прошлом - не причина отказа.
             # `early` - вызов до поиска по имени (found_sets ещё неизвестны): старт проверит поздний вызов.
             reused = pos < len(found) and bool(found[pos])
+            if ad_set.start_time and not early and not reused:
+                self._move_passed_start_of_today(ad_set)
             if ad_set.start_time and not early and not reused and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
                                 f"({self._zone_note(ad_set)}) is not in the future")
             if ad_set.end_time:
                 # ACL-1443: конец позже старта по настоящим моментам (смещения на свои даты) и в будущем.
                 if ad_set.start_time and self._end_dt(ad_set) <= self._start_dt(ad_set):
+                    was = getattr(self, "_moved_from", {}).get(id(ad_set), "")
+                    moved = f" (moved from {was} because it had passed)" if was else ""
                     raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} must be "
-                                    f"after the start time {ad_set.start_time} ({self._zone_note(ad_set)})")
+                                    f"after the start time {ad_set.start_time}{moved} ({self._zone_note(ad_set)})")
                 if self._end_dt(ad_set) <= self.now():
                     raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} "
                                     f"({self._zone_note(ad_set)}) is not in the future")
@@ -3545,6 +3632,7 @@ class CampaignCreator:
             plan, existing, renamed_choice = choice.plan, choice.existing, choice.renamed
             out.published_as = plan.name
             self._check_planned(plan, targetings, choice.found_sets)
+            self._drain_start_move_notes(out)
             differences = []
             if choice.renamed:
                 renamed = _rename_message(requested, plan.name, choice.earlier, future=True)
@@ -3780,6 +3868,7 @@ class CampaignCreator:
         out.published_as = plan.name
         out.copy_number = choice.copy_number
         self._check_planned(plan, targetings, choice.found_sets)
+        self._drain_start_move_notes(out)
         self._save_name_receipt(out, requested, choice)
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))

@@ -747,3 +747,30 @@ def test_unnamed_invalid_id_never_wipes_confirmed_entries(tmp_path):
     with pytest.raises(g.GraphError):
         tr.TermResolver(Unnamed(), store).prefetch(["alpha", "beta", "gamma"])
     assert len(store.entries()) == 3
+
+
+# ───────── категория Meta в скобках: «Swing trading» == «swing trading (investing)» ─────────
+
+def test_a_term_matches_the_interest_that_only_adds_a_category_in_brackets(tmp_path):
+    c = FakeSearch(interests={"Swing trading": [{"id": "1", "name": "swing trading (investing)"},
+                                                {"id": "2", "name": "Swing Trading Academy"}]})
+    res = _one(_resolver(c, tmp_path), "Swing trading")
+    assert res["state"] == "exact"
+    assert res["picks"] == [{"id": "1", "type": "interests", "name": "swing trading (investing)"}]
+
+
+def test_two_interests_with_the_same_base_name_are_left_to_the_human(tmp_path):
+    c = FakeSearch(interests={"Apple": [{"id": "1", "name": "Apple (fruit)"}, {"id": "2", "name": "Apple (company)"}]})
+    res = _one(_resolver(c, tmp_path), "Apple")
+    assert res["state"] != "exact" and res["picks"] == []
+    assert {x["id"] for x in res["candidates"]} == {"1", "2"}
+
+
+def test_the_bracketed_name_outranks_other_names_that_merely_contain_the_words():
+    assert tr.score("Financial market", "Financial market (investing)") > tr.score("Financial market", "Dubai Financial Market")
+    assert tr.score("Wealth management", "Wealth management (banking)") > tr.score("Wealth management",
+                                                                                   "Morgan Stanley Wealth Management")
+
+
+def test_a_name_that_is_only_brackets_is_not_emptied():
+    assert tr.base_name("(investing)") == tr.norm("(investing)")
