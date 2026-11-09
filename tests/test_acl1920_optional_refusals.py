@@ -321,3 +321,19 @@ def test_a_budget_unknown_compound_is_not_silently_split(tmp_path):
     result = resolver.resolve("Alpari Group or Plus500")
     assert result["state"] == "unknown" and not result.get("split")
     assert result["picks"] == [] and client.calls <= 1 and client.writes == 0
+
+
+def test_acl2473_term_with_candidates_gets_no_refused_lookup_note(tmp_path):
+    # Кандидаты есть, точного имени нет: причина простая, пометка про отказанные поиски не нужна.
+    c = Refusing(refuse=("adworkposition", "adworkemployer"),
+                 interests={"income": [{"id": "7", "name": "Income tax"}, {"id": "8", "name": "Income support"}]})
+    res = _resolver(c, tmp_path)._find("Income")
+    assert res["state"] == "unresolved" and res["candidates"]
+    assert "could not be checked there" not in res["reason"] and "refused" not in res["reason"]
+
+
+def test_acl2473_term_without_candidates_keeps_refused_lookup_note(tmp_path):
+    c = Refusing(refuse=("adworkposition",))
+    res = _resolver(c, tmp_path).resolve("Nothing here")
+    assert res["state"] == "unresolved" and not res["candidates"]
+    assert "work positions lookup" in res["reason"] and "could not be checked there" in res["reason"]

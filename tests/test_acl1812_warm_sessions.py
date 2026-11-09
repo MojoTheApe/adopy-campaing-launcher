@@ -121,9 +121,13 @@ class Rig:
         self.grant_ok = True
         self.store = warm.WarmStore(tmp_path / "warm_sessions.json")
         self.stops = stop_log.StopLog(tmp_path / "profile_stops.json", wall=lambda: self.now[0])
+        # ACL-2470: the memory grace runs on a fake clock - `pause` moves it, nothing really sleeps.
+        self.gate_skew = [0.0]
+        self.gate_pauses: list[float] = []
         self.gate = warm.HeavyGate(
             limit=lambda: limit, memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
-            settings=lambda: _s90(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01)
+            settings=lambda: _s90(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01,
+            clock=lambda: time.monotonic() + self.gate_skew[0], pause=self._gate_pause)
         self.reg = warm.WarmRegistry(
             store=self.store, wall=lambda: self.now[0], scan=self._scan, tab_factory=self._tab,
             start_profile=self._start, close_window=self._stop, slot_queue=lambda: FakeQueue(self),
@@ -135,6 +139,10 @@ class Rig:
             settings=lambda: _s90(),
             usage=reg_usage if reg_usage is not None else FakeUsage(),
             mono=lambda: self.now[0] - 1_800_000_000.0)
+
+    def _gate_pause(self, secs):
+        self.gate_pauses.append(secs)
+        self.gate_skew[0] += secs
 
     def _sleep_fake(self, secs):
         # ACL-2283: waits for a start turn / CPU settling look at the clock, so a sleep moves it.
@@ -1191,8 +1199,9 @@ def test_opening_waits_for_the_growth_of_profiles_still_warming_up(tmp_path, mon
 
     rig.reg._sleep = sleeping
     res = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
-    # ACL-2400: said at once in one short line (the numbers go to the log), no waiting.
-    assert res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE and not calls
+    # ACL-2400: one short line (the numbers go to the log); ACL-2470: after one 1.5 s re-check (the fake sleep
+    # jumps 30 s, past the 10 s grace), not after the old 2-minute wait.
+    assert res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE and calls == [1.5]
     # После прогрева (settle) тот же объём свободной памяти уже хватает.
     monkeypatch.setenv(warm.SETTLE_ENV, "10")
     rig.now[0] += 200
