@@ -420,7 +420,9 @@ class HeavyGate:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
         # `hold` - что показывает дешборд; `why` - настоящая причина шлюза (например, `limit`).
-        view = {"hold": "memory_low" if low else "account_busy", "why": why,
+        # ACL-2293: упёрлись в лимит тяжёлых действий - так и показываем, а не «ждёт другой аккаунт».
+        view = {"hold": "memory_low" if low else ("heavy_limit" if why == "limit" else "account_busy"),
+                "heavy_limit": max(1, int(self._limit())), "why": why,
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}
