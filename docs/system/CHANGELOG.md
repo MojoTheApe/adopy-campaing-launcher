@@ -1,5 +1,26 @@
 # System history
 
+## ACL-2478 — Offline probe tooling for ACL-2344 step 0 — 2026-11-09
+
+Offline probe tooling for ACL-2344 step 0; no behaviour change; the light work tab itself is not implemented. Adds an offline probe (`src/fb_ads_rpa/light_probe.py`, `scripts/probe_2344_p1.py`) for running in-page Graph calls from a light same-origin document instead of the full Ads Manager tab. The probe serves the light document from the browser and fails every other request of its own tab (interception pattern `*`, Network enabled on the probe tab only so service workers are bypassed, the document is inert under a no-script/no-worker CSP, the tab is set offline as a last line, interception stays on while the tab lives; a service worker acting on its own outside the probe tab is not controlled); a dummy string is handed over through a BroadcastChannel. The probe script is gated to the Doc120 profile (loopback CDP url plus an explicit `--profile-id` equal to Doc120's in the machine's account map). `RawCdp.call` and `PageTab.call` gained an optional `on_event` hook, and `RawCdp` queues messages that nested calls from a handler would otherwise drop; callers that do not pass it behave as before. No publish, read or write code path uses the probe, and the `ACL_LIGHT_WORK_TAB` mode does not exist. The live probe and the implementation stay in ACL-2344.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1478).
+
+## ACL-2397 — Builder: a drag always copies, bigger handle — 2026-11-05
+
+Dragging an ad or a campaign in the Builder now always makes a copy; the original is never moved or removed (Ctrl/⌥ no longer matter). Undo removes exactly that copy. Dropping a card on its own place does nothing (use Duplicate); the `Copy to…` menu (formerly `Move to…`, no Move|Copy switch) may still copy in place. A card whose campaign is being built can be dragged out; the destination account/campaign lock stays. The drag handle is now a 32×32 px target on ad cards and campaign rows, with a hover state, and a click on it opens `Copy to…`. The builder never writes a `copy n` suffix (that is the publisher's, ACL-2250). Dashboard only (`report.html`).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1397).
+
+## ACL-2393 — Warning when the campaign name and the targeting differ — 2026-11-05
+
+The builder now warns when a campaign name mentions a targeting preset (for example Green) and a different one is selected (for example Mix2). It is only a warning; you can still publish.
+A line under the name shows `Name says Green, targeting is Mix2 – fix one of them` (or `…but no targeting is selected – pick one`), with a `Use Green` button when the name has exactly one preset. The same text appears in the Publish confirmation (button "Build anyway") and as a note above the Check plan result. Presets are matched as whole words of the name; the card's own parts (country, OS, creative type, asset, age, date) never count, and any ad set's targeting satisfies the name. Dashboard page only; nothing is sent to the server.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1393).
+
+## ACL-2392 — Builder: short plain-language errors, raw Meta text only in the details — 2026-11-05
+
+Publish failures now show one short English line with the next step (for example "Targeting options were merged by Meta - replace the interests and republish") instead of raw Meta text, codes and ids. Unknown, unconfirmed and timed-out steps name the stage (for example "while creating ad set \"X\""). The raw text, codes, stage and readback lines now live in the header "Recent runs" popup (Show details expands per run, with a Copy details button; older history lines still render); the builder shows only the plain line, what was left in Meta and a "Details in Recent runs" link. `publish_history.jsonl` lines gain `failure` and `error_details`. New table and classifier in `src/fb_api/plain_errors.py`; `result_dict`/`dry_run_result` carry a `failure` object, `job["errors"]` holds the plain line and `job["error_details"]` the raw. Meta subcode 1870226 (reported by Meta as code 1 / http 500) is now worded as a rejection with what was left in Meta; the stop itself is still an unknown write for gating, so the job stays blocked as before. Readback mismatches show as one summary line. Gating (`publishable`, `blocking_failures`, `WritesBlocked`) and the event log content (`publish.result` keeps the raw error and readback lines) are unchanged. Python changes need a `serve.py` restart; the template loads without one.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1392).
+
 ## ACL-2471 — Targeting resolver: category in parentheses — 2026-11-08
 
 Targeting resolver: an interest name that Meta returns with a category in parentheses, for example "swing trading (investing)", now matches exactly when it is the only one with that base name; two or more stay candidates for a human.

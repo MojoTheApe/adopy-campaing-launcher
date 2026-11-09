@@ -104,18 +104,22 @@ def test_known_meta_error_shows_catalog_message_and_action(tmp_path):
     out, _ = _run(meta, _draft(tmp_path))
     assert out.stop_kind == "graph_error"
     assert "The budget is too low." in out.error and "Budget too low raw" not in out.error
+    assert out.failure.line() == "The budget is too low. Raise the budget and publish again."
     (p,) = out.problems
     assert p["title"] == "The budget is too low." and p["action"] and "1885272" in p["raw"]
     res = pa.result_dict(out)
-    assert res["problems"] == out.problems and res["error"] == out.error
+    assert res["problems"] == out.problems and res["error"] == out.failure.text()
 
 
 def test_unknown_meta_code_shows_the_raw_text(tmp_path):
     meta = RefusingMeta({"code": 99999999, "message": "Strange new refusal"})
     out, _ = _run(meta, _draft(tmp_path))
-    assert "Strange new refusal" in out.error
+    assert "Strange new refusal" in out.error                      # raw stays internal (logs, gating)
     (p,) = out.problems
-    assert "Strange new refusal" in p["title"] and p["action"] == ""
+    assert "Strange new refusal" in p["raw"] and "Strange new refusal" not in p["title"]
+    res = pa.result_dict(out)
+    assert "Strange new refusal" not in res["error"]
+    assert "Strange new refusal" in res["failure"]["details"]["raw"]
 
 
 @pytest.mark.parametrize("code", [1404078, 2859015, 1404163])
