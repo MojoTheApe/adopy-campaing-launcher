@@ -717,7 +717,10 @@ class TermResolver:
             return {"term": term, "state": "unknown", "picks": [], "candidates": [],
                     "reason": UNKNOWN_MESSAGE}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
-        reason = "; ".join(x for x in (stale, self._blind_spots()) if x)
+        # ACL-2473: пометку об отказанных поисках даём только термину без кандидатов; при кандидатах
+        # причина простая (нет точного совпадения, выберите один), аккаунт тут ни при чём.
+        blind = "" if ranked else self._blind_spots()
+        reason = "; ".join(x for x in (stale, blind) if x)
         return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason}
 
     def _stale(self, entry: dict) -> bool:
