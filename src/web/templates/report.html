@@ -1483,6 +1483,15 @@
       padding: 0.5rem 0.7rem; margin-bottom: 0.7rem;
       font-size: var(--adopy-text-table); line-height: 1.4;
     }
+    /* ACL-2393: одна строка под именем кампании, палитра .cb-warn-block. */
+    .cb-name-check {
+      color: var(--warn); font-size: var(--adopy-text-sm); line-height: 1.4; margin-top: 0.3rem;
+    }
+    .cb-name-check[hidden], .cb-name-fix[hidden] { display: none; }
+    .cb-name-fix {
+      background: var(--warn-soft); border: 1px solid var(--warn); color: var(--text);
+      border-radius: var(--radius-sm); padding: 0.05rem 0.5rem; cursor: pointer; font-size: inherit;
+    }
     /* Подсветка поля живёт до первой правки — человек видит, куда смотреть,
        и метка уходит сама, как только он начал вводить. */
     .cb-field-warn {
@@ -3386,6 +3395,21 @@
     .cb-publish-btn[aria-busy="true"]:not(:disabled), .cbd-publish-all[aria-busy="true"]:not(:disabled) {
       cursor: progress;
     }
+    /* Нажатие Publish видно сразу: пока идёт проверка перед окном подтверждения - акцент, спиннер, отсчёт. */
+    .cb-publish-btn.is-pending, .cbd-publish-all.is-pending,
+    .cb-publish-btn.is-pending:disabled, .cbd-publish-all.is-pending:disabled {
+      background: var(--accent); color: var(--on-accent); border-color: var(--accent);
+      cursor: progress; font-variant-numeric: tabular-nums;
+    }
+    .cb-publish-btn.is-pending::before, .cbd-publish-all.is-pending::before {
+      content: ""; display: inline-block; width: 0.85em; height: 0.85em; margin-right: 0.45em;
+      vertical-align: -0.1em; border: 2px solid currentColor; border-right-color: transparent;
+      border-radius: 50%; animation: cb-pending-spin 0.8s linear infinite;
+    }
+    @keyframes cb-pending-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .cb-publish-btn.is-pending::before, .cbd-publish-all.is-pending::before { animation: none; }
+    }
     .cb-publish-btn:focus-visible, .cbd-publish-all:focus-visible,
     #sfc-ok:focus-visible, #sfc-cancel:focus-visible {
       outline: 2px solid var(--accent); outline-offset: 3px;
@@ -4046,16 +4070,21 @@
     /* Числа в таблицах и карточках: цифры одной ширины, колонки не прыгают. */
     td.num, th.num, .kpi, .home-kpi, [class*="-kpi"], time { font-variant-numeric: tabular-nums lining-nums; }
     /* ═══ ACL-1345: перетаскивание карточек в билдере ═══ */
-    .cbm-grip { cursor: grab; color: var(--muted); font-size: var(--adopy-text-sm); letter-spacing: -0.15em; padding: 0 0.15rem; user-select: none; flex-shrink: 0; }
-    .cbm-grip:hover { color: var(--accent); }
-    .cbm-grip.cbm-locked { cursor: not-allowed; opacity: 0.4; }
-    /* Out of the flow, inside the tick's own left padding (0.5rem): adds no width to the row, whatever the font. */
-    .cbd-camp-head .cbm-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 0.5rem; padding: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 0.7rem; }
+    /* ACL-2397: 32x32 px hit area (the glyph is the picture, the box is the target); never hidden on narrow windows. */
+    .cbm-grip { cursor: grab; color: var(--muted); font-size: 1rem; letter-spacing: -0.15em; user-select: none; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 32px; min-height: 32px; border: 1px solid transparent; border-radius: var(--radius-sm); }
+    .cbm-grip:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+    .cbm-grip:active, body.cbm-dragging .cbm-grip { cursor: grabbing; }
     .cbm-moveto { background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.05rem 0.35rem; color: var(--muted); font: inherit; font-size: var(--adopy-text-xs); cursor: pointer; flex-shrink: 0; }
     /* Out of the flow and keyboard-revealed: the campaign Move-to button must not narrow the row or cover its click target (320px tree has no spare width). Mouse users drag by the grip. */
     .cbd-camp-head { position: relative; }
+    /* ACL-2237: the campaign handle is a real 32x32 box, stacked above the tick in its own column (the tree is 149px wide at any window width), so it covers nothing and the row gets almost the old width. */
+    .cbd-camp-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; padding-right: 0.1rem; }
+    .cbd-camp-head .cbm-grip { grid-column: 1; grid-row: 1; padding: 0; align-self: end; }
+    .cbd-camp-head .cbd-tick { grid-column: 1; grid-row: 2; justify-content: center; padding: 0 0 0.3rem; align-self: start; }
+    .cbd-camp-head .cbd-tick + .cbd-camp-row { grid-column: 2; grid-row: 1 / span 2; padding-left: 0.25rem; padding-right: 0.15rem; }
+    .cbd-camp-head .cbd-camp-drop { grid-column: 3; grid-row: 1 / span 2; }
     .cbd-camp-head .cbm-moveto { position: absolute; right: 1.8rem; top: 50%; transform: translateY(-50%); background: var(--bg-elev); opacity: 0; pointer-events: none; }
-    .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; }
+    .cbd-camp-head .cbm-moveto:focus-visible { opacity: 1; pointer-events: auto; z-index: 2; }
     .cb-ad-row-header .cbm-moveto { margin-left: auto; }
     .cb-ad-row-header .cbm-moveto + .cb-dup-ad-btn { margin-left: 0; }
     .cbm-moveto:hover { color: var(--accent); border-color: var(--accent); }
@@ -4070,9 +4099,6 @@
     .cbm-toast-note { color: var(--muted); margin-top: 0.15rem; overflow-wrap: anywhere; }
     .cbm-toast-btns { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
     .cbm-menu { position: fixed; z-index: 1100; width: 17rem; max-height: 21rem; display: flex; flex-direction: column; gap: 0.3rem; background: var(--bg-elev); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.45rem; box-shadow: var(--adopy-shadow-popover); font-size: var(--adopy-text-table); }
-    .cbm-seg { display: flex; gap: 0.25rem; }
-    .cbm-seg-btn { flex: 1; background: none; border: 1px solid var(--border-strong); border-radius: 3px; padding: 0.15rem 0.4rem; color: var(--muted); font: inherit; cursor: pointer; }
-    .cbm-seg-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
     .cbm-menu-title { color: var(--muted); font-size: var(--adopy-text-xs); }
     .cbm-filter { font: inherit; padding: 0.2rem 0.35rem; }
     .cbm-list { overflow-y: auto; display: flex; flex-direction: column; }
@@ -6971,6 +6997,78 @@ window.cbLayout = (function () {
     return o || String(auto == null ? '' : auto);
   }
 
+  /* ACL-2393: имя кампании называет пресет таргетинга (Green), а выбран другой
+     (Mix2). Только предупреждение. Совпадение — по целым словам имени, без
+     подстрок; слова самой карточки (страна, OS, тип, ассет, возраст, дата)
+     пресетом не считаются; «коды»-списки интересов из запасной библиотеки
+     (запятая, длиннее 40 знаков) игнорируются. */
+  function _ntTokens(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/[\s\-]+/g, '_')
+      .split('_').filter(Boolean);
+  }
+  var _ntLib = { src: null, n: -1, codes: [] };
+  function _ntCodes(library) {
+    if (_ntLib.src === library && _ntLib.n === library.length) return _ntLib.codes;
+    var seen = {}, codes = [];
+    library.forEach(function (t) {
+      var code = String((t && t.code) || '').trim();
+      if (!code || code.indexOf(',') !== -1 || code.length > 40) return;
+      var toks = _ntTokens(code);
+      if (!toks.length) return;
+      var key = toks.join('_');
+      if (seen[key]) return;
+      seen[key] = true;
+      codes.push({ code: code, toks: toks, key: key });
+    });
+    codes.sort(function (a, b) { return b.toks.length - a.toks.length; });
+    _ntLib = { src: library, n: library.length, codes: codes };
+    return codes;
+  }
+  function nameTargetingCheck(name, selected, library, skip) {
+    var out = { state: 'none', said: [], have: [] };
+    if (!Array.isArray(library) || !library.length) return out;
+    var toks = _ntTokens(name);
+    if (!toks.length) return out;
+    var skipSet = {};
+    (skip || []).forEach(function (x) { _ntTokens(x).forEach(function (t) { skipSet[t] = true; }); });
+    var codes = _ntCodes(library), said = [], saidKeys = [], i = 0;
+    while (i < toks.length) {
+      var hit = null;
+      for (var c = 0; c < codes.length && !hit; c += 1) {
+        var n = codes[c].toks.length, ok = i + n <= toks.length;
+        for (var j = 0; ok && j < n; j += 1) ok = toks[i + j] === codes[c].toks[j];
+        if (ok && !(n === 1 && skipSet[codes[c].toks[0]])) hit = codes[c];
+      }
+      if (hit) {
+        if (saidKeys.indexOf(hit.key) === -1) { saidKeys.push(hit.key); said.push(hit.code); }
+        i += hit.toks.length;
+      } else i += 1;
+    }
+    if (!said.length) return out;
+    var haveKeys = [];
+    (selected || []).forEach(function (v) {
+      var raw = String(v == null ? '' : v).trim();
+      if (!raw) return;
+      var k = _ntTokens(raw).join('_');
+      if (haveKeys.indexOf(k) === -1) { haveKeys.push(k); out.have.push(raw); }
+    });
+    out.said = said;
+    if (!haveKeys.length) { out.state = 'nothing'; return out; }
+    out.state = saidKeys.some(function (k) { return haveKeys.indexOf(k) !== -1; }) ? 'ok' : 'differs';
+    return out;
+  }
+  function _ntList(list, max) {
+    if (list.length <= max) return list.length > 1 ? list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1] : list[0];
+    return list.slice(0, max).join(', ') + ' and ' + (list.length - max) + ' more';
+  }
+  function nameTargetingText(check) {
+    if (!check || (check.state !== 'differs' && check.state !== 'nothing')) return '';
+    var said = _ntList(check.said, 2);
+    if (check.state === 'nothing') return 'Name says ' + said + ', but no targeting is selected – pick one';
+    var have = check.have.length > 1 ? check.have.slice(0, 3).join(', ') + (check.have.length > 3 ? ' and ' + (check.have.length - 3) + ' more' : '') : check.have[0];
+    return 'Name says ' + said + ', targeting is ' + have + ' – fix one of them';
+  }
+
   /* Статус аккаунта из того, что страница знает сегодня: идёт ли сборка и
      что говорит сохранённая настройка аккаунта (ссылка, поля карты). */
   function accountState(pf, busy) {
@@ -7183,6 +7281,7 @@ window.cbLayout = (function () {
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
     FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
+    nameTargetingCheck: nameTargetingCheck, nameTargetingText: nameTargetingText,
     COPY_API_ONLY: COPY_API_ONLY, copyToButtonHtml: copyToButtonHtml, copyBudgetValue: copyBudgetValue, copyRowProblem: copyRowProblem, copyPlan: copyPlan,
     accountState: accountState, adsetName: adsetName, adsetLabel: adsetLabel, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -8546,7 +8645,12 @@ window.cbTree = (function () {
   function refreshPublication(t) {
     var btn = foot.querySelector('.cbd-publish-all');
     if (!btn) return;
-    btn.textContent = publishLabel(t);
+    /* Пока идёт проверка, на кнопке бежит счётчик: новый текст запоминаем и вернём по окончании. */
+    if (window.cbPublishPending && window.cbPublishPending.active() && btn.dataset.cbIdleLabel !== undefined) {
+      btn.dataset.cbIdleLabel = publishLabel(t);
+    } else {
+      btn.textContent = publishLabel(t);
+    }
     var count = t.some ? t.send.length : t.open.length;
     var excluded = t.on.length ? t.on.length - t.send.length : t.total - t.open.length;
     var scope = foot.querySelector('.cbd-publication-scope');
@@ -9349,8 +9453,10 @@ window.cbTree = (function () {
     if (btn) {
       var uncertain = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
       var tg = ticks();
-      btn.disabled = uncertain || g.blocked || !(tg.some ? tg.send.length : tg.open.length);
+      var pending = !!(window.cbPublishPending && window.cbPublishPending.active());
+      btn.disabled = pending || uncertain || g.blocked || !(tg.some ? tg.send.length : tg.open.length);
       btn.title = g.blocked ? g.reason : '';
+      if (pending) window.cbPublishPending.paint();
       if (g.blocked && !note) {
         note = document.createElement('div');
         note.className = 'cbd-gate-reason';
@@ -9371,6 +9477,8 @@ window.cbTree = (function () {
         }
       }
     }
+    /* Идёт проверка перед публикацией: обе кнопки Publish держат отметку «нажато». */
+    if (window.cbPublishPending && window.cbPublishPending.active()) window.cbPublishPending.paint();
   }
 
   /* Клик по строке: открыть нужный раздел и поставить фокус в поле. */
@@ -10122,14 +10230,14 @@ window.cbTree = (function () {
 </script>
 
 <script>
-/* ═══ ACL-1345: Builder drag & drop — move / Ctrl = copy / Undo ═══════════════
-   Весь код переноса карточек - в этом блоке (+ блок CSS «ACL-1345» выше).
+/* ═══ ACL-1345 / ACL-2397: Builder drag & drop — a drag always copies / Undo ═══
+   Весь код копирования карточек - в этом блоке (+ блок CSS «ACL-1345» выше).
    Объявление - в другую кампанию или набор, кампания - в другой аккаунт. Тянем за
-   ручку ⋮⋮; то же самое без мыши - кнопка «Move to…». Перенос = тот же узел DOM
-   (все поля целы), копия = новый узел теми же построителями, что у Duplicate.
+   ручку ⋮⋮; то же самое без мыши - кнопка «Copy to…». Оригинал не трогаем никогда:
+   копия = новый узел теми же построителями, что у Duplicate. Дроп на собственное место - пусто.
    Аккаунтные поля (ссылка трекинга, кабинет, профиль) живут в форме аккаунта, поэтому
    карточка в чужой форме сама берёт чужие. Страница и Instant Form привязаны к аккаунту
-   и сбрасываются. Undo - обратная операция над теми же узлами. */
+   и сбрасываются. Undo - убирает ровно ту копию, что сделал дроп. */
 window.cbMove = (function () {
   'use strict';
   /* Детали строит скрипт ниже по странице: читаем их в момент вызова, не при загрузке. */
@@ -10138,7 +10246,8 @@ window.cbMove = (function () {
   var NOOP = 'noop';
   var MSG_BUILDING = 'This campaign is being built — wait for the run to finish or press Stop.';
   var MSG_CANT_UNDO = 'Can’t undo – the draft changed.';
-  var DRAG_TIP = 'Drag to move — hold Ctrl (⌥ on Mac) to copy';
+  var DRAG_TIP = 'Drag to copy';
+  var MSG_SAME_PLACE = 'Already here — use Duplicate to copy in place.';
   var undoStack = [];
   var drag = null;            // {kind: 'ad'|'camp', node, paintOk}
   var pendingPaint = false;
@@ -10166,7 +10275,7 @@ window.cbMove = (function () {
   function pageOf(slot) { var h = slot.querySelector('input[name$="_page_id"]'); return h ? h.value : ''; }
   function rowSetOf(row) { var h = row.querySelector('.cb-ad-adset'); return h ? (parseInt(h.value, 10) || 0) : 0; }
   function setRowSet(row, k) { var h = row.querySelector('.cb-ad-adset'); if (h) h.value = k; }
-  /* Names may already be stripped (stripNames keeps them in data-renumber-name), so match both. */
+  /* Names may already be stripped (cbRenumber keeps them in data-renumber-name), so match both. */
   function formIdInput(row) { return row.querySelector('input[name$="_form_id"], input[data-renumber-name$="_form_id"]'); }
   function slotById(id) {
     return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
@@ -10175,11 +10284,6 @@ window.cbMove = (function () {
     var hit = null;
     forms().forEach(function (f) { if (!hit && cbFormKey(f) === key) hit = f; });
     return hit;
-  }
-  /* Имена полей снимаются перед вставкой в чужую форму: иначе радио-группы
-     camp_0_ad_0_creative_type двух форм склеятся. Вернёт их cbRenumber*. */
-  function stripNames(root) {
-    $all(root, '[name]').forEach(function (el) { el.dataset.renumberName = el.name; el.removeAttribute('name'); });
   }
   function activeBuild(slot) {
     var d = window.cbBuild && window.cbBuild.dot ? window.cbBuild.dot(slot, slotName(slot)) : null;
@@ -10201,24 +10305,21 @@ window.cbMove = (function () {
   /* ── проверки ──────────────────────────────────────────────────────── */
   /* '' - можно; NOOP - то же место; иначе - причина отказа для человека. */
   function check(plan) {
-    var copy = plan.mode === 'copy';
     if (plan.kind === 'ad') {
       var srcSlot = plan.row.closest('.cb-slot');
       if (!srcSlot || !plan.destSlot) return NOOP;
-      if (activeBuild(srcSlot)) return MSG_BUILDING;
       var df = plan.destSlot.closest('form');
       if (formBusy(df)) return busyMsg(df);
       if (activeBuild(plan.destSlot)) return MSG_BUILDING;
-      var same = srcSlot === plan.destSlot;
-      if (!copy && same && rowSetOf(plan.row) === plan.k) return NOOP;
-      if ((copy || !same) && adCount(plan.destSlot) >= MAX_ADS) return 'A campaign can hold up to 100 ads.';
+      /* A drag onto the card's own place is a no-op; the Copy to… menu may copy in place. */
+      if (!plan.menu && srcSlot === plan.destSlot && rowSetOf(plan.row) === plan.k) return NOOP;
+      if (adCount(plan.destSlot) >= MAX_ADS) return 'A campaign can hold up to 100 ads.';
       return '';
     }
     var src = plan.slot, dest = plan.destForm;
     if (!src || !dest) return NOOP;
-    if (activeBuild(src)) return MSG_BUILDING;
     if (formBusy(dest)) return busyMsg(dest);
-    if (!copy && src.closest('form') === dest) return NOOP;
+    if (!plan.menu && src.closest('form') === dest) return NOOP;
     return '';
   }
   function reasonOnly(plan) { var r = check(plan); return r === NOOP ? '' : r; }
@@ -10300,13 +10401,6 @@ window.cbMove = (function () {
     window.cbSyncDestination(slot);
     if (window.cbFillFormSelects) window.cbFillFormSelects(slot);
   }
-  function blankAd(slot) {
-    var container = slot.querySelector('.cb-ad-rows');
-    container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(slot.dataset.idx, adCount(slot), 0));
-    var row = container.lastElementChild;
-    P.initAllSelects(row);
-    return row;
-  }
   /* Instant Form выбрана на Странице; на другой Странице её id ничего не значит. */
   function pageDiffers(srcSlot, destSlot) {
     return srcSlot.closest('form') !== destSlot.closest('form') || pageOf(srcSlot) !== pageOf(destSlot);
@@ -10321,109 +10415,42 @@ window.cbMove = (function () {
   function doAd(plan) {
     var row = plan.row, k = plan.k, destSlot = plan.destSlot;
     var srcSlot = row.closest('.cb-slot');
-    var same = srcSlot === destSlot;
-    var notes = [], newRow;
-    var where = ' · Ad set ' + (k + 1);
-    if (plan.mode === 'copy') {
-      var afterSrc = same && rowSetOf(row) === k ? row : null;
-      var container = destSlot.querySelector('.cb-ad-rows');
-      container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(destSlot.dataset.idx, adCount(destSlot), k));
-      newRow = container.lastElementChild;
-      P.copyAdRowValues(row, newRow);
-      setRowSet(newRow, k);
-      insertRow(destSlot, newRow, k, afterSrc);
-      if (pageDiffers(srcSlot, destSlot)) { var fi = formIdInput(newRow); if (fi) fi.value = ''; }
-      refreshSlotAds(destSlot);
-      return { label: 'copied 1 ad', slot: destSlot, notes: notes,
-        text: 'Copied 1 ad to “' + niceName(destSlot) + '”' + where,
-        undo: function () {
-          if (!newRow.isConnected || !destSlot.isConnected || formBusy(destSlot.closest('form'))) return false;
-          newRow.remove();
-          if (!adCount(destSlot)) blankAd(destSlot);
-          refreshSlotAds(destSlot);
-          return true;
-        } };
-    }
-    var oldSet = rowSetOf(row), parent = row.parentNode, next = row.nextElementSibling;
-    var oldFormId = null, blank = null;
-    stripNames(row);
-    setRowSet(row, k);
-    insertRow(destSlot, row, k);
-    if (pageDiffers(srcSlot, destSlot)) {
-      var hid = formIdInput(row);
-      if (hid && hid.value) { oldFormId = hid.value; hid.value = ''; }
-    }
-    if (!same && !adCount(srcSlot)) {
-      blank = blankAd(srcSlot);
-      notes.push('Left a blank ad in “' + niceName(srcSlot) + '” – a campaign needs at least one ad.');
-    }
+    var afterSrc = srcSlot === destSlot && rowSetOf(row) === k ? row : null;
+    var container = destSlot.querySelector('.cb-ad-rows');
+    container.insertAdjacentHTML('beforeend', P.buildAdRowHTML(destSlot.dataset.idx, adCount(destSlot), k));
+    var newRow = container.lastElementChild;
+    P.copyAdRowValues(row, newRow);
+    setRowSet(newRow, k);
+    insertRow(destSlot, newRow, k, afterSrc);
+    if (pageDiffers(srcSlot, destSlot)) { var fi = formIdInput(newRow); if (fi) fi.value = ''; }
     refreshSlotAds(destSlot);
-    if (!same) refreshSlotAds(srcSlot);
-    return { label: 'moved 1 ad', slot: destSlot, notes: notes,
-      text: 'Moved 1 ad to “' + niceName(destSlot) + '”' + where,
+    return { label: 'copied 1 ad', slot: destSlot, notes: [],
+      text: 'Copied 1 ad to “' + niceName(destSlot) + '” · Ad set ' + (k + 1),
       undo: function () {
-        if (!row.isConnected || !srcSlot.isConnected || !destSlot.isConnected) return false;
-        if (formBusy(srcSlot.closest('form')) || formBusy(destSlot.closest('form'))) return false;
-        if (blank && !blank.isConnected) return false;
-        stripNames(row);
-        setRowSet(row, oldSet);
-        if (next && next.parentNode === parent) parent.insertBefore(row, next); else parent.appendChild(row);
-        if (blank) blank.remove();
-        if (oldFormId !== null) { var h2 = formIdInput(row); if (h2) h2.value = oldFormId; }
+        if (!newRow.isConnected || !destSlot.isConnected || formBusy(destSlot.closest('form'))) return false;
+        newRow.remove();
         refreshSlotAds(destSlot);
-        if (!same) refreshSlotAds(srcSlot);
         return true;
       } };
   }
 
   function doCamp(plan) {
-    var slot = plan.slot, destForm = plan.destForm, srcForm = slot.closest('form');
-    var cross = srcForm !== destForm;
+    var slot = plan.slot, destForm = plan.destForm;
+    var cross = slot.closest('form') !== destForm;
     var notes = [];
     if (cross) notes.push('Budget unchanged — check it for ' + acctLabel(destForm) + '.');
-    if (plan.mode === 'copy') {
-      var copy = window.cbDuplicateSlot(slot, destForm);
-      if (!copy) return null;
-      if (cross) $all(copy, 'input[name$="_form_id"]').forEach(function (h) { h.value = ''; });
-      settleHidden(copy);
-      return { label: 'copied campaign', slot: copy, notes: notes,
-        text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
-        canUndo: function () { return copy.isConnected && !formBusy(destForm); },
-        undo: function () {
-          if (!copy.isConnected || formBusy(destForm)) return false;
-          copy.remove();
-          P.renumber(destForm); window.cbUpdateCount(destForm);
-          return true;
-        } };
-    }
-    var wasOpen = isOpenSlot(slot), id = slot.dataset.cbdId;
-    var parent = slot.parentNode, next = slot.nextElementSibling;
-    var n = adCount(slot);
-    var oldPage = pageOf(slot), oldAcct = slot._pageAccount, formIds = [];
-    $all(slot, 'input[name$="_form_id"]').forEach(function (h) { if (h.value) formIds.push([h, h.value]); });
-    stripNames(slot);
-    destForm.querySelector('.cb-slots').appendChild(slot);
-    P.renumber(srcForm); P.renumber(destForm);
-    window.cbUpdateCount(srcForm); window.cbUpdateCount(destForm);
-    if (cross) formIds.forEach(function (p) { p[0].value = ''; });
-    if (window.cbSyncPages) window.cbSyncPages(slot);
-    window.cbSyncDestination(slot);
-    settleHidden(slot);
-    return { label: 'moved campaign', slot: slot, notes: notes, reopen: wasOpen ? id : '',
-      text: 'Moved campaign “' + niceName(slot) + '” (' + n + (n === 1 ? ' ad' : ' ads') + ') to ' + acctLabel(destForm),
+    var copy = window.cbDuplicateSlot(slot, destForm);
+    if (!copy) return null;
+    if (cross) $all(copy, 'input[name$="_form_id"]').forEach(function (h) { h.value = ''; });
+    settleHidden(copy);
+    return { label: 'copied campaign', slot: copy, notes: notes,
+      text: 'Copied campaign “' + niceName(copy) + '” to ' + acctLabel(destForm),
+      canUndo: function () { return copy.isConnected && !formBusy(destForm); },
       undo: function () {
-        if (!slot.isConnected || !srcForm.isConnected || formBusy(srcForm) || formBusy(destForm)) return false;
-        stripNames(slot);
-        if (next && next.parentNode === parent) parent.insertBefore(slot, next); else parent.appendChild(slot);
-        P.renumber(srcForm); P.renumber(destForm);
-        window.cbUpdateCount(srcForm); window.cbUpdateCount(destForm);
-        var ph = slot.querySelector('input[name$="_page_id"]');
-        if (ph && oldPage) ph.value = oldPage;
-        slot._pageAccount = oldAcct;
-        formIds.forEach(function (p) { p[0].value = p[1]; });
-        window.cbSyncDestination(slot);
-        settleHidden(slot);
-        if (wasOpen && window.cbTree) window.cbTree.open(id); else repaintTree();
+        if (!copy.isConnected || formBusy(destForm)) return false;
+        copy.remove();
+        P.renumber(destForm); window.cbUpdateCount(destForm);
+        repaintTree();
         return true;
       } };
   }
@@ -10437,8 +10464,7 @@ window.cbMove = (function () {
       var to = countryOf(plan.destForm);
       if (countryOf(plan.slot.closest('form')) !== to) {
         var yes = await window.aclConfirm('Audience country becomes ' + to + ' and the name is rebuilt.',
-          { title: (plan.mode === 'copy' ? 'Copy' : 'Move') + ' to ' + to + '?',
-            okLabel: plan.mode === 'copy' ? 'Copy' : 'Move' });
+          { title: 'Copy to ' + to + '?', okLabel: 'Copy' });
         if (!yes) return false;
         why = check(plan);          // за время вопроса задание могло стартовать
         if (why === NOOP) return false;
@@ -10455,11 +10481,11 @@ window.cbMove = (function () {
     }
     var entry = push({ label: res.label, undo: res.undo });
     toast(res.text, { entry: entry, notes: res.notes, warn: warn });
-    if (res.reopen && window.cbTree) window.cbTree.open(res.reopen); else repaintTree();
+    repaintTree();
     return true;
   }
 
-  /* ── ручки и кнопки «Move to…» ─────────────────────────────────────── */
+  /* ── ручки и кнопки «Copy to…» ─────────────────────────────────────── */
   function gripHtml(kind) {
     return '<span class="cbm-grip" draggable="true" data-cbm="' + kind + '" aria-hidden="true"'
       + ' title="' + DRAG_TIP + '">⋮⋮</span>';
@@ -10468,8 +10494,8 @@ window.cbMove = (function () {
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'cbm-moveto'; b.dataset.cbm = kind;
     b.setAttribute('aria-haspopup', 'menu');
-    b.textContent = 'Move to…';
-    b.title = kind === 'ad' ? 'Move or copy this ad to another campaign' : 'Move or copy this campaign to another account';
+    b.textContent = 'Copy to…';
+    b.title = kind === 'ad' ? 'Copy this ad to another campaign' : 'Copy this campaign to another account';
     return b;
   }
   function decorate() {
@@ -10558,24 +10584,22 @@ window.cbMove = (function () {
     if (!acc) return null;
     return { el: acc.querySelector('.cbd-account') || acc, form: formByKey(acc.dataset.acc) };
   }
-  function planFor(hit, copy) {
+  function planFor(hit) {
     if (!hit) return null;
-    if (drag.kind === 'ad') return { kind: 'ad', mode: copy ? 'copy' : 'move', row: drag.node, destSlot: hit.slot, k: hit.k };
-    return { kind: 'camp', mode: copy ? 'copy' : 'move', slot: drag.node, destForm: hit.form };
+    if (drag.kind === 'ad') return { kind: 'ad', row: drag.node, destSlot: hit.slot, k: hit.k };
+    return { kind: 'camp', slot: drag.node, destForm: hit.form };
   }
-  function wantsCopy(e) { return !!(e.ctrlKey || e.altKey); }
 
   document.addEventListener('dragstart', function (e) {
     var grip = e.target.closest ? e.target.closest('.cbm-grip') : null;
     if (!grip) return;
     var n = nodeOf(grip), src = srcSlotOf(n);
     if (!n.node || !src) { e.preventDefault(); return; }
-    if (activeBuild(src)) { e.preventDefault(); toast(MSG_BUILDING, { warn: true }); return; }
     drag = { kind: n.kind, node: n.node };
     pendingPaint = false;
     try {
       e.dataTransfer.setData('text/plain', n.kind === 'ad' ? 'ad' : niceName(src));
-      e.dataTransfer.effectAllowed = 'copyMove';
+      e.dataTransfer.effectAllowed = 'copy';
     } catch (err) { /* не критично */ }
     setTimeout(function () {
       if (!drag) return;
@@ -10587,17 +10611,17 @@ window.cbMove = (function () {
   document.addEventListener('dragover', function (e) {
     if (!drag) return;
     var hit = resolve(e.target);
-    var copy = wantsCopy(e);
-    var plan = hit ? planFor(hit, copy) : null;
+    var plan = hit ? planFor(hit) : null;
     var why = plan ? check(plan) : NOOP;
     var el = hit && hit.el;
     clearOver(el);
     if (el && why === '') {
       e.preventDefault();
-      e.dataTransfer.dropEffect = copy ? 'copy' : 'move';
+      e.dataTransfer.dropEffect = 'copy';
       el.classList.add('cbm-over'); el.classList.remove('cbm-bad');
-      el.setAttribute('data-cbm-chip', copy ? 'Copy here' : 'Move here');
+      el.setAttribute('data-cbm-chip', 'Copy here');
     } else {
+      if (el && why === NOOP) el.title = MSG_SAME_PLACE;
       if (el && why && why !== NOOP) { el.classList.add('cbm-bad'); el.title = why; }
       try { e.dataTransfer.dropEffect = 'none'; } catch (err) { /* ok */ }
     }
@@ -10618,15 +10642,15 @@ window.cbMove = (function () {
   document.addEventListener('drop', function (e) {
     if (!drag) return;
     var hit = resolve(e.target);
-    var plan = hit ? planFor(hit, wantsCopy(e)) : null;
+    var plan = hit ? planFor(hit) : null;
     if (plan) e.preventDefault();
     endDrag();
     if (plan) run(plan);
   });
   document.addEventListener('dragend', endDrag);
 
-  /* ── меню «Move to…» (то же самое без мыши и на сенсорном экране) ───── */
-  function outside(e) { if (menu && !menu.el.contains(e.target) && !e.target.closest('.cbm-moveto')) closeMenu(false); }
+  /* ── меню «Copy to…» (то же самое без мыши и на сенсорном экране) ───── */
+  function outside(e) { if (menu && !menu.el.contains(e.target) && !e.target.closest('.cbm-moveto, .cbm-grip')) closeMenu(false); }
   function closeMenu(focusBack) {
     if (!menu) return;
     var opener = menu.opener;
@@ -10645,28 +10669,26 @@ window.cbMove = (function () {
         if (!cbFormAccount(f) || cbFormAccount(f) === '?') return;
         var reason = formBusy(f) ? busyMsg(f) : '';
         if (m.kind === 'camp') {
-          var cplan = { kind: 'camp', mode: m.mode, slot: m.node, destForm: f };
-          if (!reason) reason = check(cplan) === NOOP ? 'Already in this account' : reasonOnly(cplan);
+          if (!reason) reason = reasonOnly({ kind: 'camp', menu: true, slot: m.node, destForm: f });
         }
         var drafts = f.querySelectorAll('.cb-slot').length;
         item(acctLabel(f), { reason: reason, sub: m.kind === 'ad' ? drafts + (drafts === 1 ? ' campaign' : ' campaigns') : '',
           go: function () {
-            if (m.kind === 'camp') { closeMenu(true); run({ kind: 'camp', mode: m.mode, slot: m.node, destForm: f }); }
+            if (m.kind === 'camp') { closeMenu(true); run({ kind: 'camp', menu: true, slot: m.node, destForm: f }); }
             else { m.form = f; m.step = 1; m.filter = ''; renderMenu(); }
           } });
       });
     } else if (m.step === 1) {
       $all(m.form, '.cb-slot').forEach(function (s) {
         var reason = formBusy(m.form) ? busyMsg(m.form) : (activeBuild(s) ? MSG_BUILDING : '');
-        if (!reason && adCount(s) >= MAX_ADS && (m.mode === 'copy' || s !== m.node.closest('.cb-slot'))) reason = 'A campaign can hold up to 100 ads.';
+        if (!reason && adCount(s) >= MAX_ADS) reason = 'A campaign can hold up to 100 ads.';
         item(niceName(s), { reason: reason, sub: adCount(s) + (adCount(s) === 1 ? ' ad' : ' ads'),
           go: function () { m.slot = s; m.step = 2; m.filter = ''; renderMenu(); } });
       });
     } else {
       for (var k = 0; k < setCount(m.slot); k += 1) (function (k) {
-        var plan = { kind: 'ad', mode: m.mode, row: m.node, destSlot: m.slot, k: k };
-        var r = check(plan);
-        item('Ad set ' + (k + 1), { reason: r === NOOP ? 'Already here' : r,
+        var plan = { kind: 'ad', menu: true, row: m.node, destSlot: m.slot, k: k };
+        item('Ad set ' + (k + 1), { reason: reasonOnly(plan),
           go: function () { closeMenu(true); run(plan); } });
       })(k);
     }
@@ -10675,17 +10697,6 @@ window.cbMove = (function () {
   function renderMenu() {
     var m = menu, el = m.el;
     el.textContent = '';
-    var seg = document.createElement('div');
-    seg.className = 'cbm-seg'; seg.setAttribute('role', 'group');
-    ['move', 'copy'].forEach(function (mode) {
-      var b = document.createElement('button');
-      b.type = 'button'; b.className = 'cbm-seg-btn'; b.dataset.mode = mode;
-      b.textContent = mode === 'move' ? 'Move' : 'Copy';
-      b.setAttribute('aria-pressed', m.mode === mode ? 'true' : 'false');
-      b.addEventListener('click', function () { m.mode = mode; renderMenu(); });
-      seg.appendChild(b);
-    });
-    el.appendChild(seg);
     var title = document.createElement('div');
     title.className = 'cbm-menu-title';
     title.textContent = m.step === 0 ? 'Account'
@@ -10739,20 +10750,18 @@ window.cbMove = (function () {
     closeMenu(false);
     var n = nodeOf(btn);
     if (!n.node) return;
-    var src = srcSlotOf(n);
-    if (src && activeBuild(src)) { toast(MSG_BUILDING, { warn: true }); return; }
     var el = document.createElement('div');
-    el.className = 'cbm-menu'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Move or copy to…');
+    el.className = 'cbm-menu'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Copy to…');
     document.body.appendChild(el);
     var r = btn.getBoundingClientRect();
     el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
     el.style.top = Math.min(r.bottom + 4, Math.max(8, window.innerHeight - 340)) + 'px';
-    menu = { el: el, opener: btn, kind: n.kind, node: n.node, mode: 'move', step: 0, filter: '' };
+    menu = { el: el, opener: btn, kind: n.kind, node: n.node, step: 0, filter: '' };
     document.addEventListener('mousedown', outside, true);
     renderMenu();
   }
   document.addEventListener('click', function (e) {
-    var b = e.target.closest ? e.target.closest('.cbm-moveto') : null;
+    var b = e.target.closest ? e.target.closest('.cbm-moveto, .cbm-grip') : null;
     if (!b) return;
     e.preventDefault(); e.stopPropagation();
     openMenu(b);
@@ -10767,17 +10776,8 @@ window.cbMove = (function () {
     if (undoLatest()) e.preventDefault();
   });
 
-  /* Запертая карточка тянуться не должна - подсказка на ручке говорит почему. */
-  document.addEventListener('mouseover', function (e) {
-    var grip = e.target.closest ? e.target.closest('.cbm-grip') : null;
-    if (!grip) return;
-    var src = srcSlotOf(nodeOf(grip)), locked = !!(src && activeBuild(src));
-    grip.classList.toggle('cbm-locked', locked);
-    grip.title = locked ? MSG_BUILDING : DRAG_TIP;
-  });
-
   /* ═══ ACL-2456: «Copy to accounts» ═════════════════════════════════════
-     Копия кампании в формы других аккаунтов тем же узлом, что «Move to… → Copy» (doCamp): ссылка - своя у формы
+     Копия кампании в формы других аккаунтов тем же узлом, что перетаскивание (doCamp): ссылка - своя у формы
      аккаунта, Страница снова Automatic, id готовых Instant Form сняты. Сверх этого: сервер по карте аккаунтов
      говорит про пиксель и валюту (/api/copy-to-accounts/targets), а бюджет в другой или неизвестной валюте
      не переносится - его вводит человек. Копия - обычный черновик: Preview и Check plan, как у любого. */
@@ -17345,7 +17345,41 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var ph = window.cbLayout ? window.cbLayout.adsetName(name, k, '') : name;
       if (inp.placeholder !== ph) inp.placeholder = ph;
     });
+    /* ACL-2393: имя говорит об одном пресете таргетинга, выбран другой. */
+    var selected = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hidden'), function (h) { return h.value; });
+    var L = window.cbLayout;
+    var check = L && REF && REF.targetings
+      ? L.nameTargetingCheck(name, selected, REF.targetings, [countryCode(country), os || 'All', ctype, abbrevAsset(asset), asset, age, todayDDMM()])
+      : { state: 'none', said: [], have: [] };
+    check.text = L ? L.nameTargetingText(check) : '';
+    slot._cbNameCheck = check;
+    var box = slot.querySelector('[data-name-check]');
+    if (box) {
+      box.hidden = !check.text;
+      var msg = box.querySelector('.cb-name-check-text');
+      if (msg) msg.textContent = check.text ? '⚠ ' + check.text : '';
+      var fix = box.querySelector('.cb-name-fix');
+      if (fix) {
+        var one = check.said.length === 1 ? check.said[0] : '';
+        fix.hidden = !(check.text && one);
+        fix.dataset.code = one;
+        fix.textContent = 'Use ' + one;
+      }
+    }
   };
+
+  /* ACL-2393: «Use Green» — то же, что выбрать строку в списке таргетинга
+     у первого набора. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.cb-name-fix') : null;
+    if (!b) return;
+    var slot = b.closest('.cb-slot');
+    var wrap = slot && slot.querySelector('.cb-targeting-wrap');
+    var code = b.dataset.code || '';
+    if (!wrap || !code) return;
+    var hit = ((REF && REF.targetings) || []).filter(function (t) { return t.code === code; })[0];
+    cbTargetingPick(wrap, code, (hit && hit.fb_interest) || '');
+  });
 
   // ── Searchable select ─────────────────────────────────────────────────
   function initCbSel(wrap) {
@@ -17417,6 +17451,32 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   // ── Targeting code picker ─────────────────────────────────────────────
+  /* Выбор строки таргетинга: из списка и из «Use <code>» (ACL-2393). */
+  window.cbTargetingPick = function(wrap, code, interest) {
+    var input    = wrap.querySelector('.cb-targeting-search');
+    var hidden   = wrap.querySelector('.cb-targeting-hidden');
+    var hint     = wrap.querySelector('.cb-targeting-hint');
+    var dropdown = wrap.querySelector('.cb-sel-dropdown');
+    if (input) input.value = code;
+    /* В отправляемое поле идёт КОД, а не строка интересов.
+
+       Интересы здесь и лежали, и из-за этого детальный таргетинг не
+       ставился никогда. Сервер по этому полю ищет таргет в библиотеке
+       («PF» → «Foreign exchange market, Investor, …»), а получал уже
+       готовые интересы — по ним ничего не находится, и таргетинг
+       молча очищался. На экране при этом всё выглядело выбранным, и
+       даже имя кампании несло код.
+
+       Проверено 14.09: lookup('Foreign exchange market, …') → '',
+       lookup('PF') → полная строка интересов. */
+    if (hidden) hidden.value = code;
+    if (hint)   hint.textContent = interest;
+    if (dropdown) dropdown.hidden = true;
+    var slot = wrap.closest('.cb-slot');
+    if (slot) cbUpdateName(slot);
+    cbMarkMissingCreatives();
+  };
+
   window.cbTargetingSearch = function(input) {
     var wrap = input.closest('.cb-targeting-wrap');
     if (!wrap) return;
@@ -17482,26 +17542,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     dropdown.querySelectorAll('.cb-targeting-opt').forEach(function(opt) {
       opt.addEventListener('mousedown', function(e) {
         e.preventDefault();
-        var interest = opt.dataset.interest || '';
-        var code     = opt.dataset.code || '';
-        input.value  = code;
-        /* В отправляемое поле идёт КОД, а не строка интересов.
-
-           Интересы здесь и лежали, и из-за этого детальный таргетинг не
-           ставился никогда. Сервер по этому полю ищет таргет в библиотеке
-           («PF» → «Foreign exchange market, Investor, …»), а получал уже
-           готовые интересы — по ним ничего не находится, и таргетинг
-           молча очищался. На экране при этом всё выглядело выбранным, и
-           даже имя кампании несло код.
-
-           Проверено 14.09: lookup('Foreign exchange market, …') → '',
-           lookup('PF') → полная строка интересов. */
-        if (hidden) hidden.value = code;
-        if (hint)   hint.textContent = interest;
-        dropdown.hidden = true;
-        var slot = wrap.closest('.cb-slot');
-        if (slot) cbUpdateName(slot);
-        cbMarkMissingCreatives();
+        cbTargetingPick(wrap, opt.dataset.code || '', opt.dataset.interest || '');
       });
     });
   };
@@ -18757,6 +18798,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<div class="cb-name-box">' +
       '<div class="cb-name-auto">Auto name: <b data-auto-name></b></div>' +
       '<input type="text" data-keep="name_override" class="cb-input cb-name-override" value="" placeholder="Optional: your own name" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Used instead of the auto name only if you fill it in">' +
+      /* ACL-2393: имя и таргетинг называют разные пресеты (только предупреждение). */
+      '<div class="cb-name-check" data-name-check role="status" hidden><span class="cb-name-check-text"></span> <button type="button" class="cb-name-fix" hidden>Use</button></div>' +
       '</div>' +
       '<span class="cb-label">Asset / Offer</span>' +
       '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
@@ -19779,8 +19822,14 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
-  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
-  else pfAsk(null);
+  window.CB_CONFIRM_WAIT = true;          // отметку на кнопке снимет pfAsk, когда откроется окно
+  var pfAskShown = function (pf) {
+    window.CB_CONFIRM_WAIT = false;
+    if (window.cbPublishPending) window.cbPublishPending.end();
+    pfAsk(pf);
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAskShown);
+  else pfAskShown(null);
 };
 
 /* ── ACL-1819: серверные проверки pre-flight audit ──────────────────────
@@ -19977,6 +20026,69 @@ function cbPfUnavailable() {
   aclAlert(CB_PF_UNAVAILABLE);
 }
 
+/* Нажатие Publish видно сразу. Между нажатием и окном подтверждения идёт проверка плана
+ * (секунды – минуты): без отметки владелец думал, что кнопка не нажалась (08.11). Пока
+ * ждём, кнопки Publish выключены и считают «Checking before publishing… 0:12». Отметка
+ * снимается, когда открывается окно подтверждения или проверка остановила публикацию;
+ * страховка — 5 минут. */
+window.cbPublishPending = (function () {
+  var since = 0, timer = 0, LIMIT_MS = 5 * 60 * 1000;
+  var SEL = '.cbd-publish-all, .cb-publish-btn';
+  function label() {
+    var s = Math.max(0, Math.floor((Date.now() - since) / 1000));
+    return 'Checking before publishing… ' + Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+  }
+  function paint() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    Array.prototype.forEach.call(document.querySelectorAll(SEL), function (b) {
+      if (since) {
+        if (b.dataset.cbIdleLabel === undefined) {
+          b.dataset.cbIdleLabel = b.textContent;
+          b.dataset.cbPrevDisabled = b.disabled ? '1' : '0';
+          var pb = b.getAttribute('aria-busy');
+          b.dataset.cbPrevBusy = pb === null ? '' : pb;
+        }
+        b.disabled = true;
+        b.classList.add('is-pending');
+        b.setAttribute('aria-busy', 'true');
+        var t = label();
+        if (b.textContent !== t) b.textContent = t;
+      } else if (b.dataset.cbIdleLabel !== undefined) {
+        b.textContent = b.dataset.cbIdleLabel;
+        b.classList.remove('is-pending');
+        /* Возвращаем то, что было до нажатия (кнопка могла быть выключена проверкой формы,
+           aria-busy мог стоять от очереди); ворота потом пересчитают своё в refreshAudit. */
+        b.disabled = b.dataset.cbPrevDisabled === '1';
+        if (b.dataset.cbPrevBusy) b.setAttribute('aria-busy', b.dataset.cbPrevBusy);
+        else b.removeAttribute('aria-busy');
+        delete b.dataset.cbIdleLabel;
+        delete b.dataset.cbPrevDisabled;
+        delete b.dataset.cbPrevBusy;
+      }
+    });
+  }
+  var api = {
+    start: function () {
+      if (since) return;
+      since = Date.now();
+      paint();
+      if (typeof setInterval === 'function') timer = setInterval(function () {
+        if (Date.now() - since > LIMIT_MS) api.end(); else paint();
+      }, 1000);
+    },
+    end: function () {
+      if (!since) return;
+      since = 0;
+      if (timer) { clearInterval(timer); timer = 0; }
+      paint();
+      if (window.cbTree && window.cbTree.refreshAudit) window.cbTree.refreshAudit();
+    },
+    active: function () { return !!since; },
+    paint: paint
+  };
+  return api;
+})();
+
 /* Ворота Publish: клиентские ошибки блокируют сразу; при API — серверные проверки
  * обновляются перед отправкой (кроме свежих), и ошибка из них блокирует тоже.
  * items: [{form, slots}]. proceed() вызывается, только если ошибок нет. */
@@ -19994,7 +20106,9 @@ window.cbPreflightGate = function (items, proceed) {
       return null;                         // состояние аудита не читается — тоже запрет
     }
   }
+  var pend = window.cbPublishPending;
   function stop(bad) {
+    if (pend) pend.end();
     tree.refreshAudit();
     var id = bad[0] && bad[0].dataset.cbdId;
     if (id) tree.open(id);
@@ -20003,12 +20117,26 @@ window.cbPreflightGate = function (items, proceed) {
   if (!bad) { cbPfUnavailable(); return; }
   if (bad.length) { stop(bad); return; }
   function done() {
+    try { doneInner(); } catch (err) {
+      window.CB_PF_RUNNING = false;
+      window.CB_CONFIRM_WAIT = false;
+      if (pend) pend.end();
+      throw err;
+    }
+  }
+  function doneInner() {
     var again = blocked();
-    if (!again) { cbPfUnavailable(); return; }
+    if (!again) { if (pend) pend.end(); cbPfUnavailable(); return; }
     if (again.length) { stop(again); return; }
     window.CB_PF_WARN = cbPfWarnings(slots);
+    window.CB_CONFIRM_WAIT = false;
     proceed();
+    /* Окно подтверждения откроется после запроса готовности аккаунтов (pfAsk снимет отметку);
+       если публикация вернулась раньше (нечего собирать, уже собирается) — снимаем сразу. */
+    if (pend && !window.CB_CONFIRM_WAIT) pend.end();
   }
+  if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
+  if (pend) pend.start();
   if (!cbApiMode()) { done(); return; }
   /* ACL-2266: уходят ВСЕ выбранные кампании; нетронутые сервер отдаёт из своего кэша вердиктов (без Meta). */
   var pending = [];
@@ -20016,13 +20144,19 @@ window.cbPreflightGate = function (items, proceed) {
     if (it.slots.length) pending.push({ form: it.form, slots: it.slots });
   });
   if (!pending.length) { done(); return; }
-  if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
   window.CB_PF_RUNNING = true;
   var btn = document.querySelector('.cbd-publish-all');
   if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing… Publishing starts only after you confirm in the next window.'; }
-  var jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
+  var jobs;
+  try {
+    jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
+  } catch (err) {
+    window.CB_PF_RUNNING = false;
+    if (pend) pend.end();
+    throw err;
+  }
   Promise.all(jobs).then(function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); done(); },
-    function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); });
+    function () { window.CB_PF_RUNNING = false; if (pend) pend.end(); tree.refreshAudit(); });
 };
 
 /* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
@@ -20474,12 +20608,24 @@ window.cbCheckPlan = function (picked, out, btn, force) {
     return typeof cbFormAccount === 'function' ? cbFormAccount(x.form) : cbFormTitle(x.form);
   });
   var waiting = {};
+  // ACL-2393: живое состояние карточек, не строки плана (они могут прийти из кэша вердиктов).
+  var nameDiffers = 0;
+  forms.forEach(function (x) {
+    Array.prototype.forEach.call(x.only || x.form.querySelectorAll('.cb-slot'), function (slot) {
+      if (typeof cbUpdateName === 'function') cbUpdateName(slot);
+      if (slot._cbNameCheck && slot._cbNameCheck.text) nameDiffers += 1;
+    });
+  });
+  var nameNote = nameDiffers
+    ? '<div class="cbd-plan-head" style="color:var(--warn)">⚠ ' + nameDiffers + (nameDiffers === 1 ? ' campaign' : ' campaigns')
+      + ': the name and the targeting differ (see the line on the card). Check plan is not affected.</div>'
+    : '';
   function render() {
     if (out.hidden) return;   // закрыли, пока ждали: не открывать заново
     var notes = pending.filter(function (a) { return a && waiting[a]; }).map(function (a) {
       return '<div class="cbd-plan-head">' + aclEscHtml(a) + ': ' + aclEscHtml(waiting[a]) + '</div>';
     }).join('');
-    out.innerHTML = cbPlanFrame(parts.filter(Boolean).join('')
+    out.innerHTML = cbPlanFrame(nameNote + parts.filter(Boolean).join('')
       + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : '') + notes);
   }
   /* Ждущие места профиля аккаунты: строка очереди (только память сервера, раз в 2 с). */
@@ -21559,6 +21705,20 @@ window.cbPublish = function(form) {
     : [];
   if (missingFiles.length) bodyHtml = window.cbMissingCreativesHtml(missingFiles) + bodyHtml;
 
+  // ACL-2393: имя называет один пресет, выбран другой. Не блокирует, собрать можно.
+  var nameDiffers = [];
+  (onlySlot ? [onlySlot] : (ticked.length ? ticked : allSlots)).forEach(function(s) {
+    if (typeof cbUpdateName === 'function') cbUpdateName(s);
+    var c = s._cbNameCheck;
+    if (c && c.text) nameDiffers.push({ name: cbSlotTitle(s), text: c.text, state: c.state, have: c.have });
+  });
+  nameDiffers.forEach(function(d) {
+    bodyHtml = '<div class="cb-warn-block">⚠ Campaign “' + aclEscHtml(d.name) + '”: ' + aclEscHtml(d.text)
+      + '<br><span style="opacity:.75">You can still build – the campaign goes out '
+      + (d.state === 'nothing' ? 'without detailed targeting.' : 'with ' + aclEscHtml(d.have.join(', ')) + '.') + '</span></div>'
+      + bodyHtml;
+  });
+
   if (lostTargeting.length) {
     var names = lostTargeting.map(aclEscHtml).join(', ');
     bodyHtml = '<div class="cb-warn-block">⚠ Targeting not selected: <b>' + names + '</b>'
@@ -21591,13 +21751,19 @@ window.cbPublish = function(form) {
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
-  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway'
+  }, { confirmLabel: (warn || lostTargeting.length || nameDiffers.length) ? 'Build anyway'
          : (cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft') });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
-  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch([accLabel]).then(pfAsk);
-  else pfAsk(null);
+  window.CB_CONFIRM_WAIT = true;          // отметку на кнопке снимет pfAsk, когда откроется окно
+  var pfAskShown = function (pf) {
+    window.CB_CONFIRM_WAIT = false;
+    if (window.cbPublishPending) window.cbPublishPending.end();
+    pfAsk(pf);
+  };
+  if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch([accLabel]).then(pfAskShown);
+  else pfAskShown(null);
 };
 
 // Весь аккаунт без превью — кнопка Publish на странице страны. Идёт через
@@ -21676,6 +21842,22 @@ function cbTeachMarkerHtml(steps, cls) {
   return '';
 }
 
+// ACL-2392: the builder never prints raw Meta text, codes or ids. A failure with details gets one link that opens
+// the header "Recent runs" popup on this job, where the full text lives (recent_runs.js, with Copy details).
+var cbDetailsJobId = '';
+function cbFailureDetailsHtml(details) {
+  var d = details && typeof details === 'object' ? details : null;
+  if (!d || !Object.keys(d).length) return '';
+  return '<div class="cb-fail-link" style="margin-top:0.25rem"><a href="#recent-runs" class="cb-open-details" data-job="'
+    + aclEscHtml(cbDetailsJobId) + '">Details in Recent runs</a></div>';
+}
+document.addEventListener('click', function(ev) {
+  var a = ev.target && ev.target.closest ? ev.target.closest('.cb-open-details') : null;
+  if (!a) return;
+  ev.preventDefault();
+  if (window.aclRecentRunsOpen) window.aclRecentRunsOpen(a.getAttribute('data-job') || '');
+});
+
 // ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
 // список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
 // подробности. Данные — `r.problems` от робота (failure_policy.problems);
@@ -21723,7 +21905,8 @@ function cbProblemsHtml(r) {
     tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
   }
   items.forEach(function(p) {
-    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
+    // ACL-2392: the raw Meta text (codes, fbtrace) is not shown in the builder; it lives in Recent runs.
+    tech.push('<div>' + aclEscHtml(p.step || '') + '</div>');
   });
   if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
   if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
@@ -21738,6 +21921,7 @@ function cbProblemsHtml(r) {
   h += '<details class="cb-problems-tech"><summary>Technical details '
     + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  h += cbFailureDetailsHtml(r.failure && r.failure.details);
   return h + '</div>';
 }
 
@@ -21836,6 +22020,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
+    cbDetailsJobId = job.job_id || jobId;  // ACL-2392: the "Details in Recent runs" link targets this job
     var done = job.done_count || 0;
     var total = job.total || 0;
     var hasFatal = (job.errors || []).length > 0;
@@ -21937,6 +22122,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : (r.not_started ? ' style="color:var(--warn);border-color:var(--warn)"' : '');   // ACL-2299: not started, not failed
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
+      if (r.failure && !(r.problems || []).length) html += cbFailureDetailsHtml(r.failure.details);
       if (r.blocking_failures && r.blocking_failures.length) {
         html += '<div class="cb-status-err">Do not publish: '
              + r.blocking_failures.map(aclEscHtml).join(', ') + '</div>';
@@ -21952,8 +22138,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }
     });
-    (job.errors || []).forEach(function(e) {
-      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
+    (job.errors || []).forEach(function(e, i) {
+      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e)
+        + cbFailureDetailsHtml((job.error_details || [])[i]) + '</div>';
     });
     if (!isRunning) html += cbCloseProfileHtml(job);
     return html;

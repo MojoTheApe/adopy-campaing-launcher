@@ -37,6 +37,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import error_catalog as _catalog
+from src.fb_api import plain_errors as _plain
 from src.fb_api import facts_cache as _facts_cache
 from src.fb_api import form_create as _fc
 from src.fb_api import form_locale as _fl
@@ -51,6 +52,7 @@ from src.fb_api import creative_recovery as _cr
 from src.fb_api import name_receipt as _nr
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 
 log = logging.getLogger(__name__)
 
@@ -318,23 +320,33 @@ class PlanError(ValueError):
 
     #: Список проблем для дашборда (как у RPA, ACL-1437); у обычного отказа плана пуст.
     problems: tuple = ()
+    #: ACL-2392: key of `plain_errors.TABLE` when the raise site knows the class; empty -> classify by text.
+    key: str = ""
+
+    def __init__(self, *args: Any, key: str = ""):
+        super().__init__(*args)
+        if key:
+            self.key = key
 
 
 class RulesViolation(PlanError):
     """Задание нарушает реестр правил Meta (ACL-1805): стоп до первой записи."""
 
     def __init__(self, message: str, problems: list[dict]):
-        super().__init__(message)
+        super().__init__(message, key="meta_rule")
         self.problems = problems
 
 
 class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
-    def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped"):
+    def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
+                 failure: Any = None):
         super().__init__(message)
         self.created = dict(created or {})
         self.kind = kind
+        #: ACL-2392: the plain text for the buyer (`plain_errors.Failure`); None -> classified from the message.
+        self.failure = failure
 
 
 # ───────────────────────── план из черновика ─────────────────────────
@@ -969,7 +981,7 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     if str(row.get("account_status")) != "1":
         _log_account_state(act, row)
         raise PlanError(f"The ad account is not active (account_status {row.get('account_status')}). "
-                        "Nothing was created.")
+                        "Nothing was created.", key="account_blocked")
     acc = client.account(act)
     got = str(acc.get("account_id") or "").strip()
     if got != digits:      # ACL-2267: пустой account_id в ответе - тоже несовпадение
@@ -1045,7 +1057,7 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
                             f"this ad account can advertise from ({len(facts.pages)} found). "
-                            "This account cannot advertise using that Page. Refresh pages and choose again.")
+                            "This account cannot advertise using that Page. Refresh pages and choose again.", key="page_unavailable")
     elif facts.pages:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
@@ -1069,13 +1081,13 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
     for s in plan.ad_sets:
         # ACL-1768: пиксель набора, если задан, тоже должен быть на кабинете.
         if s.pixel_id and not s.instant and s.pixel_id not in facts.pixels:
-            raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.")
+            raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.", key="pixel_unavailable")
     if plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
-                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
+                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.", key="pixel_unavailable")
     elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
         return
     elif len(facts.pixels) == 1:
@@ -1083,7 +1095,7 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         plan.pixel_source = "account default"
     else:
         raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
-                        "the API backend needs exactly one")
+                        "the API backend needs exactly one", key="pixel_unavailable")
 
 
 def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -1188,7 +1200,7 @@ class TargetingResolver:
             if code:
                 break
         if not code:
-            raise PlanError(f"Country {key!r} was not found by Meta targeting search")
+            raise PlanError(f"Country {key!r} was not found by Meta targeting search", key="targeting_term")
         self._geo[key.upper()] = code
         self._facts.put_term(wkey, {"code": code})
         self._touched.add(wkey)
@@ -1236,7 +1248,7 @@ class TargetingResolver:
             if pick:
                 break
         if not pick:
-            raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search")
+            raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search", key="targeting_term")
         self._locale[lang] = int(pick["key"])
         self.locale_names[lang] = str(pick.get("name") or lang)
         pick_name = str(pick.get("name") or "")
@@ -1485,6 +1497,8 @@ class Outcome:
     manual_required: list[str] = field(default_factory=list)
     #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
     campaign_confirmed_paused: bool = False
+    #: ACL-2392: plain-English version of `error` (`plain_errors.Failure`); `error` stays raw for logs and gating.
+    failure: Any = None
     #: ACL-2250: (кабинет, имя из билдера) квитанции, когда сверка дошла до конца без остановки; конец задания
     #: (`publisher.finish_name_records`) удаляет её. Пусто - квитанция остаётся, следующий запуск допишет эту же кампанию.
     name_receipt_done: tuple = ()
@@ -1728,10 +1742,19 @@ class CampaignCreator:
             self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
         return show
 
-    def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
-               *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False, children_active: bool = False, form_page: str = "",
-               upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
+    def _write(self, out: Outcome, what: str, *args: Any, **kwargs: Any) -> str:
+        """ACL-2392: `_write_inner` plus the plain-words stage on whatever stops it ("while creating ad set ...")."""
+        try:
+            return self._write_inner(out, what, *args, **kwargs)
+        except (CreationStopped, GraphError, GraphStop, WriteUnknown) as exc:
+            if not getattr(exc, "stage", ""):
+                exc.stage = _plain.stage_of(what)
+            raise
+
+    def _write_inner(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
+                     *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
+                     on_ad: bool = False, children_active: bool = False, form_page: str = "",
+                     upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
         ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
@@ -1830,10 +1853,14 @@ class CampaignCreator:
                                            form_page=form_page, upload=upload, _resent=True)
                 else:
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
+                    # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
+                    rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
+                                 if exc.subcode in _REJECTION_SUBCODES else None)
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
-                        created=out.created, kind="unknown") from exc
+                        created=out.created, kind="unknown", failure=rejection) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -2647,6 +2674,86 @@ class CampaignCreator:
     def _end_dt(self, ad_set: AdSetPlan) -> datetime:
         return self._local_dt(ad_set, ad_set.end_time, "end")
 
+    #: ACL-2465: запас до старта, сдвинутого «на сейчас» (запись в Meta ещё идёт), и шаг округления.
+    TODAY_START_MARGIN = timedelta(minutes=5)
+    TODAY_START_STEP_MIN = 15
+
+    def _moved_start(self, local_now: datetime, now: datetime) -> datetime:
+        """Ближайшая четверть часа не раньше now + 5 минут (секунды округляются вверх; расчёт в UTC)."""
+        t = now.astimezone(timezone.utc) + self.TODAY_START_MARGIN
+        if t.second or t.microsecond:
+            t = t.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        t += timedelta(minutes=(-t.minute) % self.TODAY_START_STEP_MIN)
+        return t.astimezone(local_now.tzinfo)
+
+    def _move_passed_start_of_today(self, ad_set: AdSetPlan) -> None:
+        """Lifetime с первым днём «сегодня»: прошедший час старта сдвигается вперёд, а не стопорит публикацию.
+
+        ACL-2465: форма задаёт старт сегодняшнего дня как «следующий целый час», а задание может ждать
+        очереди (процессор, память) дольше - 17:51 отправлено со стартом 18:00, проверено в 18:06.
+        Старт того же дня (по поясу команды), уже прошедший, становится ближайшей четвертью часа
+        не раньше чем через 5 минут. Старт прошлых дней по-прежнему отказ; Daily не трогается.
+        Сдвиг виден человеку (`_start_move_notes`), а повторный запуск сверяет такой старт мягко
+        (`_moved_start_matches`): в плане остаётся исходный старт, в Meta уже сдвинутый.
+        """
+        if not ad_set.time_zone or not ad_set.end_time:
+            return
+        start, now = self._start_dt(ad_set), self.now()
+        if start > now:
+            return
+        local_now = now.astimezone(start.tzinfo)
+        if start.date() != local_now.date():
+            return
+        nxt = self._moved_start(local_now, now)
+        new = nxt.strftime("%Y-%m-%dT%H:%M")
+        log.info("ACL-2465: ad set %r start %s (%s) has passed; moved to %s", ad_set.name,
+                 ad_set.start_time, ad_set.time_zone, new)
+        if not hasattr(self, "_start_move_notes"):
+            self._start_move_notes = []
+        self._start_move_notes.append(
+            f"Ad set {ad_set.name!r}: the start {ad_set.start_time[-5:]} ({self._zone_note(ad_set)}) had passed "
+            f"while the job waited in the queue; moved to {new[-5:]}"
+            + ("" if new[:10] == ad_set.start_time[:10] else f" on {new[:10]}") + ".")
+        if not hasattr(self, "_moved_from"):
+            self._moved_from = {}
+        self._moved_from[id(ad_set)] = ad_set.start_time[-5:]
+        ad_set.start_time = new
+
+    def _drain_start_move_notes(self, out: Outcome) -> None:
+        """Сдвиг старта - в предупреждения результата (запуск и Check plan)."""
+        for note in getattr(self, "_start_move_notes", []):
+            if note not in out.warnings:
+                out.warnings.append(note)
+        self._start_move_notes = []
+
+    def _moved_start_matches(self, ad_set: AdSetPlan, meta_start: Any) -> bool:
+        """Старт набора в Meta - это сдвинутый (ACL-2465) старт плана при повторе/продолжении?
+
+        Первый запуск сдвинул прошедший старт сегодняшнего дня, Meta хранит сдвинутый, а билдер
+        отдаёт прежний. Совпадением считается, только если ВСЁ верно: Lifetime в поясе команды;
+        старт плана уже прошёл; старт Meta не раньше старта плана; он в тот же день пояса команды
+        либо в первые минуты следующего (сдвиг через полночь); и не дальше, чем сдвиг мог уйти от
+        «сейчас». Будущий старт плана и любая другая правка сравниваются строго.
+        """
+        if not ad_set.time_zone or not ad_set.end_time or not ad_set.start_time:
+            return False
+        try:
+            plan_start = self._start_dt(ad_set)
+            got = datetime.strptime(str(meta_start), "%Y-%m-%dT%H:%M:%S%z")
+        except (ValueError, PlanError):
+            return False
+        now = self.now()
+        if plan_start > now or got < plan_start:
+            return False
+        if got > now + self.TODAY_START_MARGIN + timedelta(minutes=self.TODAY_START_STEP_MIN):
+            return False
+        gl = got.astimezone(plan_start.tzinfo)
+        day = plan_start.date()
+        if gl.date() == day:
+            return True
+        return gl.date() == day + timedelta(days=1) and gl.hour == 0 and gl.minute <= (
+            self.TODAY_START_MARGIN.seconds // 60 + self.TODAY_START_STEP_MIN)
+
     def start_iso(self, ad_set: AdSetPlan) -> str:
         """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
         return self._start_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -2949,7 +3056,10 @@ class CampaignCreator:
         if targeting.get("genders") or t.get("genders"):
             check("gender", targeting.get("genders") or [], t.get("genders") or [])
         if ad_set.start_time:
-            check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
+            if self._moved_start_matches(ad_set, row.get("start_time")):
+                check("start_time", _utc(row.get("start_time")), _utc(row.get("start_time")))
+            else:
+                check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
         # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
         check("publisher_platforms", targeting.get("publisher_platforms") or [],
               t.get("publisher_platforms") or [])
@@ -3035,22 +3145,55 @@ class CampaignCreator:
             self._run(plan, out)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
             out.problems = list(exc.problems)
+            out.failure = self._failure(plan, out, exc, kind="plan")
         except WritesBlocked as exc:
             out.error, out.stop_kind = f"Not written: {exc}", "blocked"
+            out.failure = self._failure(plan, out, exc, kind="blocked")
         except GraphStop as exc:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.error += self._left_in_meta(plan, out)
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except GraphError as exc:
             self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind="graph_error")
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
+            out.failure = self._failure(plan, out, exc, kind="unknown")
         return out
+
+    @staticmethod
+    def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
+        """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
+        stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
+        if failure.key == "targeting_merged":
+            planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
+            hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))
+            failure.details.update({"offending": hits, "offending_note": note})
+        if out.campaign_id and not failure.left:
+            failure.left = _plain.left_in_meta(
+                campaign=True, adsets=len(out.adset_ids), ads=len(out.ad_ids), name=plan.name,
+                empty_note=failure.key == "targeting_merged",
+                not_created=[ad.index for s_ in plan.ad_sets for ad in s_.ads if ad.index not in out.ad_media])
+        return failure
+
+    @staticmethod
+    def _stage_from_outcome(out: Outcome) -> str:
+        """A stop outside a write: where the run was, from what it had created so far."""
+        if not out.campaign_id:
+            return "before the campaign was created"
+        if not out.adset_ids:
+            return "after the campaign was created, before any ad set"
+        if not out.ad_ids:
+            return "after the ad set was created, before any ad"
+        return "after some ads were created"
 
     @staticmethod
     def _left_in_meta(plan: CampaignPlan, out: Outcome) -> str:
@@ -3121,7 +3264,7 @@ class CampaignCreator:
         name = self.facts.page_names.get(pid, pid)
         if plan.act != self.facts.act:
             raise PlanError(f"The Page {name!r} ({pid}) validation account differs from the verified ad account. "
-                            "Nothing was created.")
+                            "Nothing was created.", key="page_unavailable")
         cache = self.__dict__.setdefault("_profile_page_checks", {})
         key = (plan.act, pid, plan.link)
         if key not in cache:
@@ -3130,7 +3273,7 @@ class CampaignCreator:
         if cache[key]:
             raise PlanError(f"The Page {name!r} ({pid}) belongs to the profile, not to this ad account, and "
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
-                            "to the ad account in Business Manager. Nothing was created.")
+                            "to the ad account in Business Manager. Nothing was created.", key="page_unavailable")
 
     def _prepare(self, plan: CampaignPlan, out: Outcome, *,
                  writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
@@ -3175,11 +3318,11 @@ class CampaignCreator:
                            if writing and ad.kind == "video" else ad.path)
                     data = self.load_media(src, ad.kind)
                 except OSError as exc:
-                    raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
+                    raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
                 if not data or len(data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
-                                    f"{limit // (1024 * 1024)} MB")
+                                    f"{limit // (1024 * 1024)} MB", key="creative_file")
                 files[ad.path] = data
                 if ad.vertical_path:
                     try:
@@ -3187,11 +3330,11 @@ class CampaignCreator:
                                 if writing and ad.vertical_kind == "video" else ad.vertical_path)
                         vdata = self.load_media(vsrc, ad.vertical_kind)
                     except OSError as exc:
-                        raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})") from exc
+                        raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
                     vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
-                                        f"{vlimit // (1024 * 1024)} MB")
+                                        f"{vlimit // (1024 * 1024)} MB", key="creative_file")
                     if len(vdata) == len(data) and _md5(vdata) == _md5(data):
                         # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
                         # хэшем под двумя метками («All ad asset values must be unique», живой прогон
@@ -3254,11 +3397,11 @@ class CampaignCreator:
                 form = known.get(ad.form_id)
                 if form is None:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {ad.form_id} is not a form of this "
-                                    "Page; pick one of the Page's forms (Refresh forms).")
+                                    "Page; pick one of the Page's forms (Refresh forms).", key="form_unavailable")
                 if not form.usable:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {form.name!r} is "
                                     f"{form.status.lower() or 'of unknown status'} (only ACTIVE forms can be "
-                                    "used); pick another form.")
+                                    "used); pick another form.", key="form_unavailable")
         self._form_steps = {}
         for tid, tpl in templates.items():
             existing, why = _fc.match_existing(read, tpl)
@@ -3392,14 +3535,18 @@ class CampaignCreator:
             # Набор из прошлого прогона уже стартовал: его старт в прошлом - не причина отказа.
             # `early` - вызов до поиска по имени (found_sets ещё неизвестны): старт проверит поздний вызов.
             reused = pos < len(found) and bool(found[pos])
+            if ad_set.start_time and not early and not reused:
+                self._move_passed_start_of_today(ad_set)
             if ad_set.start_time and not early and not reused and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
                                 f"({self._zone_note(ad_set)}) is not in the future")
             if ad_set.end_time:
                 # ACL-1443: конец позже старта по настоящим моментам (смещения на свои даты) и в будущем.
                 if ad_set.start_time and self._end_dt(ad_set) <= self._start_dt(ad_set):
+                    was = getattr(self, "_moved_from", {}).get(id(ad_set), "")
+                    moved = f" (moved from {was} because it had passed)" if was else ""
                     raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} must be "
-                                    f"after the start time {ad_set.start_time} ({self._zone_note(ad_set)})")
+                                    f"after the start time {ad_set.start_time}{moved} ({self._zone_note(ad_set)})")
                 if self._end_dt(ad_set) <= self.now():
                     raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} "
                                     f"({self._zone_note(ad_set)}) is not in the future")
@@ -3487,6 +3634,7 @@ class CampaignCreator:
             plan, existing, renamed_choice = choice.plan, choice.existing, choice.renamed
             out.published_as = plan.name
             self._check_planned(plan, targetings, choice.found_sets)
+            self._drain_start_move_notes(out)
             differences = []
             if choice.renamed:
                 renamed = _rename_message(requested, plan.name, choice.earlier, future=True)
@@ -3523,18 +3671,22 @@ class CampaignCreator:
             self._step(out, "dry run: preflight passed, nothing was written")
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
             if exc.kind in NAME_STOPS:
                 name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
             out.problems = list(exc.problems)
+            out.failure = self._failure(plan, out, exc, kind="plan")
         except GraphStop as exc:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except GraphError as exc:
             self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind="graph_error")
         out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
@@ -3718,6 +3870,7 @@ class CampaignCreator:
         out.published_as = plan.name
         out.copy_number = choice.copy_number
         self._check_planned(plan, targetings, choice.found_sets)
+        self._drain_start_move_notes(out)
         self._save_name_receipt(out, requested, choice)
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
@@ -4168,8 +4321,9 @@ def graph_problem(exc: BaseException) -> dict:
     code = f"{x.code}/{x.subcode}" if x.subcode else str(x.code or "")
     raw = str(exc)
     if not x.known:
-        return {"title": raw or "Meta refused the request (no details given).", "impact": "", "action": "",
-                "severity": "blocking", "step": "graph_error", "raw": raw}
+        plain = _plain.classify(exc)
+        return {"title": plain.short, "impact": "", "action": plain.next_step,
+                "severity": "blocking", "step": "graph_error", "raw": raw or "Meta refused the request (no details given)."}
     return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
             "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
 

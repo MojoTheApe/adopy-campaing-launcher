@@ -110,6 +110,8 @@ def named_search(search_type: str, fn):
 
 _SPLIT_RE = re.compile(r"\s+or\s+|\s*/\s*|\s*;\s*|\s*,\s*", re.IGNORECASE)
 _SEP_RE = re.compile(r"[\s\-_]+")
+#: Meta дописывает категорию в конец имени интереса: «swing trading (investing)».
+_CATEGORY_TAIL_RE = re.compile(r"\s*\([^()]*\)\s*$")
 
 CACHE_FILE = "targeting_confirmed.json"
 _STORE_LOCK = threading.RLock()
@@ -158,6 +160,15 @@ def norm(text: str) -> str:
     return _SEP_RE.sub(" ", s).strip()
 
 
+def base_name(text: str) -> str:
+    """norm() без хвоста «(категория)»: «Swing trading (investing)» -> «swing trading».
+
+    Если после отбрасывания скобки ничего не осталось, имя не трогаем.
+    """
+    stripped = _CATEGORY_TAIL_RE.sub("", str(text or ""))
+    return norm(stripped) if stripped.strip() else norm(text)
+
+
 def split_term(term: str) -> list[str]:
     """«A or B», «A/B» → ["A", "B"]; одна часть — деления нет."""
     parts = [p.strip() for p in _SPLIT_RE.split(str(term or "")) if p.strip()]
@@ -171,6 +182,8 @@ def score(term: str, name: str) -> float:
         return 0.0
     if a == b:
         return 1.0
+    if a == base_name(name):
+        return 0.95          # то же имя, но с категорией Meta в скобках: выше любых «по словам»
     ratio = difflib.SequenceMatcher(None, a, b).ratio()
     ta, tb = set(a.split()), set(b.split())
     if ta and tb and (ta <= tb or tb <= ta):
@@ -681,6 +694,7 @@ class TermResolver:
                 return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
             for bucket, rows in self._stages(term):
+                tail_hits: dict[str, dict] = {}   # имя совпало, но с «(категорией)»: id -> строка
                 for r in rows:
                     c = self._row(r, bucket)
                     if not c:
@@ -688,9 +702,17 @@ class TermResolver:
                     if norm(c["name"]) == key:
                         self._warm_put(term, [c])
                         return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
+                    if base_name(c["name"]) == key:
+                        tail_hits.setdefault(c["id"], c)
                     sc = score(term, c["name"])
                     if sc >= WEAK_SCORE:
                         cands.setdefault((c["type"], c["id"]), {**c, "score": sc})
+                if len(tail_hits) == 1:
+                    # Единственный интерес с таким именем и категорией в скобках - это он и есть.
+                    # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
+                    (c,) = tail_hits.values()
+                    self._warm_put(term, [c])
+                    return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
         except _Spent:
             return {"term": term, "state": "unknown", "picks": [], "candidates": [],
                     "reason": UNKNOWN_MESSAGE}

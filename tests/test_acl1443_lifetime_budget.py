@@ -536,8 +536,9 @@ def test_a_repeat_after_the_start_passed_reuses_the_campaign_without_a_new_name(
     plan = _plan(_life(tmp_path))
     again = _creator(meta, now=later).run(plan)
     assert again.error == "" and again.published_as == plan.name, again.error
-    # новый (не найденный) набор с прошедшим стартом по-прежнему отказ
-    fresh = _run(ZoneMeta(), _life(tmp_path), now=later)
+    # новый (не найденный) набор со стартом прошлого дня по-прежнему отказ
+    # (старт ТОГО ЖЕ дня, уже прошедший, ACL-2465 сдвигает вперёд - см. test_acl1448)
+    fresh = _run(ZoneMeta(), _life(tmp_path), now=datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc))
     assert "not in the future" in fresh.error
     # конец в прошлом отказ и для найденного набора
     after_end = datetime(2026, 10, 26, tzinfo=timezone.utc)
@@ -569,3 +570,109 @@ def test_a_mixed_budget_type_warns_in_both_directions():
     for first, second in (({"budget_type": "lifetime"}, {}), ({}, {"budget_type": "lifetime"})):
         [d] = slots_to_campaign_drafts([slot(**first), slot(**second)], account_label="A", country="MX")
         assert any("Mixed budget type" in w for w in d.warnings)
+
+
+# ───────────────────────── ACL-2465: сдвинутый старт сегодняшнего дня ─────────────────────────
+
+def _at(h, m=0, s=0, day=20):
+    """Момент по времени Нью-Йорка (EDT = UTC-4)."""
+    from datetime import timedelta
+    return datetime(2026, 10, day, h, m, s, tzinfo=timezone.utc) + timedelta(hours=4)
+
+
+def _n_campaigns(meta):
+    return len(meta._of("campaign"))
+
+
+@pytest.mark.parametrize("now,expected", [
+    (_at(9, 6), "2026-10-20T09:15"),
+    (_at(9, 10), "2026-10-20T09:15"),
+    (_at(9, 10, 30), "2026-10-20T09:30"),     # 09:15:30 < 5 минут запаса -> вверх
+    (_at(9, 11), "2026-10-20T09:30"),
+    (_at(9, 30), "2026-10-20T09:45"),
+])
+def test_a_passed_start_moves_to_a_quarter_hour_at_least_five_minutes_ahead(tmp_path, now, expected):
+    plan = _plan(_life(tmp_path, start="2026-10-20T09:00"))
+    out = _creator(ZoneMeta(), now=now).plan_only(plan)
+    assert out.error == "", out.error
+    assert plan.ad_sets[0].start_time == expected
+    from datetime import timedelta
+    assert _creator(ZoneMeta(), now=now)._start_dt(plan.ad_sets[0]) - now >= timedelta(minutes=5)
+
+
+def test_the_move_crosses_midnight_into_the_next_day(tmp_path):
+    plan = _plan(_life(tmp_path, start="2026-10-20T23:00", end="2026-10-25T09:00"))
+    out = _creator(ZoneMeta(), now=_at(23, 56)).plan_only(plan)
+    assert out.error == "" and plan.ad_sets[0].start_time == "2026-10-21T00:15"
+
+
+def test_a_start_moved_past_the_end_is_refused_naming_both_values(tmp_path):
+    plan = _plan(_life(tmp_path, start="2026-10-20T09:00", end="2026-10-20T09:10"))
+    out = _creator(ZoneMeta(), now=_at(9, 6)).plan_only(plan)
+    assert "must be after the start time 2026-10-20T09:15" in out.error and "moved from 09:00" in out.error
+
+
+def test_the_move_is_visible_in_the_check_plan_and_in_the_run_result(tmp_path):
+    out = _creator(ZoneMeta(), now=_at(9, 30)).plan_only(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    note = [w for w in out.warnings if "had passed" in w]
+    assert note and "09:00" in note[0] and "09:45" in note[0] and "Israel time" in note[0]
+    run = _creator(ZoneMeta(), now=_at(9, 30)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert run.error == "" and any("moved to 09:45" in w for w in run.warnings)
+
+
+def test_a_real_daily_plan_with_a_passed_start_is_not_moved(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    d.ad_sets[0].start_time = "2026-10-20T09:00"
+    plan = _plan(d)
+    out = _creator(ZoneMeta(), now=_at(9, 30)).plan_only(plan)
+    assert plan.ad_sets[0].start_time == "2026-10-20T09:00"
+    assert "not in the future" in out.error and not any("moved to" in w for w in out.warnings)
+
+
+def test_a_repeat_of_a_moved_start_reuses_the_campaign_without_copy_1(tmp_path):
+    meta = ZoneMeta()
+    first = _creator(meta, now=_at(9, 30)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert first.error == "" and first.published_as == "MX Leads 1"
+    n = _n_campaigns(meta)
+    again = _creator(meta, now=_at(9, 40)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert again.error == "" and again.published_as == "MX Leads 1", again.published_as
+    assert _n_campaigns(meta) == n
+
+
+def test_a_partial_first_run_resumes_the_moved_set_without_a_new_campaign(tmp_path):
+    meta = ZoneMeta()
+    meta.fail_next["ads"] = "unsent"
+    first = _creator(meta, now=_at(9, 30)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert first.error
+    n = _n_campaigns(meta)
+    again = _creator(meta, now=_at(9, 40)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert again.error == "" and again.published_as == "MX Leads 1", (again.published_as, again.error)
+    assert _n_campaigns(meta) == n
+
+
+def test_a_repeat_across_midnight_of_a_moved_start_reuses_the_campaign(tmp_path):
+    meta = ZoneMeta()
+    kw = dict(start="2026-10-20T23:00", end="2026-10-25T09:00")
+    assert _creator(meta, now=_at(23, 56)).run(_plan(_life(tmp_path, **kw))).error == ""
+    again = _creator(meta, now=_at(23, 58)).run(_plan(_life(tmp_path, **kw)))
+    assert again.error == "" and again.published_as == "MX Leads 1"
+
+
+@pytest.mark.parametrize("edited", ["2026-10-20T08:00:00-0400", "2026-10-19T09:45:00-0400",
+                                    "2026-10-21T09:45:00-0400", "2026-10-20T18:00:00-0400"])
+def test_a_real_start_edit_in_meta_is_still_a_difference(tmp_path, edited):
+    meta = ZoneMeta()
+    assert _creator(meta, now=_at(9, 30)).run(_plan(_life(tmp_path, start="2026-10-20T09:00"))).error == ""
+    [row] = meta._of("adset")
+    row["start_time"] = edited
+    out = _creator(meta, now=_at(9, 40)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert out.published_as == "MX Leads 1 copy 1", (edited, out.published_as)
+
+
+def test_a_future_plan_start_is_compared_strictly(tmp_path):
+    meta = ZoneMeta()
+    assert _creator(meta, now=_at(8, 0)).run(_plan(_life(tmp_path, start="2026-10-20T09:00"))).error == ""
+    [row] = meta._of("adset")
+    row["start_time"] = "2026-10-20T09:30:00-0400"       # правка в Meta; старт плана ещё в будущем
+    out = _creator(meta, now=_at(8, 30)).run(_plan(_life(tmp_path, start="2026-10-20T09:00")))
+    assert out.published_as == "MX Leads 1 copy 1"

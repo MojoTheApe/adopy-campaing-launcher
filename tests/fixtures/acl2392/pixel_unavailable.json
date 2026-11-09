@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "PlanError",
+  "message": "The pixel from the draft (123456789012) is not on this ad account (2 found).",
+  "expect": {
+    "key": "pixel_unavailable",
+    "short": "The pixel is not on this ad account",
+    "next": "choose another pixel and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  }
+}
