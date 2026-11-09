@@ -3204,6 +3204,35 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+@app.get("/api/run-limits")
+def api_run_limits() -> JSONResponse:
+    """Profile ceiling, heavy-action limit and memory share of this computer (ACL-2293)."""
+    from src.web import run_limits
+    return JSONResponse({"ok": True, **run_limits.current()})
+
+
+@app.post("/api/run-limits")
+async def api_save_run_limits(request: Request) -> JSONResponse:
+    """Change the run limits without a restart; applies to the next start decision."""
+    from src.web import run_limits
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset"}:
+        return JSONResponse({"ok": False, "error": "Unknown setting in the request"}, status_code=400)
+    if "reset" in data and not isinstance(data["reset"], bool):
+        return JSONResponse({"ok": False, "error": "Expected true or false for reset"}, status_code=400)
+    try:
+        from starlette.concurrency import run_in_threadpool
+        result = await run_in_threadpool(
+            lambda: run_limits.save(data.get("ceiling"), data.get("warm_heavy"),
+                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset"))))
+    except run_limits.RunLimitError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, **result})
+
+
 @app.post("/refresh")
 async def refresh(request: Request) -> Response:
     """Rebuild report now (reuse Excel DF if mtime unchanged), then redirect or JSON.

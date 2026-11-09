@@ -4897,6 +4897,33 @@ async function dashRefresh(ev) {
     </div>
   </section>
 
+  {#- ACL-2293: лимиты запуска этой машины - без перезапуска дашборда. -#}
+  <section class="acc-connect" id="rl-box">
+    <h3>Run limits</h3>
+    <p class="acc-sub">How many profiles and heavy actions run at once on this computer. Change them here, not in the file. A change applies to the next start; runs already going are not stopped.</p>
+    <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      <label>
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Profiles at once (1-8, default <span id="rl-def-ceiling">2</span>)</div>
+        <input id="rl-ceiling" type="number" min="1" max="8" step="1" style="width:8rem">
+      </label>
+      <label>
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Heavy actions at once (1-3, default <span id="rl-def-heavy">1</span>)</div>
+        <input id="rl-heavy" type="number" min="1" max="3" step="1" style="width:8rem">
+      </label>
+      <label>
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Max memory in use before a new profile starts, % (50-95, default <span id="rl-def-share">92</span>)</div>
+        <input id="rl-share" type="number" min="50" max="95" step="1" style="width:8rem">
+      </label>
+      <div id="rl-now" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
+      <div id="rl-warn" style="font-size:var(--adopy-text-sm);color:var(--danger)"></div>
+      <div style="display:flex;gap:0.6rem;align-items:center">
+        <button type="button" id="rl-save" class="btn">Save</button>
+        <button type="button" id="rl-reset" class="btn">Reset to default</button>
+        <span id="rl-msg" style="font-size:var(--adopy-text-body)"></span>
+      </div>
+    </div>
+  </section>
+
   <section class="acc-connect">
     <h3>Connect an account</h3>
     <p class="acc-sub">Find the profile by its last letters — open it if you need to, then connect.</p>
@@ -9767,6 +9794,7 @@ window.cbTree = (function () {
                : q.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(q)) + cbCloseWindows(q)
                : q.state === 'waiting_load' ? 'queued — ' + aclEscHtml(cbLoadWait(q))
                : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory') + cbCloseWindows(q)
+               : q.hold === 'ceiling' ? 'queued — ' + aclEscHtml(cbCeilingWait(q))
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -11339,7 +11367,7 @@ window.cbBuild = (function () {
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
-    if (q.hold === 'account_busy') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
+    if (q.hold === 'account_busy' || q.hold === 'heavy_limit') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
     if (q.hold === 'machine_busy') return { state: 'build-wait', sign: '', why: cbLoadWait(q) };
     if (q.hold === 'machine_stalled') {
       return { state: 'build-wait', sign: '',
@@ -11348,6 +11376,7 @@ window.cbBuild = (function () {
     // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
     var memory = cbMemoryWait(q);
     if (memory) return { state: 'build-wait', sign: '', why: memory };
+    if (q.hold === 'ceiling') return { state: 'build-wait', sign: '', why: cbCeilingWait(q) };
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
@@ -20756,7 +20785,26 @@ function cbLoadWait(q) {
     + rest + '). Nothing was sent to Meta; it starts by itself, Stop cancels it';
 }
 /* ACL-2278: занятые ворота действий аккаунта — задание ждёт, а не падает. */
+/* ACL-2293: the profile ceiling is what holds the run - say how many are in use and what the ceiling is. */
+function cbCeilingWait(q) {
+  q = q || {};
+  var cap = parseInt(q.cap, 10), running = parseInt(q.running, 10);
+  var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+  var tail = ahead ? ' (' + ahead + ' ahead)' : '';
+  if (!(cap > 0) || isNaN(running)) return 'Waiting for a free profile slot' + tail;
+  if (running > cap) {
+    return 'Waiting: ' + running + ' profiles running, ceiling is now ' + cap
+      + ' - new runs start when fewer than ' + cap + ' are running' + tail;
+  }
+  return 'Waiting: ' + running + ' of ' + cap + ' profiles in use (ceiling ' + cap + ')' + tail
+    + '. The next one starts when a run finishes';
+}
 function cbAccountWait(q) {
+  /* ACL-2293: the limit of heavy account actions, not "another account" */
+  if (q && q.hold === 'heavy_limit' && q.heavy_limit) {
+    return 'Waiting: ' + (parseInt(q.running, 10) || q.heavy_limit) + ' of ' + q.heavy_limit
+      + ' heavy actions in progress (limit ' + q.heavy_limit + ') - it starts by itself, Stop cancels it';
+  }
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
   var mem = (q && q.available_mb != null) ? ' (' + gb(q.available_mb) + ' GB free)' : '';
   return 'Waiting for another account action to finish' + mem + ' - it starts by itself, Stop cancels it';
@@ -21981,6 +22029,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : queue.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(queue)) + cbCloseWindows(queue)
           : queue.state === 'waiting_load' ? 'queued — ' + aclEscHtml(cbLoadWait(queue))
           : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory') + cbCloseWindows(queue)
+          : queue.hold === 'ceiling' ? 'queued — ' + aclEscHtml(cbCeilingWait(queue))
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
@@ -23143,6 +23192,72 @@ function aclPickerSearch(inst, text) {
     var t = ev.target;
     if (!t || !t.getAttribute) return;
     if (t.id === 'mp-save') { save(); return; }
+    if (t.getAttribute('data-view') === 'accounts') load();
+  });
+  document.addEventListener('acl:viewchange', function (e) {
+    if (e.detail && e.detail.view === 'accounts') load();
+  });
+  if ((location.hash || '').indexOf('accounts') !== -1) document.addEventListener('DOMContentLoaded', load);
+})();
+
+// ── ACL-2293: лимиты запуска (потолок профилей, тяжёлые действия, доля памяти) ──
+(function () {
+  var pending = false, loaded = {}, info = {};
+  function el(id) { return document.getElementById(id); }
+  function say(text, error) { el('rl-msg').textContent = text || ''; el('rl-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function show(d) {
+    info = d;
+    loaded = {ceiling: String(d.ceiling), warm_heavy: String(d.warm_heavy), memory_max_used_pct: String(d.memory_max_used_pct)};
+    el('rl-ceiling').value = loaded.ceiling;
+    el('rl-heavy').value = loaded.warm_heavy;
+    el('rl-share').value = loaded.memory_max_used_pct;
+    var df = d.defaults || {};
+    el('rl-def-ceiling').textContent = df.ceiling; el('rl-def-heavy').textContent = df.warm_heavy;
+    el('rl-def-share').textContent = df.memory_max_used_pct;
+    var now = [];
+    if (d.total_mb) now.push('This computer: ' + (d.total_mb / 1024).toFixed(0) + ' GB memory, ' + Math.round(d.used_pct) + '% in use');
+    else now.push('Memory could not be read; at most 2 profiles run at once');
+    now.push(d.running + ' of ' + d.ceiling + ' profiles running' + (d.ceiling_reached ? ' - ceiling reached' : '')
+      + (d.waiting ? ', ' + d.waiting + ' waiting' : ''));
+    el('rl-now').textContent = now.join(' · ');
+    el('rl-warn').textContent = (d.warnings || []).join(' ');
+  }
+  async function load() {
+    try {
+      var r = await fetch('/api/run-limits');
+      var d = await r.json();
+      if (r.ok && d.ok) show(d);
+    } catch (e) { say(String(e), true); }
+  }
+  async function post(body, ask) {
+    if (pending) return;
+    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
+    pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
+    try {
+      var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
+      show(d);
+      say('Saved. Applies to the next start; runs already going are not stopped.');
+    } catch (e) { say(e.message || String(e), true); }
+    finally { pending = false; el('rl-save').disabled = false; el('rl-reset').disabled = false; }
+  }
+  function save() {
+    var body = {};
+    if (el('rl-ceiling').value !== loaded.ceiling) body.ceiling = el('rl-ceiling').value;
+    if (el('rl-heavy').value !== loaded.warm_heavy) body.warm_heavy = el('rl-heavy').value;
+    if (el('rl-share').value !== loaded.memory_max_used_pct) body.memory_max_used_pct = el('rl-share').value;
+    if (!Object.keys(body).length) { say('Nothing changed.'); return; }
+    var c = parseFloat(el('rl-ceiling').value), p = parseFloat(el('rl-share').value);
+    var cf = info.confirm_above || {};
+    var risky = ('ceiling' in body && c > (cf.ceiling || 3)) || ('memory_max_used_pct' in body && p > (cf.memory_max_used_pct || 80));
+    post(body, risky);
+  }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute) return;
+    if (t.id === 'rl-save') { save(); return; }
+    if (t.id === 'rl-reset') { post({reset: true}, false); return; }
     if (t.getAttribute('data-view') === 'accounts') load();
   });
   document.addEventListener('acl:viewchange', function (e) {
