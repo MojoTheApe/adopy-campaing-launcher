@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "ApiPublishError",
+  "message": "acc: the profile could not be opened with automation: cdp refused",
+  "expect": {
+    "key": "profile_not_started",
+    "short": "The Multilogin profile did not start",
+    "next": "open it in Multilogin, then republish",
+    "severity": "blocking",
+    "retry": "later"
+  }
+}
