@@ -1,0 +1,14 @@
+{
+  "synthetic": true,
+  "type": "Checkpoint",
+  "message": "the session is on a Facebook checkpoint (190/459)",
+  "expect": {
+    "key": "checkpoint",
+    "short": "Facebook asks to confirm this account",
+    "next": "open the profile, finish the check and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "code": 190,
+  "subcode": 459
+}
