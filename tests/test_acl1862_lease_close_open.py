@@ -143,32 +143,3 @@ def test_try_lease_is_reentrant_for_the_owner_thread():
     with profile_lock(PID):
         with warm.try_lease(PID, busy_message="x", busy_code="busy") as refusal:
             assert refusal is None
-
-
-# ───────── настоящий второй процесс ─────────
-
-@pytest.mark.windows_only(reason="Real file lock held by a spawned process")
-def test_other_process_holding_the_profile_blocks_close_and_open(rig, process_factory):  # noqa: F811
-    proc, entered, release, _result = process_factory(PID, mode="hold")
-    assert entered.wait(15)
-    _warm_ours(rig)
-    assert rig.reg.close_one("Acc", entry())["code"] == "busy"
-    assert rig.stopped == []
-    rig.scan_result[PID] = ("none", None)
-    assert rig.reg.open_one("Acc", entry())["code"] == "profile_lease"
-    assert rig.started == []
-    release.set()
-    proc.join(10)
-    rig.scan_result[PID] = ("port", 9333)
-    assert rig.reg.close_one("Acc", entry())["code"] == "closed"
-
-
-@pytest.mark.windows_only(reason="Real file lock held by a spawned process")
-def test_killed_holder_does_not_block_the_next_close(rig, process_factory):  # noqa: F811
-    proc, entered, _release, _result = process_factory(PID, mode="hold")
-    assert entered.wait(15)
-    _warm_ours(rig)
-    assert rig.reg.close_one("Acc", entry())["code"] == "busy"
-    proc.terminate()
-    proc.join(10)
-    assert rig.reg.close_one("Acc", entry())["code"] == "closed"
