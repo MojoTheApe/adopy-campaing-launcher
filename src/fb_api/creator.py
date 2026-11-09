@@ -977,7 +977,7 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     if row is None:
         _log_account_state(act, None)
         raise PlanError("This profile has no access to the ad account from the account map "
-                        "(not in /me/adaccounts). Nothing was created.", key="account_blocked")
+                        "(not in /me/adaccounts). Nothing was created.")
     if str(row.get("account_status")) != "1":
         _log_account_state(act, row)
         raise PlanError(f"The ad account is not active (account_status {row.get('account_status')}). "

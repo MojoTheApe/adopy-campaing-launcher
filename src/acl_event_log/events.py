@@ -119,10 +119,15 @@ def result_payload(res: dict) -> dict:
     if isinstance(details, dict):
         if details.get("error_text"):
             out["error"] = details["error_text"]
-        lines = details.get("readback_mismatches")
-        if lines and isinstance(out.get("blocking_failures"), list):
+        lines = list(details.get("readback_mismatches") or [])
+        rows = out.get("blocking_failures")
+        if isinstance(rows, list) and (lines or details.get("error_text")):
+            # Rebuild the list as before ACL-2392: raw readback lines first, then "not finished: <raw error>".
             marker = "Meta saved different values than planned"
-            out["blocking_failures"] = [x for x in out["blocking_failures"] if marker not in str(x)] + list(lines)
+            finished = any(str(x).startswith("not finished: ") for x in rows)
+            rest = [x for x in rows if marker not in str(x) and not str(x).startswith("not finished: ")]
+            tail = ["not finished: " + str(details["error_text"])] if finished and details.get("error_text") else []
+            out["blocking_failures"] = lines + rest + tail
     return out
 
 

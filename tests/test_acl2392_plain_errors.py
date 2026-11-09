@@ -380,3 +380,41 @@ def test_the_event_log_keeps_the_raw_stop_text_and_the_raw_readback_lines():
     assert lines and lines[0].startswith("readback mismatch: ad set 'A' daily_budget")
     ok = result_payload(publish_api.result_dict(cr.Outcome(campaign_name="C")))
     assert ok["error"] is None
+
+
+# -- round 3 --------------------------------------------------------------------------------------
+
+def test_real_preflight_no_access_is_not_shown_as_a_disabled_account():
+    from tests.test_acl1761_api_create import ACT2
+
+    client = g.GraphClient(FakeMeta(), allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+    with pytest.raises(cr.PlanError) as ei:
+        cr.preflight_account(client, ACT2)          # the profile's /me/adaccounts does not list this account
+    failure = pe.classify(ei.value)
+    assert failure.key == "plan_text" and "no access to the ad account" in failure.line()
+    assert "disabled" not in failure.line() and "spending limit" not in failure.line()
+
+
+def _main_shaped_blocking(mismatches, raw_error):
+    """What `result_dict` produced before ACL-2392 (main): raw readback lines, then the raw "not finished"."""
+    lines = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
+             f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
+    return lines + (["not finished: " + raw_error] if raw_error else [])
+
+
+@pytest.mark.parametrize("with_mismatch,raw_error", [
+    (True, "ad set 'A': the write result is unknown (Graph API error 1) and nothing was found by readback."),
+    (False, "Graph API stopped: rate limit (17)"),
+    (True, ""),
+])
+def test_event_log_blocking_failures_match_main(with_mismatch, raw_error):
+    from src.acl_event_log.events import result_payload
+
+    mism = [{"object": "ad set 'A'", "field": "daily_budget", "expected": "500", "actual": "400"},
+            {"object": "ad", "field": "name", "expected": "x", "actual": "y", "not_read": True}] if with_mismatch else []
+    failure = pe.classify(g.WriteUnknown("x", path="/p", code=1, subcode=1870226)) if raw_error else None
+    out = cr.Outcome(campaign_name="C", campaign_id="1", error=raw_error, stop_kind="unknown" if raw_error else "",
+                     failure=failure, readback={"ok": False, "mismatches": mism} if mism else {})
+    payload = result_payload(publish_api.result_dict(out))
+    assert payload["blocking_failures"] == _main_shaped_blocking(mism, raw_error)
+    assert payload["error"] == (raw_error or None)
