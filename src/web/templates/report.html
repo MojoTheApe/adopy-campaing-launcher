@@ -1483,6 +1483,15 @@
       padding: 0.5rem 0.7rem; margin-bottom: 0.7rem;
       font-size: var(--adopy-text-table); line-height: 1.4;
     }
+    /* ACL-2393: одна строка под именем кампании, палитра .cb-warn-block. */
+    .cb-name-check {
+      color: var(--warn); font-size: var(--adopy-text-sm); line-height: 1.4; margin-top: 0.3rem;
+    }
+    .cb-name-check[hidden], .cb-name-fix[hidden] { display: none; }
+    .cb-name-fix {
+      background: var(--warn-soft); border: 1px solid var(--warn); color: var(--text);
+      border-radius: var(--radius-sm); padding: 0.05rem 0.5rem; cursor: pointer; font-size: inherit;
+    }
     /* Подсветка поля живёт до первой правки — человек видит, куда смотреть,
        и метка уходит сама, как только он начал вводить. */
     .cb-field-warn {
@@ -6986,6 +6995,78 @@ window.cbLayout = (function () {
     return o || String(auto == null ? '' : auto);
   }
 
+  /* ACL-2393: имя кампании называет пресет таргетинга (Green), а выбран другой
+     (Mix2). Только предупреждение. Совпадение — по целым словам имени, без
+     подстрок; слова самой карточки (страна, OS, тип, ассет, возраст, дата)
+     пресетом не считаются; «коды»-списки интересов из запасной библиотеки
+     (запятая, длиннее 40 знаков) игнорируются. */
+  function _ntTokens(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/[\s\-]+/g, '_')
+      .split('_').filter(Boolean);
+  }
+  var _ntLib = { src: null, n: -1, codes: [] };
+  function _ntCodes(library) {
+    if (_ntLib.src === library && _ntLib.n === library.length) return _ntLib.codes;
+    var seen = {}, codes = [];
+    library.forEach(function (t) {
+      var code = String((t && t.code) || '').trim();
+      if (!code || code.indexOf(',') !== -1 || code.length > 40) return;
+      var toks = _ntTokens(code);
+      if (!toks.length) return;
+      var key = toks.join('_');
+      if (seen[key]) return;
+      seen[key] = true;
+      codes.push({ code: code, toks: toks, key: key });
+    });
+    codes.sort(function (a, b) { return b.toks.length - a.toks.length; });
+    _ntLib = { src: library, n: library.length, codes: codes };
+    return codes;
+  }
+  function nameTargetingCheck(name, selected, library, skip) {
+    var out = { state: 'none', said: [], have: [] };
+    if (!Array.isArray(library) || !library.length) return out;
+    var toks = _ntTokens(name);
+    if (!toks.length) return out;
+    var skipSet = {};
+    (skip || []).forEach(function (x) { _ntTokens(x).forEach(function (t) { skipSet[t] = true; }); });
+    var codes = _ntCodes(library), said = [], saidKeys = [], i = 0;
+    while (i < toks.length) {
+      var hit = null;
+      for (var c = 0; c < codes.length && !hit; c += 1) {
+        var n = codes[c].toks.length, ok = i + n <= toks.length;
+        for (var j = 0; ok && j < n; j += 1) ok = toks[i + j] === codes[c].toks[j];
+        if (ok && !(n === 1 && skipSet[codes[c].toks[0]])) hit = codes[c];
+      }
+      if (hit) {
+        if (saidKeys.indexOf(hit.key) === -1) { saidKeys.push(hit.key); said.push(hit.code); }
+        i += hit.toks.length;
+      } else i += 1;
+    }
+    if (!said.length) return out;
+    var haveKeys = [];
+    (selected || []).forEach(function (v) {
+      var raw = String(v == null ? '' : v).trim();
+      if (!raw) return;
+      var k = _ntTokens(raw).join('_');
+      if (haveKeys.indexOf(k) === -1) { haveKeys.push(k); out.have.push(raw); }
+    });
+    out.said = said;
+    if (!haveKeys.length) { out.state = 'nothing'; return out; }
+    out.state = saidKeys.some(function (k) { return haveKeys.indexOf(k) !== -1; }) ? 'ok' : 'differs';
+    return out;
+  }
+  function _ntList(list, max) {
+    if (list.length <= max) return list.length > 1 ? list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1] : list[0];
+    return list.slice(0, max).join(', ') + ' and ' + (list.length - max) + ' more';
+  }
+  function nameTargetingText(check) {
+    if (!check || (check.state !== 'differs' && check.state !== 'nothing')) return '';
+    var said = _ntList(check.said, 2);
+    if (check.state === 'nothing') return 'Name says ' + said + ', but no targeting is selected – pick one';
+    var have = check.have.length > 1 ? check.have.slice(0, 3).join(', ') + (check.have.length > 3 ? ' and ' + (check.have.length - 3) + ' more' : '') : check.have[0];
+    return 'Name says ' + said + ', targeting is ' + have + ' – fix one of them';
+  }
+
   /* Статус аккаунта из того, что страница знает сегодня: идёт ли сборка и
      что говорит сохранённая настройка аккаунта (ссылка, поля карты). */
   function accountState(pf, busy) {
@@ -7198,6 +7279,7 @@ window.cbLayout = (function () {
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
     FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
+    nameTargetingCheck: nameTargetingCheck, nameTargetingText: nameTargetingText,
     COPY_API_ONLY: COPY_API_ONLY, copyToButtonHtml: copyToButtonHtml, copyBudgetValue: copyBudgetValue, copyRowProblem: copyRowProblem, copyPlan: copyPlan,
     accountState: accountState, adsetName: adsetName, adsetLabel: adsetLabel, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -17369,7 +17451,41 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var ph = window.cbLayout ? window.cbLayout.adsetName(name, k, '') : name;
       if (inp.placeholder !== ph) inp.placeholder = ph;
     });
+    /* ACL-2393: имя говорит об одном пресете таргетинга, выбран другой. */
+    var selected = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hidden'), function (h) { return h.value; });
+    var L = window.cbLayout;
+    var check = L && REF && REF.targetings
+      ? L.nameTargetingCheck(name, selected, REF.targetings, [countryCode(country), os || 'All', ctype, abbrevAsset(asset), asset, age, todayDDMM()])
+      : { state: 'none', said: [], have: [] };
+    check.text = L ? L.nameTargetingText(check) : '';
+    slot._cbNameCheck = check;
+    var box = slot.querySelector('[data-name-check]');
+    if (box) {
+      box.hidden = !check.text;
+      var msg = box.querySelector('.cb-name-check-text');
+      if (msg) msg.textContent = check.text ? '⚠ ' + check.text : '';
+      var fix = box.querySelector('.cb-name-fix');
+      if (fix) {
+        var one = check.said.length === 1 ? check.said[0] : '';
+        fix.hidden = !(check.text && one);
+        fix.dataset.code = one;
+        fix.textContent = 'Use ' + one;
+      }
+    }
   };
+
+  /* ACL-2393: «Use Green» — то же, что выбрать строку в списке таргетинга
+     у первого набора. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.cb-name-fix') : null;
+    if (!b) return;
+    var slot = b.closest('.cb-slot');
+    var wrap = slot && slot.querySelector('.cb-targeting-wrap');
+    var code = b.dataset.code || '';
+    if (!wrap || !code) return;
+    var hit = ((REF && REF.targetings) || []).filter(function (t) { return t.code === code; })[0];
+    cbTargetingPick(wrap, code, (hit && hit.fb_interest) || '');
+  });
 
   // ── Searchable select ─────────────────────────────────────────────────
   function initCbSel(wrap) {
@@ -17441,6 +17557,32 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   // ── Targeting code picker ─────────────────────────────────────────────
+  /* Выбор строки таргетинга: из списка и из «Use <code>» (ACL-2393). */
+  window.cbTargetingPick = function(wrap, code, interest) {
+    var input    = wrap.querySelector('.cb-targeting-search');
+    var hidden   = wrap.querySelector('.cb-targeting-hidden');
+    var hint     = wrap.querySelector('.cb-targeting-hint');
+    var dropdown = wrap.querySelector('.cb-sel-dropdown');
+    if (input) input.value = code;
+    /* В отправляемое поле идёт КОД, а не строка интересов.
+
+       Интересы здесь и лежали, и из-за этого детальный таргетинг не
+       ставился никогда. Сервер по этому полю ищет таргет в библиотеке
+       («PF» → «Foreign exchange market, Investor, …»), а получал уже
+       готовые интересы — по ним ничего не находится, и таргетинг
+       молча очищался. На экране при этом всё выглядело выбранным, и
+       даже имя кампании несло код.
+
+       Проверено 14.09: lookup('Foreign exchange market, …') → '',
+       lookup('PF') → полная строка интересов. */
+    if (hidden) hidden.value = code;
+    if (hint)   hint.textContent = interest;
+    if (dropdown) dropdown.hidden = true;
+    var slot = wrap.closest('.cb-slot');
+    if (slot) cbUpdateName(slot);
+    cbMarkMissingCreatives();
+  };
+
   window.cbTargetingSearch = function(input) {
     var wrap = input.closest('.cb-targeting-wrap');
     if (!wrap) return;
@@ -17506,26 +17648,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     dropdown.querySelectorAll('.cb-targeting-opt').forEach(function(opt) {
       opt.addEventListener('mousedown', function(e) {
         e.preventDefault();
-        var interest = opt.dataset.interest || '';
-        var code     = opt.dataset.code || '';
-        input.value  = code;
-        /* В отправляемое поле идёт КОД, а не строка интересов.
-
-           Интересы здесь и лежали, и из-за этого детальный таргетинг не
-           ставился никогда. Сервер по этому полю ищет таргет в библиотеке
-           («PF» → «Foreign exchange market, Investor, …»), а получал уже
-           готовые интересы — по ним ничего не находится, и таргетинг
-           молча очищался. На экране при этом всё выглядело выбранным, и
-           даже имя кампании несло код.
-
-           Проверено 14.09: lookup('Foreign exchange market, …') → '',
-           lookup('PF') → полная строка интересов. */
-        if (hidden) hidden.value = code;
-        if (hint)   hint.textContent = interest;
-        dropdown.hidden = true;
-        var slot = wrap.closest('.cb-slot');
-        if (slot) cbUpdateName(slot);
-        cbMarkMissingCreatives();
+        cbTargetingPick(wrap, opt.dataset.code || '', opt.dataset.interest || '');
       });
     });
   };
@@ -18781,6 +18904,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<div class="cb-name-box">' +
       '<div class="cb-name-auto">Auto name: <b data-auto-name></b></div>' +
       '<input type="text" data-keep="name_override" class="cb-input cb-name-override" value="" placeholder="Optional: your own name" autocomplete="off" oninput="cbUpdateName(this.closest(\'.cb-slot\'))" title="Used instead of the auto name only if you fill it in">' +
+      /* ACL-2393: имя и таргетинг называют разные пресеты (только предупреждение). */
+      '<div class="cb-name-check" data-name-check role="status" hidden><span class="cb-name-check-text"></span> <button type="button" class="cb-name-fix" hidden>Use</button></div>' +
       '</div>' +
       '<span class="cb-label">Asset / Offer</span>' +
       '<input type="text" name="camp_' + idx + '_asset" class="cb-input" value="" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
@@ -20589,12 +20714,24 @@ window.cbCheckPlan = function (picked, out, btn, force) {
     return typeof cbFormAccount === 'function' ? cbFormAccount(x.form) : cbFormTitle(x.form);
   });
   var waiting = {};
+  // ACL-2393: живое состояние карточек, не строки плана (они могут прийти из кэша вердиктов).
+  var nameDiffers = 0;
+  forms.forEach(function (x) {
+    Array.prototype.forEach.call(x.only || x.form.querySelectorAll('.cb-slot'), function (slot) {
+      if (typeof cbUpdateName === 'function') cbUpdateName(slot);
+      if (slot._cbNameCheck && slot._cbNameCheck.text) nameDiffers += 1;
+    });
+  });
+  var nameNote = nameDiffers
+    ? '<div class="cbd-plan-head" style="color:var(--warn)">⚠ ' + nameDiffers + (nameDiffers === 1 ? ' campaign' : ' campaigns')
+      + ': the name and the targeting differ (see the line on the card). Check plan is not affected.</div>'
+    : '';
   function render() {
     if (out.hidden) return;   // закрыли, пока ждали: не открывать заново
     var notes = pending.filter(function (a) { return a && waiting[a]; }).map(function (a) {
       return '<div class="cbd-plan-head">' + aclEscHtml(a) + ': ' + aclEscHtml(waiting[a]) + '</div>';
     }).join('');
-    out.innerHTML = cbPlanFrame(parts.filter(Boolean).join('')
+    out.innerHTML = cbPlanFrame(nameNote + parts.filter(Boolean).join('')
       + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : '') + notes);
   }
   /* Ждущие места профиля аккаунты: строка очереди (только память сервера, раз в 2 с). */
@@ -21674,6 +21811,20 @@ window.cbPublish = function(form) {
     : [];
   if (missingFiles.length) bodyHtml = window.cbMissingCreativesHtml(missingFiles) + bodyHtml;
 
+  // ACL-2393: имя называет один пресет, выбран другой. Не блокирует, собрать можно.
+  var nameDiffers = [];
+  (onlySlot ? [onlySlot] : (ticked.length ? ticked : allSlots)).forEach(function(s) {
+    if (typeof cbUpdateName === 'function') cbUpdateName(s);
+    var c = s._cbNameCheck;
+    if (c && c.text) nameDiffers.push({ name: cbSlotTitle(s), text: c.text, state: c.state, have: c.have });
+  });
+  nameDiffers.forEach(function(d) {
+    bodyHtml = '<div class="cb-warn-block">⚠ Campaign “' + aclEscHtml(d.name) + '”: ' + aclEscHtml(d.text)
+      + '<br><span style="opacity:.75">You can still build – the campaign goes out '
+      + (d.state === 'nothing' ? 'without detailed targeting.' : 'with ' + aclEscHtml(d.have.join(', ')) + '.') + '</span></div>'
+      + bodyHtml;
+  });
+
   if (lostTargeting.length) {
     var names = lostTargeting.map(aclEscHtml).join(', ');
     bodyHtml = '<div class="cb-warn-block">⚠ Targeting not selected: <b>' + names + '</b>'
@@ -21706,7 +21857,7 @@ window.cbPublish = function(form) {
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     }
     else _doCbPublish(form);
-  }, { confirmLabel: (warn || lostTargeting.length) ? 'Build anyway'
+  }, { confirmLabel: (warn || lostTargeting.length || nameDiffers.length) ? 'Build anyway'
          : (cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft') });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });

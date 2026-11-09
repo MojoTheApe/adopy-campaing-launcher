@@ -164,4 +164,51 @@ assert.equal(L.routes('Daily budget missing')[0].level, 'campaign');
 assert.equal(L.routes('Ad 1: no creative file')[0].level, 'ad');
 assert.equal(L.routes('Detailed targeting not found by Meta: Foo')[0].level, 'adset');
 
+// ── ACL-2393: имя называет один пресет таргетинга, выбран другой ──────
+{
+  const LIB = [
+    { code: 'Mix2' }, { code: 'Green' }, { code: 'Blue' }, { code: 'Day' }, { code: 'Image' },
+    { code: 'Investment Plus' }, { code: 'EF+' },
+    { code: 'Foreign exchange market, Investor, Day trading' },
+    { code: 'A'.repeat(41) }, { code: '' },
+  ];
+  const chk = (name, sel, skip) => L.nameTargetingCheck(name, sel, LIB, skip || []);
+  let r = chk('KW_TRL_All_Image_Green_35_04.11', ['Mix2'], ['KW', 'TRL', 'All', 'Image', '35', '04.11']);
+  assert.equal(r.state, 'differs'); assert.deepEqual(r.said, ['Green']); assert.deepEqual(r.have, ['Mix2']);
+  assert.equal(L.nameTargetingText(r), 'Name says Green, targeting is Mix2 – fix one of them');
+  assert.equal(chk('KW_green_35', ['Green']).state, 'ok', 'регистр мешает');
+  assert.equal(chk('KW_TRL_All_Image_35_04.11', ['Mix2'], ['Image']).state, 'none');
+  ['Gre', 'Greenland', 'Mix', 'Mix22'].forEach((w) => assert.equal(chk('KW_' + w + '_35', ['Mix2']).state, 'none', w));
+  assert.equal(chk('KW_Investment_Plus_35', ['Mix2']).state, 'differs');
+  assert.deepEqual(chk('KW_Investment_Plus_35', ['Mix2']).said, ['Investment Plus']);
+  assert.equal(chk('KW_Investment Plus_35', ['investment plus']).state, 'ok');
+  assert.equal(chk('KW_Plus_35', ['Mix2']).state, 'none', 'часть кода принята за код');
+  assert.equal(chk('KW_EF_35', ['Mix2']).state, 'none', 'EF принят за EF+');
+  assert.equal(chk('KW_EF+_35', ['Mix2']).state, 'differs');
+  r = chk('KW_Green_Blue_35', ['Green']); assert.equal(r.state, 'ok');
+  r = chk('KW_Green_Blue_35', ['Mix2']);
+  assert.equal(r.state, 'differs'); assert.deepEqual(r.said, ['Green', 'Blue']);
+  assert.equal(L.nameTargetingText(r), 'Name says Green and Blue, targeting is Mix2 – fix one of them');
+  // слова самой карточки пресетом не считаются
+  assert.equal(chk('KW_Image_35', ['Mix2'], ['Image']).state, 'none');
+  assert.equal(chk('KW_Day_35', ['Mix2'], ['Day']).state, 'none');
+  assert.equal(chk('KW_Day_35', ['Mix2']).state, 'differs');
+  // списки интересов и пустые коды не совпадают
+  assert.equal(chk('Foreign exchange market, Investor, Day trading', ['Mix2'], ['Day']).state, 'none');
+  assert.equal(chk('x_' + 'A'.repeat(41), ['Mix2']).state, 'none');
+  // ничего не выбрано
+  r = chk('KW_Green_35', []);
+  assert.equal(r.state, 'nothing');
+  assert.equal(L.nameTargetingText(r), 'Name says Green, but no targeting is selected – pick one');
+  assert.equal(chk('KW_35', []).state, 'none');
+  // несколько наборов: подходит любой
+  assert.equal(chk('KW_Green_35', ['Mix2', 'Green']).state, 'ok');
+  r = chk('KW_Green_35', ['Mix2', 'Day', 'Blue', 'EF+']);
+  assert.equal(L.nameTargetingText(r), 'Name says Green, targeting is Mix2, Day, Blue and 1 more – fix one of them');
+  // пустая или не загруженная библиотека не бросает
+  assert.equal(L.nameTargetingCheck('KW_Green', ['Mix2'], null, []).state, 'none');
+  assert.equal(L.nameTargetingCheck('KW_Green', ['Mix2'], [], []).state, 'none');
+  assert.equal(L.nameTargetingText({ state: 'ok' }), '');
+}
+
 console.log('ok');
