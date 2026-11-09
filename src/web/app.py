@@ -3219,15 +3219,20 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
-    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset"}:
+    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset", "confirm"}:
         return JSONResponse({"ok": False, "error": "Unknown setting in the request"}, status_code=400)
     if "reset" in data and not isinstance(data["reset"], bool):
         return JSONResponse({"ok": False, "error": "Expected true or false for reset"}, status_code=400)
+    if "confirm" in data and not isinstance(data["confirm"], bool):
+        return JSONResponse({"ok": False, "error": "Expected true or false for confirm"}, status_code=400)
     try:
         from starlette.concurrency import run_in_threadpool
         result = await run_in_threadpool(
             lambda: run_limits.save(data.get("ceiling"), data.get("warm_heavy"),
-                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset"))))
+                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
+                                    confirm=data.get("confirm") is True))
+    except run_limits.NeedsConfirm as exc:
+        return JSONResponse({"ok": False, "needs_confirm": True, "error": str(exc)}, status_code=409)
     except run_limits.RunLimitError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **result})

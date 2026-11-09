@@ -48,7 +48,7 @@ def no_side_effects(monkeypatch):
 
 def test_a_change_reaches_the_engine_without_a_restart(machine, no_side_effects):
     assert ps.load_settings().ceiling == 2 and warm.max_heavy() == 1
-    result = rl.save(5, 2, 80)
+    result = rl.save(5, 2, 80, confirm=True)
     assert result["ceiling"] == 5 and result["warm_heavy"] == 2 and result["memory_max_used_pct"] == 80
     assert result["running_jobs_affected"] is False and result["applies"] == "next start decision"
     settings = ps.load_settings()
@@ -77,14 +77,14 @@ def test_one_bad_field_rejects_the_whole_save(machine, no_side_effects):
 
 
 def test_bounds_accepted_and_comma_decimal(machine, no_side_effects):
-    assert rl.save(ceiling=8, warm_heavy=3, memory_max_used_pct="95")["memory_max_used_pct"] == 95
+    assert rl.save(ceiling=8, warm_heavy=3, memory_max_used_pct="95", confirm=True)["memory_max_used_pct"] == 95
     assert rl.save(ceiling=1, memory_max_used_pct="50,5")["memory_max_used_pct"] == 50.5
 
 
 def test_reset_writes_explicit_defaults_not_blank_keys(machine, no_side_effects, monkeypatch):
     # Старый ключ из прежних настроек не должен «просочиться» после сброса.
     monkeypatch.setenv("ACL_MAX_PARALLEL_CEILING", "4")
-    rl.save(6, 3, 70)
+    rl.save(6, 3, 70, confirm=True)
     result = rl.save(reset=True)
     assert (result["ceiling"], result["warm_heavy"], result["memory_max_used_pct"]) == (2, 1, 92)
     text = machine.read_text(encoding="utf-8")
@@ -92,7 +92,7 @@ def test_reset_writes_explicit_defaults_not_blank_keys(machine, no_side_effects,
 
 
 def test_telemetry_row_has_numbers_only(machine, no_side_effects):
-    rl.save(4, None, None)
+    rl.save(4, None, None, confirm=True)
     rows = [kw for a, kw in no_side_effects if kw.get("note") == "run_limits_changed"]
     assert len(rows) == 1
     diag = rows[0]["diag"]
@@ -156,7 +156,7 @@ def _post(body):
 
 def test_api_roundtrip_and_validation(machine, no_side_effects):
     from src.web import app as web
-    ok = _post({"ceiling": 4, "memory_max_used_pct": 85})
+    ok = _post({"ceiling": 4, "memory_max_used_pct": 85, "confirm": True})
     data = json.loads(ok.body)
     assert ok.status_code == 200 and data["ceiling"] == 4 and data["memory_max_used_pct"] == 85
     got = json.loads(web.api_run_limits().body)
@@ -200,3 +200,82 @@ def test_the_ceiling_wait_text_and_the_settings_block_are_on_the_page():
     # slot_decision несёт различие «потолок / память» для разбора.
     src = (ROOT / "src/web/publish_jobs.py").read_text(encoding="utf-8")
     assert '"ceiling_reached"' in src and '"effective_limit"' in src
+
+
+def test_huge_json_integer_is_a_clean_400(machine, no_side_effects):
+    before = machine.read_bytes()
+    for field in ("ceiling", "warm_heavy", "memory_max_used_pct"):
+        with pytest.raises(rl.RunLimitError):
+            rl.save(**{field: 10 ** 400})
+        resp = _post({field: 10 ** 400})
+        assert resp.status_code == 400
+    assert machine.read_bytes() == before
+
+
+def test_risky_values_need_an_explicit_confirm_on_the_server(machine, no_side_effects):
+    before = machine.read_bytes()
+    for body in ({"ceiling": 4}, {"memory_max_used_pct": 94}, {"ceiling": 8, "warm_heavy": 2},
+                 {"ceiling": 4, "confirm": False}):
+        resp = _post(body)
+        data = json.loads(resp.body)
+        assert resp.status_code == 409 and data["needs_confirm"] is True and data["ok"] is False
+    assert machine.read_bytes() == before and not no_side_effects, "nothing is written without confirm"
+    with pytest.raises(rl.NeedsConfirm):
+        rl.save(5)
+    assert _post({"ceiling": 4, "confirm": "yes"}).status_code == 400
+    ok = _post({"ceiling": 4, "memory_max_used_pct": 85, "confirm": True})
+    assert ok.status_code == 200 and json.loads(ok.body)["ceiling"] == 4
+    assert "ACL_MAX_PROFILES" in machine.read_text(encoding="utf-8")
+
+
+def test_lowering_a_share_that_is_still_above_80_needs_no_confirm(machine, no_side_effects):
+    assert _post({"memory_max_used_pct": 85}).status_code == 200   # 92 (default) -> 85: not a raise
+
+
+def test_safe_changes_and_lowering_need_no_confirm(machine, no_side_effects):
+    assert _post({"ceiling": 3, "memory_max_used_pct": 80, "warm_heavy": 3}).status_code == 200
+    assert _post({"ceiling": 4, "confirm": True}).status_code == 200
+    # Понижение с рискованного значения и сброс подтверждения не просят.
+    assert _post({"ceiling": 2}).status_code == 200
+    assert _post({"ceiling": 4, "confirm": True}).status_code == 200
+    assert _post({"reset": True}).status_code == 200
+
+
+def _page_functions(*names):
+    import re
+    html = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    out = []
+    for name in names:
+        m = re.search(r"^function " + name + r"\(.*?^\}\s*$", html, re.S | re.M)
+        assert m, name
+        out.append(m.group(0))
+    return chr(10).join(out)
+
+
+def _node(expr):
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    code = _page_functions("cbCeilingWait", "cbAccountWait") + chr(10) + "console.log(JSON.stringify(" + expr + "));"
+    done = subprocess.run([node, "-e", code], capture_output=True, text=True, timeout=30)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def test_wait_texts_say_the_ceiling_and_the_heavy_limit():
+    assert _node("cbCeilingWait({cap:5, running:5})") == (
+        "Waiting: 5 of 5 profiles in use (ceiling 5). The next one starts when a run finishes")
+    assert _node("cbCeilingWait({cap:2, running:3, ahead:2})") == (
+        "Waiting: 3 profiles running, ceiling is now 2 - new runs start when fewer than 2 are running (2 ahead)")
+    assert _node("cbCeilingWait({})") == "Waiting for a free profile slot"
+    assert _node("cbAccountWait({hold:'heavy_limit', heavy_limit:2, running:2})") == (
+        "Waiting: 2 of 2 heavy actions in progress (limit 2) - it starts by itself, Stop cancels it")
+    assert _node("cbAccountWait({hold:'account_busy'})").startswith("Waiting for another account action")
+
+
+def test_the_dialog_sends_the_confirm_flag_for_risky_values():
+    html = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    assert "if (risky) body.confirm = true;" in html
+    assert html.index("if (risky) body.confirm = true;") < html.index("post(body, risky);")

@@ -23317,6 +23317,7 @@ function aclPickerSearch(inst, text) {
     var c = parseFloat(el('rl-ceiling').value), p = parseFloat(el('rl-share').value);
     var cf = info.confirm_above || {};
     var risky = ('ceiling' in body && c > (cf.ceiling || 3)) || ('memory_max_used_pct' in body && p > (cf.memory_max_used_pct || 80));
+    if (risky) body.confirm = true;   // сервер без этого флага рискованное значение не принимает
     post(body, risky);
   }
   document.addEventListener('click', function (ev) {

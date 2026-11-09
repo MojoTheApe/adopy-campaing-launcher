@@ -42,6 +42,10 @@ class RunLimitError(ValueError):
     """A value the manager can correct: out of range, not a number."""
 
 
+class NeedsConfirm(RunLimitError):
+    """Raising the ceiling above 3 or the memory share above 80 needs an explicit `confirm`."""
+
+
 def defaults() -> dict[str, float | int]:
     from src.web import profile_slots as ps
     return {"ceiling": ps.DEFAULT_CEILING, "warm_heavy": 1,
@@ -63,7 +67,10 @@ def _number(raw: Any, label: str) -> float:
         except ValueError:
             raise RunLimitError(f"{label}: enter a number without units.") from None
     else:
-        value = float(raw)
+        try:
+            value = float(raw)
+        except OverflowError:   # JSON-целое вроде 10**400 не влезает в float
+            raise RunLimitError(f"{label}: enter a number.") from None
     if not math.isfinite(value):
         raise RunLimitError(f"{label}: enter a number.")
     return value
@@ -144,7 +151,7 @@ def current() -> dict[str, Any]:
 
 
 def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any = None,
-         *, reset: bool = False) -> dict[str, Any]:
+         *, reset: bool = False, confirm: bool = False) -> dict[str, Any]:
     """Validate everything first, then write all values in one update.
 
     `reset` writes the defaults explicitly - never blank keys: a blank ceiling would fall
@@ -163,6 +170,16 @@ def save(ceiling: Any = None, warm_heavy: Any = None, memory_max_used_pct: Any =
             values[HEAVY_KEY] = _fmt(check_heavy(warm_heavy))
         if memory_max_used_pct is not None:
             values[SHARE_KEY] = _fmt(check_share(memory_max_used_pct))
+    if not confirm and not reset:
+        # Диалог страницы - только удобство: сервер сам не принимает рискованное повышение без confirm.
+        risky = []
+        if CEILING_KEY in values and int(values[CEILING_KEY]) > CONFIRM_CEILING_ABOVE                 and int(values[CEILING_KEY]) > old["ceiling"]:
+            risky.append("more than %d profiles at once" % CONFIRM_CEILING_ABOVE)
+        if SHARE_KEY in values and float(values[SHARE_KEY]) > CONFIRM_SHARE_ABOVE                 and float(values[SHARE_KEY]) > old["memory_max_used_pct"]:
+            risky.append("more than %g%% memory in use" % CONFIRM_SHARE_ABOVE)
+        if risky:
+            raise NeedsConfirm("Confirmation required: " + " and ".join(risky)
+                               + " can overload this computer. Send confirm: true to save anyway.")
     if values:
         try:
             update_machine_env(values)
