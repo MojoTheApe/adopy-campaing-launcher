@@ -335,7 +335,8 @@ _HELPER_JS = r"""
     const media = spec[kind];
     if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
-    if (!textListOk(spec.bodies, 'bodies', true, cap) || !textListOk(spec.titles, 'titles', true, cap)) return false;
+    // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
+    if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
     if ('descriptions' in spec && !textListOk(spec.descriptions, 'descriptions', true, cap)) return false;
     let names = [];
     for (const item of media) {

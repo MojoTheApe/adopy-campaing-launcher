@@ -228,9 +228,9 @@ RULES: list[dict[str, Any]] = [
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("feed_texts", "Several texts or a Stories / Reels file need a primary text and a headline", ERROR, "client",
-       "an ad with several texts or a Stories / Reels file needs a primary text and a headline; "
-       "add them, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("feed_texts", "Several texts or a Stories / Reels file need a headline", ERROR, "client",
+       "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); "
+       "add a headline, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_len", "Text visible in full (up to 125)", WARNING, "client",
        "after 125 characters the text is folded behind 'See more'",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -315,15 +315,16 @@ def _multi_text(a: dict) -> bool:
 
 
 def _feed_missing_text(a: dict) -> bool:
-    """Объявление пойдёт через asset feed (несколько текстов или вертикальный файл), а основного текста или заголовка нет.
+    """Объявление пойдёт через asset feed (несколько текстов или вертикальный файл), а заголовка нет.
 
     write_policy._check_asset_feed всё равно откажет такому фиду до первой записи; правило переносит отказ в Check plan (ACL-2403).
+    ACL-2474: без основного текста, но с заголовком Meta принимает (живой прогон 08.11) - это предупреждение `primary_text`.
+    Случаи «текст есть, заголовка нет» и «текстов нет совсем» живьём не проверены, отказ по ним сохранён.
     """
     if not (_multi_text(a) or _s(a.get("vertical_file"))):
         return False
-    has_body = bool(_s(a.get("body"))) or bool(_distinct(a.get("bodies")))
     has_title = bool(_s(a.get("headline"))) or bool(_distinct(a.get("headlines")))
-    return not (has_body and has_title)
+    return not has_title
 
 
 def _s(v: Any) -> str:
