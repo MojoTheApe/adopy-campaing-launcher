@@ -32,7 +32,7 @@ from src.analysis_agent.analyze_fb_stats import (
 )
 from src.creative_variant import apply_backfill as apply_variant_backfill
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
-from src.analysis_agent.morning_report import build_morning_report
+from src.analysis_agent.morning_report import build_morning_report, canonical_gsheet_country_code
 from src.analysis_agent.news_context import NewsFetcher, build_news_context
 
 
@@ -53,6 +53,16 @@ def _country_from_label(label: str) -> str:
         if _RE_TWO_UPPER.match(token):
             return token
     return ""
+
+
+def _linked_countries_for(label: str) -> List[str]:
+    """Страны аккаунта из account_links.csv (пусто, если ссылок нет или файл не читается)."""
+    try:
+        from src.web import account_links
+
+        return [str(v).strip().upper() for v in account_links.values_for(label, "country") if str(v).strip()]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _fallback_accounts_from_csv(cm_name: str) -> List[Dict[str, Any]]:
@@ -83,21 +93,29 @@ def _fallback_accounts_from_csv(cm_name: str) -> List[Dict[str, Any]]:
                 # guessing from the account name — a name suffix like "SA" is just
                 # a legacy label, not necessarily where the account is actually
                 # running today (that can change day to day).
-                country_code = (row.get("country") or "").strip().upper() or _country_from_label(label)
-                rows.append({
-                    "cm": cm_name,
-                    "country_code": country_code,
-                    "account_label": label,
-                    "alias": _alias_from_label(label),
-                    "cost": "",
-                    "leads": "",
-                    "ftds": "",
-                    "stock": "",
-                    "to_do": "",
-                    "to_do_extra": "",
-                    "is_ready": True,
-                    "account_status": None,
-                })
+                #
+                # Страны, назначенные аккаунту на странице Accounts, лежат в
+                # account_links.csv, а не в колонке карты — без них аккаунт
+                # с пустой колонкой не попадал ни в одну страну билдера. Ссылок
+                # может быть несколько: по строке на каждую страну.
+                column = (row.get("country") or "").strip().upper()
+                linked = _linked_countries_for(label)
+                country_codes = linked or [column or _country_from_label(label)]
+                for country_code in country_codes:
+                    rows.append({
+                        "cm": cm_name,
+                        "country_code": country_code,
+                        "account_label": label,
+                        "alias": _alias_from_label(label),
+                        "cost": "",
+                        "leads": "",
+                        "ftds": "",
+                        "stock": "",
+                        "to_do": "",
+                        "to_do_extra": "",
+                        "is_ready": True,
+                        "account_status": None,
+                    })
     except Exception as e:  # noqa: BLE001
         print(f"[morning_service] Failed to load fallback accounts from CSV: {e}", file=sys.stderr)
     return rows
@@ -242,9 +260,17 @@ def load_morning_report(
     # RPA but aren't listed in today's GSheet tab (e.g. not scheduled for any CM
     # today) still need to be pickable in Campaign Builder — otherwise a mapped
     # account is invisible until someone adds it to the sheet for that day.
-    existing_labels = {(r.get("account_label") or "").strip().lower() for r in account_rows}
+    # По паре (аккаунт, страна), а не по одному имени: у аккаунта из листа могут
+    # быть ещё страны, назначенные вручную, и без них он не виден в этих странах.
+    existing_labels = {
+        ((r.get("account_label") or "").strip().lower(), canonical_gsheet_country_code(str(r.get("country_code", ""))))
+        for r in account_rows
+    }
     csv_rows = _fallback_accounts_from_csv(resolved_cm)
-    new_from_csv = [r for r in csv_rows if r["account_label"].strip().lower() not in existing_labels]
+    new_from_csv = [
+        r for r in csv_rows
+        if (r["account_label"].strip().lower(), canonical_gsheet_country_code(str(r.get("country_code", "")))) not in existing_labels
+    ]
     if new_from_csv:
         account_rows = account_rows + new_from_csv
         fallback_mode = True
