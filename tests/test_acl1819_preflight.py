@@ -160,8 +160,11 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "feed_texts_ok_multi": (_with(ads=_ad(0, bodies=["a", "b"], headlines=["h"])), "feed_texts", "ok", []),
     "feed_texts_vertical_no_headline": (_with(ads=_ad(0, vertical_file="v.png", headline="", headlines=[])),
                                         "feed_texts", "error", [1]),
-    "feed_texts_vertical_no_body": (_with(ads=_ad(1, vertical_file="v.png", body="", bodies=[])),
-                                    "feed_texts", "error", [2]),
+    # ACL-2474: без основного текста, но с заголовком Meta принимает ленту (живой прогон 08.11) - не ошибка.
+    "feed_texts_vertical_no_body_ok": (_with(ads=_ad(1, vertical_file="v.png", body="", bodies=[])),
+                                       "feed_texts", "ok", []),
+    "feed_texts_vertical_no_text_at_all": (_with(ads=_ad(0, vertical_file="v.png", body="", bodies=[], headline="", headlines=[])),
+                                           "feed_texts", "error", [1]),
     "feed_texts_multi_no_headline": (_with(ads=_ad(0, bodies=["a", "b"], headline="", headlines=[])),
                                      "feed_texts", "error", [1]),
     "feed_texts_one_text_no_headline_ok": (_with(ads=_ad(0, headline="")), "feed_texts", "ok", []),
