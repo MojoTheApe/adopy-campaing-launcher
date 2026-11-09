@@ -40,6 +40,20 @@ def _picker() -> str:
     return page[start:end]
 
 
+def _click() -> str:
+    """Выбор мышью: обработчик mousedown обязан звать cbTargetingPick (ACL-2393),
+    а тело выбора живёт в нём; для проверок берём оба куска."""
+    page = TPL.read_text(encoding="utf-8")
+    picker = _picker()
+    handler = picker[picker.index("opt.addEventListener('mousedown'"):]
+    assert "cbTargetingPick(wrap, opt.dataset.code" in handler, (
+        "мышь больше не идёт через общий выбор cbTargetingPick"
+    )
+    start = page.index("window.cbTargetingPick = function(")
+    body = page[start: page.index("\n  };", start)]
+    return body + "\n" + handler
+
+
 def _commit() -> str:
     page = TPL.read_text(encoding="utf-8")
     start = page.index("window.cbTargetingCommit = function(input)")
@@ -49,8 +63,7 @@ def _commit() -> str:
 # ── ради чего всё ─────────────────────────────────────────────────────
 
 def test_the_mouse_pick_puts_the_code_in_the_form():
-    picker = _picker()
-    click = picker[picker.index("opt.addEventListener('mousedown'"):]
+    click = _click()
     assert "hidden.value = code" in click, (
         "в отправляемое поле снова уходит строка интересов — сервер по ней "
         "ничего не найдёт, и детальный таргетинг молча очистится"
@@ -69,16 +82,14 @@ def test_typing_and_committing_puts_the_code_too():
 def test_the_hint_still_shows_the_interests():
     """Человеку интересы показывать надо — он по ним и узнаёт таргет. Но
     показывать и отправлять — разные вещи."""
-    picker = _picker()
-    click = picker[picker.index("opt.addEventListener('mousedown'"):]
+    click = _click()
     assert "hint.textContent = interest" in click
     assert "hint.textContent = hit[0].fb_interest" in _commit()
 
 
 def test_both_paths_agree():
     """Разойтись им нельзя: выбор мышью и набор — один и тот же выбор."""
-    click = _picker()
-    click = click[click.index("opt.addEventListener('mousedown'"):]
+    click = _click()
     commit = _commit()
     for src in (click, commit):
         sets = re.findall(r"hidden\.value = ([^;]+);", src)

@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "GraphError",
+  "message": "Graph read timed out after 3 attempts",
+  "expect": {
+    "key": "graph_read_timeout",
+    "short": "Meta did not answer in time",
+    "next": "nothing was changed, republish in a few minutes",
+    "severity": "blocking",
+    "retry": "later"
+  }
+}
