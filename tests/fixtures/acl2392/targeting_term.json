@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "PlanError",
+  "message": "Country 'Kuwaitt' was not found by Meta targeting search",
+  "expect": {
+    "key": "targeting_term",
+    "short": "Meta did not accept a targeting term: \"Kuwaitt\"",
+    "next": "replace it and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  }
+}

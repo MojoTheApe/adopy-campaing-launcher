@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "LoggedOut",
+  "message": "the session token is no longer valid; the write was not retried",
+  "expect": {
+    "key": "logged_out",
+    "short": "Account logged out",
+    "next": "log in and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "code": 190
+}

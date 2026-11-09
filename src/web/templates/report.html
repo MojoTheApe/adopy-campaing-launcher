@@ -21797,6 +21797,22 @@ function cbTeachMarkerHtml(steps, cls) {
   return '';
 }
 
+// ACL-2392: the builder never prints raw Meta text, codes or ids. A failure with details gets one link that opens
+// the header "Recent runs" popup on this job, where the full text lives (recent_runs.js, with Copy details).
+var cbDetailsJobId = '';
+function cbFailureDetailsHtml(details) {
+  var d = details && typeof details === 'object' ? details : null;
+  if (!d || !Object.keys(d).length) return '';
+  return '<div class="cb-fail-link" style="margin-top:0.25rem"><a href="#recent-runs" class="cb-open-details" data-job="'
+    + aclEscHtml(cbDetailsJobId) + '">Details in Recent runs</a></div>';
+}
+document.addEventListener('click', function(ev) {
+  var a = ev.target && ev.target.closest ? ev.target.closest('.cb-open-details') : null;
+  if (!a) return;
+  ev.preventDefault();
+  if (window.aclRecentRunsOpen) window.aclRecentRunsOpen(a.getAttribute('data-job') || '');
+});
+
 // ACL-1437: проблемы кампании — заголовок с вердиктом, число, пронумерованный
 // список (что сломалось, чем грозит, «→ что делать») и свёрнутые технические
 // подробности. Данные — `r.problems` от робота (failure_policy.problems);
@@ -21844,7 +21860,8 @@ function cbProblemsHtml(r) {
     tech.push('<div class="cb-problems-error">error: ' + aclEscHtml(extraError) + '</div>');
   }
   items.forEach(function(p) {
-    tech.push('<div>' + aclEscHtml(p.raw || p.step || '') + '</div>');
+    // ACL-2392: the raw Meta text (codes, fbtrace) is not shown in the builder; it lives in Recent runs.
+    tech.push('<div>' + aclEscHtml(p.step || '') + '</div>');
   });
   if (r.run_id) tech.push('<div>run id: ' + aclEscHtml(r.run_id) + '</div>');
   if (r.campaign_id) tech.push('<div>campaign_id: ' + aclEscHtml(r.campaign_id) + '</div>');
@@ -21859,6 +21876,7 @@ function cbProblemsHtml(r) {
   h += '<details class="cb-problems-tech"><summary>Technical details '
     + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
+  h += cbFailureDetailsHtml(r.failure && r.failure.details);
   return h + '</div>';
 }
 
@@ -21957,6 +21975,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   var stopBtnId = 'cb-stop-' + jobId.replace(/-/g, '').slice(0, 12);
 
   function renderStatus(job) {
+    cbDetailsJobId = job.job_id || jobId;  // ACL-2392: the "Details in Recent runs" link targets this job
     var done = job.done_count || 0;
     var total = job.total || 0;
     var hasFatal = (job.errors || []).length > 0;
@@ -22058,6 +22077,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : (r.not_started ? ' style="color:var(--warn);border-color:var(--warn)"' : '');   // ACL-2299: not started, not failed
         html += '<div class="cb-status-err"' + errStyle + '>' + aclEscHtml(r.error) + '</div>';
       }
+      if (r.failure && !(r.problems || []).length) html += cbFailureDetailsHtml(r.failure.details);
       if (r.blocking_failures && r.blocking_failures.length) {
         html += '<div class="cb-status-err">Do not publish: '
              + r.blocking_failures.map(aclEscHtml).join(', ') + '</div>';
@@ -22073,8 +22093,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           + 'Steps: ' + stepsHtml + extra + '</div>';
       }
     });
-    (job.errors || []).forEach(function(e) {
-      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e) + '</div>';
+    (job.errors || []).forEach(function(e, i) {
+      html += '<div class="cb-status-fatal" style="background:rgba(220,38,38,0.12);border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin-top:0.4rem">🚨 ' + aclEscHtml(e)
+        + cbFailureDetailsHtml((job.error_details || [])[i]) + '</div>';
     });
     if (!isRunning) html += cbCloseProfileHtml(job);
     return html;
