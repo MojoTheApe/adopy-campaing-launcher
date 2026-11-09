@@ -109,8 +109,26 @@ def stats_payload(name: str, spec_hash: str, *, outcome: Any = None, plan: Any =
 
 
 def result_payload(res: dict) -> dict:
-    """Итог кампании как есть, без новых полей."""
-    return {k: res.get(k) for k in _RESULT_KEYS}
+    """Итог кампании как есть, без новых полей.
+
+    ACL-2392: панель получает простой текст, а в журнал уходит прежний сырой (`failure.details.error_text`,
+    строки сверки `failure.details.readback_mismatches`): содержимое журнала не меняется.
+    """
+    out = {k: res.get(k) for k in _RESULT_KEYS}
+    details = (res.get("failure") or {}).get("details") if isinstance(res.get("failure"), dict) else None
+    if isinstance(details, dict):
+        if details.get("error_text"):
+            out["error"] = details["error_text"]
+        lines = list(details.get("readback_mismatches") or [])
+        rows = out.get("blocking_failures")
+        if isinstance(rows, list) and (lines or details.get("error_text")):
+            # Rebuild the list as before ACL-2392: raw readback lines first, then "not finished: <raw error>".
+            marker = "Meta saved different values than planned"
+            finished = any(str(x).startswith("not finished: ") for x in rows)
+            rest = [x for x in rows if marker not in str(x) and not str(x).startswith("not finished: ")]
+            tail = ["not finished: " + str(details["error_text"])] if finished and details.get("error_text") else []
+            out["blocking_failures"] = lines + rest + tail
+    return out
 
 
 def check_payload(result: dict, *, plan_hash_value: str, duration_s: float) -> dict:

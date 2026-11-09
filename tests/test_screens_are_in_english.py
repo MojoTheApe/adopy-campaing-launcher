@@ -40,4 +40,4 @@ def test_no_russian_text_reaches_the_screen():
 def test_the_publish_popup_speaks_english():
     page = (TEMPLATES / "report.html").read_text(encoding="utf-8")
     assert "Do not lock the screen while the build runs" in page
-    assert "confirmLabel: (warn || lostTargeting.length) ? 'Build anyway'" in page
+    assert "confirmLabel: (warn || lostTargeting.length || nameDiffers.length) ? 'Build anyway'" in page
