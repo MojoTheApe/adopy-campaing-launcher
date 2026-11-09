@@ -1167,6 +1167,7 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
                   "read_s": round(time.monotonic() - read_started, 1),
                   **({"rejected": dict(part.rejected)} if part.rejected else {}),
                   **({"error_kind": error_kind, "raised": except_kind} if error_kind else {}),
+                  **({"code": connection_code, "reason": error[:200]} if connection_code else {}),   # ACL-2400
                   **_tab_load(stop_seen)},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
