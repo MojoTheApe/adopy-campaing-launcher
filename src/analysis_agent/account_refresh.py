@@ -28,7 +28,9 @@ from src.analysis_agent.account_refresh_machine import MachineStore, binding, Co
 log = logging.getLogger(__name__)
 
 FRESH_S = 3600.0
-PRIORITY = {"action": 0, "retry": 1, "attention": 2, "schedule": 3}
+#: `open` (ACL-2419): профиль только что открыт кнопкой Open — статус кабинета обновляется
+#: тем же чтением, что и список; приоритет как у Retry, но паузу очереди он не обходит.
+PRIORITY = {"action": 0, "retry": 1, "open": 1, "attention": 2, "schedule": 3}
 WINDOWS = ("08:00", "13:00", "18:00")
 
 

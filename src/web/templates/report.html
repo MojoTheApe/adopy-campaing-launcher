@@ -2000,6 +2000,7 @@
     .aov-st.active { background: var(--st-active-bg); color: var(--st-active); } .aov-st.issue { background: var(--st-issue-bg); color: var(--st-issue); }
     .aov-st.dead { background: var(--st-dead-bg); color: var(--st-dead); } .aov-st.new { background: var(--st-new-bg); color: var(--st-new); }
     .aov-st.unknown { background: var(--st-unknown-bg); color: var(--st-unknown); border: 1px dashed var(--adopy-border-strong); }
+    .aov-stline { display: block; margin-top: 2px; font-size: var(--adopy-text-xs, 11px); color: var(--adopy-text-muted, #6b7280); white-space: nowrap; } .aov-stline.stale { opacity: .8; }
     .aov-empty { padding: 10px 14px; font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
     .aov-warn { padding: 10px 14px; background: var(--adopy-danger-bg); color: var(--adopy-danger); font-size: var(--adopy-text-table); }
     .aov-virtual { border-color: var(--adopy-danger); }
@@ -13107,8 +13108,11 @@ function amapApplyReading(account, s, split, waiting) {
       var status = row.querySelector('.amap-status');
       status.innerHTML = '<span></span>' + amapStatusTail(account, s);
       var label = status.firstChild;
+      /* ACL-2419: те же слова, что в шаблоне ячейки: `active` — статус из Meta (источник api),
+         `no warning` — только текст страницы, `unknown` — незнание (код не распознан). */
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
-      label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
+      label.textContent = s.status === 'clear' ? (s.source === 'api' ? 'active' : 'no warning')
+        : s.status === 'unknown' ? (s.source === 'api' ? 'unknown' : 'unreadable') : s.status;
       label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
     }
     if (s.state === 'running') {

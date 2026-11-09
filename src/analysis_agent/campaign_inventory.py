@@ -138,6 +138,10 @@ class Snapshot:
     ads: list[dict] = field(default_factory=list)
     #: уровень → {id: {spend, reach, impressions, frequency, clicks}}
     insights: dict[str, dict[str, dict]] = field(default_factory=dict)
+    #: ACL-2419: `account_status` и `disable_reason` из `/act_X`, который чтение и так запрашивает.
+    #: Новых запросов ради них нет; старые снимки без полей читаются как «не знаем».
+    account_status: int | None = None
+    disable_reason: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -766,6 +770,8 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
     acc = client.account(act)
     _api._check_account(acc, act)  # noqa: SLF001
     snap.currency = str(acc.get("currency") or "")
+    snap.account_status = _to_int(acc.get("account_status"))
+    snap.disable_reason = _to_int(acc.get("disable_reason"))
     path = f"/{act}"
 
     def fetch(step: str, sub: str, fields: str, level: str):
@@ -848,6 +854,26 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
     snap.calls = int(getattr(client, "calls", 0) or 0)
 
 
+def record_status(snap: Snapshot) -> bool:
+    """ACL-2419: отдать статус кабинета в его хранилище после УДАВШЕГО чтения списка.
+
+    Ни одного лишнего запроса: слово берётся из ответа, который чтение уже получило.
+    Неудачное чтение статус не пишет. Сбой хранилища чтение не ломает.
+    """
+    if snap.account_status is None or not read_succeeded(snap):
+        return False
+    try:
+        from src.analysis_agent import account_spend_api as _api
+
+        status, text, code, reason = _api.status_from_account(
+            {"account_status": snap.account_status, "disable_reason": snap.disable_reason})
+        return _as.put_status(snap.account, status, text, source="api", at=_as._now(),  # noqa: SLF001
+                              disable_reason=reason, account_status=code)
+    except Exception:  # noqa: BLE001 — статус вторичен, список важнее
+        log.exception("Could not store the account status of %s", snap.account)
+        return False
+
+
 def finalize(snap: Snapshot) -> None:
     """Итоговое состояние по шагам: ok | partial | empty | failed."""
     if snap.steps.get("campaigns") not in ("ok", "truncated"):
@@ -896,6 +922,7 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
             finally:
                 notes = sess.notes
         finalize(snap)
+        record_status(snap)
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
         snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
@@ -951,6 +978,7 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
                 stop = sess.client.stopped.kind
                 _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
             finalize(snap)
+            record_status(snap)
     except Exception as exc:  # noqa: BLE001 — исход команды не меняется
         snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):

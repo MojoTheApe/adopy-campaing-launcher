@@ -151,6 +151,22 @@ def map_status(account_status: Any, disable_reason: Any = None) -> tuple[str, st
     return status, text + tail + ")"
 
 
+
+def status_from_account(acc: dict) -> tuple[str, str, int | None, str]:
+    """Ответ `/act_X` → `(status, text, account_status, disable_reason_name)` (ACL-2419).
+
+    Тонкая обёртка над `map_status`: чтение списка кампаний кладёт то же слово,
+    что и чтение спенда. Нет `account_status` в ответе — статус пуст, а не `clear`.
+    """
+    acc = acc or {}
+    code = _as_int(acc.get("account_status"))
+    if code is None:
+        return "", "", None, ""
+    status, text = map_status(code, acc.get("disable_reason"))
+    reason = _as_int(acc.get("disable_reason")) if status != "clear" else None
+    return status, text, code, (_DISABLE_REASONS.get(reason, "") if reason else "")
+
+
 # ───────────────────────── дерево ─────────────────────────
 
 #: `effective_status` → слово колонки Delivery. Слова подобраны так, чтобы

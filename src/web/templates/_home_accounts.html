@@ -14,7 +14,7 @@
     {% for k in ['active', 'issue', 'dead', 'new', 'unknown'] %}
     <button type="button" class="aov-fb {{ k }}{% if not stt[k] %} zero{% endif %}" data-aov-filter="{{ k }}" aria-pressed="false"><small><span class="aov-sw {{ k }}" aria-hidden="true"></span><span class="aov-gl" aria-hidden="true">{{ glyph[k] }}</span> {{ labels[k] }}</small><b>{{ stt[k] }}</b></button>
     {% endfor %}
-    <span class="aov-fnote">{{ stt.countries_active }} of {{ stt.countries_total }} countries have an active account · Active = spend in the selected period</span>
+    <span class="aov-fnote">{{ stt.countries_active }} of {{ stt.countries_total }} countries have an active account · Active = spend in the selected period and a status read in the last 24 h or none yet</span>
   </div>
   <div class="aov-live" id="aov-live" aria-live="polite"></div>
   {% endif %}
@@ -59,7 +59,7 @@
       {% set mv = metric_values(r.spend, r.leads, r.deposits) %}
       <tr class="aov-row s-{{ s.key }}" data-state="{{ s.key }}"{% if folded %} data-folded="1" hidden{% endif %}
           data-search="{{ ((r.account or '') ~ ' ' ~ (r.workbook_alias or '')) | lower | e }}">
-        <td><span class="aov-st {{ s.key }}"><span aria-hidden="true">{{ glyph[s.key] }}</span> {{ s.label }}</span></td>
+        <td><span class="aov-st {{ s.key }}" title="{{ s.status_tip | e }}"><span aria-hidden="true">{{ glyph[s.key] }}</span> {{ s.label }}</span>{% if s.status_line %}<small class="aov-stline{{ ' stale' if s.key == 'unknown' }}">{{ s.status_line }}</small>{% endif %}</td>
         <td class="acc amap-acc" title="{{ r.account | e }}{% if r.act_id %} · {{ r.act_id | e }}{% endif %}{% if r.workbook_alias %} · workbook: {{ r.workbook_alias | e }}{% endif %}"><span class="amap-caret-off">·</span><span class="aov-acc"><span class="aov-nm">{{ r.account }}</span>{% if r.act_id %}<small class="aov-act">{{ r.act_id }}</small>{% endif %}</span></td>
         {% if r.has_data %}
         <td class="num">{{ mv[0] }}</td><td class="num">{{ mv[1] }}</td><td class="num">{{ mv[3] }}</td><td class="num">{{ mv[2] }}</td><td class="num">{{ mv[4] }}</td>
@@ -126,14 +126,14 @@
         <span class="w">{% if r.deposits and r.deposits > 0 %}{{ mv[2] }} FTD · CPA {{ mv[4] }}{% else %}CPL {{ mv[3] }}{% endif %}</span>
         {%- elif s.key == 'issue' %}
         <span class="v">{{ s.short_reason }}</span>
-        <span class="w{% if s.stale %} stale{% endif %}">{% if s.read_short %}read {{ s.read_short }}{{ age(s) }}{% else %}not read yet{% endif %}</span>
+        <span class="w{% if s.stale %} stale{% endif %}">{% if s.status_line %}{{ s.status_line }}{% elif s.read_short %}read {{ s.read_short }}{{ age(s) }}{% else %}not read yet{% endif %}</span>
         {%- elif s.key == 'dead' %}
         <span class="v">disabled</span>
-        <span class="w{% if s.stale %} stale{% endif %}">{% if r.has_data and r.spend %}{{ mv[0] }} · {% endif %}{% if s.read_short %}read {{ s.read_short }}{{ age(s) }}{% else %}not read yet{% endif %}</span>
+        <span class="w{% if s.stale %} stale{% endif %}">{% if r.has_data and r.spend %}{{ mv[0] }} · {% endif %}{% if s.status_line %}{{ s.status_line }}{% elif s.read_short %}read {{ s.read_short }}{{ age(s) }}{% else %}not read yet{% endif %}</span>
         {%- elif s.key == 'new' %}
         <span class="v">New</span><span class="w">no spend yet</span>
         {%- else %}
-        <span class="v">Unknown</span><span class="w">{% if s.tried_short %}read failed {{ s.tried_short }}{% else %}no saved reading{% endif %}</span>
+        <span class="v">Unknown</span><span class="w">{% if s.status_line %}{{ s.status_line }}{% elif s.tried_short %}read failed {{ s.tried_short }}{% else %}no saved reading{% endif %}</span>
         {%- endif %}
       </button>
       {% endfor %}
