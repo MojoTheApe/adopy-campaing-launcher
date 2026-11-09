@@ -1,5 +1,22 @@
 # System history
 
+## ACL-2473 — Check plan: refused-lookups note only for terms without candidates — 2026-11-09
+
+The "Meta refused the … lookup … could not be checked there" note is now added only to
+targeting terms that have no candidates at all. A term with candidates but no exact name
+(for example "Income") shows just the plain reason, so the buyer is not led to blame the
+account. Python change: restart the dashboard after release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1473).
+
+## ACL-2470 — Memory gate waits up to 10 seconds before refusing an unqueued action — 2026-11-09
+
+When free memory is below the reserve, an action that nobody queued (a read, a profile start) now re-checks
+every 1-2 seconds for up to 10 seconds before it refuses. A short dip while a profile starts no longer fails the
+action; a sustained shortage still refuses with "Not enough free memory - close a profile and retry" and the
+same numbers in the log as in ACL-2400. Publish jobs keep waiting in the queue (ACL-2278), the wait for a busy
+account gate is unchanged, and the 92 % default and its migration are not touched. Restart the dashboard after release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1470).
+
 ## ACL-2478 — Offline probe tooling for ACL-2344 step 0 — 2026-11-09
 
 Offline probe tooling for ACL-2344 step 0; no behaviour change; the light work tab itself is not implemented. Adds an offline probe (`src/fb_ads_rpa/light_probe.py`, `scripts/probe_2344_p1.py`) for running in-page Graph calls from a light same-origin document instead of the full Ads Manager tab. The probe serves the light document from the browser and fails every other request of its own tab (interception pattern `*`, Network enabled on the probe tab only so service workers are bypassed, the document is inert under a no-script/no-worker CSP, the tab is set offline as a last line, interception stays on while the tab lives; a service worker acting on its own outside the probe tab is not controlled); a dummy string is handed over through a BroadcastChannel. The probe script is gated to the Doc120 profile (loopback CDP url plus an explicit `--profile-id` equal to Doc120's in the machine's account map). `RawCdp.call` and `PageTab.call` gained an optional `on_event` hook, and `RawCdp` queues messages that nested calls from a handler would otherwise drop; callers that do not pass it behave as before. No publish, read or write code path uses the probe, and the `ACL_LIGHT_WORK_TAB` mode does not exist. The live probe and the implementation stay in ACL-2344.
