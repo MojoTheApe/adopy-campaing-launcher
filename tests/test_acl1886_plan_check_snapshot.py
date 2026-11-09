@@ -88,7 +88,9 @@ def test_denied_search_reaches_the_public_plan_result(tmp_path, monkeypatch, no_
     res = _assert_read_only(out, meta, opened, no_network)
     assert meta.denied and set(meta.denied) == {"/search"}
     # ACL-1805: the catalog text; the raw line stays in problems[].raw. ACL-1920 adds the refused search's name.
-    assert res["error"] == "Meta refused: " + _CATALOG_10 + " (search: adgeolocation)"
+    # ACL-2392: the panel line is the plain catalog text; "Meta refused" and the search name moved to the details.
+    assert res["error"] == _CATALOG_10 and "Meta refused" not in res["error"]
+    assert "adgeolocation" in json.dumps(res["failure"]["details"])
     assert res["problems"][0]["raw"].endswith("operation=search, search_type=adgeolocation]")
     audit = {row["rule"]: row for row in res["audit"]}
     assert audit["country_resolves"]["status"] == "unknown"
@@ -106,6 +108,6 @@ def test_denied_campaigns_reaches_the_public_plan_result(tmp_path, monkeypatch, 
     out, meta, opened = _check(tmp_path, monkeypatch, "/campaigns")
     res = _assert_read_only(out, meta, opened, no_network)
     assert meta.denied == [f"/{ACT}/campaigns"]
-    assert res["error"] == "Meta refused: " + _CATALOG_10
+    assert res["error"] == _CATALOG_10      # ACL-2392: plain text only; the raw line is in problems[].raw / details
     assert res["problems"][0]["raw"].endswith("operation=campaigns]")
     assert "operation=search" not in res["error"]
