@@ -43,6 +43,25 @@ class HandoffPending(ValueError):
     """A ready source is waiting for its Worker to record Review."""
 
 
+def partial_promotion_members(request, config, pr, numbers):
+    """Only a signed disposition of this actual merged promotion permits Review."""
+    shared = delivery_policy.read_full_state(request, config['project']['repository'])
+    section = delivery_policy.execution_state(shared, config)
+    marker = re.findall(r'^Tracker batch:\s*([a-f0-9]{32})\s*$', pr.get('body') or '', re.M)
+    if len(marker) != 1:
+        return set()
+    held = section.get('integration') or {}
+    batch = held if held.get('id') == marker[0] else section.get('batches', {}).get(marker[0], {})
+    if not batch or set(batch.get('issues', [])) != set(numbers):
+        return set()
+    workflow = shared.get('delivery_workflow', {})
+    carried = delivery_policy.partial_members(workflow, batch)
+    document = workflow.get('acceptances', {}).get(batch['id'], {}).get('evidence', {})
+    if document.get('pr') != pr['number'] or document.get('merge_sha') != pr.get('merge_commit_sha'):
+        return set()
+    return {int(n) for n in carried}
+
+
 def check(request, config, pr_number, *, allow_transition=False, admission=False, approval_recovery=False):
     repo=config['project']['repository'];root='repos/'+repo
     pr=request(root+f'/pulls/{pr_number}')
@@ -68,6 +87,7 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
         raise ValueError('Process instructions require one task per source PR')
     stages={s if isinstance(s,str) else s['id']:s if isinstance(s,str) else s['phase'] for s in config['workflow']}
     modules={m['id'] for m in config['modules']}
+    recovered_partial = None
     for n in numbers:
         issue=request(root+f'/issues/{n}')
         if 'task_context_policy' in config:
@@ -82,6 +102,12 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
                 allowed.add('approved')
             if direction == 'promotion' and not pr.get('draft'):
                 allowed = {'stage', 'merged'}
+                if (allow_transition and pr.get('merged') and delivery_policy.batch_mode(config)
+                        and any(stages.get(s) == 'review' for s in status)):
+                    if recovered_partial is None:
+                        recovered_partial = partial_promotion_members(request, config, pr, numbers)
+                    if n in recovered_partial:
+                        allowed.add('review')
         if direction == 'process':
             allowed = {'review', 'merged'} | ({'in_progress'} if pr.get('draft') else set())
         resuming_merge = (allow_transition and pr.get('merged') and len(status)==2
