@@ -286,13 +286,14 @@ def _module_source() -> str:
     return src[start:end] + "window.builderAccountFacts = window.cbLifetime.facts;"
 
 
-def _israel_period() -> tuple[str, str]:
+def _israel_period(now: datetime | None = None) -> tuple[str, str]:
     """Первый и последний день периода формы: считаем от сегодняшнего дня по Израилю, а не от литерала.
 
     Первый день = сегодня + 3 (строго в будущем, правило ACL-2462 «старт сегодня -> текущий час» не срабатывает),
     последний = первый + 5.
     """
-    first = datetime.now(ZoneInfo("Asia/Jerusalem")).date() + timedelta(days=3)
+    now = now or datetime.now(ZoneInfo(ISRAEL))
+    first = now.astimezone(ZoneInfo(ISRAEL)).date() + timedelta(days=3)
     return first.isoformat(), (first + timedelta(days=5)).isoformat()
 
 
@@ -308,6 +309,22 @@ def _preview_text(first: str, last: str) -> str:
     return f"{_short(first)} – {_short(last)} (Israel time)"
 
 
+_PERIOD_CLOCKS = [
+    pytest.param(None, id="current-relative-period"),
+    pytest.param(datetime(2027, 1, 20, 10, tzinfo=ZoneInfo("UTC")), id="winter"),
+    pytest.param(datetime(2027, 7, 20, 10, tzinfo=ZoneInfo("UTC")), id="summer"),
+    pytest.param(datetime(2027, 3, 20, 10, tzinfo=ZoneInfo("UTC")), id="us-israel-dst-mismatch"),
+]
+
+
+def _new_york_offset_and_shift(page) -> tuple[int, int]:
+    """Independent ZoneInfo expectations at the form's actually selected start."""
+    start = datetime.fromisoformat(page.input_value("[name$='_start_time']")).replace(tzinfo=ZoneInfo(ISRAEL))
+    account_offset = start.astimezone(ZoneInfo("America/New_York")).utcoffset()
+    return (int(account_offset.total_seconds() // 3600),
+            int((account_offset - start.utcoffset()).total_seconds() // 3600))
+
+
 @pytest.mark.parametrize("first,last,text", [
     ("2026-11-10", "2026-11-15", "10 Nov – 15 Nov (Israel time)"),
     ("2026-11-28", "2026-12-03", "28 Nov – 03 Dec (Israel time)"),      # переход месяца, день 1–9 с нулём
@@ -319,9 +336,12 @@ def test_preview_text_helper_is_zero_padded_for_any_day(first, last, text):
 
 
 @pytest.fixture
-def lt(browser):
+def lt(browser, request):
     ctx = browser.new_context()
     pg = ctx.new_page()
+    clock = getattr(request, "param", None)
+    if clock is not None:
+        pg.clock.install(time=clock)
     errors: list[str] = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.set_content('<div class="cb-acc-row" data-acc-label="NY"><div class="cb-slot" id="slot">'
@@ -329,7 +349,7 @@ def lt(browser):
     pg.add_script_tag(content="window.ACL_FB_BACKEND='api'; window.CB_TEAM_TIMEZONE='Asia/Jerusalem';"
                               "window.CB_ACCOUNT_FACTS={NY:{timezone_name:'America/New_York',currency:'USD'},"
                               "KO:{timezone_name:'Asia/Kolkata',currency:'USD'}};\n" + _module_source())
-    first, last = _israel_period()
+    first, last = _israel_period(clock)
     pg.evaluate("""([FIRST, LAST]) => {
         const slot = document.getElementById('slot');
         slot.insertAdjacentHTML('beforeend', cbLifetime.segHtml(0) + cbLifetime.rowsHtml(0));
@@ -342,6 +362,7 @@ def lt(browser):
     ctx.close()
 
 
+@pytest.mark.parametrize("lt", _PERIOD_CLOCKS, indirect=True)
 def test_labels_and_aria_say_israel_time(lt):
     text = lt.evaluate("document.getElementById('slot').innerText")
     assert "First day (Israel time)" in text and "Last day (Israel time)" in text
@@ -349,7 +370,8 @@ def test_labels_and_aria_say_israel_time(lt):
     assert lt.get_attribute(".cb-sg", "aria-label") == "Hours when ads run, Israel time"
     assert lt.get_attribute("[data-lt-part='start']", "aria-label") == "First day, Israel time"
     assert lt.get_attribute("[data-lt-part='start']", "type") == "date"
-    assert "Times are Israel time (Asia/Jerusalem). Account: America/New_York (UTC-5)" in \
+    offset, _shift = _new_york_offset_and_shift(lt)
+    assert f"Times are Israel time (Asia/Jerusalem). Account: America/New_York (UTC{offset:+d})" in \
         lt.inner_text("[data-lt-tz]") or "Times are Israel time (Asia/Jerusalem). Account: unknown" in lt.inner_text("[data-lt-tz]")
 
 
@@ -392,15 +414,17 @@ def test_the_page_has_no_time_zone_field(lt):
     assert lt.evaluate("document.querySelectorAll('[name$=\"_time_zone\"]').length") == 0
 
 
+@pytest.mark.parametrize("lt", _PERIOD_CLOCKS, indirect=True)
 def test_the_preset_clears_01_to_05_on_every_day_and_the_preview_shows_account_time(lt):
     lt.click(".cb-lt-preset")
     cells = lt.evaluate("[...document.querySelectorAll('.cb-sg-cell')].map(c => [+c.dataset.d, +c.dataset.h, c.classList.contains('is-on')])")
     assert len(cells) == 168
     assert all(on == (h not in (1, 2, 3, 4)) for _d, h, on in cells)
     assert json.loads(lt.input_value("[name$='_schedule']")) == NO_01_05
-    # Формулы сервера: Нью-Йорк на 10 ноября = Израиль минус 7 часов.
+    _offset, shift = _new_york_offset_and_shift(lt)
     assert lt.inner_text("[data-lt-acc-preview]") == \
-        "Meta gets account time (America/New_York): Every day: 00:00–18:00, 22:00–24:00"
+        (f"Meta gets account time (America/New_York): Every day: 00:00–{(1 + shift) % 24:02d}:00, "
+         f"{(5 + shift) % 24:02d}:00–24:00")
 
 
 def test_the_preview_asks_to_wait_for_check_plan_when_the_account_zone_is_unknown(lt):
@@ -452,13 +476,16 @@ def test_the_page_algorithm_gives_the_same_windows_as_the_server_one(lt, wins, s
     assert lt.evaluate("([w, h]) => cbLifetime.convertWindows(w, h)", [wins, shift]) == server
 
 
+@pytest.mark.parametrize("lt", _PERIOD_CLOCKS, indirect=True)
 def test_the_account_preview_reads_the_start_date_difference(lt):
     lt.evaluate("""() => { const hid = document.querySelector('[name$="_schedule"]');
         hid.disabled = false;
         document.querySelector('.cb-sched-on').checked = true;
         hid.value = JSON.stringify([{days:[1,2,3,4,5], start_minute:540, end_minute:1080}]);
         cbLifetime.sync(document.getElementById('slot')); }""")
-    assert lt.inner_text("[data-lt-acc-preview]") == "Meta gets account time (America/New_York): Mon–Fri 02:00–11:00"
+    _offset, shift = _new_york_offset_and_shift(lt)
+    assert lt.inner_text("[data-lt-acc-preview]") == \
+        f"Meta gets account time (America/New_York): Mon–Fri {(9 + shift) % 24:02d}:00–{(18 + shift) % 24:02d}:00"
 
 
 def test_a_half_hour_account_zone_is_flagged_in_the_preview(lt):
