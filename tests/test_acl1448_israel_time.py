@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -286,6 +286,21 @@ def _module_source() -> str:
     return src[start:end] + "window.builderAccountFacts = window.cbLifetime.facts;"
 
 
+def _israel_period() -> tuple[str, str]:
+    """Первый и последний день периода формы: считаем от сегодняшнего дня по Израилю, а не от литерала.
+
+    Первый день = сегодня + 3 (строго в будущем, правило ACL-2462 «старт сегодня -> текущий час» не срабатывает),
+    последний = первый + 5.
+    """
+    first = datetime.now(ZoneInfo("Asia/Jerusalem")).date() + timedelta(days=3)
+    return first.isoformat(), (first + timedelta(days=5)).isoformat()
+
+
+def _short(day: str) -> str:
+    d = datetime.strptime(day, "%Y-%m-%d")
+    return f"{d.day} {d:%b}"
+
+
 @pytest.fixture
 def lt(browser):
     ctx = browser.new_context()
@@ -297,13 +312,14 @@ def lt(browser):
     pg.add_script_tag(content="window.ACL_FB_BACKEND='api'; window.CB_TEAM_TIMEZONE='Asia/Jerusalem';"
                               "window.CB_ACCOUNT_FACTS={NY:{timezone_name:'America/New_York',currency:'USD'},"
                               "KO:{timezone_name:'Asia/Kolkata',currency:'USD'}};\n" + _module_source())
-    pg.evaluate("""() => {
+    first, last = _israel_period()
+    pg.evaluate("""([FIRST, LAST]) => {
         const slot = document.getElementById('slot');
         slot.insertAdjacentHTML('beforeend', cbLifetime.segHtml(0) + cbLifetime.rowsHtml(0));
         slot.querySelector('[data-budget-type="lifetime"]').click();
-        const ds = slot.querySelector('[data-lt-part="start"]'); ds.value = '2026-11-10'; cbLtDate(ds);
-        const de = slot.querySelector('[data-lt-part="end"]'); de.value = '2026-11-15'; cbLtDate(de);
-    }""")
+        const ds = slot.querySelector('[data-lt-part="start"]'); ds.value = FIRST; cbLtDate(ds);
+        const de = slot.querySelector('[data-lt-part="end"]'); de.value = LAST; cbLtDate(de);
+    }""", [first, last])
     yield pg
     assert not errors, errors
     ctx.close()
@@ -321,9 +337,11 @@ def test_labels_and_aria_say_israel_time(lt):
 
 
 def test_dates_are_a_period_first_day_from_midnight_last_day_inclusive(lt):
-    assert lt.input_value("[name$='_start_time']") == "2026-11-10T00:00"
-    assert lt.input_value("[name$='_end_time']") == "2026-11-16T00:00"
-    assert "10 Nov – 15 Nov (Israel time)" in lt.inner_text("[data-lt-preview]")
+    first, last = _israel_period()
+    end_exclusive = (datetime.strptime(last, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    assert lt.input_value("[name$='_start_time']") == f"{first}T00:00"
+    assert lt.input_value("[name$='_end_time']") == f"{end_exclusive}T00:00"
+    assert f"{_short(first)} – {_short(last)} (Israel time)" in lt.inner_text("[data-lt-preview]")
 
 
 def test_the_hours_grid_is_open_with_every_hour_on_and_no_schedule_is_sent(lt):
