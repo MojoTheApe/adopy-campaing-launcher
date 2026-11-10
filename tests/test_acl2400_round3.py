@@ -15,7 +15,7 @@ import pytest
 from config import config_unify as cu
 from src.fb_api import warm
 from src.web import profile_slots as ps
-from tests.test_acl1812_warm_sessions import Rig
+from tests.test_acl1812_warm_sessions import PID, Rig, _s90
 
 KEY = "ACL_MEMORY_MAX_USED_PCT"
 
@@ -185,7 +185,8 @@ def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(
     def run():
         try:
             with warm.job_wait(lambda: False, lambda view: None):
-                out.append(rig.checkout())
+                rig.gate.acquire(PID)   # ACL-2369: the gate for a NEW profile (memory-gated)
+                out.append(PID)
         except BaseException as exc:  # noqa: BLE001
             err.append(exc)
 
@@ -196,7 +197,7 @@ def test_a_queued_job_waits_at_the_gate_under_low_memory_and_goes_when_it_frees(
     free[0] = 12000
     t.join(5)
     assert err == [] and len(out) == 1
-    out[0].release()
+    rig.gate.release(PID)
     holder.release()
 
 
@@ -210,13 +211,13 @@ def test_the_gate_refusal_logs_its_numbers(tmp_path, caplog):
     holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
     with caplog.at_level(logging.INFO, logger=warm.log.name):
         with pytest.raises(warm.WarmError):
-            rig.checkout()
+            rig.gate.acquire(PID, fail_on_memory=True)
     line = next(r.getMessage() for r in caplog.records if "memory holds the action" in r.getMessage())
     assert "GB free" in line and "% used" in line and "limit" in line
 
 
-def test_check_plan_on_a_held_gate_returns_the_memory_text_and_code(tmp_path, monkeypatch):
-    """The real Check plan path with a real gate refusing for memory (no session fake)."""
+def test_check_plan_on_an_open_profile_is_not_held_by_memory(tmp_path, monkeypatch):
+    """ACL-2369 (#1369): Check plan on an already open profile is not held by memory, even while another runs."""
     from types import SimpleNamespace
 
     from src.analysis_agent import account_spend as sp
@@ -230,7 +231,7 @@ def test_check_plan_on_a_held_gate_returns_the_memory_text_and_code(tmp_path, mo
     rig.warm_up()
     other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     rig.warm_up(other, account="Acc2")
-    holder = rig.checkout(other, account="Acc2")   # ACL-2369: the first action is never held; the next one is
+    holder = rig.checkout(other, account="Acc2")   # another action is running under memory pressure
     ent = SimpleNamespace(profile_id=PID, folder_id="", multilogin_instance="A", ad_account_id=ACT)
     monkeypatch.setattr(sp, "_entry_for", lambda account: ent)
     monkeypatch.setattr(sp, "_set_wait_note", lambda account, note: None)
@@ -245,9 +246,29 @@ def test_check_plan_on_a_held_gate_returns_the_memory_text_and_code(tmp_path, mo
     recorded: list = []
     monkeypatch.setattr(publish_api, "_record", lambda step, ok, campaign="", diag=None, duration_s=None:
                         recorded.append((step, ok, diag or {})))
+    asked: list = []
+    real_acquire = rig.gate.acquire
+
+    def spy(*a, **k):
+        asked.append(k.get("memory_gated", True))
+        return real_acquire(*a, **k)
+
+    monkeypatch.setattr(rig.gate, "acquire", spy)
     out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX", force=True)
-    assert out["error"] == warm.memory_hold_text("600 MB")
-    assert out["connection_code"] in ("below_reserve", "memory_low")
-    (step,) = [r for r in recorded if r[0] == "api_plan_check"]
-    assert step[1] is False and step[2]["code"] == out["connection_code"]
-    assert step[2]["reason"] == warm.memory_hold_text("600 MB")
+    assert asked and asked[-1] is False
+    assert out.get("connection_code") not in ("below_reserve", "memory_low")
+    assert warm.memory_hold_text("600 MB") not in str(out.get("error") or "")
+    holder.release()
+
+
+def test_a_new_profile_is_still_gated_by_memory(tmp_path):
+    """The memory gate still applies to a new profile (default gate use); an open profile skips it."""
+    gate = warm.HeavyGate(limit=lambda: 2, memory=lambda: ps.MemoryReading(16000, 1000),
+                          settings=lambda: _s90(), usage=None, tick_s=0.01, grace_s=0.0)
+    gate.acquire("p1")                                  # the first one always goes
+    with pytest.raises(warm.WarmError) as cold:
+        gate.acquire("p2", fail_on_memory=True)
+    assert cold.value.code in ("below_reserve", "memory_low")
+    assert "MB" in str(cold.value) or "GB" in str(cold.value)
+    gate.acquire("p3", fail_on_memory=True, memory_gated=False)   # open profile: not held
+    assert gate.active() == ["p1", "p3"]

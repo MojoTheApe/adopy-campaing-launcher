@@ -119,7 +119,7 @@ def test_a_held_action_gets_the_memory_message_at_once_without_waiting(tmp_path)
     first = rig.checkout(other, account="Acc2")   # ACL-2369: the first action on a warm profile is never held
     started = time.monotonic()
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout()
+        rig.gate.acquire(PID, fail_on_memory=True)   # ACL-2369: the gate that guards a NEW profile
     _fail_if_slow(started)
     # 16000 MB at the rig's 90 %: 1600 MB must stay free, 1000 free -> 600 MB more
     assert str(ei.value) == warm.memory_hold_text("600 MB") and ei.value.code in ("below_reserve", "memory_low")
@@ -206,9 +206,9 @@ def test_gate_memory_dip_that_recovers_within_the_grace_lets_the_second_action_g
         return ps.MemoryReading(16000, 1000 if rig.gate_skew[0] < 4 else 9000)
 
     rig.gate._memory = dipping
-    lease = rig.checkout()
+    rig.gate.acquire(PID, fail_on_memory=True)
     assert sorted(rig.gate.active()) == sorted([PID, OTHER]) and 0 < rig.gate_skew[0] < 10 and len(reads) >= 3
-    lease.release()
+    rig.gate.release(PID)
     first.release()
 
 
@@ -218,7 +218,7 @@ def test_gate_sustained_shortage_refuses_the_second_action_after_at_most_ten_sec
     rig.gate_skew[0] = 0
     rig.gate_pauses.clear()
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout()
+        rig.gate.acquire(PID, fail_on_memory=True)
     # 16000 MB at 90 %: 1600 MB must stay free, 1000 free -> 600 MB more
     assert str(ei.value) == warm.memory_hold_text("600 MB") and ei.value.code in ("below_reserve", "memory_low")
     assert 9.9 <= rig.gate_skew[0] <= 10.1 and all(0 < p <= 2 for p in rig.gate_pauses)
@@ -232,7 +232,7 @@ def test_gate_refusal_log_of_the_second_action_keeps_the_numbers_of_acl_2400(tmp
     rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
     first = _second_action_rig(rig)
     with caplog.at_level(logging.INFO), pytest.raises(warm.WarmError):
-        rig.checkout()
+        rig.gate.acquire(PID, fail_on_memory=True)
     first.release()
     assert any("memory holds the action" in r.getMessage() and "GB free" in r.getMessage() for r in caplog.records)
 

@@ -441,12 +441,12 @@ def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(
     first = rig.checkout(a)
     free[0] = 1400                          # ACL-2255: занято 91 % из 16 ГБ (порог 90 %), а не «6 ГБ на профиль»
     with pytest.raises(warm.WarmError) as ei:     # ACL-2400: said at once, no wait
-        rig.checkout(b)
+        rig.gate.acquire(b, fail_on_memory=True)   # ACL-2369: the gate for a NEW profile
     # 16000 MB at 90 %: 1600 MB must stay free, 1400 free -> 200 MB more (ACL-2369)
     assert str(ei.value) == warm.memory_hold_text("200 MB"), "started while more than 90% of memory was in use"
     free[0] = 3000                          # занято 81 % — можно, хотя замер профиля 6 ГБ
-    second = rig.checkout(b)
-    second.release()
+    rig.gate.acquire(b, fail_on_memory=True)
+    rig.gate.release(b)
     first.release()
 
 

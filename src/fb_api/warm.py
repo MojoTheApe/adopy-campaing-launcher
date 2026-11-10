@@ -397,7 +397,7 @@ class HeavyGate:
         with self._cond:
             return sorted(self._active)
 
-    def _allowed(self) -> tuple[bool, str]:
+    def _allowed(self, *, memory_gated: bool = True) -> tuple[bool, str]:
         n = len(self._active)
         limit = max(1, int(self._limit()))
         memory = self._memory()
@@ -407,6 +407,9 @@ class HeavyGate:
             return True, "first"
         if n >= limit:
             return False, "limit"
+        if not memory_gated:
+            # ACL-2369 (#1369): an action on an already open profile adds no memory; never held by it.
+            return True, "open_profile"
         if memory is None:
             return (n < min(self._ps.FALLBACK_LIMIT, limit)), "memory_unknown"
         # ACL-2255: by the SHARE of memory in use (the running actions are already in it), not by "N GB per profile".
@@ -441,7 +444,7 @@ class HeavyGate:
                 on_wait: Callable[[str], None] | None = None,
                 cancelled: Callable[[], bool] | None = None,
                 on_tick: Callable[[str], None] | None = None,
-                fail_on_memory: bool = False) -> None:
+                fail_on_memory: bool = False, memory_gated: bool = True) -> None:
         """Ждать места. Не дождались за `wait_s` — `WarmError(code="gate_wait")`.
 
         ACL-2400: `fail_on_memory` - a memory hold (`below_reserve`/`memory_low`) is refused with
@@ -463,7 +466,7 @@ class HeavyGate:
                 if cancelled is not None and cancelled():
                     raise WarmError("Stopped while waiting for the account gate. Nothing was called.",
                                     code="cancelled")
-                ok, why = self._allowed()
+                ok, why = self._allowed(memory_gated=memory_gated)
                 if ok:
                     self._active[profile_id] = 1
                     return
@@ -1351,13 +1354,14 @@ class WarmRegistry:
         try:
             if job is None:
                 self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
-                                  on_wait=on_wait, fail_on_memory=True)
+                                  on_wait=on_wait, fail_on_memory=True,
+                                  memory_gated=False)
             else:
                 # ACL-2278: a job never fails for a busy gate or short memory: it stays queued until it can
                 # go, or until the user stops it. Only local memory reads; no account is touched.
                 try:
                     self.gate.acquire(profile_id, wait_s=float("inf"), on_wait=on_wait,
-                                      cancelled=job.cancelled,
+                                      cancelled=job.cancelled, memory_gated=False,
                                       on_tick=lambda why: _show(job, self.gate.wait_view(why)))
                 finally:
                     _show(job, None)
