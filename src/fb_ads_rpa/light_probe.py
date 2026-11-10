@@ -278,6 +278,110 @@ def run_p5(cdp_url: str, act_id: str, profile_id: str = "", *, _gate: bool = Tru
 PILOT_ACCOUNTS = ("doc120", "doc283")
 
 
+# ── P1/P3 again, on the FINAL code (`src/fb_api/light_tab.py` + the helper of `InPageGraph`), after review.
+# P1: the light document, origin requests answered locally, a reload noticed - nothing goes to Meta.
+# P3: the production lease path (capture tab -> light tab -> hand-over -> capture closed) and the two reads a
+# Check plan makes. Only codes, counts and HTTP statuses go out.
+
+def _origin_fetch(tab: Any) -> str:
+    ctx = tab.create_isolated_world(WORLD + "_origin")
+    return str(tab.evaluate_in(ctx, "fetch('/__acl_probe_origin', {cache: 'no-store'})"
+                                    ".then(() => 'sent', () => 'blocked')", timeout=20.0))
+
+
+def run_final_p1(cdp_url: str, profile_id: str = "", *, _gate: bool = True) -> dict:
+    """The light tab of the final code: our document, an origin fetch and a reload answered locally."""
+    from src.fb_api import light_tab as _lt
+
+    if _gate:
+        require_pilot(cdp_url, profile_id)
+    out: dict[str, Any] = {}
+    work, doc, reason = _lt.open_work_tab(cdp_url)
+    if work is None:
+        return {"light_doc": reason}
+    try:
+        out["light_doc"] = "ok"
+        out["intact_after_open"] = doc.document_intact() or "ok"
+        out["origin_fetch"] = _origin_fetch(work)
+        work.pump(0.5)
+        before = doc.fulfilled
+        work.call("Page.reload", {"ignoreCache": True}, timeout=20.0)   # as an F5 of the manager would
+        deadline = time.monotonic() + 15.0
+        while doc.fulfilled == before and time.monotonic() < deadline:
+            work.pump(0.2)
+        work.pump(1.0)
+        out["reload_served_locally"] = doc.fulfilled == before + 1
+        out["reload_noticed"] = doc.document_intact() == "light_doc_replaced"
+        out["counts"] = {"fulfilled": doc.fulfilled, "blocked": doc.blocked, "errors": doc.errors}
+        return out
+    finally:
+        _lt.settle_and_close(work)
+
+
+def _read_summary(reply: Any) -> dict:
+    reply = reply if isinstance(reply, dict) else {}
+    body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
+    err = body.get("error") if isinstance(body.get("error"), dict) else {}
+    out = {"status": reply.get("status"), "error": reply.get("error"), "graph_error_code": err.get("code")}
+    if isinstance(body.get("data"), list):
+        out["rows"] = len(body["data"])
+    return out
+
+
+def run_final_p3(cdp_url: str, act_id: str, profile_id: str = "", *, _gate: bool = True) -> dict:
+    """The production light lease path once: ONE Ads Manager load, hand-over, capture closed, two reads."""
+    from src.fb_api import light_tab as _lt
+    from src.fb_api.token_capture import InPageGraph, act_digits
+
+    if _gate:
+        require_pilot(cdp_url, profile_id)
+    out: dict[str, Any] = {"stopped_at": None}
+    work = capture = None
+    try:
+        work, doc, reason = _lt.open_work_tab(cdp_url)
+        if work is None:
+            out["stopped_at"] = reason
+            return out
+        capture = PageTab.open(cdp_url)
+        cap = InPageGraph(capture)
+        cap.install()
+        cap.navigate(act_id)
+        state = cap.wait_ready(timeout=90.0)
+        out["capture"] = {"kind": state.get("kind"), "has_token": bool(state.get("has_token"))}
+        if state.get("kind") != "ads_manager" or not state.get("has_token"):
+            out["stopped_at"] = "capture"
+            return out
+        graph = InPageGraph(work)
+        graph.install()
+        graph.bind_act(act_id)
+        out["handover"] = graph.receive_from(cap) or "ok"
+        try:
+            cap._eval_helper(".retire()", timeout=10.0)
+        except Exception:  # noqa: BLE001
+            pass
+        _lt.settle_and_close(capture)
+        capture = None
+        out["capture_closed"] = True
+        if out["handover"] != "ok":
+            out["stopped_at"] = "handover"
+            return out
+        st = graph.state()
+        out["work_state"] = {"kind": st.get("kind"), "has_token": bool(st.get("has_token")), "light": st.get("light")}
+        r1 = _read_summary(graph.request("GET", "/me/adaccounts", {"fields": "id", "limit": "1"}, timeout=15))
+        out["read_adaccounts"] = r1
+        if r1.get("status") != 200:
+            out["stopped_at"] = "read_adaccounts"
+            return out
+        out["read_account"] = _read_summary(graph.request("GET", "/act_" + act_digits(act_id),
+                                                          {"fields": "account_status"}, timeout=15))
+        out["intact_after_reads"] = doc.document_intact() or "ok"
+        out["counts"] = {"fulfilled": doc.fulfilled, "blocked": doc.blocked, "errors": doc.errors}
+        return out
+    finally:
+        for t in (capture, work):
+            _lt.settle_and_close(t)
+
+
 def pilot_profile_ids() -> set:
     import csv
 

@@ -466,6 +466,18 @@ def test_pilot_gate(tmp_path, monkeypatch):
         light_probe.run_p5("http://127.0.0.1:9222", "act_1", "PROF-121")
 
 
+def test_final_p1_probe_offline(browser):  # noqa: F811
+    from src.fb_ads_rpa import light_probe
+
+    got = light_probe.run_final_p1(browser, _gate=False)
+    assert got["light_doc"] == "ok" and got["intact_after_open"] == "ok", got
+    assert got["origin_fetch"] == "blocked"
+    assert got["reload_served_locally"] is True and got["reload_noticed"] is True, got
+    assert got["counts"]["fulfilled"] == 2 and got["counts"]["errors"] == 0
+    with pytest.raises(light_probe.ProbeGateError):
+        light_probe.run_final_p3("http://127.0.0.1:9222", "act_1", "PROF-121")
+
+
 def test_flag_default_off():
     assert light_tab.enabled({}) is False
     assert light_tab.enabled({"ACL_LIGHT_WORK_TAB": "1"}) is True
