@@ -15,9 +15,13 @@ and render the selected guide from actual unchanged config; the corresponding
 details use the same maintained generator. The guarded ACL adapter, exact package
 target and all four native check names remain explicit.
 
-Compare the full source with actual main
-`c0cb1a619c371c35d00a4411f066d530876a5904`; refresh this comparison when main
-advances before submission. Native config remains byte-identical (SHA256
+Compare the full source with admitted main
+`9ec59332fc1c410cc59a9bb502c404a2f5696227`. Its ACL-2506 date-fixture test and
+system changelog changes are incorporated unchanged from the earlier c0 baseline;
+no changed product import, build input or support-test dependency is introduced.
+The prior791 tooling and6 manifest results therefore retain their actual scope;
+the refreshed source still needs its normal hosted checks. Native config remains
+byte-identical (SHA256
 `987d436b56907be1c4eb263a8e865a4822b9bd4c46491d14fbc750a763387dce`).
 Every non-pin descriptor choice and Master1.8.0 executable ancestry are unchanged.
 Master1.11.0 remains the separate adopted author/reviewer guidance. The source
