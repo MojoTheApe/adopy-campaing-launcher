@@ -1836,6 +1836,7 @@ class WarmRegistry:
             self._raise_for_state(sess, state)
         if not state.get("has_token"):
             return None
+        graph.light_recaptures = 0                         # the re-capture bound is per lease
         sess.graphs[mode] = graph
         sess.logged_out = False
         return graph, state

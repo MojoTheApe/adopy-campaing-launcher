@@ -88,7 +88,8 @@ def test_lease_start_hands_over_and_closes_the_heavy_tab(rig):
     assert work.target_id in rig.reg.known_targets()               # the restored-tab clean-up never closes it
     row = _light_rows(rig)[-1]
     assert row["mode"] == "light" and row["handover_ok"] and row["capture_tab_closed"]
-    assert "url" not in repr(row).lower() or "light" in repr(row)
+    assert not any("url" in str(k).lower() for k in row)
+    assert not any(isinstance(v, str) and ("://" in v or "act_" in v) for v in row.values())
     lease.release()
 
 
@@ -98,6 +99,13 @@ def test_reuse_and_account_switch_never_load_ads_manager(rig):
     rig.checkout(act="act_987654321").release()
     assert len(rig.tabs) == 2 and sum(t.navigations for t in rig.tabs) == 1
     assert rig.last_graph.acts[-1] == "act_987654321"
+
+
+def test_the_recapture_bound_is_per_lease(rig):
+    lease = rig.checkout()
+    lease.graph.light_recaptures = 2                                     # this lease used up its re-captures
+    lease.release()
+    assert rig.checkout().graph.light_recaptures == 0
 
 
 def test_new_helper_mode_gets_the_token_from_the_same_tab(rig):

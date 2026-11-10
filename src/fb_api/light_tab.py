@@ -17,11 +17,13 @@ only status codes.
 """
 from __future__ import annotations
 
+import atexit
 import base64
 import json
 import os
 import secrets
 import time
+import weakref
 from typing import Any
 
 from src.fb_api.cdp import CdpError, PageTab
@@ -89,7 +91,7 @@ class LightDocument:
                 self.blocked += 1               # nothing of the page origin ever goes to Meta
                 self.tab.call("Fetch.failRequest", {"requestId": rid, "errorReason": "BlockedByClient"},
                               timeout=10.0)
-        except (CdpError, TimeoutError):
+        except Exception:  # noqa: BLE001 - never let a paused request hang the tab's event pump
             self.errors += 1
 
     def intercept(self, *, timeout: float = 10.0) -> None:
@@ -145,6 +147,7 @@ def open_light_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocume
                 if not doc.marker or snap.get("marker") != doc.marker:
                     return None, "light_doc_replaced"      # not our document (e.g. a service worker answered)
                 doc.time_origin = snap.get("t")
+                _OPEN.add(tab)
                 return doc, ""
             if time.monotonic() >= deadline:
                 return None, "light_doc_failed"
@@ -179,7 +182,9 @@ def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0) -> str:
             dst._eval_helper(".stopListen()", timeout=10.0)
     except (CdpError, TimeoutError):
         return "work_tab_dead"
-    if status == "received" and sent == "acked":
+    # the receiver decides: it validated and stored the token. The sender's ack (`sent`) may be lost on a
+    # busy machine (its evaluate timed out) although the token arrived - that is not a failure.
+    if status == "received":
         return ""
     if status == "rejected":
         return "handover_rejected"
@@ -253,10 +258,32 @@ def open_work_tab(cdp_url: str) -> tuple[Any, LightDocument | None, str]:
     return tab, doc, ""
 
 
+#: Light tabs of THIS process. The interception lives only as long as our CDP connection: when the process
+#: ends, a light tab left open would send `/__acl_work` to Meta on a reload (F5, discard/restore, session
+#: restore). A normal exit closes them (`_close_all`); after a crash the restored-tab clean-up of the next
+#: open closes the orphan (`cdp.is_light_work_url`). Residual risk: a reload in the gap between a crash and
+#: that clean-up is one GET of the page origin with the profile's own cookies and proxy - less than the
+#: restored Ads Manager tab of today.
+_OPEN: "weakref.WeakSet[Any]" = weakref.WeakSet()
+
+
+def _close_all() -> None:
+    for tab in list(_OPEN):
+        try:
+            if not getattr(tab, "closed", False):
+                tab.close()
+        except Exception:  # noqa: BLE001 - shutting down
+            pass
+
+
+atexit.register(_close_all)
+
+
 def settle_and_close(tab: Any) -> None:
     """Answer what is still paused, then close: nothing is left waiting, nothing goes out."""
     if tab is None:
         return
+    _OPEN.discard(tab)
     try:
         tab.pump(0.3)
     except Exception:  # noqa: BLE001

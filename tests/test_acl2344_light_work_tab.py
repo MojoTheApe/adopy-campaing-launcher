@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from types import SimpleNamespace
 
 import pytest
 
@@ -274,6 +275,150 @@ def test_call_on_lost_token_recaptures_once_then_stops(browser):  # noqa: F811
         assert n == [1]                                                   # one Ads Manager load, no loop
     finally:
         light_tab.settle_and_close(work)
+
+
+def test_recapture_bound_holds_on_every_path(browser):  # noqa: F811
+    from src.fb_api.graph import PageFailed
+
+    work = PageTab.open(browser, call_s=60.0)
+    try:
+        assert light_tab.open_light_document(work)[1] == ""
+        ig = InPageGraph(work)
+        n = []
+        ig.light_recapture = lambda g, t: n.append(1) or {"kind": "ads_manager", "has_token": False}
+        ig.reacquire(timeout=5)
+        ig.reacquire(timeout=5)
+        with pytest.raises(PageFailed):
+            ig.reacquire(timeout=5)                                      # the third load is refused
+        with pytest.raises(PageFailed):
+            ig.request("GET", "/me", {"fields": "id"}, timeout=5)        # and the call path shares the bound
+        assert n == [1, 1]
+    finally:
+        light_tab.settle_and_close(work)
+
+
+class _FakeHelperGraph:
+    """`_eval_helper` replies scripted per call; nothing runs in a browser."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def _eval_helper(self, tail, timeout=10.0):
+        self.calls.append(tail.split("(")[0])
+        reply = self.replies.pop(0)
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+
+def test_handover_succeeds_when_the_receiver_got_it_although_the_ack_was_lost():
+    dst = _FakeHelperGraph(["listening", "received"])
+    src = _FakeHelperGraph([TimeoutError("busy machine")])
+    assert light_tab.hand_over(src, dst, wait_s=0.1) == ""
+    dst = _FakeHelperGraph(["listening", "listening", True])
+    src = _FakeHelperGraph(["no_ack"])
+    assert light_tab.hand_over(src, dst, wait_s=0.1) == "handover_timeout"
+    assert dst.calls[-1] == ".stopListen"                               # a channel nobody used is closed
+
+
+class _FakeCaptureTab:
+    def __init__(self):
+        self.closed = False
+        self.light = None
+
+    def pump(self, s):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+def _capture_rig(monkeypatch, *, state=None, navigate_exc=None, receive=""):
+    from src.fb_api import token_capture
+
+    rows, tabs = [], []
+    monkeypatch.setattr(light_tab, "_record", rows.append)
+
+    class Cap:
+        def __init__(self, tab):
+            self.tab = tab
+
+        def navigate(self, act, timeout=60.0):
+            if navigate_exc is not None:
+                raise navigate_exc
+
+        def wait_ready(self, timeout=90.0):
+            return state or {"kind": "ads_manager", "has_token": True}
+
+    monkeypatch.setattr(token_capture, "InPageGraph", Cap)
+
+    class Work:
+        light_recaptures = 1
+        tab = SimpleNamespace(light=None)
+
+        def receive_from(self, src):
+            return receive
+
+        def state(self):
+            return {"kind": "ads_manager", "has_token": not receive, "light": True}
+
+    def open_tab():
+        tabs.append(_FakeCaptureTab())
+        return tabs[-1]
+    return Work(), open_tab, rows, tabs
+
+
+@pytest.mark.parametrize("kind", ["login", "checkpoint"])
+def test_capture_into_login_or_checkpoint_closes_the_capture_tab(monkeypatch, kind):
+    work, open_tab, rows, tabs = _capture_rig(monkeypatch, state={"kind": kind, "has_token": False})
+    got = light_tab.capture_into(work, open_tab, "act_1", timeout=1)
+    assert got["kind"] == kind and not got["has_token"]
+    assert tabs[0].closed and rows[-1]["fallback_reason"] == "capture_" + kind and not rows[-1]["handover_ok"]
+
+
+def test_capture_into_reraises_a_stop_and_closes_the_capture_tab(monkeypatch):
+    from src.fb_api.graph import LoggedOut
+
+    work, open_tab, rows, tabs = _capture_rig(monkeypatch, navigate_exc=LoggedOut("login"))
+    with pytest.raises(LoggedOut):
+        light_tab.capture_into(work, open_tab, "act_1", timeout=1)
+    assert tabs[0].closed and rows[-1]["phase"] == "light_recapture"
+
+
+def test_capture_into_success_and_failed_handover(monkeypatch):
+    work, open_tab, rows, tabs = _capture_rig(monkeypatch)
+    assert light_tab.capture_into(work, open_tab, "act_1", timeout=1)["has_token"] is True
+    assert tabs[0].closed and rows[-1]["handover_ok"] is True and rows[-1]["recapture_count"] == 1
+    assert not any(isinstance(v, str) and ("://" in v or "act_" in v) for v in rows[-1].values())
+    work, open_tab, rows, tabs = _capture_rig(monkeypatch, receive="handover_rejected")
+    assert light_tab.capture_into(work, open_tab, "act_1", timeout=1)["has_token"] is False
+    assert tabs[0].closed and rows[-1]["fallback_reason"] == "handover_rejected"
+
+
+def test_restored_cleanup_closes_an_orphan_light_page_and_keeps_others():
+    from src.fb_api.cdp import is_light_work_url
+    from tests.test_acl2299_tabs_and_busy_freeze import Browser, _open, _row
+
+    assert is_light_work_url(light_tab.LIGHT_URL)
+    assert not is_light_work_url("https://www.facebook.com/__acl_work")
+    assert not is_light_work_url(light_tab.LIGHT_ORIGIN + "/__acl_workx")
+    browser = Browser([_row("orphan", light_tab.LIGHT_URL), _row("mail", "https://mail.example.com/")],
+                      expected="profile")
+    tab = _open(browser)
+    try:
+        assert browser.closed_targets == ["orphan"]
+    finally:
+        tab.close()
+
+
+def test_light_tabs_are_closed_when_the_process_exits():
+    tab = _FakeCaptureTab()
+    light_tab._OPEN.add(tab)
+    light_tab._close_all()
+    assert tab.closed
+    light_tab.settle_and_close(tab)
+    assert tab not in light_tab._OPEN
 
 
 def test_p5_header_probe_reads_headers_and_sends_nothing(browser, servers):  # noqa: F811

@@ -232,6 +232,16 @@ def is_ads_manager_url(url: str) -> bool:
     return (host == "facebook.com" or host.endswith(".facebook.com"))         and (parts.path or "").lower().startswith("/adsmanager")
 
 
+def is_light_work_url(url: str) -> bool:
+    """ACL-2344: the light work page (`light_tab.LIGHT_URL`). Left open by a process that died, it has no
+    interception any more - a reload would go to Meta - so the restored-tab clean-up closes it too."""
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return False
+    return (parts.hostname or "").lower() == "adsmanager.facebook.com" and parts.path == "/__acl_work"
+
+
 class PageTab:
     """Одна своя вкладка в браузере профиля."""
 
@@ -391,8 +401,8 @@ class PageTab:
     def close_restored_ads_manager_tabs(self, context: str, *, timeout: float = CALL_S) -> int:
         """ACL-2299 (A): close the Ads Manager tabs the profile restored at its start; keep ours.
 
-        Only pages of this profile's browser context whose address is an Ads Manager page and that are not
-        the tab we drive are closed. Any other page (the owner's mail, a doc, a store, an unknown or still
+        Only pages of this profile's browser context whose address is an Ads Manager page (or an orphan
+        ACL-2344 light work page, `is_light_work_url`) and that are not the tab we drive are closed. Any other page (the owner's mail, a doc, a store, an unknown or still
         blank page) is never touched. The browser answers `Target.closeTarget` even when a renderer is
         frozen. Any failure leaves the tabs as they are: the tab opens either way. The page counts before
         and after are logged in `fb_api_tab_context` and kept on the tab for the stop rows.
@@ -417,7 +427,7 @@ class PageTab:
         may_close = max(0, len(pages) - 1)
         kept_last = 0
         for row in pages:
-            if not is_ads_manager_url(str(row.get("url") or "")):
+            if not (is_ads_manager_url(str(row.get("url") or "")) or is_light_work_url(str(row.get("url") or ""))):
                 continue
             if closed >= may_close:
                 kept_last += 1

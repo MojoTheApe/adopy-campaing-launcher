@@ -1713,7 +1713,9 @@ class InPageGraph:
     #: `callable(graph, timeout) -> state`: opens a capture tab, loads Ads Manager once, hands the token into
     #: `graph` (set by the warm lease). None - a lost token cannot be taken again (the action stops).
     light_recapture: Callable[["InPageGraph", float], dict] | None = None
-    #: How many times one graph object may take the token again before a call (each = one Ads Manager load).
+    #: How many times the token may be taken again within ONE lease (each = one Ads Manager load). Enforced
+    #: in `_light_recapture`, so it holds for every path (`_light_check`, `reacquire`, `pin_page`); the warm
+    #: lease resets the counter (`light_recaptures = 0`) when it hands the graph out.
     MAX_LIGHT_RECAPTURES = 2
     light_recaptures = 0
 
@@ -1739,6 +1741,8 @@ class InPageGraph:
     def _light_recapture(self, timeout: float) -> dict:
         if self.light_recapture is None:
             return {"kind": "ads_manager", "light": True, "has_token": False}
+        if self.light_recaptures >= self.MAX_LIGHT_RECAPTURES:
+            raise PageFailed("the lightweight page kept losing its Graph session; nothing more was sent")
         self.light_recaptures += 1
         got = self.light_recapture(self, timeout)
         return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
@@ -1754,8 +1758,6 @@ class InPageGraph:
             raise self._stop_connection(PageIdentityError())
         if not reason and isinstance(state, dict) and state.get("has_token"):
             return
-        if self.light_recaptures >= self.MAX_LIGHT_RECAPTURES:
-            raise PageFailed("the lightweight page kept losing its Graph session; nothing more was sent")
         self.world_name = f"acl_{secrets.token_hex(6)}"
         self._reset_world()
         got = self._light_recapture(max(timeout, 90.0))
