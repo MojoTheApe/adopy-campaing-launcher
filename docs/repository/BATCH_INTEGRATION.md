@@ -448,7 +448,8 @@ Reviewer may use `record-acceptance --pr MAIN_PR --actor Reviewer-ID --session
 ACTUAL_SESSION --claim RETAINED_LANE --evidence-file acceptance.json` (preview;
 add `--apply` to journal). This does not edit an Issue, finish a task, change a
 policy or publish a package. The Coordinator and member implementers cannot
-attest their own acceptance. Do not use it for partially implemented outcomes.
+attest their own acceptance. Partially implemented outcomes require the separate
+owner-signed recovery below; ordinary acceptance never carries unfinished work.
 
 The document has `kind: post-main-acceptance`, a concrete `report`, exact
 `batch_id`, promotion `pr`, actual `merge_sha`, `head_sha`, combined `tree_sha`,
@@ -476,6 +477,131 @@ config: `python -m tracker --config /absolute/original/tracker/config.json
 record-acceptance ...`, then normal `merged` commands. Do not patch cached
 runtime code, change config or adopt a new policy. This explicit engine invocation
 is recovery only; permanent consumer-pin adoption is separately tracked/reviewed.
+
+## Owner-signed partial batch acceptance — TT-270
+
+If an already admitted main batch contains a declared partial implementation or
+a criterion still awaiting real verification, keep that fact explicit. Never
+change frozen checkboxes or report an unmet criterion as passed. Before future
+source approval, split a multi-PR task into a parent and part tasks whose criteria
+each describe only the work that their PR can actually deliver.
+
+For the already merged case, the retained independent integration Reviewer uses
+`batch recover-partial --batch-id ID --pr MAIN_PR --actor Reviewer-ID --session
+ACTUAL_SESSION --claim RETAINED_LANE --approved-by OWNER_LOGIN --evidence-file
+acceptance.json`. It supports adopted execution2/3 and the exact official current
+consumer config. The authenticated operator needs maintain/admin permission.
+All original source/combined review, CI, merge inclusion, scope, pause and ownership
+guards remain required. There is no new policy, capacity, migration or takeover.
+
+The document retains the original `post-main-acceptance` identity, report and
+complete ordered criteria list. Actually verified rows have `result: passed` and
+concrete evidence. Explicitly deferred rows have `result: carried` and an honest
+evidence explanation. An added `carryovers` object, keyed by decimal member Issue
+number, contains exactly `parent`, `follow_up`, `criteria`, `delivered_part` and
+`reason` for each partial member. `parent` and `follow_up` are real local Issue
+numbers; `criteria` contains the original one-based `line` and literal `criterion`
+for every carried row. All other unchecked rows still need passed evidence.
+
+Each member has its own open, classified follow-up outside the frozen batch. That
+Issue contains every carried criterion verbatim and unfinished. For a legacy task
+with no unchecked checklist, an explicitly declared partial member may carry the
+exact plain bullets from its Acceptance section. All original Acceptance items
+then need passed/carried evidence; the follow-up preserves carried plain bullets
+in its own Acceptance section. Ordinary undeclared acceptance is unchanged.
+Such a plain-list partial parent stays Review through main handoff and retries,
+just like a checklist parent. No frozen checkbox or original list is edited. The signed
+manifest explicitly binds its parent; no new body format or edit of an existing
+reviewed follow-up is required. Its parent remains open and unfinished, and cannot also be
+a fully accepted member of this batch. When the original member itself contains
+the larger task, name it as `parent`: it will remain Review, never Merged/Done.
+
+Preview writes nothing and returns `expected_approval`, full dispositions and the
+named follow-ups. The owner/admin approves this exact preview in a new, unedited
+comment on the main integration PR, containing this complete line:
+
+```text
+Tracker partial-batch-recovery sha256:PREVIEW_SHA256
+```
+
+Only then add `--apply --expected-approval PREVIEW_SHA256`. A missing, edited,
+foreign or stale approval is refused. Task/follow-up changes need a fresh preview;
+an uncertain CAS response resumes the same signed document and owning Reviewer.
+The command appends private signed acceptance history; it does not relabel tasks,
+complete the batch, close sources, deploy or waive actual product acceptance.
+
+Next preview ordinary `merged ALL_FROZEN_MEMBERS --pr MAIN_PR`, inspect its explicit
+`partial` dispositions, then apply with `--reviewed-complete`. Fully accepted
+members become Merged. Partial members stay open in Review; their accepted
+delivered part has a receipt on the archived batch, not a whole-task completion
+receipt. The frozen member list, heads, scopes and original checkboxes remain
+unchanged. Ordinary `batch close-sources` then rechecks the retained evidence and
+closes only superseded source PRs, retaining branches and history.
+
+An existing `--deliver` request still requires the real authorized package/target
+verification. The matching native recorder handles full-member and batch-part
+receipts atomically. That verification never completes a partial parent. After
+the delivery succeeds, the next normal intake/begin is available. Recovery alone
+does not waive a pending product delivery or manufacture a new delivery request.
+
+Use one clean independently reviewed immutable fixed-engine checkout, the exact
+original consumer config, and the matching verified portable receipt helpers for
+this bounded recovery. Older clients lack this procedure and fail closed; do not
+patch a runtime cache or silently change a consumer pin. Before live application,
+verify that the actual delivery writer and snapshot reader support batch-part
+receipts. Compatible publication/adoption, if needed, is a separate visible step;
+source merge alone does not prove that the deployed reader was updated.
+
+Master impact: none. This is an explicit Tracker-owned recovery within the
+existing accepted-scope rule; it adds no shared descriptor/default and preserves
+the rule that partial milestones never finish their parent.
+
+### Existing native verifier bridge — TT-273
+
+Some consumers cannot adopt a partial-aware writer while their original pending
+delivery blocks the next batch. Do not cancel that request or force an ordinary
+support source into main. A clean independently reviewed fixed engine can perform
+the bounded administrative receipt operation below without changing the consumer
+pin. Publish a compatible snapshot reader before applying partial state.
+
+Before the owner signs the original `recover-partial` preview, its acceptance
+document may explicitly declare `delivery_verifier` with exactly `workflow`, `job`
+and `source_sha256`. The workflow must already exist in the official original
+product revision; the hash is SHA-256 of those exact source bytes. The job must
+equal the original authorized verification job. The original owner signature
+binds this declaration along with the carry-over; no second owner signature is
+needed after the genuine native result. A missing declaration never gives an
+ordinary delivery permission to use another producer.
+
+For ACL, the existing manual `release.yml` can publish the already authorized
+original product through its exact annotated-tag/main-CI checks. Its existing
+`verify-published-tag.yml` then downloads and verifies the actual stable packages
+in the real `Verify published Windows package` Windows job. It emits the same
+native log-bound receipt. Neither the tag, upload nor synthetic evidence counts
+as successful package verification. Preserve the unchanged original release
+target, tag, main revision, request and product; do not substitute a newer build.
+
+After ordinary full-member main handoff, resolve the original request using the
+fixed engine's `tracker.delivery_receipt` and retain its JSON. With the actual
+native evidence JSON, successful run/job and a factual report, preview:
+
+```text
+python -m tracker --config ORIGINAL_CONFIG recover-partial-delivery \
+  --request-file request.json --evidence-file evidence.json \
+  --verification-run RUN --verification-job JOB --report-file recovery.md
+```
+
+Inspect `expected_recovery`, the retained owner approval, original workflow and
+actual native verifier. Apply with that exact `--expected-recovery SHA256 --apply`.
+The authenticated operator needs current maintain/admin permission. The command
+revalidates official current-main config, the signed verifier source, exact latest
+successful native job and its unique log-bound receipt, original authorization,
+scope, pause/archive state and unchanged original main. The ordinary recorder
+atomically writes full-task and batch-part receipts with transparent actual
+producer/original-workflow/recovery provenance. Parent Issues stay unfinished.
+Uncertain writes resume the same request/report/preview; no automatic replay or
+replacement of verified evidence is allowed. Only real delivery clears the
+pending target barrier. This adds no policy/default, adoption or secret grant.
 
 
 ## Owner-authorized unregistered-coordinator recovery — TT-209
