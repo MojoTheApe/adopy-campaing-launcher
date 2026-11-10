@@ -350,6 +350,8 @@ def lt(browser, request):
                               "window.CB_ACCOUNT_FACTS={NY:{timezone_name:'America/New_York',currency:'USD'},"
                               "KO:{timezone_name:'Asia/Kolkata',currency:'USD'}};\n" + _module_source())
     first, last = _israel_period(clock)
+    # Keep the independent inputs: an assertion may run after Israel midnight.
+    pg._acl_selected_period = (first, last)
     pg.evaluate("""([FIRST, LAST]) => {
         const slot = document.getElementById('slot');
         slot.insertAdjacentHTML('beforeend', cbLifetime.segHtml(0) + cbLifetime.rowsHtml(0));
@@ -376,11 +378,28 @@ def test_labels_and_aria_say_israel_time(lt):
 
 
 def test_dates_are_a_period_first_day_from_midnight_last_day_inclusive(lt):
-    first, last = _israel_period()
+    first, last = lt._acl_selected_period
     end_exclusive = (datetime.strptime(last, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     assert lt.input_value("[name$='_start_time']") == f"{first}T00:00"
     assert lt.input_value("[name$='_end_time']") == f"{end_exclusive}T00:00"
     assert _preview_text(first, last) in lt.inner_text("[data-lt-preview]")
+
+
+@pytest.mark.parametrize("lt", [datetime(2027, 1, 20, 21, 59, 59, tzinfo=ZoneInfo("UTC"))], indirect=True)
+def test_period_assertions_keep_selected_days_across_israel_midnight(lt, monkeypatch):
+    after = datetime(2027, 1, 20, 22, 0, 1, tzinfo=ZoneInfo("UTC"))
+
+    class AfterMidnight(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return after.astimezone(tz) if tz else after.replace(tzinfo=None)
+
+    monkeypatch.setattr(sys.modules[__name__], "datetime", AfterMidnight)
+    lt.clock.fast_forward(2000)
+    assert lt.evaluate("cbLifetime.nowInTeam().slice(0, 10)") == "2027-01-21"
+    assert _israel_period()[0] == "2027-01-24"
+    assert lt._acl_selected_period == ("2027-01-23", "2027-01-28")
+    test_dates_are_a_period_first_day_from_midnight_last_day_inclusive(lt)
 
 
 def test_the_hours_grid_is_open_with_every_hour_on_and_no_schedule_is_sent(lt):
