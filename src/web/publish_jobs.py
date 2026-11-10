@@ -840,7 +840,7 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        with _leak_watch(profile, "publish"), _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), target_activity(
+        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), _leak_watch(profile, "publish"), target_activity(
                 profile, cancelled=lambda: _is_cancelled(job_id)):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)
