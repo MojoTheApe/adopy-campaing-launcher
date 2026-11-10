@@ -1,21 +1,24 @@
 """ACL-2344 P1: dummy hand-over between two light tabs of an ALREADY OPEN profile.
 
-No request goes to Meta (the document is served by the browser, everything else is blocked).
-Needs the owner's explicit go: pass the profile's CDP url and set ACL_2344_P1_CONFIRMED=owner-go.
-Other tabs of the profile are left alone (no restored-Ads-Manager clean-up).
+No request goes to Meta (the document is served by the browser, every other request of the tab is
+failed). Needs the owner's explicit go: set ACL_2344_P1_CONFIRMED=doc120, pass the profile's loopback
+CDP url and --profile-id equal to the Doc120 profile id from the machine's account map. Anything else
+is refused (the same gate sits inside light_probe.run_p1).
 """
 import json
 import os
 import sys
 
-from src.fb_api import light_probe
-from src.fb_api.cdp import PageTab
+from src.fb_ads_rpa import light_probe
+
+USAGE = ("usage: ACL_2344_P1_CONFIRMED=doc120 python -m scripts.probe_2344_p1 "
+         "http://127.0.0.1:<port> --profile-id <Doc120 profile id>")
 
 if __name__ == "__main__":
-    if os.environ.get("ACL_2344_P1_CONFIRMED") != "owner-go" or len(sys.argv) not in (2, 3):
-        sys.exit("usage: ACL_2344_P1_CONFIRMED=owner-go python -m scripts.probe_2344_p1 http://127.0.0.1:<port>")
-    PageTab.close_restored_ads_manager_tabs = lambda self, *a, **k: None
-    if len(sys.argv) == 3 and os.environ.get("ACL_2344_P3_CONFIRMED") == "owner-go":
-        print(json.dumps(light_probe.run_p3(sys.argv[1], sys.argv[2]), indent=1))     # P3: two real Graph reads
-    else:
-        print(json.dumps(light_probe.run_p1(sys.argv[1]), indent=1))
+    args = sys.argv[1:]
+    if os.environ.get("ACL_2344_P1_CONFIRMED") != "doc120" or len(args) != 3 or args[1] != "--profile-id":
+        sys.exit(USAGE)
+    try:
+        print(json.dumps(light_probe.run_p1(args[0], args[2]), indent=1))
+    except light_probe.ProbeGateError as exc:
+        sys.exit("refused: " + str(exc))

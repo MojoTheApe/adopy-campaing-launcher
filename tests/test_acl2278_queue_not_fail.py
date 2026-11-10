@@ -49,11 +49,11 @@ def test_job_waits_for_memory_past_the_old_limit_and_starts_when_it_frees(tmp_pa
     assert views[-1] is None, "the wait must be cleared when it ends"
 
 
-def test_without_a_job_the_memory_wait_still_gives_up(tmp_path):
+def test_without_a_job_the_memory_hold_is_reported_at_once(tmp_path):    # ACL-2400
     rig = _short_rig(tmp_path, [1600])
     rig.reg._sleep = lambda secs: rig.now.__setitem__(0, rig.now[0] + secs)
     res = rig.reg.open_one("Acc", entry(A))
-    assert res["ok"] is False and res["code"] == "memory_low" and "1.6 GB free" in res["message"]
+    assert res["ok"] is False and res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE
 
 
 def test_cancelling_a_job_waiting_for_memory_stops_the_wait(tmp_path):
@@ -100,11 +100,17 @@ def test_job_waits_for_a_busy_gate_past_the_old_limit_and_goes_when_it_frees(tmp
     t.start()
     time.sleep(1.6)
     assert got == [], "the job must still be queued after the old limit"
-    assert any(v and v["hold"] == "account_busy" for v in views)
+    assert any(v and v["hold"] == "heavy_limit" and v["why"] == "limit" for v in views)
     first.release()
     t.join(5)
     assert len(got) == 1 and views[-1] is None
     got[0].release()
+
+
+def test_a_job_held_by_something_other_than_the_limit_still_reads_account_busy(tmp_path):
+    rig = Rig(tmp_path, limit=1)
+    view = rig.reg.gate.wait_view("memory_ok")
+    assert view["hold"] == "account_busy" and view["why"] == "memory_ok"
 
 
 def test_cancelling_a_job_waiting_for_the_gate(tmp_path, monkeypatch):

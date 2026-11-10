@@ -252,6 +252,23 @@ def _unquote(raw: str) -> str:
     return raw.split(" #", 1)[0].strip()
 
 
+def clear_text_secret_keys(env_path: str | Path) -> set[str]:
+    """Secret keys whose live (last) assignment in ``.env`` is still clear text (ACL-2330).
+
+    Empty where protected storage is absent: there every line is clear text by design.
+    """
+    target = Path(env_path)
+    if not available() or not target.is_file():
+        return set()
+    try:
+        from dotenv import dotenv_values
+
+        return {k for k, v in dotenv_values(target).items()
+                if is_secret_env_key(k) and v and not is_protected_value(v)}
+    except Exception:
+        return set()
+
+
 def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None:
     """Replace plain secret values (Multilogin tokens, library token, BI password) in .env by protected ones."""
     import json
@@ -270,12 +287,23 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
         # into the vault must be exactly what dotenv gives; our own parser disagrees on
         # some escapes in double quotes (ACL-2318 review), and such a line stays as it is.
         reference = dotenv_values(target)
-        out: list[str] = []
-        changed = 0
-        skipped: list[str] = []
-        for line in lines:
+        # ACL-2330: dotenv keeps the LAST assignment of a key, so an earlier one is dead. It is dropped
+        # (the encrypted backup of the whole file still has it) instead of staying behind in clear text.
+        last_line: dict[str, int] = {}
+        for i, line in enumerate(lines):
             m = _ENV_LINE.match(line)
             if m and is_secret_env_key(m.group(2)):
+                last_line[m.group(2)] = i
+        out: list[str] = []
+        changed = 0
+        dropped = 0
+        skipped: list[str] = []
+        for i, line in enumerate(lines):
+            m = _ENV_LINE.match(line)
+            if m and is_secret_env_key(m.group(2)):
+                if last_line[m.group(2)] != i:
+                    dropped += 1
+                    continue
                 plain = _unquote(m.group(4))
                 if plain and not is_protected_value(plain) and plain != reference.get(m.group(2)):
                     skipped.append(m.group(2))
@@ -288,10 +316,13 @@ def migrate_env_file(env_path: str | Path, config_dir: str | Path) -> str | None
                     changed += 1
             out.append(line)
         left = ""
+        if dropped:
+            left += f"; {dropped} earlier duplicate line(s) of a secret key removed (the encrypted backup keeps them)"
         if skipped:
-            left = (f"; {len(skipped)} value(s) left in clear text because they are written in a form "
-                    f"the app reads differently ({', '.join(sorted(set(skipped)))}): re-enter them in Settings")
-        if not changed:
+            left += (f"; {len(set(skipped))} value(s) left in clear text because they are written in a form "
+                     f"the app reads differently ({', '.join(sorted(set(skipped)))}): they are encrypted the next "
+                     "time the same value arrives from the connection sheet (Connections -> Sign in with Google)")
+        if not changed and not dropped:
             return f".env: nothing moved to protected storage{left}" if skipped else None
         _backup(original, backup_key(target, config_dir), Path(config_dir))
         _atomic_write(target, ("\n".join(out) + "\n").encode("utf-8"))

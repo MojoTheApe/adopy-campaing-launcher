@@ -603,7 +603,8 @@ def _build_account_map_view(
                 display_name.setdefault(key, name)
 
     map_path = get_ad_account_map_path()
-    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
+    map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    known = list(map_entries)
     all_known = sorted(set(known) | labels_in_report, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
@@ -716,6 +717,8 @@ def _build_account_map_view(
                     excel = _numbers(country_name, resolved) or excel
             rows.append({
                 "account": label,
+                # номер кабинета из карты аккаунтов — Home показывает его второй строкой под именем
+                "act_id": (getattr(map_entries.get(label), "ad_account_id", "") or "").strip(),
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
@@ -872,6 +875,29 @@ def _build_account_map_view(
         key=lambda mc: (-float((mc.get("book") or {}).get("spend") or 0), (mc["country"] or "").lower())
     )
 
+    # Home «таблица как в Google»: состояние каждого аккаунта и счётчики. Только
+    # сохранённые данные (статус кабинета, спенд периода) — ни Meta, ни Multilogin
+    # здесь не читаются. `rows` не переставляем (их же рисует Manage), для Home —
+    # отдельный порядок `rows_aov`.
+    from src.web import account_state as _astate
+
+    seen_accounts: dict[str, dict] = {}
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            r["state"] = _astate.account_state(r)
+            seen_accounts.setdefault(r["account"], r["state"])
+        mc["rows_aov"] = _astate.sort_rows(mc.get("rows") or [])
+        mc["state_counts"] = _astate.state_counts(r["state"] for r in mc.get("rows") or [])
+        mc["active"] = mc["state_counts"]["active"] > 0 and not mc.get("virtual")
+    countries.sort(key=lambda mc: (
+        not mc["active"],
+        -float(((mc.get("book") or {}).get("spend") or mc.get("spend") or 0)),
+        (mc["country"] or "").casefold(),
+    ))
+    state_totals = _astate.state_counts(seen_accounts.values())
+    state_totals["countries_total"] = len(countries)
+    state_totals["countries_active"] = sum(1 for mc in countries if mc["active"])
+
     # ACL-1319: Available accounts — только те, с кем есть смысл работать.
     # `all_known` остаётся прежним: из него строятся выпадающие списки
     # привязки, и там нужен каждый аккаунт. Сужается только этот список и его
@@ -930,6 +956,7 @@ def _build_account_map_view(
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),
         # ACL-1654: строка Totals под странами.
         "totals": _amap_totals(countries, live),
+        "state_totals": state_totals,
         # ACL-1656: «Campaign managers» внизу Home.
         "cm_section": _amap_cm_section(report),
         "available": available,
@@ -1436,6 +1463,8 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
+templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 
 
 def _campaign_table_api() -> bool:
@@ -2174,10 +2203,50 @@ def _render_report(
             "fb_backend": _fb_backend(),
             # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
             "preflight_rules_json": _preflight_rules(),
+            # ACL-1443: пояс и валюта кабинетов из кэша чтений (без вызовов Meta) для полей Lifetime.
+            "account_facts_json": _account_facts_for_page(),
+            # ACL-1448: пояс команды (Израиль), в котором билдер принимает Start/End и сетку Lifetime.
+            "team_timezone": _team_timezone(),
             # ACL-1807: допустимые Meta цели/CTA/destination из реестра (только ga).
             "meta_caps_json": _meta_capabilities(),
         },
     )
+
+
+def _facts_of_reading(reading) -> dict:
+    """Пояс и валюта кабинета из кэшированного чтения; пустой словарь, если пояса нет (ACL-1443)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from src.fb_api.creator import ZERO_DECIMAL
+
+    zone_name = str(getattr(reading, "timezone", "") or "").strip()
+    if not zone_name:
+        return {}
+    try:
+        offset = datetime.now(ZoneInfo(zone_name)).utcoffset().total_seconds() / 3600
+    except Exception:  # noqa: BLE001 - незнакомое имя пояса: пояс не известен
+        return {}
+    currency = str(getattr(reading, "currency_code", "") or "").strip().upper()
+    return {"currency": currency, "timezone_name": zone_name, "timezone_offset_hours_utc": offset,
+            "zero_decimal": currency in ZERO_DECIMAL}
+
+
+def _team_timezone() -> str:
+    from src.fb_api.team_time import team_timezone
+
+    return team_timezone()
+
+
+def _account_facts_for_page() -> dict:
+    """{метка аккаунта: факты}; нет факта - нет ключа. Только кэш, Meta не трогаем."""
+    try:
+        from src.analysis_agent import account_spend
+
+        found = {label: _facts_of_reading(r) for label, r in account_spend.latest_readings().items()}
+        return {k: v for k, v in found.items() if v}
+    except Exception:  # noqa: BLE001 - страница не должна падать из-за кэша
+        return {}
 
 
 def _meta_capabilities() -> dict:
@@ -2528,6 +2597,24 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             form_errors.append(MAX_AD_SETS_ERROR)
             adset_count = MAX_AD_SETS
         first_slot = len(slots)
+        # ACL-1443 (только API-бэкенд): lifetime-бюджет, срок и расписание кампании. Нет поля или пусто - daily,
+        # и слоты остаются прежними ни байтом. ACL-1448: время и сетка - по поясу команды (Израиль), в пояс
+        # кабинета их переводит бэкенд при плане и сборке.
+        budget_type = (form.get(f"camp_{idx}_budget_type") or "").strip().lower()
+        if budget_type not in ("", "daily", "lifetime"):
+            form_errors.append(f"Unknown budget type {budget_type!r} (use Daily or Lifetime)")
+        life_start = (form.get(f"camp_{idx}_start_time") or "").strip()
+        life_end = (form.get(f"camp_{idx}_end_time") or "").strip()
+        schedule: list = []
+        raw_schedule = (form.get(f"camp_{idx}_schedule") or "").strip()
+        if raw_schedule:
+            try:
+                parsed = json.loads(raw_schedule)
+                if not isinstance(parsed, list):
+                    raise ValueError("not a list")
+                schedule = parsed
+            except (TypeError, ValueError):
+                form_errors.append("The ad schedule could not be read; clear it or set it again")
 
         # Build auto-name from campaign-level fields if not set
         if not name:
@@ -2637,6 +2724,16 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 for key in ("gender", "languages", "device", "os_min", "start_time", "placements"):
                     if sf[key] or (key == "placements" and sf[key] is not None):
                         slot[key] = sf[key]
+                if budget_type == "lifetime":
+                    # Старт и конец общие на кампанию и главнее старта набора; пояс кабинета добавит бэкенд.
+                    slot["budget_type"] = "lifetime"
+                    if life_start:
+                        slot["start_time"] = life_start
+                    if life_end:
+                        slot["end_time"] = life_end
+                if schedule:
+                    # Расписание есть и при daily - план откажет вслух ("needs a lifetime budget").
+                    slot["schedule"] = schedule
                 slots.append(slot)
         camp_spans.append((name, first_slot, len(slots), form_errors))
     # ACL-1768: две карточки с одним именем склеили бы наборы друг друга - отказ вслух.
@@ -3104,6 +3201,40 @@ async def api_save_machine_paths(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     if result["stats_changed"]:
         cache_clear()  # отчёт строился по прежней книге
+    return JSONResponse({"ok": True, **result})
+
+
+@app.get("/api/run-limits")
+def api_run_limits() -> JSONResponse:
+    """Profile ceiling, heavy-action limit and memory share of this computer (ACL-2293)."""
+    from src.web import run_limits
+    return JSONResponse({"ok": True, **run_limits.current()})
+
+
+@app.post("/api/run-limits")
+async def api_save_run_limits(request: Request) -> JSONResponse:
+    """Change the run limits without a restart; applies to the next start decision."""
+    from src.web import run_limits
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+    if not isinstance(data, dict) or set(data) - {*run_limits.FIELDS, "reset", "confirm"}:
+        return JSONResponse({"ok": False, "error": "Unknown setting in the request"}, status_code=400)
+    if "reset" in data and not isinstance(data["reset"], bool):
+        return JSONResponse({"ok": False, "error": "Expected true or false for reset"}, status_code=400)
+    if "confirm" in data and not isinstance(data["confirm"], bool):
+        return JSONResponse({"ok": False, "error": "Expected true or false for confirm"}, status_code=400)
+    try:
+        from starlette.concurrency import run_in_threadpool
+        result = await run_in_threadpool(
+            lambda: run_limits.save(data.get("ceiling"), data.get("warm_heavy"),
+                                    data.get("memory_max_used_pct"), reset=bool(data.get("reset")),
+                                    confirm=data.get("confirm") is True))
+    except run_limits.NeedsConfirm as exc:
+        return JSONResponse({"ok": False, "needs_confirm": True, "error": str(exc)}, status_code=409)
+    except run_limits.RunLimitError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **result})
 
 
@@ -4081,6 +4212,56 @@ async def creative_file(path: str = "", request: Request = None) -> Response:
         media_type=media_type,
         headers={"Cache-Control": _CREATIVE_CACHE_CONTROL, "Accept-Ranges": "bytes"},
     )
+
+
+@app.get("/api/account-facts")
+def api_account_facts(account: str = "") -> JSONResponse:
+    """ACL-1443: пояс и валюта кабинета для полей Lifetime (Start/End в поясе кабинета). Только кэш чтений.
+
+    Новых вызовов Meta нет: берётся последнее удачное чтение аккаунта (`timezone_name` приходит с чтением
+    через Graph API). Нет чтения - `known: false`, и страница не подписывает пояс, а не выдумывает его.
+    `min_daily_budget` в кэше не хранится: точное значение даёт «Check plan» (правило budget_min).
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from src.analysis_agent import account_spend
+    from src.fb_api.creator import ZERO_DECIMAL
+
+    label = (account or "").strip()
+    reading = account_spend.latest_readings().get(label) if label else None
+    facts = _facts_of_reading(reading) if reading is not None else {}
+    return JSONResponse({
+        "ok": True, "account": label, "known": bool(facts),
+        "timezone_name": facts.get("timezone_name", ""),
+        "timezone_offset_hours_utc": facts.get("timezone_offset_hours_utc"),
+        "currency": facts.get("currency", ""), "zero_decimal": bool(facts.get("zero_decimal")),
+        "min_daily_budget": None, "read_at": str(getattr(reading, "finished_at", "") or ""),
+    })
+
+
+@app.post("/api/copy-to-accounts/targets")
+async def api_copy_to_accounts_targets(request: Request) -> JSONResponse:
+    """ACL-2456: what the "Copy to accounts" dialog needs about the chosen targets. Reads the account map and
+    the cached readings only; no Meta call and nothing is created. Body JSON: {source, targets: [label]}."""
+    from src.web import copy_to_accounts as _cta, publish_api
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+    if not isinstance(body, dict) or not isinstance(body.get("targets"), list):
+        return JSONResponse({"ok": False, "error": "Expected {source, targets: [...]}"}, status_code=400)
+    map_path = get_ad_account_map_path()
+    account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+    facts = _account_facts_for_page()
+    try:
+        out = _cta.describe_targets(str(body.get("source") or ""), [str(t) for t in body["targets"]],
+                                    account_map=account_map, facts_for=lambda label: facts.get(label),
+                                    api_backend=publish_api.api_enabled())
+    except _cta.CopyRefused as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+    return JSONResponse(out)
 
 
 @app.get("/api/account-notes")
@@ -5254,12 +5435,15 @@ def account_map_fragment(
 
     base_report = report
     period_cmp, compare_note = None, ""
+    # Отчёт тоже считается за выбранный период — как на самой странице: строки аккаунтов карта пересчитывает сама,
+    # а «Total · all countries» и книжные тоталы страны берутся из отчёта. С отчётом без периода итог показывал
+    # все даты книги рядом со строками за выбранные (ACL-2384).
+    date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+    try:
+        report = report_for_period(base_report, df, date_from, date_to)
+    except PeriodReportError:
+        return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
     if compare.strip():
-        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
-        try:
-            report = report_for_period(base_report, df, date_from, date_to)
-        except PeriodReportError:
-            return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
         period_cmp, compare_note = _build_compare(
             base_report, df, date_from, date_to, span.strip(),
             compare.strip(), cmp_from.strip(), cmp_to.strip())
@@ -6147,6 +6331,7 @@ def _multi_adset_refusal(slots: list[dict]) -> JSONResponse | None:
 API_ONLY_SLOT_KEYS = {"placements": "Placements", "adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
                       "gender": "Gender", "languages": "Several languages", "device": "Devices",
                       "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more",
+                      "budget_type": "Lifetime budget", "end_time": "End time", "schedule": "Ad schedule",
                       "copy_more": "Primary text 3-5 (with their headlines and descriptions)",
                       "creative_file_vertical": "Stories / Reels file"}
 
@@ -6506,6 +6691,16 @@ async def campaign_commands_preview(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.post("/campaign-commands/bulk/preview")
+async def campaign_commands_bulk_preview(request: Request) -> JSONResponse:
+    """ACL-2457: bulk edit preview; confirming it goes through `/campaign-commands/execute`."""
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_bulk_preview, body)
+    return JSONResponse(data, status_code=code)
+
+
 @app.post("/campaign-commands/execute")
 async def campaign_commands_execute(request: Request) -> JSONResponse:
     from src.web import campaign_commands
@@ -6582,12 +6777,15 @@ def _targeting_gate() -> JSONResponse | None:
 
 @app.get("/targeting-resolver/cache")
 async def targeting_resolver_cache() -> JSONResponse:
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
-    return JSONResponse({"entries": ConfirmedStore().entries()})
+    try:
+        return JSONResponse({"entries": ConfirmedStore().entries()})
+    except ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
 
 
 @app.post("/targeting-resolver/confirm")
@@ -6609,6 +6807,8 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
         # Имя и состав берутся у кандидата, который показал сервер, а не из запроса.
         row = tr.ConfirmedStore().put(term, id=cand["id"], type=cand["type"], name=cand["name"],
                                       picks=cand.get("picks"))
+    except tr.ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _drop_plan_verdicts("targeting_confirm")
@@ -6617,22 +6817,32 @@ async def targeting_resolver_confirm(request: Request) -> JSONResponse:
 
 @app.post("/targeting-resolver/clear")
 async def targeting_resolver_clear(request: Request) -> JSONResponse:
-    """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
-    from src.fb_api.targeting_resolver import ConfirmedStore
+    """Забыть один подтверждённый термин (`term`) или все (`all: true`).
+
+    ACL-2267: заодно и из долгого кэша точных находок - «забыть» значит искать заново.
+    """
+    from src.fb_api import facts_cache
+    from src.fb_api.targeting_resolver import ConfirmedStore, ConfirmedStoreUnreadable, norm
 
     blocked = _targeting_gate()
     if blocked:
         return blocked
     body = await _targeting_body(request)
     store = ConfirmedStore()
-    if body.get("all") is True:
-        removed = store.clear()
-        _drop_plan_verdicts("targeting_clear")
-        return JSONResponse({"ok": True, "removed": removed})
-    term = str(body.get("term") or "")
-    if not term.strip():
-        return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
-    removed = 1 if store.remove(term) else 0
+    facts = facts_cache.default()
+    try:
+        if body.get("all") is True:
+            removed = store.clear()
+            facts.clear()
+            _drop_plan_verdicts("targeting_clear")
+            return JSONResponse({"ok": True, "removed": removed})
+        term = str(body.get("term") or "")
+        if not term.strip():
+            return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+        removed = 1 if store.remove(term) else 0
+    except ConfirmedStoreUnreadable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    facts.drop_terms([facts.term_key("term", norm(term))])
     _drop_plan_verdicts("targeting_clear")
     return JSONResponse({"ok": True, "removed": removed})
 

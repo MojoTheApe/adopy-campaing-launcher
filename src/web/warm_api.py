@@ -155,7 +155,7 @@ def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> N
     try:
         from src.fb_api.connection import confirmed_reopen
         with confirmed_reopen(confirm_reopen):
-            reg.open_many(items, job_id=job_id, on_result=lambda l, r: _set_result(job_id, l, r))
+            reg.open_many(items, job_id=job_id, on_result=lambda l, r: _on_open_result(job_id, l, r))
     except Exception:  # noqa: BLE001 — задание не должно умереть молча
         log.exception("Opening profiles failed")
     finally:
@@ -166,6 +166,32 @@ def _run_open(job_id: str, labels: list[str], confirm_reopen: bool = False) -> N
                 job["finished"] = time.time()
             if _ACTIVE_JOB == job_id:
                 _ACTIVE_JOB = ""
+
+
+def request_status_read(label: str) -> str:
+    """ACL-2419: после удачного Open — одна заявка в существующую очередь обновления.
+
+    Возвращает `queued` | `skipped`. Очередь сама проверяет замок профиля, паузу,
+    лимит вызовов и недавний отказ; здесь нет ни таймера, ни собственного Graph-вызова.
+    """
+    try:
+        from src.analysis_agent import account_refresh
+
+        got = account_refresh.queue().request(label, "open", force=True)
+        return "queued" if got.get("queued") else "skipped"
+    except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен
+        log.exception("Could not queue the status read after opening %s", label)
+        return "skipped"
+
+
+def _on_open_result(job_id: str, label: str, result: dict) -> None:
+    result = dict(result)
+    # Только удачное «окно поднято»: открытие руками, закрытие и отказ ничего не ставят в очередь.
+    if result.get("ok"):
+        result["status_read"] = request_status_read(label)
+    else:
+        result["status_read"] = "n/a"
+    _set_result(job_id, label, result)
 
 
 def _set_result(job_id: str, label: str, result: dict) -> None:

@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "ApiPublishError",
+  "message": "net::ERR_TUNNEL_CONNECTION_FAILED at first navigation",
+  "expect": {
+    "key": "proxy_error",
+    "short": "The profile's proxy or secure connection failed",
+    "next": "check the proxy of this profile in Multilogin and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  }
+}

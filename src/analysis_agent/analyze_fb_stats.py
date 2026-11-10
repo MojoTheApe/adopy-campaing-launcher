@@ -26,6 +26,7 @@ from config.analysis_rules import (
     get_text_segment_fallback,
 )
 from config.paths import get_excel_path
+from src.analysis_agent.adset_name import strip_copy_counter
 from src.knowledge_agent.knowledge_base import (
     resolve_targeting_text,
     log_unknown_target,
@@ -273,6 +274,7 @@ def parse_adset_name(
     if not isinstance(adset_name, str):
         return None, None, None, None
 
+    adset_name = strip_copy_counter(adset_name)     # ACL-2250: `X copy 1` читается как `X`
     parts = [p.strip() for p in adset_name.split("_") if p.strip()]
 
     # Country code is always the first token (2-3 letters like MX, CL, GCC, UAE)

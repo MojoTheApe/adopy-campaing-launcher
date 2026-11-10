@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "PlanError",
+  "message": "The ad account is not active (account_status 2). Nothing was created.",
+  "expect": {
+    "key": "account_blocked",
+    "short": "This ad account cannot run ads right now (disabled, restricted or at its spending limit)",
+    "next": "check it in Ads Manager",
+    "severity": "blocking",
+    "retry": "after_fix"
+  }
+}

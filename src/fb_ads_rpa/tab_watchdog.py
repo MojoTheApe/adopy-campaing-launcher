@@ -542,8 +542,17 @@ class RawCdp:
             pass
 
     # -- вызов
+    _depth = 0
+    _deferred: list | None = None
+
     def call(self, method: str, params: dict | None = None, *, session_id: str = "",
              timeout: float = CALL_S, on_event: Callable[[dict], None] | None = None) -> dict:
+        """Вызов CDP. `on_event` получает события, пришедшие до ответа.
+
+        Обработчик может сам вызвать `call()` (вложенный вызов): вложенный вызов не обрабатывает
+        события, а откладывает всё чужое (события и ответы) в очередь внешнего вызова, который
+        разберёт её после возврата обработчика. Ничего не теряется и не уходит «в никуда».
+        """
         self._id += 1
         my_id = self._id        # обработчик события может вызвать call() внутри и сдвинуть _id
         msg: dict[str, Any] = {"id": my_id, "method": method, "params": params or {}}
@@ -551,23 +560,77 @@ class RawCdp:
             msg["sessionId"] = session_id
         deadline = time.monotonic() + timeout
         self._send_frame(0x1, json.dumps(msg).encode(), timeout=timeout)
+        nested = self._depth > 0
+        backlog: list = list(self._deferred or [])
+        self._deferred = []
+        kept: list = []
+        self._depth += 1
+        try:
+            while True:
+                if self._deferred:           # отложено вложенным вызовом из нашего обработчика
+                    backlog.extend(self._deferred)
+                    self._deferred = []
+                if backlog:
+                    got = backlog.pop(0)
+                else:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        raise TimeoutError(f"{method}: no answer in {timeout:.0f} s")
+                    data = self._recv_message(deadline)
+                    try:
+                        got = json.loads(data)
+                    except ValueError:
+                        continue
+                    if not isinstance(got, dict):
+                        continue
+                if got.get("id") != my_id:
+                    if nested:
+                        kept.append(got)
+                    elif on_event is not None and "method" in got and "id" not in got:
+                        on_event(got)
+                    continue   # событие или чужой ответ
+                if "error" in got:
+                    err = got.get("error") or {}
+                    raise CdpError(f"{method}: {err.get('message', err)}")
+                return got.get("result") or {}
+        finally:
+            self._depth -= 1
+            if nested:
+                self._deferred = kept + backlog + list(self._deferred or [])
+            else:
+                # события, оставшиеся в очереди, достанутся следующему вызову/drain (пауза запроса не теряется)
+                self._deferred = [m for m in backlog if "method" in m and "id" not in m] +                     [m for m in (self._deferred or []) if "method" in m and "id" not in m]
+
+    def drain(self, seconds: float, on_event: Callable[[dict], None]) -> int:
+        """Подождать `seconds`, отдавая пришедшие события в `on_event`; вернуть их число."""
+        import select
+
+        handled = 0
+        end = time.monotonic() + max(0.0, seconds)
         while True:
-            left = deadline - time.monotonic()
-            if left <= 0:
-                raise TimeoutError(f"{method}: no answer in {timeout:.0f} s")
-            data = self._recv_message(deadline)
+            pending = list(self._deferred or [])
+            self._deferred = []
+            for got in pending:
+                if "method" in got and "id" not in got:
+                    on_event(got)
+                    handled += 1
+            left = end - time.monotonic()
+            if self._buf:
+                ready = True
+            elif left <= 0:
+                return handled
+            else:
+                ready = bool(select.select([self._sock], [], [], min(left, 0.2))[0])
+            if not ready:
+                continue
+            data = self._recv_message(time.monotonic() + 10.0)
             try:
                 got = json.loads(data)
             except ValueError:
                 continue
-            if got.get("id") != my_id:
-                if on_event is not None and "method" in got and "id" not in got:
-                    on_event(got)
-                continue   # событие или чужой ответ
-            if "error" in got:
-                err = got.get("error") or {}
-                raise CdpError(f"{method}: {err.get('message', err)}")
-            return got.get("result") or {}
+            if isinstance(got, dict) and "method" in got and "id" not in got:
+                on_event(got)
+                handled += 1
 
     # -- кадры websocket
     def _send_frame(self, opcode: int, payload: bytes, *, timeout: float) -> None:
