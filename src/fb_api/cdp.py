@@ -486,8 +486,16 @@ class PageTab:
                 raise SessionLostError("the owned tab's browser session was detached") from exc
             raise
 
-    #: Optional handler for CDP events of this tab (used only by the offline light-tab probe).
+    #: Optional handler for CDP events of this tab (the light work tab's interception, ACL-2344).
     on_event: Callable[[dict], None] | None = None
+    #: ACL-2344: the `light_tab.LightDocument` of a light work tab (None - an ordinary tab).
+    light: Any = None
+
+    def mark_light(self, doc: Any) -> None:
+        """This tab shows the light document: identity checks accept only `LIGHT_URL`, no reload."""
+        self.light = doc
+        from src.fb_api.light_tab import LIGHT_URL
+        self._navigation_url = LIGHT_URL
 
     def pump(self, seconds: float) -> int:
         """Handle `on_event` events for `seconds` without sending anything (probe only)."""
@@ -505,6 +513,12 @@ class PageTab:
             raise PageIdentityError("checkpoint")
         if path.startswith(("/login", "/recover")):
             raise PageIdentityError("login")
+        from src.fb_api.light_tab import LIGHT_URL
+        if expected == LIGHT_URL or actual == LIGHT_URL:
+            # ACL-2344: the light work tab is exactly its one document; anything else is another page
+            if actual != LIGHT_URL or expected != LIGHT_URL:
+                raise PageIdentityError()
+            return
         account = urllib.parse.parse_qs(wanted.query).get("act")
         if (not expected or wanted.scheme != "https" or
                 wanted.netloc != "adsmanager.facebook.com" or
@@ -537,6 +551,10 @@ class PageTab:
         if not session_id or session_id == self.session_id:
             raise CdpError("the browser did not return a new owned-tab session")
         self.session_id = session_id
+        if self.light is not None:
+            # ACL-2344: interception belongs to a CDP session; the new one must answer the origin again
+            # before anything else can make the tab load (nothing of the origin may reach Meta)
+            self.light.intercept()
         self.call("Page.enable")
         self.verify_url(expected_url)
         self.throttle = self.keep_active()
@@ -731,6 +749,9 @@ class PageTab:
             self._navigate_once(url, timeout)
 
     def reload(self, *, timeout: float = 30.0) -> None:
+        if self.light is not None:
+            # ACL-2344: a reload would only drop the token; recovery is a fresh capture tab
+            raise CdpError("the light work tab is never reloaded")
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)
 
     def close_target(self, target_id: str) -> bool:

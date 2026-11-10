@@ -160,7 +160,9 @@ _HELPER_JS = r"""
     else if (/\/login(\.php)?(\/|$)/i.test(p) || /^\/recover(\/|$)/i.test(p)
              || !!document.querySelector('input[name="pass"]')) kind = 'login';
     else if (/(^|\.)adsmanager\.facebook\.com$/i.test(h) || p.indexOf('/adsmanager') === 0) kind = 'ads_manager';
-    return { kind: kind, host: h, path: p.slice(0, 120), ready_state: document.readyState,
+    // ACL-2344: the light work tab is on the Ads Manager host but the app is NOT open there
+    const light = kind === 'ads_manager' && /^adsmanager\.facebook\.com$/i.test(h) && p === '/__acl_work';
+    return { kind: kind, light: light, host: h, path: p.slice(0, 120), ready_state: document.readyState,
              has_token: !!token, source: source, version: version, retired: retired,
              graph_host: host, credentials: credentialsFor('captured'), am_request: amRequest };
   }
@@ -900,50 +902,78 @@ _HELPER_JS = r"""
     return post('/' + VALIDATE_ACT + '/adcreatives', params, null, null, spec, {}, null);
   }
 
-  // ACL-2344: hand the captured token to the helper of ANOTHER same-origin tab (a light work tab).
-  // Channel name and nonce are random per lease and known only to Python; neither the token nor
-  // the channel leaves this world, only booleans do. The receiver accepts one message, once.
+  // ACL-2344: hand the captured token to the helper of ANOTHER world of the same origin (a light work
+  // tab, or a new world of that tab). Channel name, nonce and ack name are random per hand-over and known
+  // only to Python; neither the token nor the channel names leave this world - only status codes do.
+  // The receiver listens once, for a limited time: the first message with the right nonce closes the
+  // channel whether it is valid or not; a timeout or `stopListen()` closes it too.
   const HOST_RE = /^(?:[a-z0-9]+-)?graph\.facebook\.com$/i;
+  const VER_RE = /^(v\d+\.\d+)?$/;
+  const SECRET_RE = /^[A-Za-z0-9_-]{16,64}$/;
   let listening = null;
-  function listen(name, nonce, ack) {
-    if (retired || token || listening || typeof BroadcastChannel !== 'function') return false;
-    if (typeof name !== 'string' || typeof nonce !== 'string' || typeof ack !== 'string') return false;
+  let listenResult = 'idle';
+  function stopListening(result) {
+    if (!listening) return;
+    try { listening.ch.close(); } catch (x) {}
+    if (listening.timer !== null) clearTimeout(listening.timer);
+    listening = null;
+    listenResult = result;
+  }
+  function listen(name, nonce, ack, ttlMs) {
+    if (retired) return 'retired';
+    if (token) return 'has_token';
+    if (listening) return 'busy';
+    if (typeof BroadcastChannel !== 'function') return 'no_channel';
+    if (![name, nonce, ack].every((v) => typeof v === 'string' && SECRET_RE.test(v))) return 'bad_args';
+    const ttl = Math.max(1000, Math.min(30000, Number(ttlMs) || 15000));
     const ch = new BroadcastChannel(name);
-    listening = ch;
+    listening = { ch: ch, timer: null };
+    listenResult = 'listening';
+    listening.timer = setTimeout(() => stopListening('expired'), ttl);
     ch.onmessage = (e) => {
       const d = e.data;
-      if (token || retired || !d || d.n !== nonce || typeof d.t !== 'string' || !TOKEN_RE.test(d.t)) return;
-      if (typeof d.h !== 'string' || !HOST_RE.test(d.h) || typeof d.v !== 'string' || !/^(v\d+\.\d+)?$/.test(d.v)) return;
-      token = d.t; host = d.h.toLowerCase(); version = d.v; source = 'handover';
-      amRequest = { via: 'handover', method: 'GET', credentials: 'include', path: '', params: [] };
-      try { ch.close(); } catch (x) {}
-      try { const a = new BroadcastChannel(ack); a.postMessage({ ack: true }); a.close(); } catch (x) {}
+      if (!d || typeof d !== 'object' || d.n !== nonce) return;      // not this hand-over: ignore
+      const ok = !token && !retired && typeof d.t === 'string' && TOKEN_RE.test(d.t)
+        && typeof d.h === 'string' && HOST_RE.test(d.h) && typeof d.v === 'string' && VER_RE.test(d.v);
+      if (ok) {
+        token = d.t; host = d.h.toLowerCase(); version = d.v; source = 'handover';
+        amRequest = { via: 'handover', method: 'GET', credentials: 'include', path: '', params: [] };
+      }
+      stopListening(ok ? 'received' : 'rejected');                   // the nonce is used once, either way
+      if (ok) { try { const a = new BroadcastChannel(ack); a.postMessage({ ack: nonce }); a.close(); } catch (x) {} }
     };
-    return true;
+    return 'listening';
   }
+  function listenStatus() { return listening ? 'listening' : listenResult; }
+  function stopListen() { stopListening('stopped'); return listenResult; }
   async function handOver(name, nonce, ack, waitMs) {
     scanFast(); scanHtml();
-    if (retired || !token || typeof BroadcastChannel !== 'function') return false;
+    if (retired) return 'retired';
+    if (!token) return 'no_token';
+    if (typeof BroadcastChannel !== 'function') return 'no_channel';
+    if (![name, nonce, ack].every((v) => typeof v === 'string' && SECRET_RE.test(v))) return 'bad_args';
     const wait = Math.max(500, Math.min(15000, Number(waitMs) || 8000));
     let timer = null;
+    let a = null;
     const acked = new Promise((resolve) => {
-      const a = new BroadcastChannel(String(ack));
-      a.onmessage = (e) => { if (e.data && e.data.ack === true) { resolve(true); try { a.close(); } catch (x) {} } };
-      timer = setTimeout(() => { resolve(false); try { a.close(); } catch (x) {} }, wait);
+      a = new BroadcastChannel(ack);
+      a.onmessage = (e) => { if (e.data && e.data.ack === nonce) resolve('acked'); };
+      timer = setTimeout(() => resolve('no_ack'), wait);
     });
-    const ch = new BroadcastChannel(String(name));
-    ch.postMessage({ n: String(nonce), t: token, h: host, v: version });
-    setTimeout(() => { try { ch.close(); } catch (x) {} }, 400);
-    const ok = await acked;
+    const ch = new BroadcastChannel(name);
+    try { ch.postMessage({ n: nonce, t: token, h: host, v: version }); } finally { ch.close(); }
+    const result = await acked;
     if (timer !== null) clearTimeout(timer);
-    return ok;
+    try { a.close(); } catch (x) {}
+    return result;
   }
 
   function probe() { scanFast(); scanHtml(); return state(); }
-  function retire() { retired = true; token = null; return true; }
+  function retire() { retired = true; token = null; stopListening('retired'); return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
-                          listen: listen, handOver: handOver,
+                          listen: listen, listenStatus: listenStatus, stopListen: stopListen,
+                          handOver: handOver,
                           validatePage: validatePage,
                           stage: stage, unstage: unstage,
                           startCall: startCall, poll: poll, abort: abort });
@@ -1105,6 +1135,8 @@ class InPageGraph:
             return {"kind": "ads_manager", "has_token": True, "pinned": True}
         from src.fb_api import write_policy as _wp
 
+        if self.light:
+            return self._pin_page_light(page, timeout=timeout)
         self.write_page = page
         self._write_policy = _wp.policy_for_page(self.write_act, page)
         # ACL-2194: the helper from the preflight (no Page) still lives in the world with this name and
@@ -1113,6 +1145,35 @@ class InPageGraph:
         self.world_name = f"acl_{secrets.token_hex(6)}"
         self._reset_world()
         return self.wait_ready(timeout=timeout)
+
+    def _pin_page_light(self, page: str, *, timeout: float) -> dict:
+        """ACL-2344 (spec 5.3): the new world gets the token from the old world of the SAME tab, then the old
+        one is retired. No Ads Manager load; if the hand-over fails - one re-capture, else the action stops."""
+        import copy
+
+        from src.fb_api import write_policy as _wp
+
+        old = copy.copy(self)                         # same tab, old world and old policy
+        self.write_page = page
+        self._write_policy = _wp.policy_for_page(self.write_act, page)
+        self.world_name = f"acl_{secrets.token_hex(6)}"
+        self._reset_world()
+        reason = self.receive_from(old)
+        try:
+            old._eval_helper(".retire()", timeout=10.0)
+        except Exception:  # noqa: BLE001 - the old world may already be gone
+            pass
+        if reason:
+            if reason == "work_tab_dead":
+                raise self._stop_connection(PageIdentityError())
+            got = self._light_recapture(max(timeout, 90.0))
+            if got.get("kind") in ("login", "checkpoint"):
+                raise self._stop_connection(PageIdentityError(got["kind"]))
+            if not got.get("has_token"):
+                raise PageFailed("the lightweight page could not take the Graph session for the Page; "
+                                 "nothing more was sent")
+        state = self.state()
+        return {**state, "pinned": True} if state.get("has_token") else state
 
     def _reset_world(self) -> None:
         self._ctx = None
@@ -1258,12 +1319,16 @@ class InPageGraph:
         try:
             state = self._eval_helper(".state()", timeout=timeout)
             self._replaced_probes = 0
-            if self._session_recovered and isinstance(state, dict) and not state.get("has_token"):
+            if (self._session_recovered and not self.light and isinstance(state, dict)
+                    and not state.get("has_token")):
                 state = self._eval_helper(".probe()", timeout=timeout)
         except (CdpError, OSError) as exc:
             raise self._stop_connection(exc) from exc
         if isinstance(state, dict) and state.get("kind") in ("login", "checkpoint"):
             raise self._stop_connection(PageIdentityError(state["kind"]))
+        if self.light:
+            self._light_check(state, timeout=timeout)
+            return
         if self._session_recovered and (not isinstance(state, dict) or
                 state.get("kind") != "ads_manager" or not state.get("has_token")):
             raise self._stop_connection(PageIdentityError())
@@ -1344,7 +1409,9 @@ class InPageGraph:
         вызывающий (заменить вкладку один раз).
         """
         got = self._eval_helper(".state()", timeout=timeout)
-        if isinstance(got, dict) and got.get("kind") == "ads_manager" and not got.get("has_token"):
+        # ACL-2344: the light page has no HTML to scan - no token there means "take it again", not probe()
+        if (isinstance(got, dict) and got.get("kind") == "ads_manager" and not got.get("has_token")
+                and not got.get("light")):
             got = self._eval_helper(".probe()", timeout=timeout)
         return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
 
@@ -1625,11 +1692,77 @@ class InPageGraph:
             return {"error": "call_unknown"}
 
     def reacquire(self, *, timeout: float = 90.0) -> dict:
-        """Переснять токен: гасим помощника, перезагружаем вкладку, новый мир."""
+        """Переснять токен: гасим помощника, перезагружаем вкладку, новый мир.
+
+        ACL-2344: лёгкая вкладка не перезагружается (токен там взять негде) - токен заново
+        снимает отдельная вкладка захвата (`light_recapture`) и передаёт в новый мир этой вкладки.
+        """
         try:
             self._eval_helper(".retire()", timeout=10.0)
-        except (PageError, CdpError, TimeoutError):
+        except (PageError, CdpError, TimeoutError, GraphStop):
             pass
+        if self.light:
+            self.world_name = f"acl_{secrets.token_hex(6)}"
+            self._reset_world()
+            return self._light_recapture(timeout)
         self.tab.reload()
         self._reset_world()
         return self.wait_ready(timeout=timeout)
+
+    # -- ACL-2344: the light work tab
+    #: `callable(graph, timeout) -> state`: opens a capture tab, loads Ads Manager once, hands the token into
+    #: `graph` (set by the warm lease). None - a lost token cannot be taken again (the action stops).
+    light_recapture: Callable[["InPageGraph", float], dict] | None = None
+    #: How many times one graph object may take the token again before a call (each = one Ads Manager load).
+    MAX_LIGHT_RECAPTURES = 2
+    light_recaptures = 0
+
+    @property
+    def light(self) -> bool:
+        return getattr(self.tab, "light", None) is not None
+
+    def bind_act(self, act_id: str) -> None:
+        """Light mode: the account of the next calls, WITHOUT navigating (the light tab serves every act)."""
+        from src.fb_api.light_tab import LIGHT_URL
+
+        act = "act_" + act_digits(act_id)
+        self.validation_act = (act if not self.object_updates and re.fullmatch(r"act_[0-9]{5,}", act)
+                               and (not self.write_act or self.write_act == act) else None)
+        self._expected_url = LIGHT_URL
+
+    def receive_from(self, src: "InPageGraph", *, wait_s: float = 8.0) -> str:
+        """Take the token from the helper of `src` (another tab or another world). '' or a reason code."""
+        from src.fb_api import light_tab
+
+        return light_tab.hand_over(src, self, wait_s=wait_s)
+
+    def _light_recapture(self, timeout: float) -> dict:
+        if self.light_recapture is None:
+            return {"kind": "ads_manager", "light": True, "has_token": False}
+        self.light_recaptures += 1
+        got = self.light_recapture(self, timeout)
+        return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
+
+    def _light_check(self, state: Any, *, timeout: float) -> None:
+        """Before a call on the light tab: our document, our token - else take it again (bounded) or stop.
+
+        Only local CDP; a re-capture is one Ads Manager load in a separate tab (counted in telemetry).
+        """
+        doc = getattr(self.tab, "light", None)
+        reason = doc.document_intact(timeout=timeout) if doc is not None else "work_tab_dead"
+        if reason in ("light_doc_wrong_origin", "work_tab_dead"):
+            raise self._stop_connection(PageIdentityError())
+        if not reason and isinstance(state, dict) and state.get("has_token"):
+            return
+        if self.light_recaptures >= self.MAX_LIGHT_RECAPTURES:
+            raise PageFailed("the lightweight page kept losing its Graph session; nothing more was sent")
+        self.world_name = f"acl_{secrets.token_hex(6)}"
+        self._reset_world()
+        got = self._light_recapture(max(timeout, 90.0))
+        if got.get("kind") == "checkpoint":
+            raise self._stop_connection(PageIdentityError("checkpoint"))
+        if got.get("kind") == "login":
+            raise self._stop_connection(PageIdentityError("login"))
+        if not got.get("has_token"):
+            raise PageFailed("the lightweight page lost its Graph session and it could not be taken "
+                             "again; nothing more was sent")
