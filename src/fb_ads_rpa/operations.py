@@ -50,7 +50,7 @@ import threading
 import inspect
 from functools import wraps
 from src.fb_ads_rpa import profile_lease as _pl
-from src.fb_ads_rpa.profile_lease import profile_lock, check_nested_profile, ProfileLeaseError
+from src.fb_ads_rpa.profile_lease import profile_lock, check_nested_profile, ProfileLeaseError, leak_watch
 
 
 class _BrowserGate:
@@ -196,12 +196,14 @@ def serialized_browser(fn=None, *, key=None, reading=False, on_lease_error=None)
                     if key is None:
                         with browser_operation:
                             return func(*args, **kwargs)
-                    with publish_lease(resolve(args, kwargs)):
+                    name = resolve(args, kwargs)
+                    with leak_watch(name, "write"), publish_lease(name):
                         return func(*args, **kwargs)
                 # Чтение (Check plan, Страницы, спенд) ждёт, пока другая операция на этом
                 # профиле закончится, и подхватывает открытый профиль. Отказ «busy»
                 # через WAIT_SECONDS (120 с) превращал обычную очередь в ошибку плана.
-                with browser_operation.reading(),                         profile_lock(resolve(args, kwargs)).holding(timeout=READ_WAIT_SECONDS):
+                name = resolve(args, kwargs)
+                with browser_operation.reading(), leak_watch(name, "read"),                         profile_lock(name).holding(timeout=READ_WAIT_SECONDS):
                     return func(*args, **kwargs)
             except ProfileLeaseError as exc:
                 if on_lease_error is None:
