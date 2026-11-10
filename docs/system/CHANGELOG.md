@@ -1,5 +1,25 @@
 # System history
 
+## ACL-2495 — Builder no longer lists accounts removed on the Accounts page — 2026-11-09
+
+The Campaign Builder now skips accounts removed with Remove on the Accounts page (such as FacebookMKTOBFLV97 KW and W72 KW); a restored account is listed again. Restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1495).
+
+## ACL-2491 — Check plan finds interests through the ad account search — 2026-11-09
+
+Interests that the Ads Manager targeting box accepts are now found by Check plan too: after a miss in the interest search the resolver also looks the interest up through the ad account search (`act_X/targetingsearch`, one extra optional read per miss).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1491).
+
+## ACL-2419 — Home accounts: status comes from Meta, a stale "no warning" is never shown as fact — 2026-11-09
+
+Every campaign-list read already fetches the ad account (`account_status`, `disable_reason`); it now also stores that status (no extra request). A `clear` status older than 24 hours, or followed by a failed read, is shown as **unknown** with its date instead of "no warning"/"active"; disabled, restricted, review and blocked statuses stay visible and are marked "not refreshed". Home counts an account with such a stale or failed `clear` as **Unknown** even if it has spend, and the State cell shows the status word, the read time and the disable reason. After **Open** succeeds, one **status-only** read goes through the existing refresh queue (same lease, pause, cooldown and call budget; no timer or polling; a second click while one is queued adds nothing): exactly one request to the ad account itself — no campaign tree, no insights, no country split — and it never replaces the saved campaign list.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1419).
+
+## ACL-1862 — Close/Open profiles take the profile lease — 2026-11-09
+
+"Close profiles" and the fresh start of "Open profiles for today" now run under the physical profile lease (non-blocking). If another ACM operation (a read, a publish, another process) is using the profile, the button answers "busy" / "profile_lease" at once and nothing is stopped or started; one busy profile does not break a batch. The lease is taken after the memory/start-turn waits, so readers are not stalled. Adds the `try_lease` helper (for ACL-2091) and the `profile_lease_refused` journal event (no ids). Remaining parts of the task (checkout fails closed, job-end assertion, mixed-path tests) follow in separate PRs.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/862).
+
 ## ACL-2494 — Builder shows accounts whose country is set on the Accounts page — 2026-11-09
 
 The Campaign Builder now takes an account's country from the Accounts page links when the account map has none, and matches the sheet by (account, country), so accounts such as FacebookDoc283 appear in the builder.

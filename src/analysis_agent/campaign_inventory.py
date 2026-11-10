@@ -138,6 +138,10 @@ class Snapshot:
     ads: list[dict] = field(default_factory=list)
     #: уровень → {id: {spend, reach, impressions, frequency, clicks}}
     insights: dict[str, dict[str, dict]] = field(default_factory=dict)
+    #: ACL-2419: `account_status` и `disable_reason` из `/act_X`, который чтение и так запрашивает.
+    #: Новых запросов ради них нет; старые снимки без полей читаются как «не знаем».
+    account_status: int | None = None
+    disable_reason: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -766,6 +770,8 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
     acc = client.account(act)
     _api._check_account(acc, act)  # noqa: SLF001
     snap.currency = str(acc.get("currency") or "")
+    snap.account_status = _to_int(acc.get("account_status"))
+    snap.disable_reason = _to_int(acc.get("disable_reason"))
     path = f"/{act}"
 
     def fetch(step: str, sub: str, fields: str, level: str):
@@ -848,6 +854,78 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
     snap.calls = int(getattr(client, "calls", 0) or 0)
 
 
+def record_status(snap: Snapshot) -> bool:
+    """ACL-2419: отдать статус кабинета в его хранилище после УДАВШЕГО чтения списка.
+
+    Ни одного лишнего запроса: слово берётся из ответа, который чтение уже получило.
+    Неудачное чтение статус не пишет. Сбой хранилища чтение не ломает.
+    """
+    if snap.account_status is None or not read_succeeded(snap):
+        return False
+    try:
+        from src.analysis_agent import account_spend_api as _api
+
+        status, text, code, reason = _api.status_from_account(
+            {"account_status": snap.account_status, "disable_reason": snap.disable_reason})
+        return _as.put_status(snap.account, status, text, source="api", at=_as._now(),  # noqa: SLF001
+                              disable_reason=reason, account_status=code)
+    except Exception:  # noqa: BLE001 — статус вторичен, список важнее
+        log.exception("Could not store the account status of %s", snap.account)
+        return False
+
+
+def read_status_only(account: str, *, trigger: str = "open") -> Snapshot:
+    """ACL-2419: после Open ровно ОДИН Graph-запрос - сам кабинет (`client.account`).
+
+    Ни дерева кампаний, ни Insights, ни разбивки по странам. Удачный результат несёт
+    только статус кабинета: он кладётся в хранилище статусов через `record_status`
+    и НЕ заменяет сохранённую опись (снимок помечен `_status_only`).
+    """
+    from src.analysis_agent import account_spend_api as _api
+    from src.fb_api.graph import GraphStop
+
+    snap = Snapshot(account=account, state="failed")
+    snap._status_only = True  # type: ignore[attr-defined]
+    started = time.monotonic()
+    notes: dict = {}
+    stop = ""
+    try:
+        with _api._session(account) as sess:  # noqa: SLF001
+            from src.analysis_agent.account_refresh_machine import verify_session
+            verify_session(sess)
+            try:
+                acc = sess.client.account(sess.act)
+                _api._check_account(acc, sess.act)  # noqa: SLF001
+                snap.currency = str(acc.get("currency") or "")
+                snap.account_status = _to_int(acc.get("account_status"))
+                snap.disable_reason = _to_int(acc.get("disable_reason"))
+                snap.state = "ok"
+            finally:
+                snap.calls = int(getattr(sess.client, "calls", 0) or 0)
+                if getattr(sess.client, "stopped", None) is not None:
+                    stop = sess.client.stopped.kind
+                    _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
+                notes = sess.notes
+        record_status(snap)
+    except Exception as exc:  # noqa: BLE001 - чтение не должно ронять сервер
+        snap.state = "failed"
+        snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
+        if isinstance(exc, GraphStop):
+            stop = exc.kind
+            _api._report_stop(exc, account)  # noqa: SLF001
+    if stop:
+        snap.stop = snap.stop or stop
+    notes = {**notes, "trigger": trigger, "status_only": True}
+    _api._telemetry("campaigns", account, read_succeeded(snap), time.monotonic() - started, notes,  # noqa: SLF001
+                    error=snap.error, stop=stop)
+    return snap
+
+
+def is_status_only_ok(snap: Snapshot | None) -> bool:
+    """Удачное статус-чтение: опись под ним не трогаем."""
+    return snap is not None and bool(getattr(snap, "_status_only", False)) and read_succeeded(snap)
+
+
 def finalize(snap: Snapshot) -> None:
     """Итоговое состояние по шагам: ok | partial | empty | failed."""
     if snap.steps.get("campaigns") not in ("ok", "truncated"):
@@ -896,6 +974,7 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
             finally:
                 notes = sess.notes
         finalize(snap)
+        record_status(snap)
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
         snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
@@ -951,6 +1030,7 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
                 stop = sess.client.stopped.kind
                 _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
             finalize(snap)
+            record_status(snap)
     except Exception as exc:  # noqa: BLE001 — исход команды не меняется
         snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
@@ -991,24 +1071,31 @@ def _run_read(account: str, *, trigger: str, baseline=None, persist: bool = True
             # this result's durable settlement, not only through _session.
             from src.analysis_agent import account_refresh, account_spend_api
             cached = get_snapshot(account)
-            if (account_refresh.is_fresh(account)
+            if trigger.split(":")[0] == "open":
+                # ACL-2419: после Open - только статус кабинета, один запрос, без дерева.
+                from src.fb_api.connection import user_started_action
+
+                with user_started_action(False):
+                    done = read_status_only(account, trigger=trigger)
+            elif (account_refresh.is_fresh(account)
                     and (trigger.split(":")[0] in {"schedule", "attention"}
                          or summary(cached).get("revision") != baseline)):
                 account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
                 return cached
-            # ACL-2272: only Retry and the refresh after a command are the person's own; page-open,
-            # 08/13/18 and row-expand ("attention") reads leave a closed profile closed.
-            from src.fb_api.connection import user_started_action
+            else:
+                # ACL-2272: only Retry and the refresh after a command are the person's own; page-open,
+                # 08/13/18 and row-expand ("attention") reads leave a closed profile closed.
+                from src.fb_api.connection import user_started_action
 
-            with user_started_action(trigger.split(":")[0] in USER_TRIGGERS):
-                done = read_via_api(account, structure_only=True, trigger=trigger)
+                with user_started_action(trigger.split(":")[0] in USER_TRIGGERS):
+                    done = read_via_api(account, structure_only=True, trigger=trigger)
     except Exception as exc:  # noqa: BLE001
         done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
     done.started_at = started_at
     done.finished_at = _as._now()  # noqa: SLF001
     done.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
     done.took_s = round(time.time() - began, 1)
-    if persist:
+    if persist and not is_status_only_ok(done):
         try:
             put_result(done)
         except Exception:  # noqa: BLE001
@@ -1038,10 +1125,19 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
                 paused._machine_paused = halt
                 paused._machine_committed = True
                 return paused
+            done = None
+            if trigger.split(":")[0] == "open":
+                # ACL-2419: статус-чтение не публикует опись. Удача - без записи в общее
+                # хранилище результатов (оно заменило бы опись пустой); неудача идёт обычным путём.
+                done = operation()
+                if is_status_only_ok(done):
+                    done._machine_committed = True
+                    return done
             token = coordinator.begin(key, "inline", trigger)
             with coordinator.executing(token, key):
                 own_recovery = coordinator.stop_generation(key)
-                done = operation()
+                if done is None:
+                    done = operation()
                 revision = coordinator.publish(key, done, now=clock(), force=force,
                                                recovery=halt["generation"] if halt else None,
                                                own_recovery=own_recovery, token=token)

@@ -82,6 +82,9 @@ OPTIONAL_LOOKUPS = {
     "adworkemployer": ("work employers lookup", "work employers were not matched"),
     "adeducationschool": ("education schools lookup", "education schools were not matched"),
     "adeducationmajor": ("education majors lookup", "education majors were not matched"),
+    # Поиск окна Detailed targeting в Ads Manager: шире, чем /search?type=adinterest (интерес,
+    # который человек находит руками, там бывает, а в adinterest - нет).
+    "targetingsearch": ("ad account targeting search", "terms were matched through the interest search only"),
 }
 REQUIRED_LOOKUPS = ("adinterest", "adgeolocation", "adlocale")
 
@@ -368,8 +371,10 @@ class TermResolver:
 
     def __init__(self, client: Any, store: ConfirmedStore | None = None, *,
                  term_cap: int = TERM_READ_CAP, job_cap: int | None = None,
-                 cache: SearchCache | None = None, scope: str = "", facts: Any = None):
+                 cache: SearchCache | None = None, scope: str = "", facts: Any = None, act: str = ""):
         self.client = client
+        #: Кабинет «act_<digits>» для поиска act_X/targetingsearch; пусто - этот поиск не делается.
+        self.act = act if re.fullmatch(r"act_[0-9]{1,32}", act or "") else ""
         self.store = store if store is not None else ConfirmedStore()
         #: ACL-2267: долгий кэш точных находок (term -> picks), см. facts_cache; по умолчанию - кэш машины.
         if facts is None:
@@ -414,13 +419,14 @@ class TermResolver:
         self._bad_ids: set[str] = set()
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
-    def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
+    def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True,
+                path: str = "/search") -> list[dict]:
         if search_type in self.refused:
             return []                      # уже отказано в этом задании: повторов нет
         optional = search_type in OPTIONAL_LOOKUPS
         before = getattr(self.client, "calls", None)
         try:
-            return self._get_all(params, pages, count_term=count_term)
+            return self._get_all(params, pages, count_term=count_term, path=path)
         except GraphError as exc:
             if not (optional and is_permission_refusal(exc)):
                 raise name_lookup(exc, search_type) from exc
@@ -451,8 +457,10 @@ class TermResolver:
                 "checked there; fix the term or confirm a candidate")
 
     # -- бюджет чтений
-    def _get_all(self, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
+    def _get_all(self, params: dict, pages: int, *, count_term: bool = True, path: str = "/search") -> list[dict]:
         key = (tuple(sorted((k, json.dumps(v, sort_keys=True)) for k, v in params.items())), pages)
+        if path != "/search":
+            key = (path,) + key      # прежние ключи /search не меняются (общий кэш Check plan)
         if key in self._query_cache:
             return self._query_cache[key]
         if self._shared is not None:
@@ -469,7 +477,7 @@ class TermResolver:
             raise _Spent
         before = used if isinstance(used, int) else None
         cut_before = len(getattr(cl, "truncated", None) or [])
-        rows = cl.get_all("/search", params, max_pages=pages)
+        rows = cl.get_all(path, params, max_pages=pages)
         after = getattr(cl, "calls", None)
         # Настоящие чтения: разница счётчика клиента (по странице на GET); без счётчика - как минимум одно.
         spent = (after - before) if before is not None and isinstance(after, int) else 1
@@ -657,6 +665,14 @@ class TermResolver:
         # adinterest обязателен: отказ Meta здесь остаётся ошибкой (с названием поиска).
         yield "interests", self._lookup("adinterest", {"type": "adinterest", "q": term, "limit": SEARCH_LIMIT},
                                         SEARCH_PAGES)
+        if self.act:
+            # Тот же поиск, что в окне Detailed targeting Ads Manager; строки несут свой type.
+            found = self._lookup("targetingsearch", {"q": term, "limit": SEARCH_LIMIT}, 1,
+                                 path=f"/{self.act}/targetingsearch")
+            for bucket in ("interests", "behaviors"):
+                rows = [r for r in found if r.get("type") == bucket]
+                if rows:
+                    yield bucket, rows
         if self._behaviors is None:
             # Общий список поведений: на задание один раз, в потолок термина не входит.
             self._behaviors = self._lookup(

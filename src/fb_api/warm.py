@@ -936,7 +936,13 @@ class WarmRegistry:
         if kind == "none" and self.session(pid) is not None:
             # B2: профиль в реестре, а процесса нет — его закрыли (человек, таймер чтения).
             # Останавливаем отсчёт от момента, когда увидели, и только потом решаем про запуск.
-            self._forget(pid, stopped=True)
+            # ACL-1862 (G5): под замком — иначе пауза перезапускается для профиля, который другой
+            # процесс как раз берёт.
+            with try_lease(pid, busy_message=_OPEN_BUSY.format(label=label),
+                           busy_code="profile_lease") as refusal:
+                if refusal:
+                    return refusal
+                self._forget(pid, stopped=True)
         why = _stop_log.refusal(pid, self._stops)
         if why:
             return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
@@ -971,6 +977,10 @@ class WarmRegistry:
         queue = self._slot_queue()
         began = time.monotonic()
         grant = None
+        opened = None
+        # ACL-1862 (G3): замок профиля — на сам запуск и запись в реестр; ожидания памяти, очереди
+        # старта и места выше его не держат (читатели не должны стоять из-за них).
+        lease_stack = contextlib.ExitStack()
         # ACL-2262: a publish job already holds its own queue slot for this profile; asking for a second
         # one would make the job wait for itself. Only an action without a slot (Check, Add account) asks.
         own_slot = False
@@ -989,6 +999,10 @@ class WarmRegistry:
                                       or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
                 if grant is None:
                     return _result(False, self._slot_refusal_text(), "memory_low")
+            refusal = lease_stack.enter_context(try_lease(
+                pid, busy_message=_OPEN_BUSY.format(label=label), busy_code="profile_lease"))
+            if refusal:
+                return refusal
             try:
                 opened = self._start_profile(pid, folder, instance)
                 turn_kept = bool(getattr(opened, "started_now", False))
@@ -1009,12 +1023,17 @@ class WarmRegistry:
                     self._starting.pop(pid, None)
             if queue is not None and grant is not None and not own_slot:
                 queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
-        started = bool(getattr(opened, "started_now", False))
-        self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
-        if started:
-            with self._lock:
-                self._settling[pid] = self._mono()
-                self._ready.discard(pid)
+            if opened is None:
+                lease_stack.close()      # запуска не было: замок отпускаем здесь
+        try:
+            started = bool(getattr(opened, "started_now", False))
+            self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
+            if started:
+                with self._lock:
+                    self._settling[pid] = self._mono()
+                    self._ready.discard(pid)
+        finally:
+            lease_stack.close()
         log.info("warm: profile of %s %s (dashboard_started=%s)", label,
                  "started" if started else "was already open", started)
         return _result(True, "Opened; ready for the next action." if started
@@ -1265,6 +1284,14 @@ class WarmRegistry:
         pid = (getattr(entry, "profile_id", "") or "").strip()
         if not pid:
             return _result(False, "No Multilogin profile is linked to this account.", "no_profile")
+        # ACL-1862 (G2): замок профиля на весь обход «осмотр → остановка → проверка → запись паузы».
+        # Занят (чтение или публикация в другом процессе) — отказ без ожидания, MLX не зовём.
+        with try_lease(pid, busy_message=_CLOSE_BUSY, busy_code="busy") as refusal:
+            if refusal:
+                return refusal
+            return self._close_one_locked(label, entry, pid)
+
+    def _close_one_locked(self, label: str, entry: Any, pid: str) -> dict:
         kind, port = self._scan([pid]).get(pid, ("unknown", None))
         if kind == "no_port":
             return _result(False, "Not closed: this window was opened in Multilogin by hand. "
@@ -1827,6 +1854,52 @@ def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
     except profile_trouble.ProfileStop as stop:
         return profile_trouble.message(stop.code) or str(stop)
     return ""
+
+
+@contextlib.contextmanager
+def try_lease(pid: str, *, busy_message: str, busy_code: str):
+    """ACL-1862: неблокирующий замок физического профиля; даёт `None` (замок взят) или готовый отказ.
+
+    Занят другой операцией ACM (в том числе другим процессом) — обычный ответ `_result`, а не
+    исключение и не ожидание: один занятый профиль не рвёт пачку и не вешает кнопку на минуты.
+    Папка замков недоступна / в карте не UUID — `profile_lease` со словами ошибки. Отказ ничего не
+    меняет и не уходит в обычный браузер. Тот же помощник берёт ACL-2091 («показать окно»).
+    """
+    from src.fb_ads_rpa.operations import profile_lock
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    lease = None
+    refusal = None
+    try:
+        candidate = profile_lock(pid)
+        if candidate.acquire(blocking=False):
+            lease = candidate
+        else:
+            refusal = _result(False, busy_message, busy_code)
+    except ProfileLeaseError as exc:
+        refusal = _result(False, f"{exc} Nothing was changed.", "profile_lease")
+    if refusal is not None:
+        _lease_refused(refusal["code"])
+        yield refusal
+        return
+    try:
+        yield None
+    finally:
+        lease.release()
+
+
+def _lease_refused(code: str) -> None:
+    """Строка в журнал пилота: что отказали, без id профиля и аккаунта."""
+    try:
+        from src.fb_api import telemetry
+
+        telemetry.record({"event": "profile_lease_refused", "code": code})
+    except Exception:  # noqa: BLE001 — журнал не должен ломать отказ
+        pass
+
+
+_CLOSE_BUSY = "Not closed: another ACM operation is using this profile. Try again when it ends. Nothing was changed."
+_OPEN_BUSY = "Not started: another ACM operation is using the {label} profile. Nothing was started."
 
 
 def _result(ok: bool, message: str, code: str, **extra: Any) -> dict:

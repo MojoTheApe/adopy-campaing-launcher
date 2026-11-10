@@ -774,3 +774,58 @@ def test_the_bracketed_name_outranks_other_names_that_merely_contain_the_words()
 
 def test_a_name_that_is_only_brackets_is_not_emptied():
     assert tr.base_name("(investing)") == tr.norm("(investing)")
+
+
+# ───────── поиск окна Detailed targeting (act_X/targetingsearch) ─────────
+
+ACT_ID = "act_123"
+
+
+class FakeAccountSearch(FakeSearch):
+    """+ act_X/targetingsearch: строки со своим type, как отдаёт Meta."""
+
+    def __init__(self, *, account=None, refuse=False, **kw):
+        super().__init__(**kw)
+        self.account = account or {}          # q -> [{id,name,type}]
+        self.refuse = refuse
+
+    def get_all(self, path, params=None, *, max_pages=5):
+        if path == f"/{ACT_ID}/targetingsearch":
+            self.log.append(("targetingsearch", max_pages, dict(params)))
+            self.calls += 1
+            if self.refuse:
+                raise g.GraphError("(#10) Permission Denied", code=10)
+            return list(self.account.get(params["q"], []))
+        return super().get_all(path, params, max_pages=max_pages)
+
+
+def test_an_interest_only_the_ads_manager_search_knows_is_found(tmp_path):
+    c = FakeAccountSearch(
+        interests={"Real estate investing": [{"id": "1", "name": "Real Estate Investment Network"}]},
+        account={"Real estate investing": [{"id": "7", "name": "Real estate investing", "type": "interests"}]})
+    res = _one(_resolver(c, tmp_path, act=ACT_ID), "Real estate investing")
+    assert res["state"] == "exact"
+    assert res["picks"] == [{"id": "7", "type": "interests", "name": "Real estate investing"}]
+
+
+def test_the_ads_manager_search_is_asked_only_after_adinterest_misses(tmp_path):
+    c = FakeAccountSearch(interests={"Yoga": [{"id": "1", "name": "Yoga"}]},
+                          account={"Yoga": [{"id": "1", "name": "Yoga", "type": "interests"}]})
+    assert _one(_resolver(c, tmp_path, act=ACT_ID), "Yoga")["state"] == "exact"
+    assert "targetingsearch" not in c.types()
+
+
+def test_a_refused_ads_manager_search_is_a_warning_not_an_error(tmp_path):
+    c = FakeAccountSearch(refuse=True, interests={"Real estate investing": []})
+    r = _resolver(c, tmp_path, act=ACT_ID)
+    res = _one(r, "Real estate investing")
+    assert res["state"] == "unresolved"
+    assert any("ad account targeting search (targetingsearch)" in w for w in r.warnings())
+
+
+def test_without_an_account_the_ads_manager_search_is_not_made(tmp_path):
+    c = FakeAccountSearch(interests={"Real estate investing": []},
+                          account={"Real estate investing": [{"id": "7", "name": "Real estate investing",
+                                                              "type": "interests"}]})
+    assert _one(_resolver(c, tmp_path), "Real estate investing")["state"] == "unresolved"
+    assert "targetingsearch" not in c.types()
