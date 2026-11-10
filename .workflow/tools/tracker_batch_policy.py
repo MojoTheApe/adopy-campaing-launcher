@@ -222,8 +222,11 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
                 recovered = bool(pr.get('merged') and request(root + '/compare/' + pr['merge_commit_sha'] + '...' + current).get('status') in ('ahead', 'identical'))
             if not recovered:
                 raise ValueError('Main changed; refresh member approvals and rebuild the held batch')
+    carried = rules.partial_members(shared.get('delivery_workflow', {}), batch)
     for member in batch['members']:
-        source(request, config, member, baseline, phases=('approved', 'stage', 'merged'),
+        partial = str(member['issue']) in carried
+        phases = ('approved', 'stage', 'merged', 'review') if partial else ('approved', 'stage', 'merged')
+        source(request, config, member, baseline, phases=phases,
                pending=bool(pr.get('merged')), completed=completed, frozen=True,
                included_in=pr['merge_commit_sha'] if pr.get('merged') and (direction in ('promotion', 'batch') or completed) else None)
     if not completed:

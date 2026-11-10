@@ -124,7 +124,7 @@ def task_context(request, repo, config, shared, batch, merge_sha):
     if (batch.get('state') != 'merged' or not issues or len(issues) != len(set(issues))
             or [m.get('issue') for m in members] != issues):
         raise ValueError('The unchanged completed batch must still own every delivery member')
-    tasks = shared.get('delivery_workflow', {}).get('tasks', {})
+    tasks = rules.batch_receipts(shared.get('delivery_workflow', {}), batch)
     already_verified = True
     for number in issues:
         item = request(f'repos/{repo}/issues/{number}')
@@ -136,7 +136,14 @@ def task_context(request, repo, config, shared, batch, merge_sha):
         statuses = [s for s in labels if s.startswith('status:')]
         merged = ['status:' + (s if isinstance(s, str) else s['id']) for s in config['workflow']
                   if (s if isinstance(s, str) else s['phase']) == 'merged']
-        if (statuses != merged or {'flag:archived', 'flag:blocked'} & labels or row.get('process')
+        partial = str(number) in batch.get('partial_recovery', {}).get('carryovers', {})
+        if partial:
+            document = shared.get('delivery_workflow', {}).get('acceptances', {}).get(batch['id'], {}).get('evidence', {})
+            if document.get('pr') not in batch.get('main_prs', []) or document.get('merge_sha') != merge_sha:
+                raise PendingDelivery('Partial acceptance belongs to another admitted main revision')
+        expected_status = (['status:' + (s if isinstance(s, str) else s['id']) for s in config['workflow']
+                            if (s if isinstance(s, str) else s['phase']) == 'review'] if partial else merged)
+        if (statuses != expected_status or {'flag:archived', 'flag:blocked'} & labels or row.get('process')
                 or item.get('state_reason') == 'not_planned' or 'pull_request' in item
                 or effective != rules.fingerprint(config)
                 or not rules.scope_matches(item, reconciled_scope or member.get('scope'), config)
@@ -256,6 +263,12 @@ def selection_tree(request, repo, baseline, merge_sha, prior, selected, key, *, 
     document = 'docs/repository/' + SELECTIONS[key][2]
     allowed = {'delivery.json', 'tracker/config.json', 'docs/repository/TRACKER.md',
                document, '.workflow/template-base.json'}
+    details = 'docs/repository/TRACKER_WORKFLOW_DETAILS.md'
+    if details in before or details in after:
+        # Existing generated references may change with the one selection.
+        # The regular-file and identical-pristine-inventory checks below still
+        # reject adding/removing this path in a selection-only package.
+        allowed.add(details)
     changed = {path for path in before.keys() | after.keys() if before.get(path) != after.get(path)}
     if not allowed <= changed:
         raise ValueError('Selection delivery needs its exact generated governance-only diff; runtime/pin/helper changes stop')
@@ -648,7 +661,8 @@ def verified_native(request, document, receipt, run_id, job_id):
         raise ValueError('Receipt must match one actual successful native acceptance report')
 
 
-def record(document, receipt, run_id, job_id, *, apply=False, request=github):
+def record(document, receipt, run_id, job_id, *, apply=False, request=github, _recovery_verifier=None):
+    """Record one native result; the private hook is used only by the signed engine recovery."""
     if not document.get('eligible'):
         raise ValueError('There is no authorized delivery request')
     actual = resolve(document['repository'], document['merge_sha'], document['ci_run'], request=request,
@@ -708,11 +722,15 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
         tasks, _ = task_context(request, repo, config, shared, batch, document['merge_sha']);numbers=document['issues']
     native = {'run': run_id, 'job': job_id, 'workflow': document['workflow'],
               'authorization_sha256': document['authorization_sha256']}
+    if _recovery_verifier is not None:
+        native = _recovery_verifier(request, document, receipt, run_id, job_id,
+                                    config=config, shared=shared, batch=batch, current=current)
     if all(tasks[str(n)].get('state') == 'verified'
            and tasks[str(n)].get('verification') == receipt
            and tasks[str(n)].get('native_delivery') == native for n in numbers):
         return {'applied': False, 'already_recorded': True, 'issues': numbers}
-    verified_native(request, document, receipt, run_id, job_id)
+    if _recovery_verifier is None:
+        verified_native(request, document, receipt, run_id, job_id)
     if all(tasks[str(n)].get('state') == 'verified'
            and tasks[str(n)].get('verification') == receipt
            and {k: v for k, v in tasks[str(n)].get('native_delivery', {}).items() if k != 'job'}

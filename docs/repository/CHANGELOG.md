@@ -1,5 +1,17 @@
 # Repository process history
 
+## 2026-11-10 — ACL-2512 ordinary recovery client support
+
+Select published Tracker3.28.1 at `6e8dce91d1696f8f24e50deaf03dcff04703303c`.
+Authenticate the old96-file ancestry and use the maintained new renderer/merger
+for the genuine98-file baseline, canonical portable helpers and selected daily
+instructions/details. Ordinary clients recognize verified batch-part delivery;
+signed preview/apply recovery retains original criteria and named follow-ups.
+Preserve native config, all non-pin descriptor choices, guarded adapter, existing
+owners, release requests and application/build/runtime inputs. This isolated
+support retains normal source/batch review, checks and canonical completion proof.
+The pin alone performs no recovery, service deployment or ACL installer release.
+
 ## 2026-11-08 — ACL-2450 shared engineering guidance
 
 Adopt published Master1.11.0 author/reviewer guidance with short small-task planning
