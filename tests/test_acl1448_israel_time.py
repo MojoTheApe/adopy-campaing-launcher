@@ -296,9 +296,26 @@ def _israel_period() -> tuple[str, str]:
     return first.isoformat(), (first + timedelta(days=5)).isoformat()
 
 
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]   # как MONTHS в report.html
+
+
 def _short(day: str) -> str:
-    d = datetime.strptime(day, "%Y-%m-%d")
-    return f"{d.day} {d:%b}"
+    """Как dayText страницы: день с нулём впереди и английский месяц (без зависимости от локали)."""
+    return f"{day[8:10]} {_MONTHS[int(day[5:7]) - 1]}"
+
+
+def _preview_text(first: str, last: str) -> str:
+    return f"{_short(first)} – {_short(last)} (Israel time)"
+
+
+@pytest.mark.parametrize("first,last,text", [
+    ("2026-11-10", "2026-11-15", "10 Nov – 15 Nov (Israel time)"),
+    ("2026-11-28", "2026-12-03", "28 Nov – 03 Dec (Israel time)"),      # переход месяца, день 1–9 с нулём
+    ("2026-12-29", "2027-01-03", "29 Dec – 03 Jan (Israel time)"),      # переход года
+    ("2027-02-25", "2027-03-02", "25 Feb – 02 Mar (Israel time)"),
+])
+def test_preview_text_helper_is_zero_padded_for_any_day(first, last, text):
+    assert _preview_text(first, last) == text
 
 
 @pytest.fixture
@@ -341,7 +358,7 @@ def test_dates_are_a_period_first_day_from_midnight_last_day_inclusive(lt):
     end_exclusive = (datetime.strptime(last, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     assert lt.input_value("[name$='_start_time']") == f"{first}T00:00"
     assert lt.input_value("[name$='_end_time']") == f"{end_exclusive}T00:00"
-    assert f"{_short(first)} – {_short(last)} (Israel time)" in lt.inner_text("[data-lt-preview]")
+    assert _preview_text(first, last) in lt.inner_text("[data-lt-preview]")
 
 
 def test_the_hours_grid_is_open_with_every_hour_on_and_no_schedule_is_sent(lt):
