@@ -295,6 +295,40 @@ def reconciled_request_policy(request, batch):
     return current
 
 
+def partial_members(workflow, batch):
+    """Allowlist partial dispositions only with their retained signed evidence."""
+    recovery = batch.get('partial_recovery')
+    if recovery is None:
+        if batch.get('member_receipts'):
+            raise ValueError('Batch part receipts have no signed partial recovery')
+        return {}
+    document = workflow.get('acceptances', {}).get(batch['id'], {}).get('evidence')
+    carried = recovery.get('carryovers')
+    approval = recovery.get('approval') or {}
+    expected = recovery.get('expected_approval', '')
+    if (recovery.get('kind') != 'partial-batch-recovery' or not isinstance(document, dict)
+            or not isinstance(carried, dict) or not carried
+            or not set(carried) <= {str(n) for n in batch['issues']}
+            or document.get('batch_id') != batch['id'] or document.get('issues') != batch['issues']
+            or document.get('source_heads') != [m['head_sha'] for m in batch['members']]
+            or document.get('issue_scopes') != {str(m['issue']): m['scope'] for m in batch['members']}
+            or document.get('carryovers') != carried
+            or hashlib.sha256(json.dumps(document, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                != recovery.get('acceptance_sha256')
+            or not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected)
+            or approval.get('sha256') != expected or not approval.get('id')
+            or approval.get('author', '').casefold() != recovery.get('approved_by', '').casefold()
+            or set(batch.get('member_receipts', {})) - set(carried)):
+        raise ValueError('Retain the exact signed partial recovery and its acceptance document')
+    return carried
+
+
+def batch_receipts(workflow, batch):
+    """Delivered batch parts are distinct from completion of their parent tasks."""
+    partial_members(workflow, batch)
+    return dict(workflow.get('tasks', {}), **batch.get('member_receipts', {}))
+
+
 def pending_delivery(shared, config):
     """Keep the target's main stable until its explicitly requested delivery ends."""
     completion = policy(config)
@@ -321,7 +355,7 @@ def pending_delivery(shared, config):
             continue
         expected = set(batch.get('main_prs', []))
         for n in batch['issues']:
-            receipt = shared.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {})
+            receipt = batch_receipts(shared.get('delivery_workflow', {}), batch).get(str(n), {})
             matching = [summary(r) for r in [receipt, *reversed(receipt.get('history', []))]
                         if expected and expected <= {s.get('pr') for s in r.get('sources', [])}
                         and summary(r).get('policy') == fingerprint(config)]
