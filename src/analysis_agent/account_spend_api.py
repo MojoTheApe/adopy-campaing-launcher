@@ -511,6 +511,29 @@ def _warm_registry():
 
 @contextmanager
 def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool):
+    """ACL-1862 (G1): сессия на тёплой вкладке всегда под замком физического профиля.
+
+    Замок реентерантный: чтение/команда/публикация, уже державшие его, не ждут и не берут другой ключ;
+    вызывающий без замка (боковой путь) берёт его здесь на всю сессию, включая сверку и возврат вкладки.
+    `checkout` без замка у потока закрыт (`profile_lease`).
+    """
+    from src.fb_ads_rpa.operations import READ_WAIT_SECONDS, profile_lock
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    try:
+        hold = profile_lock(profile_id).holding(timeout=READ_WAIT_SECONDS)
+        hold.__enter__()
+    except ProfileLeaseError as exc:
+        raise ApiReadError(str(exc), code="profile_lease") from exc
+    try:
+        with _warm_session_held(account, act, key, profile_id, commands) as sess:
+            yield sess
+    finally:
+        hold.__exit__(None, None, None)
+
+
+@contextmanager
+def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool):
     """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
 
     Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,

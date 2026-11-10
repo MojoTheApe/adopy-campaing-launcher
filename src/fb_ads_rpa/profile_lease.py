@@ -81,6 +81,11 @@ class ProfileLease:
     def held_by_current_thread(self) -> bool:
         return self._owner == threading.get_ident() and self._depth > 0
 
+    @property
+    def depth(self) -> int:
+        """Сколько раз текущий поток держит замок (0 — не держит)."""
+        return self._depth if self._owner == threading.get_ident() else 0
+
     def acquire(self, blocking: bool = True, timeout: float = -1, *, cancelled=None) -> bool:
         if not blocking and timeout != -1:
             raise ValueError("can't specify a timeout for a non-blocking call")
@@ -187,3 +192,42 @@ def check_nested_profile(key: str) -> None:
         if any(lock.held_by_current_thread() for lock in _profile_locks.values()):
             if not lease.held_by_current_thread():
                 raise ProfileLeaseError("The resolved profile changed during this operation; check the account map and retry.")
+
+
+def _leak_journal(path: str) -> None:
+    """Строка в журнал пилота о недоотпущенном замке, без id профиля и аккаунта."""
+    try:
+        from src.fb_api import telemetry
+
+        telemetry.record({"event": "profile_lease_leaked", "path": path})
+    except Exception:  # noqa: BLE001 — журнал не должен ломать конец задания
+        pass
+
+
+@contextmanager
+def leak_watch(key: str, path: str):
+    """ACL-1862 (G4): на выходе чтения/публикации/команды поток держит замок ровно как на входе.
+
+    Глубина замка сверяется на входе и на выходе. Лишний захват (кто-то взял и не отпустил) —
+    утечка: она записывается в журнал (`profile_lease_leaked`) и снимается до входной глубины,
+    чтобы файловый замок не остался у потока навсегда и не блокировал другие процессы.
+    Вложенная операция внутри внешней законно оставляет замок внешней — потому глубина, а не «не держит».
+    Ничего не бросает: результат операции и её исключение остаются как есть.
+    """
+    try:
+        lease = profile_lock(key)
+    except ProfileLeaseError:
+        yield
+        return
+    before = lease.depth
+    try:
+        yield
+    finally:
+        extra = lease.depth - before
+        if extra > 0:
+            _leak_journal(path)
+            for _ in range(extra):
+                try:
+                    lease.release()
+                except RuntimeError:
+                    break

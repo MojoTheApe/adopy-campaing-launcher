@@ -43,6 +43,7 @@ _update_reserved = False
 # Serialises publishing PER PROFILE — see _run_job. Two accounts on two
 # profiles run at once; two jobs on one profile still queue (acl-1210).
 _publish_serial = publish_lease
+from src.fb_ads_rpa.profile_lease import leak_watch as _leak_watch  # noqa: E402  ACL-1862 G4
 _active_publishers: dict[str, RpaPublisher] = {}
 # Сколько профилей публикуют разом — по свободной памяти машины (ACL-1321).
 # Задания сверх решения ждут в «queued» в порядке отправки; см. profile_slots.
@@ -839,7 +840,7 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), target_activity(
+        with _leak_watch(profile, "publish"), _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), target_activity(
                 profile, cancelled=lambda: _is_cancelled(job_id)):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)

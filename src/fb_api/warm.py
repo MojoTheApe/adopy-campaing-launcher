@@ -1296,6 +1296,10 @@ class WarmRegistry:
                  make_graph: Callable[[Any], Any], ready_timeout: float = 90.0,
                  on_wait: Callable[[str], None] | None = None) -> Lease:
         """Замок профиля → ворота → живая вкладка. Освобождает `Lease.release`."""
+        # ACL-1862 (G1): вкладка не даёт права действовать. Замок профиля должен держать вызывающий
+        # поток; брать его здесь нельзя — `Lease.release` может прийти из другого потока (отмена),
+        # а файловый замок привязан к потоку. Ничего не тронуто, пока замка нет.
+        _require_checkout_lease(profile_id)
         sess = self.session(profile_id)
         if sess is None:
             raise WarmError("This profile is not kept warm.", "not_warm")
@@ -1823,6 +1827,21 @@ def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
     return ""
 
 
+def _require_checkout_lease(profile_id: str) -> None:
+    """ACL-1862 (G1): `checkout` закрыт без замка физического профиля у вызывающего потока."""
+    from src.fb_ads_rpa.operations import profile_lock
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    try:
+        held = profile_lock(profile_id).held_by_current_thread()
+        message = "This profile is not reserved by this action; nothing was changed."
+    except ProfileLeaseError as exc:
+        held, message = False, f"{exc} Nothing was changed."
+    if not held:
+        _lease_refused("profile_lease", "checkout")
+        raise WarmError(message, "profile_lease")
+
+
 @contextlib.contextmanager
 def try_lease(pid: str, *, busy_message: str, busy_code: str):
     """ACL-1862: неблокирующий замок физического профиля; даёт `None` (замок взят) или готовый отказ.
@@ -1855,12 +1874,12 @@ def try_lease(pid: str, *, busy_message: str, busy_code: str):
         lease.release()
 
 
-def _lease_refused(code: str) -> None:
+def _lease_refused(code: str, path: str = "") -> None:
     """Строка в журнал пилота: что отказали, без id профиля и аккаунта."""
     try:
         from src.fb_api import telemetry
 
-        telemetry.record({"event": "profile_lease_refused", "code": code})
+        telemetry.record({"event": "profile_lease_refused", "code": code, **({"path": path} if path else {})})
     except Exception:  # noqa: BLE001 — журнал не должен ломать отказ
         pass
 
