@@ -102,6 +102,11 @@ def defer_memory_wait():
         _DEFER_MEMORY.reset(token)
 
 
+#: ACL-2400: one short line when memory holds an action that nobody queued (Check plan, a read, Add account).
+#: It is said at once instead of after a 5 minute wait.
+MEMORY_HOLD_MESSAGE = "Not enough free memory - close a profile and retry"
+
+
 def memory_deferred(code: str) -> bool:
     return code == "memory_low"
 
@@ -126,6 +131,10 @@ STAGGER_MAX_S = 10.0
 START_SLOT_WAIT_S = 120.0
 #: Сколько ждём памяти под запуск следующего профиля и сколько профиль «приживается».
 START_MEMORY_WAIT_S = 120.0
+#: ACL-2470: короткий грейс для действия, которое никто не ставил в очередь: память может просесть на секунду-две,
+#: пока стартует профиль, поэтому перед отказом перепроверяем до 10 с (каждые 1,5 с).
+MEMORY_GRACE_S = 10.0
+MEMORY_GRACE_POLL_S = 1.5
 #: ACL-2262: сколько ждём, пока профиль, который только что закрывали, отпустят (и как часто смотрим).
 CLOSE_WAIT_S = 120.0
 CLOSE_POLL_S = 3.0
@@ -361,7 +370,9 @@ class HeavyGate:
                  memory: Callable[[], Any] | None = None,
                  settings: Callable[[], Any] | None = None,
                  usage: Any = None, clock: Callable[[], float] = time.monotonic,
-                 tick_s: float = 1.0):
+                 tick_s: float = 1.0, grace_s: float = MEMORY_GRACE_S,
+                 grace_poll_s: float = MEMORY_GRACE_POLL_S,
+                 pause: Callable[[float], None] | None = None):
         from src.web import profile_slots as _ps
 
         self._ps = _ps
@@ -371,6 +382,9 @@ class HeavyGate:
         self._usage = usage if usage is not None else _ps.ProfileUsage()
         self._clock = clock
         self._tick_s = tick_s
+        self._grace_s = grace_s            # ACL-2470
+        self._grace_poll_s = grace_poll_s
+        self._pause = pause                # подмена ожидания для тестов (часы без реального сна)
         self._cond = threading.Condition()
         self._active: dict[str, int] = {}
 
@@ -406,7 +420,9 @@ class HeavyGate:
             per_mb = max(max(measured), settings.profile_floor_mb)
         low = why in ("memory_low", "below_reserve")
         # `hold` - что показывает дешборд; `why` - настоящая причина шлюза (например, `limit`).
-        view = {"hold": "memory_low" if low else "account_busy", "why": why,
+        # ACL-2293: упёрлись в лимит тяжёлых действий - так и показываем, а не «ждёт другой аккаунт».
+        view = {"hold": "memory_low" if low else ("heavy_limit" if why == "limit" else "account_busy"),
+                "heavy_limit": max(1, int(self._limit())), "why": why,
                 "available_mb": None if memory is None else int(memory.available_mb),
                 "profile_mb": int(per_mb), "reserve_mb": int(settings.reserve_mb),
                 "need_mb": int(per_mb + settings.reserve_mb), "running": len(self._active)}
@@ -419,8 +435,14 @@ class HeavyGate:
     def acquire(self, profile_id: str, *, wait_s: float = DEFAULT_GATE_WAIT_S,
                 on_wait: Callable[[str], None] | None = None,
                 cancelled: Callable[[], bool] | None = None,
-                on_tick: Callable[[str], None] | None = None) -> None:
+                on_tick: Callable[[str], None] | None = None,
+                fail_on_memory: bool = False) -> None:
         """Ждать места. Не дождались за `wait_s` — `WarmError(code="gate_wait")`.
+
+        ACL-2400: `fail_on_memory` - a memory hold (`below_reserve`/`memory_low`) is refused with
+        `MEMORY_HOLD_MESSAGE`; the wait for a busy account gate stays.
+        ACL-2470: before that refusal the gate re-checks memory for up to `grace_s` (10 s, every ~1.5 s):
+        a short dip that recovers lets the action go.
 
         ACL-2278: `cancelled` - the caller stops waiting (`code="cancelled"`); `on_tick(why)` is called on
         every look so the wait can show live numbers. A job passes `wait_s=inf`: it waits until it can go.
@@ -431,6 +453,7 @@ class HeavyGate:
                 return
             deadline = self._clock() + wait_s
             told = ""
+            grace_end: float | None = None
             while True:
                 if cancelled is not None and cancelled():
                     raise WarmError("Stopped while waiting for the account gate. Nothing was called.",
@@ -439,6 +462,26 @@ class HeavyGate:
                 if ok:
                     self._active[profile_id] = 1
                     return
+                if fail_on_memory and why in ("below_reserve", "memory_low"):
+                    now = self._clock()
+                    if grace_end is None:
+                        grace_end = now + self._grace_s
+                    if now < grace_end:   # ACL-2470: перепроверяем, пока не вышел грейс
+                        step = min(self._grace_poll_s, grace_end - now)
+                        if self._pause is not None:
+                            self._pause(step)
+                        else:
+                            self._cond.wait(timeout=step)
+                        continue
+                    try:   # ACL-2400: the numbers of the refusal (the message itself is one short line)
+                        v = self.wait_view(why)
+                        log.info("memory holds the action (%s): %.1f GB free, %.1f GB needed, %s%% used, "
+                                 "limit %s%%, %.1f GB total", why, (v.get("available_mb") or 0) / 1024,
+                                 (v.get("need_mb") or 0) / 1024, v.get("used_pct"), v.get("max_used_pct"),
+                                 (v.get("total_mb") or 0) / 1024)
+                    except Exception:  # noqa: BLE001 - logging must never change the refusal
+                        log.info("memory holds the action (%s)", why)
+                    raise WarmError(MEMORY_HOLD_MESSAGE, code=why)
                 if self._clock() >= deadline:
                     if why == "below_reserve":
                         raise WarmError(
@@ -880,7 +923,13 @@ class WarmRegistry:
         if kind == "none" and self.session(pid) is not None:
             # B2: профиль в реестре, а процесса нет — его закрыли (человек, таймер чтения).
             # Останавливаем отсчёт от момента, когда увидели, и только потом решаем про запуск.
-            self._forget(pid, stopped=True)
+            # ACL-1862 (G5): под замком — иначе пауза перезапускается для профиля, который другой
+            # процесс как раз берёт.
+            with try_lease(pid, busy_message=_OPEN_BUSY.format(label=label),
+                           busy_code="profile_lease") as refusal:
+                if refusal:
+                    return refusal
+                self._forget(pid, stopped=True)
         why = _stop_log.refusal(pid, self._stops)
         if why:
             return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
@@ -915,6 +964,10 @@ class WarmRegistry:
         queue = self._slot_queue()
         began = time.monotonic()
         grant = None
+        opened = None
+        # ACL-1862 (G3): замок профиля — на сам запуск и запись в реестр; ожидания памяти, очереди
+        # старта и места выше его не держат (читатели не должны стоять из-за них).
+        lease_stack = contextlib.ExitStack()
         # ACL-2262: a publish job already holds its own queue slot for this profile; asking for a second
         # one would make the job wait for itself. Only an action without a slot (Check, Add account) asks.
         own_slot = False
@@ -934,6 +987,10 @@ class WarmRegistry:
                 if grant is None:
                     return _result(False, "Not started: not enough free memory for another profile. "
                                    "Close something and try again.", "memory_low")
+            refusal = lease_stack.enter_context(try_lease(
+                pid, busy_message=_OPEN_BUSY.format(label=label), busy_code="profile_lease"))
+            if refusal:
+                return refusal
             try:
                 opened = self._start_profile(pid, folder, instance)
                 turn_kept = bool(getattr(opened, "started_now", False))
@@ -954,12 +1011,17 @@ class WarmRegistry:
                     self._starting.pop(pid, None)
             if queue is not None and grant is not None and not own_slot:
                 queue.release(slot_id)   # место очереди заданий не держим; рост резервирует `_settling`
-        started = bool(getattr(opened, "started_now", False))
-        self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
-        if started:
-            with self._lock:
-                self._settling[pid] = self._mono()
-                self._ready.discard(pid)
+            if opened is None:
+                lease_stack.close()      # запуска не было: замок отпускаем здесь
+        try:
+            started = bool(getattr(opened, "started_now", False))
+            self.register(pid, account=label, port=int(opened.port), dashboard_started=started)
+            if started:
+                with self._lock:
+                    self._settling[pid] = self._mono()
+                    self._ready.discard(pid)
+        finally:
+            lease_stack.close()
         log.info("warm: profile of %s %s (dashboard_started=%s)", label,
                  "started" if started else "was already open", started)
         return _result(True, "Opened; ready for the next action." if started
@@ -1086,6 +1148,8 @@ class WarmRegistry:
         job = _JOB_WAIT.get()
         defer = _DEFER_MEMORY.get() and job is None
         deadline = self._mono() + START_MEMORY_WAIT_S
+        # ACL-2470: nobody queued this start - re-check memory for a short grace (not the 2 minutes), then refuse.
+        grace_end = self._mono() + MEMORY_GRACE_S
         try:
             while True:
                 memory, settings, _ps = self._memory_state()
@@ -1103,8 +1167,11 @@ class WarmRegistry:
                 if cancelled():
                     return "Stopped while waiting for memory. " + text if job is not None else text
                 if job is None:
-                    if defer or self._mono() >= deadline:
-                        return text
+                    if defer or self._mono() >= min(deadline, grace_end):
+                        log.info("%s", text)
+                        return MEMORY_HOLD_MESSAGE
+                    self._sleep(max(0.1, min(MEMORY_GRACE_POLL_S, grace_end - self._mono())))
+                    continue
                 else:
                     _show(job, {"hold": "memory_low", "available_mb": int(memory.available_mb),
                                 "need_mb": int(need), "reserve_mb": int(settings.reserve_mb),
@@ -1184,6 +1251,14 @@ class WarmRegistry:
         pid = (getattr(entry, "profile_id", "") or "").strip()
         if not pid:
             return _result(False, "No Multilogin profile is linked to this account.", "no_profile")
+        # ACL-1862 (G2): замок профиля на весь обход «осмотр → остановка → проверка → запись паузы».
+        # Занят (чтение или публикация в другом процессе) — отказ без ожидания, MLX не зовём.
+        with try_lease(pid, busy_message=_CLOSE_BUSY, busy_code="busy") as refusal:
+            if refusal:
+                return refusal
+            return self._close_one_locked(label, entry, pid)
+
+    def _close_one_locked(self, label: str, entry: Any, pid: str) -> dict:
         kind, port = self._scan([pid]).get(pid, ("unknown", None))
         if kind == "no_port":
             return _result(False, "Not closed: this window was opened in Multilogin by hand. "
@@ -1243,7 +1318,7 @@ class WarmRegistry:
         try:
             if job is None:
                 self.gate.acquire(profile_id, wait_s=_env_number(GATE_WAIT_ENV, DEFAULT_GATE_WAIT_S, 1.0, 3600.0),
-                                  on_wait=on_wait)
+                                  on_wait=on_wait, fail_on_memory=True)
             else:
                 # ACL-2278: a job never fails for a busy gate or short memory: it stays queued until it can
                 # go, or until the user stops it. Only local memory reads; no account is touched.
@@ -1746,6 +1821,52 @@ def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
     except profile_trouble.ProfileStop as stop:
         return profile_trouble.message(stop.code) or str(stop)
     return ""
+
+
+@contextlib.contextmanager
+def try_lease(pid: str, *, busy_message: str, busy_code: str):
+    """ACL-1862: неблокирующий замок физического профиля; даёт `None` (замок взят) или готовый отказ.
+
+    Занят другой операцией ACM (в том числе другим процессом) — обычный ответ `_result`, а не
+    исключение и не ожидание: один занятый профиль не рвёт пачку и не вешает кнопку на минуты.
+    Папка замков недоступна / в карте не UUID — `profile_lease` со словами ошибки. Отказ ничего не
+    меняет и не уходит в обычный браузер. Тот же помощник берёт ACL-2091 («показать окно»).
+    """
+    from src.fb_ads_rpa.operations import profile_lock
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    lease = None
+    refusal = None
+    try:
+        candidate = profile_lock(pid)
+        if candidate.acquire(blocking=False):
+            lease = candidate
+        else:
+            refusal = _result(False, busy_message, busy_code)
+    except ProfileLeaseError as exc:
+        refusal = _result(False, f"{exc} Nothing was changed.", "profile_lease")
+    if refusal is not None:
+        _lease_refused(refusal["code"])
+        yield refusal
+        return
+    try:
+        yield None
+    finally:
+        lease.release()
+
+
+def _lease_refused(code: str) -> None:
+    """Строка в журнал пилота: что отказали, без id профиля и аккаунта."""
+    try:
+        from src.fb_api import telemetry
+
+        telemetry.record({"event": "profile_lease_refused", "code": code})
+    except Exception:  # noqa: BLE001 — журнал не должен ломать отказ
+        pass
+
+
+_CLOSE_BUSY = "Not closed: another ACM operation is using this profile. Try again when it ends. Nothing was changed."
+_OPEN_BUSY = "Not started: another ACM operation is using the {label} profile. Nothing was started."
 
 
 def _result(ok: bool, message: str, code: str, **extra: Any) -> dict:

@@ -23,6 +23,16 @@
       ]
     },
     "default_objective": "leads",
+    "lifetime_text": {
+      "budget_min": {
+        "hint": "raise the lifetime budget to Meta's minimum for the account currency times the number of days",
+        "label": "Budget is at least Meta's minimum for the whole period"
+      },
+      "budget_set": {
+        "hint": "enter a lifetime budget above zero",
+        "label": "Lifetime budget"
+      }
+    },
     "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
     "max_headline": 40,
     "max_primary_visible": 125,
@@ -437,10 +447,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "choose a primary text in each ad",
+      "hint": "no primary text: the ad runs without it (fine for a headline-only or text-free ad)",
       "id": "primary_text",
       "label": "Primary text",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -451,10 +461,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "the chosen text has no headline: pick another library entry",
+      "hint": "no headline: the ad runs without it (fine for a primary-text-only or text-free ad)",
       "id": "headline",
       "label": "Headline",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -469,6 +479,20 @@
       "id": "headline_len",
       "label": "Headline up to 40 characters",
       "severity": "warning",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); add a headline, or use one text and one file",
+      "id": "feed_texts",
+      "label": "Several texts or a Stories / Reels file need a headline",
+      "severity": "error",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -566,6 +590,34 @@
       "hint": "enter the start as date and time, not earlier than today (ad account time zone)",
       "id": "start_time_valid",
       "label": "Start time",
+      "severity": "error",
+      "side": "client",
+      "topic": "budget",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_end_time\"]"
+      },
+      "hint": "a lifetime budget needs an end date and time after the start, not in the past (ad account time zone)",
+      "id": "end_time_valid",
+      "label": "End time (lifetime budget)",
+      "severity": "error",
+      "side": "client",
+      "topic": "budget",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_schedule\"]"
+      },
+      "hint": "a schedule needs a lifetime budget and at least one selected hour",
+      "id": "schedule_valid",
+      "label": "Ad schedule",
       "severity": "error",
       "side": "client",
       "topic": "budget",

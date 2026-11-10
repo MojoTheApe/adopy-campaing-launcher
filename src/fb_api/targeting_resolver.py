@@ -82,6 +82,9 @@ OPTIONAL_LOOKUPS = {
     "adworkemployer": ("work employers lookup", "work employers were not matched"),
     "adeducationschool": ("education schools lookup", "education schools were not matched"),
     "adeducationmajor": ("education majors lookup", "education majors were not matched"),
+    # Поиск окна Detailed targeting в Ads Manager: шире, чем /search?type=adinterest (интерес,
+    # который человек находит руками, там бывает, а в adinterest - нет).
+    "targetingsearch": ("ad account targeting search", "terms were matched through the interest search only"),
 }
 REQUIRED_LOOKUPS = ("adinterest", "adgeolocation", "adlocale")
 
@@ -110,6 +113,8 @@ def named_search(search_type: str, fn):
 
 _SPLIT_RE = re.compile(r"\s+or\s+|\s*/\s*|\s*;\s*|\s*,\s*", re.IGNORECASE)
 _SEP_RE = re.compile(r"[\s\-_]+")
+#: Meta дописывает категорию в конец имени интереса: «swing trading (investing)».
+_CATEGORY_TAIL_RE = re.compile(r"\s*\([^()]*\)\s*$")
 
 CACHE_FILE = "targeting_confirmed.json"
 _STORE_LOCK = threading.RLock()
@@ -158,6 +163,15 @@ def norm(text: str) -> str:
     return _SEP_RE.sub(" ", s).strip()
 
 
+def base_name(text: str) -> str:
+    """norm() без хвоста «(категория)»: «Swing trading (investing)» -> «swing trading».
+
+    Если после отбрасывания скобки ничего не осталось, имя не трогаем.
+    """
+    stripped = _CATEGORY_TAIL_RE.sub("", str(text or ""))
+    return norm(stripped) if stripped.strip() else norm(text)
+
+
 def split_term(term: str) -> list[str]:
     """«A or B», «A/B» → ["A", "B"]; одна часть — деления нет."""
     parts = [p.strip() for p in _SPLIT_RE.split(str(term or "")) if p.strip()]
@@ -171,6 +185,8 @@ def score(term: str, name: str) -> float:
         return 0.0
     if a == b:
         return 1.0
+    if a == base_name(name):
+        return 0.95          # то же имя, но с категорией Meta в скобках: выше любых «по словам»
     ratio = difflib.SequenceMatcher(None, a, b).ratio()
     ta, tb = set(a.split()), set(b.split())
     if ta and tb and (ta <= tb or tb <= ta):
@@ -355,8 +371,10 @@ class TermResolver:
 
     def __init__(self, client: Any, store: ConfirmedStore | None = None, *,
                  term_cap: int = TERM_READ_CAP, job_cap: int | None = None,
-                 cache: SearchCache | None = None, scope: str = "", facts: Any = None):
+                 cache: SearchCache | None = None, scope: str = "", facts: Any = None, act: str = ""):
         self.client = client
+        #: Кабинет «act_<digits>» для поиска act_X/targetingsearch; пусто - этот поиск не делается.
+        self.act = act if re.fullmatch(r"act_[0-9]{1,32}", act or "") else ""
         self.store = store if store is not None else ConfirmedStore()
         #: ACL-2267: долгий кэш точных находок (term -> picks), см. facts_cache; по умолчанию - кэш машины.
         if facts is None:
@@ -401,13 +419,14 @@ class TermResolver:
         self._bad_ids: set[str] = set()
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
-    def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
+    def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True,
+                path: str = "/search") -> list[dict]:
         if search_type in self.refused:
             return []                      # уже отказано в этом задании: повторов нет
         optional = search_type in OPTIONAL_LOOKUPS
         before = getattr(self.client, "calls", None)
         try:
-            return self._get_all(params, pages, count_term=count_term)
+            return self._get_all(params, pages, count_term=count_term, path=path)
         except GraphError as exc:
             if not (optional and is_permission_refusal(exc)):
                 raise name_lookup(exc, search_type) from exc
@@ -438,8 +457,10 @@ class TermResolver:
                 "checked there; fix the term or confirm a candidate")
 
     # -- бюджет чтений
-    def _get_all(self, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
+    def _get_all(self, params: dict, pages: int, *, count_term: bool = True, path: str = "/search") -> list[dict]:
         key = (tuple(sorted((k, json.dumps(v, sort_keys=True)) for k, v in params.items())), pages)
+        if path != "/search":
+            key = (path,) + key      # прежние ключи /search не меняются (общий кэш Check plan)
         if key in self._query_cache:
             return self._query_cache[key]
         if self._shared is not None:
@@ -456,7 +477,7 @@ class TermResolver:
             raise _Spent
         before = used if isinstance(used, int) else None
         cut_before = len(getattr(cl, "truncated", None) or [])
-        rows = cl.get_all("/search", params, max_pages=pages)
+        rows = cl.get_all(path, params, max_pages=pages)
         after = getattr(cl, "calls", None)
         # Настоящие чтения: разница счётчика клиента (по странице на GET); без счётчика - как минимум одно.
         spent = (after - before) if before is not None and isinstance(after, int) else 1
@@ -644,6 +665,14 @@ class TermResolver:
         # adinterest обязателен: отказ Meta здесь остаётся ошибкой (с названием поиска).
         yield "interests", self._lookup("adinterest", {"type": "adinterest", "q": term, "limit": SEARCH_LIMIT},
                                         SEARCH_PAGES)
+        if self.act:
+            # Тот же поиск, что в окне Detailed targeting Ads Manager; строки несут свой type.
+            found = self._lookup("targetingsearch", {"q": term, "limit": SEARCH_LIMIT}, 1,
+                                 path=f"/{self.act}/targetingsearch")
+            for bucket in ("interests", "behaviors"):
+                rows = [r for r in found if r.get("type") == bucket]
+                if rows:
+                    yield bucket, rows
         if self._behaviors is None:
             # Общий список поведений: на задание один раз, в потолок термина не входит.
             self._behaviors = self._lookup(
@@ -681,6 +710,7 @@ class TermResolver:
                 return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
             for bucket, rows in self._stages(term):
+                tail_hits: dict[str, dict] = {}   # имя совпало, но с «(категорией)»: id -> строка
                 for r in rows:
                     c = self._row(r, bucket)
                     if not c:
@@ -688,14 +718,25 @@ class TermResolver:
                     if norm(c["name"]) == key:
                         self._warm_put(term, [c])
                         return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
+                    if base_name(c["name"]) == key:
+                        tail_hits.setdefault(c["id"], c)
                     sc = score(term, c["name"])
                     if sc >= WEAK_SCORE:
                         cands.setdefault((c["type"], c["id"]), {**c, "score": sc})
+                if len(tail_hits) == 1:
+                    # Единственный интерес с таким именем и категорией в скобках - это он и есть.
+                    # Два и больше («Apple (fruit)» / «Apple (company)») - решает человек, не мы.
+                    (c,) = tail_hits.values()
+                    self._warm_put(term, [c])
+                    return {"term": term, "state": "exact", "picks": [c], "candidates": [], "reason": ""}
         except _Spent:
             return {"term": term, "state": "unknown", "picks": [], "candidates": [],
                     "reason": UNKNOWN_MESSAGE}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
-        reason = "; ".join(x for x in (stale, self._blind_spots()) if x)
+        # ACL-2473: пометку об отказанных поисках даём только термину без кандидатов; при кандидатах
+        # причина простая (нет точного совпадения, выберите один), аккаунт тут ни при чём.
+        blind = "" if ranked else self._blind_spots()
+        reason = "; ".join(x for x in (stale, blind) if x)
         return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": reason}
 
     def _stale(self, entry: dict) -> bool:

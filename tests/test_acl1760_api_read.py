@@ -1032,8 +1032,8 @@ def test_status_cell_text_is_the_same_word_set_as_rpa_and_the_long_text_is_only_
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.status == "clear"                      # экран пишет «no warning» по слову, не по тексту
     tpl = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
-    cell = re.search(r"st\.status == 'clear' -%\}<span[^>]*>([^<]*)</span>", tpl)
-    assert cell and cell.group(1) == "no warning"
+    cell = re.search(r"elif st\.status == 'clear' -%\}<span[^>]*>([^<]*)</span>", tpl)
+    assert cell and "'no warning'" in cell.group(1)      # ACL-2419: `active` для источника api
     assert "st.status_text" in tpl.split("{{ st.status }}")[0].rsplit("title=", 1)[-1]
     for code in (1, 2, 3, 7, 8, 9, 100, 101, 555):
         word, _text = api.map_status(code, 0)

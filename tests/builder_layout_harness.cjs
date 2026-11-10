@@ -96,12 +96,46 @@ assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не �
 assert.equal(L.futureTip('texts'), '', 'ACL-1774: тексты 3-5 больше не заглушка');
 assert.equal(L.futureTip('media'), '', 'ACL-1774: файл Stories / Reels больше не заглушка');
 assert.equal(L.futureTip('placements'), '', 'ACL-1772: placement editor is implemented');
-assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');
+assert.equal(L.futureTip('copyTo'), '', 'ACL-2456: Copy to accounts is a real control now');
 assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не заглушка');
 ['gender', 'languages'].forEach((k) => assert.equal(L.futureTip(k), '', k + ': ACL-1767 больше не заглушка'));
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
-assert.ok(!/<script/.test(L.futureHtml('copyTo', 'select', '<script>x</script>')));
+assert.equal(L.futureHtml('copyTo', 'select', 'x'), '', 'ACL-2456: no disabled stub is drawn for copyTo any more');
+// The escaping helper of the (now empty) FUTURE mechanism still escapes: a stub added later cannot inject markup.
+L.FUTURE.probe = { task: 'ACL-0', what: '<b>x</b>' };
+assert.ok(!/<script/.test(L.futureHtml('probe', 'select', '<script>x</script>')), 'select text is escaped');
+assert.ok(!/<script/.test(L.futureHtml('probe', 'button', '<script>x</script>')), 'button text is escaped');
+assert.ok(!/<b>/.test(L.futureHtml('probe', 'button', 'x')), 'the tip in the markup is escaped');
+delete L.FUTURE.probe;
+
+// ── ACL-2456: Copy to accounts ────────────────────────────────────────
+const on = L.copyToButtonHtml(true), off = L.copyToButtonHtml(false);
+assert.ok(/data-copy-to/.test(on) && !/ disabled/.test(on), 'API backend: the button is live');
+assert.ok(/ disabled /.test(off) && /title="API backend only"/.test(off), 'RPA backend: disabled with the reason');
+assert.equal(L.COPY_API_ONLY, 'API backend only');
+assert.equal(L.copyBudgetValue('50'), 50);
+assert.equal(L.copyBudgetValue(' 12,5 '), 12.5, 'comma is a decimal separator');
+['', '0', '-3', 'abc', '1e3', '5 USD', null, undefined].forEach((v) =>
+  assert.equal(L.copyBudgetValue(v), null, 'not a budget: ' + String(v)));
+// no pick, nothing to do
+assert.equal(L.copyPlan([]).why, 'Pick at least one account');
+assert.equal(L.copyPlan([{ picked: false, mode: 'keep' }]).why, 'Pick at least one account');
+// same known currency: the amount is kept, no input is needed
+assert.equal(L.copyPlan([{ picked: true, mode: 'keep' }]).why, '');
+// a currency mismatch (or unknown currency) is never copied silently: the buyer must type the amount
+const needs = L.copyPlan([{ picked: true, mode: 'confirm', currency: 'EUR', label: 'UL1', entered: '' }]);
+assert.equal(needs.why, 'Enter the budget in EUR for UL1');
+assert.equal(L.copyPlan([{ picked: true, mode: 'confirm', currency: '', label: 'UL1', entered: '' }]).why,
+  'Enter the budget for UL1');
+assert.equal(L.copyPlan([{ picked: true, mode: 'confirm', currency: 'EUR', label: 'UL1', entered: '0' }]).why !== '', true);
+assert.equal(L.copyPlan([{ picked: true, mode: 'confirm', currency: 'EUR', label: 'UL1', entered: '45' }]).why, '');
+// a blocked account that is picked stops the copy with its own reason; an unpicked one does not
+assert.equal(L.copyPlan([{ picked: true, blocked: 'Same ad account as the source.', mode: 'keep' }]).why, 'Same ad account as the source.');
+assert.equal(L.copyPlan([{ picked: true, mode: 'keep' }, { picked: false, blocked: 'x', mode: 'confirm' }]).why, '');
+// one bad row among good ones stops the whole copy
+assert.equal(L.copyPlan([{ picked: true, mode: 'keep' }, { picked: true, mode: 'confirm', currency: 'EUR', label: 'B', entered: '' }]).why,
+  'Enter the budget in EUR for B');
 
 // ── сообщения сервера → поля ──────────────────────────────────────────
 const sels = (m) => L.routes(m).map((r) => r.sel);
@@ -129,5 +163,52 @@ assert.deepEqual(sels('Objective is fine'), [], 'сообщение без по�
 assert.equal(L.routes('Daily budget missing')[0].level, 'campaign');
 assert.equal(L.routes('Ad 1: no creative file')[0].level, 'ad');
 assert.equal(L.routes('Detailed targeting not found by Meta: Foo')[0].level, 'adset');
+
+// ── ACL-2393: имя называет один пресет таргетинга, выбран другой ──────
+{
+  const LIB = [
+    { code: 'Mix2' }, { code: 'Green' }, { code: 'Blue' }, { code: 'Day' }, { code: 'Image' },
+    { code: 'Investment Plus' }, { code: 'EF+' },
+    { code: 'Foreign exchange market, Investor, Day trading' },
+    { code: 'A'.repeat(41) }, { code: '' },
+  ];
+  const chk = (name, sel, skip) => L.nameTargetingCheck(name, sel, LIB, skip || []);
+  let r = chk('KW_TRL_All_Image_Green_35_04.11', ['Mix2'], ['KW', 'TRL', 'All', 'Image', '35', '04.11']);
+  assert.equal(r.state, 'differs'); assert.deepEqual(r.said, ['Green']); assert.deepEqual(r.have, ['Mix2']);
+  assert.equal(L.nameTargetingText(r), 'Name says Green, targeting is Mix2 – fix one of them');
+  assert.equal(chk('KW_green_35', ['Green']).state, 'ok', 'регистр мешает');
+  assert.equal(chk('KW_TRL_All_Image_35_04.11', ['Mix2'], ['Image']).state, 'none');
+  ['Gre', 'Greenland', 'Mix', 'Mix22'].forEach((w) => assert.equal(chk('KW_' + w + '_35', ['Mix2']).state, 'none', w));
+  assert.equal(chk('KW_Investment_Plus_35', ['Mix2']).state, 'differs');
+  assert.deepEqual(chk('KW_Investment_Plus_35', ['Mix2']).said, ['Investment Plus']);
+  assert.equal(chk('KW_Investment Plus_35', ['investment plus']).state, 'ok');
+  assert.equal(chk('KW_Plus_35', ['Mix2']).state, 'none', 'часть кода принята за код');
+  assert.equal(chk('KW_EF_35', ['Mix2']).state, 'none', 'EF принят за EF+');
+  assert.equal(chk('KW_EF+_35', ['Mix2']).state, 'differs');
+  r = chk('KW_Green_Blue_35', ['Green']); assert.equal(r.state, 'ok');
+  r = chk('KW_Green_Blue_35', ['Mix2']);
+  assert.equal(r.state, 'differs'); assert.deepEqual(r.said, ['Green', 'Blue']);
+  assert.equal(L.nameTargetingText(r), 'Name says Green and Blue, targeting is Mix2 – fix one of them');
+  // слова самой карточки пресетом не считаются
+  assert.equal(chk('KW_Image_35', ['Mix2'], ['Image']).state, 'none');
+  assert.equal(chk('KW_Day_35', ['Mix2'], ['Day']).state, 'none');
+  assert.equal(chk('KW_Day_35', ['Mix2']).state, 'differs');
+  // списки интересов и пустые коды не совпадают
+  assert.equal(chk('Foreign exchange market, Investor, Day trading', ['Mix2'], ['Day']).state, 'none');
+  assert.equal(chk('x_' + 'A'.repeat(41), ['Mix2']).state, 'none');
+  // ничего не выбрано
+  r = chk('KW_Green_35', []);
+  assert.equal(r.state, 'nothing');
+  assert.equal(L.nameTargetingText(r), 'Name says Green, but no targeting is selected – pick one');
+  assert.equal(chk('KW_35', []).state, 'none');
+  // несколько наборов: подходит любой
+  assert.equal(chk('KW_Green_35', ['Mix2', 'Green']).state, 'ok');
+  r = chk('KW_Green_35', ['Mix2', 'Day', 'Blue', 'EF+']);
+  assert.equal(L.nameTargetingText(r), 'Name says Green, targeting is Mix2, Day, Blue and 1 more – fix one of them');
+  // пустая или не загруженная библиотека не бросает
+  assert.equal(L.nameTargetingCheck('KW_Green', ['Mix2'], null, []).state, 'none');
+  assert.equal(L.nameTargetingCheck('KW_Green', ['Mix2'], [], []).state, 'none');
+  assert.equal(L.nameTargetingText({ state: 'ok' }), '');
+}
 
 console.log('ok');

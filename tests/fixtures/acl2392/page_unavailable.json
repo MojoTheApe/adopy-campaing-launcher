@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "PlanError",
+  "message": "The page from the draft (123456789012) is not among the pages this ad account can advertise from (3 found).",
+  "expect": {
+    "key": "page_unavailable",
+    "short": "The Facebook Page is not available for this ad account",
+    "next": "choose another Page and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "exc_key": "page_unavailable"
+}
