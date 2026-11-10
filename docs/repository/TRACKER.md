@@ -26,6 +26,11 @@ Use `python scripts/acl_task_tracker.py guide` to render the same selected daily
    `merged`, then apply only with `--reviewed-complete` for the genuinely complete
    scope. Keep partial outcomes open; verify the actual task and next snapshot.
 
+For ACL's selected batch/package route, the native full-member `merged` handoff
+comes before resolving, publishing and verifying an authorized package delivery;
+follow the [detailed batch runbook](BATCH_INTEGRATION.md). Pending authorized
+delivery still blocks the next batch until genuinely verified.
+
 ## Selected route: batch execution schema 3
 
 5 implementation slots; 5 independent source-review slots.
