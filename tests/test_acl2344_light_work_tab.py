@@ -276,6 +276,51 @@ def test_call_on_lost_token_recaptures_once_then_stops(browser):  # noqa: F811
         light_tab.settle_and_close(work)
 
 
+def test_p5_header_probe_reads_headers_and_sends_nothing(browser, servers):  # noqa: F811
+    from src.fb_ads_rpa import light_probe
+
+    page, graph = servers
+    graph_host = graph.origin.split("://", 1)[1]
+    other = _Server()                                         # an ordinary page, standing in for Ads Manager
+    am = PageTab.open(browser, call_s=60.0)
+    work = PageTab.open(browser, call_s=60.0)
+    try:
+        am.call("Page.navigate", {"url": other.origin + "/adsmanager?act=123456789"}, timeout=30)
+        time.sleep(1.0)
+        assert light_tab.open_light_document(work)[1] == ""
+        h_am = light_probe.request_headers(am, graph_host)
+        h_light = light_probe.request_headers(work, graph_host)
+        assert graph.hits == [] and page.hits == []            # the sentinel never left either tab
+        assert h_am and h_light and h_am.get("user-agent") == h_light.get("user-agent")
+        cmp = light_probe.compare_headers(h_am, h_light)
+        assert "123456789" not in json.dumps(cmp)              # the referer path (account id) is never kept
+        assert cmp["values"]["referer"]["light"] and cmp["values"]["referer"]["ads_manager"]
+        # the light tab still answers its own origin locally afterwards
+        ctx = work.create_isolated_world("after")
+        assert work.evaluate_in(ctx, "fetch('/x').then(() => 'ok', () => 'blocked')") == "blocked"
+        assert page.hits == []
+    finally:
+        for t in (work, am):
+            light_tab.settle_and_close(t)
+        other.close()
+
+
+def test_pilot_gate(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import light_probe
+
+    mp = tmp_path / "map.csv"
+    mp.write_text("account_name,ad_account_id,profile_id\nFacebookDoc283 - X,act_1,PROF-283\n"
+                  "FacebookDoc121 - Y,act_2,PROF-121\n", encoding="utf-8")
+    monkeypatch.setenv("META_AD_ACCOUNT_MAP_PATH", str(mp))
+    light_probe.require_pilot("http://127.0.0.1:9222", "PROF-283")
+    for url, pid in (("http://127.0.0.1:9222", "PROF-121"), ("http://10.0.0.5:9222", "PROF-283"),
+                     ("http://127.0.0.1:9222", "")):
+        with pytest.raises(light_probe.ProbeGateError):
+            light_probe.require_pilot(url, pid)
+    with pytest.raises(light_probe.ProbeGateError):
+        light_probe.run_p5("http://127.0.0.1:9222", "act_1", "PROF-121")
+
+
 def test_flag_default_off():
     assert light_tab.enabled({}) is False
     assert light_tab.enabled({"ACL_LIGHT_WORK_TAB": "1"}) is True
