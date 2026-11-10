@@ -72,3 +72,35 @@ def test_light_document_and_dummy_handover(browser):
     h = result["handover"]
     assert h["handover_ok"] and h["acked"] and h["same_world_survives"] and h["main_world_clean"]
     assert "DUMMY" not in repr(result)
+
+
+def test_real_helper_handover_between_light_tabs_token_never_in_python(browser, monkeypatch):
+    import json as _json
+    from src.fb_api.cdp import PageTab
+    from src.fb_api.token_capture import InPageGraph
+
+    tok = "EAA" + "x1Y2" * 8
+    work, capture = PageTab.open(browser), PageTab.open(browser)
+    try:
+        assert light_probe.open_light_document(work)["ok"]
+        monkeypatch.setattr(light_probe, "_BODY", ('<title>ACL</title><script>var c={"accessToken":"%s"};</script>' % tok).encode())
+        assert light_probe.open_light_document(capture)["ok"]
+        ig_c, ig_w = InPageGraph(capture), InPageGraph(work)
+        assert ig_c.state()["has_token"] is False
+        assert ig_c._eval_helper(".probe()")["has_token"] is True
+        n = ("chan-aaaaaaaaaaaaaaaa", "nonce-aaaaaaaaaaaaaaa", "ack-aaaaaaaaaaaaaaaaaa")
+        args = ",".join(_json.dumps(v) for v in n)
+        assert ig_w._eval_helper(f".listen({args})") is True
+        wrong = ",".join(_json.dumps(v) for v in (n[0], "other", n[2]))
+        assert ig_c._eval_helper(f".handOver({wrong},1500)", timeout=20) is False     # wrong nonce: no ack
+        assert ig_w.state()["has_token"] is False
+        assert ig_c._eval_helper(f".handOver({args},5000)", timeout=20) is True
+        got = ig_w.state()
+        assert got["has_token"] is True and got["source"] == "handover"
+        assert tok not in repr(got) and tok not in repr(ig_w.__dict__)
+        # the received token is really used: the call is attempted (dead proxy -> network), nothing leaves the machine
+        reply = ig_w.request("GET", "/me/adaccounts", {"fields": "id"}, timeout=5)
+        assert reply.get("error") in ("network", "network_timeout") and tok not in repr(reply)
+    finally:
+        for t in (capture, work):
+            t.close()

@@ -861,10 +861,50 @@ _HELPER_JS = r"""
     return post('/' + VALIDATE_ACT + '/adcreatives', params, null, null, spec, {}, null);
   }
 
+  // ACL-2344: hand the captured token to the helper of ANOTHER same-origin tab (a light work tab).
+  // Channel name and nonce are random per lease and known only to Python; neither the token nor
+  // the channel leaves this world, only booleans do. The receiver accepts one message, once.
+  const HOST_RE = /^(?:[a-z0-9]+-)?graph\.facebook\.com$/i;
+  let listening = null;
+  function listen(name, nonce, ack) {
+    if (retired || token || listening || typeof BroadcastChannel !== 'function') return false;
+    if (typeof name !== 'string' || typeof nonce !== 'string' || typeof ack !== 'string') return false;
+    const ch = new BroadcastChannel(name);
+    listening = ch;
+    ch.onmessage = (e) => {
+      const d = e.data;
+      if (token || retired || !d || d.n !== nonce || typeof d.t !== 'string' || !TOKEN_RE.test(d.t)) return;
+      if (typeof d.h !== 'string' || !HOST_RE.test(d.h) || typeof d.v !== 'string' || !/^(v\d+\.\d+)?$/.test(d.v)) return;
+      token = d.t; host = d.h.toLowerCase(); version = d.v; source = 'handover';
+      amRequest = { via: 'handover', method: 'GET', credentials: 'include', path: '', params: [] };
+      try { ch.close(); } catch (x) {}
+      try { const a = new BroadcastChannel(ack); a.postMessage({ ack: true }); a.close(); } catch (x) {}
+    };
+    return true;
+  }
+  async function handOver(name, nonce, ack, waitMs) {
+    scanFast(); scanHtml();
+    if (retired || !token || typeof BroadcastChannel !== 'function') return false;
+    const wait = Math.max(500, Math.min(15000, Number(waitMs) || 8000));
+    let timer = null;
+    const acked = new Promise((resolve) => {
+      const a = new BroadcastChannel(String(ack));
+      a.onmessage = (e) => { if (e.data && e.data.ack === true) { resolve(true); try { a.close(); } catch (x) {} } };
+      timer = setTimeout(() => { resolve(false); try { a.close(); } catch (x) {} }, wait);
+    });
+    const ch = new BroadcastChannel(String(name));
+    ch.postMessage({ n: String(nonce), t: token, h: host, v: version });
+    setTimeout(() => { try { ch.close(); } catch (x) {} }, 400);
+    const ok = await acked;
+    if (timer !== null) clearTimeout(timer);
+    return ok;
+  }
+
   function probe() { scanFast(); scanHtml(); return state(); }
   function retire() { retired = true; token = null; return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
+                          listen: listen, handOver: handOver,
                           validatePage: validatePage,
                           stage: stage, unstage: unstage,
                           startCall: startCall, poll: poll, abort: abort });
