@@ -149,27 +149,35 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   After an unknown upload result the readback is repeated up to 6 times over about 2 minutes, counted in
   the per-campaign call budget. Writes without a file keep the short timeout. The write policy is
   unchanged and identical in Python and in the page helper.
-  Campaign name (ACL-1902): before any write, in the run and in Check plan, the creator picks the first
-  free name of `NAME`, `NAME_2` ... `NAME_20`. No live campaign with that name (deleted/archived do not
-  count) -> use it; our own (ACL tag of that name) and identical to the builder -> reuse it (resume of a
-  partial run, no duplicate); our own but different, or the same name without our tag -> next suffix. The
-  suffix is always appended to the full name (`X_2` becomes `X_2_2`; the user's own numbers are not
-  parsed). Ad set and ad names stay as built. The tag is computed from the chosen name, so `NAME_2` has
-  its own tag and its own creatives. All 20 taken -> stop before any write (`name_taken`). The rule
-  `existing_diffs` shows a WARNING with the chosen name when a suffix is used and an ERROR only when all
-  20 are taken. One campaigns search on the base name serves all candidates; if it returns the maximum
-  200 rows it is not trusted and each name is looked up with an exact (EQUAL) search, and if that is
-  also full the run stops before any write. At most 6 of our own earlier campaigns are diffed per
-  resolution (call budget); a name over 400 characters stops (conservative guard, the Meta limit is unverified). A NAME_k (k>1) of ours is
-  reused only if its ads are a subset of the plan's ad names (a builder campaign literally named `X_2`
-  is not taken for our suffix). Ad sets and ads under our tagged campaign are matched by name,
-  so a lost child tag does not make the campaign "different" and a re-run resumes it. No extra writes, no new lock.
+  Campaign name (ACL-1902, replaced by ACL-2250): before any write, in the run and in Check plan, the
+  creator picks the name. No live campaign `NAME`, `NAME copy <n>` on the ad account (deleted/archived do
+  not count) -> `NAME`. Otherwise the next copy: the highest live number + 1 (`NAME copy 1`, `copy 2` ...;
+  never the first gap, a number is not reused). The counter is lowercase, one space, at the very end of the
+  campaign name and of every ad set name; ads, creatives and forms keep their names. The user's own digits
+  are not parsed (`X copy 3` taken -> `X copy 3 copy 1`); legacy `NAME_2` campaigns are not family. The tag
+  is computed from the chosen name, so a copy has its own tag; its video is found in the library by the tag
+  of the builder name (`CampaignPlan.media_tag`) and not uploaded again. There is no limit on the count.
+  A repeat (new copy) is told from a resume or retry by a small local record per (ad account, builder
+  name): `<local config>/campaign_name_receipts/<sha256>.json` (`src/fb_api/name_receipt.py`), written
+  before the first write, with the campaign id added right after the campaign write. A live record -> the
+  same campaign is finished (only what is missing is written; if everything exists, only the readback runs).
+  The record is deleted at the end of the JOB (`publisher.finish_name_records`, called by `_publish_pending`
+  only when no campaign of the job stopped or failed), not at the end of a campaign: Publish all after a
+  stopped job re-checks the finished campaigns and does not copy them. Without a record the top row is
+  resumed only if it is ours, partial (an ad set or ad of the plan is missing), identical to the builder
+  (turned-on campaigns are never resumed) and has no ads outside the plan. Only the top row is read in
+  detail (one `/{campaign}/ads` read gives "ads fit" and "partial"). If the one search returns the maximum
+  200 rows, two more searches (`NAME copy ` and exact `NAME`) are made, and if one is full the run stops
+  before any write (`name_unsure`). The real final names of the campaign and every ad set over 400
+  characters stop the run (`name_too_long`, an ERROR in Check plan; conservative guard, the Meta limit is
+  unverified and may be 100 for ad sets); an unreadable record stops it (`name_receipt`). The rule
+  `existing_diffs` shows a WARNING with the chosen name when a copy is used. Ad sets and ads under our
+  tagged campaign are matched by name. Stats parsers (`analyze_fb_stats.parse_adset_name`,
+  `creative_verdicts.parse_adset`) drop a trailing ` copy <n>` first (`analysis_agent/adset_name.py`).
   Names in the app: `campaign_name` in every result, job progress and draft status stays the builder
   name (the dashboard keys its dots and verdicts by it); the chosen name is the separate field
-  `published_as` (empty when no suffix), shown as "-> published as NAME_2" in the plan and job panels.
-  Meta, statistics and reports show the chosen name `NAME_2`. Each NAME_k has its own tag, so creatives
-  are created again and a video may be uploaded again; an older partial campaign stays PAUSED and is
-  left as is.
+  `published_as` (empty when no counter), shown as "-> published as NAME copy 2" in the plan and job
+  panels and kept in the publish history. The telemetry row `api_create_campaign` carries `copy_number`.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets

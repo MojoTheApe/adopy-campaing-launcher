@@ -1,5 +1,65 @@
 # ACL canonical support and the product boundary
 
+## ACL-2512: partial-batch recovery client support
+
+This separate support task selects published Tracker3.28.1 at
+`6e8dce91d1696f8f24e50deaf03dcff04703303c` (stable release440543254,
+published2026-11-10). The old official3.27.3 provider authenticates the retained
+96-file pristine baseline (SHA256
+`44de20357a07d1ef1db0cca00fa6bb0290beb5fbb3dd73b875627dbdabbaa84b`).
+The new immutable source owns rendering, three-way merging, all98 new pristine
+entries, the baseline writer and complete portable-helper validation. The
+additional entries are the short guide's generated selected details and separated
+forwarder. ACL's two genuine local conflicts preserve the existing PR template
+and render the selected guide from actual unchanged config; the corresponding
+details use the same maintained generator. The guarded ACL adapter, exact package
+target and all four native check names remain explicit.
+
+Compare the full source with admitted main
+`9ec59332fc1c410cc59a9bb502c404a2f5696227`. Its ACL-2506 date-fixture test and
+system changelog changes are incorporated unchanged from the earlier c0 baseline;
+no changed product import, build input or support-test dependency is introduced.
+The prior791 tooling and6 manifest results therefore retain their actual scope;
+the refreshed source still needs its normal hosted checks. Native config remains
+byte-identical (SHA256
+`987d436b56907be1c4eb263a8e865a4822b9bd4c46491d14fbc750a763387dce`).
+Every non-pin descriptor choice and Master1.8.0 executable ancestry are unchanged.
+Master1.11.0 remains the separate adopted author/reviewer guidance. The source
+changes no product, runtime/system knowledge, dependencies, scripts, packaging,
+update logic or existing publication/complete-delivery workflow. The trusted
+provider-check workflow changes only its exact official source pin.
+
+The unchanged product import baseline covers279 product roots and281 reachable
+local modules. Its only project helpers outside product/config/runtime roots are
+`scripts._console` and `scripts.acl_update_gate`; neither imports Tracker support.
+The explicit PyInstaller Analysis, hidden imports and data list exclude the
+changed governance files. Packaging specification SHA256 remains
+`96602bbf53310656b3a6fcc4d10fa9e68e6b4c7f0ba6e964cf1f1fe78c34a17a`.
+The actual release-manifest parser's `linked_numbers` AST and import-time AST of
+both the portable PR helper and transitively imported delivery-policy module are
+unchanged against main. This preserves parsing without pretending all release
+governance is unreachable.
+
+The reachable pending-delivery and native-receipt paths intentionally gain exact
+signed partial-recovery validation and verified batch-part receipt handling.
+A delivered part remains distinct from its unfinished parent; changed Review
+acceptance is bound to the actual signed recovery, source scope and admitted main
+revision. Applicable tooling/delivery/parser regressions and normal hosted
+Linux/Windows/installer checks therefore remain required. A source comparison
+neither verifies Windows behavior nor publishes a package.
+
+This author evidence grants no source approval or process completion. The final
+immutable PR still needs the actual canonical `process-support` content proof,
+a genuine independent whole-outcome and indirect import/packaging assessment,
+normal source approval, frozen singleton admission, combined review and checks.
+Only actual admitted main adoption may establish ordinary pinned-client behavior.
+The original product batch's owner-approved package and named unfinished
+follow-ups retain their real acceptance and native receipts; this support neither
+cancels them nor marks their parents complete. No unchanged ACL installer, policy
+activation or shared service deployment is selected by this task.
+
+The earlier evidence below remains dated history, not proof of this new source.
+
 ## ACL-2079: isolated manual verification support
 
 This separate support update selects published Master1.8.0

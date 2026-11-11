@@ -303,7 +303,8 @@ def rendered(monkeypatch, tmp_path):
                                           error=error, error_code=split_code))
         view = app._build_account_map_view({"countries": []}, date_from="2026-10-01",
                                            date_to="2026-10-01")
-        return app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
+        # The campaign list moved from Home to the country Manage partial, so it comes first.
+        return "".join(app.templates.env.get_template("_account_map_country.html").render(mc=mc, amap=view, mlx={}) for mc in view["countries"]) + app.templates.env.get_template("_account_map.html").render(amap=view, mlx={})
 
     return render
 

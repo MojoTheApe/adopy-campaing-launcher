@@ -13,6 +13,8 @@ Tracker batch line, and link the source PRs/approvals; see docs/repository/BATCH
 
 ## Verification
 
+Use `check-pr` for early linkage and `check-merge PR_NUMBER` once for final admission immediately before merge.
+
 Self-checks and results. Use the guarded ACL operator adapter described in AGENTS.md. Implementation claim, handoff, independent Reviewer/report
 and exact reviewed version. For instruction-only sources: complete fixed-path/blob
 proof, current main/scope, matching base opt-in and idle stage/integration ownership.

@@ -41,7 +41,10 @@ def test_placement_state_enabled_stops(tmp_path):
     assert ("campaign", "advantage_placement_state") in _fields(out)
     res = publish_api.result_dict(out)
     assert res["publishable"] is False
-    assert any("advantage_placement_state" in t and "ENABLED" in t for t in res["blocking_failures"])
+    # ACL-2392: the panel gets one plain summary line; the field and the values stay in the details.
+    assert res["blocking_failures"] and "ENABLED" not in " ".join(res["blocking_failures"])
+    lines = res["failure"]["details"]["readback_mismatches"]
+    assert any("advantage_placement_state" in t and "ENABLED" in t for t in lines)
 
 
 def test_positions_missing_stops(tmp_path):

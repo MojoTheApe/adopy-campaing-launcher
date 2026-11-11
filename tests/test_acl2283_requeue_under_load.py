@@ -17,7 +17,7 @@ B = "b" * 8 + "-0000-4000-8000-000000000000"
 
 
 def _s90(**kw):
-    """ACL-2345: the product default is 75 %; these tests were written for the 90 % limit and pin it."""
+    """ACL-2400: the product default is 92 %; these tests were written for the 90 % limit and pin it."""
     from src.web import profile_slots as _ps
     return _ps.SlotSettings(**{"max_used_pct": 90.0, **kw})
 

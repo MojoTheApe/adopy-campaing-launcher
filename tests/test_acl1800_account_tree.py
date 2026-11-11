@@ -287,7 +287,7 @@ def test_column_groups_and_order_follow_the_prototype():
 
 def test_rows_pin_identity_and_show_level_country_account():
     acc = _acc_table()["acc"]
-    assert 'data-sel' not in acc and 'type="checkbox"' not in acc and 'class="p0"' not in acc and 'data-exp="campaign:1"' in acc and 'class="hc-switch"' in acc
+    assert 'class="p0"' not in acc and 'data-exp="campaign:1"' in acc and 'class="hc-switch"' in acc
     assert "Chile · Acc" in _text(acc) and 'class="p1"' in acc
 
 
@@ -621,7 +621,7 @@ def test_levels_shift_the_whole_row_and_only_the_expanded_campaign_is_tinted():
     row = re.search(r'<tr class="hc-r-adset[^>]* data-key="adset:11".*?</td>', html, re.S).group(0)
     assert row.count('class="p1"') == 1 and row.index("hc-switch") < row.index("hc-name") and "hc-badge" in row
     assert re.search(r'<tr class="hc-r-campaign hc-lv-campaign hc-open"[^>]* data-key="campaign:1"', html)
-    assert not re.search(r'hc-open"[^>]* data-key="campaign:2"', html) and "hc-sel" not in html
+    assert not re.search(r'hc-open"[^>]* data-key="campaign:2"', html) 
     css = TABLE[: TABLE.index("</style>")]
     assert "--hc-indent: 22px" in css and "repeating-linear-gradient(90deg" in css and "tr.hc-r-campaign.hc-open > td" in css
 

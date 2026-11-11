@@ -1,0 +1,155 @@
+{#- Home «таблица как в Google» (Expanded) и компактные плитки (Compact): оба вида из одних `amap.countries`/`r.state`.
+    Состояния считает `src/web/account_state.py` по сохранённым данным — Meta тут не читается. Дерево кампаний, Note и
+    кнопки профилей остались в Manage страны («Manage →»). Поведение — блок `aov*` в report.html. -#}
+{% set glyph = {'active': '●', 'issue': '▲', 'dead': '✕', 'new': '✦', 'unknown': '?'} %}
+{% set labels = {'active': 'Active', 'issue': 'Issue', 'dead': 'Dead', 'new': 'New', 'unknown': 'Unknown'} %}
+{% set fold_at = aov_rows_collapsed | default(15) %}
+{% set stt = amap.state_totals %}
+{% macro age(s) %}{% if s.stale and s.age_days %} · {{ s.age_days }}d{% endif %}{% endmacro %}
+
+<div id="aov" class="aov" data-view="expanded" data-default-view="expanded" data-fold="{{ fold_at }}">
+  {% if stt.all or stt.countries_total %}
+  <div class="aov-fbar" role="group" aria-label="Filter accounts by state">
+    <button type="button" class="aov-fb all" data-aov-filter="all" aria-pressed="true"><small>All accounts</small><b>{{ stt.all }}</b></button>
+    {% for k in ['active', 'issue', 'dead', 'new', 'unknown'] %}
+    <button type="button" class="aov-fb {{ k }}{% if not stt[k] %} zero{% endif %}" data-aov-filter="{{ k }}" aria-pressed="false"><small><span class="aov-sw {{ k }}" aria-hidden="true"></span><span class="aov-gl" aria-hidden="true">{{ glyph[k] }}</span> {{ labels[k] }}</small><b>{{ stt[k] }}</b></button>
+    {% endfor %}
+    <span class="aov-fnote">{{ stt.countries_active }} of {{ stt.countries_total }} countries have an active account · Active = spend in the selected period and a status read in the last 24 h or none yet</span>
+  </div>
+  <div class="aov-live" id="aov-live" aria-live="polite"></div>
+  {% endif %}
+
+  {#- ── Expanded: блок-таблица на страну ── #}
+  <div class="aov-expanded" id="aov-expanded">
+  {% for mc in amap.countries %}
+  {% set slug = mc.country | anchor_slug %}
+  {% set sc = mc.state_counts or {} %}
+  {% set rows = mc.rows_aov or [] %}
+  {% set bk = mc.book or {} %}
+  <section class="aov-block{% if mc.virtual %} aov-virtual{% endif %}" data-aov-country="{{ (mc.key or mc.country) | e }}" data-aov-slug="{{ slug | e }}">
+    <div class="aov-bh">
+      <b>{{ mc.country }}</b>
+      {% for k in ['active', 'issue', 'dead', 'new', 'unknown'] %}{% if k != 'unknown' or sc.get(k) %}
+      <span class="aov-cnt {{ k }}{% if not sc.get(k) %} zero{% endif %}"><b>{{ sc.get(k, 0) }}</b>{{ labels[k] }}</span>{% endif %}{% endfor %}
+      <span class="aov-sp"></span>
+      {% if not rows and not mc.virtual %}<button type="button" class="aov-btn" data-aov-go="{{ slug | e }}">+ Add account</button>{% endif %}
+      <button type="button" class="aov-btn q" data-aov-go="{{ slug | e }}">{% if mc.virtual %}Connect in Manage →{% else %}Manage →{% endif %}</button>
+      {% if not mc.virtual %}<button type="button" class="aov-btn danger" data-aov-close onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})" title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>{% endif %}
+    </div>
+    {% if mc.virtual %}
+    <div class="aov-warn">{% if mc.from_reading %}{{ mc.country }} is not on the map — the accounts themselves attributed spend here for these dates.{% else %}{{ mc.country }} has source money for this period but no accounts placed here — the spend is not covered by the map.{% endif %}
+      {% if bk %}<b class="num">{{ metric_values(bk.spend, bk.leads, bk.deposits)[0] }}</b>{% endif %}</div>
+    {% elif rows %}
+    {#- Дерево кампаний аккаунта (ACL-1800): тот же компонент, что в Manage. Хост — сосед таблицы, `amapCampaignMount` берёт
+        из неё строки `td.amap-list[data-account]`. Показывает только сохранённое: кнопки чтения на Home скрыты (CSS `.aov`). -#}
+    {%- if campaign_table_api is defined and campaign_table_api() %}
+    <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
+      <div class="hc-mount" data-hc-mount></div>
+    </section>
+    {%- endif %}
+    <div class="aov-scroll"><table class="aov-table" data-country-name="{{ mc.country | e }}">
+      <colgroup><col class="c1"><col><col class="c3"><col class="c4"><col class="c3"><col class="c6"><col class="c3"><col class="c10"></colgroup>
+      <thead><tr><th>State</th><th>Account</th><th class="num">Spend</th><th class="num">Leads</th><th class="num">CPL</th><th class="num">FTDs</th><th class="num" title="Spend per FTD">CPA</th><th title="Your own note about this account. Click a note to edit it.">Notes</th></tr></thead>
+      <tbody>
+      {% set ns = namespace(fold={}) %}
+      {% for r in rows %}
+      {% set s = r.state %}
+      {% set folded = loop.index > fold_at %}
+      {% if folded %}{% set _ = ns.fold.update({s.key: ns.fold.get(s.key, 0) + 1}) %}{% endif %}
+      {% set mv = metric_values(r.spend, r.leads, r.deposits) %}
+      <tr class="aov-row s-{{ s.key }}" data-state="{{ s.key }}"{% if folded %} data-folded="1" hidden{% endif %}
+          data-search="{{ ((r.account or '') ~ ' ' ~ (r.workbook_alias or '')) | lower | e }}">
+        <td><span class="aov-st {{ s.key }}"{% if s.status_tip %} title="{{ s.status_tip | e }}"{% endif %}><span aria-hidden="true">{{ glyph[s.key] }}</span> {{ s.label }}</span>{% if s.status_line %}<small class="aov-stline{{ ' stale' if s.key == 'unknown' }}">{{ s.status_line }}</small>{% endif %}</td>
+        <td class="acc amap-acc" title="{{ r.account | e }}{% if r.act_id %} · {{ r.act_id | e }}{% endif %}{% if r.workbook_alias %} · workbook: {{ r.workbook_alias | e }}{% endif %}"><span class="amap-caret-off">·</span><span class="aov-acc"><span class="aov-nm">{{ r.account }}</span>{% if r.act_id %}<small class="aov-act">{{ r.act_id }}</small>{% endif %}</span></td>
+        {% if r.has_data %}
+        <td class="num">{{ mv[0] }}</td><td class="num">{{ mv[1] }}</td><td class="num">{{ mv[3] }}</td><td class="num">{{ mv[2] }}</td><td class="num">{{ mv[4] }}</td>
+        {% else %}
+        <td class="num aov-nz">—</td><td class="num aov-nz">—</td><td class="num aov-nz">—</td><td class="num aov-nz">—</td><td class="num aov-nz">—</td>
+        {% endif %}
+        {%- set note = (amap.notes or {}).get(r.account | trim, '') %}
+        <td class="amap-acct-note aov-note{{ ' empty' if not note }}" tabindex="0" role="button" data-note-kind="account" data-account="{{ r.account | trim | e }}" data-note="{{ note | e }}" title="{{ note | e }}" aria-label="Note for {{ r.account | trim | e }}"><span class="amap-note-box">{{- note.split('
+')[0] | truncate(60, True, '…') | e if note -}}</span></td>
+        {#- Ячейка для дерева кампаний (его JS кладёт сюда снимок списка); на экране не показывается. -#}
+        <td class="amap-list" data-account="{{ r.account | e }}" hidden><span></span></td>
+      </tr>
+      {% endfor %}
+      {% if ns.fold %}
+      {% set nf = ns.fold.values() | sum %}
+      {% set more_text %}{{ nf }} more{% for k in ['issue', 'dead', 'new', 'unknown', 'active'] %}{% if ns.fold.get(k) %} · {{ ns.fold[k] }} {{ k }}{% endif %}{% endfor %}{% endset %}
+      <tr class="aov-foldrow"><td colspan="8"><button type="button" class="aov-more" data-aov-more aria-expanded="false"
+          data-more="Show {{ more_text }}">Show {{ more_text }}</button></td></tr>
+      {% endif %}
+      {% set tv = metric_values(mc.spend, mc.leads, mc.deposits) %}
+      <tr class="tot"><td colspan="2">Total · {{ rows | length }} account{{ '' if rows | length == 1 else 's' }}</td>
+        <td class="num">{{ tv[0] }}</td><td class="num">{{ tv[1] }}</td><td class="num">{{ tv[3] }}</td><td class="num">{{ tv[2] }}</td><td class="num">{{ tv[4] }}</td><td></td></tr>
+      </tbody>
+    </table></div>
+    {% else %}
+    <div class="aov-empty">No accounts in {{ mc.country }} yet.</div>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% if not amap.countries %}<div class="aov-empty">No countries yet. Accounts get placed into countries from a country's Accounts section.</div>{% endif %}
+  </div>
+
+  {#- ── Compact: строка страны и плитки 128×62 ── #}
+  <div class="aov-compact" id="aov-compact" hidden>
+  {% for mc in amap.countries %}
+  {% set slug = mc.country | anchor_slug %}
+  {% set rows = mc.rows_aov or [] %}
+  {% set sc = mc.state_counts or {} %}
+  {% set tv = metric_values(mc.spend, mc.leads, mc.deposits) %}
+  <div class="aov-crow{% if mc.virtual %} aov-virtual{% endif %}" data-aov-country="{{ (mc.key or mc.country) | e }}">
+    <div class="aov-who">
+      <b>{{ mc.country }}</b>
+      {% if rows %}<small>{{ sc.get('active', 0) }} of {{ rows | length }} active</small>
+      <small class="num">{{ tv[0] }} · {{ tv[1] }} leads · {{ tv[2] }} FTD</small>
+      {% elif mc.virtual %}<small>not covered by the map</small>{% else %}<small>no accounts yet</small>{% endif %}
+      <button type="button" class="aov-btn q sm" data-aov-go="{{ slug | e }}">Manage →</button>
+      {% if not mc.virtual %}<button type="button" class="aov-btn danger sm" data-aov-close onclick="event.preventDefault();event.stopPropagation();amapClose('country',{{ mc.key | tojson | forceescape }},{{ mc.country | tojson | forceescape }})" title="Retire this country. Its accounts fall into Available accounts — nothing is deleted.">Close</button>{% endif %}
+    </div>
+    <div class="aov-tiles">
+      {% for r in rows %}
+      {% set s = r.state %}
+      {% set mv = metric_values(r.spend, r.leads, r.deposits) %}
+      {% set nm = (r.account or '') | replace('Facebook_', '', 1) %}
+      <button type="button" class="aov-tile {{ s.key }}" data-state="{{ s.key }}" aria-haspopup="dialog"
+        data-search-tile="{{ ((r.account or '') ~ ' ' ~ (r.workbook_alias or '')) | lower | e }}"
+        data-name="{{ r.account | e }}" data-alias="{{ (r.workbook_alias or '') | e }}" data-country="{{ mc.country | e }}" data-slug="{{ slug | e }}"
+        data-label="{{ s.label }}" data-key="{{ s.key }}" data-spend="{{ mv[0] if r.has_data else '—' }}" data-leads="{{ mv[1] if r.has_data else '—' }}"
+        data-cpl="{{ mv[3] if r.has_data else '—' }}" data-ftd="{{ mv[2] if r.has_data else '—' }}" data-cpa="{{ mv[4] if r.has_data else '—' }}"
+        data-why="{{ s.reason | e }}" data-read="{% if s.read_short %}{{ s.read_short }}{{ age(s) }}{% endif %}"
+        title="{{ r.account | e }} · {{ s.label }}{% if s.reason %} · {{ s.reason | e }}{% endif %}">
+        <span class="n"><span aria-hidden="true">{{ glyph[s.key] }}</span> {{ nm }}</span>
+        {%- if s.key == 'active' %}
+        <span class="v">{{ mv[0] }} · {{ mv[1] }} leads</span>
+        <span class="w">{% if r.deposits and r.deposits > 0 %}{{ mv[2] }} FTD · CPA {{ mv[4] }}{% else %}CPL {{ mv[3] }}{% endif %}</span>
+        {%- elif s.key == 'issue' %}
+        <span class="v">{{ s.short_reason }}</span>
+        <span class="w{% if s.stale %} stale{% endif %}">{% if s.status_line %}{{ s.status_line }}{% elif s.read_short %}read {{ s.read_short }}{{ age(s) }}{% else %}not read yet{% endif %}</span>
+        {%- elif s.key == 'dead' %}
+        <span class="v">disabled</span>
+        <span class="w{% if s.stale %} stale{% endif %}">{% if r.has_data and r.spend %}{{ mv[0] }} · {% endif %}{% if s.status_line %}{{ s.status_line }}{% elif s.read_short %}read {{ s.read_short }}{{ age(s) }}{% else %}not read yet{% endif %}</span>
+        {%- elif s.key == 'new' %}
+        <span class="v">New</span><span class="w">no spend yet</span>
+        {%- else %}
+        <span class="v">Unknown</span><span class="w">{% if s.status_line %}{{ s.status_line }}{% elif s.tried_short %}read failed {{ s.tried_short }}{% else %}no saved reading{% endif %}</span>
+        {%- endif %}
+      </button>
+      {% endfor %}
+      {% if not rows %}<span class="aov-empty">{% if mc.virtual %}Spend here is not covered by the map.{% else %}No accounts yet.{% endif %}</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+
+  {% if amap.countries and amap.totals %}
+  {% set tt = amap.totals %}{% set ttv = metric_values(tt.spend, tt.leads, tt.deposits) %}
+  <div class="aov-totalbar" id="amap-totals"><b>Total · all countries</b>
+    <span><small>Spend</small> <b class="num">{{ ttv[0] }}</b></span><span><small>Leads</small> <b class="num">{{ ttv[1] }}</b></span>
+    <span><small>CPL</small> <b class="num">{{ ttv[3] }}</b></span><span><small>FTDs</small> <b class="num">{{ ttv[2] }}</b></span><span><small>CPA</small> <b class="num">{{ ttv[4] }}</b></span>
+    <span><small>Accounts</small> <b class="num">{{ stt.all }}</b></span></div>
+  {% endif %}
+
+  <div id="aov-pop" class="aov-pop" role="dialog" aria-label="Account details" hidden></div>
+</div>

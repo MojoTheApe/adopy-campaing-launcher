@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "PlanError",
+  "message": "Ad 2: the Instant Form 123456789012 is not a form of this Page; pick one of the Page's forms (Refresh forms).",
+  "expect": {
+    "key": "form_unavailable",
+    "short": "The Instant Form is not available for this Page",
+    "next": "refresh the forms, choose another one and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  }
+}
