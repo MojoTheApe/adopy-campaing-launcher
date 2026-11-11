@@ -3933,6 +3933,9 @@
     .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
     .cb-textx-add:disabled { opacity: 0.55; cursor: not-allowed; }
     .cb-textx-note { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .cb-note-shared { display: none; }
+    .cb-hl-shared .cb-note-own { display: none; }
+    .cb-hl-shared .cb-note-shared { display: inline; }
     /* ACL-1775: выбор формы Страницы в объявлении */
     .cb-form-wrap { min-width: 0; }
     .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
@@ -7356,8 +7359,23 @@ window.cbPreflight = (function () {
   function numbered(inp) {
     var out = [], n = 0;
     auditSets(inp).forEach(function (st, i) {
-      (st.ads || []).forEach(function (ad) { n += 1; out.push({ si: i + 1, n: n, st: st, ad: ad }); });
+      var first = null; /* ACL-2406: Ad 1 of each ad set */
+      (st.ads || []).forEach(function (ad) {
+        n += 1;
+        if (!first) first = ad; else ad = sharedHeadlineAd(ad, first);
+        out.push({ si: i + 1, n: n, st: st, ad: ad });
+      });
     });
+    return out;
+  }
+  /* ACL-2406: объявление 2+ берёт заголовок и описание у объявления 1 (зеркало shared_headline_ad). */
+  function sharedHeadlineAd(ad, first) {
+    var out = {}, head = s(first.headline);
+    out.shared_headline = true;
+    Object.keys(ad).forEach(function (k) { out[k] = ad[k]; });
+    out.headline = head;
+    out.headlines = head ? [head] : [];
+    out.descriptions = (first.descriptions || []).slice(0, 1);
     return out;
   }
 
@@ -7428,8 +7446,8 @@ window.cbPreflight = (function () {
           && (id === 'texts_vertical' || (st.ads || []).length > 1);
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }, 'warning'));
-      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }, 'warning'));
-      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
+      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !a.shared_headline && !s(a.headline); }, 'warning'));
+      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return !a.shared_headline && s(a.headline).length > C.max_headline; }, 'warning'));
       else if (id === 'feed_texts') out.push(perAd(id, inp, function (a) {
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
         if (!multi && !s(a.vertical_file)) return false;
@@ -9200,6 +9218,7 @@ window.cbTree = (function () {
     Array.prototype.forEach.call(secs, function (sec, i) { sec.classList.toggle('cbd-set-off', i !== setIdx); });
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
+    var seenSets = {};
     for (var i = 0; i < rows.length; i += 1) {
       /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
          кнопкой или когда в них уже есть значение (восстановленный черновик). */
@@ -9207,8 +9226,14 @@ window.cbTree = (function () {
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
+      /* ACL-2406: заголовок и описание задаёт только Ad 1 набора;
+         у остальных объявлений набора строки нет, у них только свои Primary text. */
+      var setKey = (window.cbRowSet ? window.cbRowSet(rows[i]) : 0);
+      var shared = !!seenSets[setKey];
+      seenSets[setKey] = true;
+      if (rows[i].classList.contains('cb-hl-shared') !== shared) rows[i].classList.toggle('cb-hl-shared', shared);
       if (line) {
-        var entry = pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
+        var entry = !shared && pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
         line.hidden = !entry;
         /* Только при изменении: запись в textContent — мутация формы, её слушает
            наблюдатель дерева, и безусловная запись зациклила бы страницу. */
@@ -17147,7 +17172,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
     var cards = [];
+    /* ACL-2406: Ad 1 of each ad set gives the Headline to the later ads of that set. */
+    var setFirstRow = {};
+    slot.querySelectorAll('.cb-ad-row').forEach(function(r) {
+      var k = rowSet(r);
+      if (!setFirstRow[k]) setFirstRow[k] = r;
+    });
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
+      var isFirstInSet = setFirstRow[rowSet(row)] === row;
       var fileHidden = row.querySelector('input[type="hidden"][name$="_creative_file"]');
       var fileSearch = row.querySelector('.cb-creative-search');
       var fileVal = ((fileHidden && fileHidden.value) || (fileSearch && fileSearch.value) || '').trim();
@@ -17186,8 +17218,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var bodyHtml = copy && copy.body
         ? cbpEsc(copy.body)
         : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">pick the copy…</span>');
-      var headlineHtml = copy && copy.headline
-        ? cbpEsc(copy.headline)
+      /* ACL-2406: объявления 2+ набора показывают заголовок Ad 1 этого набора. */
+      var hlCopy = copy;
+      if (!isFirstInSet) {
+        var firstRow = setFirstRow[rowSet(row)];
+        var firstHid = firstRow && firstRow.querySelector('input[type="hidden"][name$="_copy"]');
+        var firstVal = ((firstHid && firstHid.value) || '').trim();
+        hlCopy = firstVal ? AD_TITLES.find(function(t) { return t.ad_title === firstVal; }) : null;
+      }
+      var headlineHtml = hlCopy && hlCopy.headline
+        ? cbpEsc(hlCopy.headline)
         : '<span class="cbp-skel-text">headline</span>';
 
       cards.push(
@@ -18200,7 +18240,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       textxRowHtml(pfx, 3) + textxRowHtml(pfx, 4) + textxRowHtml(pfx, 5) +
       '<span class="cb-label cb-textx-add-label">More primary texts</span>' +
       '<div class="cb-textx-add-wrap"><button type="button" class="cb-textx-add" onclick="cbAddTextRow(this)">+ Primary text 3</button>' +
-      '<span class="cb-textx-note">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span></div>' +
+      '<span class="cb-textx-note"><span class="cb-note-own">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span><span class="cb-note-shared">Up to 5 primary texts per ad. The headline and description come from Ad 1.</span></span></div>' +
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
