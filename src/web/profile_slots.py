@@ -68,6 +68,7 @@ ACL-1424 (01.10): четыре профиля заняли 13,6 ГБ — по �
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sys
 import threading
@@ -213,6 +214,21 @@ def keep_free_mb(total_mb: int, settings: SlotSettings) -> int:
     """ACL-2255: сколько памяти должно оставаться свободной при доле `max_used_pct` (не меньше `MIN_FREE_MB`)."""
     share = int(max(0, int(total_mb)) * (100.0 - settings.max_used_pct) / 100.0)
     return max(share, MIN_FREE_MB)
+
+
+def free_more_mb(memory: MemoryReading, settings: SlotSettings, extra_mb: int = 0) -> int:
+    """ACL-2369: сколько МБ надо освободить, чтобы прошёл тест памяти (0 — уже хватает)."""
+    return max(0, keep_free_mb(memory.total_mb, settings) + int(extra_mb) - int(memory.available_mb))
+
+
+def format_mb(mb: int) -> str:
+    """ACL-2369: «6.6 GB» от 1024 МБ (вверх до 0.1 ГБ), ниже — целые МБ вверх до 50 («600 MB»); 0 — пусто."""
+    mb = int(mb)
+    if mb <= 0:
+        return ""
+    if mb >= 1024:
+        return f"{math.ceil(mb / 1024 * 10 - 1e-9) / 10:.1f} GB"
+    return f"{math.ceil(mb / 50) * 50} MB"
 
 
 def used_pct(memory: MemoryReading) -> float:
@@ -624,7 +640,8 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         return out
     keep = keep_free_mb(memory.total_mb, settings)
     need = keep + settings.profile_mb * warming
-    out.update(need_mb=need, keep_free_mb=keep, max_used_pct=settings.max_used_pct,
+    out.update(need_mb=need, keep_free_mb=keep, short_mb=max(0, need - int(memory.available_mb)),
+               max_used_pct=settings.max_used_pct,
                used_pct=used_pct(memory))
     if memory.available_mb < keep:
         # Занято больше допустимой доли — новый профиль не стартует, пока память
