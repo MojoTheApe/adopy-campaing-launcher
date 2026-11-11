@@ -47,3 +47,10 @@ def test_the_drawer_applies_the_parked_pick_when_it_paints():
     assert re.search(r"takePick\(\)", body)
     assert "keep = afterConnect.country" in body
     assert "keepAccount = afterConnect.account" in body
+
+
+def test_painting_never_touches_storage_so_the_pick_survives_to_the_reload():
+    s = _src()
+    i = s.index("function paintFoot()")
+    assert "sessionStorage" not in s[i:i + 1800]
+    assert "var pendingPick = loadPick();" in s, "storage is read once, at page load"

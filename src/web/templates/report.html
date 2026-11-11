@@ -8995,17 +8995,25 @@ window.cbTree = (function () {
     try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ }
   }
 
-  function takePick() {
+  // The parked entry is read (and removed from storage) exactly once, when the
+  // page loads. paintFoot() runs on the pre-reload page too (the click handler
+  // paints right after rememberPick), so it must never touch storage itself.
+  function loadPick() {
     var raw = null;
-    try { raw = sessionStorage.getItem(PICK_KEY); } catch (e) { return null; }
+    try {
+      raw = sessionStorage.getItem(PICK_KEY);
+      if (raw) sessionStorage.removeItem(PICK_KEY);
+    } catch (e) { return null; }
     if (!raw) return null;
-    var saved = null;
-    try { saved = JSON.parse(raw); } catch (e) { saved = null; }
-    var hit = resolvePick(saved, places(), Date.now());
-    // Keep it while the country is not in the tree yet; drop it once used or stale.
-    if (hit || !saved || (Date.now() - (saved.at || 0)) > PICK_TTL_MS) {
-      try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ }
-    }
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  var pendingPick = loadPick();
+
+  function takePick() {
+    if (!pendingPick) return null;
+    var hit = resolvePick(pendingPick, places(), Date.now());
+    // Keep it in memory while the country is not in the tree yet; drop it once used or stale.
+    if (hit || (Date.now() - (pendingPick.at || 0)) > PICK_TTL_MS) pendingPick = null;
     return hit;
   }
   /* } ACL-2509 pick-after-connect */

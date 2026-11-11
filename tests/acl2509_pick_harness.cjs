@@ -8,7 +8,10 @@ const b = html.indexOf('/* } ACL-2509 pick-after-connect */');
 assert(a > 0 && b > a, 'pick-after-connect block not found');
 const code = html.slice(a, b);
 
+// One call = one page load: the block's own load-time code runs against the
+// shared sessionStorage `store`, like the script does after a reload.
 function page(store, tree) {
+  const holder = { tree };
   const ctx = {
     Date, JSON,
     sessionStorage: {
@@ -16,38 +19,47 @@ function page(store, tree) {
       setItem: (k, v) => { store[k] = String(v); },
       removeItem: k => { delete store[k]; },
     },
-    places: () => tree.map(t => ({ country: t.country, name: t.country, accounts: t.accounts.slice() })),
+    places: () => holder.tree.map(t => ({ country: t.country, name: t.country, accounts: t.accounts.slice() })),
   };
   vm.createContext(ctx);
   vm.runInContext(code + '\nthis.api = {rememberPick, takePick, forgetPick, resolvePick};', ctx);
+  ctx.api.holder = holder;
   return ctx.api;
 }
 
+const KEY = 'cbd-pick-after-connect';
 const store = {};
-// Before the connect: Kuwait has one account, Australia first in the list.
 const before = [{ country: 'AU', accounts: ['AU1'] }, { country: 'KW', accounts: ['FacebookDoc283'] }];
-page(store, before).rememberPick('KW');
-
-// After the reload: Kuwait has the new account too.
 const after = [{ country: 'AU', accounts: ['AU1'] }, { country: 'KW', accounts: ['FacebookDoc283', 'KLD_BFL_F95'] }];
-let hit = page(store, after).takePick();
-assert.equal(hit.country, 'KW'); assert.equal(hit.account, 'KLD_BFL_F95', 'country kept, new account selected');
-assert.equal(Object.keys(store).length, 0, 'used once');
-assert.equal(page(store, after).takePick(), null, 'second paint falls back to the normal choice');
 
-// Country not in the tree yet (early paint): stays parked, then resolves.
+// The real sequence: click handler parks the pick and paints (paintFoot calls
+// takePick); the page reloads; the drawer paints again.
+const pre = page(store, before);
+pre.rememberPick('KW');
+assert.equal(pre.takePick(), null, 'pre-reload paint must not apply the pick');
+assert.equal(pre.takePick(), null, 'nor do polling paints');
+assert(KEY in store, 'the key survives paints before the reload');
+const post = page(store, after);               // reload
+assert(!(KEY in store), 'read once at page load');
+let hit = post.takePick();
+assert.equal(hit.country, 'KW'); assert.equal(hit.account, 'KLD_BFL_F95', 'country kept, new account selected');
+assert.equal(post.takePick(), null, 'second paint falls back to the normal choice');
+assert.equal(page(store, after).takePick(), null, 'a further reload has nothing parked');
+
+// Country not in the tree yet on the first paint after reload: held until it is.
 page(store, before).rememberPick('KW');
-assert.equal(page(store, []).takePick(), null);
-assert.equal(Object.keys(store).length, 1, 'kept until the tree is there');
-assert.equal(page(store, after).takePick().account, 'KLD_BFL_F95');
+const late = page(store, []);
+assert.equal(late.takePick(), null);
+late.holder.tree = after;
+assert.equal(late.takePick().account, 'KLD_BFL_F95');
 
 // Closing the form without connecting forgets it.
-page(store, before).rememberPick('KW');
-page(store, before).forgetPick();
+const p3 = page(store, before);
+p3.rememberPick('KW'); p3.forgetPick();
 assert.equal(page(store, after).takePick(), null);
 
 // Stale entry (older than the TTL) is dropped, not applied.
-store['cbd-pick-after-connect'] = JSON.stringify({ country: 'KW', accounts: [], at: Date.now() - 3600 * 1000 });
+store[KEY] = JSON.stringify({ country: 'KW', accounts: [], at: Date.now() - 3600 * 1000 });
 assert.equal(page(store, after).takePick(), null);
 assert.equal(Object.keys(store).length, 0);
 
