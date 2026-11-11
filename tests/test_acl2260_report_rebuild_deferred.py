@@ -146,3 +146,54 @@ def test_scheduled_account_reads_wait_for_a_publish(busy, monkeypatch):
     now = account_refresh.datetime(2026, 10, 28, 9, 0).astimezone()
     result = queue.page_open(now=now, port=9090)
     assert result == {"sweep": "deferred_publish", "window": "08:00", "queued": 0}
+
+
+# ── ACL-2508: the notice says what and why; Refresh ends in the fresh page ──
+
+def test_notice_states_saved_version_reason_and_action():
+    text = report_store.DEFERRED_TEXT
+    assert "saved version" in text
+    assert "profile window" in text and "publish" in text
+    assert "Close the profile window" in text and "wait for the publish" in text
+    assert "Refresh" in text
+
+
+def test_notice_is_hidden_when_not_deferred(cold_page, idle, monkeypatch):
+    stored = report_store.StoredPage("<html><body><h1>Saved</h1></body></html>", time.time() - 60, [])
+    monkeypatch.setattr(app.report_store, "exists", lambda inputs: True)
+    monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
+    assert ">" + report_store.DEFERRED_TEXT + "<" not in _get("/").text
+
+
+def test_refresh_warms_the_period_of_the_page(monkeypatch):
+    calls = []
+    monkeypatch.setattr(app, "get_cached_report", lambda force_rebuild=False: ({"r": 1}, "df", []))
+    monkeypatch.setattr(app, "resolve_period", lambda df, f, t, s: (f or "2026-01-01", t))
+    monkeypatch.setattr(app, "report_for_period", lambda r, df, f, t: calls.append((f, t)))
+    app._refresh_and_warm_period("2026-02-01", "2026-02-09", "")
+    assert calls == [("2026-02-01", "2026-02-09")]
+
+
+def test_refresh_endpoint_reads_period_from_query_and_referer(monkeypatch):
+    seen = []
+    monkeypatch.setattr(app, "cache_clear", lambda **k: None)
+    monkeypatch.setattr(app, "_refresh_and_warm_period", lambda f, t, s: seen.append((f, t, s)))
+    monkeypatch.setattr(app, "cache_built_at", lambda: "now")
+
+    async def post(url, headers=None):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app.app),
+                                     base_url="http://127.0.0.1") as client:
+            return await client.post(url, headers={"Accept": "application/json", **(headers or {})})
+
+    assert asyncio.run(post("/refresh?date_from=a&date_to=b&span=7")).json()["ok"] is True
+    r2 = asyncio.run(post("/refresh", {"Referer": "http://127.0.0.1/?date_from=c&date_to=d"}))
+    assert r2.status_code == 200, r2.text
+    assert seen == [("a", "b", "7"), ("c", "d", "")]
+
+
+def test_refresh_while_busy_makes_the_page_ready_and_serves_fresh(warm_cache, busy, monkeypatch):
+    """After Refresh the page is ready, so / renders the live page, not the saved one."""
+    report, _df, _w = cache.get_cached_report(force_rebuild=True)
+    assert report["marker"] == "new"
+    monkeypatch.setattr(app, "peek_cached_report", lambda: (report, None, []))
+    assert app._page_ready("", "", "") is True

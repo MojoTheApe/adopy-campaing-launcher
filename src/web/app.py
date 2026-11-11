@@ -3238,8 +3238,25 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+def _refresh_and_warm_period(date_from: str, date_to: str, span: str) -> None:
+    """Force a rebuild and also compute the page's period (ACL-2508).
+
+    The page counts as ready only when the report of its period is in memory.
+    A rebuild alone left that period cold, so while a publish or a kept profile
+    window was active the reload still got the saved page. Refresh is the
+    person's own choice (never deferred), so it must end with a page that can
+    be served fresh.
+    """
+    report, df, _warnings = get_cached_report(force_rebuild=True)
+    try:
+        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+        report_for_period(report, df, date_from, date_to)
+    except Exception:  # noqa: BLE001 - the report itself is built; the page warms it on load
+        pass
+
+
 @app.post("/refresh")
-async def refresh(request: Request) -> Response:
+async def refresh(request: Request, date_from: str = "", date_to: str = "", span: str = "") -> Response:
     """Rebuild report now (reuse Excel DF if mtime unchanged), then redirect or JSON.
 
     Runs in a worker thread so the event loop stays responsive (Stop / other
@@ -3251,7 +3268,14 @@ async def refresh(request: Request) -> Response:
     # Keep excel_df so force_rebuild skips re-parsing when the file is unchanged.
     cache_clear(keep_excel_df=True)
     try:
-        await asyncio.to_thread(lambda: get_cached_report(force_rebuild=True))
+        if not (date_from or date_to or span):
+            # A saved page carries the older script, which posts without the
+            # period; the page that pressed Refresh knows it.
+            from urllib.parse import parse_qs, urlparse
+
+            ref = parse_qs(urlparse(request.headers.get("referer", "")).query)
+            date_from, date_to, span = (ref.get(k, [""])[0] for k in ("date_from", "date_to", "span"))
+        await asyncio.to_thread(lambda: _refresh_and_warm_period(date_from, date_to, span))
     except (FileNotFoundError, ValueError) as e:
         if _wants_json(request):
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
