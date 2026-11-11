@@ -768,6 +768,7 @@ class ApiPublisher:
             _record("api_create_campaign", False, campaign=name,
                     duration_s=round(time.monotonic() - began, 1),
                     diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind,
+                          "mode": _work_mode(self._client),
                           **({"auto_resumed": True} if self.auto_resumed else {}),
                           **_tab_load(exc)})
             _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
@@ -796,6 +797,7 @@ class ApiPublisher:
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
                       "copy_number": outcome.copy_number,
+                      "mode": _work_mode(self._client),
                       **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
@@ -973,6 +975,12 @@ def _tab_load(stop: BaseException | None) -> dict[str, Any]:
     """ACL-2299: CPU %, memory %, page_count (before/after the tab clean-up) and the patient wait of a tab stop."""
     load = getattr(stop, "tab_load", None)
     return dict(load) if isinstance(load, dict) else {}
+
+
+def _work_mode(client: Any) -> str:
+    """ACL-2523: which work tab served the run - `light` (ACL_LIGHT_WORK_TAB) or `ads_manager`."""
+    transport = getattr(client, "transport", None)
+    return "light" if getattr(transport, "light", False) is True else "ads_manager"
 
 
 def _plan_in_read_session(account_label: str, drafts: list[Any], *,

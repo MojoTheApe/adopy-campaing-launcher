@@ -196,6 +196,31 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     await new Promise((r) => setTimeout(r, 60));
     assert.equal(log.proceeded, 0, 'неактивный кабинет пропустил Publish');
   }
+  // 6d. ACL-2273: a "not_checked" verdict that is already stored on the card (current revision) does not
+  //     decide Publish: the gate asks the server again, a clean answer replaces the stale verdict, a repeated
+  //     "could not check" still lets Publish go, and an account refusal still blocks.
+  {
+    const seed = (form) => { form._pfAudit = { byName: { C1: { audit: [], error: 'The profile is busy with another job',
+      errorKind: 'not_checked', accountAudit: null, result: null, rev: 'r1', at: 1, cached: false } } }; };
+    const run = async (reply) => {
+      const { w, log } = world('api', reply);
+      const form = {}; seed(form);
+      const s = slotOf(form, 'C1', okInput(), 'cbs1');
+      w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+      await new Promise((r) => setTimeout(r, 60));
+      return { w, log, form, s };
+    };
+    let x = await run({ results: [{ campaign_name: 'C1', error: null, audit: [] }] });
+    assert.deepEqual(x.log.fetched, ['/publish-plan'], 'a stored not_checked verdict was trusted without asking the server');
+    assert.equal(x.log.proceeded, 1, 'a clean answer after a stored not_checked verdict did not let Publish go');
+    assert.equal(x.form._pfAudit.byName.C1.errorKind, '', 'the stale not_checked verdict was kept');
+    x = await run({ error: 'The profile is busy with another job', error_kind: 'not_checked', results: [] });
+    assert.equal(x.log.fetched.length, 1);
+    assert.equal(x.log.proceeded, 1, 'a repeated could-not-check blocked Publish');
+    x = await run({ error: 'not active', error_kind: 'account', results: [],
+      account_audit: { rule: 'account_active', status: 'error', detail: 'not active', ads: [] } });
+    assert.equal(x.log.proceeded, 0, 'an account refusal after a stored not_checked verdict let Publish through');
+  }
   // 7. Одна из двух кампаний с ошибкой — не пускает обе (Publish all).
   {
     const { w, log } = world('rpa', {});
