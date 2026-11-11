@@ -236,6 +236,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
         "form_create": policy_for_form_create(page),
+        "form_photo": policy_for_form_photo(page),
     }
 
 
@@ -829,6 +830,56 @@ def _check_form_question(q: Any, i: int) -> None:
             o = _form_keys(o, "option", f"{where}.options[{j}]")
             _form_text(o.get("key"), f"{where}.options[{j}].key")
             _form_text(o.get("value"), f"{where}.options[{j}].value")
+
+
+# ───────────────────── фон формы: загрузка картинки (ACL-2533) ─────────────────────
+#
+# НЕ Graph: тот же запрос, что шлёт сам Ads Manager (`/ads/leadgen/upload/photo/`), с вкладки профиля,
+# от имени Страницы (`av`) и по сессии пользователя. Отдельная узкая политика: фиксированный адрес,
+# хост страницы, `av` = закреплённая Страница, jpeg/png, потолок размера. Зеркало на странице-помощнике -
+# `uploadFormPhoto` в token_capture (читает ту же таблицу из `policy_for_form_photo()`).
+
+FORM_PHOTO_HOST = "adsmanager.facebook.com"
+FORM_PHOTO_URL = "https://adsmanager.facebook.com/ads/leadgen/upload/photo/"
+FORM_PHOTO_MIMES = ("image/jpeg", "image/png")
+FORM_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+#: Один запрос на одну картинку; идёт в оценку вызовов вместе с чтениями Страницы.
+FORM_PHOTO_UPLOAD_CALLS = 1
+
+
+def policy_for_form_photo(page: str = "") -> dict:
+    """Политика загрузки фона формы для помощника страницы (JSON-сериализуемая)."""
+    return {"host": FORM_PHOTO_HOST, "url": FORM_PHOTO_URL, "page": str(page or ""),
+            "mimes": list(FORM_PHOTO_MIMES), "max_bytes": FORM_PHOTO_MAX_BYTES, "page_re": FORM_PAGE_RE}
+
+
+def policy_for_form_photo_only(page: str = "") -> dict:
+    """Помощник, который умеет ТОЛЬКО эту загрузку: ни рёбер Graph, ни правок объектов."""
+    return {"form_photo_only": True, "form_photo": policy_for_form_photo(page)}
+
+
+def check_form_photo_upload(host: str, av: str, pinned_page: str, mime: str, size: int) -> str:
+    """Проверить загрузку фона формы. Возвращает адрес запроса; иначе `WriteRefused`.
+
+    Хост - только `adsmanager.facebook.com`; `av` (Страница-актёр) - числовой id и ровно закреплённая
+    Страница сессии; файл - jpeg/png, не пустой и не больше потолка.
+    """
+    if str(host or "").lower() != FORM_PHOTO_HOST:
+        raise WriteRefused(f"write refused: the form background is uploaded only from {FORM_PHOTO_HOST}")
+    if not re.match(FORM_PAGE_RE, str(pinned_page or "")):
+        raise WriteRefused("write refused: no Page is pinned for this session; the upload is off")
+    if not re.match(FORM_PAGE_RE, str(av or "")):
+        raise WriteRefused("write refused: the Page of the upload is not set")
+    if str(av) != str(pinned_page):
+        raise WriteRefused("write refused: the upload Page is not the Page of the plan")
+    if mime not in FORM_PHOTO_MIMES:
+        raise WriteRefused("write refused: the background image must be a JPEG or PNG")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise WriteRefused("write refused: the background image is empty")
+    if size > FORM_PHOTO_MAX_BYTES:
+        raise WriteRefused(f"write refused: the background image is larger than "
+                           f"{FORM_PHOTO_MAX_BYTES // (1024 * 1024)} MB")
+    return FORM_PHOTO_URL
 
 
 def check_form_create(page_id: str, method: str, path: str, params: dict | None,

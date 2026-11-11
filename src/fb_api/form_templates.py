@@ -82,9 +82,11 @@ _HTTPS_RE = re.compile(r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$", re
 _ID_RE = re.compile(r"^[0-9a-f]{12}$")
 #: ACL-2188: id фото Страницы (и самой Страницы) - строка из цифр. Зеркало: FORM_PHOTO_ID_RE в write_policy.
 PHOTO_ID_RE = re.compile(r"^[0-9]{1,25}$")
+#: ACL-2533: sha256 загруженного файла (метка «та же картинка на той же Странице»); сами байты в библиотеку не кладём.
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 #: Ключи, которые `save` убирает из записи, когда редактор их не прислал (иначе Remove ничего не делает:
 #: `{**was, **out}` хранит старое значение).
-DROPPED_WHEN_EMPTY = ("cover_photo_id", "cover_page_id")
+DROPPED_WHEN_EMPTY = ("cover_photo_id", "cover_page_id", "cover_sha256")
 
 _lock = threading.RLock()
 
@@ -146,6 +148,13 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
             errors.append("Photo ID must contain digits only")
         else:
             out["cover_photo_id"], out["cover_page_id"] = cover_photo, cover_page
+            # ACL-2533: необязательный sha256 файла, загруженного из билдера; для выбранного со Страницы его нет.
+            cover_sha = _s(src.get("cover_sha256")).lower()
+            if cover_sha:
+                if SHA256_RE.match(cover_sha):
+                    out["cover_sha256"] = cover_sha
+                else:
+                    errors.append("Background image checksum must be 64 hex characters")
         if not out["intro"]:
             errors.append("Background image needs a Description (Meta shows it on the intro screen)")
 

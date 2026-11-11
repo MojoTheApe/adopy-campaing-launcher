@@ -227,7 +227,7 @@ REJECTION_SUBCODES = frozenset({1870226})
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
 _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", "retired",
-             "bad_path", "forbidden_param"}
+             "bad_path", "forbidden_param", "no_session"}
 
 
 def classify(code: int | None, subcode: int | None = None) -> str:
@@ -642,6 +642,53 @@ class GraphClient:
             raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path,
                                status=status if isinstance(status, int) else None)
         return body
+
+    #: ACL-2533: the address of the form-background upload (a web-session request, not a Graph path).
+    FORM_PHOTO_PATH = "/ads/leadgen/upload/photo/"
+
+    def upload_form_photo(self, page_id: str, data: bytes, *, mime: str) -> dict:
+        """ACL-2533: ONE upload of a lead form background as the pinned Page. Returns `{photo_id, width, height}`.
+
+        Not a Graph write: the transport sends the same request Ads Manager sends, from the profile's own
+        tab. It counts as one call of the budget and is never repeated. Meta's refusal is `GraphError` with
+        Meta's text; a failure after sending is `WriteUnknown` (an orphan photo is harmless and is not read back).
+        """
+        if not callable(getattr(self.transport, "upload_form_photo", None)):
+            raise ValueError("this transport cannot upload a form background")
+        if self.stopped is not None:
+            raise self.stopped
+        if self.calls >= self.max_calls:
+            raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
+        self._pace()
+        self.calls += 1
+        self.writes += 1
+        self._last_call = self._clock()
+        try:
+            reply = self.transport.upload_form_photo(page_id, data, mime=mime)
+        except ValueError as exc:
+            raise self._stop(PageFailed(f"upload refused before sending: {exc}")) from exc
+        except GraphStop as exc:
+            raise self._stop(exc) from exc
+        self._last_call = self._clock()
+        err = reply.get("error") if isinstance(reply, dict) else "bad_reply"
+        if isinstance(err, str):
+            if err in _NOT_SENT:
+                why = reply.get("why") if isinstance(reply, dict) else ""
+                raise self._stop(PageFailed(f"the page refused the upload ({err}{': ' + str(why) if why else ''})"))
+            if err == "no_token":
+                self._check_page()
+                raise self._stop(LoggedOut("no session in the page; the upload was not sent"))
+            if err == "upload_refused":
+                raise GraphError("Meta refused the background image: "
+                                 + scrub(str(reply.get("text") or "no reason given"))[:300],
+                                 status=reply.get("status") if isinstance(reply.get("status"), int) else None)
+            raise WriteUnknown(f"the upload result is unknown ({err})", path=self.FORM_PHOTO_PATH,
+                               reason=str(reply.get("reason") or err) if isinstance(reply, dict) else err)
+        if reply.get("ok") is not True or not re.fullmatch(r"[0-9]{1,25}", str(reply.get("photo_id") or "")):
+            raise WriteUnknown("the upload reply had no photo id", path=self.FORM_PHOTO_PATH)
+        def _num(v: Any) -> int:
+            return int(v) if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+        return {"photo_id": str(reply["photo_id"]), "width": _num(reply.get("width")), "height": _num(reply.get("height"))}
 
     def _check_page_after_write(self, path: str) -> None:
         """Проверка страницы после записи с неизвестным результатом.

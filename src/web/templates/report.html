@@ -7259,6 +7259,8 @@ window.cbLayout = (function () {
     if (coverPhoto || coverPage) {
       if (!(coverPhoto && coverPage)) e.push('Background image needs both a Photo ID and a Page');
       else if (!(/^[0-9]{1,25}$/.test(coverPhoto) && /^[0-9]{1,25}$/.test(coverPage))) e.push('Photo ID must contain digits only');
+      var coverSha = squeeze(t.cover_sha256).toLowerCase();
+      if (coverSha && !/^[0-9a-f]{64}$/.test(coverSha)) e.push('Background image checksum must be 64 hex characters');
       if (!String(t.intro || '').trim()) e.push('Background image needs a Description (Meta shows it on the intro screen)');
     }
     var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
@@ -18059,13 +18061,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
 
   function panelValue(panel, sel) { var el = panel.querySelector(sel); return el ? String(el.value || '') : ''; }
 
-  /* ACL-2188: выбор фоновой картинки формы - общий для вкладки Forms и панели билдера.
+  /* ACL-2188/2533: выбор фоновой картинки формы - общий для вкладки Forms и панели билдера.
      Одно чтение на нажатие «Choose from Page»: ни опроса, ни чтения при отрисовке.
-     Строки и подписи - только textContent (имена форм приходят извне); картинок на экране нет
-     (ни одного <img>: адреса Meta из дешборда не грузим). */
+     ACL-2533: «Upload» берёт файл с этого компьютера; предпросмотр - ТОЛЬКО из локального файла
+     (blob:), адреса Meta из дешборда не грузим никогда. Файл уходит на Страницу по отдельной кнопке
+     «Upload to Page», через вкладку профиля. Строки и подписи - только textContent (имена приходят извне). */
   window.formCoverPicker = function (box, getContext, opts) {
     var btnClass = (opts && opts.btnClass) || 'btn';
-    var st = { photo: '', page: '' };
+    var st = { photo: '', page: '', sha: '' };
+    var MAX_BYTES = 8 * 1024 * 1024;
+    var file = null, localUrl = '';
     function node(tag, text, cls) {
       var n = document.createElement(tag);
       if (text) n.textContent = text;
@@ -18076,36 +18081,85 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     box.textContent = '';
     var title = node('div', 'Background image (optional)');
     title.style.fontWeight = '600';
-    var help = node('div', 'A picture already on this Page, shown on the intro screen. To add a new one, upload it once in a form in Ads Manager.', 'cb-form-note');
+    var help = node('div', 'Upload a picture from this computer (JPEG or PNG, up to 8 MB) or choose one already on this Page. It is shown on the intro screen.', 'cb-form-note');
     var hint = node('div', 'Landscape pictures around 1.91:1 (for example 1200×628) usually fit best.', 'cb-form-note');
     var state = node('div', '', 'cb-form-note');
     var idLabel = node('label', 'Photo ID ');
     var idInput = node('input'); idInput.type = 'text'; idInput.setAttribute('inputmode', 'numeric'); idInput.maxLength = 25;
     idLabel.appendChild(idInput);
     var pick = button('Choose from Page'), remove = button('Remove');
+    var fileLabel = node('label', 'Upload ');
+    var fileInput = node('input'); fileInput.type = 'file'; fileInput.setAttribute('accept', 'image/jpeg,image/png');
+    fileLabel.appendChild(fileInput);
+    var send = button('Upload to Page'); send.disabled = true;
+    var preview = node('img'); preview.alt = 'Preview of the selected background image'; preview.hidden = true;
+    preview.style.cssText = 'display:block;max-width:240px;max-height:160px;margin:0.3rem 0;border-radius:4px';
     var actions = node('div'); actions.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.3rem 0';
-    actions.appendChild(idLabel); actions.appendChild(pick); actions.appendChild(remove);
+    actions.appendChild(fileLabel); actions.appendChild(send); actions.appendChild(idLabel); actions.appendChild(pick); actions.appendChild(remove);
     var msg = node('div', '', 'cb-form-note'); msg.setAttribute('role', 'status');
     var list = node('div');
-    [title, help, hint, state, actions, msg, list].forEach(function (n) { box.appendChild(n); });
+    [title, help, hint, state, preview, actions, msg, list].forEach(function (n) { box.appendChild(n); });
 
+    function clearLocal() {
+      if (localUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) { try { URL.revokeObjectURL(localUrl); } catch (e) {} }
+      file = null; localUrl = ''; preview.hidden = true; preview.removeAttribute && preview.removeAttribute('src'); send.disabled = true;
+    }
     function paint() {
-      state.textContent = st.photo ? 'Photo ' + st.photo + ', Page ' + (st.page || '—') : '';
+      state.textContent = st.photo ? 'Photo ' + st.photo + ', Page ' + (st.page || '—') + (st.sha ? ', uploaded from this computer' : '') : '';
       if (idInput.value !== st.photo) idInput.value = st.photo;
     }
     idInput.addEventListener('input', function () {
       st.photo = idInput.value.trim();
+      st.sha = '';
       if (!st.photo) st.page = '';
       else if (!st.page) st.page = String((getContext() || {}).pageId || '');
       paint();
     });
-    remove.addEventListener('click', function () { st.photo = ''; st.page = ''; list.textContent = ''; msg.textContent = ''; paint(); });
+    remove.addEventListener('click', function () { st.photo = ''; st.page = ''; st.sha = ''; clearLocal(); list.textContent = ''; msg.textContent = ''; paint(); });
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      clearLocal();
+      msg.textContent = '';
+      if (!f) return;
+      if (f.type !== 'image/jpeg' && f.type !== 'image/png') { msg.textContent = 'The background image must be a JPEG or PNG file.'; return; }
+      if (f.size > MAX_BYTES) { msg.textContent = 'The background image is larger than 8 MB.'; return; }
+      file = f;
+      localUrl = URL.createObjectURL(f);          // blob: from the local file; never a Meta address
+      preview.src = localUrl; preview.hidden = false;
+      send.disabled = false;
+      msg.textContent = 'Preview from this computer. Press "Upload to Page" to send it through the profile.';
+    });
+    send.addEventListener('click', function () {
+      var ctx = getContext() || {};
+      list.textContent = '';
+      if (!file) { msg.textContent = 'Choose a JPEG or PNG file first.'; return; }
+      if (!ctx.account || !ctx.pageId) { msg.textContent = 'Refresh Facebook Pages before uploading an image.'; return; }
+      if (send.disabled) return;
+      send.disabled = true; pick.disabled = true;
+      var who = ctx.formName ? 'Form "' + ctx.formName + '": ' : '';
+      msg.textContent = 'Uploading through the profile…';
+      var body = new FormData();
+      body.append('account_label', ctx.account);
+      body.append('page_id', ctx.pageId);
+      body.append('file', file, 'background');
+      function done(text, ok) { pick.disabled = false; send.disabled = !file || ok === true; msg.textContent = text || ''; }
+      fetch('/api/form-photo-upload', { method: 'POST', body: body })
+        .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
+        .then(function (d) {
+          if (d.ok && d.photo_id) {
+            st.photo = String(d.photo_id); st.page = String(d.page_id || ctx.pageId); st.sha = String(d.sha256 || ''); paint();
+            return done('Uploaded to the Page. Save the template to keep it.', true);
+          }
+          done(who + (d.message || d.error || 'The picture could not be uploaded'));
+        })
+        .catch(function () { done(who + 'The dashboard did not answer; try again'); });
+    });
     function row(p) {
       var label = p.form_name ? 'Cover of form "' + p.form_name + '"'
         : 'Page photo, ' + (p.width || '?') + '×' + (p.height || '?') + (p.created_time ? ', ' + String(p.created_time).slice(0, 10) : '');
       var b = button(label + ' — ' + p.id);
       b.style.cssText = 'display:block;margin:0.2rem 0;text-align:left';
-      b.addEventListener('click', function () { st.photo = String(p.id); st.page = String((getContext() || {}).pageId || ''); paint(); });
+      b.addEventListener('click', function () { st.photo = String(p.id); st.page = String((getContext() || {}).pageId || ''); st.sha = ''; paint(); });
       return b;
     }
     pick.addEventListener('click', function () {
@@ -18134,8 +18188,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     });
     paint();
     return {
-      get: function () { return { cover_photo_id: st.photo, cover_page_id: st.page }; },
-      set: function (photo, page) { st.photo = String(photo || ''); st.page = String(page || ''); list.textContent = ''; msg.textContent = ''; paint(); }
+      get: function () { return { cover_photo_id: st.photo, cover_page_id: st.page, cover_sha256: st.sha }; },
+      set: function (photo, page, sha) {
+        st.photo = String(photo || ''); st.page = String(page || ''); st.sha = st.photo ? String(sha || '') : '';
+        clearLocal(); list.textContent = ''; msg.textContent = ''; paint();
+      }
     };
   };
 
@@ -18144,7 +18201,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
     return {
       account: row ? formAccount(row) : '',
-      pageId: window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '')
+      pageId: window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : ''),
+      formName: panelValue(panel, '.cb-fc-name')
     };
   }
   function coverOf(panel) {
@@ -24193,10 +24251,10 @@ window.aclTeamLibrary = (function () {
     el('fm-cover-pages-msg').textContent = '';
     if (!cover) {
       cover = window.formCoverPicker(el('fm-cover'), function () {
-        return {account: el('fm-cover-account').value, pageId: el('fm-cover-page').value};
+        return {account: el('fm-cover-account').value, pageId: el('fm-cover-page').value, formName: el('fm-name').value};
       });
     }
-    cover.set(tpl.cover_photo_id, tpl.cover_page_id);
+    cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256);
   }
 
   function fillEditor(tpl, title, invalidErrors) {
@@ -24280,7 +24338,7 @@ window.aclTeamLibrary = (function () {
     var t = ev.target;
     if (!t || pending) return;
     if (t.id === 'fm-cover-account') loadCoverPages(false, '');
-    if (t.id === 'fm-cover-page' && cover && cover.get().cover_photo_id) cover.set(cover.get().cover_photo_id, t.value);
+    if (t.id === 'fm-cover-page' && cover && cover.get().cover_photo_id) cover.set(cover.get().cover_photo_id, t.value, '');
   });
 
   document.addEventListener('click', function (ev) {

@@ -471,7 +471,8 @@ def test_the_picker_loads_no_remote_image_and_the_csp_is_not_relaxed():
     page = HTML.read_text(encoding="utf-8")
     start = page.index("window.formCoverPicker = function")
     picker = page[start:page.index("function coverContext", start)]
-    assert "<img" not in picker and "createElement('img')" not in picker and ".src" not in picker
+    # ACL-2533: the one <img> is the local preview; its src is only ever the blob: of the chosen file.
+    assert re.findall(r"\.src\s*=\s*([^;]+);", picker) == ["localUrl"]
     assert "https://" not in picker and "innerHTML" not in picker
     app = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
     assert "img-src 'self' data: blob:;" in app
