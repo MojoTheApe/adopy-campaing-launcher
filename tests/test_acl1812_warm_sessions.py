@@ -441,11 +441,12 @@ def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(
     first = rig.checkout(a)
     free[0] = 1400                          # ACL-2255: занято 91 % из 16 ГБ (порог 90 %), а не «6 ГБ на профиль»
     with pytest.raises(warm.WarmError) as ei:     # ACL-2400: said at once, no wait
-        rig.checkout(b)
-    assert str(ei.value) == warm.MEMORY_HOLD_MESSAGE, "started while more than 90% of memory was in use"
+        rig.gate.acquire(b, fail_on_memory=True)   # ACL-2369: the gate for a NEW profile
+    # 16000 MB at 90 %: 1600 MB must stay free, 1400 free -> 200 MB more (ACL-2369)
+    assert str(ei.value) == warm.memory_hold_text("200 MB"), "started while more than 90% of memory was in use"
     free[0] = 3000                          # занято 81 % — можно, хотя замер профиля 6 ГБ
-    second = rig.checkout(b)
-    second.release()
+    rig.gate.acquire(b, fail_on_memory=True)
+    rig.gate.release(b)
     first.release()
 
 
@@ -1173,15 +1174,15 @@ def test_a_dead_owners_tab_is_closed_but_never_a_live_ones(tmp_path):
     assert heir.tabs[0].closed_targets == ["T-dead-owner"]
 
 
-def test_first_action_below_the_memory_reserve_is_refused_at_once_with_a_clear_message(tmp_path, monkeypatch):
-    # ACL-2400: no wait for memory; the short line is said at once.
+def test_first_action_on_a_warm_profile_is_not_memory_gated(tmp_path, monkeypatch):
+    # ACL-2369 (was ACL-2400 "first action below the reserve is refused"): the profile is already open, using it
+    # opens nothing new, so the first action goes even with no memory left.
     monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
     rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
     rig.warm_up()
-    with pytest.raises(warm.WarmError) as ei:
-        rig.checkout()
-    assert ei.value.code == "below_reserve" and str(ei.value) == warm.MEMORY_HOLD_MESSAGE
-    assert rig.tabs == [] and rig.gate.active() == []
+    sess = rig.checkout()
+    assert rig.gate.active() == [PID] and len(rig.tabs) == 1
+    sess.release()
 
 
 def test_opening_waits_for_the_growth_of_profiles_still_warming_up(tmp_path, monkeypatch):
@@ -1199,9 +1200,9 @@ def test_opening_waits_for_the_growth_of_profiles_still_warming_up(tmp_path, mon
 
     rig.reg._sleep = sleeping
     res = rig.reg.open_one("A2", entry("b" * 8 + "-0000-4000-8000-000000000000"))
-    # ACL-2400: one short line (the numbers go to the log); ACL-2470: after one 1.5 s re-check (the fake sleep
-    # jumps 30 s, past the 10 s grace), not after the old 2-minute wait.
-    assert res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE and calls == [1.5]
+    # ACL-2400/2369: one short line with the missing amount (the numbers go to the log); ACL-2470: after one
+    # 1.5 s re-check (the fake sleep jumps 30 s, past the 10 s grace), not after the old 2-minute wait.
+    assert res["code"] == "memory_low" and res["message"] == warm.memory_hold_text("2.0 GB") and calls == [1.5]
     # После прогрева (settle) тот же объём свободной памяти уже хватает.
     monkeypatch.setenv(warm.SETTLE_ENV, "10")
     rig.now[0] += 200

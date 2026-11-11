@@ -20823,10 +20823,14 @@ function cbMemoryWait(q) {
   var hint = '. Close a Multilogin profile you don\'t need.';
   if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  /* ACL-2369: сколько ещё освободить (short_mb от сервера, иначе need - available), от 0.1 ГБ. */
+  var shortMb = q.short_mb != null ? Number(q.short_mb) : (Number(q.need_mb) || 0) - (Number(q.available_mb) || 0);
+  var shortGb = shortMb > 0 ? (Math.ceil(shortMb / 1024 * 10 - 1e-9) / 10).toFixed(1) : '';
   /* ACL-2255: решает доля занятой памяти, а не «ГБ на профиль». */
   if (q.used_pct != null && q.max_used_pct != null) {
     return 'Waiting for memory: ' + Math.round(q.used_pct) + '% in use, a new profile starts below ' + Math.round(q.max_used_pct)
-      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)' + tail + hint;
+      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)'
+      + (shortGb ? '. Free about ' + shortGb + ' GB more — close a Multilogin profile you don\'t need.' + tail : tail + hint);
   }
   var reserve = Number(q.reserve_mb) || 0;
   var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
@@ -24602,6 +24606,14 @@ window.cwWorkbench = (function () {
     var sec = a.slot.querySelector('.cb-adset-sec[data-adset="' + (a.setIndex || 0) + '"]');
     var input = (sec || a.slot).querySelector('.cb-targeting-search');
     if (!input) return { done: false, text: 'This draft has no targeting field.' };
+    /* Прежний выбор снимаем сами: человек печатает — срабатывает oninput и сбрасывает скрытый код,
+       а тут значение кладёт код. Иначе cbTargetingCommit видит старый код («уже выбрано мышью»),
+       возвращает true, и меняется только имя в поле, а таргет остаётся прежним. */
+    var tgtWrap = input.closest('.cb-targeting-wrap');
+    var tgtHidden = tgtWrap && tgtWrap.querySelector('.cb-targeting-hidden');
+    var tgtHint = tgtWrap && tgtWrap.querySelector('.cb-targeting-hint');
+    if (tgtHidden) tgtHidden.value = '';
+    if (tgtHint) tgtHint.textContent = '';
     input.value = ev.target;
     var ok = typeof window.cbTargetingCommit === 'function' && window.cbTargetingCommit(input);
     if (ok) { changed(input); return { done: true, text: 'Target “' + ev.target + '” set on Ad set ' + ((a.setIndex || 0) + 1) + '.' }; }

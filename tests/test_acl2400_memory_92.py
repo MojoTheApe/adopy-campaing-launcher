@@ -112,15 +112,20 @@ def _fail_if_slow(started: float, limit: float = 5.0) -> None:
 def test_a_held_action_gets_the_memory_message_at_once_without_waiting(tmp_path):
     import time
 
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))   # default 300 s account gate wait
     rig.warm_up()
+    other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    rig.warm_up(other, account="Acc2")
+    first = rig.checkout(other, account="Acc2")   # ACL-2369: the first action on a warm profile is never held
     started = time.monotonic()
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout()
+        rig.gate.acquire(PID, fail_on_memory=True)   # ACL-2369: the gate that guards a NEW profile
     _fail_if_slow(started)
-    assert str(ei.value) == warm.MEMORY_HOLD_MESSAGE and ei.value.code in ("below_reserve", "memory_low")
+    # 16000 MB at the rig's 90 %: 1600 MB must stay free, 1000 free -> 600 MB more
+    assert str(ei.value) == warm.memory_hold_text("600 MB") and ei.value.code in ("below_reserve", "memory_low")
     assert "safety reserve" not in str(ei.value)
-    assert rig.gate.active() == []
+    assert rig.gate.active() == [other]
+    first.release()
 
 
 def test_a_busy_account_gate_still_waits_but_memory_does_not(tmp_path, monkeypatch):
@@ -139,7 +144,7 @@ def test_a_busy_account_gate_still_waits_but_memory_does_not(tmp_path, monkeypat
 def test_starting_a_closed_profile_reports_memory_after_the_short_grace(tmp_path):
     rig = Rig(tmp_path, reg_memory=lambda: ps.MemoryReading(64000, 1600))
     res = rig.reg.open_one("Acc", entry("a" * 8 + "-0000-4000-8000-000000000000"))
-    assert res["ok"] is False and res["code"] == "memory_low" and res["message"] == warm.MEMORY_HOLD_MESSAGE
+    assert res["ok"] is False and res["code"] == "memory_low" and res["message"].startswith(warm.MEMORY_HOLD_MESSAGE + " (free about ")
     # ACL-2470: a short grace (fake clock), not the 2 minutes of the old wait
     assert 10 <= sum(rig.sleeps) <= 11.5, "re-checked for the 10 s grace only"
 
@@ -179,9 +184,20 @@ def test_the_read_session_turns_the_memory_refusal_into_the_message(monkeypatch)
 
 # --- ACL-2470: 10 s grace before the refusal (fake clocks, no real sleeping) ------------------------
 
-def test_gate_memory_dip_that_recovers_within_the_grace_lets_the_action_go(tmp_path):
-    rig = Rig(tmp_path)
+OTHER = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+
+
+def _second_action_rig(rig):
+    """ACL-2369: the first action on a warm profile is never held; only the SECOND simultaneous one is."""
     rig.warm_up()
+    rig.warm_up(OTHER, account="Acc2")
+    return rig.checkout(OTHER, account="Acc2")
+
+
+def test_gate_memory_dip_that_recovers_within_the_grace_lets_the_second_action_go(tmp_path):
+    rig = Rig(tmp_path, limit=2)
+    first = _second_action_rig(rig)
+    rig.gate_skew[0] = 0
     reads = []
 
     def dipping():
@@ -190,28 +206,34 @@ def test_gate_memory_dip_that_recovers_within_the_grace_lets_the_action_go(tmp_p
         return ps.MemoryReading(16000, 1000 if rig.gate_skew[0] < 4 else 9000)
 
     rig.gate._memory = dipping
-    lease = rig.checkout()
-    assert rig.gate.active() == [PID] and 0 < rig.gate_skew[0] < 10 and len(reads) >= 3
-    lease.release()
+    rig.gate.acquire(PID, fail_on_memory=True)
+    assert sorted(rig.gate.active()) == sorted([PID, OTHER]) and 0 < rig.gate_skew[0] < 10 and len(reads) >= 3
+    rig.gate.release(PID)
+    first.release()
 
 
-def test_gate_sustained_shortage_refuses_after_at_most_ten_seconds(tmp_path):
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
-    rig.warm_up()
+def test_gate_sustained_shortage_refuses_the_second_action_after_at_most_ten_seconds(tmp_path):
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    first = _second_action_rig(rig)
+    rig.gate_skew[0] = 0
+    rig.gate_pauses.clear()
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout()
-    assert str(ei.value) == warm.MEMORY_HOLD_MESSAGE and ei.value.code in ("below_reserve", "memory_low")
+        rig.gate.acquire(PID, fail_on_memory=True)
+    # 16000 MB at 90 %: 1600 MB must stay free, 1000 free -> 600 MB more
+    assert str(ei.value) == warm.memory_hold_text("600 MB") and ei.value.code in ("below_reserve", "memory_low")
     assert 9.9 <= rig.gate_skew[0] <= 10.1 and all(0 < p <= 2 for p in rig.gate_pauses)
-    assert rig.gate.active() == []
+    assert rig.gate.active() == [OTHER]
+    first.release()
 
 
-def test_gate_refusal_log_keeps_the_numbers_of_acl_2400(tmp_path, caplog):
+def test_gate_refusal_log_of_the_second_action_keeps_the_numbers_of_acl_2400(tmp_path, caplog):
     import logging
 
-    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
-    rig.warm_up()
+    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(16000, 1000))
+    first = _second_action_rig(rig)
     with caplog.at_level(logging.INFO), pytest.raises(warm.WarmError):
-        rig.checkout()
+        rig.gate.acquire(PID, fail_on_memory=True)
+    first.release()
     assert any("memory holds the action" in r.getMessage() and "GB free" in r.getMessage() for r in caplog.records)
 
 

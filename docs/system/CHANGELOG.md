@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2519 — Profile lease: warm checkout fails closed and leaked leases are caught — 2026-11-10
+
+Part of ACL-2502, itself part 2 of the profile ownership work (ACL-1862 / ACL-1853). Taking the robot tab of a warm profile now requires the physical profile lease in the calling thread; without it the action is refused with `profile_lease` and nothing is touched (journal: `profile_lease_refused`, path `checkout`). API reads and commands on a warm tab take the lease themselves when a side path did not, with the same key and re-entrantly, so nested calls neither deadlock nor switch keys. At the end of every read, command and publish job the lease depth is compared with its start: a lease left taken is released and journaled as `profile_lease_leaked` (no ids), so one forgotten acquire can no longer block other processes. Real two-process tests cover read, checkout, warm session and leak against a second process. Restart the dashboard after the release (Python changed).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1519).
+
+## ACL-2504 — Use target replaces the whole target, not only its name — 2026-11-10
+
+In the Country Workbench, "Use target" on an ad set that already had a chosen target changed only the name in the field: the hidden targeting code stayed, so `cbTargetingCommit` exited early. `applyTarget` now clears the hidden code and hint before substituting, so interests and code follow the name. Template change only (`report.html`), picked up by the dashboard without a restart.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1504).
+
+## ACL-2369 — Memory limit no longer stops actions on an open profile — 2026-11-09
+
+Account actions (Check plan and the like) on a profile that is already open are no longer stopped by the memory limit: the first action on a warm profile always goes, and memory limits apply only to opening a profile; a second action at the same time on an already open profile is held only by the action-count limit, not by memory. When the limit does stop something, the message says how much memory to free (for example "free about 600 MB more"). The default and the startup-only reading of ACL_MEMORY_MAX_USED_PCT are unchanged. Restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1369).
+
 ## ACL-2506 — Lifetime form test uses relative dates — 2026-11-10
 
 The Lifetime budget form test in `tests/test_acl1448_israel_time.py` typed the fixed first day 2026-11-10 and failed on that very day, because a start that is already in the past is moved to the current hour (ACL-2462). The test now builds the period from the current Israel-time day (first day = today + 3, last day = first day + 5). New York offset and schedule expectations use the actually selected start and Python ZoneInfo instead of fixed winter offsets. The existing browser scenarios cover the current relative period, winter, summer and mismatched US/Israel daylight-saving dates. Exact date assertions retain the independently selected fixture period even if Israel midnight passes before they run. The "first day is today" behaviour keeps its unchanged test. Test-only change; no application or installer behavior changes.
