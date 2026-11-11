@@ -215,9 +215,9 @@ function Get-AclRelease([string]$Git, [string]$Target, [bool]$FreshInstall) {
     # waits for that. Candidates are annotated acl-release-* tags merged into
     # main, newest first; each one's linked CI run must be confirmed by the
     # GitHub API (head_sha = the TAG's commit) and an existing install must be
-    # able to fast-forward to it. Nothing to verify with (no token, 401/403, offline) falls back
-    # to the tag's own record with a warning, unless $AclGateEnforce or
-    # ACL_UPDATE_GATE=enforce.
+    # able to fast-forward to it. Nothing to verify with (no token, 401/403,
+    # offline) falls back to the tag's own record with a warning, unless
+    # $AclGateEnforce or ACL_UPDATE_GATE=enforce.
     $mainSha = Invoke-AclGit $Git $Target @('rev-parse', 'origin/main^{commit}')
     if ($mainSha -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the production release.' }
     if (!$FreshInstall) {
