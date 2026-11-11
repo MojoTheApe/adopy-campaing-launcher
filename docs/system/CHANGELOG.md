@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2509 — Builder: connecting an account keeps the country — 2026-11-11
+
+Connecting an account from the builder drawer reloads the page, and the drawer came back on the first country of the list (Australia) with no account chosen. The drawer now parks the country (and the accounts it had) before the connect form runs and, after the reload, shows the same country with the newly added account selected. Template-only change: no dashboard restart needed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1509).
+
+## ACL-2508 — Saved-page notice and Refresh while a profile window is open — 2026-11-11
+
+While a profile window is kept open or a publish runs, the main page serves the saved
+version. The notice now says so, why, and what to do (close the window / wait for the
+publish, or press Refresh). Refresh used to rebuild the report but not the report of the
+page's period, so the reload still got the saved page; it now builds that too (the period
+comes from the page URL, or a same-origin Referer for an older saved page; malformed dates or span are ignored and never cached) and the fresh report is
+served. No live-account reads added. Python change: restart the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1508).
+
 ## ACL-2519 — Profile lease: warm checkout fails closed and leaked leases are caught — 2026-11-10
 
 Part of ACL-2502, itself part 2 of the profile ownership work (ACL-1862 / ACL-1853). Taking the robot tab of a warm profile now requires the physical profile lease in the calling thread; without it the action is refused with `profile_lease` and nothing is touched (journal: `profile_lease_refused`, path `checkout`). API reads and commands on a warm tab take the lease themselves when a side path did not, with the same key and re-entrantly, so nested calls neither deadlock nor switch keys. At the end of every read, command and publish job the lease depth is compared with its start: a lease left taken is released and journaled as `profile_lease_leaked` (no ids), so one forgotten acquire can no longer block other processes. Real two-process tests cover read, checkout, warm session and leak against a second process. Restart the dashboard after the release (Python changed).
