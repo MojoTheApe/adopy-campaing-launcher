@@ -555,6 +555,17 @@ class WarmSession:
     #: Процесс профиля сверен с реестром (после рестарта дешборда запись не доверена).
     verified: bool = False
     tab_since: float = 0.0
+    #: ACL-2344: 'light' - `tab` is the light work tab (Graph calls only, no Ads Manager app); else the
+    #: Ads Manager tab of today. Fixed per tab; a lease reads the switch once (`light_tab.enabled`).
+    mode_kind: str = "ads_manager"
+    light_since: float = 0.0
+    light_act: str = ""
+    #: The light page could not be prepared for the LAST lease: that lease ran on the Ads Manager tab. Only a
+    #: record - the next lease reads the switch again and tries the light mode (spec 5.2: fallback "for that lease").
+    light_fallback: bool = False
+    #: Consecutive light fallbacks of this profile (in memory only: a dashboard restart clears it). At
+    #: `LIGHT_FALLBACK_LIMIT` the profile stays on its Ads Manager tab - no more drop-and-restart per lease.
+    light_fallbacks: int = 0
 
     def record(self) -> dict:
         return {"account": self.account, "port": self.port, "started_at": self.started_at,
@@ -1401,6 +1412,7 @@ class WarmRegistry:
 
     def _drop_tab(self, sess: WarmSession) -> None:
         tab, sess.tab, sess.graphs = sess.tab, None, {}
+        sess.mode_kind, sess.light_since, sess.light_fallback = "ads_manager", 0.0, False
         if tab is not None:
             try:
                 tab.close()
@@ -1693,7 +1705,19 @@ class WarmRegistry:
 
     def _prepare_owned(self,sess,act,mode,make_graph):
         self._remaining()
+        from src.fb_api import light_tab as _light
+        light = _light.enabled()                  # ACL-2344: read once per lease (spec 5.1)
+        if light and sess.light_fallbacks >= self.LIGHT_FALLBACK_LIMIT:
+            light = False                         # this profile's light page keeps failing: keep its Ads Manager tab
         had_tab = sess.tab is not None and not getattr(sess.tab,"closed",False)
+        if had_tab and (sess.mode_kind == "light") != light:
+            # the switch changed since this tab was made, or the last lease fell back to the Ads Manager tab:
+            # this lease starts in the mode asked for
+            self._drop_tab(sess)
+            sess.verified = False
+            had_tab = False
+        if light:
+            return self._prepare_light(sess, act, mode, make_graph, had_tab)
         if had_tab:
             got = self._reuse(sess,act,mode,make_graph,self._remaining())
             if got is not None:
@@ -1710,6 +1734,173 @@ class WarmRegistry:
             self._remaining()
             sess.verified = False
             return self._fresh(sess,act,mode,make_graph,self._remaining())
+
+    # -- ACL-2344: the light work tab (ACL_LIGHT_WORK_TAB=1; off by default)
+    #: Decision 5: a light session takes the token again after this long even when nothing failed.
+    LIGHT_MAX_AGE_S = 6 * 3600.0
+    #: After this many consecutive light fallbacks on one profile the light mode is skipped for it (and its
+    #: Ads Manager tab is kept) until the dashboard restarts; the lease that reaches the limit is recorded.
+    LIGHT_FALLBACK_LIMIT = 2
+
+    def _prepare_light(self, sess, act, mode, make_graph, had_tab):
+        if had_tab:
+            got = self._reuse_light(sess, act, mode, make_graph)
+            if got is not None:
+                self._remaining()
+                return got
+            self._drop_tab(sess)
+            sess.verified = False
+        return self._fresh_light(sess, act, mode, make_graph)
+
+    def _light_recapture_fn(self, sess: WarmSession) -> Callable[[Any, float], dict]:
+        """A lost token on the light tab: one capture tab of THIS profile, one Ads Manager load, hand-over."""
+        from src.fb_api import light_tab as _light
+
+        def recapture(graph: Any, timeout: float) -> dict:
+            url = f"http://127.0.0.1:{sess.port}"
+            return _light.capture_into(graph, lambda: self._tab_factory(url), sess.light_act, timeout=timeout)
+        return recapture
+
+    def _record_light(self, sess: WarmSession, **row: Any) -> None:
+        try:
+            from src.fb_api import launch as _launch
+            _launch._record({"event": "fb_api_tab_context", "ok": True, "phase": "light_lease", **row})
+        except Exception:  # noqa: BLE001 - telemetry never fails the action
+            pass
+
+    def _fresh_light(self, sess: WarmSession, act: str, mode: str, make_graph: Callable[[Any], Any]):
+        """Spec 5.2: capture tab as today -> light work tab -> hand-over -> capture tab closed.
+
+        Any failure after the capture tab is ready falls back to it (today's mode) for this tab; the work tab
+        is closed. A login/checkpoint/no-token capture stops exactly as today, and no work tab is opened.
+        """
+        from src.fb_api import light_tab as _light
+
+        self._remaining()
+        capture = self._new_tab(sess)
+        began = self._mono()
+        cap_graph = make_graph(capture)
+        try:
+            cap_graph.install()
+            cap_graph.navigate(act, timeout=self._remaining(30.0))
+            state = cap_graph.wait_ready(timeout=self._remaining())
+        except GraphStop as exc:
+            if isinstance(exc, (LoggedOut, Checkpoint)):
+                self._note_login_stop(sess)
+            raise
+        except BaseException:
+            self._drop_tab(sess)
+            raise
+        self._raise_for_state(sess, state)
+        self._remaining()
+        work = graph = None
+        reason = ""
+        try:
+            work = self._tab_factory(f"http://127.0.0.1:{sess.port}")
+            doc, reason = _light.open_light_document(work)
+            if doc is None:
+                raise _LightNotReady(reason)
+            graph = make_graph(work)
+            graph.install()
+            graph.bind_act(act)
+            reason = graph.receive_from(cap_graph)
+            if reason:
+                raise _LightNotReady(reason)
+        except (_LightNotReady, Exception) as exc:  # noqa: BLE001 - every failure here falls back
+            reason = reason or ("light_doc_failed" if not isinstance(exc, _LightNotReady) else str(exc))
+            _light.settle_and_close(work)
+            sess.graphs = {mode: cap_graph}
+            sess.logged_out = False
+            sess.light_fallback = True
+            sess.light_fallbacks += 1
+            self._record_light(sess, mode="ads_manager", handover_ok=False, fallback_reason=reason,
+                               capture_tab_closed=False, capture_open_s=round(self._mono() - began, 1),
+                               light_fallbacks=sess.light_fallbacks,
+                               light_disabled_for_profile=sess.light_fallbacks >= self.LIGHT_FALLBACK_LIMIT)
+            return cap_graph, state
+        # the hand-over is acknowledged: the work tab becomes the session tab, the heavy page goes
+        graph.light_recapture = self._light_recapture_fn(sess)
+        sess.tab, sess.graphs = work, {mode: graph}
+        sess.target_id = str(getattr(work, "target_id", "") or "")
+        sess.mode_kind, sess.light_since, sess.light_act = "light", self._wall(), act
+        sess.light_fallbacks = 0
+        sess.tab_since = self._wall()
+        sess.logged_out = False
+        closed = True
+        try:
+            cap_graph._eval_helper(".retire()", timeout=10.0)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            capture.close()
+        except Exception:  # noqa: BLE001
+            closed = False
+        self._save()
+        self._record_light(sess, mode="light", handover_ok=True, fallback_reason=None,
+                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1))
+        return graph, {**state, "light": True}
+
+    def _reuse_light(self, sess: WarmSession, act: str, mode: str, make_graph: Callable[[Any], Any]):
+        """A kept light tab: still our document, still a token. `None` - replace it (one fresh light start).
+
+        No navigation on an account switch (the light tab serves every account, spec 5.7 `_reuse`); a new
+        helper mode gets the token world-to-world from a helper of the same tab.
+        """
+        from src.fb_api import light_tab as _light
+
+        tab = sess.tab
+        url = tab.browser_url()
+        if not url:
+            return None
+        stop = _url_stop(url)
+        if stop is not None:
+            self._note_login_stop(sess)
+            raise stop
+        if url != _light.LIGHT_URL or getattr(tab, "light", None) is None:
+            return None
+        if self._wall() - sess.light_since >= self.LIGHT_MAX_AGE_S:
+            return None                                   # decision 5: re-capture after 6 h
+        keep = getattr(tab, "keep_active", None)
+        if callable(keep):
+            try:
+                keep()
+            except Exception:  # noqa: BLE001
+                return None
+        if tab.light.document_intact(timeout=self._remaining(5.0)):
+            return None                                   # reloaded or replaced: the token is gone
+        graph = sess.graphs.get(mode)
+        if graph is None:
+            donor = next((g for g in sess.graphs.values() if g is not None), None)
+            if donor is None:
+                return None
+            graph = make_graph(tab)
+            graph.install()
+            graph.bind_act(act)
+            graph.light_recapture = self._light_recapture_fn(sess)
+            if graph.receive_from(donor):
+                return None
+        else:
+            graph.bind_act(act)
+        sess.light_act = act
+        try:
+            state = graph.live_state(timeout=self._remaining(5.0))
+        except (LoggedOut, Checkpoint):
+            self._note_login_stop(sess)
+            raise
+        except Exception:  # noqa: BLE001
+            return None
+        if state.get("kind") in ("login", "checkpoint"):
+            self._raise_for_state(sess, state)
+        if not state.get("has_token"):
+            return None
+        graph.light_recaptures = 0                         # the re-capture bound is per lease
+        sess.graphs[mode] = graph
+        sess.logged_out = False
+        return graph, state
+
+
+class _LightNotReady(Exception):
+    """The light page could not be prepared; the message is a `light_tab.REASONS` code."""
 
 
 class PatientEpisode:
