@@ -1,5 +1,293 @@
 # System history
 
+## ACL-2519 — Profile lease: warm checkout fails closed and leaked leases are caught — 2026-11-10
+
+Part of ACL-2502, itself part 2 of the profile ownership work (ACL-1862 / ACL-1853). Taking the robot tab of a warm profile now requires the physical profile lease in the calling thread; without it the action is refused with `profile_lease` and nothing is touched (journal: `profile_lease_refused`, path `checkout`). API reads and commands on a warm tab take the lease themselves when a side path did not, with the same key and re-entrantly, so nested calls neither deadlock nor switch keys. At the end of every read, command and publish job the lease depth is compared with its start: a lease left taken is released and journaled as `profile_lease_leaked` (no ids), so one forgotten acquire can no longer block other processes. Real two-process tests cover read, checkout, warm session and leak against a second process. Restart the dashboard after the release (Python changed).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1519).
+
+## ACL-2504 — Use target replaces the whole target, not only its name — 2026-11-10
+
+In the Country Workbench, "Use target" on an ad set that already had a chosen target changed only the name in the field: the hidden targeting code stayed, so `cbTargetingCommit` exited early. `applyTarget` now clears the hidden code and hint before substituting, so interests and code follow the name. Template change only (`report.html`), picked up by the dashboard without a restart.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1504).
+
+## ACL-2369 — Memory limit no longer stops actions on an open profile — 2026-11-09
+
+Account actions (Check plan and the like) on a profile that is already open are no longer stopped by the memory limit: the first action on a warm profile always goes, and memory limits apply only to opening a profile; a second action at the same time on an already open profile is held only by the action-count limit, not by memory. When the limit does stop something, the message says how much memory to free (for example "free about 600 MB more"). The default and the startup-only reading of ACL_MEMORY_MAX_USED_PCT are unchanged. Restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1369).
+
+## ACL-2506 — Lifetime form test uses relative dates — 2026-11-10
+
+The Lifetime budget form test in `tests/test_acl1448_israel_time.py` typed the fixed first day 2026-11-10 and failed on that very day, because a start that is already in the past is moved to the current hour (ACL-2462). The test now builds the period from the current Israel-time day (first day = today + 3, last day = first day + 5). New York offset and schedule expectations use the actually selected start and Python ZoneInfo instead of fixed winter offsets. The existing browser scenarios cover the current relative period, winter, summer and mismatched US/Israel daylight-saving dates. Exact date assertions retain the independently selected fixture period even if Israel midnight passes before they run. The "first day is today" behaviour keeps its unchanged test. Test-only change; no application or installer behavior changes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1506).
+
+## ACL-2495 — Builder no longer lists accounts removed on the Accounts page — 2026-11-09
+
+The Campaign Builder now skips accounts removed with Remove on the Accounts page (such as FacebookMKTOBFLV97 KW and W72 KW); a restored account is listed again. Restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1495).
+
+## ACL-2491 — Check plan finds interests through the ad account search — 2026-11-09
+
+Interests that the Ads Manager targeting box accepts are now found by Check plan too: after a miss in the interest search the resolver also looks the interest up through the ad account search (`act_X/targetingsearch`, one extra optional read per miss).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1491).
+
+## ACL-2419 — Home accounts: status comes from Meta, a stale "no warning" is never shown as fact — 2026-11-09
+
+Every campaign-list read already fetches the ad account (`account_status`, `disable_reason`); it now also stores that status (no extra request). A `clear` status older than 24 hours, or followed by a failed read, is shown as **unknown** with its date instead of "no warning"/"active"; disabled, restricted, review and blocked statuses stay visible and are marked "not refreshed". Home counts an account with such a stale or failed `clear` as **Unknown** even if it has spend, and the State cell shows the status word, the read time and the disable reason. After **Open** succeeds, one **status-only** read goes through the existing refresh queue (same lease, pause, cooldown and call budget; no timer or polling; a second click while one is queued adds nothing): exactly one request to the ad account itself — no campaign tree, no insights, no country split — and it never replaces the saved campaign list.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1419).
+
+## ACL-1862 — Close/Open profiles take the profile lease — 2026-11-09
+
+"Close profiles" and the fresh start of "Open profiles for today" now run under the physical profile lease (non-blocking). If another ACM operation (a read, a publish, another process) is using the profile, the button answers "busy" / "profile_lease" at once and nothing is stopped or started; one busy profile does not break a batch. The lease is taken after the memory/start-turn waits, so readers are not stalled. Adds the `try_lease` helper (for ACL-2091) and the `profile_lease_refused` journal event (no ids). Remaining parts of the task (checkout fails closed, job-end assertion, mixed-path tests) follow in separate PRs.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/862).
+
+## ACL-2494 — Builder shows accounts whose country is set on the Accounts page — 2026-11-09
+
+The Campaign Builder now takes an account's country from the Accounts page links when the account map has none, and matches the sheet by (account, country), so accounts such as FacebookDoc283 appear in the builder.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1494).
+
+## ACL-2474 — Asset-feed ad without a primary text is accepted — 2026-11-09
+
+Check plan and the write guard no longer refuse an asset-feed ad (several texts or a Stories / Reels file) that has a headline but no primary text: Meta accepted it in the live run of 2026-11-08, so it is now only a "no primary text" warning. The rule `feed_texts` now fires only when the headline is missing; the request leaves out `bodies` when there is no primary text. A primary text without a headline and an ad with no texts at all are still refused (not yet verified live).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1474).
+
+## ACL-2293 — Run limits in Settings and a "ceiling reached" wait — 2026-11-09
+
+Settings → "Run limits" changes the profile ceiling (1-8), heavy actions at once (1-3) and the
+memory share that stops new profiles (50-95%) without restarting the dashboard. A change applies to
+the next start decision; running jobs are never stopped. More than 3 profiles or more than 80%
+asks for one confirmation (the server also requires `confirm: true` for such a raise); "Reset to default" writes the defaults explicitly. A run held by the
+ceiling now says so ("Waiting: 5 of 5 profiles in use (ceiling 5)"), and a run held by the heavy-action
+limit says "heavy actions in progress" instead of "another account". Telemetry: `run_limits_changed`
+(numbers only), `ceiling_reached` and `effective_limit` on `slot_decision`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1293).
+
+## ACL-2441 — Builder drag: drop on a campaign card, only accounts of the campaign's country — 2026-11-08
+
+A campaign dragged in the Builder drawer can now be dropped anywhere inside another account's block, including on one of its campaign cards; the copy is added as one more campaign and the whole account block is highlighted. While dragging, the grey "Drop here" zones and the account list of the `Copy to…` menu show only accounts of the campaign's country (the dragged campaign's own account is never offered). If there is no other account for that country, a note "No other account for <country>" is shown instead. Copy rules are unchanged. Dashboard only (`report.html`).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1441).
+
+## ACL-2473 — Check plan: refused-lookups note only for terms without candidates — 2026-11-09
+
+The "Meta refused the … lookup … could not be checked there" note is now added only to
+targeting terms that have no candidates at all. A term with candidates but no exact name
+(for example "Income") shows just the plain reason, so the buyer is not led to blame the
+account. Python change: restart the dashboard after release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1473).
+
+## ACL-2470 — Memory gate waits up to 10 seconds before refusing an unqueued action — 2026-11-09
+
+When free memory is below the reserve, an action that nobody queued (a read, a profile start) now re-checks
+every 1-2 seconds for up to 10 seconds before it refuses. A short dip while a profile starts no longer fails the
+action; a sustained shortage still refuses with "Not enough free memory - close a profile and retry" and the
+same numbers in the log as in ACL-2400. Publish jobs keep waiting in the queue (ACL-2278), the wait for a busy
+account gate is unchanged, and the 92 % default and its migration are not touched. Restart the dashboard after release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1470).
+
+## ACL-2478 — Offline probe tooling for ACL-2344 step 0 — 2026-11-09
+
+Offline probe tooling for ACL-2344 step 0; no behaviour change; the light work tab itself is not implemented. Adds an offline probe (`src/fb_ads_rpa/light_probe.py`, `scripts/probe_2344_p1.py`) for running in-page Graph calls from a light same-origin document instead of the full Ads Manager tab. The probe serves the light document from the browser and fails every other request of its own tab (interception pattern `*`, Network enabled on the probe tab only so service workers are bypassed, the document is inert under a no-script/no-worker CSP, the tab is set offline as a last line, interception stays on while the tab lives; a service worker acting on its own outside the probe tab is not controlled); a dummy string is handed over through a BroadcastChannel. The probe script is gated to the Doc120 profile (loopback CDP url plus an explicit `--profile-id` equal to Doc120's in the machine's account map). `RawCdp.call` and `PageTab.call` gained an optional `on_event` hook, and `RawCdp` queues messages that nested calls from a handler would otherwise drop; callers that do not pass it behave as before. No publish, read or write code path uses the probe, and the `ACL_LIGHT_WORK_TAB` mode does not exist. The live probe and the implementation stay in ACL-2344.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1478).
+
+## ACL-2397 — Builder: a drag always copies, bigger handle — 2026-11-05
+
+Dragging an ad or a campaign in the Builder now always makes a copy; the original is never moved or removed (Ctrl/⌥ no longer matter). Undo removes exactly that copy. Dropping a card on its own place does nothing (use Duplicate); the `Copy to…` menu (formerly `Move to…`, no Move|Copy switch) may still copy in place. A card whose campaign is being built can be dragged out; the destination account/campaign lock stays. The drag handle is now a 32×32 px target on ad cards and campaign rows, with a hover state, and a click on it opens `Copy to…`. The builder never writes a `copy n` suffix (that is the publisher's, ACL-2250). Dashboard only (`report.html`).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1397).
+
+## ACL-2393 — Warning when the campaign name and the targeting differ — 2026-11-05
+
+The builder now warns when a campaign name mentions a targeting preset (for example Green) and a different one is selected (for example Mix2). It is only a warning; you can still publish.
+A line under the name shows `Name says Green, targeting is Mix2 – fix one of them` (or `…but no targeting is selected – pick one`), with a `Use Green` button when the name has exactly one preset. The same text appears in the Publish confirmation (button "Build anyway") and as a note above the Check plan result. Presets are matched as whole words of the name; the card's own parts (country, OS, creative type, asset, age, date) never count, and any ad set's targeting satisfies the name. Dashboard page only; nothing is sent to the server.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1393).
+
+## ACL-2392 — Builder: short plain-language errors, raw Meta text only in the details — 2026-11-05
+
+Publish failures now show one short English line with the next step (for example "Targeting options were merged by Meta - replace the interests and republish") instead of raw Meta text, codes and ids. Unknown, unconfirmed and timed-out steps name the stage (for example "while creating ad set \"X\""). The raw text, codes, stage and readback lines now live in the header "Recent runs" popup (Show details expands per run, with a Copy details button; older history lines still render); the builder shows only the plain line, what was left in Meta and a "Details in Recent runs" link. `publish_history.jsonl` lines gain `failure` and `error_details`. New table and classifier in `src/fb_api/plain_errors.py`; `result_dict`/`dry_run_result` carry a `failure` object, `job["errors"]` holds the plain line and `job["error_details"]` the raw. Meta subcode 1870226 (reported by Meta as code 1 / http 500) is now worded as a rejection with what was left in Meta; the stop itself is still an unknown write for gating, so the job stays blocked as before. Readback mismatches show as one summary line. Gating (`publishable`, `blocking_failures`, `WritesBlocked`) and the event log content (`publish.result` keeps the raw error and readback lines) are unchanged. Python changes need a `serve.py` restart; the template loads without one.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1392).
+
+## ACL-2471 — Targeting resolver: category in parentheses — 2026-11-08
+
+Targeting resolver: an interest name that Meta returns with a category in parentheses, for example "swing trading (investing)", now matches exactly when it is the only one with that base name; two or more stay candidates for a human.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1471).
+
+## ACL-2467 — Builder: Publish buttons show a spinner while the plan check runs — 2026-11-08
+
+Builder: after Publish is pressed both Publish buttons show a spinner and the elapsed time while the plan check runs, and stay disabled until the confirm window opens, the gate blocks or an error happens.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1467).
+
+## ACL-2465 — Builder: Lifetime start of today that passed in the queue is moved forward — 2026-11-08
+
+The server no longer refuses a Lifetime job whose start of today passed while it waited in the queue (owner's run on Doc280: sent 17:51 with start 18:00, checked at 18:06). Such a start moves to the next quarter hour that is at least 5 minutes ahead (seconds count: 09:10:30 gives 09:30), and the run result and Check plan say so ("start 18:00 had passed ... moved to 18:15", Israel time). A repeat or resume of the same draft recognises the moved start in Meta and reuses the campaign instead of creating "copy 1"; any other start edit is still a difference. A start on an earlier day is still refused, Daily is unchanged. Needs a server restart.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1465).
+
+## ACL-2400 — Memory threshold 92 % on every dashboard, and an immediate memory message — 2026-11-08
+
+- **Default 92 %.** `ACL_MEMORY_MAX_USED_PCT` now defaults to 92 (was 75). With the usual work open (Claude sessions, a
+  browser, one or two Multilogin profiles) memory in use stays at 86-89 %, so with 75 or 85 Check plan and campaign reads
+  waited about 5 minutes for memory and then failed. At least 1 GB always stays free on small laptops.
+- **One-time update migration.** On the first start of this version a machine `.env` that holds an explicit
+  `ACL_MEMORY_MAX_USED_PCT` below 92 (75 or 85 from earlier releases, or set by hand) gets 92. The old `.env` is kept in
+  `backups\memory-92-<time>\` inside the settings folder. The edit is made under the `.env` lock, byte for byte (line endings, BOM and other text stay; `export`, quotes
+  and a trailing comment are handled). The migration is recorded in `migrations.json`, so it runs once:
+  a value set later in Settings (even 75) is never overwritten, and a machine without the key is left alone. Values of 92
+  and above are not touched. A package copy of the settings never brings an old default (75/90) back.
+- **Immediate memory message.** When memory holds an action nobody queued on a profile that is already open (Check
+  plan, a campaign read) or the memory check before a profile start fails, it says at once
+  `Not enough free memory - close a profile and retry` instead of waiting 2-5 minutes and then showing a generic read
+  error. Check plan's response and its `api_plan_check` record carry the memory code and text, and the log keeps the
+  numbers (free GB, used %, limit). Publish jobs still wait queued for memory (ACL-2278). Not changed: a closed
+  profile that must wait for a free slot in the profile queue (a read or a start without a job) still waits there
+  as before. The gate maths is unchanged.
+- `.env.example` shows `ACL_MEMORY_MAX_USED_PCT=92`.
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1400).
+
+## ACL-2403 — Primary text and headline are optional — 2026-11-05
+
+An ad can be published without a primary text or a headline: Check plan only warns, and the ad is sent without the empty field. An ad with several texts or a Stories / Reels file still needs both (new Check plan error "Several texts or a Stories / Reels file need a primary text and a headline", instead of a refusal at Publish). The RPA flow with empty texts is unverified.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1403).
+
+## ACL-2462 — Builder: Lifetime start time for today no longer goes stale — 2026-11-08
+
+Lifetime form: the start time for "today" is recomputed on every sync and once a minute, so the form no longer says "First day is in the past"; the Lifetime summary updates as the budget is typed. Template only: reload the page.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1462).
+
+## ACL-2457 — Dashboard: bulk edit of budget, age, gender, languages and placements — 2026-11-08
+
+On the Home campaigns table, tick several campaigns of one account and press "Bulk edit": budget (daily or lifetime, as each campaign has it), age range, gender, languages and a placements preset (Advantage+ or the ACL default). A preview shows before and after per campaign and nothing is written until you press Confirm. Only the fields you filled in are written, through the same human-confirmed command path as ACL-1800 (re-read before writing, one write per object, readback after). A failed or skipped campaign is listed with its reason and does not stop the others. API backend only; with the RPA backend the control is disabled with the reason "API backend only". The in-page write policy now also allows `lifetime_budget` and a validated `targeting` object on an existing object (ad sets keep every other targeting setting as read). Restart the dashboard after release (Python changes).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1457).
+
+## ACL-2456 — Builder: copy a campaign to other ad accounts — 2026-11-08
+
+"Copy to accounts" on the campaign card now works with the API backend (it is disabled with the reason "API backend only" on RPA). Pick one or more other accounts; the dialog reads the account map and the cached account readings (no Meta call) and shows the target pixel. The copy goes into the target account's own builder form as an ordinary draft: its tracking link, Page Automatic, Instant Form ids cleared. When the target currency differs from the source, or either is unknown, the source amount is not copied; the buyer types the budget for the target. Nothing is created by the copy: Preview and Check plan still apply and campaigns are created PAUSED. One Undo takes back all copies of one action. Python change: restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1456).
+
+## ACL-2455 — Lifetime run is a range of days, hours are picked for every day — 2026-11-08
+
+The owner found it confusing that a Lifetime campaign's Start and End carried a time of day, which read
+as the hours the ads run. The builder now asks for a First day and a Last day (date only, Israel time):
+the run starts at 00:00 on the first day (at the next full hour when the first day is today) and ends at
+the end of the last day. The hours grid ("Hours (every day, Israel time)") is always shown under the dates
+with every hour on; switching hours off makes a schedule that repeats on every day of the run, and with
+all hours on no schedule is sent. The form still sends `start_time`/`end_time`/`schedule`/`schedule_on`
+as before, so the server, drafts and plans are unchanged; drafts with a time of day show their dates.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1455).
+
+## ACL-2443 — Builder: lifetime budget and delivery schedule in the account time zone — 2026-11-07
+
+The Builder budget block now has a Daily / Lifetime switch. Lifetime takes a start and an end date-time in the ad account time zone (read from the new `GET /api/account-facts`), and an optional 7x24 hour grid that is sent as `adset_schedule` (`pacing_type` ADVERTISER time zone). Write policy, draft, creator, Graph calls and preflight know the lifetime fields; the plan cache schema is now 2, so cached plans from older versions are rebuilt. A live Lifetime publish in Meta and non-USD minimums are not verified yet. Python changed: restart the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1443).
+
+## ACL-1448 — Lifetime start, end and hours are entered in Israel time — 2026-11-07
+
+In the campaign builder the Start and End of a Lifetime budget and the hours grid are now Israel time
+(`Asia/Jerusalem`; `ACL_TEAM_TIMEZONE` overrides it, an invalid name falls back with a warning in the log).
+Before this they were read as wall-clock time of the ad account. Check plan and the build convert them to the
+account time zone: Start and End by their own dates, the grid by the difference between Israel and the account
+at the campaign start (shifted hours cross midnight into the neighbouring weekday, Sunday and Saturday wrap
+around). A difference that is not a whole number of hours is refused. If the difference changes inside the
+term (Israel and the account change clocks on different dates), Check plan shows a warning with the first date
+(and "until <date>" when it returns) and does not stop. The read-back compares what Meta stores with the
+converted windows. The grid has a preset "Don't run 01:00-05:00 every day" and a line under it that shows what
+Meta gets in account time. The zone is set by the server (`ACL_TEAM_TIMEZONE`), not by the form, so slots and
+drafts have no new keys and Daily campaigns are unchanged. Lifetime drafts saved before this change keep their
+times, which are now read as Israel time.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1448).
+
+## ACL-2334 — Package shadow config no longer overwrites the real machine config — 2026-11-06
+
+The merge of the Claude MSIX package copy is skipped when ACL_CONFIG_DIR is set explicitly. A shadow value never turns an absolute path into a relative one or an explicit setting into a code default. Each merge logs the key names only (no values).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1334).
+
+## ACL-2250 — Duplicates get a `copy 1, 2, 3 …` counter and always publish — 2026-11-04
+
+A campaign name that is already on the ad account no longer stops the run or becomes `NAME_2`: the robot
+publishes `NAME copy 1`, `copy 2`, … (highest live number + 1) on the campaign and every ad set, with no
+limit on the count. A finished job published again always makes the next copy; a stopped run is finished
+(not copied) by a small local name record that lives until the end of the job, so Publish all after a
+stopped job does not copy the finished campaigns. A copy reuses the uploaded video. A name over the limit is
+a clear `name_too_long` stop (also an ERROR in Check plan). The stats parsers ignore the counter.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1250).
+
+## ACL-2330 — Vault migration cleans up clear-text secret lines — 2026-11-06
+
+The migration now drops an earlier duplicate of a secret key (dotenv ignores it; the encrypted backup keeps it). A connection-sheet sign-in or startup refresh rewrites a clear-text secret line even when the value is unchanged, so it gets encrypted. The migration notes now match each case and point to Connections -> Sign in with Google.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1330).
+
+## ACL-2243 — Failed read of the confirmed targeting store is not an empty store — 2026-11-06
+
+A damaged or unreadable confirmed-targeting file is now reported as a read failure with a plain-English message and is never overwritten; a missing file is still an empty store. Resolution stops instead of guessing, and the `/targeting-resolver/cache`, `confirm` and `clear` routes answer 409. Python changed: restart the dashboard after deploy.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1243).
+
+## ACL-2439 — Event log tests no longer depend on a fixed date — 2026-11-06
+
+The event log store tests built their events with a fixed date (2026-10-30) while asking for the last 7 days against the real clock, so three of them failed on every branch after that window passed. Fixture timestamps are now computed from the current time (one day ago for events that must stay in the window, 30 days ago for the one that must be dropped). Tests only; no production code changed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1439).
+
+## ACL-2267 — Check plan remembers resolved targeting for 60 days — 2026-11-02
+
+Countries, audience languages and library terms that Meta matched exactly are now remembered on the
+machine for 60 days (`facts_cache.json` next to the machine config; `ACL_FACTS_CACHE_DAYS`, `0` turns it
+off), so a repeated check, or the first check of another account, does not search for them again.
+Interest ids from this cache are still confirmed by Meta on every check in the same batch that
+already runs; an id Meta rejects is dropped and the term is searched again, so a removed interest never
+fails the check. The ad account, pixels, Pages, currency and timezone are always read fresh, and an
+answer without an account id now counts as a different account. "Clear" on a term in Check plan
+forgets it in both caches. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1267).
+
+## ACL-2084 — Square file in the Stories / Reels slot — 2026-11-04
+
+The Stories / Reels file may now be 9:16 or 1:1 (images and videos); the main file stays 1:1 or 4:5, so
+4:5 or 1:1 in Feed with a separate square file in Stories / Reels publishes as a two-file pair.
+The same file in both slots (the same path, or a copy with the same bytes under another name) is used once
+as the main file with a warning: Meta refuses one asset under two placement labels ("All ad asset values
+must be unique", live run on Doc120, 2026-11-04). Changing or clearing the main file clears a slot that
+still held it. Check plan shows the Stories / Reels file of every pair. A restored Video ad now searches
+videos, not images.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1084).
+
+## ACL-2266 — Check plan asks Meta only about changed campaigns — 2026-11-02
+
+Check plan now remembers the clean result of every campaign on the server (in memory, 60 minutes by
+default, `ACL_PLAN_CACHE_TTL_MIN`, `0` turns it off). A campaign counts as unchanged when its draft
+as the server builds it (library texts, link, pixel, Page, interests) and its creative files
+(size and modification time) are the same, for the same ad account, country and day. Unchanged
+campaigns are answered at once without opening the Multilogin profile or calling Meta; only edited
+ones are read. The panel says how many campaigns were served from the saved result, shows "Checked
+at HH:MM" on the campaign card (also after a page reload) and offers "Re-check all". Publish still
+runs its own full pre-flight and refuses on a real error. A finished publish job for the account and
+a confirmed or cleared targeting term drop the saved results. The 10-minute memory of the page
+(ACL-2003) is removed: the server is the only place that remembers a result.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1266).
+
+## ACL-1345 — Builder: drag an ad or a campaign to another place (move, Ctrl = copy, Undo) — 2026-11-01
+
+An ad card can be dragged by its ⋮⋮ handle onto a campaign in the tree (it lands in Ad set 1) or onto one of
+its Ad set nodes; a campaign can be dragged onto another account, including accounts with no drafts yet.
+Plain drag moves, Ctrl (⌥ on a Mac) copies. The same actions are on the "Move to…" button of every ad card and
+campaign row (keyboard; on a campaign row it appears on keyboard focus so the narrow tree keeps its width). A moved card keeps all its fields but takes the destination account's
+tracking link, ad account and profile; the Facebook Page and Instant Form of the old account are cleared; a
+cross-country move asks first. A toast says what happened and offers Undo (10 s, last 10 moves, Ctrl+Z);
+a same-name campaign in the destination is kept with a warning, a campaign left without ads gets a blank ad.
+Cards of a campaign that is being built cannot be dragged and accounts that are being built cannot receive
+cards. Draft-only change in the Builder page; no server, robot or Meta call.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/345).
+
+## ACL-2347 — Shared action log (event log) — 2026-10-30
+
+Every API publish, plan check, account check and budget/status command now leaves events in a
+local outbox (`event_outbox/` next to the machine config). A background thread ships them in
+batches to a Cloudflare Worker (Cloudflare KV storage, written with the team library token); the owner
+downloads them into a local SQLite with `scripts/acl_log_pull.py` and reads them with
+`scripts/acl_log_report.py`. Nothing is shown to the buyer, the log never makes a new Graph or
+Multilogin request, a failing log never changes a publish result, and `ACL_EVENT_LOG=0` turns it
+off. Sending stays off until the Worker address is filled in (`DEFAULT_URL`). Meta ids and ad copy
+are kept; tokens, passwords, proxy credentials and link parameter values are never written.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1347).
+
+The telemetry now records when a job starts waiting for memory or a slot and every real reason of that
+wait, the size, hash, mode and time of each video upload, and marks silence during an upload as waiting,
+not as a hung tab. Results and the dashboard do not change.
+
 ## ACL-2345 — A tab that died resumes the publish once by itself; a profile starts below 75% memory — 2026-10-30
 
 A publish job stopped by `page_unresponsive` / `page_failed` now closes its profile, waits (up to

@@ -109,7 +109,7 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"copyTo"}
+    assert "copyTo" not in out, "ACL-2456: Copy to accounts has a backend and is no stub"
     assert "placements" not in out, "ACL-1772: placement editor has a backend and named saved fields"
     assert not {"adsets", "copyAdset"} & set(out), "ACL-1768: наборы - настоящие, а не заглушки"
     assert not {"texts", "media"} & set(out), "ACL-1774: тексты 3-5 и файл Stories / Reels - настоящие поля"
@@ -123,7 +123,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"copyTo"}
+    assert "copyTo" not in used
 
 
 def test_old_drafts_load_without_the_new_field():
@@ -213,7 +213,7 @@ def test_the_ui_shows_only_what_the_creator_sends():
     assert cr.CTA_TYPE == "LEARN_MORE" and 'data-default="LEARN_MORE"' in page
     # ACL-1775: выбор Website / Instant Form - настоящий, значения те, что шлёт создатель
     assert cr.DESTINATION == "WEBSITE" and cr.DEST_WEBSITE == "website" and cr.DEST_FORM == "instant_form"
-    assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant Form<' in page
+    assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant forms<' in page
     assert cr.PAUSED == "PAUSED" and "PAUSED campaigns" in page
     assert cr.SUPPORTED_OBJECTIVES == frozenset({"leads"})
     assert cr.OBJECTIVE == "OUTCOME_LEADS"

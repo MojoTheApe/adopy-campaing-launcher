@@ -68,6 +68,7 @@ ACL-1424 (01.10): четыре профиля заняли 13,6 ГБ — по �
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sys
 import threading
@@ -94,9 +95,9 @@ DEFAULT_PROFILE_MEMORY_GB = 3.5
 DEFAULT_PROFILE_FLOOR_GB = 3.5
 DEFAULT_RESERVE_GB = 3.0
 #: ACL-2255: решение по ДОЛЕ занятой памяти, а не по «N ГБ на профиль»: новый профиль можно
-#: (ACL-2345: порог 75 %, не 90 — три профиля сами держат ноутбук на ~80 %, и 90 % значило «никогда»)
+#: (ACL-2400: порог 92 % — при обычной работе (Claude, браузер, 1-2 профиля) занято 86-89 %, и 75/85 % значило «никогда»)
 #: стартовать, пока занято не больше стольких процентов всей памяти (`ACL_MEMORY_MAX_USED_PCT`).
-DEFAULT_MAX_USED_PCT = 75.0
+DEFAULT_MAX_USED_PCT = 92.0
 #: ...но на машине с малой памятью свободного остаётся не меньше этого (МБ).
 MIN_FREE_MB = 1024
 DEFAULT_WARMUP_S = 90.0
@@ -213,6 +214,21 @@ def keep_free_mb(total_mb: int, settings: SlotSettings) -> int:
     """ACL-2255: сколько памяти должно оставаться свободной при доле `max_used_pct` (не меньше `MIN_FREE_MB`)."""
     share = int(max(0, int(total_mb)) * (100.0 - settings.max_used_pct) / 100.0)
     return max(share, MIN_FREE_MB)
+
+
+def free_more_mb(memory: MemoryReading, settings: SlotSettings, extra_mb: int = 0) -> int:
+    """ACL-2369: сколько МБ надо освободить, чтобы прошёл тест памяти (0 — уже хватает)."""
+    return max(0, keep_free_mb(memory.total_mb, settings) + int(extra_mb) - int(memory.available_mb))
+
+
+def format_mb(mb: int) -> str:
+    """ACL-2369: «6.6 GB» от 1024 МБ (вверх до 0.1 ГБ), ниже — целые МБ вверх до 50 («600 MB»); 0 — пусто."""
+    mb = int(mb)
+    if mb <= 0:
+        return ""
+    if mb >= 1024:
+        return f"{math.ceil(mb / 1024 * 10 - 1e-9) / 10:.1f} GB"
+    return f"{math.ceil(mb / 50) * 50} MB"
 
 
 def used_pct(memory: MemoryReading) -> float:
@@ -624,7 +640,8 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
         return out
     keep = keep_free_mb(memory.total_mb, settings)
     need = keep + settings.profile_mb * warming
-    out.update(need_mb=need, keep_free_mb=keep, max_used_pct=settings.max_used_pct,
+    out.update(need_mb=need, keep_free_mb=keep, short_mb=max(0, need - int(memory.available_mb)),
+               max_used_pct=settings.max_used_pct,
                used_pct=used_pct(memory))
     if memory.available_mb < keep:
         # Занято больше допустимой доли — новый профиль не стартует, пока память

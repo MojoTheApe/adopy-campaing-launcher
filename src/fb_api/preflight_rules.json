@@ -23,6 +23,16 @@
       ]
     },
     "default_objective": "leads",
+    "lifetime_text": {
+      "budget_min": {
+        "hint": "raise the lifetime budget to Meta's minimum for the account currency times the number of days",
+        "label": "Budget is at least Meta's minimum for the whole period"
+      },
+      "budget_set": {
+        "hint": "enter a lifetime budget above zero",
+        "label": "Lifetime budget"
+      }
+    },
     "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
     "max_headline": 40,
     "max_primary_visible": 125,
@@ -353,7 +363,7 @@
         "level": "ad",
         "sel": ".cb-creative-search"
       },
-      "hint": "no 9:16 file: without one Facebook crops the picture itself",
+      "hint": "no 9:16 or square Stories / Reels file: without one Facebook crops the picture itself",
       "id": "media_vertical",
       "label": "Vertical file for Stories and Reels",
       "severity": "warning",
@@ -381,9 +391,9 @@
         "level": "ad",
         "sel": ".cb-vertical-search"
       },
-      "hint": "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+      "hint": "with a Stories / Reels file the main file must be 1:1 or 4:5, the Stories / Reels one 9:16 or 1:1, both images or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
       "id": "vertical_ratio",
-      "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16",
+      "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16 or 1:1",
       "severity": "error",
       "side": "server",
       "topic": "creative",
@@ -437,10 +447,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "choose a primary text in each ad",
+      "hint": "no primary text: the ad runs without it (fine for a headline-only or text-free ad)",
       "id": "primary_text",
       "label": "Primary text",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -451,10 +461,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "the chosen text has no headline: pick another library entry",
+      "hint": "no headline: the ad runs without it (fine for a primary-text-only or text-free ad)",
       "id": "headline",
       "label": "Headline",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -469,6 +479,20 @@
       "id": "headline_len",
       "label": "Headline up to 40 characters",
       "severity": "warning",
+      "side": "client",
+      "topic": "creative",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); add a headline, or use one text and one file",
+      "id": "feed_texts",
+      "label": "Several texts or a Stories / Reels file need a headline",
+      "severity": "error",
       "side": "client",
       "topic": "creative",
       "unit": "ad"
@@ -574,6 +598,34 @@
     {
       "applies": "always",
       "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_end_time\"]"
+      },
+      "hint": "a lifetime budget needs an end date and time after the start, not in the past (ad account time zone)",
+      "id": "end_time_valid",
+      "label": "End time (lifetime budget)",
+      "severity": "error",
+      "side": "client",
+      "topic": "budget",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_schedule\"]"
+      },
+      "hint": "a schedule needs a lifetime budget and at least one selected hour",
+      "id": "schedule_valid",
+      "label": "Ad schedule",
+      "severity": "error",
+      "side": "client",
+      "topic": "budget",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
@@ -619,9 +671,9 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... (up to _20); an error only when all 20 names are taken: rename the campaign",
+      "hint": "if a campaign with this name is already on the ad account, the robot publishes a copy named 'NAME copy 1', 'NAME copy 2' ... (the campaign and its ad sets); an error only when the name is too long or the copy number cannot be told: rename the campaign",
       "id": "existing_diffs",
-      "label": "Campaign name is free, or gets a _2, _3 suffix",
+      "label": "Campaign name is free, or gets a copy 1, copy 2 counter",
       "severity": "error",
       "side": "server",
       "topic": "names",

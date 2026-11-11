@@ -183,7 +183,7 @@ def test_a_vertical_file_with_one_text_has_one_body_and_labelled_rules(tmp_path)
 @pytest.mark.parametrize("main,vertical,message", [
     ((1080, 1920), (1080, 1920), "the main file must be 1:1 or 4:5"),
     ((1920, 1080), (1080, 1920), "the main file must be 1:1 or 4:5"),
-    ((1080, 1080), (1080, 1080), "must be 9:16"),
+    ((1080, 1080), (1080, 1350), "or 1:1 (for example 1080x1080)"),
     ((1080, 1350), (1200, 628), "must be 9:16"),
 ])
 def test_a_wrong_aspect_ratio_is_refused_before_any_upload(tmp_path, main, vertical, message):
@@ -367,7 +367,7 @@ POLICY_CASES = [
     ("text_with_extra_key", _cre(_feed(bodies=[{"text": "b", "adlabels": []}])), False),
     ("extra_spec_key", _cre(_feed(optimization_type="REGULAR")), False),
     ("extra_spec_key_group", _cre(_feed(groups=[])), False),
-    ("no_bodies", _cre(_drop(_feed(), "bodies")), False),
+    ("no_bodies", _cre(_drop(_feed(), "bodies")), True),  # ACL-2474: основной текст не обязателен
     ("no_titles", _cre(_drop(_feed(), "titles")), False),
     ("pair_ok", _cre(_pair()), True),
     ("pair_one_rule", _cre(_mut(_pair(), lambda s: s["asset_customization_rules"].pop())), False),
@@ -558,7 +558,7 @@ def test_the_page_gives_the_same_verdicts_for_the_new_rules():
 def test_the_server_names_a_wrong_ratio_in_the_audit(tmp_path):
     from tests.test_acl1819_preflight import _audit
 
-    out = _audit(FakeMeta(), _ad_with(tmp_path, main=(1080, 1080), vertical=(1080, 1080)))
+    out = _audit(FakeMeta(), _ad_with(tmp_path, main=(1080, 1080), vertical=(1080, 1350)))
     row = {v["rule"]: v for v in out.audit}["vertical_ratio"]
     assert row["status"] == "error" and "9:16" in row["detail"]
     ok = _audit(FakeMeta(), _ad_with(tmp_path))

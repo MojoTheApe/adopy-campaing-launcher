@@ -107,6 +107,22 @@ def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(profile_lease, "_lease_root", lambda: root)
 
 
+@pytest.fixture
+def strict_checkout_lease():
+    """ACL-1862 (G1): тест хочет настоящую проверку замка в `WarmRegistry.checkout`."""
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _warm_checkout_lease_not_required(request, monkeypatch):
+    """Старые тесты вызывают `checkout` напрямую, без замка потока; настоящая проверка — только по запросу."""
+    if "strict_checkout_lease" in request.fixturenames:
+        return
+    from src.fb_api import warm
+
+    monkeypatch.setattr(warm, "_require_checkout_lease", lambda profile_id: None)
+
+
 @pytest.fixture(autouse=True)
 def _account_refresh_off_the_live_machine(tmp_path_factory):
     from src.analysis_agent import account_refresh_state

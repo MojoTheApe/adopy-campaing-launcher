@@ -120,11 +120,12 @@ const T = (map) => ({closest: sel => { for (const k of Object.keys(map || {})) i
 const BTN = {'button, a, input': {classList: {contains: () => false}}};
 const CARET = {'button, a, input': {classList: {contains: c => c === 'amap-caret'}}};
 const colw = html => { const m = /<colgroup>((?:<col[^>]*>)+)<\/colgroup>/.exec(html); return m ? [...m[1].matchAll(/width:(\d+)px/g)].map(x => Number(x[1])) : []; };
-const rowOf = (html, key) => (new RegExp('<tr class="hc-r-[a-z]+[^"]*" data-key="' + key + '".*?</tr>', 's')).exec(html);
+const rowOf = (html, key) => (new RegExp('<tr class="hc-r-[a-z]+[^"]*"[^>]* data-key="' + key + '".*?</tr>', 's')).exec(html);
 (async () => {
   const out = {};
   const inst = win.hcMount(root, {scoped: true, seed: IN.seed, rows: H});
   const ctx = {inst, H, els, R1, calls, posts, warmCalls, win, store, docL, tick, T, BTN, CARET, colw, rowOf, out, mkRoot,
+    expand: async (key) => { H.Acc.table.listeners.click[0]({target: T({'[data-exp]': {dataset: {exp: key}}})}); await tick(40); },
     mount: (r) => win.hcMount(r.root, {scoped: true, seed: IN.seed, rows: r.H}), sandbox};
   if (!IN.noinit) await inst.init();
   await tick(10);
@@ -261,17 +262,17 @@ def test_maximum_keeps_structure_available_and_removes_manual_country_reads():
 # ───────────────────────── колонки и данные (как в макете) ─────────────────────────
 
 def _acc_table():
-    return _node(OPEN_ALL + " out.acc = H.Acc.table.innerHTML; out.other = H.Other.table.innerHTML; out.count = els.count.textContent;"
-                 " inst.state.acctOpen = {}; out.collapsedCount = els.count.textContent;")
+    return _node(OPEN_ALL + " out.acc = H.Acc.table.innerHTML; out.other = H.Other.table.innerHTML;")
 
 
 def test_toolbar_and_count_line_are_compact_and_the_template_has_no_separate_table_frame():
     tpl = _render_table()
     for needle in ("Search campaigns, ad sets or ads", "All delivery", "Enabled campaigns", "Paused campaigns", ">Controls<", ">BI metrics<",
-                   ">Structure<", ">Tracking<", "Expand all", "Collapse all", "Switch on", "Set bid…", "What was changed here"):
-        assert needle in tpl, needle
+                   ">Structure<", ">Tracking<", "Expand all", "Collapse all", "Switch on", "Set bid…", "What was changed here", "Manage columns"):
+        assert needle not in tpl, needle                                                                       # панель и сноска удалены 04.11
     assert 'data-hc="frame"' not in tpl and 'data-hc="table"' not in tpl and "Identity stays pinned" not in tpl     # отдельной таблицы нет
-    assert _acc_table()["count"] == "4 campaigns"                                                                  # Acc: 3, Other: 1
+    assert 'data-hc="status"' in tpl and 'data-hc="count"' not in tpl and 'data-hc="preset"' not in tpl
+    assert "STORE_KEY" not in TABLE and "saveCols" not in TABLE                                              # выбор колонок убран: сохранённое не читается
 
 
 def test_column_groups_and_order_follow_the_prototype():
@@ -282,21 +283,17 @@ def test_column_groups_and_order_follow_the_prototype():
     assert names[at + 8: at + 11] == ["Spend", "Leads", "FTDs"]
     assert "MANAGEMENT &amp; DECISIONS" in acc or "MANAGEMENT & DECISIONS" in acc
     assert "BI · business outcomes" in acc and "Account / campaign hierarchy" in acc and "Campaign / Ad set / Ad" in acc
-    allcols = _node("inst.state.acctOpen = {Acc: true}; els.preset.value = 'all'; els.preset.listeners.change[0].call(els.preset); out.t = H.Acc.table.innerHTML;")["t"]
-    flat = [re.sub(r"<[^>]+>", "", h) for h in re.findall(r"<th[^>]*>(.*?)</th>", allcols)]
-    for h in ("Deposits (all)", "CR lead→FTD", "Keitaro", "Placements", "Devices", "Landing Variant", "History"):
-        assert h in flat, h
 
 
 def test_rows_pin_identity_and_show_level_country_account():
     acc = _acc_table()["acc"]
-    assert 'data-sel="campaign:1"' in acc and 'data-exp="campaign:1"' in acc and 'class="hc-switch"' in acc
-    assert "Chile · Acc" in _text(acc) and 'class="p3"' in acc
+    assert 'class="p0"' not in acc and 'data-exp="campaign:1"' in acc and 'class="hc-switch"' in acc
+    assert "Chile · Acc" in _text(acc) and 'class="p1"' in acc
 
 
 def test_goal_benchmark_and_hint_use_real_inputs_or_say_why_not():
     t = _acc_table()
-    row = lambda html, key: re.search(r'<tr class="hc-r-campaign[^"]*" data-key="%s".*?</tr>' % key, html, re.S).group(0)
+    row = lambda html, key: re.search(r'<tr class="hc-r-campaign[^"]*"[^>]* data-key="%s".*?</tr>' % key, html, re.S).group(0)
     ever = _text(row(t["acc"], "campaign:1"))
     assert "$500.00" in ever and "$650.00" in ever and "Within CPA goal" in ever and "6 FTDs" in ever and "$1,990.00" in ever
     assert "Spend above goal CPA, no FTDs" in _text(row(t["acc"], "campaign:3")) and "alert" in row(t["acc"], "campaign:3")
@@ -316,7 +313,7 @@ def test_every_command_is_disabled_with_a_reason_without_the_helper():
 def test_budget_and_bid_columns_show_the_value_and_the_owner_note():
     t = _node("""
       H.Acc.row.listeners.click[0]({target: T({})}); await tick(10);
-      els['expand-all'].listeners.click[0](); await tick(80);
+      for (const k of ['campaign:1', 'campaign:2', 'campaign:3', 'adset:11', 'adset:12']) { await ctx.expand(k); }
       out.t = H.Acc.table.innerHTML;
     """)["t"]
     text = _text(t)
@@ -325,34 +322,16 @@ def test_budget_and_bid_columns_show_the_value_and_the_owner_note():
     assert "Ads have no budget" in t and "Managed by ad set" in t
 
 
-def test_delivery_filter_and_search_narrow_the_rows_of_every_account():
-    out = _node(OPEN_ALL + """
-      els.delivery.value = 'paused'; els.delivery.listeners.change[0].call(els.delivery);
-      out.paused = H.Acc.table.innerHTML; out.pausedOther = H.Other.table.innerHTML; out.count = els.count.textContent;
-      els.delivery.value = 'all'; els.delivery.listeners.change[0].call(els.delivery);
-      els.search.value = 'spend with'; els.search.listeners.input[0].call(els.search);
-      out.search = H.Acc.table.innerHTML;
-    """)
-    assert 'data-key="campaign:2"' in out["paused"] and 'data-key="campaign:1"' not in out["paused"] and "of" in out["count"]
-    assert 'data-key="campaign:9"' in out["pausedOther"] or "campaign:9" not in out["pausedOther"]
-    assert 'data-key="campaign:3"' in out["search"] and 'data-key="campaign:1"' not in out["search"]
-
-
-def test_expand_all_opens_every_account_and_reads_children_from_the_local_snapshot_only():
+def test_expanding_rows_reads_children_from_the_local_snapshot_only():
     out = _node("""
+      H.Acc.row.listeners.click[0]({target: T({})}); await tick(10);
       const before = calls.length;
-      els['expand-all'].listeners.click[0](); await tick(120);
-      out.open = Object.keys(H).filter(a => !H[a].child.hidden);
+      for (const k of ['campaign:1', 'campaign:2', 'campaign:3', 'adset:11', 'adset:12']) { await ctx.expand(k); }
       out.acc = H.Acc.table.innerHTML; out.calls = calls.slice(before);
-      els['collapse-all'].listeners.click[0](); await tick(5);
-      out.afterCollapse = Object.keys(H).filter(a => !H[a].child.hidden);
-      out.collapsedTable = H.Acc.child.hidden;
     """)
-    assert out["open"] == ["Acc", "Other", "Fresh"]
     assert 'data-key="adset:11"' in out["acc"] and 'data-key="adset:12"' in out["acc"] and 'data-key="ad:111"' in out["acc"]
     kids = [c for c in out["calls"] if "/campaign-inventory/children" in c]
     assert kids and not [c for c in out["calls"] if c.startswith("POST")]
-    assert out["afterCollapse"] == []
 
 
 # ───────────────────────── общая прокрутка и ширина закреплённого блока ─────────────────────────
@@ -377,7 +356,7 @@ def test_the_pinned_column_resizes_for_every_open_account_by_keyboard_mouse_and_
       const key = (k, extra) => Object.assign({key: k, target: handle, preventDefault() { this.stopped = true; }}, extra || {});
       const R2 = mkRoot(); const b = mount(R2); await b.init();
       out.initial = {w: inst.pinWidth(), cols: colw(H.Acc.table.innerHTML), stored: store['acl.hc.pinw.v1'] === undefined};
-      const hm = /class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="[^"]+" aria-valuemin="240" aria-valuemax="(\\d+)" aria-valuenow="(\\d+)"/.exec(H.Acc.table.innerHTML);
+      const hm = /class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="[^"]+" aria-valuemin="300" aria-valuemax="(\\d+)" aria-valuenow="(\\d+)"/.exec(H.Acc.table.innerHTML);
       out.handle = hm ? [hm[1], hm[2]] : null;
       const k1 = key('ArrowRight'); H.Acc.table.listeners.keydown[0](k1);
       out.right = {w: inst.pinWidth(), stored: store['acl.hc.pinw.v1'], prevented: !!k1.stopped, other: b.pinWidth(), var: R1.vars['--hc-pin-w']};
@@ -385,7 +364,7 @@ def test_the_pinned_column_resizes_for_every_open_account_by_keyboard_mouse_and_
       H.Acc.table.listeners.keydown[0](key('Home')); out.home = inst.pinWidth();
       H.Acc.table.listeners.keydown[0](key('End')); out.end = inst.pinWidth();
       H.Acc.table.listeners.keydown[0]({key: 'a', target: handle, preventDefault() { throw new Error('other keys must pass'); }});
-      inst.setPin(432, true);
+      inst.setPin(440, true);
       const md = {target: handle, button: 0, clientX: 500, preventDefault() {}};
       H.Other.table.listeners.mousedown[0](md);                                      // тянуть можно за ручку любой раскрытой таблицы
       docL.mousemove({clientX: 620}); out.dragLive = {w: inst.pinWidth(), stored: store['acl.hc.pinw.v1'], hasUp: typeof docL.mouseup};
@@ -400,32 +379,32 @@ def test_the_pinned_column_resizes_for_every_open_account_by_keyboard_mouse_and_
       for (const a of Object.keys(H)) H[a].frame.clientWidth = 0;
       inst.setPin(2000, false); out.hidden = inst.pinWidth();
     """)
-    assert out["initial"]["w"] == 432 and out["initial"]["cols"][:4] == [36, 28, 88, 280] and out["initial"]["stored"] is True
-    assert out["handle"] == ["840", "432"]
+    assert out["initial"]["w"] == 440 and out["initial"]["cols"][:1] == [440] and out["initial"]["stored"] is True
+    assert out["handle"] == ["840", "440"]
     right = out["right"]
-    assert right["w"] == 448 and right["stored"] == "448" and right["prevented"] is True and right["other"] == 448 and right["var"] == "448px"
-    assert out["leftShift"] == 384 and out["home"] == 240 and out["end"] == 840
-    assert out["dragLive"] == {"w": 552, "stored": "432", "hasUp": "function"}
-    assert out["dragDone"] == {"w": 552, "stored": "552", "moveGone": True, "other": 552}
-    assert out["colsAcc"][:4] == out["colsOther"][:4] == [36, 28, 88, 552 - 152]    # шапка и все аккаунты — одни и те же <col>
-    assert out["dragMin"] == 240 and out["dragMax"] == 840
-    assert out["reset"] == {"w": 432, "stored": "432", "other": 432}
+    assert right["w"] == 456 and right["stored"] == "456" and right["prevented"] is True and right["other"] == 456 and right["var"] == "456px"
+    assert out["leftShift"] == 392 and out["home"] == 300 and out["end"] == 840
+    assert out["dragLive"] == {"w": 560, "stored": "440", "hasUp": "function"}
+    assert out["dragDone"] == {"w": 560, "stored": "560", "moveGone": True, "other": 560}
+    assert out["colsAcc"][:1] == out["colsOther"][:1] == [560]    # шапка и все аккаунты — одни и те же <col>
+    assert out["dragMin"] == 300 and out["dragMax"] == 840
+    assert out["reset"] == {"w": 440, "stored": "440", "other": 440}
     assert out["narrow"] == 420 and out["hidden"] == 900
 
 
 def test_the_saved_width_is_used_and_garbage_is_ignored():
     assert _node("out.w = inst.pinWidth();", storage={"acl.hc.pinw.v1": "600"})["w"] == 600
     for bad in ("abc", "100", "99999", ""):
-        assert _node("out.w = inst.pinWidth();", storage={"acl.hc.pinw.v1": bad})["w"] == 432, bad
+        assert _node("out.w = inst.pinWidth();", storage={"acl.hc.pinw.v1": bad})["w"] == 440, bad
     assert _node(OPEN_ALL + " out.w = inst.pinWidth();", storage={"acl.hc.pinw.v1": "900"}, frameW=1000)["w"] == 600
 
 
 def test_names_wrap_to_two_lines_and_keep_the_full_name_in_the_tooltip():
     css = TABLE[: TABLE.index("</style>")]
     clamp = css[css.index(".hc-name b {"): css.index(".hc-name span")]
-    assert "-webkit-line-clamp: 2" in clamp and "white-space: normal" in clamp and ".hc-table td.p3 { white-space: normal; }" in css
+    assert "-webkit-line-clamp: 2" in clamp and "white-space: normal" in clamp and ".hc-table .p1 { position: sticky; left: 0;" in css and "white-space: normal; border-right" in css
     acc = _acc_table()["acc"]
-    assert 'class="p3"><div class="hc-id"><span class="hc-badge">Campaign</span><span class="hc-name"><b title="CL - Mercado Libre - Evergreen (id ' in acc
+    assert 'class="p1"><div class="hc-id">' in acc and '<span class="hc-name"><b title="CL - Mercado Libre - Evergreen (id ' in acc and '<span class="hc-badge">Campaign</span></div></td>' in acc
     assert 'class="hc-resize" role="separator"' in acc and 'aria-label="Resize the name column' in acc
 
 
@@ -501,20 +480,20 @@ def test_the_message_is_a_full_width_sub_row_under_its_row_not_a_status_cell_not
       inst.state.notes['campaign:3'] = win.acmCommands.explain('Confirmed', 'ok');
       inst.render();
       const html = H.Acc.table.innerHTML;
-      out.status = (/<td class="p2">.*?<\\/td>/s.exec(rowOf(html, 'campaign:1')[0]) || [''])[0];
+      out.status = rowOf(html, 'campaign:1')[0];
       out.sub = /<tr class="hc-rowmsg[^"]*" data-msg="row:campaign:1".*?<\\/tr>/s.exec(html)[0];
       out.order = html.indexOf('data-key="campaign:1"') < html.indexOf('data-msg="row:campaign:1"');
-      out.ok = /data-msg="row:campaign:3"[^>]*>.*?<\\/tr>/s.exec(html)[0];
+      out.ok = rowOf(html, 'campaign:3')[0]; out.okRow = html.indexOf('data-msg="row:campaign:3"') >= 0;
       const click = id => H.Acc.table.listeners.click[0]({{target: {{closest: sel => (/data-details/.test(sel) ? {{dataset: {{details: id}}}} : null)}}}});
       click('row:campaign:1'); out.opened = /data-msg="row:campaign:1".*?<\\/tr>/s.exec(H.Acc.table.innerHTML)[0];
       click('row:campaign:1'); out.closed = /data-msg="row:campaign:1".*?<\\/tr>/s.exec(H.Acc.table.innerHTML)[0];
     """)
     assert "hc-mk bad" in out["status"] and "WinError" not in out["status"] and "HTTPSConnectionPool" not in out["status"]
     assert out["order"] is True
-    assert int(re.search(r'colspan="(\d+)"', out["sub"]).group(1)) > 4
+    assert int(re.search(r'colspan="(\d+)"', out["sub"]).group(1)) > 3
     assert "Multilogin isn&#39;t running — start it and try again" in out["sub"] and "WinError" not in out["sub"]
     assert 'class="hc-rm-btn" data-details="row:campaign:1" aria-expanded="false">Details' in out["sub"] and "hc-rm-raw" not in out["sub"]
-    assert 'class="hc-rm-btn"' not in out["ok"] and "Confirmed" in out["ok"]
+    assert out["okRow"] is False and 'class="hc-mk ok"' in out["ok"] and 'title="Confirmed by Meta"' in out["ok"]    # ok: ✓ рядом с переключателем, отдельной строки нет
     assert 'class="hc-rm-raw"' in out["opened"] and "WinError 10061" in out["opened"] and "&lt;b&gt;x&lt;/b&gt;" in out["opened"] and "<b>x</b>" not in out["opened"]
     assert "hc-rm-raw" not in out["closed"]
     css = TABLE[: TABLE.index("</style>")]
@@ -625,3 +604,42 @@ def test_the_account_bands_and_the_separate_table_are_gone():
     assert 'data-hc="table"' not in tpl and 'data-hc="frame"' not in tpl and "Account / campaign hierarchy" in TABLE   # шапка кампаний — внутри раскрытой строки
     out = _node(OPEN_ALL + " out.html = Object.keys(H).map(a => H[a].table.innerHTML).join('');")["html"]
     assert 'class="hc-band ' not in out and "data-read=" not in out and "Read campaigns" not in _text(out).replace("press Read campaigns", "")
+
+
+# ───────────────────────── иерархия уровней и обратная связь в строке (вариант D, 04.11) ─────────────────────────
+
+def test_levels_shift_the_whole_row_and_only_the_expanded_campaign_is_tinted():
+    out = _node("""
+      H.Acc.row.listeners.click[0]({target: T({})}); await tick(10);
+      for (const k of ['campaign:1', 'adset:11']) { await ctx.expand(k); }
+      out.html = H.Acc.table.innerHTML;
+    """)
+    html = out["html"]
+    depth = lambda key: re.search(r'<tr class="[^"]*" style="--d:(\d)"[^>]* data-key="%s"' % key, html).group(1)
+    assert depth("campaign:1") == "0" and depth("adset:11") == "1" and depth("ad:111") == "2"
+    # переключатель стоит в той же ячейке, что и имя: сдвигается вместе со строкой
+    row = re.search(r'<tr class="hc-r-adset[^>]* data-key="adset:11".*?</td>', html, re.S).group(0)
+    assert row.count('class="p1"') == 1 and row.index("hc-switch") < row.index("hc-name") and "hc-badge" in row
+    assert re.search(r'<tr class="hc-r-campaign hc-lv-campaign hc-open"[^>]* data-key="campaign:1"', html)
+    assert not re.search(r'hc-open"[^>]* data-key="campaign:2"', html) 
+    css = TABLE[: TABLE.index("</style>")]
+    assert "--hc-indent: 22px" in css and "repeating-linear-gradient(90deg" in css and "tr.hc-r-campaign.hc-open > td" in css
+
+
+def test_command_feedback_lives_in_the_row_no_confirmed_strip():
+    out = _node(OPEN_ALL + """
+      const n = inst.state.notes, row = k => rowOf(H.Acc.table.innerHTML, k)[0];
+      n['campaign:1'] = win.acmCommands.explain('Confirmed', 'ok');
+      n['campaign:2'] = {text: 'Confirming with Meta…', tone: 'busy'};
+      n['campaign:3'] = win.acmCommands.explain('Not sent: Meta refused', 'bad', '');
+      inst.render();
+      out.ok = row('campaign:1'); out.busy = row('campaign:2'); out.bad = row('campaign:3');
+      out.rows = [...H.Acc.table.innerHTML.matchAll(/data-msg="([^"]+)"/g)].map(m => m[1]);
+      await tick(10); inst.render();
+      out.okAfter = row('campaign:1'); out.noteGone = !('campaign:1' in inst.state.notes);
+    """)
+    assert 'class="hc-mk ok"' in out["ok"] and 'title="Confirmed by Meta"' in out["ok"]
+    assert 'aria-busy="true"' in out["busy"] and "Confirming…" in out["busy"] and 'role="status"' in out["busy"]
+    assert 'class="hc-mk bad"' in out["bad"] and ">Not sent<" in out["bad"]
+    assert out["rows"] == ["row:campaign:3"]                                  # строка-сообщение только у отказа; ok и busy её не рисуют
+    assert 'class="hc-mk ok"' not in out["okAfter"] and out["noteGone"] is True   # ✓ гаснет сам

@@ -1,12 +1,16 @@
 # Repository instructions and application changes use separate routes
 
 [ACL-1750](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/750)
-prepares the owner's 2026-10-08 decision. The matching process policy must already
+records the historical preparation of the owner's 2026-10-08 decision. The matching process policy must already
 be present in main before a source can use the new route. This adoption changes
 policy, helpers and CI, so it follows the existing stage route. Source preparation
 is not activation; [ACL-1747](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/747)
 and its draft main promotion retain their genuine old-policy handoff and the
 [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) service/state cutover gates.
+
+The paragraph above describes the original adoption. The matching process policy
+is already selected in current main; ordinary instruction changes use the active
+route below and do not repeat that adoption or its old Stage route.
 
 ## Instruction-only route
 
@@ -17,12 +21,20 @@ A task that changes only normal Markdown files at `AGENTS.md`, `CLAUDE.md` or
 
 Keep the real one-task source PR, Worker and independent Reviewer. The matching
 `workflow.process_instructions` and Tracker `process_instructions` objects must
-explicitly select schema1 and the actual checks `descriptor`, `tracker-link` and
+explicitly select schema2 and the actual checks `descriptor`, `tracker-link` and
 `Process instructions`. The pinned engine records current review and admits the
 source directly into main; this route does not enter Approved or a batch. Its
 normal reviewed-Merged receipt completes the instruction-only task without an
 application installer or runtime delivery claim. Review-return, author reclaim,
 fresh head/base/scope approval and normal Merged recording still apply.
+
+ACL-2425 selects schema2 after the compatible ACL-2424 publisher/receipt delivery.
+An independently reviewed instruction-only task can now finish while an existing
+authorized product delivery waits. Its admitted Markdown descendants retain the
+native instruction receipts; the product request keeps its original code, CI,
+target and real package acceptance. Neither the docs merge nor its Done receipt
+publishes a product or satisfies that pending request. Arbitrary/mixed changes
+and held integration/intake/unpromoted Stage keep their existing guards.
 
 The task's source review lane is held through the direct main merge. Under the
 prepared schema-3 policy it consumes one of five source slots; each held process
@@ -81,3 +93,21 @@ sides. CI/policy/helper changes adopt through the ordinary route, even when thei
 purpose is process improvement. Manual/release runs and stage/batch/promotion
 contexts retain complete applicable verification. Never relabel a product task
 or trim its outstanding acceptance criteria to obtain instruction completion.
+
+## Project-owned delivery tooling
+
+[The explicit ACL declaration](../../delivery.json) lists the four existing delivery/CI
+controls and three verification files that belong to this project's process.
+The declaration is local; the pristine template, shared Tracker defaults and
+application inputs remain unchanged. It permits the shared
+[process-support proof](PROCESS_SUPPORT.md) to assess later changes to those exact
+files. It grants no approval by itself: the complete task, indirect product
+effects, ordinary source/batch reviews and applicable checks remain required.
+Actual product changes and publication requests keep their delivery obligations.
+ACL-2423 introduced only this boundary. ACL-2424 connects the existing shared
+handoff wait and prepares original-product continuation: a later checkout can
+publish the original product only after actual schema2 adoption and the complete
+native instruction/request proof. Current-main receipt helpers retain the real
+original verification evidence. ACL-2425 separately selects schema2 consistently
+in descriptor/config and the genuine generated baseline. Other execution,
+verification and product-delivery choices remain unchanged.

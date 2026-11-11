@@ -49,11 +49,11 @@ def test_job_waits_for_memory_past_the_old_limit_and_starts_when_it_frees(tmp_pa
     assert views[-1] is None, "the wait must be cleared when it ends"
 
 
-def test_without_a_job_the_memory_wait_still_gives_up(tmp_path):
+def test_without_a_job_the_memory_hold_is_reported_at_once(tmp_path):    # ACL-2400
     rig = _short_rig(tmp_path, [1600])
     rig.reg._sleep = lambda secs: rig.now.__setitem__(0, rig.now[0] + secs)
     res = rig.reg.open_one("Acc", entry(A))
-    assert res["ok"] is False and res["code"] == "memory_low" and "1.6 GB free" in res["message"]
+    assert res["ok"] is False and res["code"] == "memory_low" and res["message"] == warm.memory_hold_text("4.7 GB")
 
 
 def test_cancelling_a_job_waiting_for_memory_stops_the_wait(tmp_path):
@@ -100,11 +100,17 @@ def test_job_waits_for_a_busy_gate_past_the_old_limit_and_goes_when_it_frees(tmp
     t.start()
     time.sleep(1.6)
     assert got == [], "the job must still be queued after the old limit"
-    assert any(v and v["hold"] == "account_busy" for v in views)
+    assert any(v and v["hold"] == "heavy_limit" and v["why"] == "limit" for v in views)
     first.release()
     t.join(5)
     assert len(got) == 1 and views[-1] is None
     got[0].release()
+
+
+def test_a_job_held_by_something_other_than_the_limit_still_reads_account_busy(tmp_path):
+    rig = Rig(tmp_path, limit=1)
+    view = rig.reg.gate.wait_view("memory_ok")
+    assert view["hold"] == "account_busy" and view["why"] == "memory_ok"
 
 
 def test_cancelling_a_job_waiting_for_the_gate(tmp_path, monkeypatch):
@@ -234,3 +240,38 @@ def test_kept_labels_skip_windows_that_are_closing():
     q._running["j1"] = {"profile": "p1", "kept": True, "label": "Doc1", "started": 0}
     q._running["j2"] = {"profile": "p2", "kept": True, "label": "Doc2", "started": 0, "closing": True}
     assert q.kept_labels() == ["Doc1"]
+
+
+def test_slot_refusal_says_how_much_to_free_including_warming_growth(tmp_path, monkeypatch):
+    # ACL-2369: 64000 MB at 90 % -> 6400 MB must stay free; 1600 free; one profile still warming (+3584 MB)
+    monkeypatch.setenv(warm.SETTLE_ENV, "1000")
+    rig = _short_rig(tmp_path, [20000])
+    assert rig.reg.open_one("A1", entry(A))["started"] is True
+    rig.reg._memory = lambda: ps.MemoryReading(64000, 1600)
+    text = rig.reg._slot_refusal_text()
+    assert "Free about 8.2 GB more" in text and "closing a Multilogin profile you don't need" in text
+
+
+def test_slot_refusal_keeps_the_old_text_when_memory_is_unreadable(tmp_path):
+    rig = _short_rig(tmp_path, [1600])
+    rig.reg._memory = lambda: None
+    assert rig.reg._slot_refusal_text() == (
+        "Not started: not enough free memory for another profile. Close something and try again.")
+
+
+def test_cold_open_refusal_names_the_shortfall(tmp_path):
+    rig = _short_rig(tmp_path, [1600])
+    rig.reg._sleep = lambda secs: rig.now.__setitem__(0, rig.now[0] + secs)
+    res = rig.reg.open_one("Acc", entry(A))
+    assert res["code"] == "memory_low" and res["message"] == warm.memory_hold_text("4.7 GB")
+
+
+def test_job_on_a_warm_profile_is_not_held_by_memory(tmp_path):
+    from tests.test_acl1812_warm_sessions import PID
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, 1000))
+    rig.warm_up()
+    views: list = []
+    with warm.job_wait(lambda: False, views.append):
+        sess = rig.checkout()
+    assert not [v for v in views if v]
+    sess.release()

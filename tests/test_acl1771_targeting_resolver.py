@@ -274,10 +274,12 @@ def test_store_rejects_bad_ids_and_types_and_clears_all(tmp_path):
     assert s.clear() == 2 and s.entries() == []
 
 
-def test_corrupt_cache_file_is_treated_as_empty(tmp_path):
+def test_corrupt_cache_file_is_a_read_failure_not_empty(tmp_path):
+    # ACL-2243: a damaged file is an unknown state (see test_acl2243_store_read_failure.py).
     p = tmp_path / "confirmed.json"
     p.write_text("{not json", encoding="utf-8")
-    assert tr.ConfirmedStore(p).get("anything") is None
+    with pytest.raises(tr.ConfirmedStoreUnreadable):
+        tr.ConfirmedStore(p).get("anything")
 
 
 def test_default_store_lives_in_the_local_config_dir(tmp_path, monkeypatch):
@@ -745,3 +747,85 @@ def test_unnamed_invalid_id_never_wipes_confirmed_entries(tmp_path):
     with pytest.raises(g.GraphError):
         tr.TermResolver(Unnamed(), store).prefetch(["alpha", "beta", "gamma"])
     assert len(store.entries()) == 3
+
+
+# ───────── категория Meta в скобках: «Swing trading» == «swing trading (investing)» ─────────
+
+def test_a_term_matches_the_interest_that_only_adds_a_category_in_brackets(tmp_path):
+    c = FakeSearch(interests={"Swing trading": [{"id": "1", "name": "swing trading (investing)"},
+                                                {"id": "2", "name": "Swing Trading Academy"}]})
+    res = _one(_resolver(c, tmp_path), "Swing trading")
+    assert res["state"] == "exact"
+    assert res["picks"] == [{"id": "1", "type": "interests", "name": "swing trading (investing)"}]
+
+
+def test_two_interests_with_the_same_base_name_are_left_to_the_human(tmp_path):
+    c = FakeSearch(interests={"Apple": [{"id": "1", "name": "Apple (fruit)"}, {"id": "2", "name": "Apple (company)"}]})
+    res = _one(_resolver(c, tmp_path), "Apple")
+    assert res["state"] != "exact" and res["picks"] == []
+    assert {x["id"] for x in res["candidates"]} == {"1", "2"}
+
+
+def test_the_bracketed_name_outranks_other_names_that_merely_contain_the_words():
+    assert tr.score("Financial market", "Financial market (investing)") > tr.score("Financial market", "Dubai Financial Market")
+    assert tr.score("Wealth management", "Wealth management (banking)") > tr.score("Wealth management",
+                                                                                   "Morgan Stanley Wealth Management")
+
+
+def test_a_name_that_is_only_brackets_is_not_emptied():
+    assert tr.base_name("(investing)") == tr.norm("(investing)")
+
+
+# ───────── поиск окна Detailed targeting (act_X/targetingsearch) ─────────
+
+ACT_ID = "act_123"
+
+
+class FakeAccountSearch(FakeSearch):
+    """+ act_X/targetingsearch: строки со своим type, как отдаёт Meta."""
+
+    def __init__(self, *, account=None, refuse=False, **kw):
+        super().__init__(**kw)
+        self.account = account or {}          # q -> [{id,name,type}]
+        self.refuse = refuse
+
+    def get_all(self, path, params=None, *, max_pages=5):
+        if path == f"/{ACT_ID}/targetingsearch":
+            self.log.append(("targetingsearch", max_pages, dict(params)))
+            self.calls += 1
+            if self.refuse:
+                raise g.GraphError("(#10) Permission Denied", code=10)
+            return list(self.account.get(params["q"], []))
+        return super().get_all(path, params, max_pages=max_pages)
+
+
+def test_an_interest_only_the_ads_manager_search_knows_is_found(tmp_path):
+    c = FakeAccountSearch(
+        interests={"Real estate investing": [{"id": "1", "name": "Real Estate Investment Network"}]},
+        account={"Real estate investing": [{"id": "7", "name": "Real estate investing", "type": "interests"}]})
+    res = _one(_resolver(c, tmp_path, act=ACT_ID), "Real estate investing")
+    assert res["state"] == "exact"
+    assert res["picks"] == [{"id": "7", "type": "interests", "name": "Real estate investing"}]
+
+
+def test_the_ads_manager_search_is_asked_only_after_adinterest_misses(tmp_path):
+    c = FakeAccountSearch(interests={"Yoga": [{"id": "1", "name": "Yoga"}]},
+                          account={"Yoga": [{"id": "1", "name": "Yoga", "type": "interests"}]})
+    assert _one(_resolver(c, tmp_path, act=ACT_ID), "Yoga")["state"] == "exact"
+    assert "targetingsearch" not in c.types()
+
+
+def test_a_refused_ads_manager_search_is_a_warning_not_an_error(tmp_path):
+    c = FakeAccountSearch(refuse=True, interests={"Real estate investing": []})
+    r = _resolver(c, tmp_path, act=ACT_ID)
+    res = _one(r, "Real estate investing")
+    assert res["state"] == "unresolved"
+    assert any("ad account targeting search (targetingsearch)" in w for w in r.warnings())
+
+
+def test_without_an_account_the_ads_manager_search_is_not_made(tmp_path):
+    c = FakeAccountSearch(interests={"Real estate investing": []},
+                          account={"Real estate investing": [{"id": "7", "name": "Real estate investing",
+                                                              "type": "interests"}]})
+    assert _one(_resolver(c, tmp_path), "Real estate investing")["state"] == "unresolved"
+    assert "targetingsearch" not in c.types()

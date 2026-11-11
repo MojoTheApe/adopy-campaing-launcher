@@ -25,17 +25,20 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import error_catalog as _catalog
+from src.fb_api import plain_errors as _plain
+from src.fb_api import facts_cache as _facts_cache
 from src.fb_api import form_create as _fc
 from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
@@ -43,10 +46,13 @@ from src.fb_api import forms as _forms
 from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
+from src.fb_api import team_time as _tt
 
 from src.fb_api import creative_recovery as _cr
+from src.fb_api import name_receipt as _nr
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +82,9 @@ DEVICE_CHOICES = ("mobile", "desktop")
 OS_CHOICES = ("all", "ios", "android")
 _OS_MIN_RE = re.compile(r"^[0-9]{1,2}(\.[0-9]{1,2})?$")
 _START_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$")
+#: ACL-1443: тип бюджета кампании.
+BUDGET_DAILY, BUDGET_LIFETIME = "daily", "lifetime"
+DAY_NAMES = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 #: Multi-advertiser ads (ACL-1767): всегда явно выключены.
 MULTI_ADS_OPT_OUT = {"enroll_status": "OPT_OUT"}
 
@@ -133,7 +142,8 @@ VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
-#: Запас вызовов на всё остальное в кампании при проверке бюджета кусков (ACL-1891).
+#: Прежний фиксированный запас на остальную кампанию в Check plan (ACL-1891); с ACL-2370 не используется -
+#: остаток считает `estimate_create_calls`. Имя оставлено для старых тестов.
 CALLS_RESERVE_OTHER = 40
 
 
@@ -199,6 +209,41 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
     return total
 
 
+#: ACL-2370: запас на повторы кусков (ACL-2000, докачка со смещения): 5% кусков, не меньше двух вызовов.
+CHUNK_RETRY_SLACK_FRACTION = 0.05
+CHUNK_RETRY_SLACK_MIN = 2
+
+
+def video_files_of(plan: "CampaignPlan") -> list[str]:
+    """Видеофайлы плана без повторов: главный и вертикальный (Stories / Reels) каждого видео-объявления.
+
+    Один путь в нескольких объявлениях грузится ОДИН раз: `_video` ищет видео в кабинете по заголовку
+    (тег + md5), и второе объявление находит уже загруженное. Поэтому считаем по уникальному пути.
+    """
+    seen: dict[str, None] = {}
+    for ad_set in plan.ad_sets:
+        for ad in ad_set.ads:
+            if ad.kind == "video":
+                seen.setdefault(ad.path, None)
+            if ad.vertical_path and ad.vertical_kind == "video":
+                seen.setdefault(ad.vertical_path, None)
+    return list(seen)
+
+
+def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
+    """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
+
+    Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
+    `estimate_create_calls`). Верхняя оценка: проверка плана читает исходный файл, а запуск может
+    сжать его до загрузки.
+    """
+    size_of = size_of or _disk_size
+    chunks = sum(upload_calls(size_of(path)) for path in video_files_of(plan))
+    if not chunks:
+        return 0
+    return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
+
+
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
 #: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
@@ -228,9 +273,9 @@ RECEIPT_UNKNOWN_S = 900
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
 LABEL_VERTICAL = "acl_vertical"
-#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, вертикальный — 9:16 (допуск 1,5 %).
+#: Соотношение сторон w/h: основной файл — 1:1 или 4:5, Stories / Reels — 9:16 или 1:1 (ACL-2084), допуск 1,5 %.
 MAIN_RATIOS = (1.0, 0.8)
-VERTICAL_RATIO = 9 / 16
+VERTICAL_RATIOS = (9 / 16, 1.0)
 RATIO_TOLERANCE = 0.015
 #: Площадки вертикального файла (Stories и Reels); остальные из ручного списка — основному файлу.
 VERTICAL_FACEBOOK = ("story", "facebook_reels")
@@ -241,14 +286,15 @@ PLACEHOLDER_VIDEO_ID = "100000"
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
 SUPPORTED_OBJECTIVES = frozenset({"leads"})
 
-#: ACL-1902: имя кампании занято - пробуем NAME, NAME_2 ... NAME_20 (всего столько кандидатов).
-NAME_SUFFIX_MAX = 20
+#: ACL-2250: повтор имени получает счётчик в конце: `<имя> copy <n>` (у кампании и всех её наборов).
+COPY_WORD = " copy "
+#: Остановки выбора имени: в Check plan это ERROR правила имени, а не сбой плана.
+NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
-#: суффиксов за её пределами могло не быть видно - тогда ищем каждое имя отдельно.
+#: копий за её пределами могло не быть видно - тогда ищем точнее.
 CAMPAIGN_SEARCH_ROWS = 200
-#: Не больше стольких своих кампаний с похожими именами сверяем с билдером (потолок чтений).
-NAME_SCAN_MAX_OURS = 6
-#: Консервативная защита от слишком длинного имени (точный предел Meta не проверен).
+#: Консервативная защита от слишком длинного имени кампании и набора (точный предел Meta не проверен:
+#: для наборов в источниках 400 или 100). Единственная константа предела - ACL-2250, D6.
 CAMPAIGN_NAME_MAX = 400
 
 #: Что таблица показывает (архив и удалённое не считаем «существующим»).
@@ -274,23 +320,33 @@ class PlanError(ValueError):
 
     #: Список проблем для дашборда (как у RPA, ACL-1437); у обычного отказа плана пуст.
     problems: tuple = ()
+    #: ACL-2392: key of `plain_errors.TABLE` when the raise site knows the class; empty -> classify by text.
+    key: str = ""
+
+    def __init__(self, *args: Any, key: str = ""):
+        super().__init__(*args)
+        if key:
+            self.key = key
 
 
 class RulesViolation(PlanError):
     """Задание нарушает реестр правил Meta (ACL-1805): стоп до первой записи."""
 
     def __init__(self, message: str, problems: list[dict]):
-        super().__init__(message)
+        super().__init__(message, key="meta_rule")
         self.problems = problems
 
 
 class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
-    def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped"):
+    def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
+                 failure: Any = None):
         super().__init__(message)
         self.created = dict(created or {})
         self.kind = kind
+        #: ACL-2392: the plain text for the buyer (`plain_errors.Failure`); None -> classified from the message.
+        self.failure = failure
 
 
 # ───────────────────────── план из черновика ─────────────────────────
@@ -358,6 +414,12 @@ class AdSetPlan:
     device: str = ""                 # "mobile" | "desktop"
     os_min: str = ""                 # минимальная версия iOS/Android: "14" или "14.0"
     start_time: str = ""             # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    #: ACL-1443 (lifetime): конец и расписание; пусто = как у daily (ключей в параметрах нет).
+    end_time: str = ""               # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    schedule: list = field(default_factory=list)   # [{"days": [0..6], "start_minute", "end_minute"}]
+    #: ACL-1448: пояс, в котором введены старт, конец и сетка (пояс команды); только у lifetime, у daily пусто
+    #: и время по-прежнему читается в поясе кабинета.
+    time_zone: str = ""
     #: ACL-1768: номер набора и поля уровня набора; пусто = как у кампании.
     index: int = 1                   # 1-based порядковый номер набора в кампании
     language: str = ""               # язык набора вместо языка кампании
@@ -392,10 +454,33 @@ class CampaignPlan:
     pixel_source: str = ""
     #: Предупреждения черновика (смешанный таргетинг/бюджет) — в итог (ревью, minor 7).
     warnings: list[str] = field(default_factory=list)
+    #: ACL-1443: "daily" (как всегда) | "lifetime"; при lifetime сумма на весь срок - `lifetime_budget`,
+    #: а `daily_budget` равен 0.
+    budget_type: str = BUDGET_DAILY
+    lifetime_budget: float = 0.0
+    #: ACL-2250: метка имени из билдера (до счётчика): видео копии берётся из библиотеки по ней, без повторной загрузки.
+    media_tag: str = ""
 
     @property
     def label(self) -> str:
         return f"acl-{self.tag}"
+
+    @property
+    def lifetime(self) -> bool:
+        return self.budget_type == BUDGET_LIFETIME
+
+    @property
+    def budget_amount(self) -> float:
+        """Сумма бюджета того типа, что задан (в валюте кабинета)."""
+        return self.lifetime_budget if self.lifetime else self.daily_budget
+
+    @property
+    def has_schedule(self) -> bool:
+        return any(s.schedule for s in self.ad_sets)
+
+    @property
+    def video_tag(self) -> str:
+        return self.media_tag or self.tag
 
 
 def _interest_groups(raw: str) -> list[list[str]]:
@@ -436,7 +521,7 @@ def _near(ratio: float, target: float) -> bool:
 
 
 def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[str]:
-    """Основной файл 1:1 или 4:5 и вертикальный 9:16 — проверка ДО любой загрузки (ACL-1774).
+    """Основной файл 1:1 или 4:5, Stories / Reels 9:16 или 1:1 — проверка ДО любой загрузки (ACL-1774, ACL-2084).
 
     Не прочитали размер — тоже отказ: пару, которую нельзя проверить, Meta обрежет молча.
     """
@@ -450,9 +535,9 @@ def pair_problems(index: int, kind: str, main: bytes, vertical: bytes) -> list[s
                    "the main file must be 1:1 or 4:5")
     if not v or not v[1]:
         out.append(f"Ad {index}: the size of the Stories / Reels file cannot be read; {hint}")
-    elif not _near(v[0] / v[1], VERTICAL_RATIO):
+    elif not any(_near(v[0] / v[1], r) for r in VERTICAL_RATIOS):
         out.append(f"Ad {index}: the Stories / Reels file is {v[0]}x{v[1]}; it must be 9:16 "
-                   "(for example 1080x1920)")
+                   "(for example 1080x1920) or 1:1 (for example 1080x1080)")
     return out
 
 
@@ -634,6 +719,55 @@ def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
             problems.append(f"Ad set {name!r}: start time {start!r} is not a date and time")
 
 
+def _plan_period(plan_set: AdSetPlan, src: Any, lifetime: bool, problems: list[str]) -> None:
+    """Lifetime (ACL-1443): старт и конец набора обязательны, расписание - сетка окон. Ошибки вслух.
+
+    При daily конец и расписание не принимаются (Meta: срок < 24 ч у daily отвергается, а расписание
+    работает только с lifetime). Поля плана остаются пустыми - прежние планы не меняются.
+    """
+    name = plan_set.name
+    end = str(getattr(src, "end_time", "") or "").strip()
+    raw = getattr(src, "schedule", None) or []
+    if lifetime:
+        # ACL-1448: время вводят по поясу команды; пояс задаёт сервер, из формы он не приходит.
+        plan_set.time_zone = _tt.team_timezone()
+    if not lifetime:
+        if end:
+            problems.append(f"Ad set {name!r}: an end time needs a lifetime budget")
+        if raw:
+            problems.append(f"Ad set {name!r}: a schedule needs a lifetime budget")
+        return
+    if not plan_set.start_time:
+        problems.append(f"Ad set {name!r}: a lifetime budget needs a start time")
+    if not end:
+        problems.append(f"Ad set {name!r}: a lifetime budget needs an end time")
+    else:
+        try:
+            if not _START_RE.match(end):
+                raise ValueError(end)
+            end_dt = datetime.strptime(end, "%Y-%m-%dT%H:%M")
+            plan_set.end_time = end
+            if plan_set.start_time and end_dt <= datetime.strptime(plan_set.start_time, "%Y-%m-%dT%H:%M"):
+                problems.append(f"Ad set {name!r}: the end time {end} must be after the start time {plan_set.start_time}")
+        except ValueError:
+            problems.append(f"Ad set {name!r}: end time {end!r} is not a date and time")
+    if not raw:
+        return
+    if not isinstance(raw, list):
+        problems.append(f"Ad set {name!r}: the schedule must be a list of windows")
+        return
+    if all(isinstance(w, dict) and not w.get("days") for w in raw):
+        problems.append(f"Ad set {name!r}: the schedule is empty; select at least one hour or turn the schedule off")
+        return
+    for w in raw:
+        why = _wpol.schedule_window_problem(w, with_tz=False)
+        if why:
+            problems.append(f"Ad set {name!r}: {why}")
+            return
+    plan_set.schedule = [{"days": sorted(w["days"]), "start_minute": w["start_minute"],
+                          "end_minute": w["end_minute"]} for w in raw]
+
+
 def _source(draft: Any, what: str) -> str:
     """Источник страницы/пикселя: enrich ставит map/draft; без него — draft, если значение есть."""
     got = str(getattr(draft, f"{what}_source", "") or "")
@@ -671,8 +805,10 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     if len(ad_sets_src) > MAX_AD_SETS:
         problems.append(MAX_AD_SETS_ERROR)      # ACL-1768: потолок наборов
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
+    lifetime = (str(getattr(ad_sets_src[0], "budget_type", "") or "").strip().lower() == BUDGET_LIFETIME
+                if ad_sets_src else False)
     if not budget or float(budget) <= 0:
-        problems.append("Daily budget missing")
+        problems.append("Lifetime budget missing" if lifetime else "Daily budget missing")
     ad_sets: list[AdSetPlan] = []
     ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
     for set_no, s in enumerate(ad_sets_src, start=1):
@@ -693,6 +829,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             plan_set.destination = dest
         plan_set.placements = _plan_placements(s, problems, plan_set.name)
         _plan_audience(plan_set, s, problems)
+        _plan_period(plan_set, s, lifetime, problems)
         if not s.ads:
             problems.append(f"No ads in ad set {plan_set.name!r}")
         for ad in s.ads:
@@ -771,9 +908,24 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
         language=str(getattr(draft, "language", "") or "").strip(), link=link,
         page_id=str(getattr(draft, "page_id", "") or "").strip(),
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
-        daily_budget=float(budget), ad_sets=ad_sets,
+        daily_budget=0.0 if lifetime else float(budget), ad_sets=ad_sets,
         page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
-        warnings=warnings)
+        warnings=warnings,
+        **({"budget_type": BUDGET_LIFETIME, "lifetime_budget": float(budget)} if lifetime else {}))
+
+
+def _minor_or_none(value: Any) -> int | None:
+    """Сумма в мелких единицах из ответа Meta ("100" -> 100); нет или не число - None."""
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def minor_to_major(minor: int, currency: str) -> float:
+    """Мелкие единицы -> единицы валюты кабинета (центы /100, ZERO_DECIMAL - как есть)."""
+    return float(minor) if (currency or "").upper() in ZERO_DECIMAL else minor / 100
 
 
 def budget_minor(amount: float, currency: str) -> int:
@@ -796,6 +948,8 @@ class AccountFacts:
     #: IANA-имя часового пояса кабинета (`timezone_name`, тот же ответ, что и смещение).
     #: Время старта переводится по нему, а не по текущему смещению (ACL-1767: переход на летнее время).
     timezone_name: str = ""
+    #: Минимальный дневной бюджет кабинета в мелких единицах (`min_daily_budget` Meta); None - не прочитан (ACL-1443).
+    min_daily_budget: int | None = None
     page_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
@@ -827,10 +981,10 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     if str(row.get("account_status")) != "1":
         _log_account_state(act, row)
         raise PlanError(f"The ad account is not active (account_status {row.get('account_status')}). "
-                        "Nothing was created.")
+                        "Nothing was created.", key="account_blocked")
     acc = client.account(act)
     got = str(acc.get("account_id") or "").strip()
-    if got and got != digits:
+    if got != digits:      # ACL-2267: пустой account_id в ответе - тоже несовпадение
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
     started = time.monotonic()
     merged = _pg.read_merged(client, act, always_profile=False)
@@ -845,7 +999,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                          pixels=[str(p.get("id")) for p in pixels if p.get("id")],
                          pages=[], page_names={}, page_sources={},
-                         utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip())
+                         utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip(),
+                         min_daily_budget=_minor_or_none(acc.get("min_daily_budget")))
     _apply_pages(facts, merged)
     facts.profile_loaded = merged.profile_read
 
@@ -902,7 +1057,7 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
                             f"this ad account can advertise from ({len(facts.pages)} found). "
-                            "This account cannot advertise using that Page. Refresh pages and choose again.")
+                            "This account cannot advertise using that Page. Refresh pages and choose again.", key="page_unavailable")
     elif facts.pages:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
@@ -926,13 +1081,13 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
     for s in plan.ad_sets:
         # ACL-1768: пиксель набора, если задан, тоже должен быть на кабинете.
         if s.pixel_id and not s.instant and s.pixel_id not in facts.pixels:
-            raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.")
+            raise PlanError(f"The pixel of ad set {s.name!r} is not on this ad account.", key="pixel_unavailable")
     if plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
-                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
+                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.", key="pixel_unavailable")
     elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
         return
     elif len(facts.pixels) == 1:
@@ -940,7 +1095,7 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         plan.pixel_source = "account default"
     else:
         raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
-                        "the API backend needs exactly one")
+                        "the API backend needs exactly one", key="pixel_unavailable")
 
 
 def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -994,14 +1149,21 @@ class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
     def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
-                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = ""):
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None,
+                 act: str = ""):
         self.client = client
+        #: ACL-2267: долгий кэш разобранных терминов (страна, язык, интерес); по умолчанию - кэш машины.
+        self._facts = facts if facts is not None else _facts_cache.default()
+        #: Ключи долгого кэша, использованные этим резолвером: при отказе Meta по таргетингу сбрасываются.
+        self._touched: set[str] = set()
+        self._facts_hits = 0
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
-        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope)
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts,
+                                      act=act)
         #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
         #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
         self.locale_groups: dict[int, dict[int, str]] = {}
@@ -1013,6 +1175,13 @@ class TargetingResolver:
         if key.upper() in self._geo:
             return self._geo[key.upper()]
         up = key.upper()
+        wkey = self._facts.term_key("country", _tr.norm(key))
+        warm = self._facts.get_term(wkey)
+        if warm and re.fullmatch(r"[A-Z]{2}", str(warm.get("code") or "")):
+            self._touched.add(wkey)
+            self._facts_hits += 1
+            self._geo[up] = str(warm["code"])
+            return self._geo[up]
         code = ""
         # Для двухбуквенного кода «q=AR» отдаёт десятки стран с «ar» в названии, и нужная может
         # выпасть из страницы, поэтому: сначала код с широкой выдачей, затем английские названия.
@@ -1033,15 +1202,45 @@ class TargetingResolver:
             if code:
                 break
         if not code:
-            raise PlanError(f"Country {key!r} was not found by Meta targeting search")
+            raise PlanError(f"Country {key!r} was not found by Meta targeting search", key="targeting_term")
         self._geo[key.upper()] = code
+        self._facts.put_term(wkey, {"code": code})
+        self._touched.add(wkey)
         return code
+
+    def drop_cached(self) -> int:
+        """Meta отвергла таргетинг: забыть всё, что этот резолвер взял из долгого кэша или положил в него."""
+        keys = sorted(self._touched | self.terms.touched_keys)
+        self._facts.drop_terms(keys)
+        self._touched.clear()
+        self.terms.touched_keys.clear()
+        return len(keys)
+
+    def facts_stats(self) -> dict:
+        """Счётчики долгого кэша за задание (для телеметрии Check plan, без имён терминов)."""
+        st = dict(self.terms.facts_stats)
+        st["warm_hits"] += self._facts_hits
+        st["targeting_reads"] = self.terms.reads
+        return st
 
     def locale(self, language: str) -> int | None:
         lang = (language or "").strip()
         if not lang:
             return None
         if lang in self._locale:
+            return self._locale[lang]
+        wkey = self._facts.term_key("locale", _tr.norm(lang))
+        warm = self._facts.get_term(wkey)
+        if warm and re.fullmatch(r"[0-9]+", str(warm.get("id") or "")):
+            self._touched.add(wkey)
+            self._facts_hits += 1
+            self._locale[lang] = int(warm["id"])
+            self.locale_names[lang] = str(warm.get("name") or lang)
+            groups = warm.get("groups") if isinstance(warm.get("groups"), dict) else {}
+            if groups or self.locale_names[lang].casefold().endswith(" (all)"):
+                # группа «X (All)» без известных членов тоже группа: без пометки сравнение станет нестрогим
+                self.locale_groups[self._locale[lang]] = {int(k): str(v) for k, v in groups.items()
+                                                          if re.fullmatch(r"[0-9]+", str(k))}
             return self._locale[lang]
         rows = _tr.named_search("adlocale", lambda: self.client.get_all(
             "/search", {"type": "adlocale", "q": lang, "limit": 25}, max_pages=1))
@@ -1051,7 +1250,7 @@ class TargetingResolver:
             if pick:
                 break
         if not pick:
-            raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search")
+            raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search", key="targeting_term")
         self._locale[lang] = int(pick["key"])
         self.locale_names[lang] = str(pick.get("name") or lang)
         pick_name = str(pick.get("name") or "")
@@ -1063,6 +1262,10 @@ class TargetingResolver:
                 and str(r.get("name") or "").strip().casefold() != pick_name.casefold()
                 and (str(r.get("name") or "").strip().casefold() == base
                      or str(r.get("name") or "").strip().casefold().startswith(base + " ("))}
+        self._facts.put_term(wkey, {"id": str(self._locale[lang]), "name": self.locale_names[lang],
+                                    "groups": {str(k): v for k, v in
+                                               self.locale_groups.get(self._locale[lang], {}).items()}})
+        self._touched.add(wkey)
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
@@ -1072,8 +1275,12 @@ class TargetingResolver:
         с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
         """
         terms = [n for g in groups for n in g]
-        self.terms.prefetch(terms)
-        results = {n: self.terms.resolve(n) for n in terms}
+        try:
+            self.terms.prefetch(terms)
+            results = {n: self.terms.resolve(n) for n in terms}
+        except _tr.ConfirmedStoreUnreadable as exc:
+            # ACL-2243: unknown store state must stop the plan, not resolve as if nothing was confirmed.
+            raise PlanError(str(exc)) from exc
         bad: list[dict] = []
         for r in results.values():
             if r["state"] in ("exact", "confirmed"):
@@ -1292,6 +1499,13 @@ class Outcome:
     manual_required: list[str] = field(default_factory=list)
     #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
     campaign_confirmed_paused: bool = False
+    #: ACL-2392: plain-English version of `error` (`plain_errors.Failure`); `error` stays raw for logs and gating.
+    failure: Any = None
+    #: ACL-2250: (кабинет, имя из билдера) квитанции, когда сверка дошла до конца без остановки; конец задания
+    #: (`publisher.finish_name_records`) удаляет её. Пусто - квитанция остаётся, следующий запуск допишет эту же кампанию.
+    name_receipt_done: tuple = ()
+    #: ACL-2250: номер счётчика в имени (0 - имя из билдера); в строку телеметрии.
+    copy_number: int = 0
 
     @property
     def mismatches(self) -> list[dict]:
@@ -1300,17 +1514,53 @@ class Outcome:
 
 @dataclass
 class NameChoice:
-    """Итог выбора имени кампании (ACL-1902): план с итоговым именем и меткой, до первой записи."""
+    """Итог выбора имени кампании (ACL-1902, ACL-2250): план с итоговым именем и меткой, до первой записи."""
     plan: CampaignPlan
-    #: Своя совпавшая с билдером кампания (возобновление/повтор) - её переиспользуем; иначе None.
+    #: Своя кампания, которую дописываем (возобновление после обрыва) - её переиспользуем; иначе None.
     existing: dict | None = None
     found_sets: list = field(default_factory=list)
-    #: Пропущенные кандидаты: {"name", "reason": "different"|"foreign", "differences": [...]}.
-    skipped: list = field(default_factory=list)
+    #: Номер счётчика: 0 - имя из билдера, n - `<имя> copy <n>`.
+    copy_number: int = 0
+    #: Сколько кампаний этого имени уже было на кабинете (для текста «2 earlier»).
+    earlier: int = 0
+    #: Почему верхняя своя кампания не дописывается (расхождения с билдером) - в шаги, не в предупреждение.
+    notes: list = field(default_factory=list)
 
     @property
     def renamed(self) -> bool:
-        return bool(self.skipped)
+        return self.copy_number > 0
+
+
+def copy_name(base: str, n: int) -> str:
+    return base if n <= 0 else f"{base}{COPY_WORD}{n}"
+
+
+def copy_plan(plan: CampaignPlan, n: int) -> CampaignPlan:
+    """План с счётчиком `n` (ACL-2250): имя и метка кампании, имена всех наборов; объявления и формы прежние.
+
+    `media_tag` остаётся меткой имени из билдера: видео копии берётся из библиотеки, а не грузится заново.
+    Таргетинги идут по позиции набора, имена на них не влияют.
+    """
+    if n <= 0:
+        return plan
+    name = copy_name(plan.name, n)
+    return replace(plan, name=name, tag=campaign_tag(plan.act, name), media_tag=plan.video_tag,
+                   ad_sets=[replace(s, name=copy_name(s.name, n)) for s in plan.ad_sets])
+
+
+def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
+    """{0: строки `base`, n: строки `base copy n`} - точное имя, с учётом регистра. `copy 0` и `copy 01` не в счёте."""
+    fam: dict[int, list[dict]] = {}
+    prefix = f"{base}{COPY_WORD}"
+    for row in rows:
+        name = str(row.get("name") or "").strip()
+        if name == base:
+            fam.setdefault(0, []).append(row)
+        elif name.startswith(prefix):
+            tail = name[len(prefix):]
+            if tail.isascii() and tail.isdigit() and not tail.startswith("0"):
+                fam.setdefault(int(tail), []).append(row)
+    return fam
 
 
 #: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
@@ -1494,10 +1744,19 @@ class CampaignCreator:
             self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
         return show
 
-    def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
-               *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False, children_active: bool = False, form_page: str = "",
-               upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
+    def _write(self, out: Outcome, what: str, *args: Any, **kwargs: Any) -> str:
+        """ACL-2392: `_write_inner` plus the plain-words stage on whatever stops it ("while creating ad set ...")."""
+        try:
+            return self._write_inner(out, what, *args, **kwargs)
+        except (CreationStopped, GraphError, GraphStop, WriteUnknown) as exc:
+            if not getattr(exc, "stage", ""):
+                exc.stage = _plain.stage_of(what)
+            raise
+
+    def _write_inner(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
+                     *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
+                     on_ad: bool = False, children_active: bool = False, form_page: str = "",
+                     upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
         ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
@@ -1596,10 +1855,14 @@ class CampaignCreator:
                                            form_page=form_page, upload=upload, _resent=True)
                 else:
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
+                    # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
+                    rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
+                                 if exc.subcode in _REJECTION_SUBCODES else None)
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
-                        created=out.created, kind="unknown") from exc
+                        created=out.created, kind="unknown", failure=rejection) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -1650,79 +1913,157 @@ class CampaignCreator:
             "filtering": [{"field": "name", "operator": "CONTAIN", "value": name}],
             "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
 
-    def _name_rows(self, act: str, name: str, base_rows: list[dict], truncated: bool) -> list[dict]:
-        """Строки с этим именем: из общего поиска, а если он мог обрезаться - точным запросом по имени.
+    def _family_rows(self, plan: CampaignPlan) -> list[dict]:
+        """Живые кампании с именем семейства: один поиск по подстроке.
 
-        Точный запрос (EQUAL) тоже полный на 200 строках - тогда доверять нечему, стоп до записей.
-        """
-        if not truncated:
-            return base_rows
-        rows = self.client.get_all(f"/{act}/campaigns", {
-            "fields": "id,name,status,adlabels{name}",
-            "filtering": [{"field": "name", "operator": "EQUAL", "value": name}],
-            "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
-        if len(rows) >= CAMPAIGN_SEARCH_ROWS:
-            raise CreationStopped(
-                f"Cannot tell whether the campaign name {name!r} is free: the ad account has too many "
-                "campaigns with that name. Nothing was created; rename the campaign in the builder.",
-                kind="name_unsure")
-        return rows
-
-    def _ad_names_fit(self, cand: CampaignPlan, campaign_id: str) -> bool:
-        """Для NAME_2...: кампания с чужими объявлениями (построена билдером с таким именем) - не наша."""
-        have = {str(r.get("name") or "").strip() for r in self._children(campaign_id, "ads", "id,name")}
-        want = {ad.name for s in cand.ad_sets for ad in s.ads}
-        return have <= want
-
-    def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
-        """ACL-1902: имя кампании до любой записи - и в боевом запуске, и в Check plan.
-
-        Кандидаты NAME, NAME_2 ... NAME_20 (суффикс всегда к полному имени, чужие цифры не разбираем):
-        нет живой кампании с таким именем - берём; наша (метка кандидата) и без расхождений с билдером -
-        переиспользуем (возобновление не плодит дубль); наша, но другая, или чужая (без метки) - дальше.
-        Метка считается от имени кандидата, поэтому у NAME_2 своя метка и свои креативы.
-        Только чтения: один поиск по подстроке на все кандидаты + сверка найденных своих.
+        Если выдача могла обрезаться (200 строк) - ещё два точных поиска: `<имя> copy ` и имя целиком.
+        Они тоже полны на 200 строках - тогда доверять нечему, стоп до записей.
         """
         rows = self._campaign_rows(plan.act, plan.name)
-        truncated = len(rows) >= CAMPAIGN_SEARCH_ROWS
-        skipped: list[dict] = []
-        scans = 0
-        for n in range(1, NAME_SUFFIX_MAX + 1):
-            name = plan.name if n == 1 else f"{plan.name}_{n}"
+        if len(rows) < CAMPAIGN_SEARCH_ROWS:
+            return rows
+        more = self._campaign_rows(plan.act, f"{plan.name}{COPY_WORD}")
+        same = self.client.get_all(f"/{plan.act}/campaigns", {
+            "fields": "id,name,status,adlabels{name}",
+            "filtering": [{"field": "name", "operator": "EQUAL", "value": plan.name}],
+            "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
+        if len(more) >= CAMPAIGN_SEARCH_ROWS or len(same) >= CAMPAIGN_SEARCH_ROWS:
+            raise CreationStopped(
+                f"Cannot tell which copy number of the campaign {plan.name!r} is free: the ad account has too "
+                "many campaigns with that name. Nothing was created; rename the campaign in the builder.",
+                kind="name_unsure")
+        seen: set[str] = set()
+        out: list[dict] = []
+        for row in [*same, *more]:
+            if str(row.get("id")) not in seen:
+                seen.add(str(row.get("id")))
+                out.append(row)
+        return out
+
+    def _check_name_length(self, cand: CampaignPlan) -> None:
+        """ACL-2250 (D6): настоящие итоговые имена кампании и каждого набора - до любой записи; не обрезаем."""
+        for what, name in [("campaign", cand.name), *[("ad set", s.name) for s in cand.ad_sets]]:
             if len(name) > CAMPAIGN_NAME_MAX:
                 raise CreationStopped(
-                    f"The campaign name {name!r} would be longer than the Meta limit of "
-                    f"{CAMPAIGN_NAME_MAX} characters. Nothing was created; shorten the campaign name "
-                    "in the builder.", kind="name_too_long")
-            cand = plan if n == 1 else replace(plan, name=name, tag=campaign_tag(plan.act, name))
-            hits = self._name_rows(plan.act, name, rows, truncated)
-            same = [r for r in hits if str(r.get("name") or "").strip() == name]
-            if not same:
-                return NameChoice(cand, None, [None] * len(plan.ad_sets), skipped)
-            ours = [r for r in same if cand.label in _labels(r)]
-            if not ours:
-                skipped.append({"name": name, "reason": "foreign", "differences": []})
-                continue
-            scans += 1
-            if scans > NAME_SCAN_MAX_OURS:
-                raise CreationStopped(
-                    f"Too many earlier campaigns named like {plan.name!r} to check them all within the "
-                    "call budget. Nothing was created; rename the campaign in the builder or remove "
-                    "old ones in Ads Manager.", kind="name_scan_limit")
-            campaign_id = str(ours[0]["id"])
-            found_sets = self._find_sets(cand, campaign_id)
-            bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
-            if not bad and n > 1 and not self._ad_names_fit(cand, campaign_id):
-                skipped.append({"name": name, "reason": "other_ads", "differences": []})
-                continue
-            if not bad:
-                return NameChoice(cand, ours[0], found_sets, skipped)
-            skipped.append({"name": name, "reason": "different", "differences": bad})
-        raise CreationStopped(
-            f"All {NAME_SUFFIX_MAX} campaign names are taken: {plan.name!r} and {plan.name}_2 ... "
-            f"{plan.name}_{NAME_SUFFIX_MAX} already exist on the ad account (not ours, or ours with different "
-            "settings). Nothing was created; rename the campaign in the builder or remove the old ones "
-            "in Ads Manager.", kind="name_taken")
+                    f"The {what} name {name!r} would be longer than the Meta limit of {CAMPAIGN_NAME_MAX} "
+                    "characters. Nothing was created; shorten the campaign name in the builder.",
+                    kind="name_too_long")
+
+    def _resume_state(self, cand: CampaignPlan, targetings: list[dict], campaign_id: str):
+        """Наша кампания кандидата: (найденные наборы, неполная ли), либо None - дописывать нельзя.
+
+        Нельзя, если в ней есть объявления не из плана или она расходится с билдером (в том числе включена):
+        третий элемент - причины текстом. Неполная: нет набора плана или объявления плана под найденным набором.
+        Без Страницы объявления не считаются. Всего одно чтение объявлений кампании: и «подходят», и «неполная».
+        """
+        found_sets = self._find_sets(cand, campaign_id)
+        manual = needs_manual_page(cand)
+        ads = self._children(campaign_id, "ads", "id,name,adset_id")
+        want = set() if manual else {ad.name for s in cand.ad_sets for ad in s.ads}
+        if {str(r.get("name") or "").strip() for r in ads} - want:
+            return found_sets, False, ["it is a campaign with other ads"]
+        bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
+        if bad:
+            return found_sets, False, [f"{f['object']}: " + "; ".join(f["differences"]) for f in bad]
+        have: dict[str, set[str]] = {}
+        for r in ads:
+            have.setdefault(str(r.get("adset_id") or ""), set()).add(str(r.get("name") or "").strip())
+        partial = any(h is None for h in found_sets) or (not manual and any(
+            h is not None and any(ad.name not in have.get(str(h["id"]), set()) for ad in s.ads)
+            for s, h in zip(cand.ad_sets, found_sets)))
+        return found_sets, partial, []
+
+    def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict) -> NameChoice | None:
+        """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
+
+        Любое сомнение (нет кампании, ошибка Meta на чтении по id, не наша, не живая, расходится) - квитанция
+        не используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        """
+        n = receipt.get("n")
+        if not isinstance(n, int) or n < 0:
+            return None
+        cand = copy_plan(plan, n)
+        if receipt.get("name") != cand.name:
+            return None
+        campaign_id = str(receipt.get("campaign_id") or "")
+        if campaign_id:
+            try:
+                row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
+            except GraphError:
+                return None
+            row = {**row, "id": campaign_id} if isinstance(row, dict) else None
+        else:
+            hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
+            row = next((r for r in hits if cand.label in _labels(r)), None)
+        if not row or str(row.get("name") or "").strip() != cand.name or cand.label not in _labels(row):
+            return None
+        if str(row.get("effective_status") or row.get("status") or "") not in LIVE_STATES:
+            return None
+        found_sets, _partial, why = self._resume_state(cand, targetings, str(row["id"]))
+        if why:
+            return None
+        return NameChoice(cand, row, found_sets, n, n)
+
+    def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
+        """ACL-2250 (ACL-1902): имя кампании до любой записи - и в боевом запуске, и в Check plan.
+
+        1. Квитанция этого задания (кабинет + имя из билдера): дописываем ту же кампанию.
+        2. Иначе одним поиском собираем семейство `X`, `X copy 1`, `X copy 2` ... Нет семейства - имя как есть.
+           Верхний номер, если он наш и неполный (обрыв, квитанция потеряна) - дописываем. Иначе новая копия
+           с номером «верхний + 1» (не первая дырка): занятый номер не возвращаем.
+        Только чтения; подробно читается одна строка - верхняя.
+        """
+        base = plan.name
+        receipt = self._read_name_receipt(plan)
+        if receipt:
+            chosen = self._receipt_choice(plan, targetings, receipt)
+            if chosen:
+                return chosen
+        fam = family_rows(base, self._family_rows(plan))
+        if not fam:
+            self._check_name_length(plan)
+            return NameChoice(plan, None, [None] * len(plan.ad_sets))
+        top = max(fam)
+        cand = copy_plan(plan, top)
+        ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
+        notes: list[str] = []
+        if ours:
+            found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
+            if partial and not why:
+                return NameChoice(cand, ours, found_sets, top, len(fam) - 1)
+            if why:
+                notes.append(f"{cand.name!r} (earlier campaign) is left as is; it differs from the builder: "
+                             + " | ".join(why))
+        cand = copy_plan(plan, top + 1)
+        self._check_name_length(cand)
+        return NameChoice(cand, None, [None] * len(plan.ad_sets), top + 1, len(fam), notes)
+
+    def _save_name_receipt(self, out: Outcome, requested: str, choice: NameChoice) -> None:
+        """До первой записи: выбранное имя на диск, чтобы повтор после обрыва дописал ту же кампанию."""
+        try:
+            _nr.save(choice.plan.act, requested, choice.plan.name, choice.copy_number,
+                     str(choice.existing["id"]) if choice.existing else "")
+        except _nr.NameReceiptError as exc:
+            raise CreationStopped(
+                f"The local campaign name record could not be saved ({exc}). Nothing was created; "
+                "check the folder of the ACL machine settings.", kind="name_receipt") from exc
+
+    def _attach_name_receipt(self, out: Outcome, act: str, requested: str) -> None:
+        try:
+            _nr.attach_id(act, requested, out.campaign_id)
+        except _nr.NameReceiptError as exc:
+            raise CreationStopped(
+                f"The local campaign name record could not be updated ({exc}). The campaign "
+                f"{out.campaign_id} exists (PAUSED); nothing else was written.",
+                created=out.created, kind="name_receipt") from exc
+
+    def _read_name_receipt(self, plan: CampaignPlan) -> dict | None:
+        try:
+            return _nr.load(plan.act, plan.name)
+        except _nr.NameReceiptError as exc:
+            raise CreationStopped(
+                f"The local campaign name record could not be read ({exc}). Nothing was created; "
+                "check the folder of the ACL machine settings.", kind="name_receipt") from exc
 
     def _children(self, parent_id: str, edge: str, fields: str) -> list[dict]:
         return self.client.get_all(f"/{parent_id}/{edge}", {
@@ -1944,7 +2285,12 @@ class CampaignCreator:
                         and str(row.get("id") or "") == creative_id
                         and (content_ok or self._same_videos(plan, params, row)))
                     if identical_existing:
-                        out.warnings.append("Meta returned an existing identical creative (tag of an earlier run)")
+                        note = "Meta returned an existing identical creative (tag of an earlier run)"
+                        if plan.media_tag and plan.media_tag != plan.tag:
+                            # ACL-2250: у копии это ожидаемо (то же видео и тот же контент) - шаг, а не предупреждение.
+                            self._step(out, note)
+                        else:
+                            out.warnings.append(note)
                         if created:
                             # An existing object, not a new one: report it as reused and remember the acceptance.
                             made = out.created.get("creatives", [])
@@ -2058,7 +2404,7 @@ class CampaignCreator:
 
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
                path: str = "", role: str = "") -> tuple[str, str]:
-        title = video_title(plan.tag, data)
+        title = video_title(plan.video_tag, data)
         path = path or ad.path
         who = f"ad {ad.index}{role}"
 
@@ -2252,10 +2598,18 @@ class CampaignCreator:
 
     # -- описание объектов (одно на запись и на сверку)
     def campaign_params(self, plan: CampaignPlan) -> dict:
-        return {"name": plan.name, "objective": OBJECTIVE, "status": PAUSED,
-                "special_ad_categories": [], "buying_type": "AUCTION",
-                "daily_budget": budget_minor(plan.daily_budget, self.facts.currency),
-                "bid_strategy": BID_STRATEGY, "adlabels": [{"name": plan.label}]}
+        params = {"name": plan.name, "objective": OBJECTIVE, "status": PAUSED,
+                  "special_ad_categories": [], "buying_type": "AUCTION"}
+        if plan.lifetime:
+            # ACL-1443: сумма на весь срок; расписание - pacing_type=day_parting (так хранит Meta).
+            params["lifetime_budget"] = budget_minor(plan.lifetime_budget, self.facts.currency)
+        else:
+            params["daily_budget"] = budget_minor(plan.daily_budget, self.facts.currency)
+        params["bid_strategy"] = BID_STRATEGY
+        if plan.lifetime and plan.has_schedule:
+            params["pacing_type"] = ["day_parting"]
+        params["adlabels"] = [{"name": plan.label}]
+        return params
 
     def adset_params(self, plan: CampaignPlan, ad_set: AdSetPlan, campaign_id: str, targeting: dict) -> dict:
         if ad_set.instant:
@@ -2275,30 +2629,202 @@ class CampaignCreator:
         if ad_set.start_time:
             # ACL-1767: ключа нет, пока старт не задан - прежние планы не меняются.
             params["start_time"] = self.start_iso(ad_set)
+        if ad_set.end_time:
+            # ACL-1443: lifetime - конец набора с явным смещением; у daily ключа нет.
+            params["end_time"] = self.end_iso(ad_set)
+        if ad_set.schedule:
+            params["adset_schedule"] = self.schedule_windows(ad_set)
         if ad_set.dynamic:
             # ACL-1774: несколько текстов - Dynamic Creative на уровне набора; ключа нет у прежних планов.
             params[_wpol.DYNAMIC_KEY] = True
         return params
 
-    def _start_dt(self, ad_set: AdSetPlan) -> datetime:
-        """Время старта набора как момент: введено по часовому поясу кабинета."""
+    def _local_dt(self, ad_set: AdSetPlan, value: str, what: str) -> datetime:
+        """Время набора как момент, смещение - на САМУ дату (ACL-1443).
+
+        Lifetime (ACL-1448): введено по поясу команды (Израиль), `ad_set.time_zone`. Daily: по поясу кабинета.
+        Несуществующее время (дыра перевода часов) - отказ; неоднозначное (час повторяется) - первое.
+        """
+        if ad_set.time_zone:
+            local = _tt.localize(value, ad_set.time_zone)
+            if local is None:
+                raise PlanError(f"Ad set {ad_set.name!r}: the {what} time {value} does not exist in Israel time "
+                                f"({ad_set.time_zone}): clocks skip that hour. Pick another time.")
+            return local
         name = self.facts.timezone_name
-        zone = None
-        if name:
-            try:
-                zone = ZoneInfo(name)
-            except (ZoneInfoNotFoundError, ValueError, OSError):
-                zone = None
+        zone = _tt.load_zone(name)
         if zone is None:
             # Не угадываем по текущему смещению: на дату старта оно может быть другим (летнее время).
             raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
-                            f"({name or 'not returned by Meta'}) is not known here, so the start time "
-                            "cannot be set. Clear the start time or try again.")
-        return datetime.strptime(ad_set.start_time, "%Y-%m-%dT%H:%M").replace(tzinfo=zone)
+                            f"({name or 'not returned by Meta'}) is not known here, so the {what} time "
+                            f"cannot be set. Clear the {what} time or try again.")
+        naive = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+        local = naive.replace(tzinfo=zone, fold=0)
+        if local.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) != naive:
+            raise PlanError(f"Ad set {ad_set.name!r}: the {what} time {value} does not exist in the ad account "
+                            f"time zone ({name}): clocks skip that hour. Pick another time.")
+        return local
+
+    @staticmethod
+    def _zone_note(ad_set: AdSetPlan) -> str:
+        return "Israel time" if ad_set.time_zone else "ad account time zone"
+
+    def _start_dt(self, ad_set: AdSetPlan) -> datetime:
+        """Время старта набора как момент: введено по часовому поясу кабинета."""
+        return self._local_dt(ad_set, ad_set.start_time, "start")
+
+    def _end_dt(self, ad_set: AdSetPlan) -> datetime:
+        return self._local_dt(ad_set, ad_set.end_time, "end")
+
+    #: ACL-2465: запас до старта, сдвинутого «на сейчас» (запись в Meta ещё идёт), и шаг округления.
+    TODAY_START_MARGIN = timedelta(minutes=5)
+    TODAY_START_STEP_MIN = 15
+
+    def _moved_start(self, local_now: datetime, now: datetime) -> datetime:
+        """Ближайшая четверть часа не раньше now + 5 минут (секунды округляются вверх; расчёт в UTC)."""
+        t = now.astimezone(timezone.utc) + self.TODAY_START_MARGIN
+        if t.second or t.microsecond:
+            t = t.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        t += timedelta(minutes=(-t.minute) % self.TODAY_START_STEP_MIN)
+        return t.astimezone(local_now.tzinfo)
+
+    def _move_passed_start_of_today(self, ad_set: AdSetPlan) -> None:
+        """Lifetime с первым днём «сегодня»: прошедший час старта сдвигается вперёд, а не стопорит публикацию.
+
+        ACL-2465: форма задаёт старт сегодняшнего дня как «следующий целый час», а задание может ждать
+        очереди (процессор, память) дольше - 17:51 отправлено со стартом 18:00, проверено в 18:06.
+        Старт того же дня (по поясу команды), уже прошедший, становится ближайшей четвертью часа
+        не раньше чем через 5 минут. Старт прошлых дней по-прежнему отказ; Daily не трогается.
+        Сдвиг виден человеку (`_start_move_notes`), а повторный запуск сверяет такой старт мягко
+        (`_moved_start_matches`): в плане остаётся исходный старт, в Meta уже сдвинутый.
+        """
+        if not ad_set.time_zone or not ad_set.end_time:
+            return
+        start, now = self._start_dt(ad_set), self.now()
+        if start > now:
+            return
+        local_now = now.astimezone(start.tzinfo)
+        if start.date() != local_now.date():
+            return
+        nxt = self._moved_start(local_now, now)
+        new = nxt.strftime("%Y-%m-%dT%H:%M")
+        log.info("ACL-2465: ad set %r start %s (%s) has passed; moved to %s", ad_set.name,
+                 ad_set.start_time, ad_set.time_zone, new)
+        if not hasattr(self, "_start_move_notes"):
+            self._start_move_notes = []
+        self._start_move_notes.append(
+            f"Ad set {ad_set.name!r}: the start {ad_set.start_time[-5:]} ({self._zone_note(ad_set)}) had passed "
+            f"while the job waited in the queue; moved to {new[-5:]}"
+            + ("" if new[:10] == ad_set.start_time[:10] else f" on {new[:10]}") + ".")
+        if not hasattr(self, "_moved_from"):
+            self._moved_from = {}
+        self._moved_from[id(ad_set)] = ad_set.start_time[-5:]
+        ad_set.start_time = new
+
+    def _drain_start_move_notes(self, out: Outcome) -> None:
+        """Сдвиг старта - в предупреждения результата (запуск и Check plan)."""
+        for note in getattr(self, "_start_move_notes", []):
+            if note not in out.warnings:
+                out.warnings.append(note)
+        self._start_move_notes = []
+
+    def _moved_start_matches(self, ad_set: AdSetPlan, meta_start: Any) -> bool:
+        """Старт набора в Meta - это сдвинутый (ACL-2465) старт плана при повторе/продолжении?
+
+        Первый запуск сдвинул прошедший старт сегодняшнего дня, Meta хранит сдвинутый, а билдер
+        отдаёт прежний. Совпадением считается, только если ВСЁ верно: Lifetime в поясе команды;
+        старт плана уже прошёл; старт Meta не раньше старта плана; он в тот же день пояса команды
+        либо в первые минуты следующего (сдвиг через полночь); и не дальше, чем сдвиг мог уйти от
+        «сейчас». Будущий старт плана и любая другая правка сравниваются строго.
+        """
+        if not ad_set.time_zone or not ad_set.end_time or not ad_set.start_time:
+            return False
+        try:
+            plan_start = self._start_dt(ad_set)
+            got = datetime.strptime(str(meta_start), "%Y-%m-%dT%H:%M:%S%z")
+        except (ValueError, PlanError):
+            return False
+        now = self.now()
+        if plan_start > now or got < plan_start:
+            return False
+        if got > now + self.TODAY_START_MARGIN + timedelta(minutes=self.TODAY_START_STEP_MIN):
+            return False
+        gl = got.astimezone(plan_start.tzinfo)
+        day = plan_start.date()
+        if gl.date() == day:
+            return True
+        return gl.date() == day + timedelta(days=1) and gl.hour == 0 and gl.minute <= (
+            self.TODAY_START_MARGIN.seconds // 60 + self.TODAY_START_STEP_MIN)
 
     def start_iso(self, ad_set: AdSetPlan) -> str:
         """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
         return self._start_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
+
+    def end_iso(self, ad_set: AdSetPlan) -> str:
+        return self._end_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
+
+    def schedule_windows(self, ad_set: AdSetPlan) -> list[dict]:
+        """Окна расписания набора для записи: пояс кабинета (`ADVERTISER`) добавляет бэкенд.
+
+        ACL-1448: сетка в плане - по поясу команды; в окна кабинета её переводит `team_grid_to_account_windows`
+        по разнице поясов на момент старта. Нецелая разница часов или неизвестный пояс кабинета - отказ.
+        """
+        if not ad_set.time_zone:
+            return [{"days": list(w["days"]), "start_minute": w["start_minute"], "end_minute": w["end_minute"],
+                     "timezone_type": _wpol.SCHEDULE_TZ} for w in ad_set.schedule]
+        account = self.facts.timezone_name
+        if _tt.load_zone(account) is None:
+            raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
+                            f"({account or 'not returned by Meta'}) is not known here, so the hours of the "
+                            "schedule cannot be converted. Clear the schedule or try again.")
+        try:
+            return _tt.team_grid_to_account_windows(ad_set.schedule, ad_set.time_zone, account,
+                                                    self._start_dt(ad_set))
+        except _tt.ShiftError as exc:
+            raise PlanError(f"Ad set {ad_set.name!r}: {exc}.") from exc
+
+    def schedule_shift_warnings(self, plan: CampaignPlan) -> list[str]:
+        """ACL-1448: предупреждения (не ошибки), если разница Израиль-кабинет меняется между стартом и концом."""
+        account = self.facts.timezone_name
+        if not plan.lifetime or _tt.load_zone(account) is None:
+            return []
+        found: list[str] = []
+        for s in plan.ad_sets:
+            if not (s.schedule and s.time_zone and s.start_time and s.end_time):
+                continue
+            try:
+                note = _tt.shift_change_warning(s.time_zone, account, self._start_dt(s), self._end_dt(s))
+            except PlanError:
+                continue     # дыра часов покажет свой отказ в предпроверке
+            if note and note not in found:
+                found.append(note)
+        return found
+
+    def lifetime_days(self, plan: CampaignPlan) -> int | None:
+        """Число суток срока (вверх) по самому короткому набору; нет сроков - None (ACL-1443)."""
+        spans = [(self._end_dt(s) - self._start_dt(s)).total_seconds()
+                 for s in plan.ad_sets if s.start_time and s.end_time]
+        return max(1, math.ceil(min(spans) / 86400)) if spans else None
+
+    def budget_floor_problem(self, plan: CampaignPlan) -> str:
+        """Lifetime ниже минимума кабинета, посчитанного по ЦЕЛЫМ часам срока (ACL-1443). Нет факта - пусто.
+
+        Минимум при записи мягче вердикта Check plan (тот считает сутки вверх): отказ только если
+        бюджет меньше `min_daily_budget` x часы / 24, округлённого вверх в мелких единицах.
+        """
+        minimum = self.facts.min_daily_budget
+        spans = [(self._end_dt(s) - self._start_dt(s)).total_seconds()
+                 for s in plan.ad_sets if s.start_time and s.end_time]
+        if not plan.lifetime or not minimum or not spans:
+            return ""
+        hours = max(1, int(min(spans) // 3600))
+        need = max(minimum, -(-minimum * hours // 24))
+        if budget_minor(plan.lifetime_budget, self.facts.currency) >= need:
+            return ""
+        cur = self.facts.currency
+        return (f"The lifetime budget {plan.lifetime_budget:g} {cur} is below the ad account minimum "
+                f"{minor_to_major(minimum, cur):g} {cur} a day x {hours} hours / 24 = "
+                f"{minor_to_major(need, cur):g} {cur}")
 
     def creative_params(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict, name: str) -> dict:
         """Запись креатива: одно описание на запись, предпроверку политикой и сверку (ACL-1767)."""
@@ -2352,10 +2878,12 @@ class CampaignCreator:
             return row
 
         spec: dict[str, Any] = {
-            "bodies": [{"text": t} for t in ad.bodies], "titles": [{"text": t} for t in ad.titles],
+            "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
             "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
+        if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
+            spec["bodies"] = [{"text": t} for t in ad.bodies]
         if ad.descriptions:
             spec["descriptions"] = [{"text": t} for t in ad.descriptions]
         if ad.vertical_path:
@@ -2375,13 +2903,21 @@ class CampaignCreator:
         else:
             cta = {"type": ad.cta, "value": {"link": plan.link}}
         if ad.kind == "video":
-            data = {"video_id": media["video_id"], "image_url": media["thumb"], "title": ad.title,
-                    "message": ad.body, "call_to_action": cta}
+            data = {"video_id": media["video_id"], "image_url": media["thumb"], "call_to_action": cta}
+            if ad.title:
+                data["title"] = ad.title
+            if ad.body:
+                data["message"] = ad.body
             if ad.description:
                 data["link_description"] = ad.description
             return {"page_id": plan.page_id, "video_data": data}
-        data = {"link": INSTANT_FORM_LINK if instant else plan.link, "message": ad.body,
-                "name": ad.title, "image_hash": media["image_hash"], "call_to_action": cta}
+        data = {"link": INSTANT_FORM_LINK if instant else plan.link,
+                "image_hash": media["image_hash"], "call_to_action": cta}
+        # Основной текст и заголовок необязательны: пустое поле не отправляем.
+        if ad.body:
+            data["message"] = ad.body
+        if ad.title:
+            data["name"] = ad.title
         if ad.description:
             data["description"] = ad.description
         return {"page_id": plan.page_id, "link_data": data}
@@ -2435,7 +2971,14 @@ class CampaignCreator:
         check("name", want["name"], camp.get("name"))
         check("status", PAUSED, camp.get("status"))
         check("objective", OBJECTIVE, camp.get("objective"))
-        check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
+        if plan.lifetime:
+            # ACL-1443: проверяем тот тип бюджета, что задан; у daily прежние проверки без изменений.
+            check("lifetime_budget", str(want["lifetime_budget"]), _amount(camp.get("lifetime_budget")))
+            check("daily_budget", "0", _amount(camp.get("daily_budget")))
+            if "pacing_type" in want:
+                check("pacing_type", want["pacing_type"], camp.get("pacing_type") if "pacing_type" in camp else None)
+        else:
+            check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
         # ACL-1772: агрегат ENABLED только когда ВСЕ наборы без ограничений площадок.
@@ -2452,6 +2995,15 @@ class CampaignCreator:
                 for s in plan.ad_sets)
             check("advantage_placement_state", "ENABLED" if automatic else "DISABLED", state)
         return checks
+
+    def _schedule_check(self, checks: list[dict], obj: str, ad_set: AdSetPlan, row: dict) -> None:
+        """Расписание набора как множество окон (день, начало, конец), без учёта порядка и группировки дней."""
+        if not ad_set.schedule and not row.get("adset_schedule"):
+            return
+        want = _window_set(self.schedule_windows(ad_set))
+        got = _window_set(row["adset_schedule"]) if "adset_schedule" in row else None
+        self._mk_check(checks, obj, "adset_schedule", want, got)
+        checks[-1]["show_diff"] = True
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
                       campaign_id: str, *, reused: bool = False) -> list[dict]:
@@ -2481,9 +3033,17 @@ class CampaignCreator:
         # Оба направления: набор прошлого запуска мог быть динамическим, а объявление теперь с одним текстом.
         check("dynamic_creative", ad_set.dynamic,
               bool(row.get("is_dynamic_creative")) if ("is_dynamic_creative" in row or not ad_set.dynamic) else None)
-        check("schedule", "starts on activation, no end date",
-              "starts on activation, no end date" if not row.get("end_time") else
-              f"ends {row.get('end_time')}")
+        if ad_set.end_time:
+            # ACL-1443: lifetime - Meta должна вернуть тот же конец (сравнение в UTC, смещения разные).
+            check("schedule", f"ends {_utc(self.end_iso(ad_set))}",
+                  f"ends {_utc(row.get('end_time'))}" if row.get("end_time") else
+                  "starts on activation, no end date")
+            checks[-1]["show_diff"] = True
+            self._schedule_check(checks, obj, ad_set, row)
+        else:
+            check("schedule", "starts on activation, no end date",
+                  "starts on activation, no end date" if not row.get("end_time") else
+                  f"ends {row.get('end_time')}")
         t = row.get("targeting") or {}
         check("geo", targeting["geo_locations"]["countries"], (t.get("geo_locations") or {}).get("countries"))
         check("age_min", targeting["age_min"], t.get("age_min"))
@@ -2498,7 +3058,10 @@ class CampaignCreator:
         if targeting.get("genders") or t.get("genders"):
             check("gender", targeting.get("genders") or [], t.get("genders") or [])
         if ad_set.start_time:
-            check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
+            if self._moved_start_matches(ad_set, row.get("start_time")):
+                check("start_time", _utc(row.get("start_time")), _utc(row.get("start_time")))
+            else:
+                check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
         # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
         check("publisher_platforms", targeting.get("publisher_platforms") or [],
               t.get("publisher_platforms") or [])
@@ -2526,6 +3089,7 @@ class CampaignCreator:
         """
         found: list[dict] = []
         camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
+        self._budget_type_conflict(plan, camp)
         diffs = _describe_diffs(self._campaign_checks(plan, camp))
         if diffs:
             found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
@@ -2538,8 +3102,40 @@ class CampaignCreator:
                 found.append({"object": f"ad set {ad_set.name!r}", "kind": "adset", "differences": diffs})
         return found
 
+    @staticmethod
+    def _budget_type_conflict(plan: CampaignPlan, camp: dict) -> None:
+        """ACL-1443: наша кампания с этим именем уже есть, но с бюджетом другого типа - отказ вслух.
+
+        Тип бюджета у существующего объекта мы не меняем (Meta это не подтверждает), поэтому
+        повтор не молчит и не уходит в _2: человек переименует кампанию.
+        """
+        daily, life = _amount(camp.get("daily_budget")) != "0", _amount(camp.get("lifetime_budget")) != "0"
+        if plan.lifetime and daily and not life:
+            have = "a daily budget"
+        elif not plan.lifetime and life and not daily:
+            have = "a lifetime budget"
+        else:
+            return
+        raise CreationStopped(f"A campaign with this name already exists with {have} — rename the campaign. "
+                              "Nothing was created.", kind="budget_type_taken")
+
     def _find_sets(self, plan: CampaignPlan, campaign_id: str) -> list[dict | None]:
         return [self._find_child(campaign_id, "adsets", s.name) for s in plan.ad_sets]
+
+    def _reset_stale_facts(self, exc: BaseException) -> None:
+        """ACL-2267: Meta отвергла таргетинг (по коду) - забыть термины задания из долгого кэша."""
+        try:
+            if "targeting" in _facts_cache.kinds_for_error(exc):
+                drop = getattr(self.resolver, "drop_cached", None)
+                n = drop() if drop is not None else 0
+                if n:
+                    log.info("facts cache: %s targeting entries dropped after a Meta refusal", n)
+                    from src.fb_ads_rpa import run_telemetry
+
+                    run_telemetry.record("api_facts_dropped", True, diag={"source": "api", "dropped": n,
+                                                                          "reason": "meta_refused_targeting"})
+        except Exception:  # noqa: BLE001
+            log.debug("facts cache reset failed", exc_info=True)
 
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
@@ -2551,21 +3147,55 @@ class CampaignCreator:
             self._run(plan, out)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
             out.problems = list(exc.problems)
+            out.failure = self._failure(plan, out, exc, kind="plan")
         except WritesBlocked as exc:
             out.error, out.stop_kind = f"Not written: {exc}", "blocked"
+            out.failure = self._failure(plan, out, exc, kind="blocked")
         except GraphStop as exc:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.error += self._left_in_meta(plan, out)
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except GraphError as exc:
+            self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind="graph_error")
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
+            out.failure = self._failure(plan, out, exc, kind="unknown")
         return out
+
+    @staticmethod
+    def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
+        """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
+        stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
+        if failure.key == "targeting_merged":
+            planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
+            hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))
+            failure.details.update({"offending": hits, "offending_note": note})
+        if out.campaign_id and not failure.left:
+            failure.left = _plain.left_in_meta(
+                campaign=True, adsets=len(out.adset_ids), ads=len(out.ad_ids), name=plan.name,
+                empty_note=failure.key == "targeting_merged",
+                not_created=[ad.index for s_ in plan.ad_sets for ad in s_.ads if ad.index not in out.ad_media])
+        return failure
+
+    @staticmethod
+    def _stage_from_outcome(out: Outcome) -> str:
+        """A stop outside a write: where the run was, from what it had created so far."""
+        if not out.campaign_id:
+            return "before the campaign was created"
+        if not out.adset_ids:
+            return "after the campaign was created, before any ad set"
+        if not out.ad_ids:
+            return "after the ad set was created, before any ad"
+        return "after some ads were created"
 
     @staticmethod
     def _left_in_meta(plan: CampaignPlan, out: Outcome) -> str:
@@ -2636,7 +3266,7 @@ class CampaignCreator:
         name = self.facts.page_names.get(pid, pid)
         if plan.act != self.facts.act:
             raise PlanError(f"The Page {name!r} ({pid}) validation account differs from the verified ad account. "
-                            "Nothing was created.")
+                            "Nothing was created.", key="page_unavailable")
         cache = self.__dict__.setdefault("_profile_page_checks", {})
         key = (plan.act, pid, plan.link)
         if key not in cache:
@@ -2645,7 +3275,7 @@ class CampaignCreator:
         if cache[key]:
             raise PlanError(f"The Page {name!r} ({pid}) belongs to the profile, not to this ad account, and "
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
-                            "to the ad account in Business Manager. Nothing was created.")
+                            "to the ad account in Business Manager. Nothing was created.", key="page_unavailable")
 
     def _prepare(self, plan: CampaignPlan, out: Outcome, *,
                  writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
@@ -2654,6 +3284,7 @@ class CampaignCreator:
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
         out.warnings += resolve_page_pixel(plan, self.facts)
+        out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,
@@ -2689,11 +3320,11 @@ class CampaignCreator:
                            if writing and ad.kind == "video" else ad.path)
                     data = self.load_media(src, ad.kind)
                 except OSError as exc:
-                    raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
+                    raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
                 if not data or len(data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
-                                    f"{limit // (1024 * 1024)} MB")
+                                    f"{limit // (1024 * 1024)} MB", key="creative_file")
                 files[ad.path] = data
                 if ad.vertical_path:
                     try:
@@ -2701,11 +3332,20 @@ class CampaignCreator:
                                 if writing and ad.vertical_kind == "video" else ad.vertical_path)
                         vdata = self.load_media(vsrc, ad.vertical_kind)
                     except OSError as exc:
-                        raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})") from exc
+                        raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
                     vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
-                                        f"{vlimit // (1024 * 1024)} MB")
+                                        f"{vlimit // (1024 * 1024)} MB", key="creative_file")
+                    if len(vdata) == len(data) and _md5(vdata) == _md5(data):
+                        # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
+                        # хэшем под двумя метками («All ad asset values must be unique», живой прогон
+                        # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
+                        # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        ad.vertical_path = ad.vertical_kind = ""
+                        out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
+                                            "it will be used once as the main file.")
+                        continue
                     bad = pair_problems(ad.index, ad.kind, data, vdata)
                     if bad:
                         raise PlanError("; ".join(bad))
@@ -2716,15 +3356,25 @@ class CampaignCreator:
         chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
-        # Не хватает - отказ ДО первой записи. Check plan (`writing=False`) бюджет на записи не сверяет.
+        # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
+        # и запуск (раньше - фиксированные 40, и проверка принимала то, что запуск потом отказывал).
+        # Здесь куски без запаса на повторы: это страховка, размер после сжатия может отличаться.
         if isinstance(budget, int) and chunk_calls:
-            rest = estimate_create_calls(plan) if writing else CALLS_RESERVE_OTHER
+            rest = estimate_create_calls(plan)
             if chunk_calls + rest > budget:
                 raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
                                 f"and the rest of the campaign about {rest}, more than "
                                 f"one run allows ({budget}). Use a smaller video or split the campaign. "
                                 "Nothing was created.")
-        self._check_planned(plan, targetings)
+            if not writing:
+                # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
+                sizes = [len(v) for v in files.values() if isinstance(v, LargeFile)]
+                n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
+                out.warnings.append(
+                    f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
+                    f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                    "for this run (upper bound; the file may be compressed before upload).")
+        self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
         return targetings, files
@@ -2749,11 +3399,11 @@ class CampaignCreator:
                 form = known.get(ad.form_id)
                 if form is None:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {ad.form_id} is not a form of this "
-                                    "Page; pick one of the Page's forms (Refresh forms).")
+                                    "Page; pick one of the Page's forms (Refresh forms).", key="form_unavailable")
                 if not form.usable:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {form.name!r} is "
                                     f"{form.status.lower() or 'of unknown status'} (only ACTIVE forms can be "
-                                    "used); pick another form.")
+                                    "used); pick another form.", key="form_unavailable")
         self._form_steps = {}
         for tid, tpl in templates.items():
             existing, why = _fc.match_existing(read, tpl)
@@ -2849,7 +3499,8 @@ class CampaignCreator:
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
-    def _check_planned(self, plan: CampaignPlan, targetings: list[dict]) -> None:
+    def _check_planned(self, plan: CampaignPlan, targetings: list[dict],
+                       found_sets: list | None = None, *, early: bool = False) -> None:
         """Политика записи над КАЖДЫМ запланированным объектом — до первой записи (R2-B1).
 
         Отказ здесь — `PlanError` этой кампании: к Meta ничего не ушло, и клиент
@@ -2867,6 +3518,9 @@ class CampaignCreator:
                 raise PlanError(f"{what}: {exc}") from exc
 
         ok("campaigns", self.campaign_params(plan), "campaign")
+        floor = self.budget_floor_problem(plan)
+        if floor:
+            raise PlanError(floor)
         done_forms: set[str] = set()
         for ad_set in plan.ad_sets:
             for ad in ad_set.ads:
@@ -2878,10 +3532,26 @@ class CampaignCreator:
                                               _ft.form_params(tpl), None, plan.page_id)
                     except _wp.WriteRefused as exc:
                         raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
-        for ad_set, targeting in zip(plan.ad_sets, targetings):
-            if ad_set.start_time and self._start_dt(ad_set) <= self.now():
+        found = list(found_sets or [])
+        for pos, (ad_set, targeting) in enumerate(zip(plan.ad_sets, targetings)):
+            # Набор из прошлого прогона уже стартовал: его старт в прошлом - не причина отказа.
+            # `early` - вызов до поиска по имени (found_sets ещё неизвестны): старт проверит поздний вызов.
+            reused = pos < len(found) and bool(found[pos])
+            if ad_set.start_time and not early and not reused:
+                self._move_passed_start_of_today(ad_set)
+            if ad_set.start_time and not early and not reused and self._start_dt(ad_set) <= self.now():
                 raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
-                                "(ad account time zone) is not in the future")
+                                f"({self._zone_note(ad_set)}) is not in the future")
+            if ad_set.end_time:
+                # ACL-1443: конец позже старта по настоящим моментам (смещения на свои даты) и в будущем.
+                if ad_set.start_time and self._end_dt(ad_set) <= self._start_dt(ad_set):
+                    was = getattr(self, "_moved_from", {}).get(id(ad_set), "")
+                    moved = f" (moved from {was} because it had passed)" if was else ""
+                    raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} must be "
+                                    f"after the start time {ad_set.start_time}{moved} ({self._zone_note(ad_set)})")
+                if self._end_dt(ad_set) <= self.now():
+                    raise PlanError(f"Ad set {ad_set.name!r}: the end time {ad_set.end_time} "
+                                    f"({self._zone_note(ad_set)}) is not in the future")
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
             if needs_manual_page(plan):
                 continue  # No creative/ad write is planned until a Page is available.
@@ -2959,17 +3629,20 @@ class CampaignCreator:
         differences: list | None = None
         files: dict | None = None
         renamed = name_error = ""
-        requested, skipped = plan.name, []
+        requested, renamed_choice = plan.name, False
         try:
             targetings, files = self._prepare(plan, out, writing=False)
             choice = self._resolve_name(plan, targetings)
-            plan, existing, skipped = choice.plan, choice.existing, choice.skipped
+            plan, existing, renamed_choice = choice.plan, choice.existing, choice.renamed
             out.published_as = plan.name
-            self._check_planned(plan, targetings)
+            self._check_planned(plan, targetings, choice.found_sets)
+            self._drain_start_move_notes(out)
             differences = []
             if choice.renamed:
-                renamed = _rename_message(requested, plan.name, skipped, future=True)
+                renamed = _rename_message(requested, plan.name, choice.earlier, future=True)
                 out.warnings.append(renamed)
+                for note in choice.notes:
+                    self._step(out, note)
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
@@ -2985,7 +3658,7 @@ class CampaignCreator:
                                 **({"vertical_file": Path(ad.vertical_path).name,
                                     "vertical_bytes": len(files.get(ad.vertical_path, b""))}
                                    if ad.vertical_path else {}),
-                                "library_name": (video_title(plan.tag, data) if ad.kind == "video"
+                                "library_name": (video_title(plan.video_tag, data) if ad.kind == "video"
                                                  else image_name(ad.path, data)),
                                 "creative": (self.creative_params(plan, ad, ad_set, media, ad.name)
                                              if ad.uses_feed else self._story(plan, ad, ad_set, media))})
@@ -2996,21 +3669,26 @@ class CampaignCreator:
                         "summary": self.plan_summary(plan, targetings, files,
                                                      existing=bool(existing),
                                                      existing_differences=differences,
-                                                     requested_name=requested if skipped else "")}
+                                                     requested_name=requested if renamed_choice else "")}
             self._step(out, "dry run: preflight passed, nothing was written")
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
-            if exc.kind == "name_taken":
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
+            if exc.kind in NAME_STOPS:
                 name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
             out.problems = list(exc.problems)
+            out.failure = self._failure(plan, out, exc, kind="plan")
         except GraphStop as exc:
             out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except GraphError as exc:
+            self._reset_stale_facts(exc)
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}{_lookup_note(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
+            out.failure = self._failure(plan, out, exc, kind="graph_error")
         out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
@@ -3042,7 +3720,7 @@ class CampaignCreator:
         Не идёт после остановки Graph (лимит/блокировка): новых чтений там быть не должно.
         Сбой самого аудита не ломает план: вердиктов просто нет.
         """
-        if out.stop_kind not in ("", "plan", "graph_error", "name_taken"):
+        if out.stop_kind not in ("", "plan", "graph_error", *NAME_STOPS):
             return
         from src.fb_api import preflight_rules as _pf
 
@@ -3068,6 +3746,13 @@ class CampaignCreator:
             row["os_min"] = (t.get("user_os") or [""])[0]
         if ad_set.start_time:
             row["start_time"] = self.start_iso(ad_set)
+        if ad_set.end_time:
+            row["end_time"] = self.end_iso(ad_set)
+        if ad_set.schedule:
+            row["schedule"] = _window_set(self.schedule_windows(ad_set))
+        if ad_set.time_zone:
+            # ACL-1448: время введено по поясу команды; расписание выше уже в часах кабинета.
+            row["time_zone"] = ad_set.time_zone
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
@@ -3141,12 +3826,22 @@ class CampaignCreator:
             "campaign": plan.name, "status": PAUSED, "children_status": CHILD_STATUS,
             "status_note": STATUS_NOTE, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
-            "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
+            "budget_minor": budget_minor(plan.budget_amount, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
             "page_source": plan.page_source, "pixel_source": plan.pixel_source,
             "existing": existing, "existing_differences": list(existing_differences or []),
             "tag": plan.label, "ad_sets": sets,
         }
+        if plan.lifetime:
+            # ACL-1443: ключи только у lifetime-плана; суммарный итог - на весь срок.
+            summary["budget_type"] = BUDGET_LIFETIME
+            summary["lifetime_budget"] = plan.lifetime_budget
+            del summary["daily_budget"]
+            # Пояс и минимум кабинета - страница считает по ним сроки и минимум (минимум в мелких единицах);
+            # у daily-плана этих ключей нет: он не меняется ни байтом.
+            summary["timezone_name"] = self.facts.timezone_name
+            summary["timezone_offset_hours_utc"] = self.facts.utc_offset_hours
+            summary["min_daily_budget"] = self.facts.min_daily_budget
         if requested_name:
             # ACL-1902: имя из билдера занято - публикуем под выбранным (`campaign`), прежнее здесь.
             summary["requested_name"] = requested_name
@@ -3175,10 +3870,15 @@ class CampaignCreator:
         choice = self._resolve_name(plan, targetings)
         requested, plan = plan.name, choice.plan
         out.published_as = plan.name
-        self._check_planned(plan, targetings)
+        out.copy_number = choice.copy_number
+        self._check_planned(plan, targetings, choice.found_sets)
+        self._drain_start_move_notes(out)
+        self._save_name_receipt(out, requested, choice)
         if choice.renamed:
-            out.warnings.append(_rename_message(requested, plan.name, choice.skipped, future=False))
+            out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
+            for note in choice.notes:
+                self._step(out, note)
         existing, found_sets = choice.existing, choice.found_sets
         if existing:
             out.campaign_id = str(existing["id"])
@@ -3190,6 +3890,7 @@ class CampaignCreator:
                 out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
                 lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
             out.created["campaign"] = out.campaign_id
+            self._attach_name_receipt(out, plan.act, requested)
             self._verify_label(out, f"The campaign {plan.name!r}", out.campaign_id, plan.label)
             self._step(out, "campaign: created PAUSED, tag kept")
 
@@ -3287,6 +3988,8 @@ class CampaignCreator:
             self._step(out, "Manual completion required: add a Facebook Page and ads in Ads Manager")
         n = len(out.mismatches)
         self._step(out, "readback: all fields match" if not n else f"readback: {n} mismatch(es)")
+        # ACL-2250: сверка дошла до конца (расхождения - тоже конец: всё записано, дописывать нечего).
+        out.name_receipt_done = (plan.act, requested)
 
     # ───────────────────────── сверка ─────────────────────────
     @staticmethod
@@ -3378,7 +4081,7 @@ class CampaignCreator:
             data = files.get(path, b"")
             if ad.kind == "video":
                 self._video_file_checks(check, aobj, name, name + "_content", made, got,
-                                        plan.tag, data, identities)
+                                        plan.video_tag, data, identities)
             else:
                 if made:
                     check(aobj, name, str(made), got)
@@ -3518,7 +4221,7 @@ class CampaignCreator:
                     check(aobj, "format", "video", "video" if vd else "image")
                     vid = str(vd.get("video_id") or "")
                     self._video_file_checks(check, aobj, "video_id", "video_file",
-                                            rec.get("video_id"), vid, plan.tag, data,
+                                            rec.get("video_id"), vid, plan.video_tag, data,
                                             diag.setdefault("video_identity", []))
                     check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
@@ -3562,10 +4265,10 @@ class CampaignCreator:
 
 
 # ACL-2050: advantage_state_info и value_rules_* - только чтение, для сверки площадок после записи.
-CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,bid_strategy,adlabels{name},"
+CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,lifetime_budget,pacing_type,bid_strategy,adlabels{name},"
                    "advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state}")
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,is_dynamic_creative,adlabels{name},"
+                "promoted_object,targeting,start_time,end_time,adset_schedule,is_dynamic_creative,adlabels{name},"
                 "value_rules_applied,value_rule_set_id")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
@@ -3576,7 +4279,27 @@ _FIELD_TITLES = {"dynamic_creative": "Dynamic Creative", "geo": "countries", "ag
                  "optimization_goal": "optimization goal", "billing_event": "billing event",
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set", "gender": "gender", "start_time": "start time",
-                 "bid_strategy": "bid strategy"}
+                 "bid_strategy": "bid strategy", "lifetime_budget": "lifetime budget",
+                 "pacing_type": "pacing", "schedule": "end time", "adset_schedule": "time-of-day schedule"}
+
+
+def _amount(value: Any) -> str:
+    """Сумма Meta как строка; нет поля, пусто и "0" - одно и то же: бюджета этого типа нет (ACL-1443)."""
+    text = str(value or "").strip()
+    return text if text and text != "0" else "0"
+
+
+def _window_set(windows: Any) -> list[str]:
+    """Окна расписания -> отсортированный список «Mon 09:00-12:00» по одному на день (порядок и группы дней не важны)."""
+    out: set[str] = set()
+    for w in windows if isinstance(windows, list) else []:
+        try:
+            a, b = int(w["start_minute"]), int(w["end_minute"])
+            for d in w["days"]:
+                out.add(f"{DAY_NAMES[int(d)]} {a // 60:02d}:{a % 60:02d}-{b // 60:02d}:{b % 60:02d}")
+        except (KeyError, TypeError, ValueError, IndexError):
+            out.add(f"unreadable {w!r}")
+    return sorted(out)
 
 
 def _utc(value: Any) -> str:
@@ -3600,8 +4323,9 @@ def graph_problem(exc: BaseException) -> dict:
     code = f"{x.code}/{x.subcode}" if x.subcode else str(x.code or "")
     raw = str(exc)
     if not x.known:
-        return {"title": raw or "Meta refused the request (no details given).", "impact": "", "action": "",
-                "severity": "blocking", "step": "graph_error", "raw": raw}
+        plain = _plain.classify(exc)
+        return {"title": plain.short, "impact": "", "action": plain.next_step,
+                "severity": "blocking", "step": "graph_error", "raw": raw or "Meta refused the request (no details given)."}
     return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
             "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
 
@@ -3619,7 +4343,7 @@ def _show(value: Any) -> str:
 
 def _describe_diffs(checks: list[dict]) -> list[str]:
     """Расхождения одного объекта человеческим языком (площадки — одной строкой)."""
-    bad = [c for c in checks if not c["ok"] and c["field"] not in _SKIP_DIFF]
+    bad = [c for c in checks if not c["ok"] and (c["field"] not in _SKIP_DIFF or c.get("show_diff"))]
     out: list[str] = []
     place = [c for c in bad if c["field"] in _PLACEMENT_FIELDS]
     if place:
@@ -3640,20 +4364,10 @@ def _describe_diffs(checks: list[dict]) -> list[str]:
     return out
 
 
-def _rename_message(requested: str, chosen: str, skipped: list[dict], *, future: bool) -> str:
-    """Почему кампания пойдёт под другим именем (ACL-1902); одна строка для плана, итога и аудита."""
-    why = []
-    for item in skipped:
-        if item["reason"] == "foreign":
-            why.append(f"{item['name']!r} is already used by another campaign")
-        elif item["reason"] == "other_ads":
-            why.append(f"{item['name']!r} is a campaign with other ads")
-        else:
-            parts = [f"{f['object']}: " + "; ".join(f["differences"]) for f in item["differences"]]
-            why.append(f"{item['name']!r} (earlier campaign) is left as is; it already exists with different "
-                       "settings (" + " | ".join(parts) + ")")
+def _rename_message(requested: str, chosen: str, earlier: int, *, future: bool) -> str:
+    """Почему кампания пойдёт под именем со счётчиком (ACL-2250); короткая строка для плана, итога и аудита."""
     head = "Will be published as" if future else "Published as"
-    return f"{head} {chosen!r}: " + "; ".join(why) + "."
+    return f"{head} {chosen!r}: this name is already on the ad account ({earlier} earlier)."
 
 
 def _flex_ids(spec: Any) -> list[list[str]]:

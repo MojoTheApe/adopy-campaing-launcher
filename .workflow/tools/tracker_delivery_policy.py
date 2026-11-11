@@ -258,7 +258,8 @@ def retain_scope(receipt):
 def receipt_digest(receipt):
     # Scope recovery is auxiliary original-proof metadata. Adding it during
     # activation must not invalidate an already audited receipt fingerprint.
-    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations', 'scope', 'scope_provenance')}
+    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations', 'scope', 'scope_provenance',
+                                                    'scope_reaffirmations')}
     return hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest()
 
 
@@ -294,6 +295,40 @@ def reconciled_request_policy(request, batch):
     return current
 
 
+def partial_members(workflow, batch):
+    """Allowlist partial dispositions only with their retained signed evidence."""
+    recovery = batch.get('partial_recovery')
+    if recovery is None:
+        if batch.get('member_receipts'):
+            raise ValueError('Batch part receipts have no signed partial recovery')
+        return {}
+    document = workflow.get('acceptances', {}).get(batch['id'], {}).get('evidence')
+    carried = recovery.get('carryovers')
+    approval = recovery.get('approval') or {}
+    expected = recovery.get('expected_approval', '')
+    if (recovery.get('kind') != 'partial-batch-recovery' or not isinstance(document, dict)
+            or not isinstance(carried, dict) or not carried
+            or not set(carried) <= {str(n) for n in batch['issues']}
+            or document.get('batch_id') != batch['id'] or document.get('issues') != batch['issues']
+            or document.get('source_heads') != [m['head_sha'] for m in batch['members']]
+            or document.get('issue_scopes') != {str(m['issue']): m['scope'] for m in batch['members']}
+            or document.get('carryovers') != carried
+            or hashlib.sha256(json.dumps(document, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                != recovery.get('acceptance_sha256')
+            or not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected)
+            or approval.get('sha256') != expected or not approval.get('id')
+            or approval.get('author', '').casefold() != recovery.get('approved_by', '').casefold()
+            or set(batch.get('member_receipts', {})) - set(carried)):
+        raise ValueError('Retain the exact signed partial recovery and its acceptance document')
+    return carried
+
+
+def batch_receipts(workflow, batch):
+    """Delivered batch parts are distinct from completion of their parent tasks."""
+    partial_members(workflow, batch)
+    return dict(workflow.get('tasks', {}), **batch.get('member_receipts', {}))
+
+
 def pending_delivery(shared, config):
     """Keep the target's main stable until its explicitly requested delivery ends."""
     completion = policy(config)
@@ -320,7 +355,7 @@ def pending_delivery(shared, config):
             continue
         expected = set(batch.get('main_prs', []))
         for n in batch['issues']:
-            receipt = shared.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {})
+            receipt = batch_receipts(shared.get('delivery_workflow', {}), batch).get(str(n), {})
             matching = [summary(r) for r in [receipt, *reversed(receipt.get('history', []))]
                         if expected and expected <= {s.get('pr') for s in r.get('sources', [])}
                         and summary(r).get('policy') == fingerprint(config)]
@@ -416,12 +451,22 @@ def file_bytes(request, root, row):
 def read_full_state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    state = pause_module().decode(json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object))
+    wire = json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object)
+    hydrated, _ = archive_module().hydrate(wire, repo, row.get('sha'), request)
+    state = pause_module().decode(hydrated)
     if 'task_pause' in state and state['task_pause']['repository'].lower() != repo.lower():
         raise ValueError('Task pause belongs to a different repository')
     if state_schema(state) not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
+
+
+def archive_module():
+    try:
+        from . import state_archive
+    except ImportError:
+        import tracker_state_archive as state_archive
+    return state_archive
 
 
 def pause_module():
@@ -680,7 +725,7 @@ def summary(receipt):
             except ImportError:
                 import tracker_process_support as support
             valid = (type(proof.get('schema_version')) is int and proof['schema_version'] == 1
-                     and proof.get('kind') in (support.KIND, support.VERIFICATION) and proof.get('policy') == receipt.get('policy')
+                     and proof.get('kind') in (support.KIND, support.VERIFICATION, support.RETENTION, support.GOVERNANCE, support.PROJECT, support.SETTINGS) and proof.get('policy') == receipt.get('policy')
                      and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
                      and all(isinstance(proof.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', proof[k])
                              for k in ('proof_sha256', 'review_sha256'))
@@ -716,6 +761,8 @@ def summary(receipt):
                          and supplemental.get('workflow_run') == {'id': native['id'], 'attempt': native['attempt']}
                          and supplemental.get('process_support') == proof.get('assessment')
                          and support.digest(supplemental) == proof['review_sha256'])
+            if valid and proof['kind'] == support.RETENTION:
+                valid = support.valid_retention_receipt(proof, sources)
             if valid:
                 result['process_support'] = True
         result['verified'] = result['verified'] and bool(valid)

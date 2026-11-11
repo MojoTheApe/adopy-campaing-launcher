@@ -68,24 +68,34 @@ def configuration(request, repo, revision):
     return config
 
 
-def state(request, repo):
+def state(request, repo, *, with_context=False):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    shared = rules.pause_module().decode(json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object))
+    wire = json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object)
+    hydrated, context = rules.archive_module().hydrate(wire, repo, row.get('sha'), request)
+    shared = rules.pause_module().decode(hydrated)
     rules.state_schema(shared)
     if shared.get('maintenance'):
         raise PendingDelivery('Delivery continuation is paused by owned maintenance; resume after cutover')
-    return shared, row['sha']
+    return (shared, row['sha'], context) if with_context else (shared, row['sha'])
 
 
-def official_run(request, repo, run_id, revision):
+def native_main_run(request, repo, run_id):
     if type(run_id) is not int or run_id < 1:
         raise ValueError('A real native workflow run is required')
     run = request(f'repos/{repo}/actions/runs/{run_id}')
-    if (run.get('head_sha') != revision or run.get('head_branch') != 'main'
+    if (not isinstance(run.get('head_sha'), str) or not rules.SHA.fullmatch(run['head_sha'])
+            or run.get('head_branch') != 'main'
             or run.get('event') not in ('push', 'workflow_dispatch', 'workflow_run')
             or run.get('head_repository', {}).get('full_name', '').lower() != repo.lower()
             or not WORKFLOW.fullmatch(run.get('path', ''))):
+        raise ValueError('Native run must belong to this official main revision and trusted workflow')
+    return run
+
+
+def official_run(request, repo, run_id, revision):
+    run = native_main_run(request, repo, run_id)
+    if run['head_sha'] != revision:
         raise ValueError('Native run must belong to this official main revision and trusted workflow')
     return run
 
@@ -114,7 +124,7 @@ def task_context(request, repo, config, shared, batch, merge_sha):
     if (batch.get('state') != 'merged' or not issues or len(issues) != len(set(issues))
             or [m.get('issue') for m in members] != issues):
         raise ValueError('The unchanged completed batch must still own every delivery member')
-    tasks = shared.get('delivery_workflow', {}).get('tasks', {})
+    tasks = rules.batch_receipts(shared.get('delivery_workflow', {}), batch)
     already_verified = True
     for number in issues:
         item = request(f'repos/{repo}/issues/{number}')
@@ -126,7 +136,14 @@ def task_context(request, repo, config, shared, batch, merge_sha):
         statuses = [s for s in labels if s.startswith('status:')]
         merged = ['status:' + (s if isinstance(s, str) else s['id']) for s in config['workflow']
                   if (s if isinstance(s, str) else s['phase']) == 'merged']
-        if (statuses != merged or {'flag:archived', 'flag:blocked'} & labels or row.get('process')
+        partial = str(number) in batch.get('partial_recovery', {}).get('carryovers', {})
+        if partial:
+            document = shared.get('delivery_workflow', {}).get('acceptances', {}).get(batch['id'], {}).get('evidence', {})
+            if document.get('pr') not in batch.get('main_prs', []) or document.get('merge_sha') != merge_sha:
+                raise PendingDelivery('Partial acceptance belongs to another admitted main revision')
+        expected_status = (['status:' + (s if isinstance(s, str) else s['id']) for s in config['workflow']
+                            if (s if isinstance(s, str) else s['phase']) == 'review'] if partial else merged)
+        if (statuses != expected_status or {'flag:archived', 'flag:blocked'} & labels or row.get('process')
                 or item.get('state_reason') == 'not_planned' or 'pull_request' in item
                 or effective != rules.fingerprint(config)
                 or not rules.scope_matches(item, reconciled_scope or member.get('scope'), config)
@@ -246,6 +263,12 @@ def selection_tree(request, repo, baseline, merge_sha, prior, selected, key, *, 
     document = 'docs/repository/' + SELECTIONS[key][2]
     allowed = {'delivery.json', 'tracker/config.json', 'docs/repository/TRACKER.md',
                document, '.workflow/template-base.json'}
+    details = 'docs/repository/TRACKER_WORKFLOW_DETAILS.md'
+    if details in before or details in after:
+        # Existing generated references may change with the one selection.
+        # The regular-file and identical-pristine-inventory checks below still
+        # reject adding/removing this path in a selection-only package.
+        allowed.add(details)
     changed = {path for path in before.keys() | after.keys() if before.get(path) != after.get(path)}
     if not allowed <= changed:
         raise ValueError('Selection delivery needs its exact generated governance-only diff; runtime/pin/helper changes stop')
@@ -390,6 +413,12 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
     root = 'repos/' + repo
     current = request(root + '/git/ref/heads/main')['object']['sha']
     config = configuration(request, repo, current)
+    if (not include_delivered and current != merge_sha
+            and (rules.process_module().policy(config) or {}).get('schema_version') == 2):
+        # Publication may use an older product only across its verified
+        # instruction descendants. Recording an already verified delivery keeps
+        # its existing ancestry-based recovery semantics.
+        instruction_continuation(repo, merge_sha, current, request=request)
     original, active = rules.policy(source_config), rules.policy(config)
     if ({k: v for k, v in original.items() if k != 'staging'}
             != {k: v for k, v in active.items() if k != 'staging'}
@@ -422,7 +451,33 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
             heads = [m.get('head_sha') for m in held.get('members', [])]
             if heads and all(request(root + '/compare/' + h + '...' + merge_sha).get('status')
                              in ('ahead', 'identical') for h in heads):
-                raise PendingDelivery('Record the admitted main merge and finish its Coordinator handoff first')
+                lane = section.get('review') or {}
+                if not held.get('pr') or lane.get('batch_id') != held.get('id'):
+                    raise ValueError('Merged content has no admitted batch review. Inspect the held batch; for a '
+                                     'cancelled batch use batch adopt-merged with independent post-merge review.')
+                review = shared.get('delivery_workflow', {}).get('reviews', {}).get(str(held['pr']), {})
+                if (not review or review.get('execution_lane') != lane.get('id')
+                        or review.get('reviewer') != lane.get('actor')
+                        or review.get('review_session') != lane.get('session')):
+                    raise ValueError('Complete the retained independent review with record-review --pr '
+                                     + str(held['pr']) + ' before recording the merged handoff.')
+                raise PendingDelivery('Finish the retained merge handoff with merged <tasks> --pr '
+                                      + str(held['pr']) + ' --reviewed-complete --apply')
+        cancelled = {key: batch for key, batch in section.get('batches', {}).items()
+                     if batch.get('state') == 'cancelled'
+                     and (batch.get('delivery_request') or {}).get('state') == 'requested'}
+        if cancelled:
+            parents = request(root + '/git/commits/' + merge_sha).get('parents', [])
+            baseline = parents[0].get('sha') if parents else None
+            if any(batch.get('main_sha') == baseline for batch in cancelled.values()):
+                for pr in request(root + '/commits/' + merge_sha + '/pulls?per_page=100'):
+                    if (pr.get('merged_at') and pr.get('merge_commit_sha') == merge_sha
+                            and pr.get('base', {}).get('ref') == 'main'
+                            and pr.get('base', {}).get('repo', {}).get('full_name', '').lower() == repo.lower()):
+                        marker = re.findall(r'^Tracker batch:\s*([a-f0-9]{32})\s*$', pr.get('body') or '', re.M)
+                        if len(marker) == 1 and marker[0] in cancelled and cancelled[marker[0]].get('main_sha') == baseline:
+                            raise ValueError(f'Cancelled batch {marker[0]} is already merged. Preview batch adopt-merged '
+                                             f'--batch-id {marker[0]} --pr {pr["number"]} before reconciling delivery.')
         return {'eligible': False, 'reason': 'No completed batch authorized delivery for this main revision'}
     batch, pr = matches[0]
     auth = authorization(config, batch)
@@ -446,6 +501,27 @@ def resolve(repo, merge_sha, ci_run, *, request=github, include_delivered=False)
             'workflow': auth['workflow'], 'job': auth['job'], 'requested_at': auth['requested_at'],
             'authorization_sha256': digest(auth),
             'ci_run': ci_run}
+
+
+def instruction_continuation(repo, merge_sha, current, *, request=github):
+    """Read-only publication guard; retained delivery recording is unchanged."""
+    if (not re.fullmatch(r'[\w.-]+/[\w.-]+', repo)
+            or any(not rules.SHA.fullmatch(str(value)) for value in (merge_sha, current))):
+        raise ValueError('Use the exact original product and actual current main')
+    root = 'repos/' + repo
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during continuation; preserve the pending request')
+    if current == merge_sha:
+        return True
+    config = configuration(request, repo, current)
+    shared, _ = state(request, repo)
+    process = rules.process_module()
+    if not process.idle(shared, config) or not process.stage_base_compatible(
+            request, config, merge_sha, current, shared, exact_base=True):
+        raise ValueError('Only retained independently admitted instructions may follow the authorized product')
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during continuation; preserve the pending request')
+    return True
 
 
 def authorization_direct(config,archive):
@@ -537,14 +613,33 @@ def verification_job(request, repo, run_id, name, attempt):
     raise ValueError('Verification job is absent from every native run attempt')
 
 
+def instruction_verifier(request, repo, product, producer):
+    """A later trusted producer may verify the original package, never replace it."""
+    root = 'repos/' + repo
+    current = request(root + '/git/ref/heads/main')['object']['sha']
+    config = configuration(request, repo, current)
+    process = rules.process_module()
+    if (process.policy(config) or {}).get('schema_version') != 2:
+        raise ValueError('A later verification producer requires explicit instruction schema2')
+    shared, _ = state(request, repo)
+    if (not process.idle(shared, config)
+            or request(root + '/compare/' + producer + '...' + current).get('status') not in ('ahead', 'identical')
+            or not process.stage_base_compatible(request, config, product, producer, shared, exact_base=True)):
+        raise ValueError('Verification producer must be a retained independently admitted instruction descendant')
+    if request(root + '/git/ref/heads/main')['object']['sha'] != current:
+        raise ValueError('Current main changed during verification producer proof; retain the original report')
+
+
 def verified_native(request, document, receipt, run_id, job_id):
     repo = document['repository']
-    run = official_run(request, repo, run_id, document['merge_sha'])
+    run = native_main_run(request, repo, run_id)
     if run.get('path') != document['workflow'] or type(job_id) is not int or job_id < 1:
         raise ValueError('Verification workflow differs from the authorized project producer')
+    if run['head_sha'] != document['merge_sha']:
+        instruction_verifier(request, repo, document['merge_sha'], run['head_sha'])
     job = request(f'repos/{repo}/actions/jobs/{job_id}')
     if (job.get('run_id') != run_id or job.get('name') != document['job']
-            or job.get('head_sha') != document['merge_sha']
+            or job.get('head_sha') != run['head_sha']
             or job.get('status') != 'completed' or job.get('conclusion') != 'success'):
         raise ValueError('The exact authorized verification job has not passed')
     latest, _ = verification_job(request, repo, run_id, document['job'], run.get('run_attempt', 1))
@@ -566,7 +661,8 @@ def verified_native(request, document, receipt, run_id, job_id):
         raise ValueError('Receipt must match one actual successful native acceptance report')
 
 
-def record(document, receipt, run_id, job_id, *, apply=False, request=github):
+def record(document, receipt, run_id, job_id, *, apply=False, request=github, _recovery_verifier=None):
+    """Record one native result; the private hook is used only by the signed engine recovery."""
     if not document.get('eligible'):
         raise ValueError('There is no authorized delivery request')
     actual = resolve(document['repository'], document['merge_sha'], document['ci_run'], request=request,
@@ -578,7 +674,7 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
             or not isinstance(receipt.get('report'), str) or not receipt['report'].strip()):
         raise ValueError('A passed exact-target/revision delivery verification is required')
     repo = document['repository']
-    shared, sha = state(request, repo)
+    shared, sha, archive_context = state(request, repo, with_context=True)
     current = request('repos/' + repo + '/git/ref/heads/main')['object']['sha']
     config = configuration(request, repo, current)
     selected = selection_delivery_context(request, repo, shared, config, current, document['merge_sha'])
@@ -626,11 +722,15 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
         tasks, _ = task_context(request, repo, config, shared, batch, document['merge_sha']);numbers=document['issues']
     native = {'run': run_id, 'job': job_id, 'workflow': document['workflow'],
               'authorization_sha256': document['authorization_sha256']}
+    if _recovery_verifier is not None:
+        native = _recovery_verifier(request, document, receipt, run_id, job_id,
+                                    config=config, shared=shared, batch=batch, current=current)
     if all(tasks[str(n)].get('state') == 'verified'
            and tasks[str(n)].get('verification') == receipt
            and tasks[str(n)].get('native_delivery') == native for n in numbers):
         return {'applied': False, 'already_recorded': True, 'issues': numbers}
-    verified_native(request, document, receipt, run_id, job_id)
+    if _recovery_verifier is None:
+        verified_native(request, document, receipt, run_id, job_id)
     if all(tasks[str(n)].get('state') == 'verified'
            and tasks[str(n)].get('verification') == receipt
            and {k: v for k, v in tasks[str(n)].get('native_delivery', {}).items() if k != 'job'}
@@ -662,9 +762,8 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
                 raise ValueError('Official selection main changed during native delivery verification')
         rules.execution_state(shared,config)
         # CAS failure/uncertain response is never retried with a stale body.
-        request(root + '/contents/.tracker-state.json', 'PUT', {
-            'message': 'Record verified authorized delivery [skip ci]', 'branch': 'tracker-state', 'sha': sha,
-            'content': base64.b64encode(json.dumps(rules.pause_module().encode(shared), indent=2).encode()).decode()})
+        rules.archive_module().write(request, repo, rules.pause_module().encode(shared), sha, archive_context,
+            message='Record verified authorized delivery [skip ci]', completion=rules.policy(config)['completion'], legacy_indent=2)
     return {'applied': apply, 'issues': numbers, 'result': 'passed'}
 
 

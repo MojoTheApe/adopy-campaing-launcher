@@ -1,6 +1,16 @@
 # ACL early adoption: released support, then separate owned selections
 
-## Current executable provider: ACL-2156 candidate — 24 October 2026
+## Current executable provider
+
+Use the exact current selection in [delivery.json](../../delivery.json) and
+[tracker/engine.json](../../tracker/engine.json), with the
+[current workflow](WORKFLOW.md) and [provider guide](STANDALONE_PROVIDER_ACL.md).
+ACL-2351 adopted published Tracker3.24.1 on 4 November 2026 without changing
+native configuration, capacities or optional-policy activation. For current
+Master Repo 1.9.0 guidance, see [AGENTS.md](../../AGENTS.md). The dated selections
+below preserve their original evidence and obligations.
+
+## Historical provider adoption: ACL-2156 — 24 October 2026
 
 The owner selected the separately published standalone Task Tracker3.14.1
 provider at `771d55f3317397e7d56471aa966f0a9de37d1a2e`. Read
@@ -65,6 +75,13 @@ Use the actual current-main pinned ACL adapter for current ownership and deliver
 the old operative866 instructions below describe ACL-1987's original source path.
 
 ## Pause readiness and live boundary
+
+ACL-2414 completed this live boundary on 5 November 2026 using selected
+Tracker3.24.1 and the actually deployed Tracker3.25.0 reader. The maintained idle
+activation and same-owner maintenance resume succeeded. Five existing source
+approvals, their heads, 4,677 prior history entries and all delivery receipts
+were preserved. The source-preparation limitations below describe the earlier
+ACL-2026 handoff. See [current operation](TASK_PAUSE.md) and [history](CHANGELOG.md).
 
 The cumulative ACL-2026 source supplies compatible commands and the complete
 portable helper closure. It does not activate outer8, resume a stopped agent,

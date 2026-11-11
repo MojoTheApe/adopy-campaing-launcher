@@ -17,12 +17,14 @@ It never raises: a convenience merge must not stop anyone from launching.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from config import paths
 
@@ -70,25 +72,78 @@ def _parse_env(text: str) -> tuple[list[str], dict[str, str]]:
     return lines, values
 
 
-def merge_env_text(real_text: str, shadow_text: str, *, shadow_newer: bool) -> str:
-    """Union of keys. On conflict the newer file wins; empty values never win."""
+#: Code defaults of settings seen overwriting a real value (ACL-2334): a package copy that merely carries
+#: the default must not replace an explicit machine setting.
+_DEFAULT_VALUES = {
+    "ACL_MAX_PARALLEL_PROFILES": "2",
+    "ACL_PROFILE_MEMORY_GB": "3.5",
+    "ACL_PROFILE_MEMORY_FLOOR_GB": "3.5",
+    "ACL_MEMORY_RESERVE_GB": "3.0",
+    "ACL_MEMORY_MAX_USED_PCT": "92",
+}
+#: Older code defaults of the same settings: a package copy of an older release must not bring them back.
+_OLD_DEFAULT_VALUES = {
+    "ACL_MEMORY_MAX_USED_PCT": ("75", "90"),
+}
+
+
+def _is_absolute(value: str) -> bool:
+    v = value.strip().strip("\"'")
+    return bool(v) and (os.path.isabs(v) or PureWindowsPath(v).is_absolute() or PurePosixPath(v).is_absolute())
+
+
+def _same_number(a: str, b: str) -> bool:
+    try:
+        return float(a) == float(b)
+    except ValueError:
+        return False
+
+
+def _shadow_may_replace(key: str, real_value: str, shadow_value: str) -> bool:
+    """ACL-2334: a newer package value still never turns an absolute path into a relative one
+    or an explicit setting into the code default."""
+    if _is_absolute(real_value) and shadow_value.strip() and not _is_absolute(shadow_value):
+        return False
+    default = _DEFAULT_VALUES.get(key)
+    if default is not None and (shadow_value.strip() == default or _same_number(shadow_value.strip(), default)):
+        return False
+    for old in _OLD_DEFAULT_VALUES.get(key, ()):
+        if shadow_value.strip() == old or _same_number(shadow_value.strip(), old):
+            return False
+    return True
+
+
+def merge_env_text_keys(real_text: str, shadow_text: str, *, shadow_newer: bool) -> tuple[str, list[str]]:
+    """Union of keys. On conflict the newer file wins; empty values never win.
+
+    Returns the merged text and the names (never values) of the keys that were added or changed.
+    """
     lines, real = _parse_env(real_text)
     _, shadow = _parse_env(shadow_text)
     out = list(lines)
+    changed: list[str] = []
+
+    def replace(key: str, value: str) -> None:
+        nonlocal out
+        out = [
+            f"{key}={value}" if ln.strip().partition("=")[0].strip() == key and not ln.strip().startswith("#") else ln
+            for ln in out
+        ]
+        changed.append(key)
+
     for key, value in shadow.items():
         if key not in real:
             out.append(f"{key}={value}")
-        elif real[key] != value and shadow_newer and value.strip():
-            out = [
-                f"{key}={value}" if ln.strip().partition("=")[0].strip() == key and not ln.strip().startswith("#") else ln
-                for ln in out
-            ]
+            changed.append(key)
+        elif real[key] != value and shadow_newer and value.strip() and _shadow_may_replace(key, real[key], value):
+            replace(key, value)
         elif real[key] != value and not real[key].strip() and value.strip():
-            out = [
-                f"{key}={value}" if ln.strip().partition("=")[0].strip() == key and not ln.strip().startswith("#") else ln
-                for ln in out
-            ]
-    return "\n".join(out) + "\n"
+            replace(key, value)
+    return "\n".join(out) + "\n", changed
+
+
+def merge_env_text(real_text: str, shadow_text: str, *, shadow_newer: bool) -> str:
+    return merge_env_text_keys(real_text, shadow_text, shadow_newer=shadow_newer)[0]
 
 
 def _backup(target: Path, backup_root: Path, rel: Path) -> None:
@@ -135,7 +190,7 @@ def merge_shadow_into(real_dir: Path, shadow_dir: Path, *, now: float | None = N
                 continue
             shadow_newer = src_mtime > dest.stat().st_mtime + _MTIME_TOLERANCE
             if rel.as_posix() == ENV_NAME:
-                merged = merge_env_text(
+                merged, keys = merge_env_text_keys(
                     dest.read_text(encoding="utf-8", errors="replace"),
                     src.read_text(encoding="utf-8", errors="replace"),
                     shadow_newer=shadow_newer,
@@ -145,6 +200,9 @@ def merge_shadow_into(real_dir: Path, shadow_dir: Path, *, now: float | None = N
                     note_backup()
                     _atomic_write(dest, merged.encode("utf-8"))
                     result.env_merged.append(rel.as_posix())
+                    # Key names only, never values (ACL-2334).
+                    log.info("merged %s from the package copy; keys: %s", rel.as_posix(),
+                             ", ".join(keys) or "(none)")
                 continue
             if shadow_newer:
                 _backup(dest, backup_root, rel)
@@ -168,6 +226,99 @@ def _env_values(path: Path) -> dict[str, str]:
         return {}
 
 
+#: ACL-2400: one-time update migration of the memory threshold (done-marker so a later Settings value is kept).
+MEMORY_PCT_KEY = "ACL_MEMORY_MAX_USED_PCT"
+MEMORY_PCT_NEW = "92"
+MIGRATIONS_FILE = "migrations.json"
+MEMORY_PCT_MIGRATION_ID = "acl-2400-memory-92"
+
+#: One assignment of the key in every form python-dotenv reads (`export`, quotes, an inline comment), matched on
+#: bytes like `_STALE_GRAPH_PIN` (ACL-2123): only the value changes; BOM, encoding, line endings and other lines stay.
+_MEMORY_PCT_LINE = re.compile(
+    rb"^(?P<bom>\xef\xbb\xbf)?(?P<head>[ \t]*(?:export[ \t]+)?" + MEMORY_PCT_KEY.encode() + rb"[ \t]*=[ \t]*)"
+    rb"(?P<q>[\"']?)(?P<val>[^\s\"'#]*)(?P=q)(?P<tail>(?:[ \t]+#[^\r\n]*)?[ \t]*)(?P<eol>\r\n|\n|\r|)$"
+)
+
+
+def _migration_state(real_dir: Path, migration_id: str) -> str:
+    """`todo` (no marker file), `done`, or `broken` (the marker file cannot be read: treated as done, never
+    rewritten, so a value the owner set later in Settings can not be overwritten by a repeated run)."""
+    path = real_dir / MIGRATIONS_FILE
+    if not path.exists():
+        return "todo"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "broken"
+    if not isinstance(data, dict):
+        return "broken"
+    return "done" if migration_id in data else "todo"
+
+
+def _mark_migration_done(real_dir: Path, migration_id: str, note: str, *, now: float | None = None) -> None:
+    path = real_dir / MIGRATIONS_FILE
+    data: dict = {}
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))   # a state check just proved it readable
+    data[migration_id] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now or time.time())), "note": note}
+    paths._atomic_write(path, json.dumps(data, indent=2, sort_keys=True).encode("utf-8"))
+
+
+def migrate_memory_threshold(real_dir: Path, *, now: float | None = None) -> str | None:
+    """ACL-2400: an explicit ACL_MEMORY_MAX_USED_PCT below 92 in the machine ``.env`` (75/85 from earlier
+    releases or set by hand) becomes 92 - once. The old ``.env`` stays in the backup folder.
+
+    Read, edit and replace happen under the same ``.env.lock`` as every other writer of the machine ``.env``, on
+    bytes (CRLF, BOM, non-UTF-8 comments survive; only the value of the matched lines changes).
+    The migration is recorded in ``migrations.json`` whether or not it changed anything, so a value the owner sets
+    later in Settings (even 75) is never overwritten, and a machine without the key is left alone. An unreadable
+    ``migrations.json`` counts as done (warning in the log), never as "run again". Values above 92 and values that
+    are not numbers are kept. A failed lock or write leaves ``.env`` as it was, leaves no temp file and no backup
+    folder, and is tried again at the next launch. Returns a one-line note, or None.
+    """
+    state = _migration_state(real_dir, MEMORY_PCT_MIGRATION_ID)
+    if state == "broken":
+        log.warning("%s is unreadable; the memory threshold migration is treated as done", MIGRATIONS_FILE)
+    if state != "todo":
+        return None
+    env_path = real_dir / ENV_NAME
+    note: str | None = None
+    backup_root: Path | None = None
+    try:
+        with paths.machine_file_lock(env_path.with_name(".env.lock")):
+            if _migration_state(real_dir, MEMORY_PCT_MIGRATION_ID) != "todo":   # another process was first
+                return None
+            lines = env_path.read_bytes().splitlines(keepends=True) if env_path.is_file() else []
+            old_values: list[str] = []
+            for n, line in enumerate(lines):
+                m = _MEMORY_PCT_LINE.match(line)
+                if not m:
+                    continue
+                try:
+                    below = float(m.group("val").decode("ascii")) < float(MEMORY_PCT_NEW)
+                except (ValueError, UnicodeDecodeError):
+                    below = False
+                if below:
+                    old_values.append(m.group("val").decode("ascii"))
+                    lines[n] = (m.group("bom") or b"") + m.group("head") + m.group("q") + MEMORY_PCT_NEW.encode() \
+                        + m.group("q") + m.group("tail") + m.group("eol")
+            if old_values:
+                stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(now or time.time()))
+                backup_root = real_dir / "backups" / f"memory-92-{stamp}"
+                _backup(env_path, backup_root, Path(ENV_NAME))
+                paths._atomic_write(env_path, b"".join(lines))
+                note = (f"memory threshold {MEMORY_PCT_KEY} {old_values[-1]} -> {MEMORY_PCT_NEW} (ACL-2400); "
+                        f"the old .env is in {backup_root}")
+                log.info(note)
+            _mark_migration_done(real_dir, MEMORY_PCT_MIGRATION_ID, note or "nothing to change")
+    except (OSError, ValueError) as exc:  # not marked done: tried again at the next launch
+        log.warning("memory threshold migration failed: %s", exc)
+        if backup_root is not None and note is None:
+            shutil.rmtree(backup_root, ignore_errors=True)   # no new backup folder per failing launch
+        return None
+    return note
+
+
 def prepare_config_dir() -> UnifyResult:
     """Pin the real folder, merge package copies into it, log and warn."""
     real = Path(paths.pin_config_dir_env())
@@ -175,7 +326,13 @@ def prepare_config_dir() -> UnifyResult:
     try:
         log.info("ACL settings folder: %s", real)
         print(f"[acl] settings folder: {real}")
-        for shadow in paths.get_shadow_config_dirs():
+        explicit = paths.is_config_dir_explicit()
+        if explicit:
+            # ACL-2334: the operator pointed the app at one directory; a package copy (dev machines: app code
+            # run inside a Claude session writes there) must not rewrite it.
+            log.info("ACL_CONFIG_DIR is set explicitly; package copies are not merged")
+            print("[acl] ACL_CONFIG_DIR is set explicitly: package copies are not merged")
+        for shadow in ([] if explicit else paths.get_shadow_config_dirs()):
             merged = merge_shadow_into(real, Path(shadow))
             result.copied += merged.copied
             result.replaced += merged.replaced
@@ -198,6 +355,10 @@ def prepare_config_dir() -> UnifyResult:
                 result.warnings.append(msg)
                 log.warning(msg)
                 print(f"[acl] WARNING: {msg}")
+        mem_note = migrate_memory_threshold(real)
+        if mem_note:
+            result.env_merged.append(f"{ENV_NAME} (memory threshold)")
+            print(f"[acl] {mem_note}")
         if paths.is_virtualized_environment():
             note = (
                 "this process runs inside an MSIX package (virtual %LOCALAPPDATA%); "

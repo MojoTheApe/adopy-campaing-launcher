@@ -234,9 +234,33 @@ def test_policy_candidate_cannot_select_its_own_new_admission_route(monkeypatch)
         if '/pulls/' in path: return pr
         assert path == f'repos/{repo}/contents/tracker/config.json?ref=' + 'a' * 40
         return {'content': base64.b64encode(json.dumps(base).encode()).decode(), 'encoding': 'base64'}
-    monkeypatch.setattr(acl_pr_check.shared, 'check', lambda request, config, number: config)
+    monkeypatch.setattr(acl_pr_check.shared, 'check_with_handoff_wait', lambda request, config, number: config)
     selected = acl_pr_check.check(request, 930)
     assert selected == base and selected != candidate
+
+
+def test_prepared_bootstrap_retains_strict_feedback_without_handoff_wait(prepared, monkeypatch):
+    state = acl_adoption.read_state(prepared)
+    config = json.loads((prepared / 'tracker/config.json').read_text())
+    legacy = json.loads((prepared / '.workflow/legacy/tracker-config.json').read_text())
+    repo = config['project']['repository']
+    task = state['issue'] + config['project']['id_offset']
+    pr = {'base': {'ref': state['source_branch'], 'sha': 'a' * 40},
+          'head': {'ref': f'codex/acl-{task}-master-adoption', 'repo': {'full_name': repo}},
+          'body': f'Tracker issues: ACL-{task}'}
+    def request(path):
+        if '/pulls/' in path: return pr
+        assert path.endswith('/contents/tracker/config.json?ref=' + 'a' * 40)
+        return {'content': base64.b64encode(json.dumps(legacy).encode()).decode()}
+    seen = []
+    def strict(request, selected, number):
+        seen.append(selected)
+        return {'issues': [state['issue']]}
+    monkeypatch.setattr(acl_pr_check.shared, 'check', strict)
+    monkeypatch.setattr(acl_pr_check.shared, 'check_with_handoff_wait',
+                        lambda *args: pytest.fail('Prepared bootstrap must stay strict'))
+    result = acl_pr_check.check(request, 930, root=prepared)
+    assert seen == [legacy] and 'legacy linkage only' in result['policy']
 
 
 @pytest.mark.parametrize('workflow,success_fields', [
