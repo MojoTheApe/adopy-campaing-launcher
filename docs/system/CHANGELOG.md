@@ -1,5 +1,39 @@
 # System history
 
+## ACL-2510 — Live acceptance: interest lookup on a test account — 2026-11-11
+
+Recorded the owner's live check: "Creative real estate investing" and "Real estate
+investing" both resolve in Check plan on an allowed pilot account (TEST9095,
+release 2026-11-11.1534). Report only, no code change.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1510).
+
+## ACL-2522 — Lightweight work page for Graph calls (off by default) — 2026-11-10
+
+Account actions can now run their Graph calls from a lightweight page of the same profile instead of the full Ads Manager app (off by default; `ACL_LIGHT_WORK_TAB=1`), which lowers memory use and avoids page-unresponsive stops on low-memory laptops.
+The page is written by the browser itself on the Ads Manager address; every request to that address is answered locally or blocked, so the page itself never reaches Meta, while Graph calls still go through the profile's own proxy. The Graph session is taken once in a normal Ads Manager tab, handed over inside the browser, and that heavy tab is closed. If the page loses the session, a new Ads Manager tab takes it again (one load, counted in telemetry); the page is never reloaded. Every Graph request of the lightweight page names the account's Ads Manager campaigns address as its referrer. If the lightweight page cannot be prepared, that action uses the standard Ads Manager tab and the next action tries the lightweight page again; after two failures in a row on one profile, that profile keeps its Ads Manager tab until the dashboard restarts. The lightweight page is closed when the dashboard exits, and one left open by a crash is closed on the next tab open of the profile.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1522).
+
+## ACL-2499 — Check plan: read budget and failure handling of the ad account search — 2026-11-09
+
+With the ad account known, the per-term read budget of Check plan grows by one (the extra `targetingsearch` read), so five or more terms found nowhere no longer end as "Couldn't check all interests - press Check plan again"; the 90-term cap is unchanged. Any error of the ad account search (not only a permission refusal, e.g. code 100) is now a warning without ids or tokens, and Check plan continues with the interest search result.
+Python change: restart the dashboard after the release.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1499).
+
+## ACL-2509 — Builder: connecting an account keeps the country — 2026-11-11
+
+Connecting an account from the builder drawer reloads the page, and the drawer came back on the first country of the list (Australia) with no account chosen. The drawer now parks the country (and the accounts it had) before the connect form runs and, after the reload, shows the same country with the newly added account selected. Template-only change: no dashboard restart needed.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1509).
+
+## ACL-2508 — Saved-page notice and Refresh while a profile window is open — 2026-11-11
+
+While a profile window is kept open or a publish runs, the main page serves the saved
+version. The notice now says so, why, and what to do (close the window / wait for the
+publish, or press Refresh). Refresh used to rebuild the report but not the report of the
+page's period, so the reload still got the saved page; it now builds that too (the period
+comes from the page URL, or a same-origin Referer for an older saved page; malformed dates or span are ignored and never cached) and the fresh report is
+served. No live-account reads added. Python change: restart the dashboard.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1508).
+
 ## ACL-2519 — Profile lease: warm checkout fails closed and leaked leases are caught — 2026-11-10
 
 Part of ACL-2502, itself part 2 of the profile ownership work (ACL-1862 / ACL-1853). Taking the robot tab of a warm profile now requires the physical profile lease in the calling thread; without it the action is refused with `profile_lease` and nothing is touched (journal: `profile_lease_refused`, path `checkout`). API reads and commands on a warm tab take the lease themselves when a side path did not, with the same key and re-entrantly, so nested calls neither deadlock nor switch keys. At the end of every read, command and publish job the lease depth is compared with its start: a lease left taken is released and journaled as `profile_lease_leaked` (no ids), so one forgotten acquire can no longer block other processes. Real two-process tests cover read, checkout, warm session and leak against a second process. Restart the dashboard after the release (Python changed).
