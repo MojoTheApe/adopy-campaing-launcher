@@ -304,6 +304,7 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
 
 
 from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
+from src.fb_ads_rpa.draft import share_first_headline as _share_first_headline  # noqa: E402
 
 #: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
 FORM_ID_PLACEHOLDER = "0000000"
@@ -809,6 +810,8 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 if ad_sets_src else False)
     if not budget or float(budget) <= 0:
         problems.append("Lifetime budget missing" if lifetime else "Daily budget missing")
+    # ACL-2406: заголовок и описание всей кампании задаёт Ad 1; у объявлений 2+ свои только тексты.
+    _share_first_headline(draft)
     ad_sets: list[AdSetPlan] = []
     ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
     for set_no, s in enumerate(ad_sets_src, start=1):
