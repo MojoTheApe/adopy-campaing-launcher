@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2506 — Lifetime form test uses relative dates — 2026-11-10
+
+The Lifetime budget form test in `tests/test_acl1448_israel_time.py` typed the fixed first day 2026-11-10 and failed on that very day, because a start that is already in the past is moved to the current hour (ACL-2462). The test now builds the period from the current Israel-time day (first day = today + 3, last day = first day + 5). New York offset and schedule expectations use the actually selected start and Python ZoneInfo instead of fixed winter offsets. The existing browser scenarios cover the current relative period, winter, summer and mismatched US/Israel daylight-saving dates. Exact date assertions retain the independently selected fixture period even if Israel midnight passes before they run. The "first day is today" behaviour keeps its unchanged test. Test-only change; no application or installer behavior changes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1506).
+
 ## ACL-2495 — Builder no longer lists accounts removed on the Accounts page — 2026-11-09
 
 The Campaign Builder now skips accounts removed with Remove on the Accounts page (such as FacebookMKTOBFLV97 KW and W72 KW); a restored account is listed again. Restart the dashboard after the release.
