@@ -44,6 +44,10 @@ def _file_stem_label(filename: str) -> str:
     stem = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
     if "." in stem:
         stem = stem.rsplit(".", 1)[0]
+    # Cut first, neutralise after: a cut must not leave a readable 3-digit
+    # run behind (a stem ending in "12345" cut to 40 chars would otherwise
+    # keep "123" and the stats splitter would read it as a creative number).
+    stem = stem[:_FILE_STEM_MAX]
     # The stats splitter reads any 3-4 digit run as a creative number, so a
     # stem like "IMG_123" or "1080x1080-17" must not carry one: dimension
     # pairs are dropped, other 3-4 digit runs get a space after the first

@@ -38,6 +38,14 @@ def test_stem_is_length_limited_and_dash_flattened():
     assert _ad("big - sale.png").ad_name() == "big sale - Head"
 
 
+def test_cut_at_40_does_not_leave_a_readable_digit_run():
+    # the 40-char cut lands inside "12345": the leftover "123" must not be read as a creative number
+    stem = _ad("a" * 37 + "12345.png").ad_name()
+    creative, txt = split_ad_title(stem)
+    assert creative != "123" and "123" not in stem
+    assert len(stem.split(" - ")[0]) <= 40
+
+
 def test_numbered_files_and_explicit_creative_id_keep_todays_names():
     assert _ad("CAC-1253.mp4").ad_name() == "1253 - Head"
     assert _ad("1_es_2403_post.mp4").ad_name() == "2403 1 - Head"
@@ -113,7 +121,8 @@ def test_js_file_stem_mirrors_python():
     assert m
     from src.fb_ads_rpa.draft import _file_stem_label
     names = ["coffee beans.mp4", "IMG_123.jpg", "clip 120.mp4", "1080x1080-17.png",
-             "promo_1080х1920.png", "big - sale.png", "a/b/dog 1234 x.png", "516594629.png", "x" * 60 + ".png"]
+             "promo_1080х1920.png", "big - sale.png", "a/b/dog 1234 x.png", "516594629.png", "x" * 60 + ".png",
+             "a" * 37 + "12345.png"]
     script = m.group(0) + "\nconsole.log(JSON.stringify(%s.map(fileStem)));" % json.dumps(names)
     out = subprocess.run([node, "-e", script], capture_output=True, text=True, encoding="utf-8", check=True).stdout
     assert json.loads(out) == [_file_stem_label(n) for n in names]
