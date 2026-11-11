@@ -1526,7 +1526,9 @@ class WarmRegistry:
                 keep()          # фокус-эмуляция живёт на сессии CDP: подтверждаем (только локальный CDP)
             except Exception:
                 return None
-        graph = sess.graphs.get(mode)
+        # ACL-2533: a form-photo session pins ONE Page into its helper, so it never reuses a graph of the
+        # previous upload (which may be pinned to another Page): a fresh one every time.
+        graph = None if mode.startswith("photo") else sess.graphs.get(mode)
         if graph is None:
             graph = make_graph(tab)
         wanted = act[4:] if act.startswith("act_") else act

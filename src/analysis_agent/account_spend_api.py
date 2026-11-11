@@ -529,7 +529,8 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
     except ProfileLeaseError as exc:
         raise ApiReadError(str(exc), code="profile_lease") from exc
     try:
-        with _warm_session_held(account, act, key, profile_id, commands, photo) as sess:
+        extra = {"photo": True} if photo else {}        # ACL-2533: only when set, so older call shapes stay valid
+        with _warm_session_held(account, act, key, profile_id, commands, **extra) as sess:
             yield sess
     finally:
         hold.__exit__(None, None, None)
@@ -610,7 +611,8 @@ def _session(account: str, *, commands: bool = False, photo: bool = False):
         # Вызывающий уже держит физическую аренду профиля. Порядок тот же
         # у чтения после команды/публикации: профиль, затем одна общая читалка.
         with target_activity(_as._profile_key(account)), read_session(priority=commands):
-            with _open_session(account, commands=commands, photo=photo) as sess:
+            extra = {"photo": True} if photo else {}    # ACL-2533: only when set
+            with _open_session(account, commands=commands, **extra) as sess:
                 yield sess
     finally:
         _touch_kept_window(account)
@@ -671,7 +673,8 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
             raise ApiReadError(str(exc), code=exc.code) from exc
         raise
     if managed:
-        with _warm_session(account, act, key, profile_id, commands, photo) as warm_sess:
+        extra = {"photo": True} if photo else {}
+        with _warm_session(account, act, key, profile_id, commands, **extra) as warm_sess:
             yield warm_sess
         return
     if frozen_deferred:

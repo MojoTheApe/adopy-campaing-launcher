@@ -90,7 +90,8 @@ def test_the_policy_table_for_the_page_helper_and_the_upload_budget():
     table = wp.policy_for_form_photo(PAGE)
     assert table == {"host": "adsmanager.facebook.com", "url": wp.FORM_PHOTO_URL, "page": PAGE,
                      "mimes": ["image/jpeg", "image/png"], "max_bytes": 8 * 1024 * 1024, "page_re": wp.FORM_PAGE_RE}
-    assert wp.policy_for_page("act_1234567890", PAGE)["form_photo"] == table
+    # The creation/publish helper does NOT carry the upload block: the upload lives in its own mode only.
+    assert "form_photo" not in wp.policy_for_page("act_1234567890", PAGE)
     assert wp.policy_for_form_photo_only(PAGE) == {"form_photo_only": True, "form_photo": table}
     assert wp.FORM_PHOTO_UPLOAD_CALLS == 1
 
@@ -278,8 +279,9 @@ def test_a_network_failure_is_one_request_and_is_not_retried(js):
 
 def test_the_upload_only_helper_has_no_graph_write_chain(js):
     assert js["ok"]["graphPost"] == {"error": "read_only"}
-    assert js["with_graph_policy"]["result"]["ok"] is True      # the full creator policy also carries the block
-    assert len(js["with_graph_policy"]["calls"]) == 1
+    # the creation/publish helper has no upload block: it refuses (fail closed) and sends nothing
+    assert js["with_graph_policy"]["result"] == {"error": "write_refused", "why": "photo_policy"}
+    assert js["with_graph_policy"]["calls"] == []
 
 
 # ───────────────────────── Python: транспорт ─────────────────────────
@@ -373,12 +375,12 @@ def test_a_page_that_goes_away_after_sending_is_unknown_not_a_retry():
     assert out == {"error": "call_unknown", "reason": "cdp_timeout"} and len(tab.uploads()) == 1
 
 
-def test_the_creator_policy_helper_can_upload_for_its_pinned_page_too():
+def test_the_creation_helper_refuses_the_upload_and_sends_nothing():
     tab = PhotoTab()
     t = tc.InPageGraph(tab, allow_writes=True, write_act="act_1234567890", write_page=PAGE)
-    assert t.upload_form_photo(PAGE, JPEG, mime="image/jpeg")["photo_id"] == NEW_PHOTO
-    with pytest.raises(wp.WriteRefused):
-        t.upload_form_photo("999", JPEG, mime="image/jpeg")
+    with pytest.raises(ValueError, match="not enabled"):
+        t.upload_form_photo(PAGE, JPEG, mime="image/jpeg")
+    assert tab.stage_calls == 0 and tab.uploads() == []
     with pytest.raises(ValueError):                         # an object-edit helper never uploads
         tc.InPageGraph(PhotoTab(), allow_object_updates=True, write_act="act_1234567890").upload_form_photo(
             PAGE, JPEG, mime="image/jpeg")
@@ -412,10 +414,18 @@ def test_meta_refusal_is_a_graph_error_with_meta_text():
 
 
 @pytest.mark.parametrize("err", ["write_refused", "no_session", "no_file", "read_only"])
-def test_a_refusal_before_sending_stops_the_client_as_not_sent(err):
+def test_a_refusal_before_sending_is_a_plain_refusal_and_does_not_stop_the_client(err):
     c, _ = _client({"error": err, "why": "photo_host"})
-    with pytest.raises(g.PageFailed, match="refused the upload"):
+    with pytest.raises(g.FormPhotoRefused, match="nothing was sent") as got:
         c.upload_form_photo(PAGE, JPEG, mime="image/jpeg")
+    assert not isinstance(got.value, g.GraphStop) and c.stopped is None     # no stop -> no profile cooldown
+
+
+def test_a_missing_fb_dtsg_says_what_to_do():
+    c, _ = _client({"error": "no_session"})
+    with pytest.raises(g.FormPhotoRefused, match="Reload Ads Manager") as got:
+        c.upload_form_photo(PAGE, JPEG, mime="image/jpeg")
+    assert got.value.code == "no_session" and c.stopped is None
 
 
 @pytest.mark.parametrize("reply", [{"error": "network"}, {"error": "call_unknown", "reason": "page_closed"},
@@ -523,6 +533,30 @@ def test_a_page_outside_the_account_makes_no_upload(monkeypatch):
     _patch_upload(monkeypatch, meta)
     out = page_forms.upload_photo("Acc", "999", JPEG)
     assert out["ok"] is False and "not available for this account" in out["message"] and meta.uploads == []
+
+
+def test_the_upload_runs_as_a_write_not_a_read(monkeypatch):
+    from src.analysis_agent import account_spend as _as
+
+    meta = UploadMeta()
+    _patch_upload(monkeypatch, meta)
+    seen = []
+    monkeypatch.setattr(_as, "serialized_browser", lambda **kw: (seen.append(kw), (lambda fn: fn))[1])
+    page_forms.upload_photo("Acc", PAGE, JPEG)
+    assert len(seen) == 1 and not seen[0].get("reading") and seen[0]["key"] is _as._profile_key
+
+
+def test_a_not_sent_refusal_is_shown_as_a_refusal_and_starts_no_cooldown(monkeypatch):
+    from src.analysis_agent import account_spend_api as _api
+
+    meta = UploadMeta({"error": "no_session"})
+    client, _, records = _patch_upload(monkeypatch, meta)
+    started = []
+    monkeypatch.setattr(_api, "_start_cooldown", lambda key, stop: started.append(stop))
+    out = page_forms.upload_photo("Acc", PAGE, JPEG)
+    assert out["ok"] is False and out["state"] == "refused" and "Reload Ads Manager" in out["message"]
+    assert client.stopped is None and started == []
+    assert records[0][2]["state"] == "refused"
 
 
 def test_a_bad_file_is_refused_before_a_profile_is_opened(monkeypatch):
@@ -715,3 +749,46 @@ def test_the_page_validates_the_checksum_like_the_server():
     page = HTML.read_text(encoding="utf-8")
     assert "Background image checksum must be 64 hex characters" in page
     assert "cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256)" in page
+
+
+# ───────────────────────── тёплая вкладка: две Страницы подряд ─────────────────────────
+
+
+def test_two_uploads_for_two_pages_through_the_warm_registry_each_get_a_fresh_pinned_graph(tmp_path, monkeypatch):
+    """The registry must not hand the second upload the graph pinned to the first Page."""
+    from src.analysis_agent import account_spend_api as api
+    from tests.test_acl1812_warm_sessions import ACT, PID, FakeGraph, Rig
+
+    class PhotoGraph(FakeGraph):
+        form_photo_page = None
+
+        def pin_photo_page(self, page):             # the same rule as InPageGraph.pin_photo_page
+            if self.form_photo_page and self.form_photo_page != page:
+                raise ValueError("a different Page is already pinned for this session")
+            self.form_photo_page = page
+
+    made = []
+
+    def make(tab, commands_act=None, photo=False):
+        graph = PhotoGraph(tab)
+        made.append((graph, photo))
+        return graph
+
+    rig = Rig(tmp_path)
+    rig.warm_up()
+    monkeypatch.setattr(api, "_warm_registry", lambda: rig.reg)
+    monkeypatch.setattr(api, "_make_graph", make)
+    api._COOLDOWN.clear()
+    graphs = []
+    for page in ("111", "222"):
+        with api._warm_session_held("Acc", ACT, "k", PID, False, photo=True) as sess:
+            sess.client.transport.pin_photo_page(page)        # the second Page must not be refused
+            graphs.append(sess.client.transport)
+    assert graphs[0] is not graphs[1] and [g_.form_photo_page for g_ in graphs] == ["111", "222"]
+    assert all(photo for _, photo in made[-2:])
+    # a plain read still reuses its own graph (the fresh-graph rule is for the photo mode only)
+    reads = []
+    for _ in range(2):
+        with api._warm_session_held("Acc", ACT, "k", PID, False) as sess:
+            reads.append(sess.client.transport)
+    assert reads[0] is reads[1]

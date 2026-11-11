@@ -111,6 +111,12 @@ const lastPost = () => requests.filter(r => r.body).pop();
     assert.deepEqual([coverState.photo, coverState.page], ['111', '222'], 'saved cover was not given to the picker');
     click('fm-save-btn'); await flush();
     assert.deepEqual([lastPost().body.cover_photo_id, lastPost().body.cover_page_id], ['111', '222']);
+    // ACL-2533: the same Page keeps the picture; another Page clears it (never re-labels it).
+    click('', {'data-fm-edit': VALID.id});
+    fire('change', {id: 'fm-cover-page', value: '222'});
+    assert.deepEqual([coverState.photo, coverState.page], ['111', '222'], 'the same Page must keep the picture');
+    fire('change', {id: 'fm-cover-page', value: '333'});
+    assert.deepEqual([coverState.photo, coverState.page], ['', ''], 'another Page must clear the picture');
     click('', {'data-fm-edit': VALID.id});
     coverState.photo = ''; coverState.page = '';                       // Remove
     click('fm-save-btn'); await flush();

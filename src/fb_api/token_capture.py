@@ -1046,6 +1046,10 @@ class InPageGraph:
     помощник вырезает токены сам).
     """
 
+    #: ACL-2533: class-level defaults, so a helper built without `__init__` (test doubles) reads as "not a photo session".
+    form_photo = False
+    form_photo_page: str | None = None
+
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
@@ -1652,13 +1656,13 @@ class InPageGraph:
         SHA-256 are checked there again), then one request. Exactly once: a failure after sending is
         `call_unknown`. Returns the helper's reply: `{ok, photo_id, width, height}` or `{error, ...}`.
         """
-        if not (self.form_photo or (self.allow_writes and not self.object_updates)):
+        if not self.form_photo:
             raise ValueError("read-only: the form-background upload is not enabled for this page")
         import hashlib
 
         from src.fb_api import write_policy as _wp
 
-        pinned = (self.form_photo_page if self.form_photo else self.write_page) or ""
+        pinned = self.form_photo_page or ""
         if not isinstance(data, (bytes, bytearray)):
             raise ValueError("file content must be bytes")
         _wp.check_form_photo_upload(_wp.FORM_PHOTO_HOST, page_id, pinned, mime, len(data))

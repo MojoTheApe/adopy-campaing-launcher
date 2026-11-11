@@ -236,7 +236,6 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
         "form_create": policy_for_form_create(page),
-        "form_photo": policy_for_form_photo(page),
     }
 
 

@@ -181,6 +181,18 @@ class PageUnresponsive(GraphStop):
     kind = "page_unresponsive"
 
 
+class FormPhotoRefused(RuntimeError):
+    """ACL-2533: the form-background upload was refused BEFORE anything was sent (policy, no session values, no file).
+
+    Not a `GraphStop`: nothing is wrong with the profile or the page, so the client is not stopped and the profile
+    gets no cooldown. The text is for the person.
+    """
+
+    def __init__(self, message: str, *, code: str = ""):
+        super().__init__(scrub(message))
+        self.code = code
+
+
 class WriteUnknown(RuntimeError):
     """Запись ушла (или могла уйти), а ответа нет (ACL-1761).
 
@@ -666,15 +678,20 @@ class GraphClient:
         try:
             reply = self.transport.upload_form_photo(page_id, data, mime=mime)
         except ValueError as exc:
-            raise self._stop(PageFailed(f"upload refused before sending: {exc}")) from exc
+            raise FormPhotoRefused(f"The upload was refused before sending: {exc}", code="refused") from exc
         except GraphStop as exc:
             raise self._stop(exc) from exc
         self._last_call = self._clock()
         err = reply.get("error") if isinstance(reply, dict) else "bad_reply"
         if isinstance(err, str):
+            if err == "no_session":
+                raise FormPhotoRefused("Ads Manager did not show the session values the upload needs, so nothing "
+                                       "was sent. Reload Ads Manager in the profile and press Upload again.",
+                                       code="no_session")
             if err in _NOT_SENT:
                 why = reply.get("why") if isinstance(reply, dict) else ""
-                raise self._stop(PageFailed(f"the page refused the upload ({err}{': ' + str(why) if why else ''})"))
+                raise FormPhotoRefused(f"The page refused the upload before sending ({err}{': ' + str(why) if why else ''}); "
+                                       "nothing was sent.", code=err)
             if err == "no_token":
                 self._check_page()
                 raise self._stop(LoggedOut("no session in the page; the upload was not sent"))

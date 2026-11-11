@@ -24338,7 +24338,12 @@ window.aclTeamLibrary = (function () {
     var t = ev.target;
     if (!t || pending) return;
     if (t.id === 'fm-cover-account') loadCoverPages(false, '');
-    if (t.id === 'fm-cover-page' && cover && cover.get().cover_photo_id) cover.set(cover.get().cover_photo_id, t.value, '');
+    // ACL-2533: a picture belongs to the Page it was uploaded to / picked from. Another Page = no picture
+    // (never re-label it: Page B would get Page A's photo id).
+    if (t.id === 'fm-cover-page' && cover) {
+      var held = cover.get();
+      if (held.cover_photo_id && String(held.cover_page_id || '') !== String(t.value || '')) cover.set('', '', '');
+    }
   });
 
   document.addEventListener('click', function (ev) {

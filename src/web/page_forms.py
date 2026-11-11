@@ -188,15 +188,16 @@ def upload_photo(account_label: str, selected_page: str, data: bytes) -> dict[st
     if refusal:
         return {"ok": False, "state": "refused", "page_id": "", "photo_id": "", "message": refusal,
                 "account": account_label}
-    run = _as.serialized_browser(key=_as._profile_key, reading=True)(
+    # A write as the Page: exclusive on the profile and under the write lease category (not a read).
+    run = _as.serialized_browser(key=_as._profile_key)(
         lambda account: _upload_in_session(account, selected_page, data, mime))
     from src.fb_api.connection import user_started_action
-    from src.fb_api.graph import GraphError, WriteUnknown
+    from src.fb_api.graph import FormPhotoRefused, GraphError, WriteUnknown
     try:
         with user_started_action():      # ACL-2272: only by the person's press
             out = run(account_label)
         error, state = "", "uploaded"
-    except GraphError as exc:            # Meta refused the picture: its own text
+    except (GraphError, FormPhotoRefused) as exc:     # Meta (or our own guard, before sending) refused: plain text
         error, state = str(exc), "refused"
     except WriteUnknown:
         error = ("The upload result is unknown. Nothing was retried; if the picture is wanted, "
