@@ -28,7 +28,9 @@ from src.analysis_agent.account_refresh_machine import MachineStore, binding, Co
 log = logging.getLogger(__name__)
 
 FRESH_S = 3600.0
-PRIORITY = {"action": 0, "retry": 1, "attention": 2, "schedule": 3}
+#: `open` (ACL-2419): профиль только что открыт кнопкой Open — статус кабинета обновляется
+#: тем же чтением, что и список; приоритет как у Retry, но паузу очереди он не обходит.
+PRIORITY = {"action": 0, "retry": 1, "open": 1, "attention": 2, "schedule": 3}
 WINDOWS = ("08:00", "13:00", "18:00")
 
 
@@ -755,7 +757,13 @@ class RefreshQueue:
                                 self._sweep_complete(account, trigger)
                             continue
                         snap = self._execute_selected(account, trigger, bypassed)
-                        if snap is not None and not getattr(snap, "_machine_paused", None):
+                        if campaign_inventory.is_status_only_ok(snap):
+                            # ACL-2419: статус-чтение результата описи не публикует - заявку снимаем.
+                            self._machine.withdraw(key, self._owner)
+                            with self._state_guard():
+                                self._sweep_complete(account, trigger)
+                            done += 1
+                        elif snap is not None and not getattr(snap, "_machine_paused", None):
                             self._machine.finish(key, getattr(snap, "_machine_revision", None))
                             done += 1
                     finally:
@@ -829,6 +837,12 @@ class RefreshQueue:
             return
         verdict = classify(snap)
         self._sweep_complete(account, trigger)
+        if campaign_inventory.is_status_only_ok(snap):
+            # ACL-2419: список не читался - время списка и пауза остаются как были.
+            kept = campaign_inventory.get_snapshot(account)
+            row = self._rows.get(account, {})
+            self._rows[account] = {"list_at": row.get("list_at", ""), "state": kept.state if kept else "idle", "error": ""}
+            return
         prev_at = self._rows.get(account, {}).get("list_at", "")
         if verdict == "ok":
             self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}

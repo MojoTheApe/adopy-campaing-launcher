@@ -41,10 +41,10 @@ def _video_rows(rows):
     return [(ok, kw) for step, ok, kw in rows if (kw.get("diag") or {}).get("metric") == "video_upload"]
 
 
-def test_gate_view_keeps_the_real_reason_behind_account_busy(tmp_path):
+def test_gate_view_keeps_the_real_reason_behind_the_hold_label(tmp_path):
     rig = Rig(tmp_path)
     view = rig.reg.gate.wait_view("limit")
-    assert view["hold"] == "account_busy", "the dashboard label stays"
+    assert view["hold"] == "heavy_limit", "ACL-2293: the limit is named, not 'another account'"
     assert view["why"] == "limit"
 
 

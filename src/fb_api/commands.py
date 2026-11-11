@@ -658,6 +658,10 @@ def _fail_all(op: dict, message: str, *, stale: bool = False) -> None:
     op["state"], op["message"], op["stale"] = FAILED, message, stale
 
 
+#: Команда -> исполнитель `(store, op, sess, sleep)`; пусто = `_run` (статус, бюджет, ставка).
+RUNNERS: dict[str, Callable[..., None]] = {}
+
+
 def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
            sleep: Callable[[float], None] = time.sleep,
            after_write: Callable[[dict, Any], None] | None = None,
@@ -666,7 +670,8 @@ def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
     assert op is not None
     try:
         with open_session(op["account"], True) as sess:
-            _run(store, op, sess, sleep)
+            # ACL-2457: массовая правка регистрирует свой исполнитель (`bulk_edit`); прочие команды - `_run`.
+            RUNNERS.get(op.get("command"), _run)(store, op, sess, sleep)
             if op["state"] == SUCCEEDED and after_write is not None:
                 try:
                     after_write(op, sess)

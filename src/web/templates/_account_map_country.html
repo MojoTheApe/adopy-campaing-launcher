@@ -5,12 +5,11 @@
    Две копии разметки разошлись бы, и заметил бы это тот, кто поверил не
    той. Ожидает `mc` — страну из карты — и `amap`. #}
       {% if mc.rows %}
-      {#- ACL-1800: дерево аккаунтов. Тулбар и вкладки страны стоят над списком аккаунтов; строка аккаунта — родитель,
+      {#- ACL-1800: дерево аккаунтов. Над списком аккаунтов ничего нет (вкладки разделов страны живут в Workbench); строка аккаунта — родитель,
           под ней раскрывается таблица её кампаний (создаётся JS при первом показе блока, `amapCampaignMount`).
-          Вкладки ведут в разделы этой же страны, если они есть на странице. Раскрытие сразу показывает сохранённое; устаревший список обновляется в очереди. -#}
+          Раскрытие сразу показывает сохранённое; устаревший список обновляется в очереди. -#}
       {%- if campaign_table_api is defined and campaign_table_api() %}
       <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
-        <nav class="hc-tabs" data-hc-tabs aria-label="{{ mc.country | e }} workspace sections"></nav>
         <div class="hc-mount" data-hc-mount></div>
       </section>
       {%- endif %}
@@ -119,9 +118,15 @@
                   за сегодняшнее: у Doc20 «no warning» от 22.09 стояло, когда
                   кабинет уже был отключён (ACL-1391). -#}
               {%- set stale_note = (' Not refreshed: the latest read on ' ~ st.tried_at ~ ' failed' ~ ((' — ' ~ st.tried_error) if st.tried_error else '') ~ '.') if st.stale else '' -%}
-              {%- if st.status == 'clear' -%}<span class="amap-st {{ 'dim' if st.stale else 'ok' }}" title="No warning on the account page when it was read {{ st.at }}. Not the same as a verified &quot;active&quot;.{{ stale_note }}">no warning</span>
+              {#- ACL-2419: `shown` решает, что считать фактом. `clear` старше суток или после
+                  неудачного чтения — «unknown», а не «no warning»/«active»; тяжёлые статусы
+                  остаются красными с пометкой «not refreshed». Без `shown` (старая запись) — как раньше. -#}
+              {%- set shown = st.shown if st.shown is defined else st.status -%}
+              {%- set unrecognised = st.status == 'unknown' and st.status_text and 'unrecognised account_status' in st.status_text -%}
+              {%- if st.status in ('clear', 'unknown') and shown == 'unknown' -%}<span class="amap-st dim" title="{% if unrecognised %}Meta returned an account_status code we do not know ({{ st.account_status or st.status_text }}). Check the account in Ads Manager.{% elif st.status == 'unknown' %}The page gave nothing to read at {{ st.at }}.{% else %}The status was not refreshed in the last 24 hours. It is not shown as &quot;no warning&quot; or &quot;active&quot; until it is read again.{% endif %}{{ stale_note }}">unknown</span>
+              {%- elif st.status == 'clear' -%}<span class="amap-st {{ 'dim' if st.stale else 'ok' }}" title="{% if st.source == 'api' %}Account status from Meta (account_status = 1), read {{ st.at }}.{% else %}No warning on the account page when it was read {{ st.at }}. Not the same as a verified &quot;active&quot;.{% endif %}{{ stale_note }}">{{ 'active' if st.source == 'api' else 'no warning' }}</span>
               {%- elif st.status == 'unknown' -%}<span class="amap-st dim" title="The page gave nothing to read at {{ st.at }}.{{ stale_note }}">unreadable</span>
-              {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}.{{ stale_note }}">{{ st.status }}</span>
+              {%- else -%}<span class="amap-st bad" title="{{ st.status_text or st.status }} — read {{ st.at }}.{% if st.not_refreshed %} Last known status. The latest read did not refresh it.{% endif %}{{ stale_note }}">{{ st.status }}</span>
               {%- endif -%}
               {#- Доказательство для поддержки (ACL-1430): снимок страницы, на
                   которой прочитали проблему. Нет снимка у красного статуса —
@@ -133,7 +138,7 @@
                   получают одну кнопку Copy for group ниже (ACL-1520). -#}
               {%- if st.shot_id and st.status == 'unknown' %} <button type="button" class="amap-shot" data-shot="{{ st.shot_id }}" title="Screenshot taken {{ st.shot_at }}. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>{% endif -%}
               {%- if st.next_step %}<small class="amap-st-next">{{ st.next_step }}</small>{% endif -%}
-              {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if st.stale }}">{{ st.at_short }}{% if st.stale %} · not refreshed{% endif %}</small>{% endif -%}
+              {%- if st.at_short %}<small class="amap-st-at{{ ' stale' if (st.stale or st.not_refreshed) }}">{{ st.read_label or st.at_short }}{% if st.stale or st.not_refreshed %} · not refreshed{% endif %}</small>{% endif -%}
               {#- Одна картинка для группы поставщика (ACL-1520, решение владельца
                   03.10): снимок ACL-1430 как есть, без полосы сверху
                   (ACL-1529); data-head — заголовок вкладки запасного пути.

@@ -335,7 +335,8 @@ _HELPER_JS = r"""
     const media = spec[kind];
     if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
-    if (!textListOk(spec.bodies, 'bodies', true, cap) || !textListOk(spec.titles, 'titles', true, cap)) return false;
+    // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
+    if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
     if ('descriptions' in spec && !textListOk(spec.descriptions, 'descriptions', true, cap)) return false;
     let names = [];
     for (const item of media) {
@@ -496,6 +497,41 @@ _HELPER_JS = r"""
     return null;
   }
 
+  // ACL-2457: зеркало write_policy._check_update_targeting.
+  function targetingUpdateOk(raw, T) {
+    let t = raw;
+    if (typeof t === 'string') { try { t = JSON.parse(t); } catch (e) { return false; } }
+    if (!t || typeof t !== 'object' || Array.isArray(t) || !Object.keys(t).length || !T) return false;
+    if (JSON.stringify(t).length > T.max_chars) return false;
+    const bad = (x) => {
+      if (Array.isArray(x)) return x.some(bad);
+      if (x && typeof x === 'object') {
+        return Object.keys(x).some((k) => WRITE.forbidden.indexOf(k.toLowerCase()) >= 0 || bad(x[k]));
+      }
+      return false;
+    };
+    if (bad(t)) return false;
+    for (const k of ['age_min', 'age_max']) {
+      if (k in t && !(Number.isInteger(t[k]) && t[k] >= 13 && t[k] <= 65)) return false;
+    }
+    if ('age_min' in t && 'age_max' in t && t.age_min > t.age_max) return false;
+    if ('genders' in t) {
+      const g = t.genders;
+      if (!Array.isArray(g) || !g.length || !g.every((x) => Number.isInteger(x) && T.genders.indexOf(x) >= 0)) return false;
+    }
+    if ('locales' in t) {
+      const l = t.locales;
+      if (!Array.isArray(l) || !l.length || l.length > 50 || !l.every((x) => Number.isInteger(x) && x > 0)) return false;
+    }
+    const sets = { publisher_platforms: T.platforms, facebook_positions: T.facebook_positions, instagram_positions: T.instagram_positions };
+    for (const k of Object.keys(sets)) {
+      if (!(k in t)) continue;
+      const v = t[k];
+      if (!Array.isArray(v) || !v.length || !v.every((x) => typeof x === 'string' && sets[k].indexOf(x) >= 0)) return false;
+    }
+    return true;
+  }
+
   async function write(spec, job) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
@@ -527,6 +563,9 @@ _HELPER_JS = r"""
       const v = params[k];
       if (k === 'status') {
         if (typeof v !== 'string' || ou.statuses.indexOf(v) < 0) return refused('status');
+      } else if (k === 'targeting') {
+        // ACL-2457: targeting существующего набора - прочитанный объект; ключи правки проверяются строго.
+        if (!targetingUpdateOk(v, ou.targeting)) return refused('targeting');
       } else {
         const okNum = typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v < 1e15;
         const okStr = typeof v === 'string' && /^[1-9][0-9]{0,14}$/.test(v);

@@ -110,12 +110,12 @@ def test_the_old_paint_is_a_no_op_under_api_and_runs_under_rpa():
         assert done.returncode == 0 and done.stdout.strip() == touched, (flag, done.stdout, done.stderr)
 
 
-def test_country_block_carries_tabs_the_read_button_and_one_tree():
+def test_country_block_carries_the_read_button_and_one_tree():
     assert 'amapReadCampaigns(this)' not in COUNTRY
     assert "Read campaigns in {{ mc.country }}" not in COUNTRY and "Read all spend in {{ mc.country }}" not in COUNTRY
     assert COUNTRY.count('class="hc hc-scoped amap-campaigns"') == 1 and COUNTRY.count("data-hc-mount") == 1
-    assert "data-hc-tabs" in COUNTRY and "anchor_slug" not in COUNTRY      # вкладки строит JS: шаблон не требует серверных фильтров
-    # одно дерево: вкладки — НАД списком аккаунтов; панели инструментов и сноски нет (04.11), отдельной таблицы кампаний нет
+    assert "data-hc-tabs" not in COUNTRY and "hc-tabs" not in COUNTRY and "anchor_slug" not in COUNTRY   # полосы вкладок над аккаунтами нет: разделы страны — в Workbench
+    # одно дерево над списком аккаунтов; панели инструментов и сноски нет (04.11), отдельной таблицы кампаний нет
     assert COUNTRY.index('amap-campaigns"') < COUNTRY.index('<table class="amap-grid"')
     assert "data-hc-after" not in COUNTRY and "hc-after" not in COUNTRY
     assert '<span class="amap-caret-off">·</span>' in COUNTRY              # стрелку и остальное строке аккаунта добавляет JS (`amapCampaignTree`), только под api
@@ -133,37 +133,6 @@ def _render_table() -> str:
     from src.web.app import templates
 
     return templates.env.get_template("_campaign_table.html").render()
-
-
-def test_tabs_link_only_to_sections_that_exist_on_the_page():
-    src = REPORT[REPORT.index("function amapCampaignSlug("): REPORT.index("function amapCampaignMount(")]
-    js = src + """
-    const made = [];
-    const present = new Set(IN.panels);
-    global.document = {getElementById: id => (present.has(id) ? {} : null),
-      createElement: tag => { const e = {tag, className: '', textContent: '', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }}; made.push(e); return e; }};
-    const nav = {innerHTML: 'x', appendChild() {}};
-    const host = {dataset: {country: IN.country}, querySelector: () => nav};
-    amapCampaignTabs(host);
-    console.log(JSON.stringify({slug: amapCampaignSlug(IN.country), tabs: made.map(e => ({tag: e.tag, text: e.textContent, cls: e.className, href: e.href || '', cur: e.attrs['aria-current'] || '', title: e.title || ''}))}));
-    """
-    def run(country, panels):
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "t.js").write_text("const IN = " + json.dumps({"country": country, "panels": panels}) + ";\n" + js, encoding="utf-8")
-            done = subprocess.run([shutil.which("node"), "t.js"], cwd=tmp, capture_output=True, text=True, encoding="utf-8", timeout=30)
-        assert done.returncode == 0, done.stderr
-        return json.loads(done.stdout)
-
-    got = run("Chile", ["view-country-chile-manage", "view-country-chile-assets", "view-country-chile-creatives"])
-    assert got["slug"] == "chile"
-    by = {t["text"]: t for t in got["tabs"]}
-    assert list(by) == ["Campaigns", "Winning setups", "Landings", "Targets", "Creatives", "Buyers"]
-    assert by["Campaigns"]["tag"] == "a" and by["Campaigns"]["href"] == "#country-chile-manage" and by["Campaigns"]["cur"] == "page"
-    assert by["Winning setups"]["href"] == "#country-chile-assets" and by["Creatives"]["href"] == "#country-chile-creatives"
-    for off in ("Landings", "Targets", "Buyers"):
-        assert by[off]["tag"] == "span" and "hc-tab-off" in by[off]["cls"] and by[off]["title"], off
-    assert run("Côte d'Ivoire", [])["slug"] == "c-te-d-ivoire"                      # тот же слаг, что у `anchor_slug` на сервере
-    assert run("  ", [])["slug"] == "unknown"
 
 
 # ───────────────────────── серверная часть: цель и бенчмарк ─────────────────────────

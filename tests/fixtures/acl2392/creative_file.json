@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "type": "PlanError",
+  "message": "ad 3: creative file is empty or larger than 30 MB",
+  "expect": {
+    "key": "creative_file",
+    "short": "A creative file cannot be used: ad 3",
+    "next": "replace the file and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  }
+}

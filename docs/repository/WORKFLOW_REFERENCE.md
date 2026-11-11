@@ -23,6 +23,7 @@ Full exact local contracts:
 - [EXECUTOR_ACTIVITY.md](EXECUTOR_ACTIVITY.md)
 - [TASK_PAUSE.md](TASK_PAUSE.md)
 - [PROCESS_SUPPORT.md](PROCESS_SUPPORT.md)
+- [STATE_ARCHIVE.md](STATE_ARCHIVE.md)
 
 ---
 

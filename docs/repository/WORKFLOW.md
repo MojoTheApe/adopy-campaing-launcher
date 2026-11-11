@@ -21,6 +21,19 @@
   version, the run link and the actual resolution. If GitHub merged the PR
   outside Tracker, follow the [manual-merge recovery checklist](#recover-a-manual-github-merge).
 
+### Keep small work proportionate
+
+Use the existing Issue and a short plan stating the result, affected area and checks.
+A small task needs no extra architecture report or second specification. Material
+scope/architecture/operating changes still use the existing owner decision; routine
+implementation choices do not need another permission. Read the adopted
+[engineering rules](https://github.com/MojoTheApe/master-repo/blob/9315a3cf0ba7c13cb5725d61d4d099851547acc4/docs/engineering-standards.md)
+and local examples in [verification](VERIFICATION.md#engineering-context-and-examples).
+The actual whole diff determines the existing instruction/product route, never line count.
+Independent review and all applicable checks remain mandatory. A blocking complexity
+finding names the concrete unnecessary part and violated requirement or R1–R8 rule;
+preferences remain advice and do not expand the task.
+
 ### Hand off a tested local result
 
 Before another executor takes over, push the tested source to an accessible
@@ -76,22 +89,39 @@ Shared contract references retain canonical bodies; `_ACL` documents preserve th
 
 Use the exact published Task Tracker revision selected by
 [tracker/engine.json](../../tracker/engine.json) and
-[delivery.json](../../delivery.json). ACL-2351 adopted Tracker3.24.1 at
-`9dc08c3e31ef1204130f43b0740d173e733d5cb7` on 4 November 2026.
+[delivery.json](../../delivery.json). ACL-2512 selects published Tracker3.28.1 at
+`6e8dce91d1696f8f24e50deaf03dcff04703303c` for signed partial-batch recovery and verified part-delivery recognition.
+ACL-2421's Tracker3.27.3 selection and ACL-2417's Tracker3.26.0 recovery
+support remains history. The previous ACL-2351 selection of
+Tracker3.24.1 on 4 November 2026 remains preserved as history.
 The original ACL-2156 selection of Tracker3.14.1 remains in the
 [dated provider history](STANDALONE_PROVIDER_ACL.md#historical-adoption--acl-2156-24-october-2026).
 `delivery.json.workflow_provider`, the engine lock and immutable private-provider checkout name the
-same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed. Master1.8.0 stays the unchanged pinned documentation
-reference; this route needs no Master write or companion publication.
+same executable source. The descriptor uses the source-owned private-checkout transport with a separately authorized dedicated read-only key; it validates ACL only as data after provider authentication is removed.
+[AGENTS.md](../../AGENTS.md) links the current Master Repo 1.11.0 guidance.
+The descriptor and template baseline retain the provider's audited Master 1.8.0 ancestry.
 
 Use the exact official Tracker source and its isolated
 `scripts/workflow_provider.py` entry point for future supported rendering. Read
 [the local provider adoption](STANDALONE_PROVIDER_ACL.md) and
-[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/9dc08c3e31ef1204130f43b0740d173e733d5cb7/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+[the immutable source procedure](https://github.com/MojoTheApe/task-tracker/blob/6e8dce91d1696f8f24e50deaf03dcff04703303c/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 Preserve all local rules below, true pristine ancestry, independent review and
 full applicable checks. The native configuration, adopted execution3, capacities,
 target, required checks, IDs, existing owners and original task scope are unchanged.
-No optional policy is activated. ACL-2099 is a separate preparation-only selection;
+ACL-2423 separately declared the four existing process controls and three tests
+in `delivery.json`; that local boundary grants no approval by itself. TT-188
+activated lossless outer9 storage, retaining the unchanged inner pause8 contract,
+all history and existing ownership. See [the archive guide](STATE_ARCHIVE.md).
+ACL-2424 connects the existing bounded review-handoff wait and prepares delivery
+continuation through the published original-request proof. The normal receipt
+writer uses current-main helpers; product verification and publication keep the
+original product checkout, CI, tag, target and actual acceptance.
+ACL-2425 separately selects instruction schema2 in matching descriptor/config
+and genuine template ancestry. Reviewed instruction-only work can finish while
+an original product request waits, keeping its original code/CI/target and actual
+acceptance. Product/mixed work and held integration/intake/unpromoted Stage retain
+their existing admission/delivery guards. No new release is implied by docs Done.
+ACL-2099 is a separate preparation-only selection;
 its own package must be verified through the retained actual preselection config
 before any separately authorized owned idle adoption.
 
@@ -200,7 +230,13 @@ alone proves neither branch protection nor ruleset enforcement. Never present
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
-## Pause and resume before outer8 activation
+## Current pause and retained pre-activation history
+
+ACL-2414 completed the owned idle activation on 5 November 2026. Use the selected
+[pause/resume commands](TASK_PAUSE.md) for a confirmed stopped executor. An actual
+ACL-2414 implementation pause and resume preserved In Progress, its branch and
+work location while releasing the old claim and acquiring fresh authority.
+The following pre-activation procedure is retained as historical guidance.
 
 The source includes compatible phase-preserving [pause support](TASK_PAUSE.md),
 but a pin update does not activate it. Use `pause stop/resume` only after actual
@@ -459,6 +495,8 @@ condition releases ownership. No detached endless reporter or coordinator heartb
 for another executor. Existing runs without a producer remain unknown.
 
 ## Explicit phase-preserving pause after verified activation
+
+The ACL-2414 activation is now verified; see the [process history](CHANGELOG.md).
 
 Source support is installed separately from live activation; see the actual
 readiness boundary in [EARLY_ADOPTION.md](EARLY_ADOPTION.md#pause-readiness-and-live-boundary).

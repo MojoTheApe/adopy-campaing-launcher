@@ -104,11 +104,11 @@ def test_a_laptop_with_little_memory_always_keeps_one_gigabyte_free(total_gb, us
 
 
 def test_the_setting_is_read_from_the_machine_env_and_garbage_falls_back():
-    assert ps.load_settings({}).max_used_pct == 75.0
+    assert ps.load_settings({}).max_used_pct == 92.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "85"}).max_used_pct == 85.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "92,5"}).max_used_pct == 92.5
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 75.0
-    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 75.0     # ниже 10 — мусор
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "lots"}).max_used_pct == 92.0
+    assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "5"}).max_used_pct == 92.0     # ниже 10 — мусор
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "150"}).max_used_pct == 99.0
 
 
@@ -210,9 +210,10 @@ def test_the_heavy_gate_follows_the_share_not_a_gigabyte_estimate(used, ok):
     assert allowed is ok and why == ("memory_ok" if ok else "memory_low")
 
 
-def test_the_heavy_gate_first_action_waits_only_above_the_share():
+def test_the_heavy_gate_first_action_is_never_memory_gated():
     assert _gate(reading(31, 86), active=0)._allowed() == (True, "first")
-    assert _gate(reading(31, 95), active=0)._allowed() == (False, "below_reserve")
+    # ACL-2369: the first action on an open profile is never memory-gated
+    assert _gate(reading(31, 95), active=0)._allowed() == (True, "first")
 
 
 def test_the_heavy_gate_wait_view_carries_the_share():
@@ -235,3 +236,25 @@ def test_the_warm_start_needs_only_the_free_share_plus_profiles_with_no_measurem
     need, growth = reg._memory_need(s, ps)
     assert growth == s.profile_mb                      # p2 ещё никто не измерил; p1 уже в доле занятой
     assert need == ps.keep_free_mb(31 * GB, s) + s.profile_mb
+
+
+@pytest.mark.parametrize("mb,text", [(0, ""), (-5, ""), (1, "50 MB"), (600, "600 MB"), (601, "650 MB"),
+                                     (1023, "1050 MB"), (1024, "1.0 GB"), (6700, "6.6 GB"), (6758, "6.6 GB"),
+                                     (6759, "6.7 GB")])
+def test_format_mb_rounds_up(mb, text):
+    # ACL-2369
+    assert ps.format_mb(mb) == text
+
+
+def test_free_more_mb_is_the_shortfall_against_the_kept_free_share():
+    s = settings(max_used_pct=75.0)
+    m = reading(32, 86)                      # 32 GB total: 8192 kept free, ~4588 available
+    assert ps.free_more_mb(m, s) == 8192 - m.available_mb
+    assert ps.free_more_mb(m, s, extra_mb=500) == 8192 + 500 - m.available_mb
+    assert ps.free_more_mb(reading(32, 50), s) == 0
+
+
+def test_free_more_mb_respects_the_min_free_floor_on_a_small_machine():
+    s = settings(max_used_pct=99.0)
+    m = ps.MemoryReading(total_mb=4096, available_mb=400)    # share is 40 MB, floor is MIN_FREE_MB
+    assert ps.free_more_mb(m, s) == ps.MIN_FREE_MB - 400

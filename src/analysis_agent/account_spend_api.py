@@ -151,6 +151,22 @@ def map_status(account_status: Any, disable_reason: Any = None) -> tuple[str, st
     return status, text + tail + ")"
 
 
+
+def status_from_account(acc: dict) -> tuple[str, str, int | None, str]:
+    """Ответ `/act_X` → `(status, text, account_status, disable_reason_name)` (ACL-2419).
+
+    Тонкая обёртка над `map_status`: чтение списка кампаний кладёт то же слово,
+    что и чтение спенда. Нет `account_status` в ответе — статус пуст, а не `clear`.
+    """
+    acc = acc or {}
+    code = _as_int(acc.get("account_status"))
+    if code is None:
+        return "", "", None, ""
+    status, text = map_status(code, acc.get("disable_reason"))
+    reason = _as_int(acc.get("disable_reason")) if status != "clear" else None
+    return status, text, code, (_DISABLE_REASONS.get(reason, "") if reason else "")
+
+
 # ───────────────────────── дерево ─────────────────────────
 
 #: `effective_status` → слово колонки Delivery. Слова подобраны так, чтобы
@@ -495,6 +511,29 @@ def _warm_registry():
 
 @contextmanager
 def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool):
+    """ACL-1862 (G1): сессия на тёплой вкладке всегда под замком физического профиля.
+
+    Замок реентерантный: чтение/команда/публикация, уже державшие его, не ждут и не берут другой ключ;
+    вызывающий без замка (боковой путь) берёт его здесь на всю сессию, включая сверку и возврат вкладки.
+    `checkout` без замка у потока закрыт (`profile_lease`).
+    """
+    from src.fb_ads_rpa.operations import READ_WAIT_SECONDS, profile_lock
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    try:
+        hold = profile_lock(profile_id).holding(timeout=READ_WAIT_SECONDS)
+        hold.__enter__()
+    except ProfileLeaseError as exc:
+        raise ApiReadError(str(exc), code="profile_lease") from exc
+    try:
+        with _warm_session_held(account, act, key, profile_id, commands) as sess:
+            yield sess
+    finally:
+        hold.__exit__(None, None, None)
+
+
+@contextmanager
+def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool):
     """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
 
     Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,
