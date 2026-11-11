@@ -3238,8 +3238,64 @@ async def api_save_run_limits(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+def _clean_refresh_period(date_from: str, date_to: str, span: str) -> tuple[str, str, str]:
+    """Return the period only if it is well-formed, else the default one (ACL-2508).
+
+    Dates must be empty or YYYY-MM-DD and span "" or "all" (the only values the
+    page sends). Anything else is dropped as a whole, so a bad value can never
+    become a cache key and evict real entries.
+    """
+    from datetime import date
+
+    date_from, date_to, span = (v.strip() for v in (date_from, date_to, span))
+    try:
+        for d in (date_from, date_to):
+            if d:
+                date.fromisoformat(d)
+    except ValueError:
+        return "", "", ""
+    if span not in ("", "all"):
+        return "", "", ""
+    return date_from, date_to, span
+
+
+def _same_origin_referer_query(request: Request) -> dict[str, list[str]]:
+    """Query of the Referer, but only when it comes from this very origin."""
+    from urllib.parse import parse_qs, urlparse
+
+    ref = urlparse(request.headers.get("referer", ""))
+    own = request.url
+    default_port = {"http": 80, "https": 443}
+    try:
+        ref_port = ref.port or default_port.get(ref.scheme)
+    except ValueError:
+        return {}
+    own_port = own.port or default_port.get(own.scheme)
+    if (ref.scheme, (ref.hostname or "").lower(), ref_port) != (own.scheme, (own.hostname or "").lower(), own_port):
+        return {}
+    return parse_qs(ref.query)
+
+
+def _refresh_and_warm_period(date_from: str, date_to: str, span: str) -> None:
+    """Force a rebuild and also compute the page's period (ACL-2508).
+
+    The page counts as ready only when the report of its period is in memory.
+    A rebuild alone left that period cold, so while a publish or a kept profile
+    window was active the reload still got the saved page. Refresh is the
+    person's own choice (never deferred), so it must end with a page that can
+    be served fresh.
+    """
+    date_from, date_to, span = _clean_refresh_period(date_from, date_to, span)
+    report, df, _warnings = get_cached_report(force_rebuild=True)
+    try:
+        date_from, date_to = resolve_period(df, date_from, date_to, span)
+        report_for_period(report, df, date_from, date_to)
+    except Exception:  # noqa: BLE001 - the report itself is built; the page warms it on load
+        pass
+
+
 @app.post("/refresh")
-async def refresh(request: Request) -> Response:
+async def refresh(request: Request, date_from: str = "", date_to: str = "", span: str = "") -> Response:
     """Rebuild report now (reuse Excel DF if mtime unchanged), then redirect or JSON.
 
     Runs in a worker thread so the event loop stays responsive (Stop / other
@@ -3251,7 +3307,12 @@ async def refresh(request: Request) -> Response:
     # Keep excel_df so force_rebuild skips re-parsing when the file is unchanged.
     cache_clear(keep_excel_df=True)
     try:
-        await asyncio.to_thread(lambda: get_cached_report(force_rebuild=True))
+        if not (date_from or date_to or span):
+            # A saved page carries the older script, which posts without the
+            # period; the page that pressed Refresh knows it.
+            ref = _same_origin_referer_query(request)
+            date_from, date_to, span = (ref.get(k, [""])[0] for k in ("date_from", "date_to", "span"))
+        await asyncio.to_thread(lambda: _refresh_and_warm_period(date_from, date_to, span))
     except (FileNotFoundError, ValueError) as e:
         if _wants_json(request):
             return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
