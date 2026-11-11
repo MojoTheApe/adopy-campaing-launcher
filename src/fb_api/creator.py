@@ -174,6 +174,7 @@ CALLS_PER_AD = 5
 CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
                                 # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
 CALLS_INSTANT_FORM = 10
+CALLS_PREPARE_EXTRA_READS = 4   # ACL-2244: page / profile-page checks and similar reads of `_prepare` outside the targeting reserve
 
 
 def estimate_targeting_reads(plan: "CampaignPlan") -> int:
@@ -304,6 +305,7 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
 
 
 from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
+from src.fb_ads_rpa.draft import share_first_headline as _share_first_headline  # noqa: E402
 
 #: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
 FORM_ID_PLACEHOLDER = "0000000"
@@ -809,6 +811,8 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 if ad_sets_src else False)
     if not budget or float(budget) <= 0:
         problems.append("Lifetime budget missing" if lifetime else "Daily budget missing")
+    # ACL-2406: заголовок и описание всей кампании задаёт Ad 1; у объявлений 2+ свои только тексты.
+    _share_first_headline(draft)
     ad_sets: list[AdSetPlan] = []
     ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
     for set_no, s in enumerate(ad_sets_src, start=1):
@@ -3283,6 +3287,7 @@ class CampaignCreator:
 
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
+        calls_at_start = getattr(self.client, "calls", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
@@ -3377,7 +3382,35 @@ class CampaignCreator:
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
+        if writing:
+            self._require_remaining_budget(plan, chunk_calls, calls_at_start)
         return targetings, files
+
+    def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int, calls_at_start: int = 0) -> None:
+        """ACL-2244: stop before the first write when preparation ate into the calls the writes were sized with.
+
+        The run budget is sized as writes + targeting reads + chunks (`publish_api.create_call_budget`), and
+        `estimate_create_calls` is a deliberately generous upper bound of the writes. So the remaining calls are
+        compared with that bound only when preparation spent MORE than the budget reserved for it (targeting
+        reads, the page and form reads); ordinary preparation reads never refuse a campaign that publishes fine.
+        An operator cap below the sized budget is not checked here: it stops midway, as always.
+        """
+        budget = getattr(self.client, "max_calls", None)
+        used = getattr(self.client, "calls", 0)
+        if not isinstance(budget, int) or not isinstance(used, int):
+            return
+        spent = used - calls_at_start
+        reserved = estimate_targeting_reads(plan) + CALLS_PREPARE_EXTRA_READS
+        if any(x.instant for x in plan.ad_sets):
+            reserved += CALLS_INSTANT_FORM          # the form reads are spent here, and counted in `need` as well
+        if spent <= reserved:
+            return
+        remaining = budget - used
+        need = estimate_create_calls(plan) + chunk_calls
+        if need > remaining:
+            raise PlanError(f"The Meta call budget left for this run is too small for this campaign: it needs about "
+                            f"{need} calls, {remaining} remain, so {need - remaining} are missing. "
+                            "Nothing was created; split the campaign or try again.")
 
     def _check_forms(self, plan: CampaignPlan) -> None:
         """Формы объявлений — формы ЭТОЙ Страницы (ACL-1775). Только чтение, до любой записи.
