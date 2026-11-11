@@ -741,8 +741,9 @@ def test_the_upload_is_one_fetch_to_one_route_by_a_separate_button():
     assert len(re.findall(r"fetch\('/api/form-photo-upload'", page)) == 1
     picker = _picker_source()
     assert "send.addEventListener('click'" in picker and "fileInput.addEventListener('change'" in picker
-    change = picker[picker.index("fileInput.addEventListener('change'"):picker.index("send.addEventListener('click'")]
-    assert "fetch(" not in change, "choosing a file must not send anything"
+    change = picker[picker.index("fileInput.addEventListener('change'"):picker.index("function upload()")]
+    assert "fetch(" not in change and "upload()" not in change, "choosing a file must not send anything"
+    assert picker.count("fetch('/api/form-photo-upload'") == 1, "one upload function: the button and the save share it"
 
 
 def test_the_page_validates_the_checksum_like_the_server():
