@@ -228,7 +228,7 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "age_min_over_max": (_with(age_min=50, age_max=40), "age_range", "error", []),
     "age_nan": (_with(age_min=None, age_max=None), "age_range", "error", []),
     "names_ok": (_with(), "ad_names_unique", "ok", []),
-    "names_dup": (_with(ads=_ad(1, name="1000 - Text0")), "ad_names_unique", "error", [1, 2]),
+    "names_dup": (_with(ads=_ad(1, name="1000 - Text0")), "ad_names_unique", "warning", [2]),  # ACL-2538: a note, not a block
     "form_not_needed_for_website": (_with(), "form_chosen", None, []),
     "form_partly_missing": (_with(destination="instant_form", ads=_ad(0, form_id="7")), "form_chosen", "error", [2]),
     "form_all_ok": (_with(destination="instant_form",
@@ -286,7 +286,7 @@ CLIENT_CASES.update({
     "ads_numbered_across_sets": (_multi(_set("A"), _set("B", ads=_ad(0, file=""))), "media_chosen", "error", [3]),
     "same_ad_names_in_two_sets_ok": (_multi(_set("A"), _set("B")), "ad_names_unique", "ok", []),
     "same_ad_names_inside_a_set": (_multi(_set("A"), _set("B", ads=_ad(1, name="1000 - Text0"))),
-                                   "ad_names_unique", "error", [3, 4]),
+                                   "ad_names_unique", "warning", [4]),
     "mixed_destinations_cta_per_set": (
         _multi(_set("A"), _set("B", destination="instant_form",
                                ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]])),
@@ -353,8 +353,8 @@ def test_the_creator_agrees_with_the_client_about_the_shared_errors(tmp_path):
     d.ad_sets[0].ads[1].copy_name = d.ad_sets[0].ads[0].copy_name
     d.ad_sets[0].ads[1].creative_id = d.ad_sets[0].ads[0].creative_id
     d.ad_sets[0].ads[1].creative_filename = d.ad_sets[0].ads[0].creative_filename
-    with pytest.raises(cr.PlanError, match="would all be named"):
-        cr.plan_from_draft(d)
+    plan = cr.plan_from_draft(d)       # ACL-2538: renamed with " 2" instead of refused
+    assert plan.ad_sets[0].ads[1].name == plan.ad_sets[0].ads[0].name + " 2"
     # Instant Form без выбранной формы
     d = _draft(tmp_path, ads=1)
     d.ad_sets[0].destination = "instant_form"
@@ -838,6 +838,9 @@ NAME_CASES = [
     ("2175_ARM22.png", "T"), ("2175_ADN3.png", "T"), ("2175_ARM07_1080x1920.png", "T"),
     ("2175_post_9x16.mp4", "T"), ("2175_post_9:16.mp4", "T"), ("2175_post_1080х1920.png", "T"),
     ("12_2175_ARM22.png", "T"), ("2175_ARM22_Story.png", "T"),
+    # ACL-2538: a file name without a number -> the stem is the creative half.
+    ("dog.png", "Head"), ("my coffee beans.mp4", "Head"), ("big - sale.png", "Head"),
+    (r"C:\clips\Sunset_.mp4", "Head"), ("x" * 60 + ".png", "Head"), ("dog.png", ""),
 ]
 
 
@@ -856,8 +859,9 @@ def test_a_jpg_and_an_mp4_of_the_same_creative_with_the_same_text_are_duplicates
            for n, f in zip(names, ["2046 1.jpg", "2046 1.mp4"])]
     inp = _with(ads=ads)
     got = {v["rule"]: v for v in pf.evaluate_client(inp)}["ad_names_unique"]
-    assert got["status"] == "error" and got["ads"] == [1, 2]
-    # Те же объявления создатель тоже отвергает.
+    assert got["status"] == "warning" and got["ads"] == [2]   # ACL-2538: a note, the creator renames
+    assert "Ad 2 will be named '2046 1 - Text A 2' because Ad 1 has the same creative and text" in got["detail"]
+    # Те же объявления создатель называет одинаково (и сам добавит « 2»).
     from src.fb_ads_rpa.draft import AdDraft
     assert AdDraft(creative_filename="2046 1.jpg", copy_name="Text A").ad_name() ==         AdDraft(creative_filename="2046 1.mp4", copy_name="Text A").ad_name()
 

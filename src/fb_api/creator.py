@@ -895,11 +895,29 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     for dup in sorted({x.name for x in ad_sets if set_names.count(x.name.casefold()) > 1}):
         problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
     for x in ad_sets:
-        names = [a.name for a in x.ads]
-        for dup in sorted({n for n in names if names.count(n) > 1}):
-            idx = ", ".join(str(a.index) for a in x.ads if a.name == dup)
-            problems.append(f"Ads {idx} would all be named {dup!r}; give them different creatives "
-                            "or ad texts (names must differ inside a campaign)")
+        # ACL-2538: the same file with the same text twice is not a buyer error:
+        # the later ads get " 2", " 3"... and Check plan shows a note.
+        seen: dict[str, int] = {}
+        for a in x.ads:
+            if a.name not in seen:
+                seen[a.name] = a.index
+        used = set(seen)
+        counts: dict[str, int] = {}
+        for a in x.ads:
+            first = seen[a.name]
+            if a.index == first:
+                continue
+            base = a.name
+            n = counts.get(base, 1)
+            while True:
+                n += 1
+                cand = f"{base} {n}"
+                if cand not in used:
+                    break
+            counts[base] = n
+            used.add(cand)
+            a.name = cand
+            warnings.append(f"Ad {a.index} named {cand!r} because Ad {first} has the same creative and text")
     if problems:
         raise PlanError("; ".join(problems))
     name = str(draft.name).strip()
