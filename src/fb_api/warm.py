@@ -939,11 +939,13 @@ class WarmRegistry:
             if may_reopen_manual():
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
+        waited_close = False
         if kind == "closing":
             # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
             # released it ends in "can't lock profile". Wait (bounded, one local look every few seconds,
             # no network) until it is gone, then start.
             kind = self._wait_until_closed(pid, cancelled)
+            waited_close = kind == "none"
             if kind != "none":
                 return _result(False, f"The {label} profile is still closing in Multilogin; nothing was "
                                "started. Try again in a minute.", "profile_closing")
@@ -956,8 +958,11 @@ class WarmRegistry:
                            busy_code="profile_lease") as refusal:
                 if refusal:
                     return refusal
-                self._forget(pid, stopped=True)
-        why = _stop_log.refusal(pid, self._stops)
+                # ACL-2273: after our own wait for the closing profile the stop clock must not restart
+                # from "now" (that refused the open with restart_cooldown on a 180 s default machine).
+                self._forget(pid, stopped=not waited_close)
+        # ACL-2273: the bounded wait above already outlasted the closing of a profile our job just closed.
+        why = "" if waited_close else _stop_log.refusal(pid, self._stops)
         if why:
             return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
         # S3: память под ещё один профиль с учётом роста уже запущенных и прогревающихся.
@@ -1002,8 +1007,10 @@ class WarmRegistry:
             from src.fb_ads_rpa.run_telemetry import current_job_id
 
             holds = getattr(queue, "holds", None)
+            # ACL-2273: the slot is recorded under the lower-case canonical UUID; an upper-case id in the
+            # account map must still find it (else the job waited for its own slot).
             own_slot = bool(queue is not None and callable(holds) and current_job_id()
-                            and holds(current_job_id(), pid))
+                            and holds(current_job_id(), pid.lower()))
         except Exception:  # noqa: BLE001
             own_slot = False
         try:
@@ -1834,8 +1841,10 @@ class WarmRegistry:
         except Exception:  # noqa: BLE001
             closed = False
         self._save()
+        mb = _light.heap_used_mb(work)
         self._record_light(sess, mode="light", handover_ok=True, fallback_reason=None,
-                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1))
+                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1),
+                           **({"work_tab_mb": mb} if mb is not None else {}))
         return graph, {**state, "light": True}
 
     def _reuse_light(self, sess: WarmSession, act: str, mode: str, make_graph: Callable[[Any], Any]):
