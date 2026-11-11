@@ -68,6 +68,27 @@ def _linked_countries_for(label: str) -> List[str]:
         return []
 
 
+def _drop_hidden_accounts(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Убирает аккаунты, спрятанные кнопкой Remove на Accounts (hidden_accounts.json).
+
+    Билдер собирает список из листа и карты, а не из /api/accounts-overview,
+    поэтому фильтр Accounts до него не доходил. Ключ сравнения тот же, что у
+    Remove. Не читается файл — показываем всё: лишняя строка лучше пропавшей.
+    """
+    try:
+        from src.web import hidden_accounts
+
+        hidden = hidden_accounts.load()
+        if not hidden:
+            return rows
+        return [
+            r for r in rows
+            if not hidden_accounts.is_hidden(str(r.get("account_label") or r.get("alias") or ""), hidden)
+        ]
+    except Exception:  # noqa: BLE001
+        return rows
+
+
 def _fallback_accounts_from_csv(cm_name: str) -> List[Dict[str, Any]]:
     """Load all accounts from ad_account_map.csv as fallback when GSheet returns no rows.
 
@@ -379,6 +400,8 @@ def load_morning_report(
         # убрать её было нельзя, и она приучала не читать это место вовсе. Тогда
         # настоящее предупреждение, встав туда же, тоже осталось бы непрочитанным.
         # Сами аккаунты видны там, где они и нужны, — на карте аккаунтов.
+
+    account_rows = _drop_hidden_accounts(account_rows)
 
     assert enriched_df is not None
 
