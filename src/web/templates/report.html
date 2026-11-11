@@ -12580,6 +12580,16 @@ document.addEventListener('acl:viewchange', function () { setTimeout(function ()
     p.appendChild(dl);
     var why = d.why || (d.key === 'active' ? 'Spending in the selected period.' : '');
     p.appendChild(el('div', 'why', 'What happened: ' + (why || '—') + (d.read ? ' · read ' + d.read : '')));
+    if (d.profile) {   /* ACL-2557: тот же «Open profile», что в Manage; поведение — warm_sessions.js */
+      var wrap = el('span', 'aov-open-wrap');
+      var ob = el('button', 'aov-btn aov-open', 'Open profile');
+      ob.type = 'button'; ob.hidden = true; ob.setAttribute('data-aov-open', d.name);
+      wrap.appendChild(ob);
+      var om = el('small', 'aov-open-msg'); om.setAttribute('role', 'status'); om.setAttribute('aria-live', 'polite');
+      wrap.appendChild(om);
+      p.appendChild(wrap);
+      if (window.aclWarmHome) window.aclWarmHome.paint();
+    }
     var go = el('button', 'aov-btn', 'Open in Manage →');
     go.type = 'button'; go.setAttribute('data-aov-go', d.slug);
     p.appendChild(go);

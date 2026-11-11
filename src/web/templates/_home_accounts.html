@@ -60,7 +60,7 @@
       <tr class="aov-row s-{{ s.key }}" data-state="{{ s.key }}"{% if folded %} data-folded="1" hidden{% endif %}
           data-search="{{ ((r.account or '') ~ ' ' ~ (r.workbook_alias or '')) | lower | e }}">
         <td><span class="aov-st {{ s.key }}"{% if s.status_tip %} title="{{ s.status_tip | e }}"{% endif %}><span aria-hidden="true">{{ glyph[s.key] }}</span> {{ s.label }}</span>{% if s.status_line %}<small class="aov-stline{{ ' stale' if s.key == 'unknown' }}">{{ s.status_line }}</small>{% endif %}</td>
-        <td class="acc amap-acc" title="{{ r.account | e }}{% if r.act_id %} · {{ r.act_id | e }}{% endif %}{% if r.workbook_alias %} · workbook: {{ r.workbook_alias | e }}{% endif %}"><span class="amap-caret-off">·</span><span class="aov-acc"><span class="aov-nm">{{ r.account }}</span>{% if r.act_id %}<small class="aov-act">{{ r.act_id }}</small>{% endif %}</span></td>
+        <td class="acc amap-acc" title="{{ r.account | e }}{% if r.act_id %} · {{ r.act_id | e }}{% endif %}{% if r.workbook_alias %} · workbook: {{ r.workbook_alias | e }}{% endif %}"><span class="amap-caret-off">·</span><span class="aov-acc"><span class="aov-nm">{{ r.account }}</span>{% if r.act_id %}<small class="aov-act">{{ r.act_id }}</small>{% endif %}</span>{% if r.has_profile %}<span class="aov-open-wrap"><button type="button" class="aov-btn aov-open" data-aov-open="{{ r.account | e }}" hidden>Open profile</button><small class="aov-open-msg" role="status" aria-live="polite"></small></span>{% endif %}</td>
         {% if r.has_data %}
         <td class="num">{{ mv[0] }}</td><td class="num">{{ mv[1] }}</td><td class="num">{{ mv[3] }}</td><td class="num">{{ mv[2] }}</td><td class="num">{{ mv[4] }}</td>
         {% else %}
@@ -118,7 +118,7 @@
         data-name="{{ r.account | e }}" data-alias="{{ (r.workbook_alias or '') | e }}" data-country="{{ mc.country | e }}" data-slug="{{ slug | e }}"
         data-label="{{ s.label }}" data-key="{{ s.key }}" data-spend="{{ mv[0] if r.has_data else '—' }}" data-leads="{{ mv[1] if r.has_data else '—' }}"
         data-cpl="{{ mv[3] if r.has_data else '—' }}" data-ftd="{{ mv[2] if r.has_data else '—' }}" data-cpa="{{ mv[4] if r.has_data else '—' }}"
-        data-why="{{ s.reason | e }}" data-read="{% if s.read_short %}{{ s.read_short }}{{ age(s) }}{% endif %}"
+        {% if r.has_profile %}data-profile="1" {% endif %}data-why="{{ s.reason | e }}" data-read="{% if s.read_short %}{{ s.read_short }}{{ age(s) }}{% endif %}"
         title="{{ r.account | e }} · {{ s.label }}{% if s.reason %} · {{ s.reason | e }}{% endif %}">
         <span class="n"><span aria-hidden="true">{{ glyph[s.key] }}</span> {{ nm }}</span>
         {%- if s.key == 'active' %}
