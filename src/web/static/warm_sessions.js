@@ -145,6 +145,11 @@
       var st = chip.querySelector('.warm-state');
       st.textContent = info.text;
       st.title = info.title || '';
+      /* ACL-2268: why the automatic start did not open it - tooltip only, never a red line or a button. */
+      if (info.auto === 'refused' && info.auto_reason) {
+        st.title = (st.title ? st.title + ' ' : '') + 'Not opened automatically: ' + info.auto_reason +
+          '. It opens when you run Check plan or Publish.';
+      }
       var act = chip.querySelector('.warm-act');
       // Одна кнопка на строку: открыть закрытый / закрыть поднятый дешбордом.
       if (info.state === 'closed' || info.state === 'open') {

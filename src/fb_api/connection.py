@@ -11,7 +11,7 @@ from pathlib import Path
 from config.paths import get_local_config_dir, machine_file_lock, _atomic_write
 
 _CONFIRMED = ContextVar("acl_confirmed_profile_reopen", default=False)
-DEFAULTS = {"managed_sessions": True, "auto_reopen_manual": False}
+DEFAULTS = {"managed_sessions": True, "auto_reopen_manual": False, "auto_warm": False}
 
 
 def settings():
@@ -38,6 +38,10 @@ def save_settings(changes):
 
 
 def may_reopen_manual():
+    # ACL-2268: a background warm-up never stops a window that a person started, whatever the setting says.
+    from src.fb_api.warm import quiet_active
+    if quiet_active():
+        return False
     raw = os.environ.get("ACL_AUTO_REOPEN_MANUAL", "").strip().lower()
     return _CONFIRMED.get() or (raw in {"1","true","yes"} if raw else settings()["auto_reopen_manual"])
 

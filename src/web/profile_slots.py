@@ -1005,8 +1005,12 @@ class ProfileSlots:
         cancelled: Callable[[], bool] = lambda: False,
         on_wait: Callable[[dict[str, Any]], None] | None = None,
         share_profile: bool = False,
+        once: bool = False,
     ) -> dict[str, Any] | None:
         """Ждать места для задания. None — задание отменили, пока ждало.
+
+        ACL-2268: `once=True` (background warm-up) - one look, no waiting and no eviction: the first "no"
+        returns None and leaves no entry in the queue. A window of another account is never closed for it.
 
         Ответ: `waited_s`, `decision` (что разрешило старт), `first_hold`
         (почему пришлось ждать; None — не ждало), `shared`.
@@ -1047,6 +1051,8 @@ class ProfileSlots:
                         # зависший/перезапущенный замер не продлевает его бесконечно.
                         since = self._waiting[job_id].setdefault("open_probe_wait_since", self._clock())
                         probe_wait_s = max(0.0, OPEN_TTL_S - (self._clock() - since))
+                    if once and not verdict.get("allow"):
+                        return None
                     if (not verdict.get("allow") and self._evictor is not None
                             and verdict.get("reason") in EVICT_REASONS and probe_wait_s <= 0):
                         # ACL-2113: место или память заняты «удобными» окнами — закрыть
