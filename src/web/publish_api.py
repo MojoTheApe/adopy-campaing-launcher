@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
+from src.fb_api import plain_errors as _plain
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
     resolve_page,
@@ -235,9 +236,13 @@ def build_drafts(slots: list[dict[str, Any]], *, account_label: str, country: st
 class ApiPublishError(RuntimeError):
     """Отказ всего задания (профиль, страница, кабинет) с текстом человеку."""
 
-    def __init__(self, message: str, code: str = ""):
+    def __init__(self, message: str, code: str = "", *, key: str = "", stage: str = ""):
         super().__init__(_tm.scrub(message))
         self.code = code
+        #: ACL-2392: the phase in plain words ("while opening the Multilogin profile").
+        self.stage = stage
+        #: ACL-2392: key of `plain_errors.TABLE` when the raise site knows the class.
+        self.key = key
 
 
 #: ACL-2283: pause before the sample taken after a failed start (the load often drops right after it).
@@ -262,9 +267,20 @@ def _published_as(outcome: Outcome) -> str:
     return chosen if chosen and chosen != outcome.campaign_name else ""
 
 
+def _failure_dict(failure: Any, raw_error: str = "") -> dict | None:
+    """`Failure.as_dict()` plus the raw stop text under `details.error_text` (scrubbed), so the event log keeps it."""
+    if not failure:
+        return None
+    out = failure.as_dict()
+    if raw_error:
+        out["details"] = {**out["details"], "error_text": _tm.scrub(str(raw_error))}
+    return out
+
+
 def dry_run_result(outcome: Outcome) -> dict[str, Any]:
     """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
     ok = not outcome.error
+    failure = outcome.failure if outcome.error else None
     return {
         "campaign_name": outcome.campaign_name, "published_as": _published_as(outcome),
         "backend": "api", "dry_run": True, "status": "",
@@ -272,7 +288,9 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
         "blocking_failures": [], "problems": list(outcome.problems), "run_id": None, "campaign_id": None,
         "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
-        "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
+        "error": ((failure.text() if failure else "") or outcome.error) or None,
+        "failure": _failure_dict(failure, outcome.error),
+        "steps_completed": list(outcome.steps), "screenshots": [],
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
         "audit": list(outcome.audit),
@@ -284,12 +302,20 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
 def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False) -> dict[str, Any]:
     """Итог кампании в виде, который рисует панель задания (как `to_job_dict`)."""
     created = bool(outcome.campaign_id)
-    error = error or outcome.error
+    # ACL-2392: the panel gets the plain line; the raw text goes to `failure.details`.
+    failure = None if error else outcome.failure
+    error = error or (failure.text() if failure else "") or outcome.error
     mismatches = outcome.mismatches
-    blocking = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
-                f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
+    mismatch_lines = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
+                      f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
+    blocking = [_plain.readback_line(mismatches)] if mismatches else []
     if created and error:
         blocking.append("not finished: " + error)
+    if mismatch_lines:
+        readback_failure = _plain.Failure("readback", _plain.readback_line(mismatches), severity="blocking",
+                                          details=_tm.scrub_value({"readback_mismatches": mismatch_lines}))
+        failure = failure or readback_failure
+        failure.details.setdefault("readback_mismatches", readback_failure.details["readback_mismatches"])
     readback_ok = bool(outcome.readback) and outcome.readback.get("ok") is True
     success = created and not error
     return {
@@ -314,6 +340,8 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
         "error": error or None,
+        #: ACL-2392: key / short / next / left / details of the failure; the raw text lives only in `details`.
+        "failure": _failure_dict(failure, outcome.error),
         #: ACL-2299: the campaign was never begun (an earlier stop) - the panel shows it as waiting, not failed.
         "not_started": bool(not_started),
         "steps_completed": list(outcome.steps),
@@ -355,6 +383,8 @@ class ApiPublisher:
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
+        #: ACL-2250: квитанции имён кампаний, дошедших до конца сверки; удаляются в конце задания (`finish_name_records`).
+        self._finished_receipts: list[tuple[str, str]] = []
         #: ACL-2283: local load reading taken right before the profile start (None - unknown).
         self._load_before: dict[str, Any] | None = None
         #: ACL-2353: снимок ревью (имя кампании -> отпечаток, Page, пиксель); None - задание без ревью.
@@ -431,7 +461,7 @@ class ApiPublisher:
             return f"stop_{kind or 'none'}"
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
             return "write_unknown"
-        if any("readback mismatch" in str(x) for x in ((res or {}).get("blocking_failures") or [])):
+        if any(_plain.READBACK_MARK in str(x) for x in ((res or {}).get("blocking_failures") or [])):
             return "mismatches"
         if kind == "page_failed" and self.writes != writes_before:
             return "write_may_be_in_flight"
@@ -447,11 +477,11 @@ class ApiPublisher:
         self._load_before = None        # ACL-2283: a sample from an earlier attempt must not count
         entry = _resolve_entry(account_label)
         if entry is None:
-            raise ApiPublishError(f"{account_label} is not in the account map")
+            raise ApiPublishError(f"{account_label} is not in the account map", stage="while looking up the account")
         try:
             self.act = normalize_act(str(getattr(entry, "ad_account_id", "") or ""))
         except ValueError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}") from exc
+            raise ApiPublishError(f"{account_label}: {exc}", stage="while looking up the account") from exc
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
@@ -489,10 +519,11 @@ class ApiPublisher:
                 if earlier is not None and getattr(earlier, "started_now", False):
                     self.inherited_profile = True      # ACL-2283: a retry attaches; the window is still ours
         except _fb_profile.ProfileError as exc:
-            raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
+            raise ApiPublishError(str(exc), code=getattr(exc, "code", ""),
+                                  stage="while opening the Multilogin profile") from exc
         except Exception as exc:  # noqa: BLE001
             raise ApiPublishError(f"{account_label}: the profile could not be opened with automation: "
-                                  f"{_tm.scrub(str(exc))}") from exc
+                                  f"{_tm.scrub(str(exc))}", stage="while opening the Multilogin profile") from exc
         self.progress("profile attached")
         self._tab = _open_tab(self._opened.cdp_url)
         graph = _make_graph(self._tab, self.act, writes=not self.dry_run)
@@ -518,7 +549,8 @@ class ApiPublisher:
             self._halt(LoggedOut("the profile is logged out of Facebook"))
         if not state.get("has_token"):
             raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
-                                  "(no Graph session in the page); nothing was created")
+                                  "(no Graph session in the page); nothing was created",
+                                  stage="while loading Ads Manager")
         self._finish_open(account_label, graph)
 
     def _finish_open(self, account_label: str, graph: Any) -> None:
@@ -531,12 +563,15 @@ class ApiPublisher:
         try:
             self._facts = preflight_account(self._client, self.act)
         except PlanError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}") from exc
+            raise ApiPublishError(f"{account_label}: {exc}", stage="while checking the ad account") from exc
         except GraphStop as exc:
+            exc.stage = "while checking the ad account"
             self._halt(exc)
         except GraphError as exc:
-            raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}") from exc
-        self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
+            raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}",
+                                  stage="while checking the ad account") from exc
+        self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
+                                           act=self.act)
         self.progress("ad account verified")
 
     def _open_warm(self, account_label: str, profile_id: str) -> bool:
@@ -557,7 +592,7 @@ class ApiPublisher:
                 managed = prepare_existing(reg, self._entry, account_label)
         except _warm.WarmError as exc:
             self._requeue_if_closed(exc)
-            raise ApiPublishError(str(exc), code=exc.code) from exc
+            raise ApiPublishError(str(exc), code=exc.code, stage="while opening the Multilogin profile") from exc
         if not managed:
             return False
         act, dry = self.act, self.dry_run
@@ -573,7 +608,7 @@ class ApiPublisher:
             _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
             self._requeue_if_closed(exc)
-            raise ApiPublishError(str(exc), code=exc.code) from exc
+            raise ApiPublishError(str(exc), code=exc.code, stage="while opening the Multilogin profile") from exc
         except GraphStop as exc:
             self._halt(exc)
         self.progress("profile attached (warm)")
@@ -623,13 +658,14 @@ class ApiPublisher:
         _start_cooldown(self.account_label, stop)
         _tm.report_stop(stop.kind, str(stop), {"source": "publish", "code": stop.code})
         raise ApiPublishError(f"{self.account_label}: Graph API stopped ({stop.kind}): {stop}",
-                              code=stop.kind)
+                              code=stop.kind, stage=getattr(stop, "stage", "") or "while loading Ads Manager") from stop
 
     # -- одна кампания
     def publish_draft(self, draft: Any) -> dict[str, Any]:
         began = time.monotonic()
         name = str(getattr(draft, "name", "") or "")
         if self.stop is not None:
+            # Only the stop kind is named here (no Meta text), so there is nothing raw to hide.
             return result_dict(Outcome(campaign_name=name), not_started=True,
                                error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
@@ -682,8 +718,10 @@ class ApiPublisher:
                     self.stop = exc
                     _start_cooldown(self.account_label, exc)
                     _tm.report_stop(exc.kind, str(exc), {"source": "publish", "code": exc.code})
-                return result_dict(Outcome(campaign_name=name), error=(
-                    f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created."))
+                stopped = _plain.classify(exc, kind=exc.kind, ctx={"stage": "while choosing the Page"})
+                stopped.left = ["Stopped while choosing the Page. Nothing was created."]
+                return result_dict(Outcome(campaign_name=name, failure=stopped, error=(
+                    f"Graph API stopped ({exc.kind}) while choosing the Page: {exc}. Nothing was created.")))
             except ValueError as exc:
                 return result_dict(Outcome(campaign_name=name),
                                    error=f"The Page of this draft cannot be used in this run ({exc}). "
@@ -740,12 +778,15 @@ class ApiPublisher:
                 self.stop = exc
                 _start_cooldown(self.account_label, exc)
             raise
+        # ACL-2392: a deterministic rejection proven by readback ("rejected") does not block the next campaigns.
         if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
             self.blocked = outcome.campaign_name
         if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
             self.stop = self._client.stopped
             _start_cooldown(self.account_label, self.stop)
             _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
+        if outcome.name_receipt_done and not outcome.error:
+            self._finished_receipts.append(tuple(outcome.name_receipt_done))
         res = result_dict(outcome)
         # ACL-2192: заметка «Automatic Facebook Page» выбрана раньше creator - в итог она переносится здесь.
         res["warnings"] = [n for n in early_notes if n not in res["warnings"]] + res["warnings"]
@@ -754,6 +795,7 @@ class ApiPublisher:
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      "copy_number": outcome.copy_number,
                       **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
@@ -762,6 +804,21 @@ class ApiPublisher:
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
         self._log_stats(name, spec, began, outcome=outcome, plan=plan)
         return res
+
+    def finish_name_records(self) -> None:
+        """ACL-2250: конец задания, где ни одна кампания не остановилась и не упала: квитанции имён удаляются.
+
+        Тогда следующая публикация того же имени - повтор, и получает следующую копию. Не удалилась квитанция -
+        остаётся (безопасная сторона: следующий запуск допишет ту же кампанию). Check plan это не зовёт.
+        """
+        from src.fb_api import name_receipt
+
+        done, self._finished_receipts = self._finished_receipts, []
+        for act, base in done:
+            try:
+                name_receipt.delete(act, base)
+            except name_receipt.NameReceiptError:
+                pass
 
     def _log_spec(self, plan: Any, name: str) -> dict:
         """ACL-2347: полный план в общий журнал перед созданием; пробный запуск ничего не пишет."""
@@ -943,8 +1000,9 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
         try:
             pub._facts = preflight_account(client, sess.act)
         except PlanError as exc:
-            raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
-        pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label)
+            raise ApiPublishError(f"{account_label}: {exc}", code="account", stage="while checking the ad account") from exc
+        pub._resolver = TargetingResolver(client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
+                                          act=sess.act)
         try:
             for draft in drafts:
                 if draft.errors:
@@ -1182,6 +1240,7 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
                   "read_s": round(time.monotonic() - read_started, 1),
                   **({"rejected": dict(part.rejected)} if part.rejected else {}),
                   **({"error_kind": error_kind, "raised": except_kind} if error_kind else {}),
+                  **({"code": connection_code, "reason": error[:200]} if connection_code else {}),   # ACL-2400
                   **_tab_load(stop_seen)},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,

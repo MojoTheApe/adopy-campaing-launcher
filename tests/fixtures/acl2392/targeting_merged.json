@@ -1,0 +1,21 @@
+{
+  "synthetic": false,
+  "provenance": "message, code 1, http 500 and subcode 1870226 as seen in the live Doc120 test named in Issue 1392 (not re-captured here); the fbtrace_id is a placeholder",
+  "type": "WriteUnknown",
+  "message": "Graph API error 1 — the write result is unknown: An unknown error occurred [error_user_title=Some detailed targeting options have been combined, error_user_msg=Some of your detailed targeting options have been combined, http_status=500]",
+  "expect": {
+    "key": "targeting_merged",
+    "short": "Targeting options were merged by Meta",
+    "next": "replace the interests and republish",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "code": 1,
+  "subcode": 1870226,
+  "status": 500,
+  "details": {
+    "error_user_title": "Some detailed targeting options have been combined",
+    "error_user_msg": "Some of your detailed targeting options have been combined into one.",
+    "fbtrace_id": "AbCdEfGhIjK"
+  }
+}

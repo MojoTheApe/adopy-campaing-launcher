@@ -1,4 +1,4 @@
-"""ACL-2345: a publish stopped by a dead tab resumes once by itself; memory admission starts at 75 %. Fakes only."""
+"""ACL-2345: a publish stopped by a dead tab resumes once by itself; memory admission starts at 92 % (ACL-2400; was 75 %). Fakes only."""
 from types import SimpleNamespace
 
 import pytest
@@ -215,22 +215,22 @@ def test_the_waiting_text_is_the_paused_message():
     assert pj._queue_view({"reason": "auto_resume"})["state"] == "waiting_memory"
 
 
-# ---- Part 2: the stricter default ----
+# ---- Part 2: the default (ACL-2400: 92 %) ----
 
-def test_the_memory_limit_defaults_to_75_and_keeps_the_env_override():
-    assert ps.DEFAULT_MAX_USED_PCT == 75.0
-    assert ps.load_settings({}).max_used_pct == 75.0
+def test_the_memory_limit_defaults_to_92_and_keeps_the_env_override():
+    assert ps.DEFAULT_MAX_USED_PCT == 92.0
+    assert ps.load_settings({}).max_used_pct == 92.0
     assert ps.load_settings({"ACL_MEMORY_MAX_USED_PCT": "85"}).max_used_pct == 85.0
 
 
-@pytest.mark.parametrize("used,allowed", [(70, True), (74, True), (76, False), (80, False)])
-def test_with_used_memory_over_75_percent_a_new_profile_waits(used, allowed):
+@pytest.mark.parametrize("used,allowed", [(75, True), (89, True), (91, True), (93, False), (96, False)])
+def test_with_used_memory_over_92_percent_a_new_profile_waits(used, allowed):
     total = 32 * 1024
     mem = ps.MemoryReading(total, int(total * (100 - used) / 100))
     verdict = ps.decide(1, 0, mem, ps.SlotSettings(ceiling=5))
     assert verdict["allow"] is allowed
     if not allowed:
-        assert verdict["reason"] == "below_reserve" and verdict["max_used_pct"] == 75.0
+        assert verdict["reason"] == "below_reserve" and verdict["max_used_pct"] == 92.0
         assert pj._queue_view(verdict)["state"] == "waiting_memory"
 
 
@@ -283,9 +283,9 @@ def test_a_failed_reopen_after_a_raised_stop_does_not_lose_the_campaign(rig):
 def test_the_real_memory_check_decides_the_wait(rig, monkeypatch):
     monkeypatch.undo()          # the real _memory_admits, then only what the test needs
     total = 32 * 1024
-    readings = [ps.MemoryReading(total, int(total * 0.20)), ps.MemoryReading(total, int(total * 0.40))]
+    readings = [ps.MemoryReading(total, int(total * 0.05)), ps.MemoryReading(total, int(total * 0.40))]
     monkeypatch.setattr(ps, "read_memory", lambda: readings.pop(0) if len(readings) > 1 else readings[0])
     ok, used = pj._memory_admits()
-    assert ok is False and used == pytest.approx(80, abs=0.1)
+    assert ok is False and used == pytest.approx(95, abs=0.1)
     ok, used = pj._memory_admits()
     assert ok is True and used == pytest.approx(60, abs=0.1)

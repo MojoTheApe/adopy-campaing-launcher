@@ -67,7 +67,7 @@ def test_object_policy_refuses_edges_creation_and_odd_paths(path):
 
 @pytest.mark.parametrize("params", [
     {"name": "x"}, {"effective_status": "ACTIVE"}, {"configured_status": "ACTIVE"},
-    {"lifetime_budget": 100}, {"spend_cap": 100}, {"bid_strategy": "COST_CAP"},
+    {"spend_cap": 100}, {"bid_strategy": "COST_CAP"},
     {"access_token": "x"}, {"method": "DELETE"}, {"_method": "DELETE"}, {"batch": []},
     {"execution_options": ["validate_only"]}, {"targeting": {}}, {"adlabels": []},
     {}, {"status": "ACTIVE", "daily_budget": 100}, {"status": "ACTIVE", "name": "x"},
@@ -110,8 +110,9 @@ def test_creation_policy_still_refuses_object_paths_and_active():
 def test_command_policy_for_page_has_no_creation_edges():
     pol = wp.policy_for_commands(ACT)
     assert pol["edges"] == {} and pol["files"] == {}
-    assert pol["object_update"] == {"fields": ["bid_amount", "daily_budget", "status"],
-                                    "statuses": ["ACTIVE", "PAUSED"]}
+    # ACL-2457 added lifetime_budget and targeting (bulk edit); the three ACL-1800 fields are unchanged.
+    assert pol["object_update"]["fields"] == ["bid_amount", "daily_budget", "lifetime_budget", "status", "targeting"]
+    assert pol["object_update"]["statuses"] == ["ACTIVE", "PAUSED"]
 
 
 # ───────────────────────── Graph в памяти ─────────────────────────

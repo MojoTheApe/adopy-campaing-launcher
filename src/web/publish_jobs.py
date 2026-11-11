@@ -33,6 +33,7 @@ from src.fb_ads_rpa.profile_lease import ProfileLeaseError
 from src.web.keep_awake import keep_display_awake
 from src.web.profile_slots import KEPT_CONVENIENCE, KEPT_REVIEW, ProfileSlots
 from src.web import draft_status
+from src.fb_api import telemetry as _tm
 from src.analysis_agent.account_refresh_state import target_activity
 
 # ── In-memory job store ────────────────────────────────────────────────
@@ -42,6 +43,7 @@ _update_reserved = False
 # Serialises publishing PER PROFILE — see _run_job. Two accounts on two
 # profiles run at once; two jobs on one profile still queue (acl-1210).
 _publish_serial = publish_lease
+from src.fb_ads_rpa.profile_lease import leak_watch as _leak_watch  # noqa: E402  ACL-1862 G4
 _active_publishers: dict[str, RpaPublisher] = {}
 # Сколько профилей публикуют разом — по свободной памяти машины (ACL-1321).
 # Задания сверх решения ждут в «queued» в порядке отправки; см. profile_slots.
@@ -599,6 +601,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap = dict(job)
         snap["results"] = list(job["results"])
         snap["errors"] = list(job["errors"])
+        snap["error_details"] = list(job.get("error_details") or [])
         snap["creative_notices"] = list(job.get("creative_notices", []))
         snap["campaign_names"] = list(job.get("campaign_names", []))
         if isinstance(job.get("queue"), dict):
@@ -729,7 +732,7 @@ def _run_job(job_id: str, slots: list[dict[str, Any]], **kwargs: Any) -> None:
         if live:
             _finish(job_id, cancelled=True)
     except ProfileLeaseError as exc:
-        _fatal(job_id, str(exc))
+        _fatal(job_id, str(exc), exc)
     finally:
         job_cancel.unbind()
         ended.set()
@@ -842,7 +845,7 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), target_activity(
+        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)), _leak_watch(profile, "publish"), target_activity(
                 profile, cancelled=lambda: _is_cancelled(job_id)):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)
@@ -926,6 +929,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
     replaced = False
     resumed = False         # ACL-2345: one automatic resume per job
     requeues = 0
+    clean = True            # ACL-2250: no campaign of the job stopped or failed
     while pending:
         if _is_cancelled(job_id):
             raise job_cancel.JobCancelled()
@@ -953,6 +957,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
                 resumed = True      # ACL-2345: the same campaign runs again; what exists is reused
                 replaced = False
                 continue
+            clean = clean and _result_clean(res)
             _append_result(job_id, res)
             pending.pop(0)
             replaced = False
@@ -972,6 +977,7 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
                 resumed = True      # ACL-2345
                 replaced = False
                 continue
+            clean = clean and _result_clean(res)
             _append_result(job_id, res)
             pending.pop(0)
             replaced = False
@@ -987,6 +993,14 @@ def _publish_pending(job_id: str, publisher: Any, account_label: str, pending: l
             raise job_cancel.JobCancelled()
         replaced = False
         _open_with_load_requeue(job_id, publisher, account_label)
+    finish = getattr(publisher, "finish_name_records", None)
+    if clean and finish is not None:
+        finish()            # ACL-2250: the whole job ended without a stop or failure: its name records are done
+
+
+def _result_clean(res: dict[str, Any]) -> bool:
+    """ACL-2250: a campaign result that does not keep the job's name records alive (readback mismatches count as done)."""
+    return not res.get("error") and not res.get("not_started")
 
 
 AUTO_RESUME_WAIT_ENV = "ACL_AUTO_RESUME_WAIT_S"
@@ -1297,7 +1311,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         # ACL-1603: состояние для дешборда — память, место или профиль.
         "state": ("waiting_profile" if hold == "profile"
-                  else "waiting_account" if hold == "account_busy"
+                  else "waiting_account" if hold in ("account_busy", "heavy_limit")
                   else "waiting_load" if hold == "machine_busy"
                   else "waiting_memory" if (hold in ("memory_low", "below_reserve", "auto_resume")
                                             or verdict.get("behind_memory"))
@@ -1321,6 +1335,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "used_pct": verdict.get("used_pct"),
         "max_used_pct": verdict.get("max_used_pct"),
         "running": verdict.get("running"),
+        # ACL-2293: the warm heavy-action limit, when it is what holds the action.
+        "heavy_limit": verdict.get("heavy_limit"),
         "available_mb": verdict.get("available_mb"),
         "profile_mb": verdict.get("profile_mb"),
         "profile_mb_source": verdict.get("profile_mb_source"),
@@ -1351,7 +1367,10 @@ def _record_slot_decision(rt: Any, campaign: str, account: str, verdict: dict[st
         return
     try:
         rt.record("job_phase", True, campaign=campaign, note="slot_decision",
-                  diag={"account": account, "decision": _decision_for_telemetry(verdict)})
+                  diag={"account": account, "decision": _decision_for_telemetry(verdict),
+                        # ACL-2293: сколько ждали потолок, а сколько память - различить по этим полям.
+                        "ceiling_reached": verdict.get("reason") == "ceiling",
+                        "effective_limit": verdict.get("limit")})
     except Exception:
         pass
 
@@ -1389,12 +1408,47 @@ def _mlx_text(job_id: str, msg: str) -> str:
         return msg
 
 
-def _fatal(job_id: str, msg: str) -> None:
-    msg = _mlx_text(job_id, msg)
+def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str, dict | None]:
+    """ACL-2392: (text for the panel, details for the log). Only a caught exception is translated.
+
+    Other messages are our own plain strings ("Stopped by the user", "No campaigns to publish.").
+    """
+    text = _mlx_text(job_id, msg)
+    if exc is None:
+        return text, None
+    try:
+        from src.fb_api import plain_errors
+        from src.fb_api.creator import PlanError
+        from src.fb_api.graph import GraphError, GraphStop
+
+        cause = exc.__cause__
+        if getattr(exc, "key", "") or not isinstance(cause, (GraphError, GraphStop, PlanError)):
+            cause = exc
+        stage = getattr(exc, "stage", "") or getattr(cause, "stage", "")
+        failure = plain_errors.classify(cause, ctx={"stage": stage} if stage else None)
+        if text != msg:  # Multilogin session / proxy text is already plain
+            return text, failure.details
+        return failure.text(), failure.details
+    except Exception:  # noqa: BLE001 - never lose the error because the translation failed
+        return text, None
+
+
+def _append_error_locked(job: dict, text: str, details: dict | None) -> None:
+    errors = job["errors"]
+    rows = job.setdefault("error_details", [])
+    rows.extend([None] * (len(errors) - len(rows)))  # keep the index of `errors`
+    errors.append(text)
+    rows.append(details)
+
+
+def _fatal(job_id: str, msg: str, exc: BaseException | None = None) -> None:
+    msg, details = _plain_error(job_id, msg, exc)
+    if details is not None:
+        _tm.record({"event": "job_error", "job": job_id, "details": details})
     with _jobs_lock:
         if _abandoned(job_id):
             return
-        _jobs[job_id]["errors"].append(msg)
+        _append_error_locked(_jobs[job_id], msg, details)
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["finished_at"] = _now_iso()
         snapshot = _status_snapshot_locked(_jobs[job_id])
@@ -1776,7 +1830,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             cancelled = True
             _add_error(job_id, "Stopped by the user")
         else:
-            _add_error(job_id, f"Graph API publish error: {e}")
+            _add_error(job_id, f"Graph API publish error: {e}", e)
             try:
                 from src import acl_sentry
 
@@ -1872,12 +1926,14 @@ def _api_review_window_notice(*, wrote: bool, clean: bool, still_open: bool = Fa
     return API_CLEAN_NOTICE if clean else API_REVIEW_NOTICE
 
 
-def _add_error(job_id: str, msg: str) -> None:
+def _add_error(job_id: str, msg: str, exc: BaseException | None = None) -> None:
     """Ошибка в задание; брошенное по сроку Stop молчит (ACL-1614)."""
-    msg = _mlx_text(job_id, msg)
+    msg, details = _plain_error(job_id, msg, exc)
+    if details is not None:
+        _tm.record({"event": "job_error", "job": job_id, "details": details})
     with _jobs_lock:
         if not _abandoned(job_id):
-            _jobs[job_id]["errors"].append(msg)
+            _append_error_locked(_jobs[job_id], msg, details)
 
 
 # ── ACL-1614: сигнал «робот молчит» ─────────────────────────────────────────

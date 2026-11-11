@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "type": "RulesViolation",
+  "message": "Campaign name is too long - shorten it",
+  "expect": {
+    "key": "meta_rule",
+    "short": "Campaign name is too long - shorten it",
+    "next": "",
+    "severity": "blocking",
+    "retry": "after_fix"
+  },
+  "exc_key": "meta_rule"
+}
