@@ -1,5 +1,42 @@
 # System history
 
+## ACL-2523 — Light work tab: telemetry gaps — 2026-11-11
+
+`fb_api_tab_context` rows of the light work tab (lease and re-capture) now carry `work_tab_mb` (JS heap in MB from
+`Performance.getMetrics` `JSHeapUsedSize`) when the metric can be read; otherwise the key is omitted. The
+`api_create_campaign` telemetry rows (including the stop/exception row) carry `mode` (`light` or `ads_manager`).
+Numbers and codes only; the token never reaches telemetry.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1523).
+
+## ACL-2513 — Profile lease: real two-process tests through the callers — 2026-11-11
+
+Tests only, no product change (follow-up of ACL-2502 / ACL-1862 / ACL-1853). Spawned worker processes now run the real callers — account read (`read_country_split_via_api`), command (`campaign_commands.open_session`, `turn_off`), create (publish lease + `ApiPublisher`), the warm session/checkout side path and warm cleanup (`close_one`, idle close, deferred close after a read) — against synthetic transports and with the real checkout lease on. They prove that read+create, read+command, create+warm cleanup and command+warm checkout on one profile never run at the same time (the second process waits or is refused with an explicit message), that the same pairs on two profiles run independently, that alias spellings of one profile share one owner, that cleanup never stops a profile another process holds, and that cancel, crash, kill and normal exit release the lease while an unknown external write stays unknown and is never replayed. No live profile, activation or budget edit.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1513).
+
+## ACL-2406 — Builder: ads 2+ of an ad set take only Primary text; Headline and Description come from the set's Ad 1 — 2026-11-11
+
+Ad 1 of each ad set defines that set's Headline and Description through its Primary text 1 (ad sets can differ in language and audience). Ads 2 and later in the same ad set show no Headline line in the builder (only Primary texts) and are published with that set's Ad 1 Headline and Description, also for their texts 2-5. Removing an Ad 1 makes the next ad of its set the source. The pre-flight audit requires and measures the Headline only for each set's Ad 1; the card preview of ads 2+ shows their own set's Ad 1 Headline.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1406).
+
+## ACL-2273 — Review follow-ups: slot uuid case, restart cooldown, Publish gate test — 2026-11-11
+
+- A job that holds its own queue slot is now recognised whatever the case of the profile id in the account
+  map (`ProfileSlots.holds` and the warm open compare the lower-case canonical id), so it no longer waits
+  up to 120 s for itself.
+- After the open path waits for a profile that our own job just closed, it no longer records a new stop
+  "now" and no longer refuses with `restart_cooldown` on machines with the default 180 s pause.
+- Test for the Publish gate with a stored "not checked" verdict on the card.
+- Closed with a reason, no code change: a partial plan failure is kept per campaign (false block only, never
+  a false pass; "Check again" and every Publish click ask the server again and replace it), and a call with a
+  subset of campaigns joining a running check receives the superset answer (cosmetic, stored by name).
+
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1273).
+
+## ACL-2244 — Stop before the first write when preparation ate the call budget — 2026-11-11
+
+Right before the first write, prepare now checks the calls left against the planned writes, but only when preparation spent more than the budget reserved for it (targeting reads, page and form reads). In that case it stops before creating anything and tells the buyer how many calls are missing and that nothing was created. Campaigns whose preparation stays inside its reserve are never refused by this check.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1244).
+
 ## ACL-2510 — Live acceptance: interest lookup on a test account — 2026-11-11
 
 Recorded the owner's live check: "Creative real estate investing" and "Real estate
