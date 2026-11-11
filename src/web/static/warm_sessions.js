@@ -25,10 +25,11 @@
     '.warm-bar{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:flex-end;padding:.3rem .85rem 0;font-size:.72rem}',
     '.warm-msg{color:var(--muted,#888)}',
     '.warm-msg.warm-bad{color:var(--bad,#c0392b)}',
-    '.aov-open-wrap{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.3rem;margin-left:.5rem;vertical-align:middle}',
-    '.aov-pop .aov-open-wrap{display:flex;margin:0 0 .5rem}',
-    '.aov-open{padding:0 .5rem;min-height:24px}',
-    '.aov-open:disabled{opacity:.6;cursor:default}',
+    '.aov-acts{display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;flex:0 0 auto}',
+    '.aov-pop .aov-acts{margin:0 0 .5rem}',
+    '.aov-open,.aov-takeout{padding:0 .5rem;min-height:24px}',
+    '.aov-open:disabled,.aov-takeout:disabled{opacity:.6;cursor:default}',
+    '.aov-acts .acl-inline-err{display:block;color:var(--bad,#c0392b);font-size:.72rem}',
     '.aov-open-msg{color:var(--adopy-text-muted,#888)}',
     '.aov-open-msg.warm-bad{color:var(--bad,#c0392b)}'
   ].join('\n');
@@ -459,7 +460,7 @@
 
   // Перерисовать состояние аккаунта на Home из свежего фрагмента /account-map: ячейку состояния
   // строки, плитку и счётчики. Остальные ячейки, раскрытые блоки и фильтры остаются как были.
-  function homeRepaint(account) {
+  function homeFresh() {
     var per = typeof window.amapPeriod === 'function' ? window.amapPeriod() : {};
     var url = '/account-map?date_from=' + encodeURIComponent(per.from || '') + '&date_to=' + encodeURIComponent(per.to || '')
       + '&span=' + encodeURIComponent(per.span || '');
@@ -468,6 +469,13 @@
       .then(function (html) {
         var fresh = new DOMParser().parseFromString(html, 'text/html');
         if (!fresh.querySelector('#aov')) throw new Error('refresh');
+        return fresh;
+      });
+  }
+
+  function homeRepaint(account) {
+    return homeFresh()
+      .then(function (fresh) {
         function rowOf(root) {
           var out = null;
           root.querySelectorAll('.aov-row').forEach(function (tr) {
@@ -507,13 +515,44 @@
       .catch(function () { return false; });
   }
 
+  // ACL-2560: после «Take out of <country>» страна на Home перерисовывается из свежего /account-map:
+  // блок страны (таблица), её строка плиток, строка фильтров и итог. Раскрытие других стран и фильтр остаются.
+  function homeAfterTakeOut(ckey) {
+    return homeFresh().then(function (fresh) {
+      ['#aov .aov-block', '#aov .aov-crow'].forEach(function (sel) {
+        var cur = null, nw = null;
+        document.querySelectorAll(sel).forEach(function (n) { if (n.getAttribute('data-aov-country') === ckey) cur = n; });
+        fresh.querySelectorAll(sel).forEach(function (n) { if (n.getAttribute('data-aov-country') === ckey) nw = n; });
+        if (cur && nw) cur.replaceWith(nw.cloneNode(true));
+      });
+      ['#aov .aov-fbar', '#amap-totals'].forEach(function (sel) {
+        var a = document.querySelector(sel), b = fresh.querySelector(sel);
+        if (a && b) a.innerHTML = b.innerHTML;
+      });
+      var pop = document.getElementById('aov-pop');
+      if (pop) pop.hidden = true;
+      if (typeof window.amapCampaignMountVisible === 'function' && window.AMAP_CAMPAIGN_TABLE) {
+        try { window.amapCampaignMountVisible(); } catch (e) { /* дерево подтянется при следующем открытии */ }
+      }
+      if (typeof window.aovApply === 'function') window.aovApply();
+      homePaint();
+    }).catch(function () { window.location.reload(); });
+  }
+
   document.addEventListener('click', function (e) {
+    var tk = e.target && e.target.closest ? e.target.closest('[data-aov-takeout]') : null;
+    if (tk && !tk.disabled && typeof window.amapUnlink === 'function') {
+      e.preventDefault(); e.stopPropagation();
+      var ck = tk.getAttribute('data-aov-ckey');
+      window.amapUnlink(tk.getAttribute('data-aov-takeout'), 'country', ck, tk, function () { return homeAfterTakeOut(ck); });
+      return;
+    }
     var t = e.target && e.target.closest ? e.target.closest('[data-aov-open]') : null;
     if (!t || t.disabled) return;
     homeOpen(t, t.getAttribute('data-aov-open'), false);
   });
 
-  window.aclWarmHome = { paint: homePaint, refresh: homeRefresh, repaint: homeRepaint };
+  window.aclWarmHome = { paint: homePaint, refresh: homeRefresh, repaint: homeRepaint, afterTakeOut: homeAfterTakeOut };
 
   addStyle();
   document.addEventListener('DOMContentLoaded', function () { refresh(); homeRefresh(); });
