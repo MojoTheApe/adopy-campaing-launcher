@@ -7632,6 +7632,7 @@ window.cbPreflight = (function () {
   function fileStem(file) {
     var stem = String(file || '').split(/[\\/]/).pop();
     if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
+    stem = stem.replace(/\d{3,4}\s*[xх×]\s*\d{3,4}/gi, ' ').replace(/(^|\D)(\d)(\d{2,3})(?!\d)/g, '$1$2 $3');
     stem = stem.replace(/\s*[-–—]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[ _]+|[ _]+$/g, '');
     return stem.slice(0, 40).replace(/^[ _]+|[ _]+$/g, '');
   }

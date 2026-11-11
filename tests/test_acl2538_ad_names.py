@@ -28,7 +28,7 @@ def _unnumber(d, names):
 
 def test_numberless_files_use_their_stem_as_creative_half():
     assert _ad("coffee beans.mp4").ad_name() == "coffee beans - Head"
-    assert _ad("C:\folder\Sunset.PNG").ad_name() == "Sunset - Head"
+    assert _ad(r"C:\folder\Sunset.PNG").ad_name() == "Sunset - Head"  # linux-ok: sample Windows path is only data for the name function
     assert _ad("a/b/dog.png").ad_name() != _ad("a/b/cat.png").ad_name()
 
 
@@ -42,7 +42,7 @@ def test_numbered_files_and_explicit_creative_id_keep_todays_names():
     assert _ad("CAC-1253.mp4").ad_name() == "1253 - Head"
     assert _ad("1_es_2403_post.mp4").ad_name() == "2403 1 - Head"
     assert _ad("anything.mp4", cid="77").ad_name() == "77 - Head"
-    assert _ad("1080x1080-17.png", text="").ad_name() == "1080x1080 17"
+    assert _ad("1080x1080-17.png", text="").ad_name() == "17"
 
 
 def test_no_file_no_creative_is_just_the_text():
@@ -87,3 +87,33 @@ def test_ad_set_name_duplicates_are_still_refused(tmp_path):
     d.ad_sets.append(copy.deepcopy(d.ad_sets[0]))
     with pytest.raises(cr.PlanError, match="Two ad sets are named"):
         cr.plan_from_draft(d)
+
+
+def test_stem_digits_are_not_read_as_a_creative_number():
+    # IMG_123 / clip 120 / 1080x1080-17 must not turn into creative 123/120/1080 in stats
+    for fname, text, want in [
+        ("IMG_123.jpg", "Head", ("IMG_1 23", "Head")),
+        ("clip 120.mp4", "Head", ("clip 1 20", "Head")),
+        ("1080x1080-17.png", "Head", ("17", "Head")),
+        ("promo_1080х1920.png", "Head", ("promo", "Head")),
+    ]:
+        creative, txt = split_ad_title(_ad(fname, text=text).ad_name())
+        assert (creative, txt) == want, fname
+    # a long digit run (not 3-4 digits) is untouched and not a creative number either
+    assert _ad("516594629.png").ad_name() == "516594629 - Head"
+
+
+def test_js_file_stem_mirrors_python():
+    import json, re, shutil, subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available")
+    html = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    m = re.search(r"  function fileStem\(file\) \{.*?\n  \}\n", html, re.S)
+    assert m
+    from src.fb_ads_rpa.draft import _file_stem_label
+    names = ["coffee beans.mp4", "IMG_123.jpg", "clip 120.mp4", "1080x1080-17.png",
+             "promo_1080х1920.png", "big - sale.png", "a/b/dog 1234 x.png", "516594629.png", "x" * 60 + ".png"]
+    script = m.group(0) + "\nconsole.log(JSON.stringify(%s.map(fileStem)));" % json.dumps(names)
+    out = subprocess.run([node, "-e", script], capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    assert json.loads(out) == [_file_stem_label(n) for n in names]

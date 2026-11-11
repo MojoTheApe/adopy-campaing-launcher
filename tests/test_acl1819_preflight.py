@@ -840,7 +840,8 @@ NAME_CASES = [
     ("12_2175_ARM22.png", "T"), ("2175_ARM22_Story.png", "T"),
     # ACL-2538: a file name without a number -> the stem is the creative half.
     ("dog.png", "Head"), ("my coffee beans.mp4", "Head"), ("big - sale.png", "Head"),
-    (r"C:\clips\Sunset_.mp4", "Head"), ("x" * 60 + ".png", "Head"), ("dog.png", ""),
+    (r"C:\clips\Sunset_.mp4", "Head"), ("x" * 60 + ".png", "Head"), ("dog.png", ""),  # linux-ok: Windows path is only data for the name function
+    ("IMG_123.jpg", "Head"), ("clip 120.mp4", "Head"), ("1080x1080-17.png", "Head"), ("promo_1080х1920.png", "Head"),
 ]
 
 

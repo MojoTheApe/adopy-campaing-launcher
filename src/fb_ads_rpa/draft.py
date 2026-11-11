@@ -44,6 +44,12 @@ def _file_stem_label(filename: str) -> str:
     stem = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
     if "." in stem:
         stem = stem.rsplit(".", 1)[0]
+    # The stats splitter reads any 3-4 digit run as a creative number, so a
+    # stem like "IMG_123" or "1080x1080-17" must not carry one: dimension
+    # pairs are dropped, other 3-4 digit runs get a space after the first
+    # digit ("IMG_123" -> "IMG_1 23"). Numbered files never come here.
+    stem = _DIMENSIONS_RE.sub(" ", stem)
+    stem = re.sub(r"(?<!\d)(\d)(\d{2,3})(?!\d)", r"\1 \2", stem)
     stem = re.sub(r"\s*[-–—]\s*", " ", stem)
     stem = re.sub(r"\s+", " ", stem).strip(" _")
     return stem[:_FILE_STEM_MAX].strip(" _")
