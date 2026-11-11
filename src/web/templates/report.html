@@ -4574,7 +4574,7 @@ async function dashRefresh(ev) {
   btn.textContent = 'Refreshing…';
   aclInlineError(btn, '');
   try {
-    var r = await fetch('/refresh', {
+    var r = await fetch('/refresh' + window.location.search, {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
       credentials: 'same-origin',
