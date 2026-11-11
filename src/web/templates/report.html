@@ -7357,8 +7357,9 @@ window.cbPreflight = (function () {
   }
   /* [{si: набор 1-based, n: сквозной номер объявления, st: набор, ad: объявление}] */
   function numbered(inp) {
-    var out = [], n = 0, first = null;
+    var out = [], n = 0;
     auditSets(inp).forEach(function (st, i) {
+      var first = null; /* ACL-2406: Ad 1 of each ad set */
       (st.ads || []).forEach(function (ad) {
         n += 1;
         if (!first) first = ad; else ad = sharedHeadlineAd(ad, first);
@@ -9217,6 +9218,7 @@ window.cbTree = (function () {
     Array.prototype.forEach.call(secs, function (sec, i) { sec.classList.toggle('cbd-set-off', i !== setIdx); });
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
+    var seenSets = {};
     for (var i = 0; i < rows.length; i += 1) {
       /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
          кнопкой или когда в них уже есть значение (восстановленный черновик). */
@@ -9224,9 +9226,11 @@ window.cbTree = (function () {
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
-      /* ACL-2406: заголовок и описание задаёт только Ad 1 (первое объявление кампании);
-         у объявлений 2+ строки нет, у них только свои Primary text. */
-      var shared = i > 0;
+      /* ACL-2406: заголовок и описание задаёт только Ad 1 набора;
+         у остальных объявлений набора строки нет, у них только свои Primary text. */
+      var setKey = (window.cbRowSet ? window.cbRowSet(rows[i]) : 0);
+      var shared = !!seenSets[setKey];
+      seenSets[setKey] = true;
       if (rows[i].classList.contains('cb-hl-shared') !== shared) rows[i].classList.toggle('cb-hl-shared', shared);
       if (line) {
         var entry = !shared && pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
@@ -17158,7 +17162,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
     var cards = [];
+    /* ACL-2406: Ad 1 of each ad set gives the Headline to the later ads of that set. */
+    var setFirstRow = {};
+    slot.querySelectorAll('.cb-ad-row').forEach(function(r) {
+      var k = rowSet(r);
+      if (!setFirstRow[k]) setFirstRow[k] = r;
+    });
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
+      var isFirstInSet = setFirstRow[rowSet(row)] === row;
       var fileHidden = row.querySelector('input[type="hidden"][name$="_creative_file"]');
       var fileSearch = row.querySelector('.cb-creative-search');
       var fileVal = ((fileHidden && fileHidden.value) || (fileSearch && fileSearch.value) || '').trim();
@@ -17197,10 +17208,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var bodyHtml = copy && copy.body
         ? cbpEsc(copy.body)
         : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">pick the copy…</span>');
-      /* ACL-2406: объявления 2+ показывают заголовок Ad 1. */
+      /* ACL-2406: объявления 2+ набора показывают заголовок Ad 1 этого набора. */
       var hlCopy = copy;
-      if (i > 0) {
-        var firstRow = slot.querySelector('.cb-ad-row');
+      if (!isFirstInSet) {
+        var firstRow = setFirstRow[rowSet(row)];
         var firstHid = firstRow && firstRow.querySelector('input[type="hidden"][name$="_copy"]');
         var firstVal = ((firstHid && firstHid.value) || '').trim();
         hlCopy = firstVal ? AD_TITLES.find(function(t) { return t.ad_title === firstVal; }) : null;

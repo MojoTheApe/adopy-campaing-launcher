@@ -384,8 +384,8 @@ def _numbered(inp: dict[str, Any]) -> list[tuple[int, int, dict[str, Any], dict[
     """(номер набора 1-based, сквозной номер объявления 1-based, набор, объявление)."""
     out = []
     n = 0
-    first: dict[str, Any] | None = None
     for si, st in enumerate(audit_sets(inp), start=1):
+        first: dict[str, Any] | None = None  # ACL-2406: Ad 1 of each ad set
         for ad in st.get("ads") or []:
             n += 1
             if first is None:

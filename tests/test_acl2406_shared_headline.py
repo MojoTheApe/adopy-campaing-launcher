@@ -46,18 +46,15 @@ def test_ad_two_takes_headline_and_description_from_ad_one_and_keeps_its_own_bod
 
 
 def test_several_texts_of_ad_two_share_the_headline_and_description_of_ad_one(tmp_path):
-    from src.fb_ads_rpa.draft import AdSetDraft
     d = _draft(tmp_path, ads=2)
-    ad2 = d.ad_sets[0].ads.pop()
-    ad2.text_variants = [
+    d.ad_sets[0].ads[1].text_variants = [
         {"name": "T2", "body": "Body 1 second", "headline": "Variant headline", "description": "Variant desc"},
         {"name": "T3", "body": "Body 1 third", "headline": "Another", "description": "Another desc"}]
-    d.ad_sets.append(AdSetDraft(name="MX Leads 2", targeting_label="Swing trading", os="All", age_min=25,
-                                age_max=55, daily_budget=20.0, ads=[ad2]))
-    plan = cr.plan_from_draft(d)
-    two = plan.ad_sets[1].ads[0]
-    assert two.bodies == ["Body 1", "Body 1 second", "Body 1 third"]
-    assert two.titles == ["Head 0"] and two.descriptions == ["Desc"]
+    # plan_from_draft refuses several texts next to other ads (Dynamic Creative), so check the draft step.
+    share_first_headline(d)
+    two = d.ad_sets[0].ads[1]
+    assert [(v["headline"], v["description"]) for v in two.text_variants] == [("Head 0", "Desc")] * 2
+    assert (two.ad_title, two.ad_link_description, two.ad_body) == ("Head 0", "Desc", "Body 1")
 
 
 def test_ad_one_keeps_several_own_headlines(tmp_path):
@@ -74,14 +71,31 @@ def test_removing_ad_one_makes_the_next_ad_the_source(tmp_path):
     assert first.title == "Head 1" and second.title == "Head 1" and second.body == "Body 2"
 
 
-def test_ad_one_is_the_first_ad_of_the_campaign_across_ad_sets(tmp_path):
+def _two_set_draft(tmp_path):
+    """Set 1: Ad 1 + Ad 2; set 2: Ad 1 + Ad 2 (own headlines Head 0..3)."""
     from src.fb_ads_rpa.draft import AdSetDraft
-    d = _draft(tmp_path, ads=2)
-    second_set = AdSetDraft(name="MX Leads 2", targeting_label="Swing trading", os="All", age_min=25, age_max=55,
-                            daily_budget=20.0, ads=[d.ad_sets[0].ads.pop()])
-    d.ad_sets.append(second_set)
+    d = _draft(tmp_path, ads=4)
+    ads = d.ad_sets[0].ads
+    d.ad_sets[0].ads = ads[:2]
+    d.ad_sets.append(AdSetDraft(name="MX Leads 2", targeting_label="Swing trading", os="All", age_min=25,
+                                age_max=55, daily_budget=20.0, ads=ads[2:]))
+    return d
+
+
+def test_ad_one_is_the_first_ad_of_each_ad_set(tmp_path):
+    d = _two_set_draft(tmp_path)
+    d.ad_sets[0].ads[0].ad_link_description = "Desc A"
+    d.ad_sets[1].ads[0].ad_link_description = "Desc B"
     plan = cr.plan_from_draft(d)
-    assert [a.title for s in plan.ad_sets for a in s.ads] == ["Head 0", "Head 0"]
+    got = [[(a.title, a.description) for a in s.ads] for s in plan.ad_sets]
+    # Ad 1 of ad set 2 keeps its own headline; its Ad 2 inherits from it, not from the campaign's first ad.
+    assert got == [[("Head 0", "Desc A")] * 2, [("Head 2", "Desc B")] * 2]
+
+
+def test_empty_title_warning_is_per_ad_set(tmp_path):
+    from src.fb_ads_rpa import enrich_draft as ed
+    src = Path(ed.__file__).read_text(encoding="utf-8")
+    assert "for ad_set in draft.ad_sets:" in src and "ad_set.ads[0]" in src
 
 
 def test_share_first_headline_is_idempotent_and_leaves_ad_one_alone(tmp_path):
@@ -146,7 +160,7 @@ def test_python_and_page_audit_agree_on_shared_headlines():
 
 def test_builder_hides_headline_of_ads_two_plus_and_preview_uses_ad_one():
     page = TPL.read_text(encoding="utf-8")
-    assert "var shared = i > 0;" in page and "cb-hl-shared" in page
+    assert "var shared = !!seenSets[setKey];" in page and "cb-hl-shared" in page
     assert "!shared && pick && pick.value" in page            # no headline line under ads 2+
     assert "The headline and description come from Ad 1." in page
     assert "hlCopy" in page                                    # the card preview shows Ad 1's headline
@@ -160,3 +174,27 @@ def test_duplicate_ad_copies_primary_texts_and_no_headline_or_description_field(
     assert "headline" not in body.lower() and "description" not in body.lower()
     for sel in (".cb-adtitle-sel-wrap", ".cb-text2-sel-wrap", ".cb-textx-sel-wrap"):
         assert sel in body
+
+
+def test_python_and_page_audit_agree_across_ad_sets():
+    def ad(name, head, **kw):
+        out = {"name": name, "file": name + ".png", "form_id": "", "body": "Body " + name, "headline": head,
+               "headlines": [head] if head else [], "cta": "LEARN_MORE"}
+        out.update(kw)
+        return out
+    base = _ok_input()
+    cases = []
+    for set2 in ([ad("c", "Own B1"), ad("d", "z" * 60)],            # set 2 Ad 1 fine, Ad 2 own long headline ignored
+                 [ad("c", ""), ad("d", "z" * 60)],                   # set 2 Ad 1 has no headline -> warning for Ad 3
+                 [ad("c", "Own B1"), ad("d", "", bodies=["a", "b"])]):
+        inp = dict(base)
+        inp["ad_sets"] = [{"name": "S1", "destination": "website", "ads": [ad("a", "Head A"), ad("b", "")]},
+                          {"name": "S2", "destination": "website", "ads": set2}]
+        cases.append(inp)
+    got = _harness("--evaluate", {str(i): c for i, c in enumerate(cases)})
+    for i, inp in enumerate(cases):
+        want = pf.evaluate_client(inp)
+        assert [(v["rule"], v["status"], v.get("ads", [])) for v in got[str(i)]] ==                [(v["rule"], v["status"], v.get("ads", [])) for v in want]
+    by_rule = {v["rule"]: v for v in pf.evaluate_client(cases[1])}
+    assert by_rule["headline"]["ads"] == [3]
+    assert {v["rule"]: v for v in pf.evaluate_client(cases[0])}["headline_len"]["status"] == "ok"

@@ -378,10 +378,11 @@ def enrich_campaign_drafts(
                 elif ad.creative_filename:
                     ad.creative_path = str(Path(root) / ad.creative_filename)
 
-        # ACL-2406: заголовок и описание всей кампании задаёт Ad 1.
+        # ACL-2406: заголовок и описание набора задаёт его Ad 1.
         share_first_headline(draft)
-        first_ad = next((a for s in draft.ad_sets for a in s.ads), None)
-        if first_ad is not None and not first_ad.ad_title:
-            draft.warnings.append(f"Ad title empty for creative {first_ad.creative_id or '?'}")
+        for ad_set in draft.ad_sets:
+            first_ad = ad_set.ads[0] if ad_set.ads else None
+            if first_ad is not None and not first_ad.ad_title:
+                draft.warnings.append(f"Ad title empty for creative {first_ad.creative_id or '?'}")
 
     return drafts
