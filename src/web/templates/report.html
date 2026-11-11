@@ -8962,6 +8962,54 @@ window.cbTree = (function () {
     setTimeout(function () { if (footPending && !footBusy()) paintFoot(); }, 0);
   });
 
+  /* ACL-2509 pick-after-connect { */
+  /* Connecting an account reloads the page. The drawer is rebuilt from
+     scratch and, with no country-bound view open, fell back to the first
+     country of the list with no account chosen. Before the form runs, the
+     country the buyer was in (and the accounts it had) is parked in
+     sessionStorage; after the reload the same country comes back with the
+     account that was not there before selected. */
+  var PICK_KEY = 'cbd-pick-after-connect';
+  var PICK_TTL_MS = 10 * 60 * 1000;
+
+  function resolvePick(saved, list, now) {
+    if (!saved || !saved.country || (now - (saved.at || 0)) > PICK_TTL_MS) return null;
+    var found = null;
+    list.forEach(function (p) { if (p.country === saved.country) found = p; });
+    if (!found) return null;
+    var before = saved.accounts || [];
+    var added = '';
+    found.accounts.forEach(function (a) { if (!added && before.indexOf(a) === -1) added = a; });
+    return { country: saved.country, account: added };
+  }
+
+  function rememberPick(country) {
+    try {
+      var accounts = [];
+      places().forEach(function (p) { if (p.country === country) accounts = p.accounts; });
+      sessionStorage.setItem(PICK_KEY, JSON.stringify({ country: country, accounts: accounts, at: Date.now() }));
+    } catch (e) { /* storage blocked: the old behaviour, nothing worse */ }
+  }
+
+  function forgetPick() {
+    try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ }
+  }
+
+  function takePick() {
+    var raw = null;
+    try { raw = sessionStorage.getItem(PICK_KEY); } catch (e) { return null; }
+    if (!raw) return null;
+    var saved = null;
+    try { saved = JSON.parse(raw); } catch (e) { saved = null; }
+    var hit = resolvePick(saved, places(), Date.now());
+    // Keep it while the country is not in the tree yet; drop it once used or stale.
+    if (hit || !saved || (Date.now() - (saved.at || 0)) > PICK_TTL_MS) {
+      try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ }
+    }
+    return hit;
+  }
+  /* } ACL-2509 pick-after-connect */
+
   function paintFoot() {
     if (footBusy()) { footPending = true; refreshTicks(); return; }
     footPending = false;
@@ -8970,6 +9018,8 @@ window.cbTree = (function () {
     var keep = (chosen && chosen.value) || currentCountry();
     var acctOld = foot.querySelector('.cbd-pick-account');
     var keepAccount = acctOld ? acctOld.value : '';
+    var afterConnect = takePick();
+    if (afterConnect) { keep = afterConnect.country; keepAccount = afterConnect.account; }
     var typedOld = foot.querySelector('.cbd-new-country');
     var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
@@ -10032,7 +10082,7 @@ window.cbTree = (function () {
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
       if (!country) return;
       var chosenCountryName = act === 'connect-picked' ? countryName(country) : hit.dataset.countryName;
-      if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
+      if (openConnect === country) { openConnect = ''; releaseConnect(); forgetPick(); paint(); return; }
       openConnect = country;
       paint();
       if (!borrowConnect(chosenCountryName)) {
@@ -10041,6 +10091,7 @@ window.cbTree = (function () {
         window.aclAlert('Add it first with «+ Country».', { title: 'This country is not on the account map yet' });
         return;
       }
+      rememberPick(country);
       paint();
     } else if (act === 'add-country') {
       var input = foot.querySelector('.cbd-new-country');
