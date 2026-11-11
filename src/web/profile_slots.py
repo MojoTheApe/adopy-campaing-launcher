@@ -1121,7 +1121,9 @@ class ProfileSlots:
         """ACL-2262: держит ли это задание сейчас своё место (оно идёт, а не ждёт) — для этого профиля."""
         with self._cond:
             run = self._running.get(str(job_id or ""))
-            return run is not None and (not profile or run.get("profile") == str(profile))
+            # ACL-2273: ids differ only by case/spaces in the account map; same physical profile.
+            return run is not None and (not profile or str(run.get("profile") or "").strip().lower()
+                                        == str(profile).strip().lower())
 
     def others_on(self, profile: str, job_id: str | tuple[str, ...] = "") -> bool:
         """Держит ли место этого профиля или ждёт его кто-то, кроме `job_id` (ACL-1580)."""

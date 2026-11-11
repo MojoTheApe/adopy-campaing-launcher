@@ -17,6 +17,7 @@ from src.upload_agent.build_upload_excel import (
     lookup_interest,
 )
 from src.web.ad_copy import lookup_ad_copy_by_title
+from src.fb_ads_rpa.draft import share_first_headline
 
 
 def _interest_names_from_targeting(ref: dict, targeting_name: str) -> str:
@@ -377,7 +378,11 @@ def enrich_campaign_drafts(
                 elif ad.creative_filename:
                     ad.creative_path = str(Path(root) / ad.creative_filename)
 
-                if not ad.ad_title:
-                    draft.warnings.append(f"Ad title empty for creative {ad.creative_id or '?'}")
+        # ACL-2406: заголовок и описание набора задаёт его Ad 1.
+        share_first_headline(draft)
+        for ad_set in draft.ad_sets:
+            first_ad = ad_set.ads[0] if ad_set.ads else None
+            if first_ad is not None and not first_ad.ad_title:
+                draft.warnings.append(f"Ad title empty for creative {first_ad.creative_id or '?'}")
 
     return drafts
