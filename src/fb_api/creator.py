@@ -174,6 +174,7 @@ CALLS_PER_AD = 5
 CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
                                 # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
 CALLS_INSTANT_FORM = 10
+CALLS_PREPARE_EXTRA_READS = 4   # ACL-2244: page / profile-page checks and similar reads of `_prepare` outside the targeting reserve
 
 
 def estimate_targeting_reads(plan: "CampaignPlan") -> int:
@@ -3283,6 +3284,7 @@ class CampaignCreator:
 
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
+        calls_at_start = getattr(self.client, "calls", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
@@ -3378,18 +3380,27 @@ class CampaignCreator:
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
         if writing:
-            self._require_remaining_budget(plan, chunk_calls)
+            self._require_remaining_budget(plan, chunk_calls, calls_at_start)
         return targetings, files
 
-    def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int) -> None:
-        """ACL-2244: the calls left must cover every planned write and readback, or nothing is created.
+    def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int, calls_at_start: int = 0) -> None:
+        """ACL-2244: stop before the first write when preparation ate into the calls the writes were sized with.
 
-        Runs unconditionally just before the first write: earlier preparation steps (targeting reads, form
-        reads, uploads) may have used part of the budget the plan was sized with.
+        The run budget is sized as writes + targeting reads + chunks (`publish_api.create_call_budget`), and
+        `estimate_create_calls` is a deliberately generous upper bound of the writes. So the remaining calls are
+        compared with that bound only when preparation spent MORE than the budget reserved for it (targeting
+        reads, the page and form reads); ordinary preparation reads never refuse a campaign that publishes fine.
+        An operator cap below the sized budget is not checked here: it stops midway, as always.
         """
         budget = getattr(self.client, "max_calls", None)
         used = getattr(self.client, "calls", 0)
         if not isinstance(budget, int) or not isinstance(used, int):
+            return
+        spent = used - calls_at_start
+        reserved = estimate_targeting_reads(plan) + CALLS_PREPARE_EXTRA_READS
+        if any(x.instant for x in plan.ad_sets):
+            reserved += CALLS_INSTANT_FORM          # the form reads are spent here, and counted in `need` as well
+        if spent <= reserved:
             return
         remaining = budget - used
         need = estimate_create_calls(plan) + chunk_calls
