@@ -976,7 +976,7 @@ def test_after_an_unknown_result_the_rest_of_the_job_is_refused(tmp_path):
 
 
 def test_own_call_cap_does_not_end_later_campaigns(tmp_path, monkeypatch):
-    monkeypatch.setenv("ACL_FB_API_CREATE_MAX_CALLS", "20")
+    monkeypatch.setenv("ACL_FB_API_CREATE_MAX_CALLS", "36")
     meta = FakeMeta(video_states=("processing",))
     pub = _publisher(meta)
     first = pub.publish_draft(_draft(tmp_path, video=True, ads=1))

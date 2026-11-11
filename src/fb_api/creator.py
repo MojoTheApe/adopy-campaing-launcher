@@ -3394,9 +3394,9 @@ class CampaignCreator:
         remaining = budget - used
         need = estimate_create_calls(plan) + chunk_calls
         if need > remaining:
-            raise PlanError(f"Not enough Meta calls are left for this campaign: it needs about {need}, "
-                            f"{remaining} remain, so {need - remaining} are missing. Nothing was created; "
-                            "split the campaign or try again.")
+            raise PlanError(f"The Meta call budget left for this run is too small for this campaign: it needs about "
+                            f"{need} calls, {remaining} remain, so {need - remaining} are missing. "
+                            "Nothing was created; split the campaign or try again.")
 
     def _check_forms(self, plan: CampaignPlan) -> None:
         """Формы объявлений — формы ЭТОЙ Страницы (ACL-1775). Только чтение, до любой записи.
