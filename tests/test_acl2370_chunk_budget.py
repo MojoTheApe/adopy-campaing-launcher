@@ -135,7 +135,7 @@ def test_the_estimate_covers_a_real_chunked_run(small, tmp_path):
     plan = cr.plan_from_draft(d)
     estimate = cr.estimate_upload_calls(plan)
     meta = ChunkMeta()
-    budget = cr.estimate_create_calls(plan) + estimate
+    budget = cr.estimate_create_calls(plan) + estimate + cr.estimate_targeting_reads(plan)  # ACL-2244: as in production
     out, client = _run(meta, d, max_calls=budget)
     assert out.error == "", out.error
     sent = len(meta.phases)                                      # start + куски + finish
