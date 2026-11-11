@@ -156,6 +156,22 @@ def test_use_target_goes_to_the_selected_draft_and_not_to_the_last_one(page):
     assert ev[0]["kind"] == "target" and ev[0]["value"] == "FX" and ev[0]["from"] == "2026-06-01"
 
 
+def test_use_target_replaces_an_already_chosen_target_not_only_its_name(page):
+    """Поле уже занято выбранным таргетом: Use target меняет и код с интересами, а не одно имя."""
+    _campaigns(page, 1)
+    _pick(page, 0)
+    page.evaluate("""() => { const w = document.querySelector('form.open-account-form .cb-targeting-wrap');
+      w.querySelector('.cb-targeting-search').value = 'ZZ';
+      w.querySelector('.cb-targeting-hidden').value = 'ZZ';
+      w.querySelector('.cb-targeting-hint').textContent = 'old interests'; }""")
+    page.locator(f"{PANEL} .cw-chip", has_text="Alpha").click()
+    page.locator(f"{PANEL} .cw-tab", has_text="Targets").click()
+    _click_use(page, "Use target")
+    assert _targeting(page, 0) == "FX", "сменилось имя в поле, а таргет остался прежним"
+    assert page.evaluate("document.querySelector('.cb-targeting-search').value") == "FX"
+    assert page.evaluate("document.querySelector('.cb-targeting-hint').textContent") == "Foreign exchange market"
+
+
 def test_selecting_the_other_draft_moves_the_destination(page):
     _campaigns(page, 2)
     _pick(page, 1)
