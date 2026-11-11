@@ -1741,7 +1741,7 @@ class InPageGraph:
 
     @property
     def light(self) -> bool:
-        return getattr(self.tab, "light", None) is not None
+        return getattr(getattr(self, "tab", None), "light", None) is not None
 
     light_act_id = ""
 

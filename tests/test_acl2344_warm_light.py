@@ -181,3 +181,29 @@ def test_flag_off_opens_one_tab_only(tmp_path, monkeypatch):
     r.checkout().release()
     assert len(r.tabs) == 1 and r.tabs[0].navigations == 1
     assert OK_STATE["kind"] == "ads_manager"
+
+
+def test_two_consecutive_fallbacks_keep_the_ads_manager_tab_for_later_leases(rig):
+    LightGraph.handover_reason = "handover_timeout"
+    rig.checkout().release()                                             # fallback 1
+    rig.checkout().release()                                             # fallback 2 -> limit reached
+    sess = rig.reg.session(PID)
+    assert sess.light_fallbacks == 2
+    row = _light_rows(rig)[-1]
+    assert row["light_fallbacks"] == 2 and row["light_disabled_for_profile"] is True
+    assert _light_rows(rig)[-2]["light_disabled_for_profile"] is False
+    tabs_before = len(rig.tabs)
+    kept = sess.tab
+    lease = rig.checkout()                                               # no drop, no new light attempt
+    assert len(rig.tabs) == tabs_before and lease.tab is kept and not kept.closed
+    lease.release()
+    assert len(_light_rows(rig)) == 2
+
+
+def test_a_successful_light_lease_resets_the_fallback_count(rig):
+    LightGraph.handover_reason = "handover_timeout"
+    rig.checkout().release()
+    assert rig.reg.session(PID).light_fallbacks == 1
+    LightGraph.handover_reason = ""
+    rig.checkout().release()
+    assert rig.reg.session(PID).light_fallbacks == 0 and rig.reg.session(PID).mode_kind == "light"

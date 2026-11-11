@@ -563,6 +563,9 @@ class WarmSession:
     #: The light page could not be prepared for the LAST lease: that lease ran on the Ads Manager tab. Only a
     #: record - the next lease reads the switch again and tries the light mode (spec 5.2: fallback "for that lease").
     light_fallback: bool = False
+    #: Consecutive light fallbacks of this profile (in memory only: a dashboard restart clears it). At
+    #: `LIGHT_FALLBACK_LIMIT` the profile stays on its Ads Manager tab - no more drop-and-restart per lease.
+    light_fallbacks: int = 0
 
     def record(self) -> dict:
         return {"account": self.account, "port": self.port, "started_at": self.started_at,
@@ -1702,6 +1705,8 @@ class WarmRegistry:
         self._remaining()
         from src.fb_api import light_tab as _light
         light = _light.enabled()                  # ACL-2344: read once per lease (spec 5.1)
+        if light and sess.light_fallbacks >= self.LIGHT_FALLBACK_LIMIT:
+            light = False                         # this profile's light page keeps failing: keep its Ads Manager tab
         had_tab = sess.tab is not None and not getattr(sess.tab,"closed",False)
         if had_tab and (sess.mode_kind == "light") != light:
             # the switch changed since this tab was made, or the last lease fell back to the Ads Manager tab:
@@ -1731,6 +1736,9 @@ class WarmRegistry:
     # -- ACL-2344: the light work tab (ACL_LIGHT_WORK_TAB=1; off by default)
     #: Decision 5: a light session takes the token again after this long even when nothing failed.
     LIGHT_MAX_AGE_S = 6 * 3600.0
+    #: After this many consecutive light fallbacks on one profile the light mode is skipped for it (and its
+    #: Ads Manager tab is kept) until the dashboard restarts; the lease that reaches the limit is recorded.
+    LIGHT_FALLBACK_LIMIT = 2
 
     def _prepare_light(self, sess, act, mode, make_graph, had_tab):
         if had_tab:
@@ -1802,14 +1810,18 @@ class WarmRegistry:
             sess.graphs = {mode: cap_graph}
             sess.logged_out = False
             sess.light_fallback = True
+            sess.light_fallbacks += 1
             self._record_light(sess, mode="ads_manager", handover_ok=False, fallback_reason=reason,
-                               capture_tab_closed=False, capture_open_s=round(self._mono() - began, 1))
+                               capture_tab_closed=False, capture_open_s=round(self._mono() - began, 1),
+                               light_fallbacks=sess.light_fallbacks,
+                               light_disabled_for_profile=sess.light_fallbacks >= self.LIGHT_FALLBACK_LIMIT)
             return cap_graph, state
         # the hand-over is acknowledged: the work tab becomes the session tab, the heavy page goes
         graph.light_recapture = self._light_recapture_fn(sess)
         sess.tab, sess.graphs = work, {mode: graph}
         sess.target_id = str(getattr(work, "target_id", "") or "")
         sess.mode_kind, sess.light_since, sess.light_act = "light", self._wall(), act
+        sess.light_fallbacks = 0
         sess.tab_since = self._wall()
         sess.logged_out = False
         closed = True
