@@ -10,7 +10,7 @@ resolve in Check plan on a test account.
 ## Environment
 
 - Build: TEST9095, release 2026-11-11.1534 (main 54e167d16).
-- Account: allowed pilot account B97 (from the approved pilot list).
+- Account: allowed pilot account B97. "B97" is the label of this account in the approved pilot list; it is intentionally used here instead of any Meta, Multilogin or ad account id.
 - Target: a single target containing both interest terms.
 - Run by: the project owner.
 
@@ -25,6 +25,19 @@ resolve in Check plan on a test account.
 
 Evidence comment on the Issue:
 https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1510#issuecomment-6795434680
+
+## Ads Manager check
+
+After the two Check plans the owner published the same plan on B97 as a campaign
+that stays turned off (paused): "KW_TRL_All_Image_DAY|Investment_35_11.11"
+(TEST9095 job started 12:10Z). The owner then opened it in Ads Manager and showed
+both interests in the second AND group ("And must also match") of Detailed
+targeting, so Ads Manager accepted them. Nothing was activated.
+
+The original evidence comment on the Issue says no ads were created or activated
+by this check; that sentence was inaccurate and is corrected in the latest comment
+on #1510:
+https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1510#issuecomment-6795735087
 
 ## Scope notes
 
