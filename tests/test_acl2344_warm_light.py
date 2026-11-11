@@ -126,8 +126,13 @@ def test_handover_failure_falls_back_to_the_ads_manager_tab_and_keeps_it(rig):
     assert row["handover_ok"] is False and row["fallback_reason"] == "handover_timeout"
     assert row["capture_tab_closed"] is False
     lease.release()
-    rig.checkout().release()                                         # the fallback tab is kept: no new load
-    assert len(rig.tabs) == 2 and capture.navigations == 1
+    # the fallback is for THAT lease only: the next lease tries the light mode again (one fresh start)
+    LightGraph.handover_reason = ""
+    lease2 = rig.checkout()
+    assert len(rig.tabs) == 4 and capture.closed and not rig.tabs[3].closed
+    assert rig.reg.session(PID).mode_kind == "light" and not rig.reg.session(PID).light_fallback
+    assert lease2.tab is rig.tabs[3] and _light_rows(rig)[-1]["handover_ok"] is True
+    lease2.release()
 
 
 def test_light_document_failure_falls_back(rig):

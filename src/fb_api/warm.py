@@ -560,7 +560,8 @@ class WarmSession:
     mode_kind: str = "ads_manager"
     light_since: float = 0.0
     light_act: str = ""
-    #: The light page could not be prepared for this tab: it stays an Ads Manager tab until it is dropped.
+    #: The light page could not be prepared for the LAST lease: that lease ran on the Ads Manager tab. Only a
+    #: record - the next lease reads the switch again and tries the light mode (spec 5.2: fallback "for that lease").
     light_fallback: bool = False
 
     def record(self) -> dict:
@@ -1702,12 +1703,13 @@ class WarmRegistry:
         from src.fb_api import light_tab as _light
         light = _light.enabled()                  # ACL-2344: read once per lease (spec 5.1)
         had_tab = sess.tab is not None and not getattr(sess.tab,"closed",False)
-        if had_tab and (sess.mode_kind == "light") != light and not (light and sess.light_fallback):
-            # the switch changed since this tab was made: the next lease starts in the mode asked for
+        if had_tab and (sess.mode_kind == "light") != light:
+            # the switch changed since this tab was made, or the last lease fell back to the Ads Manager tab:
+            # this lease starts in the mode asked for
             self._drop_tab(sess)
             sess.verified = False
             had_tab = False
-        if light and not (had_tab and sess.light_fallback):
+        if light:
             return self._prepare_light(sess, act, mode, make_graph, had_tab)
         if had_tab:
             got = self._reuse(sess,act,mode,make_graph,self._remaining())

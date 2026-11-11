@@ -232,9 +232,10 @@ def capture_into(work: Any, open_tab: Any, act: str, *, timeout: float = 90.0) -
             raise
         return result
     finally:
-        settle_and_close(capture)
+        closed = settle_and_close(capture)
         _record({"event": "fb_api_tab_context", "phase": "light_recapture", "mode": "light",
                  "handover_ok": not reason, "fallback_reason": reason or None,
+                 "capture_tab_closed": closed,
                  "capture_open_s": round(time.monotonic() - began, 1),
                  "recapture_count": getattr(work, "light_recaptures", 0)})
 
@@ -279,10 +280,13 @@ def _close_all() -> None:
 atexit.register(_close_all)
 
 
-def settle_and_close(tab: Any) -> None:
-    """Answer what is still paused, then close: nothing is left waiting, nothing goes out."""
+def settle_and_close(tab: Any) -> bool:
+    """Answer what is still paused, then close: nothing is left waiting, nothing goes out.
+
+    True when no tab is left open (also when there was none), False when `close()` failed.
+    """
     if tab is None:
-        return
+        return True
     _OPEN.discard(tab)
     try:
         tab.pump(0.3)
@@ -291,4 +295,5 @@ def settle_and_close(tab: Any) -> None:
     try:
         tab.close()
     except Exception:  # noqa: BLE001
-        pass
+        return False
+    return True

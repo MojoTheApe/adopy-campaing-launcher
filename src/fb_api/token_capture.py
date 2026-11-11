@@ -660,6 +660,18 @@ _HELPER_JS = r"""
     return post(path, params, want, blob, spec, files, job || null);
   }
 
+  // ACL-2344: the light work tab sends the Ads Manager campaigns URL of the act as the referrer of every
+  // fetch (same origin, so `fetch` accepts it). Absent / foreign values are ignored: default mode unchanged.
+  function refOpt(spec) {
+    const r = spec && spec.referrer;
+    if (typeof r !== 'string' || !r) return {};
+    try {
+      const u = new URL(r);
+      if (u.origin !== location.origin || !/^\/adsmanager\/manage\/campaigns$/.test(u.pathname)) return {};
+    } catch (e) { return {}; }
+    return { referrer: r };
+  }
+
   // ACL-1899: отправка файла (XHR: abort и проверка перенаправления). Без собственного таймаута: ждём ответ,
   // сетевую ошибку или `abort()` (Stop у покупателя).
   function sendXhr(url, body, cred, job) {
@@ -791,7 +803,7 @@ _HELPER_JS = r"""
       try {
         try {
           resp = await within(fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
-                                           cache: 'no-store', redirect: 'error',
+                                           cache: 'no-store', redirect: 'error', ...refOpt(spec),
                                            ...(controller ? { signal: controller.signal } : {}) }));
           if (resp === expired) return { error: 'network_timeout', endpoint: endpoint };
         } catch (e) {
@@ -863,7 +875,7 @@ _HELPER_JS = r"""
     });
     try {
       resp = await Promise.race([fetch(url, { method: 'GET', credentials: cred, mode: 'cors',
-                         cache: 'no-store', redirect: 'error',
+                         cache: 'no-store', redirect: 'error', ...refOpt(spec),
                          ...(controller ? {signal: controller.signal} : {}) }), deadline]);
       if (resp === expired) return {error: 'network_timeout', endpoint: endpoint};
       text = await Promise.race([resp.text(), deadline]);
@@ -888,7 +900,7 @@ _HELPER_JS = r"""
     const refused = (why) => ({ error: 'validation_refused', why: why });
     if (retired) return { error: 'retired' };
     if (!VALIDATE_ACT || !/^act_[0-9]{5,}$/.test(VALIDATE_ACT)) return refused('account');
-    if (!spec || Object.keys(spec).some((k) => !['page_id', 'link', 'host', 'credentials'].includes(k))) return refused('key');
+    if (!spec || Object.keys(spec).some((k) => !['page_id', 'link', 'host', 'credentials', 'referrer'].includes(k))) return refused('key');
     if (typeof spec.page_id !== 'string' || !/^[0-9]{1,25}$/.test(spec.page_id)) return refused('page');
     const link = spec.link || 'https://www.facebook.com/';
     if (typeof link !== 'string' || link.length > 2048 || /[\s\x00-\x1f]/.test(link)) return refused('link');
@@ -1432,6 +1444,7 @@ class InPageGraph:
             raise ValueError(f"read-only: parameter {bad[0]!r} is not allowed")
         spec = {"method": method, "path": path, "params": params or {},
                 "host": self.graph_host, "credentials": self.credentials}
+        self._add_referrer(spec)
         # Bounded read: the in-page deadline aborts fetch/body before the CDP deadline.
         timeout = min(float(timeout), 15.0)
         spec["timeout_ms"] = max(1, int(timeout * 1000))
@@ -1481,6 +1494,7 @@ class InPageGraph:
         ctx = self._ensure()
         spec = {"page_id": page_id, "link": checked["object_story_spec"]["link_data"]["link"],
                 "host": self.graph_host, "credentials": self.credentials}
+        self._add_referrer(spec)
         expr = f"globalThis[{json.dumps(self.name)}].validatePage({json.dumps(spec)})"
         try:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
@@ -1569,6 +1583,7 @@ class InPageGraph:
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
+        self._add_referrer(spec)
         if form_page:
             spec["form_page"] = str(form_page)
         if on_ad:
@@ -1699,8 +1714,13 @@ class InPageGraph:
         """
         try:
             self._eval_helper(".retire()", timeout=10.0)
-        except (PageError, CdpError, TimeoutError, GraphStop):
+        except (PageError, CdpError, TimeoutError):
             pass
+        except GraphStop:
+            # Default mode: a connection stop ends the re-acquire as before (no reload of a stopped tab).
+            # Light mode: the work tab is not the page that stopped; the capture tab decides below.
+            if not self.light:
+                raise
         if self.light:
             self.world_name = f"acl_{secrets.token_hex(6)}"
             self._reset_world()
@@ -1723,11 +1743,19 @@ class InPageGraph:
     def light(self) -> bool:
         return getattr(self.tab, "light", None) is not None
 
+    light_act_id = ""
+
+    def _add_referrer(self, spec: dict) -> None:
+        """Light mode: every fetch of the work tab carries the act's campaigns URL as `referrer` (spec 5)."""
+        if self.light and self.light_act_id:
+            spec["referrer"] = ads_manager_url(self.light_act_id)
+
     def bind_act(self, act_id: str) -> None:
         """Light mode: the account of the next calls, WITHOUT navigating (the light tab serves every act)."""
         from src.fb_api.light_tab import LIGHT_URL
 
         act = "act_" + act_digits(act_id)
+        self.light_act_id = act
         self.validation_act = (act if not self.object_updates and re.fullmatch(r"act_[0-9]{5,}", act)
                                and (not self.write_act or self.write_act == act) else None)
         self._expected_url = LIGHT_URL
