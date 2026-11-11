@@ -8962,6 +8962,62 @@ window.cbTree = (function () {
     setTimeout(function () { if (footPending && !footBusy()) paintFoot(); }, 0);
   });
 
+  /* ACL-2509 pick-after-connect { */
+  /* Connecting an account reloads the page. The drawer is rebuilt from
+     scratch and, with no country-bound view open, fell back to the first
+     country of the list with no account chosen. Before the form runs, the
+     country the buyer was in (and the accounts it had) is parked in
+     sessionStorage; after the reload the same country comes back with the
+     account that was not there before selected. */
+  var PICK_KEY = 'cbd-pick-after-connect';
+  var PICK_TTL_MS = 10 * 60 * 1000;
+
+  function resolvePick(saved, list, now) {
+    if (!saved || !saved.country || (now - (saved.at || 0)) > PICK_TTL_MS) return null;
+    var found = null;
+    list.forEach(function (p) { if (p.country === saved.country) found = p; });
+    if (!found) return null;
+    var before = saved.accounts || [];
+    var added = '';
+    found.accounts.forEach(function (a) { if (!added && before.indexOf(a) === -1) added = a; });
+    return { country: saved.country, account: added };
+  }
+
+  function rememberPick(country) {
+    try {
+      var accounts = [];
+      places().forEach(function (p) { if (p.country === country) accounts = p.accounts; });
+      sessionStorage.setItem(PICK_KEY, JSON.stringify({ country: country, accounts: accounts, at: Date.now() }));
+    } catch (e) { /* storage blocked: the old behaviour, nothing worse */ }
+  }
+
+  function forgetPick() {
+    try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ }
+  }
+
+  // The parked entry is read (and removed from storage) exactly once, when the
+  // page loads. paintFoot() runs on the pre-reload page too (the click handler
+  // paints right after rememberPick), so it must never touch storage itself.
+  function loadPick() {
+    var raw = null;
+    try {
+      raw = sessionStorage.getItem(PICK_KEY);
+      if (raw) sessionStorage.removeItem(PICK_KEY);
+    } catch (e) { return null; }
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  var pendingPick = loadPick();
+
+  function takePick() {
+    if (!pendingPick) return null;
+    var hit = resolvePick(pendingPick, places(), Date.now());
+    // Keep it in memory while the country is not in the tree yet; drop it once used or stale.
+    if (hit || (Date.now() - (pendingPick.at || 0)) > PICK_TTL_MS) pendingPick = null;
+    return hit;
+  }
+  /* } ACL-2509 pick-after-connect */
+
   function paintFoot() {
     if (footBusy()) { footPending = true; refreshTicks(); return; }
     footPending = false;
@@ -8970,6 +9026,8 @@ window.cbTree = (function () {
     var keep = (chosen && chosen.value) || currentCountry();
     var acctOld = foot.querySelector('.cbd-pick-account');
     var keepAccount = acctOld ? acctOld.value : '';
+    var afterConnect = takePick();
+    if (afterConnect) { keep = afterConnect.country; keepAccount = afterConnect.account; }
     var typedOld = foot.querySelector('.cbd-new-country');
     var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
@@ -10032,7 +10090,7 @@ window.cbTree = (function () {
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
       if (!country) return;
       var chosenCountryName = act === 'connect-picked' ? countryName(country) : hit.dataset.countryName;
-      if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
+      if (openConnect === country) { openConnect = ''; releaseConnect(); forgetPick(); paint(); return; }
       openConnect = country;
       paint();
       if (!borrowConnect(chosenCountryName)) {
@@ -10041,6 +10099,7 @@ window.cbTree = (function () {
         window.aclAlert('Add it first with «+ Country».', { title: 'This country is not on the account map yet' });
         return;
       }
+      rememberPick(country);
       paint();
     } else if (act === 'add-country') {
       var input = foot.querySelector('.cbd-new-country');
