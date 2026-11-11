@@ -750,3 +750,42 @@ def test_refused_campaigns_keep_their_tick_and_get_no_build_dot(browser):
         assert not _real(errors), errors
     finally:
         ctx.close()
+
+
+def test_a_resend_answer_with_refused_rows_looks_like_the_first_answer(browser):
+    """ACL-2562: the first answer is lost (502), Retry resends the same request_id and the server answers with
+    the job plus the refused rows of the first request: "Not created" with the reason, tick kept, no build dot."""
+    fake = Fake()
+    state = {"n": 0}
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p, count=2)
+        names = p.evaluate("() => [...document.querySelectorAll('form.open-account-form .cb-name-hidden')].map(x => x.value)")
+
+        def reply(body):
+            state["n"] += 1
+            if state["n"] == 1:
+                return 502, "<html>busy</html>"
+            return 200, {"job_id": "job-1", "total": 1, "refused": [{"name": names[1], "code": "review_stale"}],
+                         "refused_text": "Not created: %s changed after the review. Review again." % names[1]}
+
+        fake.job_reply = reply
+        p.evaluate("() => document.querySelectorAll('form.open-account-form .cb-slot').forEach(s => { s._cbdPick = true; })")
+        p.evaluate("() => { window.__watched = []; const w = window.cbBuild && window.cbBuild.watch;"
+                   " if (w) window.cbBuild.watch = function (id, acc, names, c) { window.__watched.push(names); return w.apply(this, arguments); }; }")
+        _publish(p)
+        _settle(p)
+        p.locator("#sfc-ok").click()
+        p.wait_for_selector("[data-cb-retry]", timeout=8000)
+        assert p.evaluate("() => window.__watched.length") == 0
+        p.locator("[data-cb-retry]").click()
+        p.wait_for_timeout(800)
+        rid = [re.search(r'name="request_id"\r\n\r\n(.*?)\r\n', j).group(1) for j in fake.jobs]
+        assert len(fake.jobs) == 2 and rid[0] == rid[1]
+        queue = p.locator(".cbd-queue").inner_text()
+        assert "changed after the review" in queue and "Review again" in queue, queue
+        watched = p.evaluate("() => window.__watched")
+        assert watched and names[1] not in watched[0] and names[0] in watched[0], watched
+        assert not _real(errors), errors
+    finally:
+        ctx.close()

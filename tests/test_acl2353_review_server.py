@@ -422,3 +422,103 @@ def test_event_route_accepts_only_the_two_names(monkeypatch):
     assert asyncio.run(post({"event": "review.opened", "accounts": 2, "campaigns": 5})).status_code == 200
     assert asyncio.run(post({"event": "job.created"})).status_code == 400
     assert got == [("review.opened", {"accounts": 2, "campaigns": 5})]
+
+
+# ───────────────────────── ACL-2562: resend keeps the refused rows, one confirm per request key ─────────────────────────
+
+@pytest.fixture
+def real_registry(jobs_endpoint, monkeypatch, tmp_path):
+    """The real request registry and job store; only the job thread is replaced by a stub entry."""
+    created = []
+
+    def fake_start(account, country, slots, **kw):
+        job_id = "job-r%d" % (len(created) + 1)
+        created.append(kw)
+        with pj._jobs_lock:
+            pj._jobs[job_id] = {"job_id": job_id, "total": len(kw["frozen_drafts"] or []),
+                                "review_refused": [dict(r) for r in (kw.get("review_refused") or [])]}
+        return job_id
+
+    monkeypatch.setattr(pj, "_start_job", fake_start)
+    monkeypatch.setattr("src.web.app.start_job", pj.start_job)
+    monkeypatch.setattr("src.web.app.get_job", lambda job_id: {"total": pj._jobs[job_id]["total"]})
+    jobs_endpoint.created = created
+    yield jobs_endpoint
+    with pj._jobs_lock:
+        for jid in [j for j in pj._jobs if j.startswith("job-r")]:
+            pj._jobs.pop(jid, None)
+    with pj._request_lock:
+        for k in [k for k in pj._request_jobs if k.startswith("r-2562")]:
+            pj._request_jobs.pop(k, None)
+
+
+def _two_drafts_one_changed(state, tmp_path):
+    a, b = _draft(tmp_path), _draft(tmp_path)
+    a.name, b.name = "A", "B"
+    review = _review([a, b])
+    b.ad_sets[0].ads[0].ad_body = "library text changed"
+    state.drafts = [a, b]
+    return review
+
+
+def test_a_resend_returns_the_refused_rows_of_the_first_request(real_registry, tmp_path):
+    review = _two_drafts_one_changed(real_registry, tmp_path)
+    form = {**_FORM, "request_id": "r-2562-a", "review_json": json.dumps(review)}
+    first = asyncio.run(_post("/publish-jobs", dict(form))).json()
+    assert first["refused"] == [{"name": "B", "code": "review_stale"}] and first["total"] == 1
+    # Library is back to the reviewed state: a re-check would now accept B. The resend must not re-check.
+    real_registry.drafts[1].ad_sets[0].ads[0].ad_body = real_registry.drafts[0].ad_sets[0].ads[0].ad_body
+    builds, emitted = real_registry.builds, list(real_registry.emitted)
+    again = asyncio.run(_post("/publish-jobs", dict(form))).json()
+    assert again == first, (again, first)
+    assert real_registry.builds == builds and real_registry.emitted == emitted and len(real_registry.created) == 1
+
+
+def test_a_resend_of_a_clean_first_request_has_no_refused_rows(real_registry):
+    form = {**_FORM, "request_id": "r-2562-b", "review_json": json.dumps(_review(real_registry.drafts))}
+    first = asyncio.run(_post("/publish-jobs", dict(form))).json()
+    again = asyncio.run(_post("/publish-jobs", dict(form))).json()
+    assert "refused" not in first and again == first
+
+
+def test_job_review_refused_returns_a_copy_and_empty_for_unknown_jobs():
+    assert pj.job_review_refused("no-such-job") == []
+    with pj._jobs_lock:
+        pj._jobs["job-r-copy"] = {"job_id": "job-r-copy", "review_refused": [{"name": "B", "code": "review_stale"}]}
+    try:
+        rows = pj.job_review_refused("job-r-copy")
+        rows[0]["name"] = "X"
+        assert pj.job_review_refused("job-r-copy") == [{"name": "B", "code": "review_stale"}]
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop("job-r-copy", None)
+
+
+def test_two_simultaneous_first_sends_with_one_request_id_create_one_job_and_log_once(real_registry, monkeypatch,
+                                                                                    tmp_path):
+    import threading
+    import time
+
+    review = _two_drafts_one_changed(real_registry, tmp_path)
+    real_build = publish_api.build_drafts
+
+    def slow_build(slots, *, account_label, country):
+        time.sleep(0.4)  # wide window: the second POST arrives while the first is still building
+        return real_build(slots, account_label=account_label, country=country)
+
+    monkeypatch.setattr(publish_api, "build_drafts", slow_build)
+    form = {**_FORM, "request_id": "r-2562-c", "review_json": json.dumps(review)}
+    out = []
+    threads = [threading.Thread(target=lambda: out.append(asyncio.run(_post("/publish-jobs", dict(form)))))
+               for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert [r.status_code for r in out] == [200, 200]
+    assert out[0].json() == out[1].json() and out[0].json()["refused"] == [{"name": "B", "code": "review_stale"}]
+    assert len(real_registry.created) == 1, "one job"
+    assert real_registry.builds == 1, "drafts built once"
+    assert [e[0] for e in real_registry.emitted].count("review.confirmed") == 1
+    assert [e[0] for e in real_registry.emitted].count("review.refused") == 1
+    assert pj._guard_locks == {}, "the per-key guard is released"

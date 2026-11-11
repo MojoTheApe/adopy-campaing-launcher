@@ -49,7 +49,8 @@ from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.fb_api.connection import user_started_action
-from src.web.publish_jobs import DuplicateJobError, get_job, known_request_job, start_job, cancel_job
+from src.web.publish_jobs import (DuplicateJobError, get_job, job_review_refused, known_request_job, request_guard,
+                                 start_job, cancel_job)
 from src.web.cache import (
     background_build_state,
     background_progress_callback,
@@ -6657,15 +6658,22 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
             return JSONResponse({"error": f"{exc}. Nothing was created."}, status_code=400)
 
     def launch() -> tuple[str, int, list[dict[str, Any]]]:
+        # ACL-2562: lookup, review check, job start and review.confirmed are one step per request key, so two
+        # near-simultaneous first sends with one key create one job and log once; the second is a resend.
+        with request_guard(request_id):
+            return _launch_locked()
+
+    def _launch_locked() -> tuple[str, int, list[dict[str, Any]]]:
         # Черновики собираются из библиотек и книги — не в цикле событий:
         # иначе запуск публикации ждал бы (и держал бы) весь сервер.
         frozen: list[Any] | None = None
         refused: list[dict[str, Any]] = []
         # A resend with the same request key returns the existing job first (ACL-1399, spec 5.5.1): no new
-        # drafts, no review check against a changed library, no second review.confirmed.
+        # drafts, no review check against a changed library, no second review.confirmed. ACL-2562: the answer
+        # carries the refused rows of the first request, so the screen is the same as after the first answer.
         again = known_request_job(request_id)
         if again:
-            return again, int((get_job(again) or {}).get("total") or len(slots)), []
+            return again, int((get_job(again) or {}).get("total") or len(slots)), job_review_refused(again)
         if review is not None:
             # Один раз строим черновики и сверяем отпечатки; дальше задание работает с ЭТИМИ черновиками (D4, D5).
             from src.acl_event_log.events import review_refused_payload
@@ -6689,6 +6697,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
             request_id=request_id,
             reviewed=review,
             frozen_drafts=frozen,
+            review_refused=refused,
         )
         if review is not None and frozen is not None:
             from src.acl_event_log.events import review_confirmed_payload
