@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.analysis_agent import account_spend_api as api
-from src.fb_api import connection, warm
+from src.fb_api import account_blocks, connection, warm
 from tests.test_acl1812_warm_sessions import ACT, PID, Rig
 
 
@@ -128,11 +128,13 @@ def test_frozen_tab_wait_is_lifted_once_per_episode_and_rearmed_when_the_replace
     _freeze(key)
     assert api.frozen_tab_replaceable(key) is True
     assert api.release_frozen_tab_cooldown(key) is True and api._cooldown_state(key)[0] == 0
-    _freeze(key)                                  # the replacement tab froze as well: full pause
-    assert api._cooldown_state(key)[0] > 590
+    _freeze(key)                                  # the replacement tab froze as well: ACL-2091 D4, a hold until Retry
+    assert account_blocks.is_held(key) and api._cooldown_state(key)[0] == 0
     assert api.frozen_tab_replaceable(key) is False and api.release_frozen_tab_cooldown(key) is False
-    assert api._cooldown_state(key)[0] > 590, "the pause must stand for the next action"
-    api.note_tab_recovered(key)                   # a tab answered: the next freeze is a new episode
+    assert account_blocks.is_held(key), "the hold must stand for the next action"
+    api.note_tab_recovered(key)                   # a tab answered: the hold ends, the next freeze is a new episode
+    assert not account_blocks.is_held(key)
+    _freeze(key)
     assert api.frozen_tab_replaceable(key) is True
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
 
@@ -141,7 +143,7 @@ def test_other_waits_are_never_lifted():
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
     _freeze("k", "checkpoint")
     assert api.frozen_tab_replaceable("k") is False and api.release_frozen_tab_cooldown("k") is False
-    assert api._cooldown_state("k")[1] == "checkpoint"
+    assert account_blocks.hold_of("k")["kind"] == "checkpoint"      # ACL-2091: a hold, never lifted by a replacement
     api._COOLDOWN.clear()
 
 
@@ -149,7 +151,7 @@ def test_frozen_tab_wait_stays_when_sessions_are_not_managed(monkeypatch):
     monkeypatch.setattr(connection, "settings", lambda: {"managed_sessions": False, "auto_reopen_manual": False})
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
     _freeze("k")
-    assert api.frozen_tab_replaceable("k") is False and api._cooldown_state("k")[0] > 0
+    assert api.frozen_tab_replaceable("k") is False and account_blocks.is_held("k")
     api._COOLDOWN.clear()
 
 
@@ -191,10 +193,10 @@ def test_publish_open_on_a_frozen_profile_replaces_the_tab_once_then_keeps_the_p
     with pytest.raises(publish_api.ApiPublishError):
         publish_api.ApiPublisher(dry_run=True).open("Acc")
     tabs_after_first = len(rig.tabs)
-    assert api._cooldown_state(key)[0] > 590
+    assert account_blocks.is_held(key)
     with pytest.raises(publish_api.ApiPublishError) as ei:
         publish_api.ApiPublisher(dry_run=True).open("Acc")
-    assert ei.value.code == "page_unresponsive" and len(rig.tabs) == tabs_after_first, "no new tab while paused"
+    assert ei.value.code == "account_blocked" and len(rig.tabs) == tabs_after_first, "no new tab while paused"
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
 
 
@@ -213,7 +215,7 @@ def test_a_frozen_pause_stands_when_the_profile_is_not_on_the_warm_path(monkeypa
     _freeze("k-" + PID)
     with pytest.raises(publish_api.ApiPublishError) as ei:
         publish_api.ApiPublisher(dry_run=True).open("Acc")
-    assert ei.value.code == "page_unresponsive" and not rig.started
+    assert ei.value.code == "account_blocked" and not rig.started
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
 
 

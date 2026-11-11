@@ -870,8 +870,11 @@ def _run_job_inner(
 
                     with _warm.job_wait(lambda: _is_cancelled(job_id),
                                         lambda view: _show_resource_wait(job_id, account_label, view)):
-                        _run_api(job_id, slots, account_label=account_label, country=country,
-                                 dry_run=dry_run)
+                        from src.fb_api import account_blocks as _blocks
+
+                        with _blocks.problem_action("publish"):
+                            _run_api(job_id, slots, account_label=account_label, country=country,
+                                     dry_run=dry_run)
                     return
                 _run_rpa(
                     job_id,

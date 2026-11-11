@@ -43,6 +43,7 @@ from typing import Any
 
 from src.analysis_agent import account_spend as _as
 from src.fb_ads_rpa.operations import browser_operation
+from src.fb_api import account_blocks as _blocks
 from src.fb_api import profile as _fb_profile
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
@@ -324,6 +325,7 @@ def note_tab_recovered(key: str) -> None:
     """Вкладка выдана и отвечает: эпизод зависания закончен, следующий получит новую замену."""
     with _COOLDOWN_LOCK:
         _FROZEN_RELEASED.discard(key)
+    _blocks.clear(key, "recovered", kind="page_unresponsive")     # ACL-2091: the tab answers, the freeze is over
 
 
 def _cooldown_left(key: str) -> float:
@@ -340,9 +342,28 @@ def _launch_note_session(profile_id: str, state: dict, account: str) -> None:
         pass
 
 
-def _start_cooldown(key: str, stop: GraphStop) -> None:
+def _replacement_spent(key: str) -> bool:
+    """ACL-2091 D4: the one tab replacement of this freeze episode is used (or cannot happen)."""
+    with _COOLDOWN_LOCK:
+        if key in _FROZEN_RELEASED:
+            return True
+    try:
+        from src.fb_api.connection import settings
+
+        return not bool(settings()["managed_sessions"])
+    except Exception:  # noqa: BLE001 — unreadable settings: nothing will replace the tab
+        return True
+
+
+def _start_cooldown(key: str, stop: GraphStop, label: str = "") -> None:
     secs = COOLDOWN_S.get(stop.kind)
     if secs is None:
+        return
+    # ACL-2091: checkpoint, a login page, a policy block and a frozen tab whose replacement is spent are
+    # holds: persisted, no timer, lifted only by a person (Retry). Everything else stays a timed pause.
+    if _blocks.note_stop(key, label, stop, replacement_spent=_replacement_spent(key)):
+        with _COOLDOWN_LOCK:
+            _COOLDOWN.pop(key, None)
         return
     secs = max(secs, float(getattr(stop, "retry_after_s", None) or 0))
     with _COOLDOWN_LOCK:
@@ -559,7 +580,7 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
     except _warm.WarmError as exc:
         raise ApiReadError(str(exc), code=exc.code) from exc
     except GraphStop as exc:
-        _start_cooldown(key, exc)
+        _start_cooldown(key, exc, account)
         raise
     finally:
         _as._set_wait_note(account, "")
@@ -579,7 +600,7 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
             raise
         finally:
             if client.stopped is not None:
-                _start_cooldown(key, client.stopped)
+                _start_cooldown(key, client.stopped, account)
                 stop = stop or client.stopped
             sess.notes["calls"] = client.calls
     finally:
@@ -604,7 +625,7 @@ def _session(account: str, *, commands: bool = False):
     try:
         # Вызывающий уже держит физическую аренду профиля. Порядок тот же
         # у чтения после команды/публикации: профиль, затем одна общая читалка.
-        with target_activity(_as._profile_key(account)), read_session(priority=commands):
+        with target_activity(_as._profile_key(account)), read_session(priority=commands),                 _blocks.problem_action("command" if commands else "read", only_if_unset=True):
             with _open_session(account, commands=commands) as sess:
                 yield sess
     finally:
@@ -639,21 +660,12 @@ def _open_session(account: str, *, commands: bool = False):
     # ACL-2262: a hung tab is replaced once per episode by the warm checkout below; the pause is lifted
     # only right before it. If the action does not go through the warm path, the pause stands.
     frozen_deferred = left > 0 and why == "page_unresponsive" and frozen_tab_replaceable(key)
-    if left > 0 and not frozen_deferred:
-        mins = int(left // 60) + 1
-        if why == "logged_out":
-            raise ApiReadError(_as.logged_out_message(account), code=_as.LOGGED_OUT_CODE)
-        if why == "checkpoint":
-            raise ApiReadError(
-                f"The {account} profile is on a Facebook checkpoint; Ads Manager is not reopened "
-                f"for about {mins} min. Solve it inside Multilogin, then Read again. Nothing was called.")
-        if why == "page_unresponsive":
-            raise ApiReadError(
-                f"The Ads Manager tab for {account} stopped answering on the last read; it is not "
-                f"reopened for about {mins} min. Nothing was called.")
-        raise ApiReadError(
-            f"Meta asked to slow down for {account}; waiting before the next read "
-            f"(about {mins} min). Nothing was called.")
+    blocked = _blocks.refusal(key, account, "read",
+                              timed=(left, why) if left > 0 and not frozen_deferred else None,
+                              replaceable=False)
+    if blocked:
+        held = _blocks.is_held(key)
+        raise ApiReadError(blocked[0], code=_as.LOGGED_OUT_CODE if (why == "logged_out" and not held) else blocked[1])
 
     # ACL-1812: профиль, который человек держит «тёплым» (Open profiles for today),
     # работает через реестр: одна вкладка робота на все действия, без перезагрузки.
@@ -734,20 +746,20 @@ def _open_session(account: str, *, commands: bool = False):
                         _warm_registry().annotate_stop(exc, shim)
                 except Exception:
                     pass
-            _start_cooldown(key, exc)
+            _start_cooldown(key, exc, account)
             raise
         page_stop: GraphStop | None = None
         _launch_note_session(getattr(opened, "profile_id", ""), state, account)
         if state.get("kind") == "checkpoint":
             page_stop = Checkpoint("the profile is on a Facebook checkpoint")
         elif state.get("kind") == "login":
-            page_stop = LoggedOut("the profile is logged out of Facebook")
+            page_stop = LoggedOut("the profile is logged out of Facebook", page_seen=True)
         elif not state.get("has_token"):
             raise PageFailed("Ads Manager did not finish loading (no Graph session in the page); "
                              "the profile may be logged out")
         if page_stop is not None:
             # Найдено на странице, ещё до клиента: охлаждение тоже (ревью S2).
-            _start_cooldown(key, page_stop)
+            _start_cooldown(key, page_stop, account)
             raise page_stop
         client = GraphClient(
             graph,
@@ -760,7 +772,7 @@ def _open_session(account: str, *, commands: bool = False):
             yield sess
         finally:
             if client.stopped is not None:
-                _start_cooldown(key, client.stopped)
+                _start_cooldown(key, client.stopped, account)
                 problem = client.stopped
             sess.notes["calls"] = client.calls
     except BaseException as exc:

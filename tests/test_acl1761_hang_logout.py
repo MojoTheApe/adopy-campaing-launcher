@@ -170,8 +170,8 @@ def test_open_stops_as_logged_out_with_cooldown_and_no_graph_calls(monkeypatch, 
         pub.open("Acc")
     assert ei.value.code == "logged_out" and "SECRETVALUE" not in str(ei.value)
     assert pub._client is None
-    left, why = pa._cooldown("Acc")
-    assert left > 0 and why == "logged_out"
+    from src.fb_api import account_blocks
+    assert account_blocks.hold_of(pa._frozen_api("Acc")[1])["kind"] == "logged_out"   # ACL-2091: a hold
 
 
 def test_open_stops_as_checkpoint(monkeypatch, tmp_path):
@@ -195,11 +195,13 @@ def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch, tmp_pa
     with pytest.raises(pa.ApiPublishError) as ei2:
         pa.ApiPublisher().open("Acc")
     assert ei2.value.code == "page_unresponsive" and len(opened) == 1
-    left2, why2 = pa._cooldown("Acc")
-    assert why2 == "page_unresponsive" and 590 < left2 <= 600
+    # ACL-2091 (D4): the replacement froze too, so the account is HELD until Retry (no timer).
+    from src.fb_api import account_blocks
+    assert pa._cooldown("Acc")[0] == 0
+    assert account_blocks.hold_of(pa._frozen_api("Acc")[1])["kind"] == "page_unresponsive"
     with pytest.raises(pa.ApiPublishError) as ei3:     # third action: the profile is not touched at all
         pa.ApiPublisher().open("Acc")
-    assert ei3.value.code == "page_unresponsive" and len(opened) == 1
+    assert ei3.value.code == "account_blocked" and len(opened) == 1
     assert "Nothing was created" in str(ei3.value)
 
 
