@@ -51,6 +51,8 @@ TERM_READ_CAP = 8
 #: (целая строка и каждая её часть), но не выше JOB_READ_ABS_CAP. JOB_READ_CAP - прежнее имя базы.
 JOB_READ_BASE = 6
 JOB_READ_PER_TERM = 6
+#: ACL-2499: поиск по кабинету (targetingsearch) - ещё одно чтение на каждую искомую строку.
+ACCOUNT_SEARCH_EXTRA_READS = 1
 JOB_READ_ABS_CAP = 90
 JOB_READ_CAP = JOB_READ_BASE
 #: Сколько секунд результаты поиска живут между Check plan (повтор после «unknown» идёт дальше).
@@ -75,6 +77,9 @@ VALID_LIMIT = 200
 #: пропускает этот поиск на всё задание и становится предупреждением с названием поиска. Остальные
 #: (`adinterest`, `adgeolocation`, `adlocale`) обязательны: без них таргетинг не разрешить безопасно,
 #: отказ остаётся ошибкой. Значение: (название для человека, что тогда не сопоставляется).
+#: ACL-2499: эти поиски - запасные; ЛЮБАЯ ошибка Graph (не только отказ по правам, например код 100)
+#: даёт предупреждение, а результат поиска интересов остаётся главным.
+ANY_ERROR_OPTIONAL = frozenset({"targetingsearch"})
 OPTIONAL_LOOKUPS = {
     "adinterestvalid": ("exact-name interest check", "interests were matched through the interest search instead"),
     "adTargetingCategory": ("behaviors lookup", "behaviors were not matched"),
@@ -400,7 +405,7 @@ class TermResolver:
         self.term_cap = int(term_cap)
         #: Явный потолок задания (тесты) или None: тогда он растёт с числом строк (см. prefetch).
         self._fixed_job_cap = None if job_cap is None else int(job_cap)
-        self.job_cap = self._fixed_job_cap if job_cap is not None else JOB_READ_BASE + JOB_READ_PER_TERM
+        self.job_cap = self._fixed_job_cap if job_cap is not None else JOB_READ_BASE + self.per_term_reads
         self._shared, self._scope = cache, scope
         #: Чтений Graph за задание (каждая страница), для бюджета и тестов.
         self.reads = 0
@@ -414,9 +419,16 @@ class TermResolver:
         self._query_cache: dict[tuple, list[dict]] = {}
         #: ACL-1920: необязательные поиски, в которых Meta отказала (тип -> текст), без повторов.
         self.refused: dict[str, str] = {}
+        #: ACL-2499: из них те, где была не отказ по правам, а иная ошибка (текст предупреждения другой).
+        self._failed: set[str] = set()
         self._ids_unverified = False
         #: Interest ids Meta rejected as `Invalid id` (their cache entries are dropped).
         self._bad_ids: set[str] = set()
+
+    @property
+    def per_term_reads(self) -> int:
+        """Чтений задания на искомую строку: с известным кабинетом на одно больше (targetingsearch)."""
+        return JOB_READ_PER_TERM + (ACCOUNT_SEARCH_EXTRA_READS if self.act else 0)
 
     # -- необязательный поиск: отказ по правам пропускает его, а не роняет весь план
     def _lookup(self, search_type: str, params: dict, pages: int, *, count_term: bool = True,
@@ -428,8 +440,10 @@ class TermResolver:
         try:
             return self._get_all(params, pages, count_term=count_term, path=path)
         except GraphError as exc:
-            if not (optional and is_permission_refusal(exc)):
+            soft = optional and (is_permission_refusal(exc) or search_type in ANY_ERROR_OPTIONAL)
+            if not soft:
                 raise name_lookup(exc, search_type) from exc
+            refusal = is_permission_refusal(exc)
         # Отказанный запрос тоже был чтением: он остаётся в бюджете.
         after = getattr(self.client, "calls", None)
         spent = max(1, after - before) if isinstance(before, int) and isinstance(after, int) else 1
@@ -437,7 +451,12 @@ class TermResolver:
         if count_term:
             self._term_reads += spent
         label, effect = OPTIONAL_LOOKUPS[search_type]
-        self.refused[search_type] = f"Meta refused the {label} ({search_type}) on this account; {effect}."
+        if refusal:
+            self.refused[search_type] = f"Meta refused the {label} ({search_type}) on this account; {effect}."
+        else:
+            # Текст ошибки не берём: в нём могут быть id и токены.
+            self.refused[search_type] = f"The {label} ({search_type}) failed on this account; {effect}."
+            self._failed.add(search_type)
         return []
 
     def warnings(self) -> list[str]:
@@ -453,7 +472,10 @@ class TermResolver:
         gone = [OPTIONAL_LOOKUPS[t][0] for t in self.refused if t != "adinterestvalid"]
         if not gone:
             return ""
-        return ("Meta refused the " + " and the ".join(gone) + " on this account, so the term could not be "
+        verb = "failed" if all(t in self._failed for t in self.refused if t != "adinterestvalid") else "refused"
+        lead = "Meta refused the " if verb == "refused" else "The "
+        tail = " on this account" if verb == "refused" else " failed on this account"
+        return (lead + " and the ".join(gone) + tail + ", so the term could not be "
                 "checked there; fix the term or confirm a candidate")
 
     # -- бюджет чтений
@@ -649,7 +671,7 @@ class TermResolver:
             if self._fixed_job_cap is None:
                 # потолок считается и по тёплым терминам: отвергнутый id потребует обычного поиска
                 n = len({norm(x) for x in id_terms}) + len(self._results)
-                self.job_cap = min(JOB_READ_ABS_CAP, max(self.job_cap, JOB_READ_BASE + JOB_READ_PER_TERM * n))
+                self.job_cap = min(JOB_READ_ABS_CAP, max(self.job_cap, JOB_READ_BASE + self.per_term_reads * n))
             self._ask_valid(every, self._cached_interest_ids(id_terms) + self._warm_interest_ids(id_terms))
         except _Spent:
             pass
