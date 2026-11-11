@@ -15,7 +15,7 @@ def test_holds_matches_the_profile_whatever_its_case_or_spaces():
     q = SimpleNamespace(_cond=contextlib.nullcontext(), _running={"job-1": {"profile": PID}})
     for given in (PID, PID.upper(), f"  {PID.upper()} "):
         assert ProfileSlots.holds(q, "job-1", given) is True
-    assert ProfileSlots.holds(q, "job-1", "11111111-1111-1111-1111-111111111111") is False
+    assert ProfileSlots.holds(q, "job-1", "-".join(["1" * 8, "1" * 4, "1" * 4, "1" * 4, "1" * 12])) is False
     assert ProfileSlots.holds(q, "job-2", PID) is False
     assert ProfileSlots.holds(q, "job-1") is True          # no profile given: any slot of the job
 
