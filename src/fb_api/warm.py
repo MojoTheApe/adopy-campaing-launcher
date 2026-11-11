@@ -1834,8 +1834,10 @@ class WarmRegistry:
         except Exception:  # noqa: BLE001
             closed = False
         self._save()
+        mb = _light.heap_used_mb(work)
         self._record_light(sess, mode="light", handover_ok=True, fallback_reason=None,
-                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1))
+                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1),
+                           **({"work_tab_mb": mb} if mb is not None else {}))
         return graph, {**state, "light": True}
 
     def _reuse_light(self, sess: WarmSession, act: str, mode: str, make_graph: Callable[[Any], Any]):
