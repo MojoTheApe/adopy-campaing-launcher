@@ -334,6 +334,54 @@ def test_a_resend_with_the_same_request_id_returns_the_same_job(monkeypatch, tmp
             pj._jobs.pop(first, None)
 
 
+def test_a_retry_resend_with_changed_inputs_gets_the_first_job_not_a_refusal(jobs_endpoint, monkeypatch, tmp_path):
+    """ACL-1399 Retry: the first POST was accepted, the answer was lost; a library, map or file change in
+    between must not turn the resend into 409 / "Not created", build drafts again or log a second confirm."""
+    known = {}
+
+    def start(account, country, slots, **kw):
+        jobs_endpoint.started.append(kw)
+        known[kw["request_id"]] = "job-first"
+        return "job-first"
+
+    monkeypatch.setattr("src.web.app.start_job", start)
+    monkeypatch.setattr("src.web.app.known_request_job", lambda rid: known.get(rid, ""))
+    monkeypatch.setattr("src.web.app.get_job", lambda job_id: {"total": 1})
+    a, b = _draft(tmp_path), _draft(tmp_path)
+    a.name, b.name = "A", "B"
+    jobs_endpoint.drafts = [a, b]
+    body = {**_FORM, "review_json": json.dumps(_review([a, b]))}
+    first = asyncio.run(_post("/publish-jobs", dict(body)))
+    assert first.status_code == 200 and first.json()["job_id"] == "job-first"
+    builds, emitted = jobs_endpoint.builds, list(jobs_endpoint.emitted)
+    # Everything changed since the review: a first submit would be 409 review_stale.
+    a.link = "https://example.invalid/new-a"
+    b.ad_sets[0].ads[0].ad_body = "library text changed"
+    again = asyncio.run(_post("/publish-jobs", dict(body)))
+    assert again.status_code == 200 and again.json() == {"job_id": "job-first", "total": 1}
+    assert len(jobs_endpoint.started) == 1, "no second job"
+    assert jobs_endpoint.builds == builds, "no second draft build"
+    assert jobs_endpoint.emitted == emitted, "no second review.confirmed / review.refused"
+
+
+def test_known_request_job_only_answers_for_a_live_job():
+    assert pj.known_request_job("") == "" and pj.known_request_job("never-seen") == ""
+    with pj._request_lock:
+        pj._request_jobs["k-live"] = "job-live"
+        pj._request_jobs["k-gone"] = "job-gone"
+    with pj._jobs_lock:
+        pj._jobs["job-live"] = {"job_id": "job-live"}
+    try:
+        assert pj.known_request_job("k-live") == "job-live"
+        assert pj.known_request_job("k-gone") == ""
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.pop("job-live", None)
+        with pj._request_lock:
+            pj._request_jobs.pop("k-live", None)
+            pj._request_jobs.pop("k-gone", None)
+
+
 def test_the_job_record_says_whether_it_was_reviewed():
     from src.web import publish_history
 

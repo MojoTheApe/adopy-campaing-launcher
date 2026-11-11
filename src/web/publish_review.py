@@ -9,8 +9,9 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-import os
 from typing import Any
+
+from src.web.plan_cache import _file_fingerprint as _file_stat  # same (path, size, mtime_ns) mark as the plan cache
 
 #: Версия формата `review_json`.
 REVIEW_VERSION = 1
@@ -42,18 +43,6 @@ def stale_text(names: list[str]) -> str:
 def publish_stale_text(name: str) -> str:
     """Тот же отказ, замеченный в `publish_draft` (за время очереди сменился шаблон формы или файл)."""
     return f"Not created: {name} changed after the review (form template or file). Nothing was created."
-
-
-def _file_stat(path: Any) -> list[Any]:
-    """(путь, размер, mtime_ns) без чтения содержимого; нет файла - отметка об этом."""
-    text = str(path or "")
-    if not text:
-        return [""]
-    try:
-        st = os.stat(text)
-    except OSError:
-        return [text, "missing"]
-    return [text, st.st_size, st.st_mtime_ns]
 
 
 def review_fingerprint(plan: Any) -> str:

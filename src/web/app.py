@@ -49,7 +49,7 @@ from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.fb_api.connection import user_started_action
-from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
+from src.web.publish_jobs import DuplicateJobError, get_job, known_request_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
     background_progress_callback,
@@ -6661,6 +6661,11 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         # иначе запуск публикации ждал бы (и держал бы) весь сервер.
         frozen: list[Any] | None = None
         refused: list[dict[str, Any]] = []
+        # A resend with the same request key returns the existing job first (ACL-1399, spec 5.5.1): no new
+        # drafts, no review check against a changed library, no second review.confirmed.
+        again = known_request_job(request_id)
+        if again:
+            return again, int((get_job(again) or {}).get("total") or len(slots)), []
         if review is not None:
             # Один раз строим черновики и сверяем отпечатки; дальше задание работает с ЭТИМИ черновиками (D4, D5).
             from src.acl_event_log.events import review_refused_payload

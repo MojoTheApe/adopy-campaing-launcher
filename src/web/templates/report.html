@@ -21234,10 +21234,16 @@ function cbNewRun(notify) {
           (window.CB_REVIEW_REFUSED = window.CB_REVIEW_REFUSED || {})[e.key] = e.refusedNames;
           skipped += e.refusedNames.length;
         }
-        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, sentNames, e.country);
+        // ACL-2353: refused campaigns were not created - no build dot for them and they keep their tick.
+        var refusedNow = e.refusedNames || [];
+        var watched = sentNames.filter(function (n) { return refusedNow.indexOf(n) < 0; });
+        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, watched, e.country);
         // ACL-1360: ушедшие роботу кампании больше не отмечены.
         if (window.cbTree && window.cbTree.untick) {
-          try { window.cbTree.untick(e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : [])); }
+          try {
+            var sentSlots = e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : []);
+            window.cbTree.untick(sentSlots.filter(function (sl) { return refusedNow.indexOf(cbPfName(sl)) < 0; }));
+          }
           catch (err) { /* отметка — удобство, задание уже ушло */ }
         }
         follow(e, data.job_id, skipped);
@@ -22108,11 +22114,19 @@ function _doCbPublish(form) {
     return found;
   }
   function numberText(n) { return (n % 1 ? n.toFixed(2) : String(n)); }
+  /* {n, cur, lifetime}: lifetime is a total for the whole run, never a daily amount (it stays out of the daily sum). */
   function budgetOf(c) {
     var sum = summaryOf(c);
-    if (sum && isFinite(Number(sum.daily_budget))) return { n: Number(sum.daily_budget), cur: String(sum.currency || '') };
+    if (sum && Number(sum.lifetime_budget) > 0) return { n: Number(sum.lifetime_budget), cur: String(sum.currency || ''), lifetime: true };
+    if (sum && isFinite(Number(sum.daily_budget))) return { n: Number(sum.daily_budget), cur: String(sum.currency || ''), lifetime: false };
+    var life = false;
+    try { life = !!(window.cbLifetime && window.cbLifetime.preview(c.slot)); } catch (err) { life = false; }
+    if (life) {
+      var f = c.slot.querySelector('[name$="_budget"]'), n = f ? Number(f.value) : NaN;
+      return isFinite(n) && n > 0 ? { n: n, cur: '', lifetime: true } : null;
+    }
     var m = c.row && /([\d]+(?:\.\d+)?)/.exec(String(c.row['Campaign Daily Budget'] || ''));
-    return m ? { n: Number(m[1]), cur: '' } : null;
+    return m ? { n: Number(m[1]), cur: '', lifetime: false } : null;
   }
 
   /* Блокеры кампании: тот же признак, что у ворот (cbPreflight.blocks), плюс то, что знает только ревью. */
@@ -22155,8 +22169,12 @@ function _doCbPublish(form) {
         hint: 'the only pixel on the ad account will be used (' + (sum.pixel_id || '—') + ').', detail: '', campaign: c.name });
     }
     if (trackingText) out.push({ level: 'warn', rule: 'tracking_link', label: trackingText, hint: '', detail: '', campaign: c.name });
-    if (c.twin) out.push({ level: 'warn', rule: 'twin', label: 'Same name',
+    if (c.twin && c.rep) out.push({ level: 'warn', rule: 'twin', label: 'Same name',
       hint: 'these cards become one campaign (' + c.name + ').', detail: '', campaign: c.name });
+    if (sum && (sum.manual_required || []).length) {
+      out.push({ level: 'warn', rule: 'manual_page', label: 'Manual completion required',
+        hint: sum.manual_required.join(' '), detail: '', campaign: c.name });
+    }
     return out;
   }
 
@@ -22176,11 +22194,25 @@ function _doCbPublish(form) {
       try { tw = window.cbTrackingWarning ? window.cbTrackingWarning(e.form) : null; } catch (err) { tw = null; }
       var trackingText = tw && !/^No tracking link/.test(tw.text) ? tw.text : '';
       var perAccount = { tracking: trackingText };
+      e.camps.forEach(function (c) { c._blockers = blockersOf(e, c); });
+      /* W5: cards with one name become ONE campaign, so they are created together or not at all:
+         a blocker on one card blocks every card of the name (the server would otherwise get a partial
+         draft and refuse it as "changed"). */
       e.camps.forEach(function (c) {
-        c._blockers = blockersOf(e, c);
+        if (!c.twin) return;
+        var group = e.camps.filter(function (x) { return x.name === c.name; }), all = [];
+        group.forEach(function (x) {
+          x._blockers.forEach(function (b) {
+            if (!all.some(function (y) { return y.label === b.label && y.detail === b.detail; })) all.push(b);
+          });
+        });
+        if (all.length) c._blockers = all;
+      });
+      e.camps.forEach(function (c) {
         c._warnings = c._blockers.length ? [] : warningsOf(e, c, perAccount);
         c._out = leftOut(e);
         c._willCreate = !c._blockers.length && !c._out;
+        if (!c.rep) { c._warnings.forEach(function (w) { notices.push(w); }); return; }   // a twin is counted once
         if (c._blockers.length) blocked.push({ e: e, c: c });
         if (!model.checking && !c._blockers.length && !checkedOk(c)) w7.push({ e: e, c: c });
         if (c._willCreate) create.push({ e: e, c: c });
@@ -22209,13 +22241,14 @@ function _doCbPublish(form) {
     h += line('Languages', esc((s.languages_picked || [s.language]).filter(Boolean).join(', ')));
     h += line('Devices', esc(s.devices || (s.os && s.os !== 'All' ? s.os : '')));
     h += line('Placements', esc(s.placements || ''));
+    if (s.ads_not_created) h += line('Ads', esc(String(s.pending_ad_count || 0) + ' — not created: needs a manual step (see the warning)'));
     (s.ads || []).forEach(function (a) {
       h += '<div class="rv-ad"><strong>Ad ' + esc(a.index) + '</strong>'
-        + line('Page', esc(a.page_name || ''))
         + line('Primary text', esc((a.primary_texts || [a.primary_text]).filter(Boolean).join(' / ')))
         + line('Headline', esc((a.headlines || [a.headline]).filter(Boolean).join(' / ')))
         + line('Button', esc(a.cta || ''))
-        + (a.form_name ? line('Form', esc(a.form_name)) : line('URL', esc(a.link || '')))
+        + (a.form_name ? line('Form', esc(a.form_name) + (a.form_note ? ' <span class="rv-grey">' + esc(a.form_note) + '</span>' : ''))
+                       : line('URL', esc(a.link || '')))
         + line('Feed file', esc(a.file || ''))
         + line('Stories / Reels file', esc(a.stories_reels_file || '')) + '</div>';
     });
@@ -22234,7 +22267,7 @@ function _doCbPublish(form) {
   }
   function campaignHtml(e, c) {
     var b = budgetOf(c), sum = summaryOf(c), checked = checkedOk(c);
-    var bud = b ? ' · CBO · ' + numberText(b.n) + (b.cur ? ' ' + esc(b.cur) : '') + ' / day' : '';
+    var bud = b ? ' · CBO · ' + numberText(b.n) + (b.cur ? ' ' + esc(b.cur) : '') + (b.lifetime ? ' lifetime' : ' / day') : '';
     var published = '';
     var hit = hitOf(c), res = hit && hit.result;
     if (res && res.published_as && res.published_as !== c.name) {
@@ -22247,6 +22280,13 @@ function _doCbPublish(form) {
         + esc(c._out ? 'account not ready' : blockedReason(e, c)) + '</span></div>';
     }
     var body = '';
+    if (sum) {
+      var pg = sum.page_name ? sum.page_name + (sum.page_id ? ' (' + sum.page_id + ')' : '') : String(sum.page_id || '');
+      body += line('Page', esc(pg)) + line('Pixel', esc(String(sum.pixel_id || '')));
+      if ((sum.manual_required || []).length) {
+        body += '<div class="rv-line rv-manual"><strong>Manual completion required</strong>: ' + esc(sum.manual_required.join(' ')) + '</div>';
+      }
+    }
     if (sum && (sum.ad_sets || []).length) {
       sum.ad_sets.forEach(function (s, i) { body += adSetHtml(s, s.index || i + 1); });
     } else body += previewOnlyHtml(c);
@@ -22257,18 +22297,18 @@ function _doCbPublish(form) {
   }
 
   function budgetLine(ev) {
-    var by = {}, order = [];
+    var daily = {}, dOrder = [], life = {}, lOrder = [];
     ev.create.forEach(function (x) {
       var b = budgetOf(x.c);
       if (!b) return;
-      var k = b.cur || '';
-      if (!(k in by)) { by[k] = 0; order.push(k); }
-      by[k] += b.n;
+      var k = b.cur || '', into = b.lifetime ? life : daily, order = b.lifetime ? lOrder : dOrder;
+      if (!(k in into)) { into[k] = 0; order.push(k); }
+      into[k] += b.n;
     });
-    if (!order.length) return '';
-    var parts = order.map(function (k) {
-      return numberText(by[k]) + (k ? ' ' + esc(k) : '') + ' / day' + (k ? '' : ' <span class="rv-grey">(currency ' + REUSE_NOTE + ')</span>');
-    });
+    if (!dOrder.length && !lOrder.length) return '';
+    var unknown = ' <span class="rv-grey">(currency ' + REUSE_NOTE + ')</span>';
+    var parts = dOrder.map(function (k) { return numberText(daily[k]) + (k ? ' ' + esc(k) : '') + ' / day' + (k ? '' : unknown); })
+      .concat(lOrder.map(function (k) { return numberText(life[k]) + (k ? ' ' + esc(k) : '') + ' lifetime' + (k ? '' : unknown); }));
     return '<div class="pc-budget">Budget: ' + parts.join(' · ') + '</div>';
   }
   function checkLine() {
@@ -22277,7 +22317,15 @@ function _doCbPublish(form) {
       return '<div class="pc-checked rv-checking">Checking with Meta… ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2) + '</div>';
     }
     if (!model.checkedAt) return '';
-    var min = Math.max(0, Math.round((Date.now() - model.checkedAt) / 60000));
+    /* The age of the OLDEST verdict shown (a reused one is older than this popup), not the time this check ended. */
+    var since = model.checkedAt;
+    model.entries.forEach(function (e) {
+      e.camps.forEach(function (c) {
+        var hit = checkedOk(c) ? hitOf(c) : null;
+        if (hit && isFinite(hit.at) && hit.at > 0 && hit.at < since) since = hit.at;
+      });
+    });
+    var min = Math.max(0, Math.round((Date.now() - since) / 60000));
     return '<div class="pc-checked">Checked with Meta ' + (min < 1 ? 'just now' : min + ' min ago') + '.</div>';
   }
 
@@ -22342,7 +22390,7 @@ function _doCbPublish(form) {
   function paint() {
     var ev = evaluate();
     model.ev = ev;
-    var accounts = model.entries.map(function (e) { return { name: e.title, camps: e.camps.map(function (c) { return c.name; }), e: e }; });
+    var accounts = model.entries.map(function (e) { return { name: e.title, camps: e.reps.map(function (c) { return c.name; }), e: e }; });
     var accWithCreate = {};
     ev.create.forEach(function (x) { accWithCreate[x.e.key] = true; });
     var skipped = model.running;
@@ -22352,7 +22400,7 @@ function _doCbPublish(form) {
       collapseOver: 6,
       modeHtml: '<b>' + esc(cbPublishMode().split(' — ')[0]) + '</b> ' + esc(cbPublishMode().split(' — ').slice(1).join(' — ')),
       leadExtraHtml: budgetLine(ev) + checkLine(),
-      campaignHtml: function (a, i) { return campaignHtml(a.e, a.e.camps[i]); },
+      campaignHtml: function (a, i) { return campaignHtml(a.e, a.e.reps[i]); },
       noticesHtml: bannerHtml() + blockedHtml(ev) + notReadyHtml() + warningsHtml(ev) + noteHtml(),
     });
     var box = document.getElementById('safe-confirm-modal');
@@ -22440,6 +22488,9 @@ function _doCbPublish(form) {
       var n = cbPfName(slot);
       return { form: form, slot: slot, name: n || cbSlotTitle(slot), twin: names[n] > 1, row: null, fp: '' };
     });
+    var seen = {};
+    e.camps.forEach(function (c) { c.rep = !seen[c.name]; seen[c.name] = true; });   // twins are counted once
+    e.reps = e.camps.filter(function (c) { return c.rep; });
     return e;
   }
   function runPreview(e) {
@@ -22477,15 +22528,20 @@ function _doCbPublish(form) {
     if (!live.length) { cbSayAlreadyBuilding(running); return; }
     var rules = window.cbPreflight && window.cbPreflight.table ? window.cbPreflight.table() : [];
     if (!window.cbTree || !window.cbTree.auditLines || !rules.length) { cbPfUnavailable(); return; }
-    if (preparing) return;
+    if (preparing) {
+      aclInlineError(document.querySelector('.cbd-publish-all') || document.querySelector('.cb-publish-btn'), 'Still preparing the review — it opens when Preview and the checks have answered.');
+      return;
+    }
     preparing = true;
+    if (window.cbPublishPending) window.cbPublishPending.start();
     var entries = live.map(function (it) { return makeEntry(it.form, it.slots); });
     var accounts = entries.map(function (e) { return e.account; });
     var pf = typeof window.cbPreflightFetch === 'function' ? window.cbPreflightFetch(accounts) : Promise.resolve(null);
     Promise.all([Promise.all(entries.map(runPreview)), pf]).then(function (r) {
       preparing = false;
+      if (window.cbPublishPending) window.cbPublishPending.end();
       open({ entries: entries, running: running, pf: r[1], opts: opts, reselect: reselect, openedAt: Date.now() });
-    }, function () { preparing = false; });
+    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); });
   }
 
   function open(m) {

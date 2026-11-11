@@ -2339,6 +2339,23 @@ def _evict_kept_window(kept_job_id: str, account_label: str, profile: str,
     return True
 
 
+def known_request_job(request_id: str) -> str:
+    """ACL-2353: id of the live job already started under this request key, else ''.
+
+    A resend (ACL-1399) must be answered with that job BEFORE any review check: the first request was
+    accepted against the review, and a later library or file change must not turn the resend into a refusal.
+    """
+    key = (request_id or "").strip()[:100]
+    if not key:
+        return ""
+    with _request_lock:
+        known = _request_jobs.get(key)
+    if known is None:
+        return ""
+    with _jobs_lock:
+        return known if known in _jobs else ""
+
+
 def start_job(
     account_label: str,
     country: str,

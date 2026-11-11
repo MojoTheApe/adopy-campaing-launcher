@@ -476,3 +476,277 @@ def test_rpa_keeps_today_popup_and_never_sends_review_json(browser):
         assert not [e for e in fake.events if e.get("event", "").startswith("review.")]
     finally:
         ctx.close()
+
+
+def _ready_form(p, idx):
+    """Like `_ready`, but for the form with number `idx` (the second account)."""
+    add(p, account=idx, count=1)
+    p.evaluate("""(idx) => {
+      const f = document.querySelectorAll('form.open-account-form')[idx];
+      const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); };
+      set(f.querySelector('input[name="tracking_link"]'), 'https://track.example.com/c?sub=1');
+      f.querySelectorAll('.cb-slot').forEach((s) => {
+        set(s.querySelector('[name$="_budget"]'), '20');
+        set(s.querySelector('input[type="hidden"][name$="_ad_0_copy"]'), 'Text A');
+      });
+    }""", idx)
+    p.wait_for_timeout(500)
+
+
+def _close_popup(p):
+    p.evaluate("() => { const m = document.getElementById('safe-confirm-modal'); if (m) m.remove(); }")
+    p.wait_for_function("() => !window.cbReview.model()")
+
+
+def _lifetime_summary(n, ad_sets=None):
+    return {"plan": {"summary": {
+        "campaign": n, "lifetime_budget": 500.0, "budget_type": "lifetime", "currency": "USD", "page_id": "111",
+        "page_name": "Page One", "pixel_id": "222", "pixel_source": "map", "existing": False,
+        "ad_sets": ad_sets if ad_sets is not None else []}}}
+
+
+def test_card_country_page_and_retry_publish_all_open_the_review(browser):
+    """Spec test 13: every Publish road reaches the review under the API backend and posts nothing by itself."""
+    fake = Fake()
+    state = {"n": 0}
+
+    def reply(body):
+        state["n"] += 1
+        if state["n"] == 1:
+            return 200, {"error": "The shared Multilogin session was lost", "code": "mlx_session_lost"}
+        return 200, {"job_id": "job-%d" % state["n"], "total": 1}
+
+    fake.job_reply = reply
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p, count=2)
+        # 1. Country-page Publish button (cbPublish on the form).
+        p.evaluate("() => cbPublish(document.querySelector('form.open-account-form'))")
+        p.wait_for_selector("#safe-confirm-modal .rv-foot")
+        assert fake.jobs == []
+        _close_popup(p)
+        # 2. Card Publish: one card opened in the drawer, the same function with a shown card.
+        p.evaluate("""() => { const f = document.querySelector('form.open-account-form');
+          cbTree.open(f.querySelector('.cb-slot').dataset.cbdId); cbPublish(f); }""")
+        p.wait_for_selector("#safe-confirm-modal .rv-foot")
+        assert "Create this campaign as a PAUSED campaign?" in _body(p)
+        assert fake.jobs == []
+        _close_popup(p)
+        # 3. ACL-1826 Retry: Publish all, the account is stopped by a lost session, Retry opens the review again.
+        p.evaluate("() => cbTree.close && cbTree.close()")
+        p.locator(".cbd-publish-all").click()
+        p.wait_for_selector("#safe-confirm-modal .rv-foot")
+        _settle(p)
+        p.locator("#sfc-ok").click()
+        p.wait_for_selector("[data-cb-stop-retry]", timeout=8000)
+        assert len(fake.jobs) == 1
+        p.locator("[data-cb-stop-retry]").click()
+        p.wait_for_selector("#safe-confirm-modal .rv-foot")
+        assert len(fake.jobs) == 1, "Retry opens the review; nothing is sent before Confirm"
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_two_accounts_an_edit_of_the_second_right_after_confirm_reaches_neither_job(browser):
+    """Spec test 7: two accounts, an edit on the second right after Confirm."""
+    p, fake, errors, ctx = _open(browser)
+    try:
+        _ready(p)
+        _ready_form(p, 1)
+        _publish(p)
+        _settle(p)
+        p.locator("#sfc-ok").click()
+        p.evaluate("""() => { const i = document.querySelectorAll('form.open-account-form')[1].querySelector('[name$="_budget"]');
+          i.value = '999'; i.dispatchEvent(new Event('input', {bubbles: true})); }""")
+        p.wait_for_function("document.querySelector('#safe-confirm-modal') === null")
+        p.wait_for_timeout(500)
+        assert len(fake.jobs) == 2, "one job per account"
+        for body in fake.jobs:
+            assert re.search(r'name="camp_0_budget"\r\n\r\n20\r\n', body) and "999" not in body
+            assert body.count("review_json") == 1
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_lifetime_budget_is_shown_as_lifetime_and_kept_out_of_the_daily_total(browser):
+    fake = Fake()
+    fake.check_extra = lambda n: _lifetime_summary(n)
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p, count=2)
+        _publish(p)
+        _settle(p)
+        lead = p.locator(".sfc-lead").inner_text()
+        assert "Budget: 1000 USD lifetime" in lead and "/ day" not in lead, lead
+        p.locator("details.rv-camp summary").first.click()
+        text = p.locator("details.rv-camp").first.inner_text()
+        assert "500 USD lifetime" in text and "/ day" not in text, text
+        assert "Page One (111)" in text, "L1: the Page is shown at campaign level"
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_a_daily_and_a_lifetime_campaign_get_separate_totals(browser):
+    fake = Fake()
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p, count=2)
+        names = p.evaluate("() => [...document.querySelectorAll('form.open-account-form .cb-name-hidden')].map(x => x.value)")
+        fake.check_extra = lambda n: _lifetime_summary(n) if n == names[0] else {}
+        _publish(p)
+        _settle(p)
+        lead = p.locator(".sfc-lead").inner_text()
+        assert "Budget: 20 USD / day · 500 USD lifetime" in lead, lead
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_manual_page_notice_and_instant_form_note_are_shown(browser):
+    fake = Fake()
+    fake.check_extra = lambda n: {"plan": {"summary": {
+        "campaign": n, "daily_budget": 20.0, "currency": "USD", "page_id": "111", "page_name": "Page One",
+        "pixel_id": "222", "pixel_source": "map", "existing": False,
+        "manual_required": ["Choose the Page by hand in Ads Manager."],
+        "ad_sets": [{"name": "Set", "index": 1, "age": "25-55", "interests": [], "placements": "Automatic",
+                     "language": "es", "destination": "Instant Form", "ads_not_created": True, "pending_ad_count": 1,
+                     "ads": []}]}}}
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p)
+        _publish(p)
+        _settle(p)
+        right = p.locator(".pc-right").inner_text()
+        assert "Manual completion required" in right and "Choose the Page by hand" in right, right
+        p.locator("details.rv-camp summary").first.click()
+        p.locator("details.rv-set summary").first.click()
+        text = p.locator("details.rv-camp").first.inner_text()
+        assert "Choose the Page by hand" in text and "not created" in text, text
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_form_note_of_an_instant_form_ad_is_shown(browser):
+    fake = Fake()
+    fake.check_extra = lambda n: {"plan": {"summary": {
+        "campaign": n, "daily_budget": 20.0, "currency": "USD", "page_id": "111", "pixel_id": "222",
+        "pixel_source": "map", "existing": False,
+        "ad_sets": [{"name": "Set", "index": 1, "age": "25-55", "interests": [], "placements": "Automatic",
+                     "language": "es", "destination": "Instant Form",
+                     "ads": [{"index": 1, "name": "Ad 1", "headline": "Head", "primary_text": "Body", "cta": "LEARN_MORE",
+                              "form_name": "Lead form", "form_note": "form will be created: Lead form",
+                              "file": "offline-0.png"}]}]}}}
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p)
+        _publish(p)
+        _settle(p)
+        p.locator("details.rv-camp summary").first.click()
+        p.locator("details.rv-set summary").first.click()
+        assert "form will be created: Lead form" in p.locator("details.rv-camp").first.inner_text()
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_twin_cards_are_one_campaign_in_the_count(browser):
+    p, fake, errors, ctx = _open(browser)
+    try:
+        _ready(p, count=2)
+        p.evaluate("""() => document.querySelectorAll('form.open-account-form .cb-name-override').forEach(o => {
+          o.value = 'Twin'; o.dispatchEvent(new Event('input', {bubbles: true})); })""")
+        p.wait_for_function("() => [...document.querySelectorAll('form.open-account-form .cb-name-hidden')].every(h => h.value === 'Twin')")
+        _publish(p)
+        _settle(p)
+        lead = p.locator(".sfc-lead").inner_text()
+        assert "1 campaign" in lead and "2 campaigns" not in lead, lead
+        assert "Budget: 20 " in lead and "Budget: 40" not in lead, lead
+        assert p.locator("#safe-confirm-modal details.rv-camp").count() == 1
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_a_blocked_twin_blocks_the_whole_campaign(browser):
+    fake = Fake()
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p, count=2)
+        p.evaluate("""() => document.querySelectorAll('form.open-account-form .cb-name-override').forEach(o => {
+          o.value = 'Twin'; o.dispatchEvent(new Event('input', {bubbles: true})); })""")
+        p.wait_for_function("() => [...document.querySelectorAll('form.open-account-form .cb-name-hidden')].every(h => h.value === 'Twin')")
+        # Only the second card has a blocker: the Preview row of the name is found for the first one only,
+        # so give the second card an empty file (a client-side blocker).
+        p.evaluate("""() => { const s = document.querySelectorAll('form.open-account-form .cb-slot')[1];
+          const f = s.querySelector('[name$="_ad_0_creative_file"]'); f.value = 'missing-file.png'; }""")
+        _publish(p)
+        _settle(p)
+        assert "Will not be created (1)" in p.locator("#safe-confirm-modal").inner_text()
+        assert not p.locator("#sfc-ok").is_enabled()
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_the_checked_age_comes_from_the_age_of_the_verdict(browser):
+    fake = Fake()
+    from datetime import datetime, timedelta, timezone
+
+    old = (datetime.now(timezone.utc) - timedelta(minutes=7)).isoformat()
+    fake.check_extra = lambda n: {"checked_at": old, "cached": True}
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p)
+        _publish(p)
+        _settle(p)
+        assert "Checked with Meta 7 min ago" in p.locator(".sfc-lead").inner_text()
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_the_button_shows_progress_while_the_review_prepares_and_a_second_click_says_so(browser):
+    p, fake, errors, ctx = _open(browser)
+    try:
+        _ready(p)
+        p.evaluate("""() => { window.__held = null; const orig = window.fetch;
+          window.fetch = function (url, init) { if (String(url).indexOf('/preview-publish') >= 0)
+            return new Promise((res) => { window.__held = () => res(orig.call(window, url, init)); });
+            return orig.apply(this, arguments); }; }""")
+        p.evaluate("() => window.cbPublishAll(window.cbTree.showQueue)")
+        p.wait_for_function("() => window.cbPublishPending.active()")
+        assert "Checking before publishing" in p.locator(".cbd-publish-all").inner_text()
+        p.evaluate("() => window.cbPublishAll(window.cbTree.showQueue)")
+        assert "Still preparing the review" in p.locator("body").inner_text()
+        p.evaluate("() => window.__held()")
+        p.wait_for_selector("#safe-confirm-modal .rv-foot")
+        assert p.evaluate("() => window.cbPublishPending.active()") is False
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
+
+
+def test_refused_campaigns_keep_their_tick_and_get_no_build_dot(browser):
+    fake = Fake()
+    p, fake, errors, ctx = _open(browser, fake=fake)
+    try:
+        _ready(p, count=2)
+        names = p.evaluate("() => [...document.querySelectorAll('form.open-account-form .cb-name-hidden')].map(x => x.value)")
+        fake.job_reply = lambda body: (200, {"job_id": "job-1", "total": 1, "refused": [{"name": names[1], "code": "review_stale"}],
+                                              "refused_text": "Not created: %s changed after the review. Review again." % names[1]})
+        p.evaluate("() => document.querySelectorAll('form.open-account-form .cb-slot').forEach(s => { s._cbdPick = true; })")
+        p.evaluate("() => { window.__watched = []; const w = window.cbBuild && window.cbBuild.watch;"
+                   " if (w) window.cbBuild.watch = function (id, acc, names, c) { window.__watched.push(names); return w.apply(this, arguments); }; }")
+        _publish(p)
+        _settle(p)
+        p.locator("#sfc-ok").click()
+        p.wait_for_timeout(700)
+        watched = p.evaluate("() => window.__watched")
+        assert watched and names[1] not in watched[0] and names[0] in watched[0], watched
+        assert not _real(errors), errors
+    finally:
+        ctx.close()
