@@ -188,3 +188,62 @@ def test_unknown_campaign_write_is_never_rewritten_under_the_same_name(tmp_path,
     text = " ".join(again.warnings + list(getattr(again, "steps", []) or []))
     assert "Wait" not in text and "few minutes" not in text
     assert len(list(journal.root.glob("op-*.superseded"))) == 1
+
+
+def _lagging_search(monkeypatch):
+    monkeypatch.setattr(cr.CampaignCreator, "_campaign_rows", lambda self, act, name: [])
+    monkeypatch.setattr(cr.CampaignCreator, "_find_campaign", lambda self, plan, after_unknown=False: None)
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+
+
+def test_settled_not_found_campaign_stage_is_never_sent_under_the_same_name(tmp_path, journal, clock, monkeypatch):
+    """Run 1: the campaign POST lands but the answer is lost and the readback finds nothing (stage unknown/not_found).
+    The rerun must continue as "<name> copy 1", not write the same name again."""
+    meta = Crashy()
+    meta.fail_next["campaigns"] = "lost"
+    _lagging_search(monkeypatch)
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert first.stop_kind == "unknown"
+    saved = " ".join(f.read_text(encoding="utf-8") for f in journal.root.glob("op-*.json"))
+    assert '"not_found"' in saved          # the stage is settled as not found
+    creator, _client = _creator(meta, journal)
+    creator.sleep = lambda s: setattr(clock, "t", clock.t + s)
+    clock.t += 60
+    again = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert again.error == "", again.error
+    names = sorted(o["name"] for o in meta.objects.values() if o["_kind"] == "campaign")
+    assert len(names) == 2 and names[1] == f"{names[0]} copy 1"
+    assert any("duplicate" in w and "PAUSED" in w for w in again.warnings)
+
+
+class _AnswerLost(Crashy):
+    """The first campaign POST is created at Meta, the answer never arrives (network_timeout)."""
+    hits = 0
+
+    def write(self, path, params, files=None, filename="", **kw):
+        body = super().write(path, params, files, filename, **kw)
+        if path.endswith("/campaigns") and self.hits == 0:
+            self.hits += 1
+            return {"error": "network_timeout"}
+        return body
+
+
+def test_in_run_resend_of_the_campaign_goes_out_under_the_next_copy_name(tmp_path, journal, clock, monkeypatch):
+    meta = _AnswerLost()
+    _lagging_search(monkeypatch)
+    out, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert out.error == "", out.error
+    names = sorted(o["name"] for o in meta.objects.values() if o["_kind"] == "campaign")
+    assert len(names) == 2 and names[1] == f"{names[0]} copy 1"
+    assert out.published_as == names[1] and out.copy_number == 1
+    assert any("duplicate" in w and "PAUSED" in w for w in out.warnings)
+
+
+@pytest.mark.parametrize("suffix", ["_105", "_105_105", "_1_2_3"])
+def test_stored_image_name_accepts_repeated_suffixes(suffix):
+    assert cr.stored_image_name("acl-aa5e593c3fc5d36f.png", "acl-aa5e593c3fc5d36f.png" + suffix) == "acl-aa5e593c3fc5d36f.png"
+
+
+def test_stored_image_name_still_flags_a_different_image():
+    other = "acl-bbbbbbbbbbbbbbbb.png_105"
+    assert cr.stored_image_name("acl-aa5e593c3fc5d36f.png", other) == other

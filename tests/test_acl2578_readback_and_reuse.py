@@ -22,7 +22,8 @@ from tests.test_acl2250_copy_counter import BASE, _names  # noqa: E402
     ("acl-ab.png", "acl-ab.png", "acl-ab.png"),
     ("acl-ab.png", "acl-cd.png_105", "acl-cd.png_105"),         # another image stays a difference
     ("acl-ab.png", "acl-ab.png_x", "acl-ab.png_x"),
-    ("acl-ab.png", "acl-ab.png_105_7", "acl-ab.png_105_7"),
+    ("acl-ab.png", "acl-ab.png_105_7", "acl-ab.png"),            # ACL-2583: Meta may suffix twice
+    ("acl-ab.png", "acl-ab.png_105_x", "acl-ab.png_105_x"),
     ("acl-ab.png", "", ""),
 ])
 def test_stored_image_name_accepts_only_a_digit_suffix(expected, actual, result):

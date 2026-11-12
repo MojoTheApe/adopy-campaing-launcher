@@ -1505,13 +1505,14 @@ def image_name(path: str, data: bytes, ext: str = "") -> str:
     return f"acl-{_md5(data)[:16]}{ext}"
 
 
-_STORED_SUFFIX = re.compile(r"_\d+$")
+_STORED_SUFFIX = re.compile(r"(?:_\d+)+$")
 
 
 def stored_image_name(expected: str, actual: str) -> str:
     """ACL-2578: Meta may append `_<digits>` to the library name of an uploaded image (`acl-<md5>.png_105`).
 
-    It is still our file: the suffix alone is not a difference. Any other name stays as Meta returned it.
+    Uploading the same image twice can add the suffix again (`acl-<md5>.png_105_105`). It is still our file: the
+    suffixes alone are not a difference. Any other name stays as Meta returned it.
     """
     text = str(actual or "")
     if text != expected and _STORED_SUFFIX.sub("", text, count=1) == expected:
@@ -1911,8 +1912,11 @@ class CampaignCreator:
             # Looked and found nothing. ACL-2583 owner rule: no time-based stop. When the outcome is really unknown
             # (a stage left `sent`, or an unknown one the readback could not settle) read back once more after the
             # same ~30 s pause as a transient read; still nothing -> write again (a duplicate is acceptable, the
-            # objects are PAUSED and the name is never reused). A stage already settled as not found is just sent.
+            # objects are PAUSED and the name is never reused). A campaign stage is never sent again under its name, settled or not.
             settled = old["state"] == _oj.UNKNOWN and old.get("note") == _oj.NOT_FOUND_NOTE
+            if kind == "campaign" and settled:
+                # "Settled as not found" is only the first run's own name search, which is the part of Meta that lags.
+                raise _CampaignRewrite(int(op.data.get("copy_number") or 0))
             if not settled:
                 self._step(out, f"{what}: result of the earlier write is unknown, reading it back once more")
                 self._pause(sum(TRANSIENT_READ_WAITS_S))
@@ -2295,6 +2299,11 @@ class CampaignCreator:
                             "Nothing else was written; reconcile the existing object in Ads Manager before retrying.",
                             created=out.created, kind="unknown") from rexc
                     self._note_unknown_write(what, exc, began, first=False, second=bool(found))
+                    if not found and what == "campaign" and self._op is not None:
+                        # ACL-2583 owner rule: the same campaign name is never written twice. The name search lags, so
+                        # the caller continues under the next "<name> copy N" (a duplicate is acceptable).
+                        self.client.reconciled(path)
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
                     if not found:
                         self.client.reconciled(path)
                         self._step(out, f"{what}: not found by readback after {exc.reason} - sending once more")
