@@ -49,7 +49,7 @@ from typing import Any, Callable
 from src.fb_api.cdp import (CdpError, CdpTimeout, PageError, StaleContextError,
                             SessionLostError, PageIdentityError, host_and_path)
 from src.fb_api.graph import (Checkpoint, GraphStop, LoggedOut, PageFailed,
-                              PageUnresponsive)
+                              PageUnresponsive, classify_stop_url)
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -156,7 +156,7 @@ _HELPER_JS = r"""
     const h = location.hostname || '';
     const p = location.pathname || '';
     let kind = 'other';
-    if (/\/checkpoint(\/|$)/i.test(p) || /\/(two_step_verification|two_factor)(\/|$)/i.test(p)) kind = 'checkpoint';
+    if (/\/checkpoint(\/|$)/i.test(p) || /\/(two_step_verification|two_factor|hacked-protection)(\/|$)/i.test(p)) kind = 'checkpoint';
     else if (/\/login(\.php)?(\/|$)/i.test(p) || /^\/recover(\/|$)/i.test(p)
              || !!document.querySelector('input[name="pass"]')) kind = 'login';
     else if (/(^|\.)adsmanager\.facebook\.com$/i.test(h) || p.indexOf('/adsmanager') === 0) kind = 'ads_manager';
@@ -1086,10 +1086,11 @@ class InPageGraph:
             return None
         path = urllib.parse.urlsplit(url).path.lower()
         where = host_and_path(url) or "an unknown page"
-        if path.startswith(("/login", "/recover")):
+        seen = classify_stop_url(path)
+        if seen == "login":
             return LoggedOut("the profile was logged out while the job ran; log in inside "
-                             "Multilogin, then retry. Nothing more was sent.")
-        if "/checkpoint" in path or "two_step" in path:
+                             "Multilogin, then retry. Nothing more was sent.", page_seen=True)
+        if seen == "checkpoint":
             return Checkpoint("the profile is on a Facebook checkpoint")
         return PageUnresponsive(f"the Ads Manager tab stopped answering (now at {where}); "
                                 "nothing more was sent")
@@ -1254,7 +1255,7 @@ class InPageGraph:
         if kind == "checkpoint":
             stop = Checkpoint("the profile is on a Facebook checkpoint")
         elif kind == "login":
-            stop = LoggedOut("the profile is logged out of Facebook")
+            stop = LoggedOut("the profile is logged out of Facebook", page_seen=True)
         else:
             stop = PageFailed("connection to the owned Ads Manager tab was lost or its account changed; "
                               "recovery stopped without replaying the interrupted request")

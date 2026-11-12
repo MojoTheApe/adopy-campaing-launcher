@@ -345,13 +345,13 @@ def test_session_applies_the_existing_cooldown_for_a_logged_out_tab(monkeypatch,
     with pytest.raises(g.LoggedOut):
         with api._session("Acc"):
             pytest.fail("the body must not run on a logged-out tab")
-    left, why = api._cooldown_state(sp._profile_key("Acc"))
-    assert why == "logged_out" and left > 0
+    from src.fb_api import account_blocks
+    assert account_blocks.hold_of(sp._profile_key("Acc"))["kind"] == "logged_out"   # ACL-2091: a hold
     # Следующий заход отказывает ДО вкладки, текстом о входе.
     with pytest.raises(api.ApiReadError) as ei:
         with api._session("Acc"):
             pass
-    assert ei.value.code == sp.LOGGED_OUT_CODE
+    assert ei.value.code == "account_blocked" and "logged out of Facebook" in str(ei.value)
 
 
 # ───────────────────────── замок профиля ─────────────────────────

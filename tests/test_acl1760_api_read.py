@@ -418,7 +418,7 @@ def test_rate_limit_codes_stop_and_cool_the_profile_down(world, code):
     assert [k for k, _ in world.stops] == ["rate_limited"]
     n = len(world.page.specs)
     again = api.read_via_api(ACCOUNT, D, D)
-    assert again.state == "failed" and "slow down" in again.error and "Nothing was called" in again.error
+    assert again.state == "failed" and "rate limit" in again.error.lower() and "Nothing was called" in again.error
     assert len(world.page.specs) == n, "a cooled-down profile gets no Graph call"
     assert len(world.opened_profiles) == 1, "and its profile is not opened again"
 
@@ -427,7 +427,9 @@ def test_368_is_a_policy_stop_with_a_long_cooldown(world):
     world.page.routes["/ACT||"] = err(368)
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.state == "failed" and "not retried" in r.error
-    assert api._cooldown_left(sp._profile_key(ACCOUNT)) > 600
+    # ACL-2091: a policy block is a hold (no timer) until a person presses Retry.
+    from src.fb_api import account_blocks
+    assert account_blocks.is_held(sp._profile_key(ACCOUNT))
 
 
 def test_no_access_to_the_ad_account_is_said_plainly(world):
@@ -950,13 +952,15 @@ def test_graph_client_additions_refuse_unknown_levels_breakdowns_and_dates():
 
 def test_checkpoint_or_logout_seen_during_the_token_wait_starts_the_cooldown(world):
     """Найдено на странице до клиента (ревью S2): следующее чтение — отказ без вызовов."""
-    for state, code, word in (({"kind": "checkpoint", "has_token": False}, "", "checkpoint"),
-                              ({"kind": "login", "has_token": False}, "profile_logged_out", "logged out")):
+    from src.fb_api import account_blocks
+    for state, code, word in (({"kind": "checkpoint", "has_token": False}, "account_blocked", "checkpoint"),
+                              ({"kind": "login", "has_token": False}, "account_blocked", "logged out")):
         api._COOLDOWN.clear()
+        account_blocks.clear(sp._profile_key(ACCOUNT), "test")
         world.page.state_value = state
         first = api.read_via_api(ACCOUNT, D, D)
         assert first.state == "failed"
-        assert api._cooldown_left(sp._profile_key(ACCOUNT)) > 0, word
+        assert account_blocks.is_held(sp._profile_key(ACCOUNT)), word   # ACL-2091: a hold, no timer
         tabs = world.cdp.sent.count(("Target.createTarget", {"url": "about:blank"}, ""))
         opened = len(world.opened_profiles)
         second = api.read_via_api(ACCOUNT, D, D)

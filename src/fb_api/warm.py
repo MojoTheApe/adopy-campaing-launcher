@@ -54,7 +54,8 @@ from typing import Any, Callable
 
 from src.fb_api import profile as _fb_profile
 from src.fb_api import stop_log as _stop_log
-from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageFailed, PageUnresponsive
+from src.fb_api.graph import (Checkpoint, GraphStop, LoggedOut, PageFailed, PageUnresponsive,
+                              classify_stop_url)
 from src.fb_api.telemetry import scrub
 
 # Upper limit of the connection preparation. It was 45 s: on a loaded machine (a profile takes 2-3 minutes to start)
@@ -288,9 +289,11 @@ def _url_stop(url: str) -> GraphStop | None:
         path = urllib.parse.urlsplit(url or "").path.lower()
     except ValueError:
         return None
-    if path.startswith(("/login", "/recover")):
-        return LoggedOut("the profile is logged out of Facebook; log in inside Multilogin, then retry")
-    if "/checkpoint" in path or "two_step" in path or "two_factor" in path:
+    where = classify_stop_url(path)
+    if where == "login":
+        return LoggedOut("the profile is logged out of Facebook; log in inside Multilogin, then retry",
+                         page_seen=True)
+    if where == "checkpoint":
         return Checkpoint("the profile is on a Facebook checkpoint")
     return None
 
@@ -1548,7 +1551,7 @@ class WarmRegistry:
             raise Checkpoint("the profile is on a Facebook checkpoint")
         if kind == "login":
             self._note_login_stop(sess)
-            raise LoggedOut("the profile is logged out of Facebook")
+            raise LoggedOut("the profile is logged out of Facebook", page_seen=True)
         if not state.get("has_token"):
             self._drop_tab(sess)
             raise PageFailed("Ads Manager did not finish loading (no Graph session in the page); "
