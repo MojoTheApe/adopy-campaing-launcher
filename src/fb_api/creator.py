@@ -1581,6 +1581,15 @@ class _AliveUnknown(Exception):
         self.campaign_id = campaign_id
 
 
+class _SwitchCopy(Exception):
+    """ACL-2583: the journal's operation already wrote (or may have written) the campaign under copy name `n`, but the
+    name choice lags behind Meta's search and picked a lower counter. The run continues under copy `n`."""
+
+    def __init__(self, copy_number: int) -> None:
+        super().__init__("switch copy")
+        self.copy_number = copy_number
+
+
 class _CampaignRewrite(Exception):
     """ACL-2583: the campaign write's result stayed unknown and the readbacks found nothing. The name search is exactly
     what lags behind Meta, so the caller must not write the campaign again under the SAME name."""
@@ -2081,6 +2090,14 @@ class CampaignCreator:
             op = self.journal.open(plan.act, requested_tag, fp, str(view.get("name") or plan.name),
                                    request_id=self.request_key)
             camp = op.campaign_id()
+            # ACL-2583: a name this operation itself recorded (campaign stage while unresolved, else the published
+            # name) is never a buyer rename and never goes back to a lower counter: continue under that copy plan.
+            cst0 = op.stage("campaign") or {}
+            rec_name = (str(cst0.get("name") or "") if cst0.get("state") in (_oj.SENT, _oj.UNKNOWN)
+                        else op.published_name) or ""
+            rec_n = name_copy_number(rec_name, str(view.get("name") or ""))
+            if rec_n > plan_copy_number(plan, view) and (camp or cst0.get("state") in (_oj.SENT, _oj.UNKNOWN)):
+                raise _SwitchCopy(rec_n)
             same_name = not op.published_name or op.published_name == plan.name
             if camp and (not same_name or camp != existing_id):
                 if same_name:
@@ -4494,20 +4511,31 @@ class CampaignCreator:
         self._save_name_receipt(out, requested, choice)
         # ACL-1856: журнал по итоговому плану (имя уже выбрано) и сверка прошлых этапов - до первой записи.
         existing_id = str(choice.existing["id"]) if choice.existing else ""
-        try:
-            adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
-        except _AliveUnknown as unsure:
-            # ACL-2583 (owner decision): the earlier campaign of the journal cannot be read even after the retries.
-            # No stop: a new operation under a copy name that differs from the earlier one (never the same name).
-            n = max(choice.copy_number, unsure.copy_number) + 1
-            plan = copy_plan(base_plan, n)
-            self._check_name_length(plan)
-            choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
-            out.published_as, out.copy_number, existing_id = plan.name, n, ""
-            self._check_planned(plan, targetings, choice.found_sets)
-            self._save_name_receipt(out, requested, choice)
-            out.warnings.append(MSG_CONTINUED_AS_COPY.format(name=plan.name))
-            adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id="")
+        for _attempt in range(4):
+            try:
+                adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+                break
+            except (_SwitchCopy, _AliveUnknown) as sw:
+                if isinstance(sw, _SwitchCopy):
+                    # ACL-2583: the operation already wrote (or may have written) the campaign under a higher copy
+                    # name than the lagging name choice: switch the rest of the run to that copy plan (labels,
+                    # names, receipt), never back to the base name.
+                    n = sw.copy_number
+                else:
+                    # ACL-2583 (owner decision): the earlier campaign of the journal cannot be read even after the
+                    # retries. No stop: a new operation under a copy name that differs from the earlier one.
+                    n = max(choice.copy_number, sw.copy_number) + 1
+                plan = copy_plan(base_plan, n)
+                self._check_name_length(plan)
+                choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+                out.published_as, out.copy_number, existing_id = plan.name, n, ""
+                self._check_planned(plan, targetings, choice.found_sets)
+                self._save_name_receipt(out, requested, choice)
+                if isinstance(sw, _AliveUnknown):
+                    out.warnings.append(MSG_CONTINUED_AS_COPY.format(name=plan.name))
+        else:
+            raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name), created=out.created,
+                                  kind="unknown")
         if adopt and not existing_id:
             # The name search missed our live campaign: resume into it, never create a second one (ACL-1856).
             found_sets, _partial, why = self._resume_state(plan, targetings, adopt)

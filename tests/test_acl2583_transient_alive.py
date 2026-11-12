@@ -335,3 +335,54 @@ def test_set_published_does_not_lower_the_counter_of_an_unresolved_campaign_stag
     monkeypatch.setattr(cr.CampaignCreator, "_journaled", spy)
     _rerun(meta, journal, clock, tmp_path)
     assert seen and seen[0] >= 1, seen       # the counter was not reset to 0 by the name choice
+
+
+_REAL_FIND = cr.CampaignCreator._find_campaign
+
+
+def _lag_except_copy1(mp, find_copy1):
+    """Search lags behind Meta; only the recorded-name readback of `... copy 1` sees its campaign."""
+    real_find = _REAL_FIND
+    mp.setattr(cr.CampaignCreator, "_campaign_rows", lambda self, act, name: [])
+    mp.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+
+    def find(self, plan, after_unknown=False):
+        if find_copy1 and plan.name.endswith(" copy 1"):
+            return real_find(self, plan, after_unknown=after_unknown)
+        return None
+    mp.setattr(cr.CampaignCreator, "_find_campaign", find)
+
+
+def _two_lost_then_readback_sees_copy1(tmp_path, journal, clock, monkeypatch):
+    meta = Crashy()
+    _lag_except_copy1(monkeypatch, False)
+    meta.fail_next["campaigns"] = "lost"
+    _go(meta, _draft(tmp_path, ads=1), journal)
+    meta.fail_next["campaigns"] = "lost"
+    _rerun(meta, journal, clock, tmp_path)
+    _lag_except_copy1(monkeypatch, True)
+    return meta
+
+
+def test_readback_adopting_the_recorded_copy_continues_as_that_copy(tmp_path, journal, clock, monkeypatch):
+    """Run 3: name choice lags (X), the readback of the recorded `X copy 1` finds it: no false label_missing, the
+    rest of the run (plan, label, published name) is the copy."""
+    meta = _two_lost_then_readback_sees_copy1(tmp_path, journal, clock, monkeypatch)
+    third = _rerun(meta, journal, clock, tmp_path)
+    assert third.stop_kind != "label_missing", third.error
+    assert third.published_as.endswith(" copy 1") and third.copy_number == 1
+    names = _campaign_names(meta)
+    assert len(names) == len(set(names)), names
+    assert not any(n.endswith(" copy 2") for n in names), names
+
+
+def test_lagging_search_after_adopting_the_copy_never_writes_the_same_name_again(tmp_path, journal, clock, monkeypatch):
+    """Run 4 with the search still lagging: the operation resumes into `X copy 1`, it is not 'renamed by the buyer'."""
+    meta = _two_lost_then_readback_sees_copy1(tmp_path, journal, clock, monkeypatch)
+    _rerun(meta, journal, clock, tmp_path)
+    fourth = _rerun(meta, journal, clock, tmp_path)
+    names = _campaign_names(meta)
+    assert len(names) == len(set(names)), names
+    assert fourth.published_as.endswith(" copy 1"), fourth.published_as
+    assert cr.MSG_SUPERSEDED_RENAMED not in fourth.warnings
+    assert len(names) == 2, names
