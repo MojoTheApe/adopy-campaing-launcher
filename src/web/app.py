@@ -49,7 +49,8 @@ from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.preview import preview_campaign_drafts
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.fb_api.connection import user_started_action
-from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
+from src.web.publish_jobs import (DuplicateJobError, get_job, job_review_refused, known_request_job, request_guard,
+                                 start_job, cancel_job)
 from src.web.cache import (
     background_build_state,
     background_progress_callback,
@@ -6589,12 +6590,25 @@ async def preview_publish(request: Request) -> JSONResponse:
             return preview_campaign_drafts(drafts)
         return preview_jobs(slots, account_label=account_label, country=country)
 
+    def review_for() -> dict[str, str]:
+        # ACL-2353: отпечаток каждой кампании (те же черновики, что получит задание). Только при Graph API.
+        from src.web import publish_api, publish_review
+
+        if not publish_api.api_enabled():
+            return {}
+        return publish_review.fingerprints(
+            publish_api.build_drafts(slots, account_label=account_label, country=country))
+
     try:
         # ACL-1399: превью тянет библиотеки и книгу — в потоке, не в цикле.
         plan = await asyncio.to_thread(plan_for)
+        review = await asyncio.to_thread(review_for)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse({"plan": plan, "account": account_label, "country": country})
+    body: dict[str, Any] = {"plan": plan, "account": account_label, "country": country}
+    if review:
+        body["review"] = review
+    return JSONResponse(body)
 
 
 @app.post("/publish-jobs")
@@ -6631,10 +6645,48 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     if skipped is not None:
         body = json.loads(skipped.body)
         return JSONResponse({"error": body["error"], "code": body["code"], "skipped": True}, status_code=409)
+    # ACL-2353: снимок ревью. Поле бывает только у Graph API; у RPA - отказ, ничего не создаётся.
+    from src.web import publish_api as _pa, publish_review as _pr
 
-    def launch() -> tuple[str, int]:
+    review_raw = (form.get("review_json") or "").strip()
+    review: dict[str, Any] | None = None
+    if review_raw:
+        if not _pa.api_enabled():
+            return JSONResponse({"error": "A review snapshot is only accepted by the Graph API backend. "
+                                          "Nothing was created."}, status_code=409)
+        try:
+            review = _pr.parse_review_json(review_raw)
+        except _pr.ReviewBad as exc:
+            return JSONResponse({"error": f"{exc}. Nothing was created."}, status_code=400)
+
+    def launch() -> tuple[str, int, list[dict[str, Any]]]:
+        # ACL-2562: lookup, review check, job start and review.confirmed are one step per request key, so two
+        # near-simultaneous first sends with one key create one job and log once; the second is a resend.
+        with request_guard(request_id):
+            return _launch_locked()
+
+    def _launch_locked() -> tuple[str, int, list[dict[str, Any]]]:
         # Черновики собираются из библиотек и книги — не в цикле событий:
         # иначе запуск публикации ждал бы (и держал бы) весь сервер.
+        frozen: list[Any] | None = None
+        refused: list[dict[str, Any]] = []
+        # A resend with the same request key returns the existing job first (ACL-1399, spec 5.5.1): no new
+        # drafts, no review check against a changed library, no second review.confirmed. ACL-2562: the answer
+        # carries the refused rows of the first request, so the screen is the same as after the first answer.
+        again = known_request_job(request_id)
+        if again:
+            return again, int((get_job(again) or {}).get("total") or len(slots)), job_review_refused(again)
+        if review is not None:
+            # Один раз строим черновики и сверяем отпечатки; дальше задание работает с ЭТИМИ черновиками (D4, D5).
+            from src.acl_event_log.events import review_refused_payload
+
+            drafts = _pa.build_drafts(slots, account_label=account_label, country=country)
+            frozen, changed = _pr.check_submit(drafts, review)
+            if changed:
+                _log_review_event("review.refused", review_refused_payload("submit", changed), account_label)
+                refused = [{"name": n, "code": _pr.CODE_STALE} for n in changed]
+            if not frozen:
+                raise _pr.ReviewStale(changed)
         job_id = start_job(
             account_label,
             country,
@@ -6645,21 +6697,65 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
             # The server owns this safety decision; a client cannot opt out.
             hand_off=True,
             request_id=request_id,
+            reviewed=review,
+            frozen_drafts=frozen,
+            review_refused=refused,
         )
+        if review is not None and frozen is not None:
+            from src.acl_event_log.events import review_confirmed_payload
+
+            _log_review_event("review.confirmed", review_confirmed_payload(review, _pr.fingerprints(frozen)),
+                              account_label, job_id=job_id)
         # Сколько кампаний — из самого задания: start_job уже собрал черновики
         # (ревью PR #408, R8 — второй сборки не нужно).
         job = get_job(job_id) or {}
-        return job_id, int(job.get("total") or len(slots))
+        return job_id, int(job.get("total") or len(slots)), refused
 
     try:
-        job_id, total = await asyncio.to_thread(launch)
+        job_id, total, refused_rows = await asyncio.to_thread(launch)
+    except _pr.ReviewStale as exc:
+        return JSONResponse({"error": _pr.stale_text(exc.changed), "code": exc.code, "changed": exc.changed},
+                            status_code=409)
     except DuplicateJobError as exc:
         # ACL-1603: у аккаунта уже есть идущее или ждущее задание — второго нет.
         return JSONResponse({"error": str(exc), "duplicate": True, "account": exc.account_label,
                              "job_id": exc.job_id}, status_code=409)
     except (RuntimeError, ValueError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
-    return JSONResponse({"job_id": job_id, "total": total})
+    answer: dict[str, Any] = {"job_id": job_id, "total": total}
+    if refused_rows:
+        answer["refused"] = refused_rows
+        answer["refused_text"] = _pr.stale_text([r["name"] for r in refused_rows])
+    return JSONResponse(answer)
+
+
+def _log_review_event(name: str, payload: dict[str, Any], account: str, *, job_id: str | None = None) -> None:
+    """ACL-2353: событие ревью в общий журнал; сбой журнала ход запроса не меняет."""
+    try:
+        from src.acl_event_log import emit
+
+        emit(name, payload, job_id=job_id, account=account or None)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@app.post("/api/publish-review/event")
+async def publish_review_event(request: Request) -> JSONResponse:
+    """ACL-2353: страница сообщает, что окно ревью открыли или закрыли. Только два имени, только счётчики."""
+    from src.acl_event_log.events import review_ui_payload
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    name = str(raw.get("event") or "")
+    payload = review_ui_payload(name, raw)
+    if payload is None:
+        return JSONResponse({"ok": False}, status_code=400)
+    _log_review_event(name, payload, "")
+    return JSONResponse({"ok": True})
 
 
 @app.post("/publish-plan")
@@ -6926,6 +7022,17 @@ async def warm_open(request: Request) -> JSONResponse:
 
     body = await _campaign_commands_body(request)
     data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"), body.get("confirm_reopen") is True)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/warm/ensure")
+async def warm_ensure(request: Request) -> JSONResponse:
+    """ACL-2268: queue the automatic start of ONE account's profile (a person's add/duplicate/edit in the Builder)."""
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.ensure_open, body.get("accounts"), body.get("trigger"),
+                                         body.get("campaigns"))
     return JSONResponse(data, status_code=code)
 
 

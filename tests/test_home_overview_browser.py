@@ -298,6 +298,34 @@ def test_account_cell_shows_act_id_state_tip_and_no_empty_strip(open_page, amap)
     assert h[0] == "0px" and h[1] < 4, h
 
 
+def test_state_cell_shows_whole_status_line_in_both_views(open_page, amap):
+    """ACL-2511: date, reason and not-refreshed suffix are readable in the State column (no clipping); tile titles carry the line."""
+    long_line = "disabled · 10.11 10:00 · ads integrity policy violation · not refreshed"
+    rows = [r for mc in amap["countries"] for r in mc["rows_aov"]]
+    target = next(r for r in rows if r["state"]["key"] == "dead")
+    target["state"]["status_line"] = long_line
+    pg = open_page()
+    row = pg.locator("#aov-expanded tr.aov-row", has_text=target["account"]).first
+    line = row.locator(".aov-stline")
+    assert line.inner_text() == long_line
+    assert line.get_attribute("title") == long_line
+    assert pg.evaluate("(e) => getComputedStyle(e).whiteSpace", line.element_handle()) == "normal"
+    # nothing is cut: the text fits the cell horizontally and the cell grows to hold every wrapped line
+    assert pg.evaluate(
+        "(e) => { const td = e.closest('td'); const a = e.getBoundingClientRect(), b = td.getBoundingClientRect();"
+        " return e.scrollWidth <= e.clientWidth + 1 && a.right <= b.right + 1 && a.bottom <= b.bottom + 1 && td.scrollHeight <= td.clientHeight + 1; }",
+        line.element_handle())
+    # every State line in the expanded view is fully inside its cell
+    clipped = pg.evaluate(
+        "[...document.querySelectorAll('#aov-expanded .aov-stline')].filter(e => { const td = e.closest('td');"
+        " return td.getBoundingClientRect().width > 0 && (e.scrollWidth > e.clientWidth + 1 || td.scrollHeight > td.clientHeight + 1); }).length")
+    assert clipped == 0
+    pg.click("[data-aov-view=compact]")
+    title = pg.evaluate("(n) => [...document.querySelectorAll('#aov-compact .aov-tile')].find(t => t.dataset.name === n).title", target["account"])
+    assert long_line in title
+    assert not pg.errors
+
+
 def test_active_by_spend_row_with_failed_read_shows_active_and_agreeing_line(monkeypatch, tmp_path):
     """ACL-2556: spend + failed status read -> Active badge with 'not refreshed' line; never 'unknown'."""
     from src.web import app as web

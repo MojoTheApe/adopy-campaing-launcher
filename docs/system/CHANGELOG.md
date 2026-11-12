@@ -1,5 +1,37 @@
 # System history
 
+## ACL-2562 — Publish retry keeps the refused campaigns of the first request — 2026-11-12
+
+A resend of Publish after a lost answer (ACL-1399 Retry, same request key) now returns the campaigns that the review refused at the first request, with the same reasons. The builder shows the "Not created" line for them, keeps their tick and gives them no build dot, exactly as after the first answer.
+
+- The refused rows are stored on the job when it is created and returned unchanged by `/publish-jobs` on a resend.
+- Lookup of the request key, review check, job start and the `review.confirmed` event now run as one step per key: two near-simultaneous first sends create one job and log `review.confirmed` once. Different keys do not wait for each other.
+- What gets created on Meta is unchanged; no new Meta calls.
+
+Needs a dashboard restart (Python changed). [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1562).
+
+## ACL-2511 — Home State column shows the whole status line — 2026-11-11
+
+The State column on Home no longer clips the read date and the reason / "not refreshed" text: the status line wraps inside the cell and also carries the full text as a tooltip. Compact tile tooltips include the status line too. API mapping, heavier-status fallback and Open refresh are unchanged. Browser test covers both views.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1511).
+
+## ACL-2268 — Builder brings the account profile up on first work — 2026-11-11
+
+When a person adds or duplicates a campaign, or edits one, in the Builder, the account's Multilogin profile can now start by itself (`POST /warm/ensure`, `warm_auto.js`). Off by default: the connection setting `auto_warm` is false until switched on. It opens through the same `prepare_existing` path as Check plan and Publish in a quiet mode: it never waits for memory or a slot, never evicts another window, never restarts a hand-opened window, and refuses quietly when a run is queued, the profile ceiling is reached, memory or CPU is high, the profile is busy, or Meta paused the account. One attempt per physical profile per 30 minutes (kept on disk, every outcome uses it); a failed start is never retried. No page-load trigger, no polling of Meta, no button; the reason of a refusal is in the account chip tooltip.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1268).
+
+## ACL-2353 — Before create review: summary, warnings, frozen snapshot — 2026-11-07
+
+The confirmation window of Publish (ACL-2118) is now the review of what will be created, under the Graph API backend only. The RPA road and its popup are unchanged.
+
+- Each campaign expands to its ad sets and ads (audience, age, languages, placements, Page, texts, headline, button, link or form, Feed and Stories / Reels files). Values that only the local preview knows are marked "not checked with Meta"; currency, Page and pixel are never guessed. One budget total per currency; a lifetime budget is shown as "lifetime" and totalled apart from the daily one. The Page, the manual-Page notice and the Instant Form note are shown; cards with one name count as one campaign.
+- Anything that is required and missing blocks that campaign only, not the account or the batch: it is listed under "Will not be created (N)", left out of the request, and stays in the builder with its audit line. Warnings are listed under "Warnings (N): they do not block". A failed Check allows Confirm, with a "Could not check with Meta" row and "Check again".
+- The request is frozen on Confirm: the browser sends the reviewed form snapshot as it is (no second preview), together with a per-campaign fingerprint (`review_json`). The server builds the drafts once, compares the fingerprints and runs the job on those drafts, so a later edit of the form, a library text or the account map does not change the batch. A campaign that changed after the review is refused alone ("Review again"); the others go on. A Page or pixel that differs from the reviewed one stops that campaign before the first write.
+- A resend with the same request key (ACL-1399 Retry) returns the existing job before any review check. While the review is being prepared the Publish button shows "Checking before publishing…"; "Checked with Meta N min ago" is the age of the verdict. Campaigns refused after the review keep their tick and get no build dot.
+- New: `src/web/publish_review.py`, `POST /api/publish-review/event` (counters only), `review_fp` on Check rows, `reviewed` on the job and in the publish history.
+
+Needs a dashboard restart (Python changed). [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1353).
+
 ## ACL-2565 — Tests: vault tests no longer leak ACL_LIBRARY_TOKEN — 2026-11-12
 
 The shared `machine` fixture in `tests/test_token_vault.py` now restores `os.environ` after each test, so
