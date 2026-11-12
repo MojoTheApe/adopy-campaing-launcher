@@ -36,8 +36,16 @@ class El {
   querySelector(sel) { return this.all(sel.replace('.', ''))[0] || null; }
   get options() { return this.kids.filter((k) => k.tag === 'option'); }
 }
-// A select takes a value only if it has such an option, as a browser does.
-const realValue = Object.getOwnPropertyDescriptor(El.prototype, 'value');
+// A select takes a value only if it has such an option, as a browser does: any other value reads back as ''.
+// (A select without option elements, such as the question-type one here, is a plain field.)
+Object.defineProperty(El.prototype, 'value', {
+  get() {
+    if (this.tag !== 'select' || !this.options.length) return this._v === undefined ? '' : this._v;
+    const o = this.options.find((x) => x._v === this._chosen);
+    return o ? o._v : '';
+  },
+  set(v) { this._v = String(v); this._chosen = String(v); },
+  configurable: true });
 const mk = (tag, cls, props) => { const e = new El(tag); e.className = cls || ''; Object.assign(e, props || {}); return e; };
 
 const layoutCode = slice('window.cbLayout = (function () {', '\n})();') + '\n})();';
@@ -125,6 +133,26 @@ assert.equal(sels(0).find((s) => s.getAttribute('data-answer') === 'Yes').value,
 choose(0, 'Yes', 'q2');
 W.cbFormQuestionRemove(mk('button', '', { parent: list.kids[1] }));
 assert.equal(sels(0).find((s) => s.getAttribute('data-answer') === 'Yes').value, '', 'a jump to a removed question survived');
+
+// 6b. ACL-2178 review: a jump to the question right after the removed one survives in a question below it.
+// Q1 MC, Q2 short, Q3 MC [A, B] with "A" -> question 4, Q4 short; remove Q1: Q3 becomes Q2 and "A" must be q3.
+while (list.kids.length) list.kids[0].remove();
+list.appendChild(question('Q1', 'multiple_choice', ['Yes', 'No']));
+list.appendChild(question('Q2', 'short_answer'));
+list.appendChild(question('Q3', 'multiple_choice', ['A', 'B']));
+list.appendChild(question('Q4', 'short_answer'));
+W.cbFormLogicRefresh(panel);
+choose(2, 'A', 'q4');
+assert.equal(sels(2).find((s) => s.getAttribute('data-answer') === 'A').value, 'q4');
+W.cbFormQuestionRemove(mk('button', '', { parent: list.kids[0] }));
+assert.equal(list.kids.length, 3);
+assert.deepEqual(sels(1).map((s) => [s.getAttribute('data-answer'), s.value]), [['A', 'q3'], ['B', '']]);
+// Put the panel back for the checks below.
+while (list.kids.length) list.kids[0].remove();
+list.appendChild(question('Budget', 'multiple_choice', ['Yes', 'No']));
+list.appendChild(question('Phone model', 'short_answer'));
+W.cbFormLogicRefresh(panel);
+choose(0, 'Yes', 'q2'); choose(0, 'No', 'close');
 
 // 7. Turning it off asks first when something is set; "no" keeps it on, "yes" sends plain questions.
 W.confirmAnswer = false; on.checked = false; W.cbFormLogicToggle(on);

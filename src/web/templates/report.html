@@ -18263,7 +18263,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   function panelAnswers(q) {
     return String(panelValue(q, '.cb-fc-q-options')).split('\n').map(function (o) { return o.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
   }
-  window.cbFormLogicRefresh = function (el) {
+  window.cbFormLogicRefresh = function (el, remap) {
     var panel = el.closest ? el.closest('.cb-form-create') : el;
     if (!panel) return;
     var on = panelLogicOn(panel), qs = panelQuestions(panel);
@@ -18273,7 +18273,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var box = q.querySelector('.cb-fc-q-logic'), after = q.querySelector('.cb-fc-q-after-box');
       var multi = panelValue(q, '.cb-fc-q-type') === 'multiple_choice';
       var kept = {};
-      Array.prototype.slice.call(box.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) { kept[sel.getAttribute('data-answer')] = sel.value; });
+      Array.prototype.slice.call(box.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) { kept[sel.getAttribute('data-answer')] = remap ? remap(sel.value) : sel.value; });
       box.textContent = '';
       after.hidden = !on;
       box.hidden = !(on && multi);
@@ -18324,16 +18324,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var at = panel ? panelQuestions(panel).indexOf(q) : -1;
     q.remove();
     if (panel && at >= 0) {
-      // Jumps to the removed question are cleared (chosen again); later targets move up by one.
-      panelQuestions(panel).forEach(function (other) {
-        Array.prototype.slice.call(other.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) {
-          var m = /^q([0-9]+)$/.exec(sel.value);
-          if (!m) return;
-          var n = Number(m[1]) - 1;
-          if (n === at) sel.value = ''; else if (n > at) sel.value = 'q' + n;
-        });
+      // Jumps to the removed question are cleared (chosen again); later targets move up by one. The new targets
+      // go into the refresh's kept map: an old select does not have the option list of its new position.
+      window.cbFormLogicRefresh(panel, function (v) {
+        var m = /^q([0-9]+)$/.exec(v);
+        if (!m) return v;
+        var n = Number(m[1]) - 1;
+        if (n === at) return '';
+        return n > at ? 'q' + n : v;
       });
-      window.cbFormLogicRefresh(panel);
     }
   };
   window.cbFormQuestionAdd = function (btn) {
