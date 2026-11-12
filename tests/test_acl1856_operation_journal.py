@@ -673,16 +673,58 @@ def test_a_campaign_renamed_in_ads_manager_is_taken_over_and_never_asks_to_wait(
     assert list(journal.root.glob("*.superseded"))                      # the old record was set aside
 
 
-def test_a_campaign_the_name_search_still_does_not_list_after_the_lag_window_is_a_new_operation(
+def test_a_live_campaign_the_name_search_misses_after_the_lag_window_is_resumed_not_duplicated(
         tmp_path, journal, clock, monkeypatch):
+    # Reviewer probe (round 3): name search empty, clock +11 min, publish -> exactly one live campaign.
     meta, first = _partial(tmp_path, journal)
     nr.delete(ACT, "MX Leads 1")
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
     clock.t += oj.NOT_LISTED_LAG_S + 60
     out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "", out.error
     assert "does not list it yet" not in (out.error or "")
-    assert out.error == "" and out.campaign_id and out.campaign_id != first.campaign_id
+    assert out.campaign_id == first.operation["partial_ids"]["campaign"]
+    assert _count(meta, "campaign") == 1 and _count(meta, "ad") == 2
+    assert not list(journal.root.glob("*.superseded"))
+    assert not any("no longer in Ads Manager" in w for w in out.warnings)
+    _assert_safe(meta)
+
+
+@pytest.mark.parametrize("status", ["DELETED", "ARCHIVED"])
+def test_a_campaign_really_gone_after_the_lag_window_is_a_new_operation(tmp_path, journal, clock, monkeypatch, status):
+    meta, first = _partial(tmp_path, journal)
+    camp = _by_kind(meta, "campaign")
+    camp["status"] = status
+    camp["effective_status"] = status
+    nr.delete(ACT, "MX Leads 1")
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+    clock.t += oj.NOT_LISTED_LAG_S + 60
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "" and out.campaign_id and out.campaign_id != camp["id"]
     assert list(journal.root.glob("*.superseded"))
+    assert any("no longer in Ads Manager" in w for w in out.warnings)
+
+
+def test_a_campaign_whose_read_by_id_fails_after_the_lag_window_is_a_new_operation(tmp_path, journal, clock,
+                                                                                 monkeypatch):
+    meta, first = _partial(tmp_path, journal)
+    old_id = _by_kind(meta, "campaign")["id"]
+    del meta.objects[old_id]
+    nr.delete(ACT, "MX Leads 1")
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+    clock.t += oj.NOT_LISTED_LAG_S + 60
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "" and out.campaign_id and out.campaign_id != old_id
+    assert list(journal.root.glob("*.superseded"))
+
+
+def test_a_renamed_campaign_warning_says_renamed_not_gone(tmp_path, journal, clock):
+    meta, _first = _partial(tmp_path, journal)
+    _by_kind(meta, "campaign")["name"] = "Renamed by hand"
+    clock.t += 3600
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert any("renamed in Ads Manager" in w for w in out.warnings)
+    assert not any("no longer in Ads Manager" in w for w in out.warnings)
 
 
 def test_next_action_says_publish_again_once_the_hold_of_a_sent_stage_has_passed(journal, clock):

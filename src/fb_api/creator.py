@@ -1618,6 +1618,8 @@ MSG_NOT_LISTED = ('"{name}" was created earlier but Ads Manager does not list it
                   "Wait a few minutes, then publish again. Nothing was created.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
                   "is no longer in Ads Manager; this is a new publish.")
+MSG_SUPERSEDED_RENAMED = ("The earlier campaign was renamed in Ads Manager and is left as it is; "
+                          "a new campaign is created for this publish.")
 #: Вид объекта по ребру записи (для журнала).
 _EDGE_KIND = {"campaigns": "campaign", "adsets": "adset", "ads": "ad", "adcreatives": "creative",
               "adimages": "image", "advideos": "video"}
@@ -1924,16 +1926,20 @@ class CampaignCreator:
         return (not gone), str(row.get("name") or "")
 
     def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict, *,
-                        submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> None:
+                        submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> str:
         """Open the journal before the first write of the run.
 
         The identity is the plan AS SUBMITTED (`submitted` = its view and tag, taken before name choice and any start
         move) plus the draft slot, so it does not depend on what Meta holds or on the clock. The name chosen for this
         run (`plan`, after the ACL-2250 choice) is kept in the record. An earlier record whose campaign is gone from
-        Ads Manager, or that published under another name, is set aside and a NEW operation starts.
+        Ads Manager (the read by id fails, or DELETED/ARCHIVED), or that published under another name, is set aside and a
+        NEW operation starts. "Gone" is decided ONLY by that read by id, never by the name search missing the campaign.
+        Returns the id of a live campaign with the recorded name that the name search did not list: the caller
+        resumes into it (`_verify_resume` checks it) instead of creating a second one; otherwise "".
         """
         if self.journal is None:
-            return
+            return ""
+        adopt = ""
         view, requested_tag = submitted if submitted is not None else (self._plan_view(plan), plan.tag)
         md5s: dict[str, list[str]] = {}
         for s_ in plan.ad_sets:
@@ -1959,9 +1965,12 @@ class CampaignCreator:
                         self._snapshot_operation_of(op, out)
                         raise CreationStopped(MSG_NOT_LISTED.format(name=plan.name), created=out.created,
                                               kind="resume_mismatch")
-                op = self.journal.supersede(op, request_id=self.request_key)
-                if same_name:
-                    op.warnings.append(MSG_SUPERSEDED)
+                    if alive and (not live_name or live_name == op.published_name):
+                        adopt = camp         # alive with the recorded name, only the name search misses it: resume
+                if not adopt:
+                    op = self.journal.supersede(op, request_id=self.request_key)
+                    if same_name:
+                        op.warnings.append(MSG_SUPERSEDED if not alive else MSG_SUPERSEDED_RENAMED)
             op.set_published(plan.name, plan_copy_number(plan, view))
         except _oj.RequestConflict as exc:
             raise CreationStopped(f"{exc} Nothing was created.", kind="request_conflict") from exc
@@ -1971,6 +1980,7 @@ class CampaignCreator:
         self._op = op
         out.warnings.extend(op.warnings)
         self._snapshot_operation(out)
+        return adopt
 
     @staticmethod
     def _snapshot_operation_of(op: "_oj.Operation", out: Outcome) -> None:
@@ -4264,7 +4274,16 @@ class CampaignCreator:
         self._save_name_receipt(out, requested, choice)
         # ACL-1856: журнал по итоговому плану (имя уже выбрано) и сверка прошлых этапов - до первой записи.
         existing_id = str(choice.existing["id"]) if choice.existing else ""
-        self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+        adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+        if adopt and not existing_id:
+            # The name search missed our live campaign: resume into it, never create a second one (ACL-1856).
+            found_sets, _partial, why = self._resume_state(plan, targetings, adopt)
+            if why:
+                self._snapshot_operation(out)
+                raise CreationStopped(MSG_MISMATCH.format(name=plan.name), created=out.created,
+                                      kind="resume_mismatch")
+            choice = NameChoice(plan, {"id": adopt, "name": plan.name}, found_sets, choice.copy_number)
+            existing_id = adopt
         self._verify_resume(plan, out, existing_id)
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
