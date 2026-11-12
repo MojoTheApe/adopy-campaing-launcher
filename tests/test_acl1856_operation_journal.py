@@ -656,12 +656,15 @@ def test_republish_after_the_campaign_was_deleted_in_meta_starts_a_new_operation
     assert second.error == "", second.error
     assert second.campaign_id and second.campaign_id != gone and len(meta.posts) > posts
     assert second.operation["state"] == oj.OP_COMPLETE
-    assert any("set aside" in w for w in second.warnings)
-    assert len(list(journal.root.glob("op-*.superseded"))) == 1          # the earlier record is kept, not deleted
-    assert len(list(journal.root.glob("op-*.json"))) == 1
+    # ACL-2583 (Doc284): "does not exist" (100) for a campaign THIS draft recorded never frees its name - Meta says
+    # the same for a live campaign it cannot load. The new campaign continues as "<name> copy 1".
+    assert second.published_as.endswith(" copy 1")
+    assert any("copy" in w for w in second.warnings)
     _assert_safe(meta)
     third, _c = _go(meta, _draft(tmp_path, ads=2), journal)              # and a third publish is just as unblocked
     assert third.error == ""
+    names = [o["name"] for o in meta.objects.values() if o["_kind"] == "campaign"]
+    assert len(names) == len(set(names))
 
 
 def test_republish_after_a_partly_created_campaign_was_deleted(tmp_path, journal):

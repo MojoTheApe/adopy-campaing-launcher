@@ -121,13 +121,51 @@ def test_rate_limit_on_the_read_stays_a_stop_without_a_write(tmp_path, journal, 
     assert not list(journal.root.glob("op-*.superseded"))
 
 
-def test_does_not_exist_answer_starts_a_new_operation(tmp_path, journal, clock, monkeypatch):
+def test_does_not_exist_answer_never_frees_the_name(tmp_path, journal, clock, monkeypatch):
+    """Doc284: code 100 / subcode 33 for a left-over campaign of THIS draft (live or not) continues as "copy N"."""
     meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
+    base = meta.objects[camp]["name"]
     _delete_campaign_tree(meta, camp)                   # Meta answers code 100 / subcode 33 for the read by id
     out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
     assert out.error == "", out.error
     assert out.campaign_id != camp
-    assert len(list(journal.root.glob("op-*.superseded"))) == 1
+    assert out.published_as == base + " copy 1"
+    assert any("copy 1" in w for w in out.warnings)
+
+
+def test_doc284_live_campaign_answered_100_33_never_makes_two_of_one_name(tmp_path, journal, clock, monkeypatch):
+    """The probe sequence: the left-over campaign is still live, but the read by id answers 100/33."""
+    meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
+    base = meta.objects[camp]["name"]
+    real = meta._get
+
+    def get(path, params):
+        if path.strip("/") == camp:
+            return {"error": {"code": 100, "error_subcode": 33, "type": "GraphMethodException",
+                              "message": f"Unsupported get request. Object with ID '{camp}' does not exist, cannot be "
+                                         "loaded due to missing permissions, or does not support this operation"}}
+        return real(path, params)
+    monkeypatch.setattr(meta, "_get", get)
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "", out.error
+    assert out.published_as == base + " copy 1"
+    names = sorted(o["name"] for o in meta.objects.values() if o["_kind"] == "campaign")
+    assert names == [base, base + " copy 1"]
+
+
+def test_every_gone_or_unknown_decision_logs_graph_code_subcode_and_message(tmp_path, journal, clock, monkeypatch,
+                                                                            caplog):
+    meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
+    _delete_campaign_tree(meta, camp)
+    events = []
+    monkeypatch.setattr(cr.CampaignCreator, "_journal_event",
+                        staticmethod(lambda event, **diag: events.append((event, diag))))
+    with caplog.at_level("WARNING"):
+        _go(meta, _draft(tmp_path, ads=2), journal)
+    hits = [d for e, d in events if e == "campaign_read_decision"]
+    assert hits and all("graph_code" in d and "graph_message" in d for d in hits)
+    assert all(d["campaign"].startswith("…") for d in hits)        # ids are masked (last digits only)
+    assert any("campaign read decision" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.parametrize("status", ["DELETED", "ARCHIVED"])

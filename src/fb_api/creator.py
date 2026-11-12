@@ -53,6 +53,7 @@ from src.fb_api import image_convert as _imgconv
 from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
+from src.fb_api.telemetry import mask_id as _mask_id
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
@@ -2055,14 +2056,26 @@ class CampaignCreator:
         try:
             row = self._get_retrying(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
         except GraphError as exc:
-            if _object_gone(exc):
-                return False, ""                 # Meta says it does not exist: gone
+            # ACL-2583 (Doc284): "does not exist / missing permissions" (100/33) is also what Meta answers for a live
+            # campaign it cannot load right now. For a campaign THIS draft recorded it never frees the name: unknown.
+            self._log_read_decision("alive_unknown", campaign_id, exc)
             return None, ""
         if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
             return None, ""
         gone = ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
                 & {"DELETED", "ARCHIVED"})
+        if gone:
+            self._log_read_decision("gone_read", campaign_id, None, status=",".join(sorted(gone)))
         return (not gone), str(row.get("name") or "")
+
+    def _log_read_decision(self, decision: str, campaign_id: str, exc: "GraphError | None", **extra: Any) -> None:
+        """ACL-2583: Graph code, subcode and message (ids masked) behind every gone/unknown decision about a campaign."""
+        diag: dict[str, Any] = {"decision": decision, "campaign": _mask_id(campaign_id), **extra}
+        if exc is not None:
+            diag.update(graph_code=exc.code, graph_subcode=exc.subcode,
+                        graph_message=str(exc).replace(campaign_id, _mask_id(campaign_id))[:300])
+        log.warning("campaign read decision: %s", json.dumps(diag, ensure_ascii=False, default=str))
+        self._journal_event("campaign_read_decision", **diag)
 
     def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict, *,
                         submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> str:
@@ -2486,7 +2499,7 @@ class CampaignCreator:
                         ) -> tuple[NameChoice | None, tuple[int, dict, list[str]] | None]:
         """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
 
-        Возвращает (выбор, остаток). Нет кампании (id не существует), не живая, переименована - квитанция не
+        Возвращает (выбор, остаток). ACL-2583: «id не существует» (100/33) имя НЕ освобождает - как нет ответа. Не живая (прочитана DELETED/ARCHIVED), переименована - квитанция не
         используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
         ACL-2578: (1) чтение по id упало по другой причине (не «не существует») - 2-3 повтора за ~30 с; всё ещё без ответа -
         имя считается занятым (второй элемент без причин), идём новой кампанией со следующим `copy N`, не стоп; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
@@ -2505,8 +2518,10 @@ class CampaignCreator:
             try:
                 row = self._get_retrying(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
             except GraphError as exc:
-                if _object_gone(exc):
-                    return None, None
+                # ACL-2583 (Doc284): "does not exist" (100/33) does not free the name either: the receipt names a
+                # campaign this draft created, and Meta answers the same for a live one it cannot load. Only a row
+                # read with a non-live status (below) lets the base name go.
+                self._log_read_decision("receipt_unknown", campaign_id, exc)
                 # ACL-2578 / owner decision: Meta still does not answer after the retries. The earlier campaign may
                 # exist, so its name is held (never reused): the caller takes the next copy number, as a new campaign.
                 return None, (n, {"id": campaign_id, "name": cand.name}, None)
