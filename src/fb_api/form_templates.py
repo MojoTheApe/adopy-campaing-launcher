@@ -86,7 +86,7 @@ PHOTO_ID_RE = re.compile(r"^[0-9]{1,25}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 #: Ключи, которые `save` убирает из записи, когда редактор их не прислал (иначе Remove ничего не делает:
 #: `{**was, **out}` хранит старое значение).
-DROPPED_WHEN_EMPTY = ("cover_photo_id", "cover_page_id", "cover_sha256")
+DROPPED_WHEN_EMPTY = ("cover_photo_id", "cover_page_id", "cover_sha256", "cover_local_sha256")
 
 _lock = threading.RLock()
 
@@ -157,6 +157,18 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
                     errors.append("Background image checksum must be 64 hex characters")
         if not out["intro"]:
             errors.append("Background image needs a Description (Meta shows it on the intro screen)")
+    # ACL-2571: a picture kept on this computer and uploaded to each Page at publish. The library holds only
+    # its hash (never bytes). One picture per template: either a Page photo or the local one.
+    local_sha = _s(src.get("cover_local_sha256")).lower()
+    if local_sha:
+        if not SHA256_RE.match(local_sha):
+            errors.append("Background picture checksum must be 64 hex characters")
+        elif "cover_photo_id" in out:
+            errors.append("Choose either a Page photo or a picture from this computer for the background, not both")
+        else:
+            out["cover_local_sha256"] = local_sha
+            if not out["intro"]:
+                errors.append("Background image needs a Description (Meta shows it on the intro screen)")
 
     contacts = src.get("contact_fields")
     contacts = contacts if isinstance(contacts, (list, tuple)) else []
@@ -282,8 +294,12 @@ def expected_questions(tpl: dict[str, Any]) -> list[dict[str, Any]]:
     return custom + contacts if tpl.get("questions_first") else contacts + custom
 
 
-def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
-    """Тело `POST /{page}/leadgen_forms`: только то, что нужно шаблону. Без `tos_accepted`."""
+def form_params(tpl: dict[str, Any], cover_photo_id: str = "") -> dict[str, Any]:
+    """Тело `POST /{page}/leadgen_forms`: только то, что нужно шаблону. Без `tos_accepted`.
+
+    `cover_photo_id` (ACL-2571): the photo uploaded to THIS Page for a template with a local picture. The name
+    is taken from the template itself, so it is the same on every Page.
+    """
     if tpl.get("locale") == AUTO_LOCALE:
         raise ValueError("form locale Auto must be resolved from the ad set language and country before writing")
     params: dict[str, Any] = {
@@ -303,8 +319,8 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
     if tpl.get("intro"):
         params["context_card"] = {"title": tpl.get("intro_title") or tpl["headline"],
                                   "style": "PARAGRAPH_STYLE", "content": [tpl["intro"]]}
-        if tpl.get("cover_photo_id"):
-            params["context_card"]["cover_photo_id"] = tpl["cover_photo_id"]
+        if tpl.get("cover_photo_id") or cover_photo_id:
+            params["context_card"]["cover_photo_id"] = cover_photo_id or tpl["cover_photo_id"]
     if tpl.get("thank_you_text") or tpl.get("website_url"):
         thanks: dict[str, Any] = {"title": tpl["thank_you_title"]}
         if tpl.get("thank_you_text"):
@@ -521,7 +537,7 @@ def summary(tpl: dict[str, Any]) -> str:
     contacts = ", ".join(_CONTACT_LABEL[k] for k in tpl.get("contact_fields") or [] if k in _CONTACT_LABEL)
     n = len(tpl.get("questions") or [])
     text = f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
-    return text + (" · background image" if tpl.get("cover_photo_id") else "")
+    return text + (" · background image" if (tpl.get("cover_photo_id") or tpl.get("cover_local_sha256")) else "")
 
 
 def _revision(rec: Any) -> str:

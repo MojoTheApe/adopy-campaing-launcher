@@ -1,9 +1,11 @@
-"""ACL-2533 round 3: the background-image picker in a real browser (Chromium), Forms tab and builder panel.
+"""ACL-2533 / ACL-2571: the background-image picker in a real browser (Chromium), Forms tab and builder panel.
 
 Offline: every /api/* call is answered by the test; no Meta, no Multilogin, no profile.
-Covers what the node harness cannot: that the preview really decodes (a JPEG and a PNG), that with no
-file nothing is displayed, that the owner's sequence (file first, then Account, Refresh pages, Page)
-keeps the file, and that a Save never drops a chosen file silently.
+ACL-2571: the picture of a shared template is chosen WITHOUT an account or a Page, kept on this computer
+(`/api/form-templates/cover-file`) and uploaded to each Page only when a campaign is published. Covers what
+the node harness cannot: that the preview really decodes (a JPEG and a PNG), that with no file nothing is
+displayed, that a Save keeps the file first and never drops it silently, and that a stored picture missing on
+this computer says so.
 """
 from __future__ import annotations
 
@@ -60,8 +62,10 @@ class Api:
 
     def __init__(self):
         self.pages = PAGES
-        self.upload_reply = {"ok": True, "state": "uploaded", "photo_id": "777", "page_id": "123", "sha256": "a" * 64}
-        self.uploads: list[dict] = []
+        self.stage_reply = {"ok": True, "sha256": "a" * 64, "bytes": 100, "mime": "image/jpeg"}
+        self.stages = 0
+        self.meta_uploads: list[str] = []       # any request to the Meta-bound route (must stay empty)
+        self.stored: bytes | None = None        # what GET cover-file serves (None = 404, "on another computer")
         self.saves: list[dict] = []
 
     def handle(self, route):
@@ -70,10 +74,15 @@ class Api:
         if "/api/account-pages" in url:
             return route.fulfill(json={"ok": True, "state": "ready", "pages": self.pages})
         if "/api/form-photo-upload" in url:
-            body = req.post_data_buffer or b""
-            fields = dict(re.findall(rb'name="(account_label|page_id)"\r\n\r\n([^\r]*)', body))
-            self.uploads.append({k.decode(): v.decode() for k, v in fields.items()})
-            return route.fulfill(json=self.upload_reply)
+            self.meta_uploads.append(url)
+            return route.fulfill(json={"ok": False})
+        if "/api/form-templates/cover-file" in url:
+            if req.method == "POST":
+                self.stages += 1
+                return route.fulfill(json=self.stage_reply, status=200 if self.stage_reply.get("ok") else 400)
+            if self.stored is None:
+                return route.fulfill(status=404, body="")
+            return route.fulfill(status=200, body=self.stored, content_type="image/jpeg")
         if "/api/form-templates" in url and req.method == "POST":
             data = json.loads(req.post_data or "{}")
             self.saves.append(data)
@@ -142,128 +151,63 @@ def _state(pg, root="#fm-cover"):
 
 
 @pytest.mark.parametrize("kind", ["jpeg", "png"])
-def test_the_preview_decodes_a_real_file_and_is_not_displayed_without_one(browser, kind):
-    ctx, pg, api, errors = _open_forms(browser, ["Acc"])
+def test_the_preview_decodes_a_real_file_with_no_account_or_page_and_is_not_displayed_without_one(browser, kind):
+    ctx, pg, api, errors = _open_forms(browser, ["Acc", "Other"])
     try:
-        pg.select_option("#fm-cover-account", "Acc")
-        pg.locator("#fm-cover-pages-btn").click()
-        pg.select_option("#fm-cover-page", "123")
         img = _preview(pg)
         # Nothing chosen: no broken image with its alt text.
         assert img.evaluate("e => getComputedStyle(e).display") == "none"
+        # No account, no Page: the file input is ready all the same.
+        expect(_file_input(pg)).to_be_enabled()
         _file_input(pg).set_input_files(FILES[kind])
         expect(img).to_be_visible()
         assert img.evaluate("e => e.complete && e.naturalWidth") > 0, "the preview did not decode"
-        expect(_state(pg)).to_have_text("Chosen (not uploaded yet)")
-        expect(pg.get_by_role("button", name="Upload to Page")).to_be_enabled()
+        expect(_state(pg)).to_have_text("Chosen (not saved yet)")
         # Remove: the preview is gone and the input does not keep the name of a dropped file.
         pg.locator("#fm-cover").get_by_role("button", name="Remove").click()
         assert img.evaluate("e => getComputedStyle(e).display") == "none"
         assert _file_input(pg).input_value() == ""
+        assert api.stages == 0 and api.meta_uploads == [], "choosing a file must send nothing"
         assert not errors, errors
     finally:
         ctx.close()
 
 
-def test_the_owner_sequence_keeps_the_file_and_the_upload_button(browser):
-    """No Account/Page -> a file -> Account -> Refresh pages -> Page: the file is still chosen."""
+def test_save_keeps_the_picture_on_this_computer_and_saves_only_its_hash(browser):
     ctx, pg, api, errors = _open_forms(browser, ["Acc", "Other"])
     try:
-        # Page first: with two accounts and nothing chosen the file input waits and says why.
-        expect(_file_input(pg)).to_be_disabled()
-        expect(pg.locator("#fm-cover")).to_contain_text("Choose an account and a Page first (Refresh pages).")
-        # The owner's file got in anyway (an input that is disabled cannot be filled by a user, so force it).
-        pg.evaluate("document.querySelector('#fm-cover input[type=file]').disabled = false")
-        _file_input(pg).set_input_files(FILES["jpeg"])
-        expect(_preview(pg)).to_be_visible()
-        pg.select_option("#fm-cover-account", "Acc")
-        pg.locator("#fm-cover-pages-btn").click()
-        expect(pg.locator("#fm-cover-page option")).to_have_count(3)
-        pg.select_option("#fm-cover-page", "123")
-        # Still there: the name in the input, a decoded preview, the label, an enabled button.
-        assert "WhatsApp" in _file_input(pg).evaluate("e => e.files[0] ? e.files[0].name : ''")
-        assert _preview(pg).evaluate("e => e.naturalWidth") > 0
-        expect(_state(pg)).to_have_text("Chosen (not uploaded yet)")
-        expect(pg.get_by_role("button", name="Upload to Page")).to_be_enabled()
-        expect(_file_input(pg)).to_be_enabled()
-        pg.get_by_role("button", name="Upload to Page").click()
-        expect(_state(pg)).to_contain_text("Uploaded to Page")
-        assert api.uploads == [{"account_label": "Acc", "page_id": "123"}]
-        assert not errors, errors
-    finally:
-        ctx.close()
-
-
-def test_one_obvious_account_and_page_are_preselected_and_the_file_input_is_ready(browser):
-    api = Api()
-    api.pages = [PAGES[0]]
-    ctx, pg, api, errors = _open_forms(browser, ["Only"], api)
-    try:
-        expect(pg.locator("#fm-cover-account")).to_have_value("Only")
-        expect(pg.locator("#fm-cover-page")).to_have_value("123")
-        expect(_file_input(pg)).to_be_enabled()
-        assert not errors, errors
-    finally:
-        ctx.close()
-
-
-def test_save_with_a_pending_file_uploads_it_first_and_saves_the_pair(browser):
-    ctx, pg, api, errors = _open_forms(browser, ["Acc", "Other"])
-    try:
-        pg.select_option("#fm-cover-account", "Acc")
-        pg.locator("#fm-cover-pages-btn").click()
-        expect(pg.locator("#fm-cover-page option")).to_have_count(3)
-        pg.select_option("#fm-cover-page", "123")
         _fill_valid(pg)
         _file_input(pg).set_input_files(FILES["png"])
-        expect(_state(pg)).to_have_text("Chosen (not uploaded yet)")
+        expect(_state(pg)).to_have_text("Chosen (not saved yet)")
         pg.locator("#fm-save-btn").click()
         expect(pg.locator("#fm-editor")).to_be_hidden()
-        assert api.uploads == [{"account_label": "Acc", "page_id": "123"}], "one upload, through the one route"
+        assert api.stages == 1, "one request keeps the file on this computer"
+        assert api.meta_uploads == [], "the picture must not go to a Page at save"
         assert len(api.saves) == 1
-        assert (api.saves[0]["cover_photo_id"], api.saves[0]["cover_page_id"], api.saves[0]["cover_sha256"]) == ("777", "123", "a" * 64)
+        saved = api.saves[0]
+        assert saved["cover_local_sha256"] == "a" * 64
+        assert not saved.get("cover_photo_id") and not saved.get("cover_page_id")
+        assert len(json.dumps(saved)) < 5000, "no image bytes in the template"
         assert not errors, errors
     finally:
         ctx.close()
 
 
-def test_save_stops_with_a_visible_error_when_the_upload_fails(browser):
+def test_save_stops_with_a_visible_error_when_the_picture_cannot_be_kept(browser):
     api = Api()
-    api.upload_reply = {"ok": False, "state": "refused", "message": "Meta refused the background image: Invalid image"}
+    api.stage_reply = {"ok": False, "message": "The background image must be a JPEG or PNG file."}
     ctx, pg, api, errors = _open_forms(browser, ["Acc", "Other"], api)
     try:
-        pg.select_option("#fm-cover-account", "Acc")
-        pg.locator("#fm-cover-pages-btn").click()
-        expect(pg.locator("#fm-cover-page option")).to_have_count(3)
-        pg.select_option("#fm-cover-page", "123")
         _fill_valid(pg)
         _file_input(pg).set_input_files(FILES["jpeg"])
         pg.locator("#fm-save-btn").click()
         expect(pg.locator("#fm-editor-msg")).to_contain_text("The template was not saved.")
-        expect(pg.locator("#fm-editor-msg")).to_contain_text("Meta refused the background image")
-        expect(_state(pg)).to_contain_text("Upload failed: Meta refused the background image")
+        expect(pg.locator("#fm-editor-msg")).to_contain_text("must be a JPEG or PNG")
+        expect(_state(pg)).to_contain_text("Not saved:")
         assert api.saves == [], "saved without the chosen picture"
         expect(pg.locator("#fm-editor")).to_be_visible()
         expect(pg.locator("#fm-save-btn")).to_be_enabled()
         assert "WhatsApp" in _file_input(pg).evaluate("e => e.files[0] ? e.files[0].name : ''")
-        assert not errors, errors
-    finally:
-        ctx.close()
-
-
-def test_save_without_a_page_is_a_visible_blocking_error_with_the_fix(browser):
-    ctx, pg, api, errors = _open_forms(browser, ["Acc", "Other"])
-    try:
-        _fill_valid(pg)
-        pg.evaluate("document.querySelector('#fm-cover input[type=file]').disabled = false")
-        _file_input(pg).set_input_files(FILES["jpeg"])
-        pg.locator("#fm-save-btn").click()
-        alert = pg.locator("#fm-cover [role=alert]")
-        expect(alert).to_be_visible()
-        expect(alert).to_contain_text("Refresh pages and choose a Page")
-        expect(pg.locator("#fm-editor-msg")).to_contain_text("Refresh pages and choose a Page")
-        assert api.saves == [] and api.uploads == [], "nothing may be sent without a Page"
-        expect(_state(pg)).to_have_text("Chosen (not uploaded yet)")
         assert not errors, errors
     finally:
         ctx.close()
@@ -278,8 +222,51 @@ def test_save_without_a_picture_is_unchanged(browser):
         pg.fill("#fm-thanks", "Thank you.")
         pg.locator("#fm-save-btn").click()
         expect(pg.locator("#fm-editor")).to_be_hidden()
-        assert api.uploads == [] and len(api.saves) == 1
-        assert not api.saves[0].get("cover_photo_id")
+        assert api.stages == 0 and len(api.saves) == 1
+        assert not api.saves[0].get("cover_photo_id") and not api.saves[0].get("cover_local_sha256")
+    finally:
+        ctx.close()
+
+
+def _picker_page(browser, api):
+    """The picker alone on a blank page, with the real routes of the dashboard answered by `api`."""
+    _panel, _layout, picker, _forms = _forms_source()
+    ctx = browser.new_context()
+    ctx.route("**/*", api.handle)
+    pg = ctx.new_page()
+    errors = []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.goto("http://acl.test/")
+    pg.set_content("<body><div id='box'></div></body>")
+    pg.add_script_tag(content=picker)
+    pg.evaluate("window.p = window.formCoverPicker(document.getElementById('box'), () => ({account: '', pageId: ''}))")
+    return ctx, pg, errors
+
+
+def test_a_stored_picture_shows_from_this_computer_and_a_missing_one_says_so(browser):
+    api = Api()
+    api.stored = JPEG
+    ctx, pg, errors = _picker_page(browser, api)
+    try:
+        pg.evaluate("window.p.set('', '', '', 'a'.repeat(64), 'tpl000000001')")
+        img = pg.locator("#box img").first
+        expect(img).to_be_visible()
+        assert img.evaluate("e => e.complete && e.naturalWidth") > 0
+        assert img.evaluate("e => e.src").startswith("http://acl.test/api/form-templates/cover-file?id=tpl000000001&sha=")
+        assert pg.evaluate("window.p.get().cover_local_sha256") == "a" * 64
+        # The same template on a computer without the file (the library has only the hash).
+        api.stored = None
+        pg.evaluate("window.p.set('', '', '', 'a'.repeat(64), 'tpl000000001')")
+        expect(pg.locator("#box [aria-live=polite]").first).to_have_text(
+            "Background picture is on another computer \u2014 choose it again here")
+        assert img.evaluate("e => getComputedStyle(e).display") == "none"
+        assert pg.evaluate("window.p.get().cover_local_sha256") == "a" * 64, "the hash stays until the buyer replaces it"
+        # Choosing the file again here replaces the note and sends nothing to Meta.
+        pg.locator("#box input[type=file]").set_input_files(FILES["jpeg"])
+        expect(img).to_be_visible()
+        assert pg.evaluate("window.p.get().cover_local_sha256") == "", "a new file waits for the save to get its hash"
+        assert api.meta_uploads == []
+        assert not errors, errors
     finally:
         ctx.close()
 
@@ -292,6 +279,7 @@ def _builder_panel(page, pages_payload):
     page.add_script_tag(path=str(ACCOUNT_PAGES))
     api = Api()
     page.route("**/api/form-photo-upload", api.handle)
+    page.route("**/api/form-templates/cover-file*", api.handle)
     page.route("**/api/form-templates", api.handle)
     page.evaluate("window.cbFormTemplates = []; window.cbFillTemplateSelects = () => {};")
     page.set_default_timeout(8000)
@@ -315,55 +303,33 @@ def _builder_panel(page, pages_payload):
     return api, panel
 
 
-def test_builder_slot_with_an_automatic_page_uploads_for_the_resolved_page(builder_page):
-    page = builder_page
-    page.route("**/api/account-pages", lambda r: r.fulfill(json={"ok": True, "state": "ready", "pages": PAGES}))
-    page.add_script_tag(path=str(ACCOUNT_PAGES))
-    page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('First Page')")
-    # The slot's own Page field is empty (Automatic); the resolved Page is what the picture goes to.
-    assert page.locator('[name="camp_0_page_id"]').input_value() == ""
-    api, panel = _builder_panel(page, {"ok": True, "state": "ready", "pages": PAGES})
-    expect(panel.locator(".cb-fc-cover input[type=file]")).to_be_enabled()
-    panel.locator(".cb-fc-cover input[type=file]").set_input_files(FILES["jpeg"])
-    assert panel.locator(".cb-fc-cover img").evaluate("e => e.naturalWidth") > 0
-    expect(panel.locator(".cb-fc-cover [aria-live=polite]")).to_have_text("Chosen (not uploaded yet)")
-    panel.get_by_role("button", name="Save and select").click()
-    page.wait_for_function("window.cbFormTemplates.length === 1")
-    assert api.uploads == [{"account_label": "Demo", "page_id": "123"}]
-    assert (api.saves[0]["cover_photo_id"], api.saves[0]["cover_page_id"]) == ("777", "123")
-
-
-def test_builder_pending_file_and_upload_failure_stops_the_save(builder_page):
-    page = builder_page
-    page.route("**/api/account-pages", lambda r: r.fulfill(json={"ok": True, "state": "ready", "pages": PAGES}))
-    page.add_script_tag(path=str(ACCOUNT_PAGES))
-    page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('First Page')")
-    api, panel = _builder_panel(page, {"ok": True, "state": "ready", "pages": PAGES})
-    api.upload_reply = {"ok": False, "state": "refused", "message": "Meta refused the background image: Invalid image"}
-    page.unroute("**/api/form-photo-upload")
-    page.route("**/api/form-photo-upload", api.handle)
-    panel.locator(".cb-fc-cover input[type=file]").set_input_files(FILES["png"])
-    panel.get_by_role("button", name="Save and select").click()
-    msg = panel.locator("[data-fc-msg]")
-    expect(msg).to_contain_text("The form was not saved.")
-    expect(msg).to_contain_text("Meta refused the background image")
-    expect(panel.locator(".cb-fc-cover [aria-live=polite]")).to_contain_text("Upload failed:")
-    assert api.saves == [], "saved without the chosen picture"
-    expect(panel.get_by_role("button", name="Save and select")).to_be_enabled()
-
-
-def test_builder_slot_without_a_page_waits_and_blocks_the_save_with_the_fix(builder_page):
+def test_builder_picture_is_chosen_and_kept_with_no_page_resolved(builder_page):
     page = builder_page
     page.route("**/api/account-pages", lambda r: r.fulfill(json={"ok": True, "state": "empty", "pages": [], "message": "No Facebook Pages available"}))
     page.add_script_tag(path=str(ACCOUNT_PAGES))
     api, panel = _builder_panel(page, {"ok": True, "state": "empty", "pages": [], "message": "No Facebook Pages available"})
-    expect(panel.locator(".cb-fc-cover input[type=file]")).to_be_disabled()
-    expect(panel.locator(".cb-fc-cover")).to_contain_text("Choose an account and a Page first (Refresh pages).")
-    panel.locator(".cb-fc-cover input[type=file]").evaluate("e => { e.disabled = false; }")
-    panel.locator(".cb-fc-cover input[type=file]").set_input_files(FILES["jpeg"])
+    file_input = panel.locator(".cb-fc-cover input[type=file]")
+    expect(file_input).to_be_enabled()                      # no Account/Page needed to choose the picture
+    file_input.set_input_files(FILES["jpeg"])
+    assert panel.locator(".cb-fc-cover img").evaluate("e => e.naturalWidth") > 0
+    expect(panel.locator(".cb-fc-cover [aria-live=polite]")).to_have_text("Chosen (not saved yet)")
     panel.get_by_role("button", name="Save and select").click()
-    alert = panel.locator(".cb-fc-cover [role=alert]")
-    expect(alert).to_be_visible()
-    expect(alert).to_contain_text("Refresh pages and choose a Page")
-    expect(panel.locator("[data-fc-msg]")).to_contain_text("Refresh pages and choose a Page")
-    assert api.saves == [] and api.uploads == []
+    page.wait_for_function("window.cbFormTemplates.length === 1")
+    assert api.stages == 1 and api.meta_uploads == []
+    assert api.saves[0]["cover_local_sha256"] == "a" * 64 and not api.saves[0].get("cover_photo_id")
+
+
+def test_builder_stage_failure_stops_the_save(builder_page):
+    page = builder_page
+    page.route("**/api/account-pages", lambda r: r.fulfill(json={"ok": True, "state": "ready", "pages": PAGES}))
+    page.add_script_tag(path=str(ACCOUNT_PAGES))
+    api, panel = _builder_panel(page, {"ok": True, "state": "ready", "pages": PAGES})
+    api.stage_reply = {"ok": False, "message": "The background image is larger than 8 MB."}
+    panel.locator(".cb-fc-cover input[type=file]").set_input_files(FILES["png"])
+    panel.get_by_role("button", name="Save and select").click()
+    msg = panel.locator("[data-fc-msg]")
+    expect(msg).to_contain_text("The form was not saved.")
+    expect(msg).to_contain_text("larger than 8 MB")
+    expect(panel.locator(".cb-fc-cover [aria-live=polite]")).to_contain_text("Not saved:")
+    assert api.saves == [], "saved without the chosen picture"
+    expect(panel.get_by_role("button", name="Save and select")).to_be_enabled()
