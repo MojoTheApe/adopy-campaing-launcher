@@ -1573,7 +1573,9 @@ class WarmRegistry:
                 keep()          # фокус-эмуляция живёт на сессии CDP: подтверждаем (только локальный CDP)
             except Exception:
                 return None
-        graph = sess.graphs.get(mode)
+        # ACL-2533: a form-photo session pins ONE Page into its helper, so it never reuses a graph of the
+        # previous upload (which may be pinned to another Page): a fresh one every time.
+        graph = None if mode.startswith("photo") else sess.graphs.get(mode)
         if graph is None:
             graph = make_graph(tab)
         wanted = act[4:] if act.startswith("act_") else act
@@ -1740,6 +1742,11 @@ class WarmRegistry:
         self._remaining()
         from src.fb_api import light_tab as _light
         light = _light.enabled()                  # ACL-2344: read once per lease (spec 5.1)
+        if light and mode.startswith("photo"):
+            # ACL-2533: a form-photo upload needs the Ads Manager page (fb_dtsg/lsd, a fresh per-Page helper
+            # pin); the light page has neither. Only this lease runs on the Ads Manager tab; switching the
+            # kept tab's kind drops it below, which is fine for a button press.
+            light = False
         if light and sess.light_fallbacks >= self.LIGHT_FALLBACK_LIMIT:
             light = False                         # this profile's light page keeps failing: keep its Ads Manager tab
         had_tab = sess.tab is not None and not getattr(sess.tab,"closed",False)

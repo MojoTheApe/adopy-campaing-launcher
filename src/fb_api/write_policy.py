@@ -735,7 +735,7 @@ FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "co
 FORM_NESTED: dict[str, list[str]] = {
     "privacy_policy": ["link_text", "url"],
     "thank_you_page": ["body", "button_text", "button_type", "title", "website_url"],
-    "context_card": ["button_text", "content", "style", "title"],
+    "context_card": ["button_text", "content", "cover_photo_id", "style", "title"],
     "question": ["key", "label", "options", "type"],
     "option": ["key", "value"],
 }
@@ -751,6 +751,8 @@ FORM_MAX_TEXT = 1000
 FORM_NAME_RE = r" · ACL [0-9a-f]{6}$"
 FORM_PAGE_RE = r"^[0-9]{1,25}$"
 FORM_LOCALE_RE = r"^[A-Z]{2}_[A-Z]{2}$"
+#: ACL-2188: id существующего фото Страницы в context_card. Только строка из цифр; `cover_photo` (файл) отказ.
+FORM_PHOTO_ID_RE = r"^[0-9]{1,25}$"
 FORM_URL_RE = r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$"
 #: Ключи, которых нет нигде и на любой глубине (условия, токены, обходные пути).
 FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "tos", "terms",
@@ -767,6 +769,7 @@ def policy_for_form_create(page: str = "") -> dict:
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
         "max_options": FORM_MAX_OPTIONS, "max_text": FORM_MAX_TEXT,
         "name_re": FORM_NAME_RE, "page_re": FORM_PAGE_RE, "locale_re": FORM_LOCALE_RE,
+        "photo_id_re": FORM_PHOTO_ID_RE,
         "url_re": FORM_URL_RE, "forbidden": sorted(FORM_FORBIDDEN_ANYWHERE),
     }
 
@@ -826,6 +829,56 @@ def _check_form_question(q: Any, i: int) -> None:
             o = _form_keys(o, "option", f"{where}.options[{j}]")
             _form_text(o.get("key"), f"{where}.options[{j}].key")
             _form_text(o.get("value"), f"{where}.options[{j}].value")
+
+
+# ───────────────────── фон формы: загрузка картинки (ACL-2533) ─────────────────────
+#
+# НЕ Graph: тот же запрос, что шлёт сам Ads Manager (`/ads/leadgen/upload/photo/`), с вкладки профиля,
+# от имени Страницы (`av`) и по сессии пользователя. Отдельная узкая политика: фиксированный адрес,
+# хост страницы, `av` = закреплённая Страница, jpeg/png, потолок размера. Зеркало на странице-помощнике -
+# `uploadFormPhoto` в token_capture (читает ту же таблицу из `policy_for_form_photo()`).
+
+FORM_PHOTO_HOST = "adsmanager.facebook.com"
+FORM_PHOTO_URL = "https://adsmanager.facebook.com/ads/leadgen/upload/photo/"
+FORM_PHOTO_MIMES = ("image/jpeg", "image/png")
+FORM_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+#: Один запрос на одну картинку; идёт в оценку вызовов вместе с чтениями Страницы.
+FORM_PHOTO_UPLOAD_CALLS = 1
+
+
+def policy_for_form_photo(page: str = "") -> dict:
+    """Политика загрузки фона формы для помощника страницы (JSON-сериализуемая)."""
+    return {"host": FORM_PHOTO_HOST, "url": FORM_PHOTO_URL, "page": str(page or ""),
+            "mimes": list(FORM_PHOTO_MIMES), "max_bytes": FORM_PHOTO_MAX_BYTES, "page_re": FORM_PAGE_RE}
+
+
+def policy_for_form_photo_only(page: str = "") -> dict:
+    """Помощник, который умеет ТОЛЬКО эту загрузку: ни рёбер Graph, ни правок объектов."""
+    return {"form_photo_only": True, "form_photo": policy_for_form_photo(page)}
+
+
+def check_form_photo_upload(host: str, av: str, pinned_page: str, mime: str, size: int) -> str:
+    """Проверить загрузку фона формы. Возвращает адрес запроса; иначе `WriteRefused`.
+
+    Хост - только `adsmanager.facebook.com`; `av` (Страница-актёр) - числовой id и ровно закреплённая
+    Страница сессии; файл - jpeg/png, не пустой и не больше потолка.
+    """
+    if str(host or "").lower() != FORM_PHOTO_HOST:
+        raise WriteRefused(f"write refused: the form background is uploaded only from {FORM_PHOTO_HOST}")
+    if not re.match(FORM_PAGE_RE, str(pinned_page or "")):
+        raise WriteRefused("write refused: no Page is pinned for this session; the upload is off")
+    if not re.match(FORM_PAGE_RE, str(av or "")):
+        raise WriteRefused("write refused: the Page of the upload is not set")
+    if str(av) != str(pinned_page):
+        raise WriteRefused("write refused: the upload Page is not the Page of the plan")
+    if mime not in FORM_PHOTO_MIMES:
+        raise WriteRefused("write refused: the background image must be a JPEG or PNG")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise WriteRefused("write refused: the background image is empty")
+    if size > FORM_PHOTO_MAX_BYTES:
+        raise WriteRefused(f"write refused: the background image is larger than "
+                           f"{FORM_PHOTO_MAX_BYTES // (1024 * 1024)} MB")
+    return FORM_PHOTO_URL
 
 
 def check_form_create(page_id: str, method: str, path: str, params: dict | None,
@@ -901,6 +954,10 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         content = cc.get("content")
         if not (isinstance(content, list) and content and all(isinstance(x, str) and x.strip() for x in content)):
             raise WriteRefused("write refused: context_card.content must be a list of texts")
+        if "cover_photo_id" in cc:
+            photo = cc["cover_photo_id"]
+            if not (isinstance(photo, str) and re.match(FORM_PHOTO_ID_RE, photo)):
+                raise WriteRefused("write refused: context_card.cover_photo_id must be a photo id of digits")
     return FORM_EDGE
 
 

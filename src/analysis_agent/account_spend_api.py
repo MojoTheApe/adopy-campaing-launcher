@@ -400,9 +400,12 @@ def _open_tab(cdp_url: str):
     return PageTab.open(cdp_url)
 
 
-def _make_graph(tab, *, commands_act: str | None = None):
+def _make_graph(tab, *, commands_act: str | None = None, photo: bool = False):
     from src.fb_api.token_capture import InPageGraph
 
+    if photo:
+        # ACL-2533: only the form-background upload (web session); no Graph writes, no object edits.
+        return InPageGraph(tab, form_photo=True)
     if commands_act:
         # ACL-1800: правка существующих объектов — отдельный режим записи.
         return InPageGraph(tab, allow_object_updates=True, write_act=commands_act)
@@ -510,7 +513,7 @@ def _warm_registry():
 
 
 @contextmanager
-def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool):
+def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False):
     """ACL-1862 (G1): сессия на тёплой вкладке всегда под замком физического профиля.
 
     Замок реентерантный: чтение/команда/публикация, уже державшие его, не ждут и не берут другой ключ;
@@ -526,14 +529,15 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
     except ProfileLeaseError as exc:
         raise ApiReadError(str(exc), code="profile_lease") from exc
     try:
-        with _warm_session_held(account, act, key, profile_id, commands) as sess:
+        extra = {"photo": True} if photo else {}        # ACL-2533: only when set, so older call shapes stay valid
+        with _warm_session_held(account, act, key, profile_id, commands, **extra) as sess:
             yield sess
     finally:
         hold.__exit__(None, None, None)
 
 
 @contextmanager
-def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool):
+def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False):
     """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
 
     Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,
@@ -542,9 +546,11 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
     """
     from src.fb_api import warm as _warm
 
-    mode = f"commands:{act}" if commands else "read"
+    mode = "photo" if photo else (f"commands:{act}" if commands else "read")
 
     def make(tab):
+        if photo:
+            return _make_graph(tab, photo=True)
         return _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
 
     release_frozen_tab_cooldown(key)
@@ -597,7 +603,7 @@ def _touch_kept_window(account: str) -> None:
 
 
 @contextmanager
-def _session(account: str, *, commands: bool = False):
+def _session(account: str, *, commands: bool = False, photo: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
     from src.analysis_agent.account_refresh_state import read_session, target_activity
 
@@ -605,14 +611,15 @@ def _session(account: str, *, commands: bool = False):
         # Вызывающий уже держит физическую аренду профиля. Порядок тот же
         # у чтения после команды/публикации: профиль, затем одна общая читалка.
         with target_activity(_as._profile_key(account)), read_session(priority=commands):
-            with _open_session(account, commands=commands) as sess:
+            extra = {"photo": True} if photo else {}    # ACL-2533: only when set
+            with _open_session(account, commands=commands, **extra) as sess:
                 yield sess
     finally:
         _touch_kept_window(account)
 
 
 @contextmanager
-def _open_session(account: str, *, commands: bool = False):
+def _open_session(account: str, *, commands: bool = False, photo: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
     ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
@@ -666,7 +673,8 @@ def _open_session(account: str, *, commands: bool = False):
             raise ApiReadError(str(exc), code=exc.code) from exc
         raise
     if managed:
-        with _warm_session(account, act, key, profile_id, commands) as warm_sess:
+        extra = {"photo": True} if photo else {}
+        with _warm_session(account, act, key, profile_id, commands, **extra) as warm_sess:
             yield warm_sess
         return
     if frozen_deferred:
@@ -696,7 +704,8 @@ def _open_session(account: str, *, commands: bool = False):
             ) from exc
 
         tab = _open_tab(opened.cdp_url)
-        graph = _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
+        graph = (_make_graph(tab, photo=True) if photo
+                 else _make_graph(tab, commands_act=act) if commands else _make_graph(tab))
         graph.install()
         # ACL-2316: a Check plan (nothing is written) waits for a silent tab on ANY machine, then takes ONE
         # replacement tab; a second freeze stops as before. Other readers keep today's behaviour.

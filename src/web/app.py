@@ -6459,6 +6459,54 @@ async def api_page_forms(request: Request) -> JSONResponse:
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 
+@app.post("/api/page-photos")
+async def api_page_photos(request: Request) -> JSONResponse:
+    """ACL-2188: картинки Страницы для фона формы. Только по нажатию человека; без ссылок на картинки.
+
+    Чтение без права записи; ни опроса, ни расписания. Страница обязательна и должна принадлежать аккаунту.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await read_form(request, BUILDER_FORM)
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    page_id = str(form.get("page_id") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not page_id:
+        return JSONResponse({"ok": False, "error": "page_id is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Background images need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_photos, account, page_id))
+
+
+@app.post("/api/form-photo-upload")
+async def api_form_photo_upload(request: Request) -> JSONResponse:
+    """ACL-2533: фон формы из файла. Файл с локальной страницы -> вкладка профиля -> id фото.
+
+    Только по нажатию человека; картинка из Meta назад не читается (предпросмотр - из локального файла).
+    Тип определяется по байтам, а не по имени; не jpeg/png и больше 8 МБ - отказ до профиля.
+    """
+    from src.web import page_forms, publish_api
+    from src.web.request_limits import FORM_PHOTO_FORM
+
+    form = await read_form(request, FORM_PHOTO_FORM)
+    account = str(form.get("account_label") or form.get("account") or "").strip()
+    page_id = str(form.get("page_id") or "").strip()
+    upload = form.get("file")
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not page_id:
+        return JSONResponse({"ok": False, "error": "page_id is required"}, status_code=400)
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse({"ok": False, "error": "an image file is required"}, status_code=400)
+    data = await upload.read()
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Background images need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.upload_photo, account, page_id, data))
+
+
 @app.get("/api/form-templates")
 def api_form_templates_list(force: bool = False) -> JSONResponse:
     """ACL-1776/2054: шаблоны Instant Form из общей библиотеки (в Meta не ходит).

@@ -3453,6 +3453,9 @@ class CampaignCreator:
                                     "used); pick another form.", key="form_unavailable")
         self._form_steps = {}
         for tid, tpl in templates.items():
+            # ACL-2188: картинка чужой Страницы - стоп до поиска формы и до любой записи (строки, не числа).
+            if tpl.get("cover_photo_id") and str(tpl.get("cover_page_id") or "") != str(plan.page_id):
+                raise PlanError(_fc.MSG_COVER_OTHER_PAGE.format(name=tpl["name"]))
             existing, why = _fc.match_existing(read, tpl)
             if why:
                 raise PlanError(why + ".")
@@ -3501,13 +3504,24 @@ class CampaignCreator:
         existing, _why = _fc.match_existing(read, tpl)
         return existing or None
 
-    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str) -> None:
-        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп."""
-        row = self.client.get(f"/{form_id}", {"fields": _fc.READBACK_FIELDS})
+    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str, reused: bool = False) -> None:
+        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп.
+
+        Картинка (ACL-2188): у новой формы расхождение - стоп, у переиспользованной - заметка и дальше
+        (фото могли удалить со Страницы, рабочая форма не должна блокировать каждую публикацию).
+        """
+        row = self.client.get(f"/{form_id}", {"fields": _fc.readback_fields(tpl)})
         bad = _fc.compare_form(tpl, plan.page_id, row)
+        cover = _fc.compare_cover(tpl, row)
+        if cover and reused and not bad:
+            self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
+            cover = []
+        bad += cover
         if bad:
+            tail = (" The form stays on the Page; the next run reuses it with a note."
+                    if "background image" in bad and not reused else "")
             raise CreationStopped(f"The form {_ft.form_name(tpl)!r} was read back with differences ("
-                                  + "; ".join(bad) + "). Nothing that depends on it was created.",
+                                  + "; ".join(bad) + "). Nothing that depends on it was created." + tail,
                                   created=out.created, kind="form_mismatch")
 
     def _ensure_form(self, out: Outcome, plan: CampaignPlan, ad: AdPlan) -> None:
@@ -3537,12 +3551,12 @@ class CampaignCreator:
                         form_page=plan.page_id)
                 except GraphError as exc:
                     _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
-                    raise CreationStopped(_fc.refused_message(exc), created=out.created,
+                    raise CreationStopped(_fc.refused_message(exc, tpl), created=out.created,
                                           kind="form_refused") from exc
                 _fc.clear_pending(plan.act, plan.page_id, step.form_name)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
-            self._verify_form(out, plan, tpl, step.form_id)
+            self._verify_form(out, plan, tpl, step.form_id, reused=bool(step.existing_id))
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
