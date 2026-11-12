@@ -55,6 +55,7 @@ _slots = ProfileSlots(
 # и получает то же задание, а не второе на тот же аккаунт.
 _request_jobs: dict[str, str] = {}
 _request_locks: dict[str, threading.Lock] = {}
+_guard_locks: dict[str, list[Any]] = {}  # ACL-2562: key -> [lock, users]
 _request_lock = threading.Lock()
 _REQUEST_KEYS_MAX = 500
 
@@ -202,6 +203,7 @@ def create_job(
     total: int | None = None,
     campaign_names: list[str] | None = None,
     reviewed: bool = False,
+    review_refused: list[dict[str, Any]] | None = None,
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
@@ -240,6 +242,9 @@ def create_job(
             "fb_backend": _fb_backend(),
             # ACL-2353: задание создано из ревью (замороженные черновики); без ревью - False.
             "reviewed": bool(reviewed),
+            # ACL-2562: campaigns refused by the review at the first request (name, code); a resend with the
+            # same request key returns them unchanged.
+            "review_refused": [dict(r) for r in (review_refused or [])],
             "status": "pending",
             "created_at": _now_iso(),
             "started_at": None,
@@ -604,6 +609,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap["error_details"] = list(job.get("error_details") or [])
         snap["creative_notices"] = list(job.get("creative_notices", []))
         snap["campaign_names"] = list(job.get("campaign_names", []))
+        snap["review_refused"] = [dict(r) for r in (job.get("review_refused") or [])]
         if isinstance(job.get("queue"), dict):
             snap["queue"] = dict(job["queue"])
         # ACL-1142: ждёт ли ЭТО задание клика человека (teach) и чей аккаунт.
@@ -2356,6 +2362,38 @@ def known_request_job(request_id: str) -> str:
         return known if known in _jobs else ""
 
 
+def job_review_refused(job_id: str) -> list[dict[str, Any]]:
+    """ACL-2562: the refused rows (name, code) the first request of this job was answered with."""
+    with _jobs_lock:
+        job = _jobs.get(job_id) or {}
+        return [dict(r) for r in (job.get("review_refused") or [])]
+
+
+@contextlib.contextmanager
+def request_guard(request_id: str):
+    """ACL-2562: serialise everything done under one request key (lookup, review check, job start, log).
+
+    Two near-simultaneous first sends with one key then run one after the other: the second finds the job
+    of the first in `known_request_job` and does not build, check or log `review.confirmed` again. A
+    separate lock from the one inside `start_job`; keys do not wait for each other. No key: no lock.
+    """
+    key = (request_id or "").strip()[:100]
+    if not key:
+        yield
+        return
+    with _request_lock:
+        entry = _guard_locks.setdefault(key, [threading.Lock(), 0])
+        entry[1] += 1
+    try:
+        with entry[0]:
+            yield
+    finally:
+        with _request_lock:
+            entry[1] -= 1
+            if entry[1] <= 0 and _guard_locks.get(key) is entry:
+                _guard_locks.pop(key, None)
+
+
 def start_job(
     account_label: str,
     country: str,
@@ -2368,6 +2406,7 @@ def start_job(
     request_id: str = "",
     reviewed: dict[str, Any] | None = None,
     frozen_drafts: list[Any] | None = None,
+    review_refused: list[dict[str, Any]] | None = None,
 ) -> str:
     """Create a job and launch it in a background daemon thread. Returns job_id.
 
@@ -2380,7 +2419,8 @@ def start_job(
     if not request_id:
         return _start_job(account_label, country, slots, via_multilogin=via_multilogin,
                           activate=activate, dry_run=dry_run, hand_off=hand_off,
-                          reviewed=reviewed, frozen_drafts=frozen_drafts)
+                          reviewed=reviewed, frozen_drafts=frozen_drafts,
+                          review_refused=review_refused)
     # Под замком этого ключа целиком: исходный запрос и его повтор могут
     # прийти почти разом (первый ещё собирает черновики), и проверить-потом-
     # создать раздельно значило бы два задания. Замок — на ключ, а не общий:
@@ -2397,7 +2437,8 @@ def start_job(
                         return known
             job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
                                 activate=activate, dry_run=dry_run, hand_off=hand_off,
-                                reviewed=reviewed, frozen_drafts=frozen_drafts)
+                                reviewed=reviewed, frozen_drafts=frozen_drafts,
+                                review_refused=review_refused)
             with _request_lock:
                 while len(_request_jobs) >= _REQUEST_KEYS_MAX:
                     _request_jobs.pop(next(iter(_request_jobs)))
@@ -2424,6 +2465,7 @@ def _start_job(
     hand_off: bool,
     reviewed: dict[str, Any] | None = None,
     frozen_drafts: list[Any] | None = None,
+    review_refused: list[dict[str, Any]] | None = None,
 ) -> str:
     if activate:
         raise ValueError("ACM is draft-only: live activation is disabled")
@@ -2450,6 +2492,7 @@ def _start_job(
         total=len(drafts),
         campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
         reviewed=reviewed is not None,
+        review_refused=review_refused,
     )
     # Event конца потока заводится здесь, прямо перед потоком: у задания, чей
     # поток не стартовал, он не остаётся навсегда.
