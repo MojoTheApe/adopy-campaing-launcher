@@ -223,7 +223,7 @@ def test_a_job_level_stop_names_the_phase():
 def test_left_text_names_the_reuse_rule_and_the_second_name():
     assert pe.left_in_meta(campaign=True, adsets=1, ads=2, name="MX") == [
         'Left in Meta: a paused campaign, 1 ad set, 2 ads. Publishing again reuses it if its settings match; '
-        'otherwise the new one is published as "MX_2".']
+        'otherwise the new one is published as a new copy, "MX copy 1" (or the next free number).']
     assert pe.left_in_meta(campaign=True, name="MX")[0].startswith("Left in Meta: a paused campaign. ")
 
 

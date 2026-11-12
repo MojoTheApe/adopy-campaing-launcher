@@ -30,6 +30,35 @@ def _creative_number(filename: str) -> str:
     return m.group(1) if m else ""
 
 
+#: ACL-2538: longest file-name stem used as the creative half of an ad name.
+_FILE_STEM_MAX = 40
+
+
+def _file_stem_label(filename: str) -> str:
+    """The file's own name without folders and extension, for ads whose file
+    carries no creative number ("coffee beans.mp4" -> "coffee beans").
+
+    A " - " inside the stem is flattened to a space: the stats side splits
+    "<creative> - <text>" on that dash, so a dash in the stem would move part
+    of the file name into the text half."""
+    stem = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if "." in stem:
+        stem = stem.rsplit(".", 1)[0]
+    # Cut first, neutralise after: a cut must not leave a readable 3-digit
+    # run behind (a stem ending in "12345" cut to 40 chars would otherwise
+    # keep "123" and the stats splitter would read it as a creative number).
+    stem = stem[:_FILE_STEM_MAX]
+    # The stats splitter reads any 3-4 digit run as a creative number, so a
+    # stem like "IMG_123" or "1080x1080-17" must not carry one: dimension
+    # pairs are dropped, other 3-4 digit runs get a space after the first
+    # digit ("IMG_123" -> "IMG_1 23"). Numbered files never come here.
+    stem = _DIMENSIONS_RE.sub(" ", stem)
+    stem = re.sub(r"(?<!\d)(\d)(\d{2,3})(?!\d)", r"\1 \2", stem)
+    stem = re.sub(r"\s*[-–—]\s*", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip(" _")
+    return stem[:_FILE_STEM_MAX].strip(" _")
+
+
 @dataclass
 class AdDraft:
     creative_type: str = "Image"
@@ -73,6 +102,10 @@ class AdDraft:
         creative = (self.creative_id or "").strip()
         if not creative and self.creative_filename:
             creative = _creative_number(self.creative_filename)
+            if not creative:
+                # ACL-2538: no number in the file name -> the file's own name,
+                # so different files give different ads different names.
+                creative = _file_stem_label(self.creative_filename)
         # ACL-1593: ведущее число файла — вариант («1_es_2403_post.mp4» →
         # «2403 1»). Только когда номер имени совпадает с креативом объявления:
         # свободный текст в creative_id число из файла не получает.

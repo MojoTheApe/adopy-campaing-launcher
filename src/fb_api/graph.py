@@ -129,6 +129,20 @@ def _read_context(path: str, params: dict | None) -> dict[str, str]:
     return context
 
 
+def classify_stop_url(path: str) -> str:
+    """ACL-2091: one reading of a Facebook page path: `login`, `checkpoint` or "" (nothing special).
+
+    `checkpoint` covers the security pages: /checkpoint, two-step/two-factor and /hacked-protection.
+    Used by the warm path, the timeout probe and mirrored by the page script in `token_capture`.
+    """
+    low = str(path or "").lower()
+    if low.startswith(("/login", "/recover")):
+        return "login"
+    if "/checkpoint" in low or "two_step" in low or "two_factor" in low or "/hacked-protection" in low:
+        return "checkpoint"
+    return ""
+
+
 class GraphStop(RuntimeError):
     """Остановка: дальше этот клиент не зовёт Graph вовсе."""
 
@@ -143,7 +157,14 @@ class GraphStop(RuntimeError):
 
 
 class LoggedOut(GraphStop):
+    """The session is gone. `page_seen` is True only when the browser showed the login page (ACL-2091):
+    a token-only logout (Graph 190, page still on Ads Manager) heals by itself and is never a hold."""
+
     kind = "logged_out"
+
+    def __init__(self, message: str, *, page_seen: bool = False, **kw: Any):
+        super().__init__(message, **kw)
+        self.page_seen = bool(page_seen)
 
 
 class Checkpoint(GraphStop):
@@ -235,6 +256,9 @@ UNKNOWN_RESULT_CODES = {1, 2}
 #: ACL-2392: подкоды, с которыми Meta отказывает детерминированно, хотя ответ выглядит как «неизвестная ошибка»
 #: (код 1 / http 500): после сверки чтением, что ничего не записано, это отказ, а не неизвестный результат.
 REJECTION_SUBCODES = frozenset({1870226})
+#: ACL-2575: Meta's definite refusal of an uploaded file (1487411 FileTypeNotSupported, HTTP 500, is_transient=False):
+#: a refusal of that file, never "the write result is unknown".
+FILE_REFUSAL_SUBCODES = frozenset({1487411})
 #: Отказы помощника страницы ДО отправки: к Meta ничего не ушло.
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
@@ -385,7 +409,7 @@ class GraphClient:
         if kind == "checkpoint":
             raise self._stop(Checkpoint("the profile is on a Facebook checkpoint"))
         if kind == "login":
-            raise self._stop(LoggedOut("the profile is logged out of Facebook"))
+            raise self._stop(LoggedOut("the profile is logged out of Facebook", page_seen=True))
         return state
 
     # -- повтор чтения (ACL-2301)
@@ -639,6 +663,10 @@ class GraphClient:
                 self._check_page()
                 raise self._stop(LoggedOut("the session token is no longer valid; the write was not retried",
                                            code=code, subcode=sub))
+            if (sub in FILE_REFUSAL_SUBCODES and str(details.get("is_transient", "")).lower() == "false"
+                    and path.endswith("/adimages")):
+                raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
+                                 details=details)
             if code in UNKNOWN_RESULT_CODES or (isinstance(status, int) and status >= 500):
                 self.unreconciled = path
                 raise WriteUnknown(f"Graph API error {code} — the write result is unknown: {msg}", path=path,

@@ -1,5 +1,67 @@
 # System history
 
+## ACL-2578 — Readback accepts Meta's image-name suffix; a re-run reuses its left-over and never repeats a campaign name — 2026-11-12
+
+Depends on ACL-1856 (#1569).
+
+Readback no longer flags an image whose library name Meta stored with a `_<digits>` suffix (a different image still fails). A re-run after a stop now reuses its own left-over campaign and ad set when their settings match the builder, even if the creatives were replaced or added: for a campaign that has no ads yet, Meta's derived placement aggregate (`advantage_placement_state`) is no longer part of that comparison (the ad sets' own placements are still compared, and the aggregate is checked after the writes). The campaign name is never taken twice: a live campaign with the exact name counts as taken whatever its tag, a left-over known from the local name record counts even when the Meta listing misses it, and a failed read of that campaign (not "does not exist") stops the run before any write. The stop message names the real copy name instead of "_2". Not detectable: no local record and a listing miss.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1578).
+
+## ACL-2548 — Background refresh skips held profiles — 2026-11-12
+
+Part B of ACL-2091. While a profile waits for a person (checkpoint, login page, Meta block, frozen tab), the account refresh queue does not read it at all: scheduled 08/13/18 reads, background reads, page-open reads and refreshes after an action are skipped before any call, even when forced. Only a person's Retry reaches the profile. A skip writes no attempt row, so the stored stops and a persisted global halt stay as they were. A refusal with the account-level code `account_blocked` no longer counts as a stop for the text fallback, so its "checkpoint" wording cannot raise a halt for every account. Other accounts are read as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1548).
+
+## ACL-2547 — Account blocks: persisted holds, action context, reason texts — 2026-11-11
+
+Part A of ACL-2091. A checkpoint, a login page, a Meta policy block (368, 1404078, 2859015, 1404163) and a frozen Ads Manager tab whose one replacement is spent now become a persisted hold (`account_holds.json`, no timer, survives a restart) kept by the new `fb_api/account_blocks.py`; a person's Retry (or an explicit Read) that finds the page healthy lifts it, and background reads are not queued for a held profile. A token-only logout keeps its 1 minute timer. Refusals name the kind, the profile and the action that found the problem (for example "a background read") instead of "waiting about 10 min", with code `account_blocked`. One classifier now recognises `/hacked-protection` and `two_factor` in all three detectors. No window or tab handling changes yet.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1547).
+
+## ACL-2575 — WebP/AVIF/HEIC image creatives are converted before publishing — 2026-11-12
+
+A WebP ad image passed every check, the paused campaign and ad set were created, and then Meta refused the upload
+(error 100/1487411 FileTypeNotSupported) and the buyer was told to "check Ads Manager". Now WebP, AVIF and HEIC images
+are converted locally to PNG (transparent) or JPEG in the preflight (the buyer's file is not changed, the converted
+size counts toward the same cap) and the conversion is listed in the warnings and in Check plan; an image that cannot
+be converted is refused before any write. A definite non-transient FileTypeNotSupported answer is now reported as a
+refusal naming the ad and the file, not as an unknown result. The EXIF orientation of a converted photo is applied, so
+a phone picture is not published sideways.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1575).
+
+## ACL-1856 — Campaign creation keeps durable progress and resumes only after a check — 2026-11-12
+
+The API campaign creator records every write in a per-operation journal file on the computer
+(`api_operations/<operation id>.json`): "sent" is saved before the request goes to Meta, and the result
+(created / unknown / refused / stopped) right after. After a restart the earlier progress is checked in Meta
+before the first write; a changed object stops the run with a plain message and nothing is written.
+- The operation identity is the plan as submitted (before the name choice and before any start-time move) plus the
+  draft position in the submit; the chosen name stays in the record. The page's submit key is bound to the draft
+  position, so two identical drafts of one submit are two operations (`X`, `X copy 1`).
+- A campaign deleted in Ads Manager is not a block: the earlier record is set aside (kept as `.superseded` for 30 days)
+  and the publish starts a new operation. A live campaign that the name search does not list yet stops the run
+  without a write ("wait a few minutes") only for 10 minutes after the campaign was confirmed; later it counts as gone
+  and a new operation starts. A campaign renamed in Ads Manager is taken over by the buyer: the record is set aside
+  and a new operation starts, nothing is written into the renamed campaign. A different set or order of drafts in a
+  later submit is a new operation (the ACL-2250 name/tag lookup applies).
+- A write whose result is unknown and was looked for by readback and not found is sent again on the next publish (the
+  ACL-2250 behaviour, no waiting). Only a step left "sent" by a run that died, or one the readback could not settle,
+  waits 10 minutes. Uploads (files) still wait.
+- Each step carries an owner token checked under the file lock: two processes on one machine folder cannot both send
+  the same step.
+- The extra reads of a resume check are added to the call budget from the number of confirmed objects, not a flat number.
+- Old operation files (any state), `.corrupt`, `.superseded` and orphan lock files are removed after 30 days, at most
+  one scan per 6 hours; `.corrupt` files are timestamped. The submit-key duplicate scan reads recent files only.
+- The job result carries the stages, the IDs already created and one plain next action that agrees with the error.
+  (Showing them in the page is a separate task.)
+- After the 10-minute lag window a saved campaign counts as gone only when the read by id says so (read fails, DELETED or ARCHIVED). A live campaign with the recorded name that the name search does not list is resumed, never duplicated. A campaign renamed in Ads Manager gets its own warning.
+Objects stay PAUSED-only. `ACL_OPERATION_JOURNAL=0` turns the journal off.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/856).
+
+## ACL-2538 — Different ads always get different names — 2026-11-11
+
+Check plan no longer refuses ads whose creative files have no number in their names. The file's own name (without extension, up to 40 characters) now serves as the creative half of the ad name ("coffee beans - Head"); files with a number and ads with a creative id keep exactly the names they had. If two ads in one ad set still get the same name (same file, same text), the later ones become "Name 2", "Name 3" and Check plan shows a note instead of stopping. Stats note: a stem without a number is read by the dashboard as the creative label (via the dash). Stem digits can no longer be mistaken for a creative number ("IMG_123" becomes "IMG_1 23", dimensions such as 1080x1080 are dropped). A numbered duplicate ("Head 2") has a different text half, so in stats it forms its own text bucket separate from "Head".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1538).
+
 ## ACL-2562 — Publish retry keeps the refused campaigns of the first request — 2026-11-12
 
 A resend of Publish after a lost answer (ACL-1399 Retry, same request key) now returns the campaigns that the review refused at the first request, with the same reasons. The builder shows the "Not created" line for them, keeps their tick and gives them no build dot, exactly as after the first answer.
