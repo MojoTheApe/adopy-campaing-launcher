@@ -440,8 +440,12 @@ class AdSetPlan:
 
     @property
     def dynamic(self) -> bool:
-        """Набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774)."""
-        return any(a.multi_text for a in self.ads)
+        """Website-набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774).
+
+        ACL-2584: Instant Form не Dynamic Creative: несколько текстов идут лентой с правилами площадок (форма
+        Ads Manager), набор обычный и берёт объявлений сколько позволит Meta.
+        """
+        return not self.instant and any(a.multi_text for a in self.ads)
 
 
 @dataclass
@@ -872,6 +876,12 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                     elif not main_pos or not vert_pos:
                         # Один тип площадок не требует непроверенных правил для пустой второй группы.
                         problems.append(f"Ad {i}: the current app mapping for a two-file pair needs both Feed and Stories / Reels placements; clear the unused file and use the required file as main")
+            if (plan_set.instant and planned_ad.uses_feed and plan_set.placements is not None
+                    and plan_set.placements.get("mode") == "manual"):
+                main_pos, vert_pos = CampaignCreator.instant_rule_positions(plan_set.placements)
+                if not main_pos or not vert_pos:
+                    problems.append(f"Ad {i}: several texts on an Instant Form use two placement rules (Feed and "
+                                    "Stories / Reels); select both Feed and Stories / Reels placements, or use one text")
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -3242,13 +3252,15 @@ class CampaignCreator:
     def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict, *, instant: bool = False) -> dict:
         """`asset_feed_spec` объявления: тексты (до 5) и один или два файла с метками.
 
-        ACL-2528: у Instant Form (`instant`) ссылка - заглушка формы, а форма Страницы лежит в кнопке ленты
-        (`call_to_actions[0].value.lead_gen_form_id`), как её пишет Ads Manager; файл один, без правил.
+        ACL-2584: у Instant Form (`instant`) лента - форма Ads Manager (`instant_feed_spec`): заглушка вместо ссылки,
+        форма Страницы в кнопке ленты, `optimization_type: PLACEMENT` и два правила площадок.
 
         Один файл — без правил. Два — правило Stories/Reels на вертикальный и правило на остальные
         площадки на основной (Meta требует минимум два правила). Текстовые улучшения и Multi-advertiser
         выключены рядом, в самом креативе.
         """
+        if instant:
+            return CampaignCreator.instant_feed_spec(ad, media)
         key = "videos" if ad.kind == "video" else "images"
 
         def item(m: dict, label: str | None) -> dict:
@@ -3261,12 +3273,9 @@ class CampaignCreator:
         spec: dict[str, Any] = {
             "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
-            "link_urls": [{"website_url": INSTANT_FORM_LINK if instant else plan.link}],
+            "link_urls": [{"website_url": plan.link}],
             "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
-        if instant:
-            spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
-                                                                  "lead_gen_form_id": ad.form_id}}]
         if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
             spec["bodies"] = [{"text": t} for t in ad.bodies]
         if ad.descriptions:
@@ -3278,6 +3287,48 @@ class CampaignCreator:
             spec["asset_customization_rules"] = [
                 {"customization_spec": vert_pos, label_key: {"name": LABEL_VERTICAL}},
                 {"customization_spec": main_pos, label_key: {"name": LABEL_MAIN}}]
+        return spec
+
+    @staticmethod
+    def instant_rule_positions(placements: dict | None) -> tuple[dict, dict]:
+        """Площадки двух правил ленты Instant Form: (основное, Stories/Reels).
+
+        Advantage+ площадки: основное правило пустое (всё остальное, как в Ads Manager), вертикальное - Stories/Reels.
+        """
+        if placements is not None and placements.get("mode") == "advantage_plus":
+            return {}, CampaignCreator.rule_positions(None)[1]
+        return CampaignCreator.rule_positions(placements)
+
+    @staticmethod
+    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
+        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
+        Файл один с обеими метками; набор не Dynamic Creative. Форма Страницы - в кнопке ленты.
+        """
+        def labelled(key: str, row: dict, first: bool) -> dict:
+            main, vertical = _wpol.instant_labels(key)
+            return {**row, "adlabels": [{"name": main}] + ([{"name": vertical}] if first else [])}
+
+        media_key = "videos" if ad.kind == "video" else "images"
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
+        for key, texts in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
+            if texts:  # ACL-2474: пустой вид текста ключ не отправляет
+                spec[key] = [labelled(key, {"text": t}, n == 0) for n, t in enumerate(texts)]
+        file_row = ({"video_id": media["video_id"], "thumbnail_url": media["thumb"]} if ad.kind == "video"
+                    else {"hash": media["image_hash"]})
+        spec[media_key] = [labelled(media_key, file_row, True)]
+        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK}, True)]
+        spec["call_to_action_types"] = [ad.cta]
+        spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
+                                                              "lead_gen_form_id": ad.form_id}}]
+        spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
+        present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
+        spec["asset_customization_rules"] = [
+            {"customization_spec": positions,
+             **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
+            for n, positions in enumerate((main_pos, vert_pos))]
         return spec
 
     @staticmethod
@@ -4262,6 +4313,9 @@ class CampaignCreator:
             self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.dynamic:
                 sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
+            elif ad_set.instant and any(a.uses_feed for a in ad_set.ads):
+                sets[-1]["creative_mode"] = ("Several texts with placement rules (Stories / Reels show the first "
+                                             "text; any number of ads in this ad set)")
             if ad_set.instant:
                 # ACL-1775: вместо сайта - форма Страницы (имя и id); ключей сайта у такого набора нет.
                 known = self._page_forms.by_id() if self._page_forms else {}
@@ -4522,9 +4576,13 @@ class CampaignCreator:
             # ACL-2290: Meta returns [' '] for "none"; whitespace-only values count as empty on both sides.
             return [v for v in values if str(v).strip()]
 
-        check(aobj, "primary_texts", nonblank(list(ad.bodies)), nonblank(texts("bodies")))
-        check(aobj, "headlines", nonblank(list(ad.titles)), nonblank(texts("titles")))
-        check(aobj, "descriptions", nonblank(list(ad.descriptions)), nonblank(texts("descriptions")))
+        def listed(values: list[str]) -> list[str]:
+            # ACL-2584: on an Instant Form feed the texts are compared as a set (Meta may reorder them).
+            return sorted(values) if instant else values
+
+        check(aobj, "primary_texts", listed(nonblank(list(ad.bodies))), listed(nonblank(texts("bodies"))))
+        check(aobj, "headlines", listed(nonblank(list(ad.titles))), listed(nonblank(texts("titles"))))
+        check(aobj, "descriptions", listed(nonblank(list(ad.descriptions))), listed(nonblank(texts("descriptions"))))
         ctas = fs.get("call_to_action_types") or [""]
         check(aobj, "call_to_action", ad.cta, ctas[0] if isinstance(ctas, list) and ctas else "")
         links = fs.get("link_urls") or [{}]
@@ -4548,12 +4606,47 @@ class CampaignCreator:
             first = raw[0] if isinstance(raw, list) and len(raw) == 1 else None
             return str(first.get("name") or "") if isinstance(first, dict) else ""
 
+        def names_of(row: dict) -> list[str]:
+            raw = row.get("adlabels")
+            if isinstance(raw, dict):
+                raw = raw.get("data")
+            return sorted(str(x.get("name") or "") for x in raw if isinstance(x, dict)) if isinstance(raw, list) else []
+
+        if instant:
+            # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
+                if not nonblank(list(base)):
+                    continue
+                main, vertical = _wpol.instant_labels(kind)
+                got = [x for x in (fs.get(kind) or []) if isinstance(x, dict) and str(x.get("text") or "").strip()]
+                check(aobj, kind + "_main_label", sorted(nonblank(list(base))),
+                      sorted(str(x.get("text")) for x in got if main in names_of(x)))
+                check(aobj, kind + "_vertical_label", [base[0]],
+                      [str(x.get("text")) for x in got if vertical in names_of(x)])
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
+            media_key = "videos" if ad.kind == "video" else "images"
+            present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
+                                         ("descriptions", ad.descriptions)) if nonblank(list(base))] + ["link_urls", media_key]
+            got_rules = [r for r in (fs.get("asset_customization_rules") or []) if isinstance(r, dict)]
+            for n, (name, want) in enumerate((("main", main_pos), ("stories_reels", vert_pos))):
+                want_labels = {_wpol.INSTANT_ASSET_KINDS[k][1]: _wpol.instant_labels(k)[n] for k in present}
+                rule = next((r for r in got_rules if all(
+                    isinstance(r.get(lk), dict) and r[lk].get("name") == v for lk, v in want_labels.items())), {})
+                check(aobj, f"rule_{name}_labels", want_labels,
+                      {lk: (rule.get(lk) or {}).get("name") for lk in want_labels} if rule else {})
+                cs = rule.get("customization_spec") or {}
+                check(aobj, f"rule_{name}_placements",
+                      {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")},
+                      {k: sorted(cs.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")})
         by_label = {label_of(r): str(r.get(id_key) or "") for r in rows}
         bound = {"main": by_label.get(LABEL_MAIN) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
         bound["vertical"] = by_label.get(LABEL_VERTICAL, "")
         check(aobj, "file_count", 2 if ad.vertical_path else 1, len(rows))
         if ad.vertical_path:
             check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
+        elif instant:
+            check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), [n for r in rows for n in names_of(r)])
         else:
             check(aobj, "placement_rules", [], fs.get("asset_customization_rules") or [])
         extra: list[tuple[str, str, str]] = []

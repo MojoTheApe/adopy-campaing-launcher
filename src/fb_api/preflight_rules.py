@@ -229,8 +229,8 @@ RULES: list[dict[str, Any]] = [
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("feed_texts", "Several texts or a Stories / Reels file need a headline", ERROR, "client",
-       "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); "
-       "add a headline, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
+       "Meta requires a headline when an ad has several texts or a Stories / Reels file (a primary text is "
+       "optional): add a headline, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_len", "Text visible in full (up to 125)", WARNING, "client",
        "after 125 characters the text is folded behind 'See more'",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -482,8 +482,10 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "texts_vertical":
             out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
+            # ACL-2584: only a Website ad set runs several texts as Dynamic Creative (one ad per set); an
+            # Instant Form ad set uses placement rules (Ads Manager shape) and takes as many ads as Meta allows.
             out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and not _s(a.get("vertical_file"))
-                                      and len(st.get("ads") or []) > 1))
+                                      and _dest_of(st) != "instant_form" and len(st.get("ads") or []) > 1))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body")), WARNING))
         elif rid == "headline":

@@ -489,7 +489,7 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); add a headline, or use one text and one file",
+      "hint": "Meta requires a headline when an ad has several texts or a Stories / Reels file (a primary text is optional): add a headline, or use one text and one file",
       "id": "feed_texts",
       "label": "Several texts or a Stories / Reels file need a headline",
       "severity": "error",
