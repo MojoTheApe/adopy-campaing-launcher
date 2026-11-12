@@ -228,9 +228,9 @@ RULES: list[dict[str, Any]] = [
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("feed_texts", "Several texts or a Stories / Reels file need a primary text and a headline", ERROR, "client",
-       "an ad with several texts or a Stories / Reels file needs a primary text and a headline; "
-       "add them, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("feed_texts", "Several texts or a Stories / Reels file need a headline", ERROR, "client",
+       "an ad with several texts or a Stories / Reels file needs a headline (a primary text is optional); "
+       "add a headline, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_len", "Text visible in full (up to 125)", WARNING, "client",
        "after 125 characters the text is folded behind 'See more'",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -315,15 +315,16 @@ def _multi_text(a: dict) -> bool:
 
 
 def _feed_missing_text(a: dict) -> bool:
-    """Объявление пойдёт через asset feed (несколько текстов или вертикальный файл), а основного текста или заголовка нет.
+    """Объявление пойдёт через asset feed (несколько текстов или вертикальный файл), а заголовка нет.
 
     write_policy._check_asset_feed всё равно откажет такому фиду до первой записи; правило переносит отказ в Check plan (ACL-2403).
+    ACL-2474: без основного текста, но с заголовком Meta принимает (живой прогон 08.11) - это предупреждение `primary_text`.
+    Случаи «текст есть, заголовка нет» и «текстов нет совсем» живьём не проверены, отказ по ним сохранён.
     """
     if not (_multi_text(a) or _s(a.get("vertical_file"))):
         return False
-    has_body = bool(_s(a.get("body"))) or bool(_distinct(a.get("bodies")))
     has_title = bool(_s(a.get("headline"))) or bool(_distinct(a.get("headlines")))
-    return not (has_body and has_title)
+    return not has_title
 
 
 def _s(v: Any) -> str:
@@ -384,9 +385,29 @@ def _numbered(inp: dict[str, Any]) -> list[tuple[int, int, dict[str, Any], dict[
     out = []
     n = 0
     for si, st in enumerate(audit_sets(inp), start=1):
+        first: dict[str, Any] | None = None  # ACL-2406: Ad 1 of each ad set
         for ad in st.get("ads") or []:
             n += 1
+            if first is None:
+                first = ad
+            else:
+                ad = shared_headline_ad(ad, first)
             out.append((si, n, st, ad))
+    return out
+
+
+def shared_headline_ad(ad: dict[str, Any], first: dict[str, Any]) -> dict[str, Any]:
+    """ACL-2406: объявление 2+ берёт заголовок и описание у объявления 1 (свои поля не читаются).
+
+    Зеркало `sharedHeadlineAd` в report.html. Ad 1 задаёт их по Primary text 1; у объявления 2+
+    остаются только его тексты (`bodies`, `body`).
+    """
+    out = dict(ad)
+    out["shared_headline"] = True
+    head = _s(first.get("headline"))
+    out["headline"] = head
+    out["headlines"] = [head] if head else []
+    out["descriptions"] = list(first.get("descriptions") or [])[:1]
     return out
 
 
@@ -466,9 +487,9 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body")), WARNING))
         elif rid == "headline":
-            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline")), WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: not a.get("shared_headline") and not _s(a.get("headline")), WARNING))
         elif rid == "headline_len":
-            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: not a.get("shared_headline") and len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "feed_texts":
             out.append(_per_ad(rid, inp, lambda a, st: _feed_missing_text(a)))
         elif rid == "primary_len":

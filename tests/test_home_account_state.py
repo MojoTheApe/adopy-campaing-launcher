@@ -22,7 +22,7 @@ def test_issue_statuses():
 
 
 def test_spend_is_active():
-    assert A.account_state(row({"status": "clear"}, 5, True), TODAY)["key"] == "active"
+    assert A.account_state(row({"status": "clear", "at": "2026-11-04 08:00:00"}, 5, True), TODAY)["key"] == "active"
 
 
 def test_not_in_workbook_is_new():
@@ -76,3 +76,63 @@ def test_counts_and_sort():
 
 def test_empty_country_counts():
     assert A.state_counts([])["all"] == 0
+
+
+# --- ACL-2556: an evidently active account is not "Unknown" -------------------------
+def _fail(**kw):
+    return {"tried_at": "2026-11-04 09:00:00", "tried_error": "timeout", **kw}
+
+
+def test_spend_with_failed_read_is_active_not_refreshed():
+    s = A.account_state(row(_fail(), 5, True, act_id="act_1"), TODAY)
+    assert s["key"] == "active"
+    assert s["status_line"].startswith("status not refreshed · last read")
+    assert "unknown" not in s["status_line"]
+    assert s["status_tip"].startswith("Active by spend in the period; the account status could not be read")
+
+
+def test_spend_never_read_is_active_by_spend():
+    s = A.account_state(row({}, 5, True, act_id="act_1"), TODAY)
+    assert s["key"] == "active"
+    assert s["status_line"] == "active by spend · status not read yet"
+
+
+def test_last_clear_then_failed_read_is_active_not_refreshed():
+    st = _fail(status="clear", at="2026-11-03 10:00:00", source="api")
+    s = A.account_state(row(st, 0, False, act_id="act_1"), TODAY)
+    assert s["key"] == "active"
+    assert s["status_line"] == "status not refreshed · last read 03.11 10:00"
+
+
+def test_heavy_status_still_beats_spend_even_when_read_failed():
+    st = _fail(status="restricted", at="2026-11-03 10:00:00")
+    s = A.account_state(row(st, 50, True, act_id="act_1"), TODAY)
+    assert s["key"] == "issue"
+    assert "not refreshed" in s["status_line"]
+
+
+def test_no_spend_no_successful_read_stays_unknown():
+    s = A.account_state(row(_fail(), 0, False, act_id="act_1"), TODAY)
+    assert s["key"] == "unknown"
+    assert s["status_line"].startswith("unknown")
+
+
+def test_old_clear_without_spend_stays_unknown():
+    st = _fail(status="clear", at="2026-10-20 10:00:00")
+    assert A.account_state(row(st, 0, False, act_id="act_1"), TODAY)["key"] == "unknown"
+
+
+def test_badge_and_line_never_contradict():
+    cases = [
+        row({}, 5, True, act_id="a"), row(_fail(), 5, True, act_id="a"),
+        row({}, 0, False, act_id="a"), row(_fail(), 0, False, act_id="a"),
+        row({}, 0, False, in_workbook=False, act_id="a"),
+        row({"status": "clear", "at": "2026-11-04 08:00:00", "source": "api"}, 0, False, act_id="a"),
+        row(_fail(status="clear", at="2026-11-03 10:00:00"), 0, False, act_id="a"),
+    ]
+    for c in cases:
+        s = A.account_state(c, TODAY)
+        if s["key"] != "unknown":
+            assert not s["status_line"].startswith("unknown"), (s["key"], s["status_line"])
+        else:
+            assert s["status_line"] == "" or s["status_line"].startswith("unknown")

@@ -518,7 +518,8 @@ def test_publish_labels_follow_the_backend():
     assert "'Publish selected → ' + what" in label and "'Publish all → ' + what" in label
     assert "confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget()" in text
     assert "(cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft')" in text
-    assert text.count("'Create the selected campaigns as PAUSED campaigns?'") == 2
+    # Дважды в прежних окнах подтверждения и дважды в блоке ревью ACL-2353 (те же вопросы под Graph API).
+    assert text.count("'Create the selected campaigns as PAUSED campaigns?'") == 4
     # Флаг ставится в голове страницы — раньше любого кода билдера.
     assert text.index("window.ACL_FB_BACKEND = {{") < text.index("function publishLabel(t) {")
 

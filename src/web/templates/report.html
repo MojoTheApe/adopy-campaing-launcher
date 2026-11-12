@@ -2009,6 +2009,7 @@
     .aov-st.active { background: var(--st-active-bg); color: var(--st-active); } .aov-st.issue { background: var(--st-issue-bg); color: var(--st-issue); }
     .aov-st.dead { background: var(--st-dead-bg); color: var(--st-dead); } .aov-st.new { background: var(--st-new-bg); color: var(--st-new); }
     .aov-st.unknown { background: var(--st-unknown-bg); color: var(--st-unknown); border: 1px dashed var(--adopy-border-strong); }
+    .aov-stline { display: block; margin-top: 2px; font-size: var(--adopy-text-xs, 11px); color: var(--adopy-text-muted, #6b7280); white-space: normal; overflow-wrap: anywhere; line-height: 1.3; } .aov-stline.stale { opacity: .8; }
     .aov-empty { padding: 10px 14px; font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
     .aov-warn { padding: 10px 14px; background: var(--adopy-danger-bg); color: var(--adopy-danger); font-size: var(--adopy-text-table); }
     .aov-virtual { border-color: var(--adopy-danger); }
@@ -2054,7 +2055,8 @@
     .aov-table col.c10 { width: 210px; }
     /* Имя и номер кабинета читаются целиком: перенос вместо многоточия, номер мелкой второй строкой. */
     .aov-table td.acc { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-    .aov-table td.acc .aov-acc { display: inline-flex; flex-direction: column; vertical-align: middle; }
+    .aov-table td.acc .aov-accrow { display: inline-flex; align-items: flex-start; gap: 8px; vertical-align: middle; }
+    .aov-table td.acc .aov-acc { display: flex; flex-direction: column; flex: 0 0 11rem; min-width: 0; }
     .aov-table td.acc .aov-act { color: var(--adopy-text-muted); font-size: var(--adopy-text-xs); font-variant-numeric: tabular-nums; }
     /* Хост таблицы кампаний нужен только как точка монтирования: без рамки и отступов он рисовался пустой скруглённой полосой над шапкой. */
     .aov .hc.hc-scoped.amap-campaigns { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; border-radius: 0; }
@@ -3446,6 +3448,25 @@
     .pc-note.pc-warn { border-left-color: var(--warn); background: var(--warn-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
     .pc-note.pc-block { border-left-color: var(--bad); background: var(--bad-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
     .pc-note ul { margin: 0.2rem 0 0.1rem 1.1rem; padding: 0; }
+    /* ACL-2353 begin: ревью внутри окна подтверждения (те же .pc-* и .sfc-*) */
+    .rv-camps { margin-top: 0.2rem; }
+    .rv-camp { margin: 0.15rem 0; }
+    .rv-camp > summary { cursor: pointer; }
+    .rv-out { color: var(--muted); }
+    .rv-set { margin: 0.1rem 0 0.1rem 1rem; }
+    .rv-set > summary { cursor: pointer; color: var(--text); }
+    .rv-line { margin-left: 1rem; font-size: var(--adopy-text-sm); }
+    .rv-k { color: var(--muted); }
+    .rv-ad { margin: 0.15rem 0 0.25rem 1rem; padding-left: 0.5rem; border-left: 2px solid var(--border); }
+    .rv-grey { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .rv-edit { display: inline-block; margin: 0.2rem 0 0.2rem 1rem; font-size: var(--adopy-text-sm); color: var(--accent); }
+    .rv-btn { margin-left: 0.4rem; cursor: pointer; }
+    .rv-vis { margin: 0.2rem 0 0 1rem; }
+    .pc-budget, .pc-checked { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .rv-foot-wrap { flex: none; margin-top: 0.5rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .rv-nothing { margin-top: 0.25rem; color: var(--bad); }
+    #sfc-ok:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* ACL-2353 end */
     .pc-hint { color: var(--muted); }
     .pc-help { margin-top: 0.4rem; font-size: var(--adopy-text-sm); color: var(--muted); }
     .pc-i { cursor: help; color: var(--accent); border: 1px solid var(--border-strong); border-radius: 50%;
@@ -3932,6 +3953,9 @@
     .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
     .cb-textx-add:disabled { opacity: 0.55; cursor: not-allowed; }
     .cb-textx-note { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .cb-note-shared { display: none; }
+    .cb-hl-shared .cb-note-own { display: none; }
+    .cb-hl-shared .cb-note-shared { display: inline; }
     /* ACL-1775: выбор формы Страницы в объявлении */
     .cb-form-wrap { min-width: 0; }
     .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
@@ -4093,6 +4117,8 @@
     .cbm-over[data-cbm-chip]::after { content: attr(data-cbm-chip); position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); background: var(--accent); color: #fff; font-size: var(--adopy-text-xs); border-radius: 3px; padding: 0 0.35rem; pointer-events: none; }
     .cbm-bad { cursor: not-allowed; opacity: 0.6; }
     .cbm-ghosts { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .cbm-ghost.cbm-ghost-none { border-style: none; font-style: italic; }
+    .cbm-none { padding: 0.4rem 0.5rem; color: var(--muted); font-size: var(--adopy-text-table); font-style: italic; }
     .cbm-ghost { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 0.4rem 0.5rem; color: var(--muted); font-size: var(--adopy-text-table); opacity: 0.8; }
     .cbm-toast { max-width: 32rem; }
     .cbm-toast.cbm-warn { border-color: var(--danger); }
@@ -4571,7 +4597,7 @@ async function dashRefresh(ev) {
   btn.textContent = 'Refreshing…';
   aclInlineError(btn, '');
   try {
-    var r = await fetch('/refresh', {
+    var r = await fetch('/refresh' + window.location.search, {
       method: 'POST',
       headers: { 'Accept': 'application/json' },
       credentials: 'same-origin',
@@ -4904,6 +4930,33 @@ async function dashRefresh(ev) {
       <div style="display:flex;gap:0.6rem;align-items:center">
         <button type="button" id="mp-save" class="btn">Save</button>
         <span id="mp-msg" style="font-size:var(--adopy-text-body)"></span>
+      </div>
+    </div>
+  </section>
+
+  {#- ACL-2293: лимиты запуска этой машины - без перезапуска дашборда. -#}
+  <section class="acc-connect" id="rl-box">
+    <h3>Run limits</h3>
+    <p class="acc-sub">How many profiles and heavy actions run at once on this computer. Change them here, not in the file. A change applies to the next start; runs already going are not stopped.</p>
+    <div style="display:flex;flex-direction:column;gap:0.6rem;max-width:70ch">
+      <label>
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Profiles at once (1-8, default <span id="rl-def-ceiling">2</span>)</div>
+        <input id="rl-ceiling" type="number" min="1" max="8" step="1" style="width:8rem">
+      </label>
+      <label>
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Heavy actions at once (1-3, default <span id="rl-def-heavy">1</span>)</div>
+        <input id="rl-heavy" type="number" min="1" max="3" step="1" style="width:8rem">
+      </label>
+      <label>
+        <div style="font-size:var(--adopy-text-sm);color:var(--muted)">Max memory in use before a new profile starts, % (50-95, default <span id="rl-def-share">92</span>)</div>
+        <input id="rl-share" type="number" min="50" max="95" step="1" style="width:8rem">
+      </label>
+      <div id="rl-now" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
+      <div id="rl-warn" style="font-size:var(--adopy-text-sm);color:var(--danger)"></div>
+      <div style="display:flex;gap:0.6rem;align-items:center">
+        <button type="button" id="rl-save" class="btn">Save</button>
+        <button type="button" id="rl-reset" class="btn">Reset to default</button>
+        <span id="rl-msg" style="font-size:var(--adopy-text-body)"></span>
       </div>
     </div>
   </section>
@@ -7326,8 +7379,23 @@ window.cbPreflight = (function () {
   function numbered(inp) {
     var out = [], n = 0;
     auditSets(inp).forEach(function (st, i) {
-      (st.ads || []).forEach(function (ad) { n += 1; out.push({ si: i + 1, n: n, st: st, ad: ad }); });
+      var first = null; /* ACL-2406: Ad 1 of each ad set */
+      (st.ads || []).forEach(function (ad) {
+        n += 1;
+        if (!first) first = ad; else ad = sharedHeadlineAd(ad, first);
+        out.push({ si: i + 1, n: n, st: st, ad: ad });
+      });
     });
+    return out;
+  }
+  /* ACL-2406: объявление 2+ берёт заголовок и описание у объявления 1 (зеркало shared_headline_ad). */
+  function sharedHeadlineAd(ad, first) {
+    var out = {}, head = s(first.headline);
+    out.shared_headline = true;
+    Object.keys(ad).forEach(function (k) { out[k] = ad[k]; });
+    out.headline = head;
+    out.headlines = head ? [head] : [];
+    out.descriptions = (first.descriptions || []).slice(0, 1);
     return out;
   }
 
@@ -7398,12 +7466,12 @@ window.cbPreflight = (function () {
           && (id === 'texts_vertical' || (st.ads || []).length > 1);
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }, 'warning'));
-      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }, 'warning'));
-      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
+      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !a.shared_headline && !s(a.headline); }, 'warning'));
+      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return !a.shared_headline && s(a.headline).length > C.max_headline; }, 'warning'));
       else if (id === 'feed_texts') out.push(perAd(id, inp, function (a) {
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
         if (!multi && !s(a.vertical_file)) return false;
-        return !((s(a.body) || distinct(a.bodies).length) && (s(a.headline) || distinct(a.headlines).length));
+        return !(s(a.headline) || distinct(a.headlines).length); // ACL-2474: основной текст не обязателен
       }));
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
@@ -8932,6 +9000,62 @@ window.cbTree = (function () {
     setTimeout(function () { if (footPending && !footBusy()) paintFoot(); }, 0);
   });
 
+  /* ACL-2509 pick-after-connect { */
+  /* Connecting an account reloads the page. The drawer is rebuilt from
+     scratch and, with no country-bound view open, fell back to the first
+     country of the list with no account chosen. Before the form runs, the
+     country the buyer was in (and the accounts it had) is parked in
+     sessionStorage; after the reload the same country comes back with the
+     account that was not there before selected. */
+  var PICK_KEY = 'cbd-pick-after-connect';
+  var PICK_TTL_MS = 10 * 60 * 1000;
+
+  function resolvePick(saved, list, now) {
+    if (!saved || !saved.country || (now - (saved.at || 0)) > PICK_TTL_MS) return null;
+    var found = null;
+    list.forEach(function (p) { if (p.country === saved.country) found = p; });
+    if (!found) return null;
+    var before = saved.accounts || [];
+    var added = '';
+    found.accounts.forEach(function (a) { if (!added && before.indexOf(a) === -1) added = a; });
+    return { country: saved.country, account: added };
+  }
+
+  function rememberPick(country) {
+    try {
+      var accounts = [];
+      places().forEach(function (p) { if (p.country === country) accounts = p.accounts; });
+      sessionStorage.setItem(PICK_KEY, JSON.stringify({ country: country, accounts: accounts, at: Date.now() }));
+    } catch (e) { /* storage blocked: the old behaviour, nothing worse */ }
+  }
+
+  function forgetPick() {
+    try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* ignore */ }
+  }
+
+  // The parked entry is read (and removed from storage) exactly once, when the
+  // page loads. paintFoot() runs on the pre-reload page too (the click handler
+  // paints right after rememberPick), so it must never touch storage itself.
+  function loadPick() {
+    var raw = null;
+    try {
+      raw = sessionStorage.getItem(PICK_KEY);
+      if (raw) sessionStorage.removeItem(PICK_KEY);
+    } catch (e) { return null; }
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  var pendingPick = loadPick();
+
+  function takePick() {
+    if (!pendingPick) return null;
+    var hit = resolvePick(pendingPick, places(), Date.now());
+    // Keep it in memory while the country is not in the tree yet; drop it once used or stale.
+    if (hit || (Date.now() - (pendingPick.at || 0)) > PICK_TTL_MS) pendingPick = null;
+    return hit;
+  }
+  /* } ACL-2509 pick-after-connect */
+
   function paintFoot() {
     if (footBusy()) { footPending = true; refreshTicks(); return; }
     footPending = false;
@@ -8940,6 +9064,8 @@ window.cbTree = (function () {
     var keep = (chosen && chosen.value) || currentCountry();
     var acctOld = foot.querySelector('.cbd-pick-account');
     var keepAccount = acctOld ? acctOld.value : '';
+    var afterConnect = takePick();
+    if (afterConnect) { keep = afterConnect.country; keepAccount = afterConnect.account; }
     var typedOld = foot.querySelector('.cbd-new-country');
     var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
@@ -9112,6 +9238,7 @@ window.cbTree = (function () {
     Array.prototype.forEach.call(secs, function (sec, i) { sec.classList.toggle('cbd-set-off', i !== setIdx); });
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
+    var seenSets = {};
     for (var i = 0; i < rows.length; i += 1) {
       /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
          кнопкой или когда в них уже есть значение (восстановленный черновик). */
@@ -9119,8 +9246,14 @@ window.cbTree = (function () {
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
+      /* ACL-2406: заголовок и описание задаёт только Ad 1 набора;
+         у остальных объявлений набора строки нет, у них только свои Primary text. */
+      var setKey = (window.cbRowSet ? window.cbRowSet(rows[i]) : 0);
+      var shared = !!seenSets[setKey];
+      seenSets[setKey] = true;
+      if (rows[i].classList.contains('cb-hl-shared') !== shared) rows[i].classList.toggle('cb-hl-shared', shared);
       if (line) {
-        var entry = pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
+        var entry = !shared && pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
         line.hidden = !entry;
         /* Только при изменении: запись в textContent — мутация формы, её слушает
            наблюдатель дерева, и безусловная запись зациклила бы страницу. */
@@ -9809,7 +9942,9 @@ window.cbTree = (function () {
         : '<span class="cbd-q-bad">✕</span>';
       var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
       return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
-        + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
+        + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '')
+        + (r.again ? ' <button type="button" class="cbd-q-retry" data-cb-review-again="' + aclEscHtml(r.key || '') + '">Review again</button>' : '')
+        + '</div>';
     });
 
     // ACL-1355: идущая сборка кнопку не держит — остальные аккаунты
@@ -9851,6 +9986,7 @@ window.cbTree = (function () {
                : q.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(q)) + cbCloseWindows(q)
                : q.state === 'waiting_load' ? 'queued — ' + aclEscHtml(cbLoadWait(q))
                : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory') + cbCloseWindows(q)
+               : q.hold === 'ceiling' ? 'queued — ' + aclEscHtml(cbCeilingWait(q))
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -9879,6 +10015,13 @@ window.cbTree = (function () {
     var stopRetry = box.querySelector('[data-cb-stop-retry]');
     if (stopRetry) stopRetry.addEventListener('click', function () {
       window.cbPublishAll(showQueue, selectedForPublish(), lost.map(function (r) { return r.key; }));
+    });
+    box.querySelectorAll('[data-cb-review-again]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-cb-review-again');
+        var names = (window.CB_REVIEW_REFUSED || {})[k] || [];
+        if (window.cbReview && names.length) window.cbReview.again(k, names);
+      });
     });
     box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -9931,6 +10074,7 @@ window.cbTree = (function () {
     var before = {};
     form.querySelectorAll('.cb-slot').forEach(function (s) { before[slotId(s)] = true; });
     window.cbAddSlot(form);
+    addCampaign.form = form;      /* ACL-2268: the click handler tells warm_auto.js which form got the card */
     var made = null;
     form.querySelectorAll('.cb-slot').forEach(function (s) {
       var id = slotId(s);
@@ -9995,13 +10139,14 @@ window.cbTree = (function () {
           paint();
         });
     } else if (act === 'add-here') {
-      addCampaign(hit.dataset.country, hit.dataset.account);
+      var madeHere = addCampaign(hit.dataset.country, hit.dataset.account);
+      if (madeHere && window.aclWarmAutoUser) window.aclWarmAutoUser(addCampaign.form, 'add', e.isTrusted);
     } else if (act === 'connect' || act === 'connect-picked') {
       var picked = foot.querySelector('.cbd-pick-country');
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
       if (!country) return;
       var chosenCountryName = act === 'connect-picked' ? countryName(country) : hit.dataset.countryName;
-      if (openConnect === country) { openConnect = ''; releaseConnect(); paint(); return; }
+      if (openConnect === country) { openConnect = ''; releaseConnect(); forgetPick(); paint(); return; }
       openConnect = country;
       paint();
       if (!borrowConnect(chosenCountryName)) {
@@ -10010,6 +10155,7 @@ window.cbTree = (function () {
         window.aclAlert('Add it first with «+ Country».', { title: 'This country is not on the account map yet' });
         return;
       }
+      rememberPick(country);
       paint();
     } else if (act === 'add-country') {
       var input = foot.querySelector('.cbd-new-country');
@@ -10039,7 +10185,8 @@ window.cbTree = (function () {
       /* Вкладку не переключаем: ящик затем и сделан, чтобы не уходить с
          того, что читаешь. Блок аккаунта найдётся и в скрытой вкладке — на
          странице отрисованы все. */
-      addCampaign(countrySel.value, accountSel.value);
+      var madePicked = addCampaign(countrySel.value, accountSel.value);
+      if (madePicked && window.aclWarmAutoUser) window.aclWarmAutoUser(addCampaign.form, 'add', e.isTrusted);
     }
   });
 
@@ -10283,6 +10430,17 @@ window.cbMove = (function () {
   function formByKey(key) {
     var hit = null;
     forms().forEach(function (f) { if (!hit && cbFormKey(f) === key) hit = f; });
+    return hit;
+  }
+  /* Блок аккаунта в дереве подписан «slug-страны|аккаунт» (saudi-arabia|Demo), а ключ формы -
+     «Страна|аккаунт» (Saudi Arabia|Demo): сравниваем по одинаковому слагу (ACL-2441). */
+  function slugOf(x) { return String(x || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+  function formByTreeKey(key) {
+    var i = String(key).indexOf('|'), hit = null;
+    var slug = slugOf(key.slice(0, i)), account = key.slice(i + 1);
+    forms().forEach(function (f) {
+      if (!hit && cbFormAccount(f) === account && slugOf(countryOf(f)) === slug) hit = f;
+    });
     return hit;
   }
   function activeBuild(slot) {
@@ -10534,14 +10692,25 @@ window.cbMove = (function () {
   function srcSlotOf(n) { return n.kind === 'ad' ? (n.node && n.node.closest('.cb-slot')) : n.node; }
 
   /* ── перетаскивание ────────────────────────────────────────────────── */
+  /* Аккаунты, куда эту кампанию можно скопировать: страна в карте аккаунтов совпадает
+     со страной кампании, свой аккаунт не предлагаем (ACL-2441). */
+  function targetForms(srcSlot) {
+    var srcForm = srcSlot.closest('form'), country = countryOf(srcForm);
+    return forms().filter(function (f) {
+      return f !== srcForm && cbFormAccount(f) && cbFormAccount(f) !== '?' && countryOf(f) === country;
+    });
+  }
+  function noAccountNote(srcSlot) {
+    return 'No other account for ' + (countryOf(srcSlot.closest('form')) || 'this country');
+  }
   function ghosts() {
     var body = document.getElementById('cbd-body');
-    if (!body || body.querySelector('.cbm-ghosts')) return;
+    if (!body || body.querySelector('.cbm-ghosts') || !drag || drag.kind !== 'camp') return;
     var wrap = document.createElement('div');
     wrap.className = 'cbm-ghosts';
     var any = false;
-    forms().forEach(function (f) {
-      if (f.querySelector('.cb-slot') || !cbFormAccount(f) || cbFormAccount(f) === '?') return;
+    targetForms(drag.node).forEach(function (f) {
+      if (f.querySelector('.cb-slot')) return;      // аккаунт с кампаниями принимает дроп на свой блок
       any = true;
       var d = document.createElement('div');
       d.className = 'cbm-ghost';
@@ -10549,6 +10718,13 @@ window.cbMove = (function () {
       d.textContent = acctLabel(f) + ' — Drop here';
       wrap.appendChild(d);
     });
+    if (!any && !targetForms(drag.node).length) {
+      var n = document.createElement('div');
+      n.className = 'cbm-ghost cbm-ghost-none';
+      n.textContent = noAccountNote(drag.node);
+      wrap.appendChild(n);
+      any = true;
+    }
     if (any) body.appendChild(wrap);
   }
   function clearOver(except) {
@@ -10579,10 +10755,12 @@ window.cbMove = (function () {
       return { el: camp.querySelector('.cbd-camp-head') || camp, slot: slot, k: 0, camp: camp };
     }
     var ghost = target.closest('.cbm-ghost');
+    if (ghost && ghost.classList.contains('cbm-ghost-none')) return null;
     if (ghost) return { el: ghost, form: formByKey(ghost.dataset.key) };
     var acc = target.closest('.cbd-acc');
     if (!acc) return null;
-    return { el: acc.querySelector('.cbd-account') || acc, form: formByKey(acc.dataset.acc) };
+    /* Подсвечиваем весь блок аккаунта: дроп на карточку кампании = дроп на аккаунт (ACL-2441). */
+    return { el: acc, form: formByTreeKey(acc.dataset.acc) };
   }
   function planFor(hit) {
     if (!hit) return null;
@@ -10665,7 +10843,9 @@ window.cbMove = (function () {
     function item(label, o) { out.push({ label: label, reason: o.reason || '', go: o.go, back: !!o.back, sub: o.sub }); }
     if (m.step > 0) item('‹ Back', { back: true });
     if (m.step === 0) {
-      forms().forEach(function (f) {
+      /* Кампанию предлагаем только аккаунтам её страны, как и при перетаскивании (ACL-2441). */
+      var accounts = m.kind === 'camp' ? targetForms(m.node) : forms();
+      accounts.forEach(function (f) {
         if (!cbFormAccount(f) || cbFormAccount(f) === '?') return;
         var reason = formBusy(f) ? busyMsg(f) : '';
         if (m.kind === 'camp') {
@@ -10712,7 +10892,13 @@ window.cbMove = (function () {
     function fill() {
       list.textContent = '';
       var q = f.value.trim().toLowerCase();
-      menuItems().forEach(function (it) {
+      var items = menuItems();
+      if (m.kind === 'camp' && m.step === 0 && !items.length) {
+        var none = document.createElement('div');
+        none.className = 'cbm-none'; none.textContent = noAccountNote(m.node);
+        list.appendChild(none);
+      }
+      items.forEach(function (it) {
         if (q && !it.back && it.label.toLowerCase().indexOf(q) === -1) return;
         var b = document.createElement('button');
         b.type = 'button'; b.className = 'cbm-item'; b.setAttribute('role', 'menuitem');
@@ -11315,7 +11501,7 @@ window.cbBuild = (function () {
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
-    if (q.hold === 'account_busy') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
+    if (q.hold === 'account_busy' || q.hold === 'heavy_limit') return { state: 'build-wait', sign: '', why: cbAccountWait(q) };
     if (q.hold === 'machine_busy') return { state: 'build-wait', sign: '', why: cbLoadWait(q) };
     if (q.hold === 'machine_stalled') {
       return { state: 'build-wait', sign: '',
@@ -11324,6 +11510,7 @@ window.cbBuild = (function () {
     // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
     var memory = cbMemoryWait(q);
     if (memory) return { state: 'build-wait', sign: '', why: memory };
+    if (q.hold === 'ceiling') return { state: 'build-wait', sign: '', why: cbCeilingWait(q) };
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
@@ -12450,6 +12637,24 @@ document.addEventListener('acl:viewchange', function () { setTimeout(function ()
     p.appendChild(dl);
     var why = d.why || (d.key === 'active' ? 'Spending in the selected period.' : '');
     p.appendChild(el('div', 'why', 'What happened: ' + (why || '—') + (d.read ? ' · read ' + d.read : '')));
+    /* ACL-2557/2560: действия аккаунта стопкой — Open profile (если есть профиль), Take out of <country>. Поведение — warm_sessions.js */
+    var wrap = el('span', 'aov-acts aov-open-wrap');
+    if (d.profile) {
+      var ob = el('button', 'aov-btn aov-open', 'Open profile');
+      ob.type = 'button'; ob.hidden = true; ob.setAttribute('data-aov-open', d.name);
+      wrap.appendChild(ob);
+    }
+    var tb = el('button', 'aov-btn danger aov-takeout', 'Take out of ' + d.country);
+    tb.type = 'button'; tb.setAttribute('data-aov-takeout', d.name); tb.setAttribute('data-aov-ckey', d.ckey || d.country);
+    tb.setAttribute('data-aov-cname', d.country);
+    tb.title = 'Take this account out of ' + d.country + '. It stays in ACL and moves to Available accounts.';
+    wrap.appendChild(tb);
+    if (d.profile) {
+      var om = el('small', 'aov-open-msg'); om.setAttribute('role', 'status'); om.setAttribute('aria-live', 'polite');
+      wrap.appendChild(om);
+    }
+    p.appendChild(wrap);
+    if (d.profile && window.aclWarmHome) window.aclWarmHome.paint();
     var go = el('button', 'aov-btn', 'Open in Manage →');
     go.type = 'button'; go.setAttribute('data-aov-go', d.slug);
     p.appendChild(go);
@@ -13083,8 +13288,11 @@ function amapApplyReading(account, s, split, waiting) {
       var status = row.querySelector('.amap-status');
       status.innerHTML = '<span></span>' + amapStatusTail(account, s);
       var label = status.firstChild;
+      /* ACL-2419: те же слова, что в шаблоне ячейки: `active` — статус из Meta (источник api),
+         `no warning` — только текст страницы, `unknown` — незнание (код не распознан). */
       label.className = 'amap-st ' + (s.status === 'clear' ? 'ok' : s.status === 'unknown' ? 'dim' : 'bad');
-      label.textContent = s.status === 'clear' ? 'no warning' : s.status === 'unknown' ? 'unreadable' : s.status;
+      label.textContent = s.status === 'clear' ? (s.source === 'api' ? 'active' : 'no warning')
+        : s.status === 'unknown' ? (s.source === 'api' ? 'unknown' : 'unreadable') : s.status;
       label.title = (s.status_text || (s.status === 'clear' ? 'No warning on the page; not a verified active status' : s.status)) + ' · read ' + (s.finished_at || '');
     }
     if (s.state === 'running') {
@@ -14680,7 +14888,7 @@ async function goalSend(body) {
 // ── Account map: placing accounts in countries ───────────────────────
 // Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
 // перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
-async function amapSend(body, msgEl, errorAnchor) {
+async function amapSend(body, msgEl, errorAnchor, onOk) {
   if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
   var r = await fetch('/account-links', {
     method: 'POST',
@@ -14690,7 +14898,11 @@ async function amapSend(body, msgEl, errorAnchor) {
   });
   var data = null;
   try { data = await r.json(); } catch (e) { data = null; }
-  if (data && data.ok) { location.reload(); return true; }
+  if (data && data.ok) {
+    /* ACL-2560: Home перерисовывает себя сам (onOk), остальные места — перезагрузка как раньше */
+    if (typeof onOk === 'function') { await onOk(); return true; }
+    location.reload(); return true;
+  }
 
   // Счёт идёт на деньги: аккаунт, который сегодня тратил, не убирается
   // молча. Подтверждение спрашивается один раз и с текстом, который
@@ -14698,7 +14910,7 @@ async function amapSend(body, msgEl, errorAnchor) {
   if (data && data.needs_confirm) {
     if (await aclConfirm(data.error, { title: 'Take it out anyway?', okLabel: 'Take it out', danger: true })) {
       body.confirm = true;
-      return amapSend(body, msgEl, errorAnchor);
+      return amapSend(body, msgEl, errorAnchor, onOk);
     }
     if (msgEl) msgEl.textContent = '';
     return false;
@@ -14885,7 +15097,7 @@ function amapLink(select, kind, value) {
   amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
 }
 
-async function amapUnlink(account, kind, value, anchor) {
+async function amapUnlink(account, kind, value, anchor, onOk) {
   /* ACL-142: «×» убирает аккаунт из ОДНОЙ страны, а выглядит как «удалить».
      Спрашиваем и говорим, что останется; удаление из ACL — отдельная кнопка. */
   if (!await aclConfirm('Take ' + account + ' out of ' + value + '?' + String.fromCharCode(10, 10)
@@ -14894,7 +15106,7 @@ async function amapUnlink(account, kind, value, anchor) {
   if (anchor) anchor.disabled = true;
   aclInlineError(anchor, '');
   try {
-    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor);
+    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor, onOk);
   } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
   finally {
     if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }
@@ -17004,7 +17216,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
     var cards = [];
+    /* ACL-2406: Ad 1 of each ad set gives the Headline to the later ads of that set. */
+    var setFirstRow = {};
+    slot.querySelectorAll('.cb-ad-row').forEach(function(r) {
+      var k = rowSet(r);
+      if (!setFirstRow[k]) setFirstRow[k] = r;
+    });
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
+      var isFirstInSet = setFirstRow[rowSet(row)] === row;
       var fileHidden = row.querySelector('input[type="hidden"][name$="_creative_file"]');
       var fileSearch = row.querySelector('.cb-creative-search');
       var fileVal = ((fileHidden && fileHidden.value) || (fileSearch && fileSearch.value) || '').trim();
@@ -17043,8 +17262,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var bodyHtml = copy && copy.body
         ? cbpEsc(copy.body)
         : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">pick the copy…</span>');
-      var headlineHtml = copy && copy.headline
-        ? cbpEsc(copy.headline)
+      /* ACL-2406: объявления 2+ набора показывают заголовок Ad 1 этого набора. */
+      var hlCopy = copy;
+      if (!isFirstInSet) {
+        var firstRow = setFirstRow[rowSet(row)];
+        var firstHid = firstRow && firstRow.querySelector('input[type="hidden"][name$="_copy"]');
+        var firstVal = ((firstHid && firstHid.value) || '').trim();
+        hlCopy = firstVal ? AD_TITLES.find(function(t) { return t.ad_title === firstVal; }) : null;
+      }
+      var headlineHtml = hlCopy && hlCopy.headline
+        ? cbpEsc(hlCopy.headline)
         : '<span class="cbp-skel-text">headline</span>';
 
       cards.push(
@@ -18057,7 +18284,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       textxRowHtml(pfx, 3) + textxRowHtml(pfx, 4) + textxRowHtml(pfx, 5) +
       '<span class="cb-label cb-textx-add-label">More primary texts</span>' +
       '<div class="cb-textx-add-wrap"><button type="button" class="cb-textx-add" onclick="cbAddTextRow(this)">+ Primary text 3</button>' +
-      '<span class="cb-textx-note">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span></div>' +
+      '<span class="cb-textx-note"><span class="cb-note-own">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span><span class="cb-note-shared">Up to 5 primary texts per ad. The headline and description come from Ad 1.</span></span></div>' +
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
@@ -19623,10 +19850,12 @@ function cbPublishConfirmParts(m) {
   var total = m.campaigns === undefined
     ? accounts.reduce(function (n, a) { return n + a.camps.length; }, 0) : m.campaigns;
   var collapse = total > (m.collapseOver === undefined ? 6 : m.collapseOver);
+  /* ACL-2353: ревью считает аккаунты и кампании, которые правда будут созданы. */
+  var nAcc = m.accountsCount === undefined ? accounts.length : m.accountsCount;
   var lead = '<div class="pc-sum">' + esc(m.verb || 'Publish') + ' <strong>' + total + '</strong> '
-    + (total === 1 ? 'campaign' : 'campaigns') + ' on <strong>' + accounts.length + '</strong> '
-    + (accounts.length === 1 ? 'account' : 'accounts') + ' — ' + esc(m.targetText || '') + '</div>'
-    + '<div class="pc-mode">Mode: ' + (m.modeHtml || '') + '</div>';
+    + (total === 1 ? 'campaign' : 'campaigns') + ' on <strong>' + nAcc + '</strong> '
+    + (nAcc === 1 ? 'account' : 'accounts') + ' — ' + esc(m.targetText || '') + '</div>'
+    + '<div class="pc-mode">Mode: ' + (m.modeHtml || '') + '</div>' + (m.leadExtraHtml || '');
 
   var left = accounts.map(function (a) {
     var chips = a.camps.map(function (c) { return '<span class="pc-chip">' + esc(c) + '</span>'; })
@@ -19634,6 +19863,13 @@ function cbPublishConfirmParts(m) {
     var head = '<strong>' + esc(a.name) + '</strong>'
       + (a.camps.length ? ' <span class="pc-n">(' + a.camps.length + ')</span>' : '');
     if (!a.camps.length) return '<div class="pc-acc">' + head + '</div>';
+    if (m.campaignHtml) {
+      // ACL-2353: каждая кампания раскрывается (наборы и объявления); без хука - прежние чипы.
+      var items = a.camps.map(function (c, i) { return m.campaignHtml(a, i); }).join('');
+      return collapse
+        ? '<details class="pc-acc"><summary>' + head + '</summary><div class="rv-camps">' + items + '</div></details>'
+        : '<div class="pc-acc">' + head + '<div class="rv-camps">' + items + '</div></div>';
+    }
     // «Demo: имя1, имя2» читается подряд и в раскрытом виде, и для скринридера.
     return collapse
       ? '<details class="pc-acc"><summary>' + head + '</summary><div class="pc-chips">' + chips + '</div></details>'
@@ -19652,7 +19888,8 @@ function cbPublishConfirmParts(m) {
   var body = '<div class="pc-cols"><div class="pc-left"><div class="pc-h">Accounts and campaigns</div><div class="cb-selected-list">' + left + '</div>'
     + (m.skipped && m.skipped.length
       ? '<div class="pc-skipped">Already being built, skipped: ' + esc(m.skipped.join(', ')) + '</div>' : '')
-    + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>';
+    + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>'
+    + (m.footerHtml || '');
   return { lead: lead, body: body };
 }
 /* ACL-2118 end */
@@ -20749,10 +20986,14 @@ function cbMemoryWait(q) {
   var hint = '. Close a Multilogin profile you don\'t need.';
   if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  /* ACL-2369: сколько ещё освободить (short_mb от сервера, иначе need - available), от 0.1 ГБ. */
+  var shortMb = q.short_mb != null ? Number(q.short_mb) : (Number(q.need_mb) || 0) - (Number(q.available_mb) || 0);
+  var shortGb = shortMb > 0 ? (Math.ceil(shortMb / 1024 * 10 - 1e-9) / 10).toFixed(1) : '';
   /* ACL-2255: решает доля занятой памяти, а не «ГБ на профиль». */
   if (q.used_pct != null && q.max_used_pct != null) {
     return 'Waiting for memory: ' + Math.round(q.used_pct) + '% in use, a new profile starts below ' + Math.round(q.max_used_pct)
-      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)' + tail + hint;
+      + '% (' + gb(q.available_mb) + ' GB free, ' + gb(q.need_mb) + ' GB must stay free)'
+      + (shortGb ? '. Free about ' + shortGb + ' GB more — close a Multilogin profile you don\'t need.' + tail : tail + hint);
   }
   var reserve = Number(q.reserve_mb) || 0;
   var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
@@ -20787,7 +21028,26 @@ function cbLoadWait(q) {
     + rest + '). Nothing was sent to Meta; it starts by itself, Stop cancels it';
 }
 /* ACL-2278: занятые ворота действий аккаунта — задание ждёт, а не падает. */
+/* ACL-2293: the profile ceiling is what holds the run - say how many are in use and what the ceiling is. */
+function cbCeilingWait(q) {
+  q = q || {};
+  var cap = parseInt(q.cap, 10), running = parseInt(q.running, 10);
+  var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+  var tail = ahead ? ' (' + ahead + ' ahead)' : '';
+  if (!(cap > 0) || isNaN(running)) return 'Waiting for a free profile slot' + tail;
+  if (running > cap) {
+    return 'Waiting: ' + running + ' profiles running, ceiling is now ' + cap
+      + ' - new runs start when fewer than ' + cap + ' are running' + tail;
+  }
+  return 'Waiting: ' + running + ' of ' + cap + ' profiles in use (ceiling ' + cap + ')' + tail
+    + '. The next one starts when a run finishes';
+}
 function cbAccountWait(q) {
+  /* ACL-2293: the limit of heavy account actions, not "another account" */
+  if (q && q.hold === 'heavy_limit' && q.heavy_limit) {
+    return 'Waiting: ' + (parseInt(q.running, 10) || q.heavy_limit) + ' of ' + q.heavy_limit
+      + ' heavy actions in progress (limit ' + q.heavy_limit + ') - it starts by itself, Stop cancels it';
+  }
   var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
   var mem = (q && q.available_mb != null) ? ' (' + gb(q.available_mb) + ' GB free)' : '';
   return 'Waiting for another account action to finish' + mem + ' - it starts by itself, Stop cancels it';
@@ -20962,7 +21222,8 @@ function cbNewRun(notify) {
       var ok = !(job.errors || []).length && (job.results || []).length
         && (job.results || []).every(function (r) { return r.publishable === true; });
       settle(e, { account: e.label, state: ok ? 'ok' : 'bad', skipped: skipped,
-                  why: ok ? '' : 'draft blocked — see the account panel' });
+                  why: ok ? (e.refusedText || '') : 'draft blocked — see the account panel',
+                  again: !!e.refusedText, key: e.key });
     }, function (job) {
       // Каждый опрос: ждёт ли аккаунт место или уже собирается.
       if (window.CB_QUEUE !== batch || e.state === 'settled') return;
@@ -21019,16 +21280,36 @@ function cbNewRun(notify) {
           settle(e, { account: e.label, state: 'dup', why: data.error, skipped: skipped });
           return;
         }
+        if (data.error && data.code === 'review_stale') {
+          // ACL-2353: все кампании аккаунта изменились после ревью - заданий нет, остальные аккаунты идут.
+          (window.CB_REVIEW_REFUSED = window.CB_REVIEW_REFUSED || {})[e.key] = data.changed || [];
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(data.error) + '</span>';
+          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped, key: e.key, again: true });
+          return;
+        }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
           settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped, code: data.code || '', key: e.key });
           return;
         }
         if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
-        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, sentNames, e.country);
+        if (data.refused && data.refused.length) {
+          // ACL-2353: часть кампаний изменилась после ревью - отказ по ним, остальные идут (D5).
+          e.refusedText = data.refused_text || '';
+          e.refusedNames = data.refused.map(function (x) { return x.name; });
+          (window.CB_REVIEW_REFUSED = window.CB_REVIEW_REFUSED || {})[e.key] = e.refusedNames;
+          skipped += e.refusedNames.length;
+        }
+        // ACL-2353: refused campaigns were not created - no build dot for them and they keep their tick.
+        var refusedNow = e.refusedNames || [];
+        var watched = sentNames.filter(function (n) { return refusedNow.indexOf(n) < 0; });
+        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, watched, e.country);
         // ACL-1360: ушедшие роботу кампании больше не отмечены.
         if (window.cbTree && window.cbTree.untick) {
-          try { window.cbTree.untick(e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : [])); }
+          try {
+            var sentSlots = e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : []);
+            window.cbTree.untick(sentSlots.filter(function (sl) { return refusedNow.indexOf(cbPfName(sl)) < 0; }));
+          }
           catch (err) { /* отметка — удобство, задание уже ушло */ }
         }
         follow(e, data.job_id, skipped);
@@ -21057,6 +21338,11 @@ function cbNewRun(notify) {
     e.state = 'retry';
     e.resend = function () {
       if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      // ACL-2353: замороженная отправка уже прошла ревью; живая карточка больше ничего не решает.
+      if (e.frozen) {
+        post(e, fd, skipped, sentNames);
+        return true;
+      }
       // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
       // нет ворот — нет повтора.
       if (typeof window.cbPreflightGate !== 'function' || !e.form) {
@@ -21186,6 +21472,17 @@ function cbNewRun(notify) {
     if (!entries.length) batch.active = false;   // пустая сборка никого не держит
     pump();
     return { added: added, skipped: skipped };
+  };
+  /* ACL-2353: снимок из окна ревью уходит как есть, без превью и без повторного чтения формы.
+     `slots` - карточки, ушедшие в снимок; `left` - сколько кампаний ревью оставило дома. */
+  batch.frozen = function (form, fd, slots, left) {
+    var key = cbFormKey(form), label = cbFormTitle(form);
+    if (batch.busy(key)) return { added: [], skipped: [label] };
+    var e = entry(form, key, label, null);
+    e.frozen = true;
+    e.sent = slots;
+    submit(e, fd, left || 0);
+    return { added: [label], skipped: [] };
   };
   /* Весь аккаунт без превью — кнопка Publish на странице страны. */
   batch.direct = function (form, fd) {
@@ -21808,6 +22105,702 @@ function _doCbPublish(form) {
   }
 })();
 
+/* ACL-2353 begin
+ * «Before create review»: окно подтверждения Publish (ACL-2118) становится ревью. Только Graph API;
+ * у RPA обёртки сразу отдают дорогу прежним функциям. Снимок формы берётся при открытии, на Confirm
+ * сверяется и уходит на сервер как есть, без второго превью (сервер строит черновики один раз).
+ * Весь код ревью живёт в этом блоке. */
+(function () {
+  'use strict';
+  var prevAll = window.cbPublishAll, prevOne = window.cbPublish;
+  var esc = aclEscHtml;
+  var REUSE_NOTE = 'not checked with Meta';
+  var model = null;          // идущее ревью (одно на вкладку)
+  var preparing = false;     // Preview и проверка аккаунтов ещё идут: второе нажатие не нужно
+
+  /* ── события для журнала: только счётчики ───────────────────────────── */
+  function emit(name, body) {
+    try {
+      fetch('/api/publish-review/event', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ event: name }, body || {})) }).catch(function () {});
+    } catch (e) { /* журнал не условие работы */ }
+  }
+
+  /* ── снимок ─────────────────────────────────────────────────────────── */
+  function allSlots(form) { return Array.prototype.slice.call(form.querySelectorAll('.cb-slot')); }
+  function slotId(slot) { return (slot.dataset && slot.dataset.cbdId) || ''; }
+  function skipMap(form, keep) {
+    var m = {};
+    allSlots(form).forEach(function (s, i) { if (keep.indexOf(s) < 0) m[i] = true; });
+    return m;
+  }
+  /* FormData только выбранных карточек (номера сдвинуты, camp_count пересчитан). */
+  function snapshotOf(form, keep) {
+    return cbFormDataSkipping(form, skipMap(form, keep), cbCollectFormData(form)).body;
+  }
+  function entriesOf(fd) {
+    var a = [];
+    fd.forEach(function (v, k) { a.push([k, typeof v === 'string' ? v : 'file:' + ((v && v.name) || '')]); });
+    return a;
+  }
+  /* {rest: поля уровня формы, camps: {имя: поля кампании без номера}} - чем различаются два снимка. */
+  function digest(fd) {
+    var rest = [], camps = {}, order = [], names = {};
+    var list = entriesOf(fd);
+    list.forEach(function (kv) { var m = /^camp_(\d+)_name$/.exec(kv[0]); if (m) names[m[1]] = kv[1]; });
+    list.forEach(function (kv) {
+      var m = /^camp_(\d+)_(.+)$/.exec(kv[0]);
+      if (!m) { if (kv[0] !== 'camp_count' && kv[0] !== 'request_id') rest.push(kv); return; }
+      var name = names[m[1]] || ('#' + m[1]);
+      if (!camps[name]) { camps[name] = []; order.push(name); }
+      camps[name].push([m[2], kv[1]]);
+    });
+    var flat = {};
+    order.forEach(function (n) { flat[n] = JSON.stringify(camps[n]); });
+    return { rest: JSON.stringify(rest), camps: flat, order: order };
+  }
+
+  /* ── данные кампании ────────────────────────────────────────────────── */
+  function hitOf(c) {
+    var store = c.form._pfAudit, hit = store && store.byName[c.name];
+    if (!hit || hit.rev !== window.cbPfRev(c.slot)) return null;
+    return hit;
+  }
+  function checkedOk(c) {
+    var hit = hitOf(c);
+    return !!(hit && hit.result && !hit.error && hit.errorKind !== 'not_checked' && !c.fpMismatch);
+  }
+  function summaryOf(c) {
+    var hit = checkedOk(c) ? hitOf(c) : null;
+    return (hit && hit.result && hit.result.plan && hit.result.plan.summary) || null;
+  }
+  function previewRowOf(e, name) {
+    var found = null;
+    (e.plan || []).forEach(function (p) { if (!found && String(p['Campaign Name'] || '') === name) found = p; });
+    return found;
+  }
+  function numberText(n) { return (n % 1 ? n.toFixed(2) : String(n)); }
+  /* {n, cur, lifetime}: lifetime is a total for the whole run, never a daily amount (it stays out of the daily sum). */
+  function budgetOf(c) {
+    var sum = summaryOf(c);
+    if (sum && Number(sum.lifetime_budget) > 0) return { n: Number(sum.lifetime_budget), cur: String(sum.currency || ''), lifetime: true };
+    if (sum && isFinite(Number(sum.daily_budget))) return { n: Number(sum.daily_budget), cur: String(sum.currency || ''), lifetime: false };
+    var life = false;
+    try { life = !!(window.cbLifetime && window.cbLifetime.preview(c.slot)); } catch (err) { life = false; }
+    if (life) {
+      var f = c.slot.querySelector('[name$="_budget"]'), n = f ? Number(f.value) : NaN;
+      return isFinite(n) && n > 0 ? { n: n, cur: '', lifetime: true } : null;
+    }
+    var m = c.row && /([\d]+(?:\.\d+)?)/.exec(String(c.row['Campaign Daily Budget'] || ''));
+    return m ? { n: Number(m[1]), cur: '', lifetime: false } : null;
+  }
+
+  /* Блокеры кампании: тот же признак, что у ворот (cbPreflight.blocks), плюс то, что знает только ревью. */
+  function blockersOf(e, c) {
+    var out = [];
+    if (e.previewError) return [{ rule: 'preview', label: e.previewError, hint: '', detail: '' }];
+    if (!c.row) out.push({ rule: 'preview', label: 'Preview did not cover this campaign', hint: 'reload the page and try again', detail: '' });
+    else if (cbBlockingErrors(c.row).length) {
+      cbBlockingErrors(c.row).forEach(function (t) { out.push({ rule: 'preview', label: String(t), hint: '', detail: '' }); });
+    }
+    (window.cbMissingCreatives ? window.cbMissingCreatives(c.slot.closest ? c.slot : e.form) : []).forEach(function (m) {
+      if (m.slot === c.slot) out.push({ rule: 'media_file_missing', label: 'File missing — pick it again',
+        hint: '', detail: 'Ad ' + m.ad + ': ' + m.file });
+    });
+    var lines = [];
+    try { lines = window.cbTree.auditLines(c.slot); } catch (err) { lines = null; }
+    if (lines === null) return out.concat([{ rule: 'audit', label: 'Pre-flight audit unavailable', hint: 'reload the page', detail: '' }]);
+    lines.forEach(function (x) {
+      if (x.status === 'error') out.push({ rule: x.rule, label: x.label || x.rule, hint: x.hint || '', detail: cleanDetail(x.detail) });
+    });
+    if (!c.fp && !out.length) out.push({ rule: 'review', label: 'No review fingerprint', hint: 'reload the page and try again', detail: '' });
+    return out;
+  }
+  function cleanDetail(d) { return d && !/^(empty|not_https|no_valid_link)$/.test(d) ? d : ''; }
+
+  function warningsOf(e, c, perAccount) {
+    var out = [];
+    var lines = [];
+    try { lines = window.cbTree.auditLines(c.slot); } catch (err) { lines = []; }
+    var trackingText = perAccount.tracking;
+    lines.forEach(function (x) {
+      if (x.status !== 'warning') return;
+      if (x.rule === 'link_tracking' && trackingText) return;            // W3c: только если W3b молчит
+      out.push({ level: x.rule === 'media_vertical' ? 'warn' : cbNoticeLevel(x.rule, x.status), rule: x.rule,
+        label: x.label || x.rule, hint: x.hint || '', detail: cleanDetail(x.detail), campaign: c.name });
+    });
+    var sum = summaryOf(c);
+    if (sum && sum.pixel_source === 'account default') {
+      out.push({ level: 'warn', rule: 'pixel_source', label: 'No pixel in the account map',
+        hint: 'the only pixel on the ad account will be used (' + (sum.pixel_id || '—') + ').', detail: '', campaign: c.name });
+    }
+    if (trackingText) out.push({ level: 'warn', rule: 'tracking_link', label: trackingText, hint: '', detail: '', campaign: c.name });
+    if (c.twin && c.rep) out.push({ level: 'warn', rule: 'twin', label: 'Same name',
+      hint: 'these cards become one campaign (' + c.name + ').', detail: '', campaign: c.name });
+    if (sum && (sum.manual_required || []).length) {
+      out.push({ level: 'warn', rule: 'manual_page', label: 'Manual completion required',
+        hint: sum.manual_required.join(' '), detail: '', campaign: c.name });
+    }
+    return out;
+  }
+
+  function leftOut(e) { return !!(e.notReady && !model.anyway); }
+  function blockedReason(e, c) {
+    if (c._blockers.length) return c._blockers.map(function (b) {
+      return b.label + (b.detail ? ': ' + b.detail : '') + (b.hint ? ' — ' + b.hint : '');
+    }).join('; ');
+    return '';
+  }
+
+  /* ── подсчёт состояния окна ─────────────────────────────────────────── */
+  function evaluate() {
+    var create = [], blocked = [], notices = [], w7 = [];
+    model.entries.forEach(function (e) {
+      var tw = null;
+      try { tw = window.cbTrackingWarning ? window.cbTrackingWarning(e.form) : null; } catch (err) { tw = null; }
+      var trackingText = tw && !/^No tracking link/.test(tw.text) ? tw.text : '';
+      var perAccount = { tracking: trackingText };
+      e.camps.forEach(function (c) { c._blockers = blockersOf(e, c); });
+      /* W5: cards with one name become ONE campaign, so they are created together or not at all:
+         a blocker on one card blocks every card of the name (the server would otherwise get a partial
+         draft and refuse it as "changed"). */
+      e.camps.forEach(function (c) {
+        if (!c.twin) return;
+        var group = e.camps.filter(function (x) { return x.name === c.name; }), all = [];
+        group.forEach(function (x) {
+          x._blockers.forEach(function (b) {
+            if (!all.some(function (y) { return y.label === b.label && y.detail === b.detail; })) all.push(b);
+          });
+        });
+        if (all.length) c._blockers = all;
+      });
+      e.camps.forEach(function (c) {
+        c._warnings = c._blockers.length ? [] : warningsOf(e, c, perAccount);
+        c._out = leftOut(e);
+        c._willCreate = !c._blockers.length && !c._out;
+        if (!c.rep) { c._warnings.forEach(function (w) { notices.push(w); }); return; }   // a twin is counted once
+        if (c._blockers.length) blocked.push({ e: e, c: c });
+        if (!model.checking && !c._blockers.length && !checkedOk(c)) w7.push({ e: e, c: c });
+        if (c._willCreate) create.push({ e: e, c: c });
+        c._warnings.forEach(function (w) { notices.push(w); });
+      });
+      e.lostTargeting.forEach(function (typed) {
+        notices.push({ level: 'warn', rule: 'targeting_unpicked', label: 'Targeting not selected',
+          hint: typed + '. The campaign goes without detailed targeting.', detail: '', campaign: e.title });
+      });
+    });
+    return { create: create, blocked: blocked, notices: notices, w7: w7 };
+  }
+
+  /* ── разметка ───────────────────────────────────────────────────────── */
+  function line(label, value) {
+    return value ? '<div class="rv-line"><span class="rv-k">' + esc(label) + '</span> ' + value + '</div>' : '';
+  }
+  function adSetHtml(s, no) {
+    var dest = String(s.destination || 'Website');
+    var h = '<details class="rv-set"><summary>Ad set ' + (no < 10 ? '0' : '') + no + ' · ' + esc(dest) + ' · '
+      + (s.ads || []).length + ((s.ads || []).length === 1 ? ' ad' : ' ads') + '</summary>';
+    var interests = (s.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
+    h += line('Audience', esc(interests || 'no detailed targeting'));
+    h += line('Age', esc(s.age || ''));
+    h += line('Gender', esc(s.gender || ''));
+    h += line('Languages', esc((s.languages_picked || [s.language]).filter(Boolean).join(', ')));
+    h += line('Devices', esc(s.devices || (s.os && s.os !== 'All' ? s.os : '')));
+    h += line('Placements', esc(s.placements || ''));
+    if (s.ads_not_created) h += line('Ads', esc(String(s.pending_ad_count || 0) + ' — not created: needs a manual step (see the warning)'));
+    (s.ads || []).forEach(function (a) {
+      h += '<div class="rv-ad"><strong>Ad ' + esc(a.index) + '</strong>'
+        + line('Primary text', esc((a.primary_texts || [a.primary_text]).filter(Boolean).join(' / ')))
+        + line('Headline', esc((a.headlines || [a.headline]).filter(Boolean).join(' / ')))
+        + line('Button', esc(a.cta || ''))
+        + (a.form_name ? line('Form', esc(a.form_name) + (a.form_note ? ' <span class="rv-grey">' + esc(a.form_note) + '</span>' : ''))
+                       : line('URL', esc(a.link || '')))
+        + line('Feed file', esc(a.file || ''))
+        + line('Stories / Reels file', esc(a.stories_reels_file || '')) + '</div>';
+    });
+    return h + '</details>';
+  }
+  function previewOnlyHtml(c) {
+    var r = c.row || {};
+    var grey = ' <span class="rv-grey">' + REUSE_NOTE + '</span>';
+    return '<div class="rv-set-flat">'
+      + line('Audience', esc(r.Targeting || '') + grey)
+      + line('Age', esc(r['Age Min'] != null ? r['Age Min'] + '-' + r['Age Max'] : '') + grey)
+      + line('Page', '— ' + grey) + line('Pixel', '— ' + grey)
+      + line('Headline', esc(r['Ad Title'] || '') + grey)
+      + line('Feed file', esc(r['Creative Path'] || '') + grey)
+      + '</div>';
+  }
+  function campaignHtml(e, c) {
+    var b = budgetOf(c), sum = summaryOf(c), checked = checkedOk(c);
+    var bud = b ? ' · CBO · ' + numberText(b.n) + (b.cur ? ' ' + esc(b.cur) : '') + (b.lifetime ? ' lifetime' : ' / day') : '';
+    var published = '';
+    var hit = hitOf(c), res = hit && hit.result;
+    if (res && res.published_as && res.published_as !== c.name) {
+      published = ' → published as <strong>' + esc(res.published_as) + '</strong>';
+    }
+    var existing = sum && sum.existing ? ' <span class="rv-grey">already exists; a publish would reuse it</span>' : '';
+    var unchecked = !checked && !c._blockers.length ? ' <span class="rv-grey">' + REUSE_NOTE + '</span>' : '';
+    if (c._blockers.length || c._out) {
+      return '<div class="rv-camp rv-out"><s>' + esc(c.name) + '</s> <span class="rv-grey">— '
+        + esc(c._out ? 'account not ready' : blockedReason(e, c)) + '</span></div>';
+    }
+    var body = '';
+    if (sum) {
+      var pg = sum.page_name ? sum.page_name + (sum.page_id ? ' (' + sum.page_id + ')' : '') : String(sum.page_id || '');
+      body += line('Page', esc(pg)) + line('Pixel', esc(String(sum.pixel_id || '')));
+      if ((sum.manual_required || []).length) {
+        body += '<div class="rv-line rv-manual"><strong>Manual completion required</strong>: ' + esc(sum.manual_required.join(' ')) + '</div>';
+      }
+    }
+    if (sum && (sum.ad_sets || []).length) {
+      sum.ad_sets.forEach(function (s, i) { body += adSetHtml(s, s.index || i + 1); });
+    } else body += previewOnlyHtml(c);
+    if (c.visual) body += c.visual;
+    body += '<a href="#" class="rv-edit" data-rv-edit="' + esc(slotId(c.slot)) + '">Edit campaign</a>';
+    return '<details class="rv-camp"><summary><strong>' + esc(c.name) + '</strong>' + bud + published + existing + unchecked
+      + '</summary>' + body + '</details>';
+  }
+
+  function budgetLine(ev) {
+    var daily = {}, dOrder = [], life = {}, lOrder = [];
+    ev.create.forEach(function (x) {
+      var b = budgetOf(x.c);
+      if (!b) return;
+      var k = b.cur || '', into = b.lifetime ? life : daily, order = b.lifetime ? lOrder : dOrder;
+      if (!(k in into)) { into[k] = 0; order.push(k); }
+      into[k] += b.n;
+    });
+    if (!dOrder.length && !lOrder.length) return '';
+    var unknown = ' <span class="rv-grey">(currency ' + REUSE_NOTE + ')</span>';
+    var parts = dOrder.map(function (k) { return numberText(daily[k]) + (k ? ' ' + esc(k) : '') + ' / day' + (k ? '' : unknown); })
+      .concat(lOrder.map(function (k) { return numberText(life[k]) + (k ? ' ' + esc(k) : '') + ' lifetime' + (k ? '' : unknown); }));
+    return '<div class="pc-budget">Budget: ' + parts.join(' · ') + '</div>';
+  }
+  function checkLine() {
+    if (model.checking) {
+      var secs = Math.max(0, Math.floor((Date.now() - model.startedAt) / 1000));
+      return '<div class="pc-checked rv-checking">Checking with Meta… ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2) + '</div>';
+    }
+    if (!model.checkedAt) return '';
+    /* The age of the OLDEST verdict shown (a reused one is older than this popup), not the time this check ended. */
+    var since = model.checkedAt;
+    model.entries.forEach(function (e) {
+      e.camps.forEach(function (c) {
+        var hit = checkedOk(c) ? hitOf(c) : null;
+        if (hit && isFinite(hit.at) && hit.at > 0 && hit.at < since) since = hit.at;
+      });
+    });
+    var min = Math.max(0, Math.round((Date.now() - since) / 60000));
+    return '<div class="pc-checked">Checked with Meta ' + (min < 1 ? 'just now' : min + ' min ago') + '.</div>';
+  }
+
+  function notReadyHtml() {
+    var bad = model.badList;
+    if (!bad.length) return '';
+    return '<div class="cb-preflight pc-note pc-block">'
+      + '<strong>✕ Not ready (' + bad.length + ')</strong> — skipped unless you run them anyway:<br>'
+      + bad.map(function (a) {
+          return '<div>' + esc(a.account) + ' — ' + esc((a.reasons || []).map(function (r) {
+            return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
+          }).join('; ')) + '</div>';
+        }).join('')
+      + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway" data-rv-anyway="1"'
+      + (model.anyway ? ' checked' : '') + '> Run anyway</label></div>';
+  }
+  function blockedHtml(ev) {
+    if (!ev.blocked.length) return '';
+    return '<div class="pc-note pc-block rv-blocked"><strong>✕ Will not be created (' + ev.blocked.length + ')</strong><ul>'
+      + ev.blocked.map(function (x) {
+          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + '</li>';
+        }).join('') + '</ul></div>';
+  }
+  function warningsHtml(ev) {
+    var groups = cbGroupNotices(ev.notices);
+    var n = ev.notices.length;
+    var html = '<div class="pc-notes rv-warnings"><div class="pc-h">'
+      + (n ? 'Warnings (' + n + '): they do not block' : 'No warnings.') + '</div>';
+    if (n) html += cbNoticesHtml(groups);
+    if (ev.w7.length) {
+      var reasons = [];
+      ev.w7.forEach(function (x) {
+        var hit = x.c.form && x.c.form._pfAudit && x.c.form._pfAudit.byName[x.c.name];
+        var r = (hit && hit.error) || 'no answer';
+        if (reasons.indexOf(r) < 0) reasons.push(r);
+      });
+      html += '<div class="pc-note pc-warn rv-w7">⚠ Could not check with Meta (' + esc(reasons.join('; '))
+        + '). The pixel and vertical file warnings are unknown for: '
+        + esc(ev.w7.map(function (x) { return x.c.name; }).join(', ')) + '. '
+        + '<button type="button" class="rv-btn" data-rv-recheck="1">Check again</button></div>';
+    }
+    return html + '</div>';
+  }
+  function noteHtml() {
+    var open = (model.pf && model.pf.accounts || []).filter(function (a) {
+      return a.ready !== false && (a.notes || []).some(function (n) { return n.code === 'open_now'; });
+    });
+    return open.length ? '<div class="cb-preflight-note pc-note">' + esc(open.map(function (a) { return a.account; }).join(', '))
+      + ': profile is open — the robot will reuse or reopen it.</div>' : '';
+  }
+
+  var FOOT = 'On confirmation, this request is frozen. Each campaign is created PAUSED, ad sets and ads active, '
+    + 'then read back and compared. Later draft edits do not change this batch.';
+  var NOTHING = 'Nothing can be created: fix the campaigns listed under Will not be created.';
+
+  function bannerHtml() {
+    if (!model.stale || !model.stale.length) return '';
+    return '<div class="pc-note pc-block rv-stale" role="alert"><strong>Campaigns changed since this review: '
+      + esc(model.stale.join(', ')) + '.</strong> <button type="button" class="rv-btn" data-rv-again="1">Review again</button></div>';
+  }
+
+  function paint() {
+    var ev = evaluate();
+    model.ev = ev;
+    var accounts = model.entries.map(function (e) { return { name: e.title, camps: e.reps.map(function (c) { return c.name; }), e: e }; });
+    var accWithCreate = {};
+    ev.create.forEach(function (x) { accWithCreate[x.e.key] = true; });
+    var skipped = model.running;
+    var parts = cbPublishConfirmParts({
+      verb: 'Publish', targetText: 'campaign PAUSED, ad sets and ads active', accounts: accounts,
+      campaigns: ev.create.length, accountsCount: Object.keys(accWithCreate).length, skipped: skipped,
+      collapseOver: 6,
+      modeHtml: '<b>' + esc(cbPublishMode().split(' — ')[0]) + '</b> ' + esc(cbPublishMode().split(' — ').slice(1).join(' — ')),
+      leadExtraHtml: budgetLine(ev) + checkLine(),
+      campaignHtml: function (a, i) { return campaignHtml(a.e, a.e.reps[i]); },
+      noticesHtml: bannerHtml() + blockedHtml(ev) + notReadyHtml() + warningsHtml(ev) + noteHtml(),
+    });
+    var box = document.getElementById('safe-confirm-modal');
+    if (!box) return;
+    var lead = box.querySelector('.sfc-lead'), body = box.querySelector('.sfc-body');
+    if (lead) lead.innerHTML = parts.lead;
+    if (body) body.innerHTML = parts.body;
+    // Строка о заморозке стоит над кнопками и не прокручивается вместе с телом.
+    var foot = box.querySelector('.rv-foot-wrap');
+    if (!foot) {
+      foot = document.createElement('div');
+      foot.className = 'rv-foot-wrap';
+      var actions = box.querySelector('.sfc-actions');
+      if (actions && actions.parentNode) actions.parentNode.insertBefore(foot, actions);
+    }
+    foot.innerHTML = '<div class="rv-foot">' + esc(FOOT) + '</div>'
+      + (!model.checking && !ev.create.length ? '<div class="rv-nothing">' + esc(NOTHING) + '</div>' : '');
+    var ok = box.querySelector('#sfc-ok');
+    if (ok) {
+      ok.disabled = !!(model.checking || !ev.create.length);
+      ok.title = model.checking ? 'Checking with Meta…' : (!ev.create.length ? NOTHING : '');
+    }
+  }
+
+  /* ── проверка Meta (одна функция: ACL-1266 поменяет только её) ──────── */
+  window.cbReviewCheck = function (form, slots) {
+    var run = window.cbPreflightRun;
+    if (typeof run !== 'function') return Promise.resolve(null);
+    return Promise.resolve(run(form, slots)).then(function (data) {
+      var again = [];
+      var e = model && model.entries.filter(function (x) { return x.form === form; })[0];
+      slots.forEach(function (slot) {
+        var c = e && e.camps.filter(function (x) { return x.slot === slot; })[0];
+        var hit = c && hitOf(c), fp = c && e.review && e.review[c.name];
+        if (hit && hit.result && hit.result.review_fp && fp && hit.result.review_fp !== fp) again.push(slot);
+      });
+      if (!again.length) return data;
+      /* Вердикт другого отпечатка (поменяли текст в библиотеке): проверить заново, кэш не читать. */
+      return Promise.resolve(run(form, again, { force: true })).then(function (d2) {
+        again.forEach(function (slot) {
+          var c = e.camps.filter(function (x) { return x.slot === slot; })[0];
+          var hit = c && hitOf(c);
+          c.fpMismatch = !!(hit && hit.result && hit.result.review_fp && hit.result.review_fp !== e.review[c.name]);
+        });
+        return d2;
+      });
+    });
+  };
+
+  function runChecks() {
+    if (!model) return;
+    var mine = model;
+    mine.checking = true;
+    mine.startedAt = Date.now();
+    paint();
+    var jobs = mine.entries.map(function (e) {
+      var slots = e.camps.filter(function (c) { return !c.noCheck; }).map(function (c) { return c.slot; });
+      if (!slots.length) return Promise.resolve();
+      return window.cbReviewCheck(e.form, slots).catch(function () { return null; });
+    });
+    Promise.all(jobs).then(function () {
+      if (model !== mine) return;
+      mine.checking = false;
+      mine.checkedAt = Date.now();
+      try { window.cbTree.refreshAudit(); } catch (err) { /* карточки перерисуются сами */ }
+      paint();
+    });
+  }
+
+  /* ── подготовка: снимок, Preview, проверка аккаунтов ────────────────── */
+  function makeEntry(form, slots) {
+    var sel = allSlots(form).filter(function (s) { return slots.indexOf(s) >= 0; });
+    var names = {};
+    allSlots(form).forEach(function (s) { var n = cbPfName(s); names[n] = (names[n] || 0) + 1; });
+    var lost = [];
+    form.querySelectorAll('.cb-targeting-wrap').forEach(function (wrap) {
+      var input = wrap.querySelector('.cb-targeting-search'), hidden = wrap.querySelector('.cb-targeting-hidden');
+      if (input && typeof cbTargetingCommit === 'function') cbTargetingCommit(input);
+      var typed = input ? (input.value || '').trim() : '';
+      if (typed && !(hidden && hidden.value)) lost.push(typed);
+    });
+    var e = { form: form, key: cbFormKey(form), title: cbFormTitle(form), account: cbFormAccount(form), slots: sel,
+              fd: snapshotOf(form, sel), plan: null, review: {}, previewError: '', lostTargeting: lost, notReady: false, camps: [] };
+    e.camps = sel.map(function (slot) {
+      var n = cbPfName(slot);
+      return { form: form, slot: slot, name: n || cbSlotTitle(slot), twin: names[n] > 1, row: null, fp: '' };
+    });
+    var seen = {};
+    e.camps.forEach(function (c) { c.rep = !seen[c.name]; seen[c.name] = true; });   // twins are counted once
+    e.reps = e.camps.filter(function (c) { return c.rep; });
+    return e;
+  }
+  function runPreview(e) {
+    return fetch('/preview-publish', { method: 'POST', body: e.fd })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }, function () { return { ok: false, d: {} }; }); })
+      .then(function (x) {
+        if (!x.ok || !Array.isArray(x.d.plan)) { e.previewError = String(x.d.error || 'Preview did not answer'); return; }
+        e.plan = x.d.plan;
+        e.review = x.d.review || {};
+        e.camps.forEach(function (c) {
+          c.row = previewRowOf(e, c.name); c.fp = e.review[c.name] || '';
+          try {
+            if (c.row && c.row._ads_raw && window.buildVisualPreviewHtml) {
+              var acc = e.account, pfm = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
+              c.visual = '<details class="rv-vis"><summary>Ad previews</summary>'
+                + window.buildVisualPreviewHtml([c.row], pfm.page_name || acc || 'Your Page', {}) + '</details>';
+            }
+          } catch (err) { c.visual = ''; }
+        });
+      })
+      .catch(function () { e.previewError = 'The dashboard did not answer the preview'; });
+  }
+
+  function begin(reselect, opts) {
+    if (cbQueueUncertain()) return;
+    var items = reselect();
+    var running = [], live = [];
+    items.forEach(function (it) {
+      if (cbAccountBusy(cbFormKey(it.form))) running.push(cbFormTitle(it.form)); else live.push(it);
+    });
+    if (!live.length && !running.length) {
+      aclInlineError(document.querySelector('.cbd-publish-all'), 'Nothing is being assembled yet.');
+      return;
+    }
+    if (!live.length) { cbSayAlreadyBuilding(running); return; }
+    var rules = window.cbPreflight && window.cbPreflight.table ? window.cbPreflight.table() : [];
+    if (!window.cbTree || !window.cbTree.auditLines || !rules.length) { cbPfUnavailable(); return; }
+    if (preparing) {
+      aclInlineError(document.querySelector('.cbd-publish-all') || document.querySelector('.cb-publish-btn'), 'Still preparing the review — it opens when Preview and the checks have answered.');
+      return;
+    }
+    preparing = true;
+    if (window.cbPublishPending) window.cbPublishPending.start();
+    var entries = live.map(function (it) { return makeEntry(it.form, it.slots); });
+    var accounts = entries.map(function (e) { return e.account; });
+    var pf = typeof window.cbPreflightFetch === 'function' ? window.cbPreflightFetch(accounts) : Promise.resolve(null);
+    Promise.all([Promise.all(entries.map(runPreview)), pf]).then(function (r) {
+      preparing = false;
+      if (window.cbPublishPending) window.cbPublishPending.end();
+      open({ entries: entries, running: running, pf: r[1], opts: opts, reselect: reselect, openedAt: Date.now() });
+    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); });
+  }
+
+  function open(m) {
+    var bad = {}, badList = [];
+    ((m.pf && m.pf.accounts) || []).forEach(function (a) {
+      if (a && a.ready === false) { bad[String(a.account).toLowerCase()] = a; badList.push(a); }
+    });
+    m.badList = badList;
+    m.entries.forEach(function (e) { e.notReady = !!bad[e.account.toLowerCase()]; });
+    m.anyway = false; m.checking = false; m.stale = null; m.checkedAt = 0; m.closeReason = '';
+    model = m;
+    var opts = m.opts;
+    _safeConfirm(opts.title, '', function () {}, { confirmLabel: opts.confirmLabel, wide: true, lead: '&nbsp;' });
+    var overlay = document.getElementById('safe-confirm-modal');
+    var okBtn = overlay.querySelector('#sfc-ok');
+    okBtn.onclick = function () { if (!okBtn.disabled) confirm(); };
+    overlay.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var edit = t.closest('[data-rv-edit]');
+      if (edit) {
+        ev.preventDefault();
+        m.closeReason = 'edit';
+        overlay.remove();
+        try { window.cbTree.open(edit.getAttribute('data-rv-edit')); } catch (err) { /* карточка могла уйти */ }
+      } else if (t.closest('[data-rv-recheck]')) {
+        runChecks();
+      } else if (t.closest('[data-rv-again]')) {
+        m.closeReason = 'stale';
+        overlay.remove();
+        begin(m.reselect, m.opts);
+      }
+    });
+    overlay.addEventListener('change', function (ev) {
+      if (ev.target && ev.target.getAttribute && ev.target.getAttribute('data-rv-anyway')) { m.anyway = !!ev.target.checked; paint(); }
+    });
+    emit('review.opened', { accounts: m.entries.length, campaigns: m.entries.reduce(function (n, e) { return n + e.camps.length; }, 0) });
+    var tick = setInterval(function () {
+      if (!document.getElementById('safe-confirm-modal')) {
+        clearInterval(tick);
+        if (model === m && m.closeReason !== 'confirm') emit('review.closed', { reason: m.closeReason || 'cancel', open_s: Math.round((Date.now() - m.openedAt) / 1000) });
+        if (model === m) model = null;
+        return;
+      }
+      if (m.checking) paint();
+    }, 1000);
+    paint();
+    runChecks();
+  }
+
+  /* ── Confirm ────────────────────────────────────────────────────────── */
+  function staleNames() {
+    var fresh = model.reselect(), names = [];
+    var byKey = {};
+    fresh.forEach(function (it) { byKey[cbFormKey(it.form)] = it; });
+    model.entries.forEach(function (e) {
+      var f = byKey[e.key];
+      if (!f) { names = names.concat(e.camps.map(function (c) { return c.name; })); return; }
+      delete byKey[e.key];
+      var picked = allSlots(f.form).filter(function (s) { return f.slots.indexOf(s) >= 0; });
+      var sameSet = picked.length === e.slots.length && picked.every(function (s, i) { return s === e.slots[i]; });
+      var a = digest(e.fd), b = digest(snapshotOf(f.form, picked));
+      if (!sameSet || a.rest !== b.rest) {
+        e.camps.forEach(function (c) { names.push(c.name); });
+        picked.forEach(function (s) { var n = cbPfName(s); if (names.indexOf(n) < 0) names.push(n); });
+        return;
+      }
+      a.order.concat(b.order).forEach(function (n) { if (a.camps[n] !== b.camps[n] && names.indexOf(n) < 0) names.push(n); });
+    });
+    Object.keys(byKey).forEach(function (k) { byKey[k].slots.forEach(function (s) { names.push(cbPfName(s) || cbSlotTitle(s)); }); });
+    return names;
+  }
+
+  function countBy(list, pick) {
+    var out = {};
+    list.forEach(function (x) { pick(x).forEach(function (r) { out[r] = (out[r] || 0) + 1; }); });
+    return out;
+  }
+
+  function confirm() {
+    if (!model || model.checking) return;
+    var ev = model.ev || evaluate();
+    if (!ev.create.length) return;
+    var names = staleNames();
+    if (names.length) {
+      model.stale = names;
+      paint();
+      var box = document.getElementById('safe-confirm-modal');
+      var banner = box && box.querySelector('.rv-stale');
+      if (banner && banner.scrollIntoView) banner.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    var run = cbPublishRun(model.opts.onProgress || (window.cbTree ? window.cbTree.showQueue : null));
+    if (!run) return;
+    var m = model;
+    m.closeReason = 'confirm';
+    if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);
+    var go = [], skippedAcc = [], anywayAcc = [], busy = [];
+    var openS = Math.round((Date.now() - m.openedAt) / 1000);
+    m.entries.forEach(function (e) {
+      if (e.notReady) (m.anyway ? anywayAcc : skippedAcc).push(e.account);
+      var send = e.camps.filter(function (c) { return c._willCreate; });
+      if (!send.length) return;
+      go.push(e.account);
+      var skip = {};
+      e.camps.forEach(function (c, i) { if (!c._willCreate) skip[i] = true; });
+      var body = cbFormDataSkipping(e.form, skip, e.fd).body;
+      var campaigns = {};
+      send.forEach(function (c) {
+        var sum = summaryOf(c);
+        campaigns[c.name] = { fp: c.fp, page_id: sum ? String(sum.page_id || '') : '', pixel_id: sum ? String(sum.pixel_id || '') : '' };
+      });
+      var warnings = countBy(send.map(function (c) { return c._warnings; }), function (ws) { return ws.map(function (w) { return w.rule; }); });
+      var blocked = countBy(ev.blocked.filter(function (x) { return x.e === e; }), function (x) { return x.c._blockers.map(function (b) { return b.rule; }); });
+      var checked = send.filter(checkedOk).length;
+      body.set('review_json', JSON.stringify({ v: 1, campaigns: campaigns, warnings: warnings, blocked: blocked,
+        checked: checked, not_checked: send.length - checked, open_s: openS }));
+      var got = run.frozen(e.form, body, send.map(function (c) { return c.slot; }), e.camps.length - send.length);
+      if (got && got.skipped && got.skipped.length) busy = busy.concat(got.skipped);
+    });
+    if (m.pf && window.cbPreflightDecision) {
+      window.cbPreflightDecision(go, m.anyway ? [] : skippedAcc, m.anyway ? anywayAcc : []);
+    }
+    var overlay = document.getElementById('safe-confirm-modal');
+    if (overlay) overlay.remove();
+    if (busy.length) cbSayAlreadyBuilding(busy);
+  }
+
+  /* «Review again» из строки итога: те же кампании, которые сервер вернул как изменившиеся. */
+  window.cbReview = {
+    again: function (key, names) {
+      var forms = Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'))
+        .filter(function (f) { return cbKeyMatches(cbFormKey(f), key); });
+      var reselect = function () {
+        return forms.map(function (f) { return { form: f, slots: allSlots(f).filter(function (s) { return names.indexOf(cbPfName(s)) >= 0; }) }; })
+          .filter(function (it) { return it.slots.length; });
+      };
+      begin(reselect, { title: 'Create the changed campaigns as PAUSED campaigns?', confirmLabel: 'Publish selected → ' + cbPublishTarget(),
+        onProgress: window.cbTree ? window.cbTree.showQueue : null });
+    },
+    model: function () { return model; }
+  };
+
+  /* ── обёртки кнопок: только Graph API, иначе прежняя дорога ─────────── */
+  function ticked(form) { return allSlots(form).filter(function (s) { return !!s._cbdPick; }); }
+
+  if (typeof prevAll === 'function') {
+    window.cbPublishAll = function (onProgress, picked, onlyKeys) {
+      if (!cbApiMode()) return prevAll(onProgress, picked, onlyKeys);
+      var hadPick = !!(picked && picked.length);
+      var firstCall = true;
+      var reselect = function () {
+        var out = [];
+        // Первый раз - то, что передала кнопка; на Confirm - то, что отмечено сейчас (как подпись кнопки Publish).
+        var pick = null;
+        if (firstCall && hadPick) pick = picked;
+        else if (!firstCall) {
+          var t = []; document.querySelectorAll('form.open-account-form').forEach(function (f) { t = t.concat(ticked(f)); });
+          pick = t.length ? t : null;
+        }
+        firstCall = false;
+        document.querySelectorAll('form.open-account-form').forEach(function (form) {
+          var all = allSlots(form);
+          if (!all.length) return;
+          if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
+          var mine = pick ? cbPickedIn(form, pick) : all;
+          if (mine.length) out.push({ form: form, slots: mine });
+        });
+        return out;
+      };
+      begin(reselect, { onProgress: onProgress, confirmLabel: (hadPick ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(),
+        title: hadPick ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?' });
+    };
+  }
+  if (typeof prevOne === 'function') {
+    window.cbPublish = function (form) {
+      if (!cbApiMode()) return prevOne(form);
+      var reselect = function () {
+        var all = allSlots(form);
+        var shown = form.classList.contains('cb-in-drawer') ? all.filter(function (s) { return !s.hidden; })[0] : null;
+        var tk = shown ? [] : ticked(form);
+        var slots = shown ? [shown] : (tk.length && tk.length !== all.length ? tk : all);
+        return [{ form: form, slots: slots }];
+      };
+      var several = reselect()[0].slots.length > 1;
+      begin(reselect, { onProgress: window.cbTree ? window.cbTree.showQueue : null,
+        confirmLabel: 'Publish → PAUSED campaign',
+        title: several ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?' });
+    };
+  }
+})();
+/* ACL-2353 end */
+
 // ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
 // добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
 // first.» (ads_manager_flow) и заметки хэндоффа (rpa_publisher) — повтор.
@@ -22045,6 +23038,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : queue.state === 'waiting_account' ? 'queued — ' + aclEscHtml(cbAccountWait(queue)) + cbCloseWindows(queue)
           : queue.state === 'waiting_load' ? 'queued — ' + aclEscHtml(cbLoadWait(queue))
           : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory') + cbCloseWindows(queue)
+          : queue.hold === 'ceiling' ? 'queued — ' + aclEscHtml(cbCeilingWait(queue))
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
@@ -23209,6 +24203,73 @@ function aclPickerSearch(inst, text) {
     var t = ev.target;
     if (!t || !t.getAttribute) return;
     if (t.id === 'mp-save') { save(); return; }
+    if (t.getAttribute('data-view') === 'accounts') load();
+  });
+  document.addEventListener('acl:viewchange', function (e) {
+    if (e.detail && e.detail.view === 'accounts') load();
+  });
+  if ((location.hash || '').indexOf('accounts') !== -1) document.addEventListener('DOMContentLoaded', load);
+})();
+
+// ── ACL-2293: лимиты запуска (потолок профилей, тяжёлые действия, доля памяти) ──
+(function () {
+  var pending = false, loaded = {}, info = {};
+  function el(id) { return document.getElementById(id); }
+  function say(text, error) { el('rl-msg').textContent = text || ''; el('rl-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function show(d) {
+    info = d;
+    loaded = {ceiling: String(d.ceiling), warm_heavy: String(d.warm_heavy), memory_max_used_pct: String(d.memory_max_used_pct)};
+    el('rl-ceiling').value = loaded.ceiling;
+    el('rl-heavy').value = loaded.warm_heavy;
+    el('rl-share').value = loaded.memory_max_used_pct;
+    var df = d.defaults || {};
+    el('rl-def-ceiling').textContent = df.ceiling; el('rl-def-heavy').textContent = df.warm_heavy;
+    el('rl-def-share').textContent = df.memory_max_used_pct;
+    var now = [];
+    if (d.total_mb) now.push('This computer: ' + (d.total_mb / 1024).toFixed(0) + ' GB memory, ' + Math.round(d.used_pct) + '% in use');
+    else now.push('Memory could not be read; at most 2 profiles run at once');
+    now.push(d.running + ' of ' + d.ceiling + ' profiles running' + (d.ceiling_reached ? ' - ceiling reached' : '')
+      + (d.waiting ? ', ' + d.waiting + ' waiting' : ''));
+    el('rl-now').textContent = now.join(' · ');
+    el('rl-warn').textContent = (d.warnings || []).join(' ');
+  }
+  async function load() {
+    try {
+      var r = await fetch('/api/run-limits');
+      var d = await r.json();
+      if (r.ok && d.ok) show(d);
+    } catch (e) { say(String(e), true); }
+  }
+  async function post(body, ask) {
+    if (pending) return;
+    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
+    pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
+    try {
+      var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d.error || 'Could not save');
+      show(d);
+      say('Saved. Applies to the next start; runs already going are not stopped.');
+    } catch (e) { say(e.message || String(e), true); }
+    finally { pending = false; el('rl-save').disabled = false; el('rl-reset').disabled = false; }
+  }
+  function save() {
+    var body = {};
+    if (el('rl-ceiling').value !== loaded.ceiling) body.ceiling = el('rl-ceiling').value;
+    if (el('rl-heavy').value !== loaded.warm_heavy) body.warm_heavy = el('rl-heavy').value;
+    if (el('rl-share').value !== loaded.memory_max_used_pct) body.memory_max_used_pct = el('rl-share').value;
+    if (!Object.keys(body).length) { say('Nothing changed.'); return; }
+    var c = parseFloat(el('rl-ceiling').value), p = parseFloat(el('rl-share').value);
+    var cf = info.confirm_above || {};
+    var risky = ('ceiling' in body && c > (cf.ceiling || 3)) || ('memory_max_used_pct' in body && p > (cf.memory_max_used_pct || 80));
+    if (risky) body.confirm = true;   // сервер без этого флага рискованное значение не принимает
+    post(body, risky);
+  }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute) return;
+    if (t.id === 'rl-save') { save(); return; }
+    if (t.id === 'rl-reset') { post({reset: true}, false); return; }
     if (t.getAttribute('data-view') === 'accounts') load();
   });
   document.addEventListener('acl:viewchange', function (e) {
@@ -24441,6 +25502,14 @@ window.cwWorkbench = (function () {
     var sec = a.slot.querySelector('.cb-adset-sec[data-adset="' + (a.setIndex || 0) + '"]');
     var input = (sec || a.slot).querySelector('.cb-targeting-search');
     if (!input) return { done: false, text: 'This draft has no targeting field.' };
+    /* Прежний выбор снимаем сами: человек печатает — срабатывает oninput и сбрасывает скрытый код,
+       а тут значение кладёт код. Иначе cbTargetingCommit видит старый код («уже выбрано мышью»),
+       возвращает true, и меняется только имя в поле, а таргет остаётся прежним. */
+    var tgtWrap = input.closest('.cb-targeting-wrap');
+    var tgtHidden = tgtWrap && tgtWrap.querySelector('.cb-targeting-hidden');
+    var tgtHint = tgtWrap && tgtWrap.querySelector('.cb-targeting-hint');
+    if (tgtHidden) tgtHidden.value = '';
+    if (tgtHint) tgtHint.textContent = '';
     input.value = ev.target;
     var ok = typeof window.cbTargetingCommit === 'function' && window.cbTargetingCommit(input);
     if (ok) { changed(input); return { done: true, text: 'Target “' + ev.target + '” set on Ad set ' + ((a.setIndex || 0) + 1) + '.' }; }
@@ -24774,6 +25843,7 @@ window.cwWorkbench = (function () {
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
 <script src="/static/account_pages.js"></script>
 <script src="/static/warm_sessions.js"></script>
+<script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>
 <script src="/static/connections.js"></script>
 </body>

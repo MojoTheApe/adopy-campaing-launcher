@@ -538,6 +538,133 @@ def test_static_strings_exist():
         assert gone not in html, gone
 
 
+# ── ACL-2441: дроп на карточку кампании и фильтр аккаунтов по стране ──────────
+
+def _three_accounts(browser):
+    """Demo и Other в одной стране, Third - в другой; у Other уже есть кампании."""
+    ctx = browser.new_context()
+    p = ctx.new_page()
+    errors: list[str] = []
+    p.on("pageerror", lambda e: errors.append(str(e)))
+    html = _render({"Demo": [], "Other": [], "Third": []})
+
+    def route(r):
+        if r.request.resource_type == "document":
+            r.fulfill(content_type="text/html", body=html)
+            return
+        r.fulfill(json={"files": OFFLINE_FILES, "texts": [], "rows": [], "profiles": [], "waiting": False})
+
+    p.route("**/*", route)
+    p.goto("http://acl.test/")
+    p.evaluate("cbDrawer.open()")
+    return ctx, p, errors
+
+
+def _set_country(p, label, country):
+    p.evaluate(
+        """([label, country]) => {
+          const f = Array.from(document.querySelectorAll('form.open-account-form'))
+            .find(x => x.querySelector('[name="account_label"]').value === label);
+          f.querySelector('[name="country"]').value = country;
+        }""",
+        [label, country],
+    )
+
+
+def _count(p, label):
+    return p.evaluate(
+        """(label) => Array.from(document.querySelectorAll('form.open-account-form'))
+          .find(x => x.querySelector('[name="account_label"]').value === label).querySelectorAll('.cb-slot').length""",
+        label,
+    )
+
+
+def test_drop_on_a_campaign_card_of_another_account_adds_one_more_campaign(page):
+    _seed(page, account=0, count=1)
+    _seed(page, account=1, count=2)
+    before = _count(page, "Other")
+    grip = page.locator(".cbd-acc").first.locator(".cbd-camp-head .cbm-grip").first
+    target = page.locator(".cbd-acc").nth(1).locator(".cbd-camp-row").first
+    grip.drag_to(target)
+    assert _count(page, "Other") == before + 1, "копия не добавилась как ещё одна кампания"
+    assert _count(page, "Demo") == 1, "оригинал тронут"
+    assert "Copied campaign" in _toast(page).inner_text()
+    assert _names_ok(page)
+
+
+def test_drag_over_a_campaign_card_highlights_the_account_block(page):
+    _seed(page, account=0, count=1)
+    _seed(page, account=1, count=2)
+    page.evaluate(
+        """() => { const g = document.querySelector('.cbd-acc .cbm-grip');
+          g.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })); }"""
+    )
+    page.wait_for_function("document.body.classList.contains('cbm-dragging')")
+    page.evaluate(
+        """() => { const row = document.querySelectorAll('.cbd-acc')[1].querySelector('.cbd-camp-row');
+          row.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() })); }"""
+    )
+    assert page.evaluate("document.querySelectorAll('.cbd-acc')[1].classList.contains('cbm-over')")
+    page.evaluate("document.dispatchEvent(new DragEvent('dragend', { bubbles: true }))")
+
+
+def test_drop_on_a_campaign_card_of_the_own_account_is_a_no_op(page):
+    _seed(page, account=0, count=2)
+    snap = _snapshot(page)
+    grip = page.locator(".cbd-camp-head .cbm-grip").first
+    grip.drag_to(page.locator(".cbd-camp-row").nth(1))
+    after = _snapshot(page)
+    # Имя кампании билдер пересобирает сам при любой перерисовке - сравниваем число карточек и строк.
+    assert {k: after[k] for k in ("slots", "rows", "tree")} == {k: snap[k] for k in ("slots", "rows", "tree")}
+    assert not _toast(page).count() or not _toast(page).is_visible()
+    assert _count(page, "Demo") == 2
+
+
+def test_ghosts_and_menu_list_only_accounts_of_the_campaigns_country(browser):
+    ctx, p, errors = _three_accounts(browser)
+    try:
+        _set_country(p, "Third", "Peru")
+        _seed(p, account=0, count=1)
+        p.evaluate(
+            """() => { const g = document.querySelector('.cbd-acc .cbm-grip');
+              g.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })); }"""
+        )
+        p.wait_for_function("document.body.classList.contains('cbm-dragging')")
+        ghosts = p.locator(".cbm-ghost").all_inner_texts()
+        assert len(ghosts) == 1 and ghosts[0].startswith("Other"), ghosts
+        p.evaluate("document.dispatchEvent(new DragEvent('dragend', { bubbles: true }))")
+        p.locator(".cbd-camp-head .cbm-moveto").first.dispatch_event("click")
+        labels = p.locator(".cbm-menu .cbm-item").all_inner_texts()
+        joined = " ".join(labels)
+        assert "Other" in joined and "Third" not in joined and "Demo" not in joined, labels
+    finally:
+        assert not errors, errors
+        ctx.close()
+
+
+def test_a_country_without_other_accounts_shows_a_note_instead_of_an_empty_list(browser):
+    ctx, p, errors = _three_accounts(browser)
+    try:
+        _set_country(p, "Other", "Peru")
+        _set_country(p, "Third", "Chile")
+        _seed(p, account=0, count=1)
+        p.evaluate(
+            """() => { const g = document.querySelector('.cbd-acc .cbm-grip');
+              g.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })); }"""
+        )
+        p.wait_for_function("document.body.classList.contains('cbm-dragging')")
+        assert p.locator(".cbm-ghost:not(.cbm-ghost-none)").count() == 0
+        note = p.locator(".cbm-ghosts .cbm-ghost-none").inner_text()
+        assert note.startswith("No other account for ")
+        p.evaluate("document.dispatchEvent(new DragEvent('dragend', { bubbles: true }))")
+        p.locator(".cbd-camp-head .cbm-moveto").first.dispatch_event("click")
+        assert p.locator(".cbm-menu .cbm-item").count() == 0
+        assert "No other account for" in p.locator(".cbm-menu").inner_text()
+    finally:
+        assert not errors, errors
+        ctx.close()
+
+
 @pytest.mark.parametrize("width", [1280, 800, 370, 320])
 def test_campaign_head_controls_do_not_cover_each_other(page, width):
     _seed(page, account=0, count=2)

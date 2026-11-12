@@ -148,9 +148,9 @@ def test_tile_content_by_state(open_page):
     assert tile("Facebook_DQ-214")[2] == "1 FTD · CPA $117"          # есть FTD — вместо CPL строка про CPA
     assert tile("Facebook_DQ-213")[2].startswith("CPL ")              # FTD нет — остаётся CPL
     br = tile("Facebook_BR1")
-    assert br[1] == "not in BM" and br[2].startswith("read ") and br[2].endswith("· 5d")
+    assert br[1] == "not in BM" and br[2].startswith("not in BM · ") and br[2].endswith("· not refreshed")   # ACL-2419 §4: слово статуса · время чтения · not refreshed
     dead = tile("Facebook_DQ-212")
-    assert dead[1] == "disabled" and dead[2].startswith("$40 · read ")
+    assert dead[1] == "disabled" and dead[2].startswith("$40 · disabled · ")
     assert tile("Facebook_DQ-217")[1:] == ["New", "no spend yet"]
     assert tile("Facebook_CLU0")[1] == "Unknown"
     size = pg.evaluate("(() => { const r = document.querySelector('.aov-tile').getBoundingClientRect(); return [r.width, r.height]; })()")
@@ -296,3 +296,62 @@ def test_account_cell_shows_act_id_state_tip_and_no_empty_strip(open_page, amap)
     # хост дерева кампаний не рисуется пустой рамкой
     h = pg.evaluate("(() => { const e = document.querySelector('#aov-expanded .amap-campaigns'); const s = getComputedStyle(e); return [s.borderTopWidth, e.offsetHeight]; })()")
     assert h[0] == "0px" and h[1] < 4, h
+
+
+def test_state_cell_shows_whole_status_line_in_both_views(open_page, amap):
+    """ACL-2511: date, reason and not-refreshed suffix are readable in the State column (no clipping); tile titles carry the line."""
+    long_line = "disabled · 10.11 10:00 · ads integrity policy violation · not refreshed"
+    rows = [r for mc in amap["countries"] for r in mc["rows_aov"]]
+    target = next(r for r in rows if r["state"]["key"] == "dead")
+    target["state"]["status_line"] = long_line
+    pg = open_page()
+    row = pg.locator("#aov-expanded tr.aov-row", has_text=target["account"]).first
+    line = row.locator(".aov-stline")
+    assert line.inner_text() == long_line
+    assert line.get_attribute("title") == long_line
+    assert pg.evaluate("(e) => getComputedStyle(e).whiteSpace", line.element_handle()) == "normal"
+    # nothing is cut: the text fits the cell horizontally and the cell grows to hold every wrapped line
+    assert pg.evaluate(
+        "(e) => { const td = e.closest('td'); const a = e.getBoundingClientRect(), b = td.getBoundingClientRect();"
+        " return e.scrollWidth <= e.clientWidth + 1 && a.right <= b.right + 1 && a.bottom <= b.bottom + 1 && td.scrollHeight <= td.clientHeight + 1; }",
+        line.element_handle())
+    # every State line in the expanded view is fully inside its cell
+    clipped = pg.evaluate(
+        "[...document.querySelectorAll('#aov-expanded .aov-stline')].filter(e => { const td = e.closest('td');"
+        " return td.getBoundingClientRect().width > 0 && (e.scrollWidth > e.clientWidth + 1 || td.scrollHeight > td.clientHeight + 1); }).length")
+    assert clipped == 0
+    pg.click("[data-aov-view=compact]")
+    title = pg.evaluate("(n) => [...document.querySelectorAll('#aov-compact .aov-tile')].find(t => t.dataset.name === n).title", target["account"])
+    assert long_line in title
+    assert not pg.errors
+
+
+def test_active_by_spend_row_with_failed_read_shows_active_and_agreeing_line(monkeypatch, tmp_path):
+    """ACL-2556: spend + failed status read -> Active badge with 'not refreshed' line; never 'unknown'."""
+    from src.web import app as web
+
+    monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(tmp_path / "nope.csv"))
+    monkeypatch.setattr("src.web.app.get_ad_account_map_path", lambda: str(tmp_path / "nope.csv"))
+    spec = {"Chile": [("Facebook_ACT1", 50.0, None, "", 0), ("Facebook_ACT2", 60.0, None, "", 0),
+                      ("Facebook_UNK1", 0, None, "", 0)]}
+    failed = {"tried_at": site.iso(0).replace("T", " "), "tried_error": "timeout"}
+    amap = site.build_amap(web, links, monkeypatch, spec, status_extra={"Facebook_ACT1": failed})
+    for mc in amap["countries"]:
+        for r in mc["rows_aov"]:
+            r["act_id"] = "act_1"
+    with sync_playwright() as pw:
+        browser = launch_chromium(pw)
+        pg = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
+        html = site.page_html(amap)
+        pg.route("http://acl.test/**", lambda route: route.fulfill(status=200, content_type="text/html", body=html))
+        pg.goto("http://acl.test/")
+        for acc, badge, line in (("Facebook_ACT1", "Active", "status not refreshed"),
+                                 ("Facebook_ACT2", "Active", "active by spend"),
+                                 ("Facebook_UNK1", "Unknown", "unknown")):
+            cell = pg.locator('#aov-expanded [data-aov-country="Chile"] tr.aov-row', has_text=acc).locator("td:has(.aov-st)")
+            text = cell.inner_text().lower()
+            assert badge.lower() in text and line in text, (acc, text)
+            if badge == "Active":
+                assert "unknown" not in text, (acc, text)
+        browser.close()

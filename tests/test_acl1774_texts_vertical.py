@@ -367,7 +367,7 @@ POLICY_CASES = [
     ("text_with_extra_key", _cre(_feed(bodies=[{"text": "b", "adlabels": []}])), False),
     ("extra_spec_key", _cre(_feed(optimization_type="REGULAR")), False),
     ("extra_spec_key_group", _cre(_feed(groups=[])), False),
-    ("no_bodies", _cre(_drop(_feed(), "bodies")), False),
+    ("no_bodies", _cre(_drop(_feed(), "bodies")), True),  # ACL-2474: основной текст не обязателен
     ("no_titles", _cre(_drop(_feed(), "titles")), False),
     ("pair_ok", _cre(_pair()), True),
     ("pair_one_rule", _cre(_mut(_pair(), lambda s: s["asset_customization_rules"].pop())), False),

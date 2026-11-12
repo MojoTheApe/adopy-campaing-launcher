@@ -175,6 +175,7 @@ CALLS_PER_AD = 5
 CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
                                 # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
 CALLS_INSTANT_FORM = 10
+CALLS_PREPARE_EXTRA_READS = 4   # ACL-2244: page / profile-page checks and similar reads of `_prepare` outside the targeting reserve
 
 
 def estimate_targeting_reads(plan: "CampaignPlan") -> int:
@@ -305,6 +306,7 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
 
 
 from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
+from src.fb_ads_rpa.draft import share_first_headline as _share_first_headline  # noqa: E402
 
 #: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
 FORM_ID_PLACEHOLDER = "0000000"
@@ -810,6 +812,8 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 if ad_sets_src else False)
     if not budget or float(budget) <= 0:
         problems.append("Lifetime budget missing" if lifetime else "Daily budget missing")
+    # ACL-2406: заголовок и описание всей кампании задаёт Ad 1; у объявлений 2+ свои только тексты.
+    _share_first_headline(draft)
     ad_sets: list[AdSetPlan] = []
     ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
     for set_no, s in enumerate(ad_sets_src, start=1):
@@ -1150,7 +1154,8 @@ class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
     def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None, *,
-                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None):
+                 search_cache: "_tr.SearchCache | None" = None, cache_scope: str = "", facts: Any = None,
+                 act: str = ""):
         self.client = client
         #: ACL-2267: долгий кэш разобранных терминов (страна, язык, интерес); по умолчанию - кэш машины.
         self._facts = facts if facts is not None else _facts_cache.default()
@@ -1162,7 +1167,8 @@ class TargetingResolver:
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
-        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts)
+        self.terms = _tr.TermResolver(client, store, cache=search_cache, scope=cache_scope, facts=self._facts,
+                                      act=act)
         #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
         #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
         self.locale_groups: dict[int, dict[int, str]] = {}
@@ -1612,6 +1618,8 @@ class CampaignCreator:
         self._op: "_oj.Operation | None" = None
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
+        #: ACL-2353: снимок ревью задания (имя кампании -> fp, Page, пиксель); None - без ревью.
+        self.reviewed: dict | None = None
         self.facts = facts
         self.resolver = resolver
         self.cancelled = cancelled
@@ -3107,10 +3115,12 @@ class CampaignCreator:
             return row
 
         spec: dict[str, Any] = {
-            "bodies": [{"text": t} for t in ad.bodies], "titles": [{"text": t} for t in ad.titles],
+            "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
             "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
+        if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
+            spec["bodies"] = [{"text": t} for t in ad.bodies]
         if ad.descriptions:
             spec["descriptions"] = [{"text": t} for t in ad.descriptions]
         if ad.vertical_path:
@@ -3408,6 +3418,18 @@ class CampaignCreator:
         self._snapshot_operation(out)
         return out
 
+    def _check_reviewed_ids(self, plan: CampaignPlan) -> None:
+        """ACL-2353: Page и пиксель, выбранные сейчас («Automatic», «account default»), совпадают с показанными
+        в ревью. Иначе стоп ДО первой записи: человек одобрял другое."""
+        if self.reviewed is None:
+            return
+        from src.web import publish_review
+
+        problem = publish_review.ids_mismatch(self.reviewed, plan.name, page_id=plan.page_id,
+                                              pixel_id=plan.pixel_id)
+        if problem:
+            raise CreationStopped(problem, kind="review_stale")
+
     @staticmethod
     def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
         """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
@@ -3521,6 +3543,7 @@ class CampaignCreator:
 
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
+        calls_at_start = getattr(self.client, "calls", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
@@ -3615,7 +3638,35 @@ class CampaignCreator:
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
+        if writing:
+            self._require_remaining_budget(plan, chunk_calls, calls_at_start)
         return targetings, files
+
+    def _require_remaining_budget(self, plan: CampaignPlan, chunk_calls: int, calls_at_start: int = 0) -> None:
+        """ACL-2244: stop before the first write when preparation ate into the calls the writes were sized with.
+
+        The run budget is sized as writes + targeting reads + chunks (`publish_api.create_call_budget`), and
+        `estimate_create_calls` is a deliberately generous upper bound of the writes. So the remaining calls are
+        compared with that bound only when preparation spent MORE than the budget reserved for it (targeting
+        reads, the page and form reads); ordinary preparation reads never refuse a campaign that publishes fine.
+        An operator cap below the sized budget is not checked here: it stops midway, as always.
+        """
+        budget = getattr(self.client, "max_calls", None)
+        used = getattr(self.client, "calls", 0)
+        if not isinstance(budget, int) or not isinstance(used, int):
+            return
+        spent = used - calls_at_start
+        reserved = estimate_targeting_reads(plan) + CALLS_PREPARE_EXTRA_READS
+        if any(x.instant for x in plan.ad_sets):
+            reserved += CALLS_INSTANT_FORM          # the form reads are spent here, and counted in `need` as well
+        if spent <= reserved:
+            return
+        remaining = budget - used
+        need = estimate_create_calls(plan) + chunk_calls
+        if need > remaining:
+            raise PlanError(f"The Meta call budget left for this run is too small for this campaign: it needs about "
+                            f"{need} calls, {remaining} remain, so {need - remaining} are missing. "
+                            "Nothing was created; split the campaign or try again.")
 
     def _check_forms(self, plan: CampaignPlan) -> None:
         """Формы объявлений — формы ЭТОЙ Страницы (ACL-1775). Только чтение, до любой записи.
@@ -4102,6 +4153,7 @@ class CampaignCreator:
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
         targetings, files = self._prepare(plan, out)
+        self._check_reviewed_ids(plan)
 
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
