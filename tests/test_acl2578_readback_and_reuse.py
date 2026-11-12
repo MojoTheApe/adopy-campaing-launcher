@@ -1,0 +1,114 @@
+"""ACL-2578: `_<digits>` on a stored image name is not a readback mismatch; a re-run never reuses a name. Fakes only."""
+from __future__ import annotations
+
+import hashlib
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+import pytest  # noqa: E402
+
+from src.fb_api import creator as cr  # noqa: E402
+from src.fb_api import name_receipt as nr  # noqa: E402
+from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _publisher, _run  # noqa: E402
+from tests.test_acl2250_copy_counter import BASE, _names  # noqa: E402
+
+
+@pytest.mark.parametrize("expected,actual,result", [
+    ("acl-ab.png", "acl-ab.png_105", "acl-ab.png"),
+    ("acl-ab.png", "acl-ab.png_1", "acl-ab.png"),
+    ("acl-ab.png", "acl-ab.png", "acl-ab.png"),
+    ("acl-ab.png", "acl-cd.png_105", "acl-cd.png_105"),         # another image stays a difference
+    ("acl-ab.png", "acl-ab.png_x", "acl-ab.png_x"),
+    ("acl-ab.png", "acl-ab.png_105_7", "acl-ab.png_105_7"),
+    ("acl-ab.png", "", ""),
+])
+def test_stored_image_name_accepts_only_a_digit_suffix(expected, actual, result):
+    assert cr.stored_image_name(expected, actual) == result
+
+
+def _suffixing_meta(suffix="_105"):
+    """Library names come back with Meta's `_<digits>` suffix; the hash is not the md5, so the name is compared."""
+    meta = FakeMeta(hash_fn=lambda d: hashlib.sha1(d).hexdigest())
+    real = meta.write
+
+    def write(path, params, *a, **k):
+        got = real(path, params, *a, **k)
+        if path.endswith("/adimages"):
+            for h in list(meta.images):
+                if not meta.images[h].endswith(suffix):
+                    meta.images[h] += suffix
+        return got
+    meta.write = write
+    return meta
+
+
+def test_readback_passes_when_meta_appends_a_digit_suffix_to_the_image_name(tmp_path):
+    meta = _suffixing_meta()
+    out, _ = _run(meta, _draft(tmp_path, ads=2))
+    assert out.error == "" and out.readback["ok"] is True, out.mismatches
+    assert any(c["field"] == "image_file" and c["ok"] for c in out.readback["checks"])
+
+
+def test_readback_still_fails_for_a_genuinely_different_image_name(tmp_path):
+    meta = _suffixing_meta()
+    real = meta.request
+
+    def request(method, path, params=None):
+        got = real(method, path, params)
+        if path.endswith("/adimages") and isinstance(got.get("body"), dict):
+            for row in got["body"].get("data", []):
+                row["name"] = "acl-0000000000000000.png_105"
+        return got
+    meta.request = request
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert [m["field"] for m in out.mismatches] == ["image_file"]
+
+
+def _stop_at_first_image(tmp_path):
+    meta = FakeMeta()
+    meta.fail_next["adimages"] = "unsent"
+    first = _publisher(meta).publish_draft(_draft(tmp_path / "a", ads=2))
+    assert first["error"] and first["campaign_id"]
+    return meta, first
+
+
+@pytest.fixture
+def dirs(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    return tmp_path
+
+
+def test_rerun_after_a_stop_at_the_first_image_reuses_campaign_and_ad_set_with_a_replaced_creative(dirs):
+    meta, first = _stop_at_first_image(dirs)
+    d = _draft(dirs / "b", ads=3)                           # replaced creative file and one more ad
+    d.ad_sets[0].ads[0].creative_path = str(dirs / "b" / "replaced.png")
+    (dirs / "b" / "replaced.png").write_bytes(b"another picture")
+    res = _publisher(meta).publish_draft(d)                 # a new job = a new publisher
+    assert res["error"] is None and not res["published_as"]
+    assert res["campaign_id"] == first["campaign_id"] and res["reused"].get("campaign")
+    assert _names(meta) == [BASE] and _names(meta, "adset") == [BASE]
+    assert sum(1 for o in meta.objects.values() if o["_kind"] == "ad") == 3
+
+
+def test_stop_message_names_the_copy_that_a_changed_draft_really_gets(dirs):
+    meta, first = _stop_at_first_image(dirs)
+    assert f'"{BASE} copy 1"' in first["error"] and "_2" not in first["error"]
+    d = _draft(dirs / "b", ads=2)
+    d.ad_sets[0].daily_budget = 77.0                        # the campaign settings differ: no reuse
+    res = _publisher(meta).publish_draft(d)
+    assert res["error"] is None and res["published_as"] == BASE + " copy 1"
+
+
+def test_left_over_known_by_receipt_is_never_given_the_same_name_when_the_listing_misses_it(dirs, monkeypatch):
+    meta, first = _stop_at_first_image(dirs)
+    assert nr.load(ACT, BASE)["campaign_id"] == first["campaign_id"]
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])      # search lag
+    d = _draft(dirs / "b", ads=2)
+    d.ad_sets[0].daily_budget = 77.0                        # not reusable
+    res = _publisher(meta).publish_draft(d)
+    assert res["error"] is None and res["published_as"] == BASE + " copy 1"
+    assert sorted(_names(meta)) == [BASE, BASE + " copy 1"], "never two campaigns with one name"

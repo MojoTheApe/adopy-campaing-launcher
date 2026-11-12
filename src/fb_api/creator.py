@@ -1470,6 +1470,20 @@ def image_name(path: str, data: bytes) -> str:
     return f"acl-{_md5(data)[:16]}{ext}"
 
 
+_STORED_SUFFIX = re.compile(r"_\d+$")
+
+
+def stored_image_name(expected: str, actual: str) -> str:
+    """ACL-2578: Meta may append `_<digits>` to the library name of an uploaded image (`acl-<md5>.png_105`).
+
+    It is still our file: the suffix alone is not a difference. Any other name stays as Meta returned it.
+    """
+    text = str(actual or "")
+    if text != expected and _STORED_SUFFIX.sub("", text, count=1) == expected:
+        return expected
+    return text
+
+
 def video_title(tag: str, data: bytes) -> str:
     return f"acl-{tag}-{_md5(data)[:12]}"
 
@@ -1979,36 +1993,39 @@ class CampaignCreator:
             for s, h in zip(cand.ad_sets, found_sets)))
         return found_sets, partial, []
 
-    def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict) -> NameChoice | None:
+    def _receipt_choice(self, plan: CampaignPlan, targetings: list[dict], receipt: dict
+                        ) -> tuple[NameChoice | None, tuple[int, dict, list[str]] | None]:
         """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
 
-        Любое сомнение (нет кампании, ошибка Meta на чтении по id, не наша, не живая, расходится) - квитанция
-        не используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        Возвращает (выбор, остаток). Любое сомнение (нет кампании, ошибка Meta на чтении по id, не наша, не живая) -
+        квитанция не используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        ACL-2578: если кампания жива и наша, но расходится с билдером, она не дописывается, а возвращается вторым
+        элементом (номер, строка, причины): её имя занято, даже если листинг Meta её сейчас не показал.
         """
         n = receipt.get("n")
         if not isinstance(n, int) or n < 0:
-            return None
+            return None, None
         cand = copy_plan(plan, n)
         if receipt.get("name") != cand.name:
-            return None
+            return None, None
         campaign_id = str(receipt.get("campaign_id") or "")
         if campaign_id:
             try:
                 row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
             except GraphError:
-                return None
+                return None, None
             row = {**row, "id": campaign_id} if isinstance(row, dict) else None
         else:
             hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
             row = next((r for r in hits if cand.label in _labels(r)), None)
         if not row or str(row.get("name") or "").strip() != cand.name or cand.label not in _labels(row):
-            return None
+            return None, None
         if str(row.get("effective_status") or row.get("status") or "") not in LIVE_STATES:
-            return None
+            return None, None
         found_sets, _partial, why = self._resume_state(cand, targetings, str(row["id"]))
         if why:
-            return None
-        return NameChoice(cand, row, found_sets, n, n)
+            return None, (n, row, why)
+        return NameChoice(cand, row, found_sets, n, n), None
 
     def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
         """ACL-2250 (ACL-1902): имя кампании до любой записи - и в боевом запуске, и в Check plan.
@@ -2021,11 +2038,19 @@ class CampaignCreator:
         """
         base = plan.name
         receipt = self._read_name_receipt(plan)
+        leftover = None
         if receipt:
-            chosen = self._receipt_choice(plan, targetings, receipt)
+            chosen, leftover = self._receipt_choice(plan, targetings, receipt)
             if chosen:
                 return chosen
         fam = family_rows(base, self._family_rows(plan))
+        if leftover:
+            # ACL-2578: our own left-over campaign (known by id from the receipt) holds its name even when the
+            # Meta listing does not show it (search lag): the new one must never take the same name.
+            n_left, row_left, _why = leftover
+            known = fam.setdefault(n_left, [])
+            if str(row_left.get("id")) not in {str(r.get("id")) for r in known}:
+                known.append(row_left)
         if not fam:
             self._check_name_length(plan)
             return NameChoice(plan, None, [None] * len(plan.ad_sets))
@@ -4306,7 +4331,8 @@ class CampaignCreator:
                 "hashes": sorted({h for _, _, h in image_ads}), "fields": "hash,name"}, max_pages=1)
             names = {str(r.get("hash")): str(r.get("name") or "") for r in rows}
             for aobj, path, h in image_ads:
-                check(aobj, "image_file", image_name(path, files[path]), names.get(h, ""))
+                want_name = image_name(path, files[path])
+                check(aobj, "image_file", want_name, stored_image_name(want_name, names.get(h, "")))
         mismatches = [c for c in checks if not c["ok"]]
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
                 "diagnostics": diag}
