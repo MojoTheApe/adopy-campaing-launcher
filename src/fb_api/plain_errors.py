@@ -355,7 +355,9 @@ def left_in_meta(*, campaign: bool, adsets: int = 0, ads: int = 0, empty_note: b
         parts.append(f"{adsets} ad set{'s' if adsets != 1 else ''}")
     if ads:
         parts.append(f"{ads} ad{'s' if ads != 1 else ''}")
-    again = (f'otherwise the new one is published as "{name}_2"' if name else "otherwise a new one is published")
+    # ACL-2578: the real naming is the ACL-2250 copy counter ("X copy 1", then the next free number), never "_2".
+    again = (f'otherwise the new one is published as a new copy, "{name} copy 1" (or the next free number)'
+             if name else "otherwise a new one is published as a new copy")
     text = ("Left in Meta: " + ", ".join(parts)
             + f". Publishing again reuses it if its settings match; {again}.")
     if not_created:
