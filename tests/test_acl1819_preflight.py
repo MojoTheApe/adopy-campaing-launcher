@@ -167,6 +167,12 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
                                            "feed_texts", "error", [1]),
     "feed_texts_multi_no_headline": (_with(ads=_ad(0, bodies=["a", "b"], headline="", headlines=[])),
                                      "feed_texts", "error", [1]),
+    # ACL-2584: an Instant Form ad without a headline goes out with an empty one (Ads Manager HAR): a warning, not a block.
+    "feed_texts_form_multi_no_headline": (_with(destination="instant_form", ads=_ad(0, form_id="7", bodies=["a", "b"],
+                                                                                headline="", headlines=[])),
+                                          "feed_texts", "warning", [1]),
+    "feed_texts_form_vertical_no_headline": (_with(destination="instant_form", ads=_ad(
+        0, form_id="7", vertical_file="v.png", headline="", headlines=[])), "feed_texts", "warning", [1]),
     "feed_texts_one_text_no_headline_ok": (_with(ads=_ad(0, headline="")), "feed_texts", "ok", []),
     # ACL-2528 (owner 2026-11-12): empty or title-only text 1 with texts 2..3 filled does not block; warning only.
     "feed_texts_empty_text1_ok": (_with(ads=_ad(0, body="", bodies=["", "b", "c"], headline="Head",

@@ -399,7 +399,8 @@ def _check_instant_feed(spec: dict, refuse: Any) -> None:
 
     Рядом с `object_story_spec` (проверен выше): тексты с метками, один файл с двумя метками, ссылка-заглушка формы
     с двумя метками, кнопка формы, `optimization_type: PLACEMENT` и ровно два правила: основное (все тексты) и
-    вертикальное (первый текст). Заголовок обязателен (ACL-2474: без него живой прогон не проверен).
+    вертикальное (первый текст). Заголовок: 1-5 непустых текстов либо ровно один пустой (`""`) с обеими метками -
+    так Ads Manager отправил объявление без заголовка (HAR владельца); любые другие пустые тексты - отказ.
     """
     allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls", "call_to_action_types",
                "call_to_actions", "ad_formats", "optimization_type", "asset_customization_rules"}
@@ -413,16 +414,18 @@ def _check_instant_feed(spec: dict, refuse: Any) -> None:
         refuse("needs either images or videos")
     media_kind = "images" if has_images else "videos"
     if "titles" not in spec:
-        refuse("titles must hold 1-5 non-empty texts (Meta requires a headline when an ad has several texts)")
+        refuse("titles must be present: 1-5 non-empty texts, or exactly one empty text when the ad has no headline")
     present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_kind]
     for kind in ("bodies", "titles", "descriptions"):
         if kind not in spec:
             continue
         items = _instant_labelled_list(spec, kind, refuse, texts=True)
         limit = ASSET_FEED_TEXT_MAX[kind]
+        # ACL-2584: the ONE empty text allowed is a lone title "" (no headline, as Ads Manager sent it).
+        no_headline = kind == "titles" and len(items) == 1
         for item in items:
             text = item.get("text")
-            if set(item) != {"text", "adlabels"} or not isinstance(text, str) or not text.strip():
+            if set(item) != {"text", "adlabels"} or not isinstance(text, str)                     or not (text.strip() or (no_headline and text == "")):
                 refuse(f"{kind} must hold non-empty texts with labels only")
             if len(text) > limit:
                 refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
@@ -464,6 +467,9 @@ def _check_instant_feed(spec: dict, refuse: Any) -> None:
         if n == 0 and cs == {}:
             continue  # Advantage+ placements: the main rule is the catch-all, as in Ads Manager
         _check_customization_spec(cs, refuse)
+        if not (cs.get("facebook_positions") or cs.get("instagram_positions")):
+            # Platforms alone would make the two rules overlap completely.
+            refuse("a rule with publisher_platforms needs position lists")
         for key, vertical in INSTANT_VERTICAL_POSITIONS.items():
             values = cs.get(key) or []
             inside = [x for x in values if x in vertical]
@@ -517,7 +523,7 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     if "bodies" in spec and not _is_text_list(spec["bodies"], "bodies", required=True, limit_count=cap):
         refuse(f"bodies must hold 1-{cap} non-empty texts, or be left out")
     if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):
-        refuse(f"titles must hold 1-{cap} non-empty texts (Meta requires a headline when an ad has several texts)")
+        refuse(f"titles must hold 1-{cap} non-empty texts (a Website ad with several texts and no headline is not verified yet)")
     if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True,
                                                     limit_count=cap):
         refuse(f"descriptions must hold 1-{cap} non-empty texts")
@@ -865,6 +871,9 @@ def check(act: str, method: str, path: str, params: dict | None,
         _check_targeting(checked["targeting"])
     if DYNAMIC_KEY in checked and checked[DYNAMIC_KEY] is not True:
         raise WriteRefused(f"write refused: {DYNAMIC_KEY} may only be true")
+    if edge == "adsets" and checked.get(DYNAMIC_KEY) is True and checked.get("destination_type") == "ON_AD":
+        # ACL-2584: an Instant Form ad set is never Dynamic Creative (its feed uses placement rules).
+        raise WriteRefused(f"write refused: an Instant Form (ON_AD) ad set may not set {DYNAMIC_KEY}")
     if edge == "ads" and "creative" in checked:
         # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
         # встроенный креатив провёз бы свой degrees_of_freedom_spec).

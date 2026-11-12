@@ -489,9 +489,9 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "Meta requires a headline when an ad has several texts or a Stories / Reels file (a primary text is optional): add a headline, or use one text and one file",
+      "hint": "Website ad: a headline-less ad with several texts or a Stories / Reels file is not verified yet, so it is blocked: add a headline, or use one text and one file. Instant Form ad: this is only a warning, the ad goes out with no headline (Meta shows none)",
       "id": "feed_texts",
-      "label": "Several texts or a Stories / Reels file need a headline",
+      "label": "Several texts or a Stories / Reels file: headline",
       "severity": "error",
       "side": "client",
       "topic": "creative",

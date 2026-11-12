@@ -329,6 +329,31 @@ MATRIX = [
     ("other_optimization_type", _cre(_feed(optimization_type="DEGREES_OF_FREEDOM")), True, False),
     ("no_title", _cre(_feed(titles=None, asset_customization_rules=[
         _rule(0, MAIN_POS, ("body", "link", "image")), _rule(1, VERT_POS, ("body", "link", "image"))])), True, False),
+    # No headline (Ads Manager HAR): exactly one empty title with both labels, title_label kept in both rules.
+    ("ok_empty_title", _cre(_feed(titles=[_t("", "acl_title_main", "acl_title_vertical")])), True, True),
+    ("empty_title_without_vertical_label", _cre(_feed(titles=[_t("", "acl_title_main")])), True, False),
+    ("empty_title_next_to_another", _cre(_feed(titles=[_t("t1", "acl_title_main", "acl_title_vertical"),
+                                                       _t("", "acl_title_main")])), True, False),
+    ("empty_title_first_of_two", _cre(_feed(titles=[_t("", "acl_title_main", "acl_title_vertical"),
+                                                    _t("t2", "acl_title_main")])), True, False),
+    ("whitespace_title", _cre(_feed(titles=[_t(" ", "acl_title_main", "acl_title_vertical")])), True, False),
+    ("empty_title_with_extra_key", _cre(_feed(titles=[{"text": "", "x": 1, "adlabels": _lab(
+        "acl_title_main", "acl_title_vertical")}])), True, False),
+    ("empty_title_rule_loses_title_label", _cre(_feed(
+        titles=[_t("", "acl_title_main", "acl_title_vertical")], asset_customization_rules=[
+            _rule(0, MAIN_POS, ("body", "link", "image")), _rule(1, VERT_POS, ("body", "link", "image"))])), True, False),
+    ("empty_body", _cre(_feed(bodies=[_t("", "acl_body_main", "acl_body_vertical")])), True, False),
+    ("empty_second_body", _cre(_feed(bodies=[_t("b1", "acl_body_main", "acl_body_vertical"),
+                                             _t("", "acl_body_main")])), True, False),
+    ("empty_description", _cre(_feed(descriptions=[_t("", "acl_description_main", "acl_description_vertical")],
+                                     asset_customization_rules=[
+        _rule(0, MAIN_POS, ("body", "title", "description", "link", "image")),
+        _rule(1, VERT_POS, ("body", "title", "description", "link", "image"))])), True, False),
+    # A rule with platforms only has no positions: the two rules would overlap completely.
+    ("vertical_rule_platforms_only", _cre(_feed(asset_customization_rules=[
+        _rule(0, MAIN_POS), _rule(1, {"publisher_platforms": ["facebook", "instagram"]})])), True, False),
+    ("main_rule_platforms_only", _cre(_feed(asset_customization_rules=[
+        _rule(0, {"publisher_platforms": ["facebook", "instagram"]}), _rule(1, VERT_POS)])), True, False),
     ("unlabelled_text", _cre(_feed(bodies=[{"text": "b1"}, {"text": "b2"}])), True, False),
     ("second_text_with_vertical_label", _cre(_feed(bodies=[
         _t("b1", "acl_body_main", "acl_body_vertical"), _t("b2", "acl_body_main", "acl_body_vertical")])), True, False),
@@ -468,7 +493,7 @@ const h = G[NAME];
 (async () => {
   const out = {};
   for (const m of MATRIX) {
-    const spec = { method: 'POST', path: '/' + ACTV + '/adcreatives', params: m.params };
+    const spec = { method: 'POST', path: '/' + ACTV + '/' + (m.edge || 'adcreatives'), params: m.params };
     if (m.on_ad) spec.on_ad = true;
     out[m.name] = await h.call(spec);
   }
@@ -478,12 +503,13 @@ const h = G[NAME];
 """
 
 
-def _node_matrix() -> dict:
+def _node_matrix(rows=None) -> dict:
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
     name = "__acl_graph_feed_form"
-    matrix = [{"name": n, "params": p, "on_ad": o} for n, p, o, _a in MATRIX]
+    matrix = [{"name": n, "params": p, "on_ad": o, **({"edge": e} if e else {})}
+              for n, p, o, _a, e in (rows or [(*m, "") for m in MATRIX])]
     script = (_NODE.replace("TOKENV", json.dumps("EAAB" + "Zx9" * 20)).replace("NAME", json.dumps(name))
               .replace("ACTV", json.dumps(ACT)).replace("MATRIX", "(" + json.dumps(matrix) + ")")
               .replace("HELPER", json.dumps(tc.helper_source(name, wp.policy_for_page(ACT)))))
@@ -510,7 +536,132 @@ def test_page_helper_agrees_with_python_on_the_whole_matrix():
     assert out["calls"] == sum(1 for m in MATRIX if m[3]), "wrong number of writes reached Meta"
 
 
+_SET = {"name": "s", "campaign_id": "1", "status": "PAUSED", "destination_type": "ON_AD"}
+#: (name, params, allowed): an Instant Form (ON_AD) ad set is never Dynamic Creative (ACL-2584 review M4).
+ADSET_ROWS = [
+    ("on_ad_plain", dict(_SET), True),
+    ("on_ad_flag_false", dict(_SET, is_dynamic_creative=False), False),
+    ("on_ad_dynamic", dict(_SET, is_dynamic_creative=True), False),
+    ("website_dynamic_stays_allowed", {**_SET, "destination_type": "WEBSITE", "is_dynamic_creative": True}, True),
+    ("no_destination_dynamic_stays_allowed",
+     {k: v for k, v in _SET.items() if k != "destination_type"} | {"is_dynamic_creative": True}, True),
+]
+
+
+@pytest.mark.parametrize("name,params,allowed", ADSET_ROWS, ids=[r[0] for r in ADSET_ROWS])
+def test_an_instant_form_ad_set_may_not_be_dynamic_creative_python(name, params, allowed):
+    if allowed:
+        assert wp.check(ACT, "POST", f"/{ACT}/adsets", params) == "adsets"
+    else:
+        with pytest.raises(wp.WriteRefused):
+            wp.check(ACT, "POST", f"/{ACT}/adsets", params)
+
+
+def test_an_instant_form_ad_set_may_not_be_dynamic_creative_page_helper():
+    out = _node_matrix([(n, p, False, a, "adsets") for n, p, a in ADSET_ROWS])
+    for name, _p, allowed in ADSET_ROWS:
+        assert (out[name].get("body") == {"id": "5"}) == allowed, (name, out[name])
+
+
+# ───────────────────────── no headline (Ads Manager HAR) ─────────────────────────
+
+def _no_headline_draft(tmp_path):
+    d = _draft(tmp_path, texts=1)
+    ad = d.ad_sets[0].ads[0]
+    ad.ad_title = ""
+    ad.text_variants = [{"name": "T2", "body": "Body variant 2", "headline": "", "description": ""}]
+    return d
+
+
+def test_an_ad_without_a_headline_sends_one_empty_title_as_ads_manager_did(tmp_path):
+    meta = FormMeta()
+    d = _no_headline_draft(tmp_path)
+    assert cr.plan_from_draft(d).ad_sets[0].ads[0].titles == []
+    out, _ = _run(meta, d)
+    assert out.error == "" and out.readback["ok"], (out.error, out.mismatches)
+    fs = _of(meta, "creative")["asset_feed_spec"]
+    assert fs["titles"] == [{"text": "", "adlabels": _lab("acl_title_main", "acl_title_vertical")}]
+    assert all("title_label" in r for r in fs["asset_customization_rules"])  # kept in both rules
+    assert "is_dynamic_creative" not in _of(meta, "adset")
+    assert wp.check(ACT, "POST", f"/{ACT}/adcreatives", _cre(fs), on_ad=True) == "adcreatives"
+
+
+def test_readback_still_catches_a_headline_that_came_back_different(tmp_path):
+    meta = FormMeta()
+    meta.mutate_ads["creative.asset_feed_spec.titles"] = [{"text": "Meta wrote this"}]
+    out, _ = _run(meta, _no_headline_draft(tmp_path))
+    assert "headlines" in {m["field"] for m in out.mismatches}, out.mismatches
+
+
+# ───────────────────────── readback hardening (ACL-2584 review M2, M3) ─────────────────────────
+
+def test_readback_accepts_the_adlabel_spelling_of_the_rule_label_keys(tmp_path):
+    first = FormMeta()
+    _run(first, _draft(tmp_path, texts=1))
+    rules = _of(first, "creative")["asset_feed_spec"]["asset_customization_rules"]
+    renamed = [{(k[:-len("_label")] + "_adlabel" if k.endswith("_label") else k): v for k, v in r.items()}
+               for r in rules]
+    assert renamed != rules
+    meta = FormMeta()
+    meta.mutate_ads["creative.asset_feed_spec.asset_customization_rules"] = renamed
+    out, _ = _run(meta, _draft(tmp_path, texts=1))
+    assert not [m for m in out.mismatches if str(m["field"]).startswith("rule_")], out.mismatches
+
+
+def test_readback_flags_a_wrong_label_in_the_adlabel_spelling(tmp_path):
+    first = FormMeta()
+    _run(first, _draft(tmp_path, texts=1))
+    rules = _of(first, "creative")["asset_feed_spec"]["asset_customization_rules"]
+    bad = [{(k[:-len("_label")] + "_adlabel" if k.endswith("_label") else k):
+            ({"name": "acl_body_other"} if k == "body_label" else v) for k, v in r.items()} for r in rules]
+    meta = FormMeta()
+    meta.mutate_ads["creative.asset_feed_spec.asset_customization_rules"] = bad
+    out, _ = _run(meta, _draft(tmp_path, texts=1))
+    assert "rule_main_labels" in {m["field"] for m in out.mismatches}
+
+
+def test_one_image_that_meta_stores_as_two_rows_is_not_a_mismatch(tmp_path):
+    first = FormMeta()
+    _run(first, _draft(tmp_path, texts=1))
+    row = _of(first, "creative")["asset_feed_spec"]["images"][0]
+    split = [{"hash": row["hash"], "adlabels": _lab("acl_image_main")},
+             {"hash": row["hash"], "image_crops": {"90x160": [[0, 0], [1, 1]]},
+              "adlabels": _lab("acl_image_vertical")}]
+    meta = FormMeta()
+    meta.mutate_ads["creative.asset_feed_spec.images"] = split
+    out, _ = _run(meta, _draft(tmp_path, texts=1))
+    assert not {"file_count", "media_labels"} & {m["field"] for m in out.mismatches}, out.mismatches
+
+
+def test_two_different_images_are_still_a_file_count_mismatch(tmp_path):
+    first = FormMeta()
+    _run(first, _draft(tmp_path, texts=1))
+    row = _of(first, "creative")["asset_feed_spec"]["images"][0]
+    meta = FormMeta()
+    meta.mutate_ads["creative.asset_feed_spec.images"] = [
+        {"hash": row["hash"], "adlabels": _lab("acl_image_main")},
+        {"hash": "f" * 32, "adlabels": _lab("acl_image_vertical")}]
+    out, _ = _run(meta, _draft(tmp_path, texts=1))
+    assert "file_count" in {m["field"] for m in out.mismatches}
+
+
 # ───────────────────────── Check plan ─────────────────────────
+
+def _form_inp(dest):
+    return {"destination": dest, "objective": "leads", "link": "https://example.invalid/l", "country": "US",
+            "ads": [{"file": "a.png", "form_id": FORM, "bodies": ["a", "b"], "headlines": []}]}
+
+
+def test_no_headline_is_a_warning_for_instant_form_and_a_block_for_website():
+    form = {v["rule"]: v for v in pf.evaluate_client(_form_inp("instant_form"))}["feed_texts"]
+    assert form["status"] == "warning", form
+    web = {v["rule"]: v for v in pf.evaluate_client(_form_inp("website"))}["feed_texts"]
+    assert web["status"] == "error", web
+
+
+def test_the_feed_texts_wording_does_not_claim_meta_requires_a_headline():
+    rule = next(r for r in pf.load_json()["rules"] if r["id"] == "feed_texts")
+    assert "Meta requires" not in rule["hint"] and "Meta requires" not in rule["label"]
 
 def test_check_plan_rules_let_several_texts_pass_for_a_form_ad_set():
     inp = {"destination": "instant_form", "objective": "leads", "link": "https://example.invalid/l", "country": "US",

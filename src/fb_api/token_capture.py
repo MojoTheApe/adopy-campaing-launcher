@@ -463,7 +463,9 @@ _HELPER_JS = r"""
       for (const it of items) {
         const ks = Object.keys(it);
         if (!(ks.length === 2 && ks.indexOf('text') >= 0 && ks.indexOf('adlabels') >= 0)) return false;
-        if (typeof it.text !== 'string' || it.text.trim() === '' || it.text.length > AF.text_max[kind]) return false;
+        // ACL-2584: the one empty text allowed is a lone title "" (no headline, as Ads Manager sent it).
+        const noHeadline = kind === 'titles' && items.length === 1 && it.text === '';
+        if (typeof it.text !== 'string' || (it.text.trim() === '' && !noHeadline) || it.text.length > AF.text_max[kind]) return false;
       }
     }
     const mlist = instantList(spec, mediaKind, false);
@@ -498,6 +500,7 @@ _HELPER_JS = r"""
       const cs = rule.customization_spec;
       if (n === 0 && isObj(cs) && Object.keys(cs).length === 0) continue;
       if (!csOk(cs)) return false;
+      if (!((cs.facebook_positions || []).length || (cs.instagram_positions || []).length)) return false;  // platforms alone overlap fully
       for (const k of Object.keys(I.vertical_positions)) {
         const values = cs[k] || [];
         const inside = values.filter((x) => I.vertical_positions[k].indexOf(x) >= 0);
@@ -737,6 +740,8 @@ _HELPER_JS = r"""
     if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
     if (edge === 'adsets' && 'targeting' in checked && !targetingOk(checked.targeting)) return refused('targeting');
     if (WRITE.asset_feed.dynamic_key in checked && checked[WRITE.asset_feed.dynamic_key] !== true) return refused('dynamic');
+    // ACL-2584: an Instant Form (ON_AD) ad set is never Dynamic Creative (mirror of write_policy.check).
+    if (edge === 'adsets' && checked[WRITE.asset_feed.dynamic_key] === true && checked.destination_type === 'ON_AD') return refused('dynamic');
     // Объявление — только ссылка на готовый креатив.
     if (edge === 'ads' && 'creative' in checked) {
       const c = checked.creative;

@@ -3315,6 +3315,9 @@ class CampaignCreator:
         for key, texts in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
             if texts:  # ACL-2474: пустой вид текста ключ не отправляет
                 spec[key] = [labelled(key, {"text": t}, n == 0) for n, t in enumerate(texts)]
+        if "titles" not in spec:
+            # ACL-2584: без заголовка уходит ровно один пустой, как у Ads Manager (HAR владельца): Meta его сохранила.
+            spec["titles"] = [labelled("titles", {"text": ""}, True)]
         file_row = ({"video_id": media["video_id"], "thumbnail_url": media["thumb"]} if ad.kind == "video"
                     else {"hash": media["image_hash"]})
         spec[media_key] = [labelled(media_key, file_row, True)]
@@ -4598,6 +4601,22 @@ class CampaignCreator:
         check(aobj, "format", ad.kind, "video" if fs.get("videos") else ("image" if fs.get("images") else ""))
         id_key = "video_id" if ad.kind == "video" else "hash"
         rows = [x for x in (fs.get(key) or []) if isinstance(x, dict)]
+        if instant:
+            # ACL-2584: Ads Manager's own readback shows one file stored as two rows (same id, the second with a
+            # crop). Rows with the same id are one file carrying the labels of all of them.
+            merged: dict[str, dict] = {}
+            for r in rows:
+                ident = str(r.get(id_key) or "")
+                if not ident:
+                    merged[f"#{len(merged)}"] = r
+                    continue
+                names = merged.get(ident, {}).get("adlabels") or []
+                raw = r.get("adlabels")
+                raw = raw.get("data") if isinstance(raw, dict) else raw
+                more = [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
+                have = {x.get("name") for x in names}
+                merged[ident] = {id_key: ident, "adlabels": names + [x for x in more if x.get("name") not in have]}
+            rows = list(merged.values())
 
         def label_of(row: dict) -> str:
             raw = row.get("adlabels")
@@ -4617,7 +4636,7 @@ class CampaignCreator:
             check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
-                    continue
+                    continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
                 main, vertical = _wpol.instant_labels(kind)
                 got = [x for x in (fs.get(kind) or []) if isinstance(x, dict) and str(x.get("text") or "").strip()]
                 check(aobj, kind + "_main_label", sorted(nonblank(list(base))),
@@ -4626,15 +4645,23 @@ class CampaignCreator:
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
             main_pos, vert_pos = self.instant_rule_positions(ad.placements)
             media_key = "videos" if ad.kind == "video" else "images"
+            # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
-                                         ("descriptions", ad.descriptions)) if nonblank(list(base))] + ["link_urls", media_key]
+                                         ("descriptions", ad.descriptions)) if nonblank(list(base)) or k == "titles"
+                       ] + ["link_urls", media_key]
+
+            def rule_label(r: dict, lk: str) -> Any:
+                # ACL-2584: the public Graph names these `*_label`, the internal readback `*_adlabel`.
+                lab = r.get(lk) or r.get(lk.replace("_label", "_adlabel"))
+                return lab if isinstance(lab, dict) else {}
+
             got_rules = [r for r in (fs.get("asset_customization_rules") or []) if isinstance(r, dict)]
             for n, (name, want) in enumerate((("main", main_pos), ("stories_reels", vert_pos))):
                 want_labels = {_wpol.INSTANT_ASSET_KINDS[k][1]: _wpol.instant_labels(k)[n] for k in present}
                 rule = next((r for r in got_rules if all(
-                    isinstance(r.get(lk), dict) and r[lk].get("name") == v for lk, v in want_labels.items())), {})
+                    rule_label(r, lk).get("name") == v for lk, v in want_labels.items())), {})
                 check(aobj, f"rule_{name}_labels", want_labels,
-                      {lk: (rule.get(lk) or {}).get("name") for lk in want_labels} if rule else {})
+                      {lk: rule_label(rule, lk).get("name") for lk in want_labels} if rule else {})
                 cs = rule.get("customization_spec") or {}
                 check(aobj, f"rule_{name}_placements",
                       {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")},

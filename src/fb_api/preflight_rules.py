@@ -228,9 +228,11 @@ RULES: list[dict[str, Any]] = [
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline_len", "Headline up to 40 characters", WARNING, "client",
        "a longer headline may be cut off", sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("feed_texts", "Several texts or a Stories / Reels file need a headline", ERROR, "client",
-       "Meta requires a headline when an ad has several texts or a Stories / Reels file (a primary text is "
-       "optional): add a headline, or use one text and one file", sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("feed_texts", "Several texts or a Stories / Reels file: headline", ERROR, "client",
+       "Website ad: a headline-less ad with several texts or a Stories / Reels file is not verified yet, so it is "
+       "blocked: add a headline, or use one text and one file. Instant Form ad: this is only a warning, the ad "
+       "goes out with no headline (Meta shows none)",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_len", "Text visible in full (up to 125)", WARNING, "client",
        "after 125 characters the text is folded behind 'See more'",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -325,6 +327,19 @@ def _feed_missing_text(a: dict) -> bool:
         return False
     has_title = bool(_s(a.get("headline"))) or bool(_distinct(a.get("headlines")))
     return not has_title
+
+
+def _feed_texts_verdict(inp: dict) -> dict[str, Any]:
+    """ACL-2584: без заголовка Website-объявление с несколькими текстами - ошибка, Instant Form - предупреждение.
+
+    Instant Form уходит с одним пустым заголовком, как у Ads Manager (HAR владельца); Website без заголовка не проверен.
+    """
+    rows = [(n, _dest_of(st) == "instant_form") for _si, n, st, ad in _numbered(inp) if _feed_missing_text(ad)]
+    if not rows:
+        return _v("feed_texts", OK)
+    ads = [n for n, _form in rows]
+    status = WARNING if all(form for _n, form in rows) else ERROR
+    return _v("feed_texts", status, "Ad " + ", ".join(map(str, ads)), ads)
 
 
 def _s(v: Any) -> str:
@@ -493,7 +508,7 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "headline_len":
             out.append(_per_ad(rid, inp, lambda a, st: not a.get("shared_headline") and len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "feed_texts":
-            out.append(_per_ad(rid, inp, lambda a, st: _feed_missing_text(a)))
+            out.append(_feed_texts_verdict(inp))
         elif rid == "primary_len":
             out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
