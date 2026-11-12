@@ -65,7 +65,8 @@ def test_late_failure_preserves_completed_result_and_blocks_unfinished(tmp_path,
 
         monkeypatch.setattr(session_api, "_session", session)
     out = api.check_plan([{"name": d.name} for d in drafts], account_label="Test", country="MX")
-    assert out["results"] == completed and len(completed) == 1
+    # ACL-2353: строки проверки несут ещё `review_fp` (отпечаток для окна ревью) - сравниваем остальное.
+    assert [{k: v for k, v in r.items() if k != "review_fp"} for r in out["results"]] == completed and len(completed) == 1
     assert out["error"] and out["error_kind"] == "plan"
     assert bool(completed[0]["error"]) == (first_verdict != "ok")
     assert meta.posts == [] and all(c.writes == 0 for c in clients)

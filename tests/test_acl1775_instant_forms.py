@@ -673,13 +673,17 @@ def _without_instagram(value):
     return value
 
 
-def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(tmp_path):
+def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(tmp_path, monkeypatch):
     """Золотой файл снят прежним создателем (до ACL-1775) на том же черновике.
 
     ACL-1767/1774 add explicit multi-advertiser opt-out and dynamic-mode verification;
     ACL-1896 adds Instagram identity. Every other old-draft field remains identical.
     """
     want = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    # ACL-2406: ads 2+ of an ad set now take the set's Ad 1 Headline/Description. The golden file's
+    # ads carry their own headlines, so switch the sharing off here (it is covered by test_acl2406);
+    # everything else stays byte-identical.
+    monkeypatch.setattr(cr, "_share_first_headline", lambda draft: None)
     got = _golden_run(cr, tmp_path)
     flags = [c for c in got["readback_checks"] if c["field"] == "dynamic_creative"]
     assert flags == [{"object": "ad set MX Leads 1", "field": "dynamic_creative",
