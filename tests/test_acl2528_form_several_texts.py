@@ -328,3 +328,71 @@ def test_check_plan_rules_let_several_texts_pass_for_a_form_ad_set():
     rules = {v["rule"]: v for v in pf.evaluate_client(inp)}
     for rule in ("texts_vertical", "texts_dynamic", "texts_limit", "feed_texts"):
         assert rules[rule]["status"] == "ok", rules[rule]
+
+
+# ───────────── owner decision 2026-11-12: an empty Primary text 1 never blocks ─────────────
+
+def _texts_draft(tmp_path, *, body1, variants):
+    d = _instant(tmp_path, forms=(FORM,))
+    ad = d.ad_sets[0].ads[0]
+    Path(ad.creative_path).write_bytes(png(1080, 1080, salt="main"))
+    ad.ad_body = body1
+    ad.text_variants = [{"name": f"T{i}", "body": b, "headline": h, "description": ""}
+                        for i, (b, h) in enumerate(variants, 2)]
+    return d
+
+
+@pytest.mark.parametrize("title_only", [False, True])
+def test_empty_or_title_only_text_1_publishes_with_texts_2_and_3_in_order(tmp_path, title_only):
+    d = _texts_draft(tmp_path, body1="", variants=[("Body two", "Head two"), ("Body three", "Head three")])
+    d.ad_sets[0].ads[0].ad_title = "Head" if title_only else ""
+    plan = cr.plan_from_draft(d)  # no "choose Primary text 1 first" refusal
+    assert plan.ad_sets[0].ads[0].bodies == ["Body two", "Body three"]
+    meta = FormMeta()
+    out, _ = _run(meta, d)
+    assert out.error == "" and out.readback["ok"], out.mismatches
+    fs = _of(meta, "creative")["asset_feed_spec"]
+    assert [b["text"] for b in fs["bodies"]] == ["Body two", "Body three"]
+    assert _of(meta, "adset")["is_dynamic_creative"] is True
+
+
+def test_no_body_at_all_publishes_without_a_primary_text(tmp_path):
+    d = _texts_draft(tmp_path, body1="", variants=[])
+    d.ad_sets[0].ads[0].ad_title = "Head"
+    plan = cr.plan_from_draft(d)
+    assert plan.ad_sets[0].ads[0].bodies == []
+    meta = FormMeta()
+    out, _ = _run(meta, d)
+    assert out.error == "", out.error
+    assert _of(meta, "creative")  # created without a primary text
+
+
+def test_the_dynamic_one_ad_per_ad_set_rule_still_holds_with_an_empty_text_1(tmp_path):
+    d = _instant(tmp_path, forms=(FORM, FORM2))
+    d.ad_sets[0].ads[0].ad_body = ""
+    d.ad_sets[0].ads[0].text_variants = [{"name": "T2", "body": "Body two", "headline": "Head two",
+                                          "description": ""}]
+    with pytest.raises(cr.PlanError, match="only one ad in such an ad set"):
+        cr.plan_from_draft(d)
+
+
+def test_the_draft_keeps_texts_2_and_3_when_text_1_is_title_only(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from src.fb_ads_rpa import enrich_draft as en
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+    lib = {"Head": {"headline": "Head", "body": "", "description": ""},
+           "T2": {"headline": "H2", "body": "Body two", "description": ""},
+           "T3": {"headline": "H3", "body": "Body three", "description": ""}}
+    monkeypatch.setattr(en, "load_ad_account_map", lambda p: {})
+    monkeypatch.setattr(en, "resolve_account_entry",
+                        lambda *a: SimpleNamespace(ad_account_id="act_test", page_id="page", profile_id="profile"))
+    monkeypatch.setattr(en, "lookup_ad_copy_by_title", lambda n: lib[n])
+    ad = AdDraft(copy_name="Head", copy2_name="T2", more_copy_names=["T3"])
+    draft = CampaignDraft("SA_x", "SA", "Acc", ad_sets=[AdSetDraft("SA_x", ads=[ad])])
+    en.enrich_campaign_drafts([draft], account_label="Acc", upload_fb_path=str(tmp_path / "none.xlsx"),
+                              ad_account_map_path=str(tmp_path / "map.csv"), creatives_root=str(tmp_path),
+                              preview_mode=True)
+    assert ad.ad_body == ""
+    assert [v["body"] for v in ad.text_variants] == ["Body two", "Body three"]
+    assert any("has no body" in w for w in draft.warnings)  # warning only
+    assert not [e for e in draft.errors if "text" in e.lower()], draft.errors

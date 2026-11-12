@@ -606,8 +606,8 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
         # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
         problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
-    if plan_ad.bodies and not plan_ad.body:
-        problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
+    # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 never blocks. `bodies` already
+    # holds only the non-empty texts in order; with none, the ad goes without a primary text (warning only).
     if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
         problems.append(f"Ad {i}: the Stories / Reels file was not found")
     if vertical:
