@@ -244,6 +244,9 @@ UNKNOWN_RESULT_CODES = {1, 2}
 #: ACL-2392: подкоды, с которыми Meta отказывает детерминированно, хотя ответ выглядит как «неизвестная ошибка»
 #: (код 1 / http 500): после сверки чтением, что ничего не записано, это отказ, а не неизвестный результат.
 REJECTION_SUBCODES = frozenset({1870226})
+#: ACL-2575: Meta's definite refusal of an uploaded file (1487411 FileTypeNotSupported, HTTP 500, is_transient=False):
+#: a refusal of that file, never "the write result is unknown".
+FILE_REFUSAL_SUBCODES = frozenset({1487411})
 #: Отказы помощника страницы ДО отправки: к Meta ничего не ушло.
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
@@ -648,6 +651,10 @@ class GraphClient:
                 self._check_page()
                 raise self._stop(LoggedOut("the session token is no longer valid; the write was not retried",
                                            code=code, subcode=sub))
+            if (sub in FILE_REFUSAL_SUBCODES and str(details.get("is_transient", "")).lower() == "false"
+                    and path.endswith("/adimages")):
+                raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
+                                 details=details)
             if code in UNKNOWN_RESULT_CODES or (isinstance(status, int) and status >= 500):
                 self.unreconciled = path
                 raise WriteUnknown(f"Graph API error {code} — the write result is unknown: {msg}", path=path,
