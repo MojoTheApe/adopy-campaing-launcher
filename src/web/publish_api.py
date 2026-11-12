@@ -29,6 +29,7 @@ from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import plain_errors as _plain
+from src.fb_api import operation_journal as _oj
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
     resolve_page,
@@ -112,6 +113,11 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
                          f"chunks, {need + reads} for the rest), more than one run allows ({ceiling}). "
                          "Use a smaller or shorter video, or split the campaign. Nothing was created.")
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
+
+
+def journal_enabled() -> bool:
+    """ACL-1856: durable operation journal; `ACL_OPERATION_JOURNAL=0` turns it off."""
+    return os.environ.get("ACL_OPERATION_JOURNAL", "1").strip().lower() not in ("0", "false", "off", "no")
 
 
 def _now_iso() -> str:
@@ -208,7 +214,7 @@ def _start_cooldown(account_label: str, stop: GraphStop) -> None:
         from src.analysis_agent import account_spend as _as
         from src.analysis_agent import account_spend_api as _api
 
-        _api._start_cooldown(_as._profile_key(account_label), stop)
+        _api._start_cooldown(_as._profile_key(account_label), stop, account_label)
     except Exception:
         pass
 
@@ -350,6 +356,8 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "created": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.created.items()},
         "reused": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.reused.items()},
         "ts": _now_iso(),
+        #: ACL-1856: durable progress (stages, partial ids, plain next action); None when not recorded.
+        "operation": outcome.operation or None,
     }
 
 
@@ -410,6 +418,10 @@ class ApiPublisher:
 
     #: ACL-2345: this job already took its one automatic resume (the final campaign row says so).
     auto_resumed = False
+    #: ACL-1856: the page's submit key (set by publish_jobs); bound to the plan revision per campaign.
+    request_id = ""
+    #: ACL-1856: position of each draft in its submit (`id(draft)` -> index); set by the job, else first-seen order.
+    draft_slots: dict | None = None
 
     #: ACL-2299: writes of clients replaced by a fresh tab earlier in the same job (the count never goes down).
     _writes_base = 0
@@ -488,16 +500,24 @@ class ApiPublisher:
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
-        frozen_error = ApiPublishError(
-            f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
-            f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
-            code="page_unresponsive")
-        if left > 0 and why == "page_unresponsive" and not frozen_deferred:
-            raise frozen_error
-        if left > 0 and why != "page_unresponsive":
-            raise ApiPublishError(
-                f"{account_label}: Meta stopped the last API call ({why}); waiting about "
-                f"{int(left // 60) + 1} min before calling again. Nothing was created.")
+        from src.fb_api import account_blocks as _blocks
+
+        key = _frozen_api(account_label)[1]
+        # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
+        # and a timed pause are explained by the one owner of that state.
+        blocked = _blocks.refusal(key, account_label, "publish",
+                                  timed=(left, why) if left > 0 and not frozen_deferred else None)
+        if blocked:
+            held = _blocks.is_held(key)
+            raise ApiPublishError(blocked[0], code=blocked[1] if held else (
+                "page_unresponsive" if why == "page_unresponsive" else ""))
+        def frozen_error() -> ApiPublishError:
+            # Built only when it is raised: building it explains (and logs) a refusal that never happens.
+            return ApiPublishError(
+                (_blocks.refusal(key, account_label, "publish", timed=(max(left, 1.0), "page_unresponsive")) or
+                 (f"{account_label}: the Ads Manager tab stopped answering. Nothing was created.",))[0],
+                code="page_unresponsive")
+
         self._entry = entry
         self._session_profile_id = profile_id
         from src.fb_api import profile as _fb_profile
@@ -505,7 +525,7 @@ class ApiPublisher:
         if self._open_warm(account_label, profile_id):
             return
         if frozen_deferred:
-            raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
+            raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 
@@ -546,7 +566,7 @@ class ApiPublisher:
         if state.get("kind") == "checkpoint":
             self._halt(Checkpoint("the profile is on a Facebook checkpoint"))
         if state.get("kind") == "login":
-            self._halt(LoggedOut("the profile is logged out of Facebook"))
+            self._halt(LoggedOut("the profile is logged out of Facebook", page_seen=True))
         if not state.get("has_token"):
             raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
                                   "(no Graph session in the page); nothing was created",
@@ -660,6 +680,11 @@ class ApiPublisher:
         raise ApiPublishError(f"{self.account_label}: Graph API stopped ({stop.kind}): {stop}",
                               code=stop.kind, stage=getattr(stop, "stage", "") or "while loading Ads Manager") from stop
 
+    def _slot_of(self, draft: Any) -> int:
+        if self.draft_slots is None:
+            self.draft_slots = {}
+        return self.draft_slots.setdefault(id(draft), len(self.draft_slots))
+
     # -- одна кампания
     def publish_draft(self, draft: Any) -> dict[str, Any]:
         began = time.monotonic()
@@ -730,6 +755,10 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
+        slot = self._slot_of(draft)
+        journal = None
+        if not self.dry_run and journal_enabled():
+            journal = _oj.OperationJournal()      # a resume check adds its own reads to the budget (creator)
         self._client.reset_budget(budget)
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
@@ -747,7 +776,11 @@ class ApiPublisher:
         spec = self._log_spec(plan, name)
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
-                                  live_progress=lambda text: self.progress(f"{name}: {text}"))
+                                  live_progress=lambda text: self.progress(f"{name}: {text}"),
+                                  journal=journal,
+                                  # one submit holds several campaigns: the key is bound to the draft position
+                                  # in the submit (not to the name, which two drafts can share)
+                                  request_key=(f"{self.request_id}#{slot}" if self.request_id else ""), slot=slot)
         if self.reviewed is not None:
             creator.reviewed = self.reviewed
         if self.dry_run:
@@ -796,6 +829,9 @@ class ApiPublisher:
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      **({"operation": outcome.operation.get("id"), "operation_state": outcome.operation.get("state"),
+                          "stages_confirmed": len(outcome.operation.get("partial_ids") or [])}
+                         if outcome.operation else {}),
                       "copy_number": outcome.copy_number,
                       "mode": _work_mode(self._client),
                       **({"auto_resumed": True} if self.auto_resumed else {}),
@@ -1128,7 +1164,10 @@ def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, count
                        force: bool = False) -> dict[str, Any]:
     """`_check_plan_once` + событие `plan.checked` в общий журнал (ACL-2347), и на ранних выходах."""
     began = time.monotonic()
-    result = _check_plan_once(slots, account_label=account_label, country=country, force=force)
+    from src.fb_api import account_blocks as _blocks
+
+    with _blocks.problem_action("check_plan"):
+        result = _check_plan_once(slots, account_label=account_label, country=country, force=force)
     try:
         from src.acl_event_log import emit
         from src.acl_event_log.clean import plan_hash

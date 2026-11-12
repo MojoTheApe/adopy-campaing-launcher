@@ -71,7 +71,9 @@ TABLE: dict[str, Plain] = {
     "memory_hold": Plain("Not enough free memory", "close a profile and retry", "blocking", "later"),
     "account_hold": Plain("Another action is still running", "wait for it to finish and republish", "hold",
                           "later"),
-    "creative_file": Plain("A creative file cannot be used{ad}", "replace the file and republish"),
+    "file_type_refused": Plain("Meta refused the file{adn}{file}: " + "The type of file is not supported",
+                               "convert it to JPG or PNG and republish (re-publishing reuses what was created)"),
+    "creative_file": Plain("A creative file cannot be used{ad}{file}", "replace the file and republish"),
     "unknown": Plain("Meta refused this step{stage}", WHERE),
 }
 
@@ -110,7 +112,8 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     names = ctx.get("names") or []
     ad = ctx.get("ad")
     fill = {"names": (": " + ", ".join(f'"{n}"' for n in names[:3])) if names else "",
-            "ad": f": ad {ad}" if ad else "", "stage": f" ({ctx['stage']})" if ctx.get("stage") else "",
+            "ad": f": ad {ad}" if ad else "",
+            "adn": f" of ad {ad}" if ad else "", "file": f" ({ctx['file']})" if ctx.get("file") else "", "stage": f" ({ctx['stage']})" if ctx.get("stage") else "",
             "wait": f"about {ctx['minutes']} min" if ctx.get("minutes") else "a few minutes"}
     short, nxt = plain.short, plain.next_step
     for k, v in fill.items():
@@ -120,6 +123,16 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
         short = str(ctx.get("text") or _mlx.SESSION_LOST_MESSAGE)
     return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry,
                    stage=str(ctx.get("stage") or ""), **over)
+
+
+FILE_REFUSED_REASON = "The type of file is not supported"
+
+
+def file_refused(ad: str, file_name: str, exc: BaseException | None = None) -> Failure:
+    """ACL-2575: Meta refused the uploaded file of ad `ad` (a definite answer, not an unknown result)."""
+    details = build_details(exc, kind="graph_error", extra={"stage": "while uploading ad %s creative" % ad,
+                                                           "file": file_name})
+    return _make("file_type_refused", {"ad": ad, "file": file_name, "stage": ""}, details=details)
 
 
 # ───────────────────────── details (scrubbed) ─────────────────────────
@@ -283,6 +296,8 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
             ctx["minutes"] = m.group(1)
     if key == "targeting_term" and not ctx.get("names"):
         ctx["names"] = _QUOTED.findall(raw)[:3]
+    if key == "creative_file" and not ctx.get("file") and getattr(exc, "file_name", ""):
+        ctx["file"] = exc.file_name  # ACL-2575: a file that cannot be converted is named
     if key == "creative_file" and not ctx.get("ad"):
         m = re.search(r"\bad (\d+)\b", raw, re.I)
         ctx["ad"] = m.group(1) if m else ""
@@ -340,7 +355,9 @@ def left_in_meta(*, campaign: bool, adsets: int = 0, ads: int = 0, empty_note: b
         parts.append(f"{adsets} ad set{'s' if adsets != 1 else ''}")
     if ads:
         parts.append(f"{ads} ad{'s' if ads != 1 else ''}")
-    again = (f'otherwise the new one is published as "{name}_2"' if name else "otherwise a new one is published")
+    # ACL-2578: the real naming is the ACL-2250 copy counter ("X copy 1", then the next free number), never "_2".
+    again = (f'otherwise the new one is published as a new copy, "{name} copy 1" (or the next free number)'
+             if name else "otherwise a new one is published as a new copy")
     text = ("Left in Meta: " + ", ".join(parts)
             + f". Publishing again reuses it if its settings match; {again}.")
     if not_created:
