@@ -94,6 +94,20 @@ def test_ordinary_images_are_not_converted():
     assert ic.convert("a.jpg", b"creative-0", 10**6, "ad 1") is None   # unknown bytes keep today's behaviour
 
 
+def test_exif_orientation_is_applied_to_the_converted_image():
+    # A 40x20 landscape WebP tagged "rotate 90 CW" (EXIF Orientation=6), as a phone camera writes it.
+    src = PIL.new("RGB", (40, 20), (200, 10, 10))
+    exif = src.getexif()
+    exif[0x0112] = 6
+    buf = io.BytesIO()
+    src.save(buf, "WEBP", exif=exif.tobytes())
+    out = ic.convert("1000_phone.webp", buf.getvalue(), 10**6, "ad 1")
+    assert out is not None and out.ext == ".jpg"
+    with PIL.open(io.BytesIO(out.data)) as img:
+        assert img.size == (20, 40)                # rotated: width and height swapped
+        assert img.getexif().get(0x0112) in (None, 1)   # the tag is consumed, not left to rotate it twice
+
+
 # -- refusal before any write --
 
 def test_an_undecodable_webp_is_refused_before_any_write(tmp_path):

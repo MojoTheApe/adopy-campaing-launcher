@@ -78,7 +78,7 @@ def convert(path: str, data: bytes, limit: int, who: str) -> Converted | None:
     label = source.upper() if source != "webp" else "WebP"
     name = Path(path).name
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
     except ImportError as exc:  # pragma: no cover - Pillow is in requirements.txt
         raise ImageConversionError(f"{who}: {name} is a {label} image and this machine cannot convert it "
                                    "(image library missing). Use a JPG or PNG file.") from exc
@@ -86,6 +86,8 @@ def convert(path: str, data: bytes, limit: int, who: str) -> Converted | None:
         with Image.open(io.BytesIO(data)) as img:
             img.load()
             animated = getattr(img, "n_frames", 1) > 1
+            # Phone photos carry an EXIF Orientation tag; apply it so the pixels are upright in the output.
+            img = ImageOps.exif_transpose(img)
             alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
             frame = img.convert("RGBA" if alpha else "RGB")
     except Exception as exc:  # noqa: BLE001 - any decoder failure is a refusal with the reason
