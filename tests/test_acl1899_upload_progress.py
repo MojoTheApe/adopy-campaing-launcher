@@ -317,7 +317,7 @@ def test_stop_during_the_upload_reads_back_twice_and_stops(tmp_path):
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
     assert out.stop_kind == "cancelled"
     assert meta.reads_after == 2 and slept[:2] == [5.0, 20.0] and 30.0 not in slept
-    assert "wait a few minutes before publishing again" in out.error
+    assert "publish again to check it first" in out.error and "few minutes" not in out.error
     assert len([p for p, _ in meta.posts if p.endswith("/advideos")]) == 1
 
 
@@ -345,7 +345,7 @@ def test_stop_during_the_readback_stops_at_once_and_keeps_the_marker(tmp_path):
     out = creator.run(cr.plan_from_draft(_draft(tmp_path, video=True, ads=1)))
     assert out.stop_kind == "cancelled"
     assert len(orig_find_reads) == 1 and client.unreconciled is not None      # после Stop не читаем
-    assert "wait a few minutes before publishing again" in out.error
+    assert "publish again to check it first" in out.error and "few minutes" not in out.error
 
 
 def test_repeated_readbacks_read_fewer_pages_than_the_first_lookup(tmp_path):
