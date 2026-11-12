@@ -1,5 +1,36 @@
 # System history
 
+## ACL-2560 — Home: aligned action buttons and Take out of country — 2026-11-11
+
+On Home the account actions now sit in one stack that starts at the same horizontal position on every row, whatever the
+length of the account name: "Open profile" on top (accounts with a profile), "Take out of <country>" below it, the Open
+profile message line under both. Every Home account row (Expanded) and the Compact tile popup has "Take out of <country>".
+It is the same action as the "×" in Manage: the same confirmation ("Take <account> out of <country>?") and the same
+`/account-links` unlink request, with no new route. After a successful take-out the country repaints on Home — the row or
+tile, the country counters, the filter bar and the total — without a page reload; an error is shown next to the button.
+Manage still reloads the page after its "×", as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1560).
+
+## ACL-2557 — Home: Open profile for every account — 2026-11-11
+
+Home now has the same "Open profile" action as Manage on every account that has a bound Multilogin profile:
+on the Expanded row and in the Compact tile popup. It goes through the same `/warm/open` path and refusals
+(memory, busy, hand-opened window with confirm-reopen, held account, cooldown); the button shows progress, ignores a
+second click while opening and shows the refusal reason. After a successful open the row, tile and counters repaint
+from the saved status once the status-only read from ACL-2419 has finished, without a page reload. Accounts without a
+profile show no button. Nothing opens by itself and no live account is polled.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1557).
+
+## ACL-2556 — Home: an evidently active account is not shown as Unknown — 2026-11-11
+
+An account with spend in the period, or whose last good status read was active, now shows Active with a freshness line (`status not refreshed · last read …` / `active by spend · status not read yet`) when its latest status read failed or is missing. Heavy statuses still win; Unknown stays only with no spend and no usable read. The badge and the line under it can no longer disagree (no "unknown · never read" under Active/New).
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1556).
+
+## ACL-2367 — Installers pick the newest release merged into main — 2026-11-11
+
+`Install ACL.bat` and `Install ACL.command` now choose the newest valid `acl-release-*` tag that is merged into origin/main, instead of requiring a tag at the exact tip of main. Fresh installs no longer fail while main is ahead of the last release. Tag annotation and CI checks are unchanged; the update gate and launcher are not touched.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1367).
+
 ## ACL-2523 — Light work tab: telemetry gaps — 2026-11-11
 
 `fb_api_tab_context` rows of the light work tab (lease and re-capture) now carry `work_tab_mb` (JS heap in MB from
