@@ -275,8 +275,14 @@ _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", 
              "bad_path", "forbidden_param", "no_session"}
 
 
-def is_auth_required(code: int | None, subcode: int | None = None) -> bool:
-    return (code, subcode) == AUTH_REQUIRED
+AUTH_REQUIRED_TITLE = "please authenticate your account"
+
+
+def is_auth_required(code: int | None, subcode: int | None = None, title: str = "") -> bool:
+    """31/3858385, or code 31 with Meta's title "Please authenticate your account" (the subcode may be absent)."""
+    if (code, subcode) == AUTH_REQUIRED:
+        return True
+    return code == AUTH_REQUIRED[0] and str(title or "").strip().lower() == AUTH_REQUIRED_TITLE
 
 
 def classify(code: int | None, subcode: int | None = None) -> str:
@@ -505,7 +511,7 @@ class GraphClient:
             details.update(_read_context(path, params))
             msg = _with_details(msg, details)
             kind = classify(code, sub)
-            if is_auth_required(code, sub):
+            if is_auth_required(code, sub, str(gerr.get("error_user_title") or "")):
                 raise self._stop(AuthRequired(f"Meta asks to authenticate this account ({code}/{sub}): {msg}",
                                               code=code, subcode=sub))
             if kind == "policy":
@@ -575,6 +581,9 @@ class GraphClient:
             code, sub = _int(gerr.get("code")), _int(gerr.get("error_subcode"))
             msg = str(gerr.get("message") or "Page validation refused")
             kind = classify(code)
+            if is_auth_required(code, sub, str(gerr.get("error_user_title") or "")):
+                raise self._stop(AuthRequired(f"Meta asks to authenticate this account ({code}/{sub}): {msg}",
+                                              code=code, subcode=sub))
             if kind == "policy":
                 raise self._stop(PolicyBlocked(msg, code=code, subcode=sub))
             if kind == "rate_limit":
@@ -668,7 +677,7 @@ class GraphClient:
             details = error_details(gerr, reply)
             msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
             kind = classify(code, sub)
-            if is_auth_required(code, sub):
+            if is_auth_required(code, sub, str(gerr.get("error_user_title") or "")):
                 raise self._stop(AuthRequired(f"Meta asks to authenticate this account ({code}/{sub}): {msg}",
                                               code=code, subcode=sub))
             if kind == "policy":

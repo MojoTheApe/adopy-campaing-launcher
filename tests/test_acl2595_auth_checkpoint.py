@@ -116,3 +116,101 @@ def test_another_account_in_the_same_job_is_not_affected(tmp_path):
     ok = _publisher(FakeMeta())
     res = ok.publish_draft(_second(tmp_path))
     assert ok.stop is None and res["not_started"] is False and res["success"] is True
+
+
+# ───────────────────────── B1: a person's Publish lifts the hold ─────────────────────────
+
+PID = "550e8400-e29b-41d4-a716-446655440000"
+
+
+def _rig(monkeypatch, tmp_path, meta):
+    from types import SimpleNamespace
+
+    from src.analysis_agent import account_spend as _as
+    from src.web import publish_api
+    from tests.test_acl1761_api_create import ACT, _PageOverMeta
+    from tests.test_acl2262_builder_opens_profile import closed_profile_rig
+
+    closed_profile_rig(monkeypatch, tmp_path, None, PID)
+    monkeypatch.setattr(_as, "_profile_key", lambda label: "prof-1")
+    monkeypatch.setattr(publish_api, "_resolve_entry", lambda label: SimpleNamespace(
+        ad_account_id=ACT, profile_id=PID, folder_id="", multilogin_instance="A"))
+    monkeypatch.setattr(publish_api, "_open_profile", lambda *a: pytest.fail("the cold path must not be used"))
+    monkeypatch.setattr(publish_api, "_make_graph", lambda tab, act, *, writes=True: _PageOverMeta(meta, writes))
+    return publish_api
+
+
+def test_a_person_started_publish_lifts_the_auth_hold_and_the_job_runs(monkeypatch, tmp_path):
+    publish_api = _rig(monkeypatch, tmp_path, FakeMeta())
+    api._start_cooldown("prof-1", g.AuthRequired("a", code=31, subcode=3858385), "KLD_BFL_F91")
+    assert blocks.is_held("prof-1")
+    pub = publish_api.ApiPublisher()
+    pub.open("KLD_BFL_F91")                      # not refused by the hold
+    assert not blocks.is_held("prof-1") and pub._client is not None
+
+
+def test_other_checkpoint_holds_still_refuse_publish_and_need_retry(monkeypatch, tmp_path):
+    publish_api = _rig(monkeypatch, tmp_path, FakeMeta())
+    api._start_cooldown("prof-1", g.Checkpoint("c"), "KLD_BFL_F91")
+    with pytest.raises(publish_api.ApiPublishError):
+        publish_api.ApiPublisher().open("KLD_BFL_F91")
+    assert blocks.is_held("prof-1")
+
+
+def test_when_meta_still_asks_the_hold_is_set_again_after_one_refused_call(monkeypatch, tmp_path):
+    meta = AuthMeta()
+    publish_api = _rig(monkeypatch, tmp_path, meta)
+    api._start_cooldown("prof-1", g.AuthRequired("a", code=31, subcode=3858385), "KLD_BFL_F91")
+    pub = publish_api.ApiPublisher()
+    pub.open("KLD_BFL_F91")
+    assert not blocks.is_held("prof-1")
+    res = pub.publish_draft(_draft(tmp_path, ads=1))
+    assert res["failure"]["key"] == "auth_required" and blocks.is_held("prof-1")
+    assert sum(1 for p, _ in meta.posts if p.endswith("/ads")) == 1
+    n = len(meta.posts)
+    assert pub.publish_draft(_second(tmp_path))["not_started"] is True and len(meta.posts) == n
+
+
+# ───────────────────────── N1-N3 ─────────────────────────
+
+def test_the_read_path_raises_auth_required():
+    class T:
+        def request(self, method, path, params=None):
+            return {"status": 400, "body": {"error": {"code": 31, "error_subcode": 3858385, "message": "m"}}}
+
+        def state(self):
+            return {"kind": "ads_manager", "has_token": True}
+
+    c = g.GraphClient(T(), sleep=lambda s: None, min_interval_s=0.0)
+    with pytest.raises(g.AuthRequired):
+        c.get("/act_1/campaigns", {})
+    assert c.stopped is not None
+
+
+def test_the_title_alone_with_code_31_is_enough_and_other_titles_are_not():
+    assert g.is_auth_required(31, None, "Please authenticate your account")
+    assert not g.is_auth_required(31, None, "Something else") and not g.is_auth_required(100, None, "Please authenticate your account")
+    meta = FakeMeta()
+    c = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+    meta.write = lambda *a, **k: {"status": 400, "body": {"error": {
+        "code": 31, "message": "m", "error_user_title": "Please authenticate your account"}}}
+    with pytest.raises(g.AuthRequired):
+        c.post("/act_1/ads", {"name": "x"})
+
+
+def test_validate_page_raises_auth_required():
+    from tests.test_acl1761_api_create import ACT
+
+    class T:
+        calls = 0
+
+        def validate_page(self, act, page_id, link):
+            T.calls += 1
+            return {"status": 400, "body": {"error": {"code": 31, "error_subcode": 3858385, "message": "m"}}}
+
+    c = g.GraphClient(T(), allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+    with pytest.raises(g.AuthRequired):
+        c.validate_page(ACT, "123456789012345")
+    with pytest.raises(g.AuthRequired):         # the next campaign does not repeat the call
+        c.validate_page(ACT, "123456789012345")
+    assert T.calls == 1

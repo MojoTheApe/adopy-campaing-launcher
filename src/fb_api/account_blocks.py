@@ -229,6 +229,18 @@ def clear(key: str, by: str = "retry", *, kind: str = "") -> bool:
     return True
 
 
+def lift_auth_hold(key: str, by: str = "publish") -> bool:
+    """ACL-2595: a person-started Publish lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
+
+    Only that kind of hold: every other checkpoint still clears through Retry. If the check is still pending, Meta
+    answers 31/3858385 again, the sticky `AuthRequired` stop sets the hold again after at most one refused call.
+    """
+    held = hold_of(key)
+    if not held or held.get("kind") != "checkpoint" or held.get("code") != AUTH_REQUIRED_CODE:
+        return False
+    return clear(key, by, kind="checkpoint")
+
+
 def forget_timed(key: str) -> None:
     """Drop the action/label kept beside a timer (called when the timer ends or is replaced)."""
     with _LOCK:

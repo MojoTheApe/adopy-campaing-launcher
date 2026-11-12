@@ -497,6 +497,15 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        try:
+            # ACL-2595: pressing Publish after the owner finished the Meta check lifts that one hold; a pending
+            # check is answered by Meta once and the stop sets the hold again.
+            from src.analysis_agent import account_spend as _as_
+            from src.fb_api import account_blocks as _b_
+
+            _b_.lift_auth_hold(_as_._profile_key(account_label), "publish")
+        except Exception:  # noqa: BLE001 - never breaks the open
+            log.debug("auth hold lift failed", exc_info=True)
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
