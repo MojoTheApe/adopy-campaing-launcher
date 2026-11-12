@@ -124,30 +124,18 @@ def read_photos(account_label: str, selected_page: str) -> dict[str, Any]:
 
 # ───────────────────────── фон формы: загрузка файла (ACL-2533) ─────────────────────────
 
-_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-
-
 def sniff_image(data: bytes) -> str:
     """Тип по первым байтам (имя и тип от браузера не доверяем): `image/jpeg`, `image/png` или пусто."""
-    if data[:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if data[:8] == _PNG_MAGIC:
-        return "image/png"
-    return ""
+    from src.fb_api import form_cover_store as _store
+
+    return _store.sniff_image(data)
 
 
 def check_photo_file(data: bytes) -> tuple[str, str]:
     """(тип, текст отказа). Пустой отказ - файл годится. Те же пределы, что в политике записи."""
-    from src.fb_api import write_policy as _wp
+    from src.fb_api import form_cover_store as _store
 
-    if not data:
-        return "", "The image file is empty."
-    mime = sniff_image(data)
-    if not mime:
-        return "", "The background image must be a JPEG or PNG file."
-    if len(data) > _wp.FORM_PHOTO_MAX_BYTES:
-        return "", f"The background image is larger than {_wp.FORM_PHOTO_MAX_BYTES // (1024 * 1024)} MB."
-    return mime, ""
+    return _store.check_file(data)
 
 
 def _upload_in_session(account_label: str, selected_page: str, data: bytes, mime: str) -> dict[str, Any]:

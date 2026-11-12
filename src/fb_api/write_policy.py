@@ -236,6 +236,9 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
         "form_create": policy_for_form_create(page),
+        # ACL-2571: the same narrow upload as the form-photo session, in the creation session too, so the
+        # picture of a shared template reaches the campaign's Page from inside its profile. Needs the Page.
+        "form_photo": policy_for_form_photo(page),
     }
 
 

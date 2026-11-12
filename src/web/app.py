@@ -6574,7 +6574,46 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
     except OSError:
         return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
                             status_code=500)
+    # ACL-2571: the picture kept on this computer now belongs to the saved template (the library has only its hash).
+    if saved.get("cover_local_sha256"):
+        from src.fb_api import form_cover_store
+
+        await asyncio.to_thread(form_cover_store.adopt, saved["id"], saved["cover_local_sha256"])
     return JSONResponse({"ok": True, "template": saved})
+
+
+@app.post("/api/form-templates/cover-file")
+async def api_form_template_cover_stage(request: Request) -> JSONResponse:
+    """ACL-2571: keep the background picture of a shared template ON THIS COMPUTER; nothing goes to Meta.
+
+    No account or Page is needed. The type comes from the bytes, JPEG/PNG up to 8 MB. The answer is the
+    hash that the template record keeps - the team library never receives image bytes.
+    """
+    from src.fb_api import form_cover_store
+    from src.web.request_limits import FORM_PHOTO_FORM
+
+    form = await read_form(request, FORM_PHOTO_FORM)
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse({"ok": False, "message": "An image file is required"}, status_code=400)
+    data = await upload.read()
+    try:
+        got = await asyncio.to_thread(form_cover_store.stage, data)
+    except OSError:
+        return JSONResponse({"ok": False, "message": "The picture could not be kept on this computer"}, status_code=500)
+    return JSONResponse(got, status_code=200 if got.get("ok") else 400)
+
+
+@app.get("/api/form-templates/cover-file")
+def api_form_template_cover_file(id: str = "", sha: str = "") -> Response:
+    """ACL-2571: the stored picture of a template, for the editor preview (same origin, so `img-src 'self'`)."""
+    from src.fb_api import form_cover_store
+
+    data = form_cover_store.read(id, sha)
+    if data is None:
+        return Response(status_code=404)
+    return Response(content=data, media_type=form_cover_store.sniff_image(data) or "application/octet-stream",
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/form-templates/delete")
@@ -6600,7 +6639,20 @@ async def api_form_templates_restore(request: Request) -> JSONResponse:
 async def api_form_templates_duplicate(request: Request) -> JSONResponse:
     from src.fb_api import form_templates
 
-    return await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+    resp = await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+    if resp.status_code == 200:
+        # ACL-2571: a copy keeps the picture kept on this computer.
+        from src.fb_api import form_cover_store
+
+        try:
+            raw = await request.json()
+            src_id = str((raw or {}).get("id") or "")
+            new = json.loads(resp.body)["template"]
+            if new.get("cover_local_sha256"):
+                await asyncio.to_thread(form_cover_store.copy_to, src_id, new["id"], new["cover_local_sha256"])
+        except (ValueError, KeyError, OSError, TypeError):
+            pass
+    return resp
 
 
 @app.post("/api/form-templates/migrate")

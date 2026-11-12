@@ -1779,13 +1779,16 @@ class InPageGraph:
         SHA-256 are checked there again), then one request. Exactly once: a failure after sending is
         `call_unknown`. Returns the helper's reply: `{ok, photo_id, width, height}` or `{error, ...}`.
         """
-        if not self.form_photo:
+        # ACL-2571: also allowed in a creation session (it has the verified Page of the plan); never in an
+        # object-update session.
+        creation = bool(self.allow_writes and not self.object_updates and self.write_page)
+        if not (self.form_photo or creation):
             raise ValueError("read-only: the form-background upload is not enabled for this page")
         import hashlib
 
         from src.fb_api import write_policy as _wp
 
-        pinned = self.form_photo_page or ""
+        pinned = (self.form_photo_page or "") if self.form_photo else str(self.write_page or "")
         if not isinstance(data, (bytes, bytearray)):
             raise ValueError("file content must be bytes")
         _wp.check_form_photo_upload(_wp.FORM_PHOTO_HOST, page_id, pinned, mime, len(data))
