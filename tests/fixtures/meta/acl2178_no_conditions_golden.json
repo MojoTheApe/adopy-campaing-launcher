@@ -1,0 +1,363 @@
+{
+ "follow_up_only": {
+  "clean": {
+   "button_text": "Visit website",
+   "contact_fields": [
+    "first_name",
+    "last_name",
+    "email",
+    "phone"
+   ],
+   "follow_up_action_url": "https://example.com/f",
+   "headline": "H",
+   "id": "",
+   "intro": "Intro",
+   "locale": "EN_US",
+   "name": "Plain",
+   "privacy_link_text": "Privacy Policy",
+   "privacy_url": "https://example.com/p",
+   "questions": [
+    {
+     "label": "Budget",
+     "options": [
+      "Low",
+      "High"
+     ],
+     "type": "multiple_choice"
+    },
+    {
+     "label": "Why",
+     "type": "short_answer"
+    }
+   ],
+   "questions_first": true,
+   "thank_you_text": "",
+   "thank_you_title": "Thank you",
+   "website_url": ""
+  },
+  "hash": "3f1b86",
+  "input": {
+   "contact_fields": [
+    "first_name",
+    "last_name",
+    "email",
+    "phone"
+   ],
+   "follow_up_action_url": "https://example.com/f",
+   "headline": "H",
+   "intro": "Intro",
+   "locale": "EN_US",
+   "name": "Plain",
+   "privacy_url": "https://example.com/p",
+   "questions": [
+    {
+     "label": "Budget",
+     "options": [
+      "Low",
+      "High"
+     ],
+     "type": "multiple_choice"
+    },
+    {
+     "label": "Why",
+     "type": "short_answer"
+    }
+   ],
+   "questions_first": true,
+   "thank_you_text": "",
+   "website_url": ""
+  },
+  "params": {
+   "block_display_for_non_targeted_viewer": true,
+   "context_card": {
+    "content": [
+     "Intro"
+    ],
+    "style": "PARAGRAPH_STYLE",
+    "title": "H"
+   },
+   "follow_up_action_url": "https://example.com/f",
+   "is_optimized_for_quality": false,
+   "locale": "EN_US",
+   "name": "Plain \u00b7 ACL 3f1b86",
+   "privacy_policy": {
+    "link_text": "Privacy Policy",
+    "url": "https://example.com/p"
+   },
+   "question_page_custom_headline": "H",
+   "questions": [
+    {
+     "key": "question_1",
+     "label": "Budget",
+     "options": [
+      {
+       "key": "q1_option_1",
+       "value": "Low"
+      },
+      {
+       "key": "q1_option_2",
+       "value": "High"
+      }
+     ],
+     "type": "CUSTOM"
+    },
+    {
+     "key": "question_2",
+     "label": "Why",
+     "type": "CUSTOM"
+    },
+    {
+     "type": "FIRST_NAME"
+    },
+    {
+     "type": "LAST_NAME"
+    },
+    {
+     "type": "EMAIL"
+    },
+    {
+     "type": "PHONE"
+    }
+   ]
+  }
+ },
+ "plain_default": {
+  "clean": {
+   "button_text": "Visit website",
+   "contact_fields": [
+    "name",
+    "email"
+   ],
+   "headline": "H",
+   "id": "",
+   "intro": "Intro",
+   "locale": "EN_US",
+   "name": "Plain",
+   "privacy_link_text": "Privacy Policy",
+   "privacy_url": "https://example.com/p",
+   "questions": [
+    {
+     "label": "Budget",
+     "options": [
+      "Low",
+      "High"
+     ],
+     "type": "multiple_choice"
+    },
+    {
+     "label": "Why",
+     "type": "short_answer"
+    }
+   ],
+   "thank_you_text": "Thanks",
+   "thank_you_title": "Thank you",
+   "website_url": ""
+  },
+  "hash": "e0fc3b",
+  "input": {
+   "contact_fields": [
+    "name",
+    "email"
+   ],
+   "headline": "H",
+   "intro": "Intro",
+   "locale": "EN_US",
+   "name": "Plain",
+   "privacy_url": "https://example.com/p",
+   "questions": [
+    {
+     "label": "Budget",
+     "options": [
+      "Low",
+      "High"
+     ],
+     "type": "multiple_choice"
+    },
+    {
+     "label": "Why",
+     "type": "short_answer"
+    }
+   ],
+   "questions_first": false,
+   "thank_you_text": "Thanks",
+   "website_url": ""
+  },
+  "params": {
+   "block_display_for_non_targeted_viewer": true,
+   "context_card": {
+    "content": [
+     "Intro"
+    ],
+    "style": "PARAGRAPH_STYLE",
+    "title": "H"
+   },
+   "is_optimized_for_quality": false,
+   "locale": "EN_US",
+   "name": "Plain \u00b7 ACL e0fc3b",
+   "privacy_policy": {
+    "link_text": "Privacy Policy",
+    "url": "https://example.com/p"
+   },
+   "question_page_custom_headline": "H",
+   "questions": [
+    {
+     "type": "FULL_NAME"
+    },
+    {
+     "type": "EMAIL"
+    },
+    {
+     "key": "question_1",
+     "label": "Budget",
+     "options": [
+      {
+       "key": "q1_option_1",
+       "value": "Low"
+      },
+      {
+       "key": "q1_option_2",
+       "value": "High"
+      }
+     ],
+     "type": "CUSTOM"
+    },
+    {
+     "key": "question_2",
+     "label": "Why",
+     "type": "CUSTOM"
+    }
+   ],
+   "thank_you_page": {
+    "body": "Thanks",
+    "button_type": "NONE",
+    "title": "Thank you"
+   }
+  }
+ },
+ "plain_questions_first": {
+  "clean": {
+   "button_text": "Visit website",
+   "contact_fields": [
+    "first_name",
+    "last_name",
+    "email",
+    "phone"
+   ],
+   "headline": "H",
+   "id": "",
+   "intro": "Intro",
+   "locale": "EN_US",
+   "name": "Plain",
+   "privacy_link_text": "Privacy Policy",
+   "privacy_url": "https://example.com/p",
+   "questions": [
+    {
+     "label": "Budget",
+     "options": [
+      "Low",
+      "High"
+     ],
+     "type": "multiple_choice"
+    },
+    {
+     "label": "Why",
+     "type": "short_answer"
+    }
+   ],
+   "questions_first": true,
+   "thank_you_text": "Thanks",
+   "thank_you_title": "Thank you",
+   "website_url": "https://example.com/t"
+  },
+  "hash": "9807db",
+  "input": {
+   "contact_fields": [
+    "first_name",
+    "last_name",
+    "email",
+    "phone"
+   ],
+   "headline": "H",
+   "intro": "Intro",
+   "locale": "EN_US",
+   "name": "Plain",
+   "privacy_url": "https://example.com/p",
+   "questions": [
+    {
+     "label": "Budget",
+     "options": [
+      "Low",
+      "High"
+     ],
+     "type": "multiple_choice"
+    },
+    {
+     "label": "Why",
+     "type": "short_answer"
+    }
+   ],
+   "questions_first": true,
+   "thank_you_text": "Thanks",
+   "website_url": "https://example.com/t"
+  },
+  "params": {
+   "block_display_for_non_targeted_viewer": true,
+   "context_card": {
+    "content": [
+     "Intro"
+    ],
+    "style": "PARAGRAPH_STYLE",
+    "title": "H"
+   },
+   "is_optimized_for_quality": false,
+   "locale": "EN_US",
+   "name": "Plain \u00b7 ACL 9807db",
+   "privacy_policy": {
+    "link_text": "Privacy Policy",
+    "url": "https://example.com/p"
+   },
+   "question_page_custom_headline": "H",
+   "questions": [
+    {
+     "key": "question_1",
+     "label": "Budget",
+     "options": [
+      {
+       "key": "q1_option_1",
+       "value": "Low"
+      },
+      {
+       "key": "q1_option_2",
+       "value": "High"
+      }
+     ],
+     "type": "CUSTOM"
+    },
+    {
+     "key": "question_2",
+     "label": "Why",
+     "type": "CUSTOM"
+    },
+    {
+     "type": "FIRST_NAME"
+    },
+    {
+     "type": "LAST_NAME"
+    },
+    {
+     "type": "EMAIL"
+    },
+    {
+     "type": "PHONE"
+    }
+   ],
+   "thank_you_page": {
+    "body": "Thanks",
+    "button_text": "Visit website",
+    "button_type": "VIEW_WEBSITE",
+    "title": "Thank you",
+    "website_url": "https://example.com/t"
+   }
+  }
+ }
+}

@@ -39,6 +39,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from src.fb_api import error_catalog as _catalog
 from src.fb_api import plain_errors as _plain
 from src.fb_api import facts_cache as _facts_cache
+from src.fb_api import form_cover_store as _cover_store
 from src.fb_api import form_create as _fc
 from src.fb_api import form_locale as _fl
 from src.fb_api import form_templates as _ft
@@ -53,7 +54,7 @@ from src.fb_api import image_convert as _imgconv
 from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
-from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.graph import FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
@@ -210,6 +211,9 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
         total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.kind == "video")
     if any(x.instant for x in plan.ad_sets):
         total += CALLS_INSTANT_FORM
+        # ACL-2571: one upload of the template's picture to the campaign's Page per such template.
+        total += len({a.form_template["id"] for x in plan.ad_sets for a in x.ads
+                      if a.form_template and a.form_template.get("cover_local_sha256")})
     return total
 
 
@@ -886,6 +890,11 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
                     else:
+                        if clean.get("cover_local_sha256") and not _cover_store.exists(clean["id"], clean["cover_local_sha256"]):
+                            # ACL-2571: the picture file is on another computer. Never a wrong Page's photo:
+                            # this form is created (or found) as the same template without a background.
+                            warnings.append(f"Ad {i}: {_fc.MSG_COVER_ON_OTHER_COMPUTER.format(name=clean['name'])}")
+                            clean = {k: v for k, v in clean.items() if k != "cover_local_sha256"}
                         try:   # ACL-2180: Auto -> код из языка и страны, до любой записи
                             clean, note = _fl.resolve_template(
                                 clean, str(getattr(draft, "language", "") or ""), str(draft.country or ""))
@@ -1716,6 +1725,8 @@ class CampaignCreator:
         #: Шаблоны форм плана -> что с ними будет (ACL-1776); читается в `_check_forms`.
         self._form_steps: dict[str, _fc.FormStep] = {}
         self._form_warnings: list[str] = []
+        #: ACL-2571: template id -> photo id of its local picture uploaded to this plan's Page (before any write).
+        self._cover_ids: dict[str, str] = {}
         self.progress = progress
         self.now = now
         #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
@@ -3780,6 +3791,7 @@ class CampaignCreator:
         self._page_forms = None
         self._form_steps = {}
         self._form_warnings = []
+        self._cover_ids = {}
         if any(s.instant for s in plan.ad_sets):
             self._check_forms(plan)
             out.warnings += self._form_warnings
@@ -3913,11 +3925,15 @@ class CampaignCreator:
                                     "used); pick another form.", key="form_unavailable")
         self._form_steps = {}
         for tid, tpl in templates.items():
+            # ACL-2188: картинка чужой Страницы - стоп до поиска формы и до любой записи (строки, не числа).
+            if tpl.get("cover_photo_id") and str(tpl.get("cover_page_id") or "") != str(plan.page_id):
+                raise PlanError(_fc.MSG_COVER_OTHER_PAGE.format(name=tpl["name"]))
             existing, why = _fc.match_existing(read, tpl)
             if why:
                 raise PlanError(why + ".")
             fname = _ft.form_name(tpl)
             if existing:
+                self._refuse_existing_without_cover(plan, tpl, existing)
                 _fc.clear_pending(plan.act, plan.page_id, fname)
             elif _fc.is_pending(plan.act, plan.page_id, fname):
                 # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
@@ -3930,6 +3946,29 @@ class CampaignCreator:
                 raise PlanError(_fc.MSG_TERMS_STOP + ".")
             self._check_form_permission()
         self._page_forms = read
+
+    def _refuse_existing_without_cover(self, plan: CampaignPlan, tpl: dict, existing_id: str) -> None:
+        """ACL-2579: a same-name form without the template's background is NOT reused (stop before any write).
+
+        The name carries the template hash, so a form of this name may exist without a background (made by a run
+        where the picture was missing, or one Meta stored without it). Reusing it would publish ads with the wrong
+        form. Only a readable form that shows no / another picture stops; an unreadable one keeps the old
+        behaviour (reuse, with a note after the readback).
+        """
+        want = str(tpl.get("cover_photo_id") or "")
+        sha = str(tpl.get("cover_local_sha256") or "")
+        if not want and sha:
+            want = _cover_store.cached_photo(plan.page_id, sha) or ""
+        if not want and not sha:
+            return
+        if not want and not _cover_store.exists(tpl["id"], sha):
+            return      # ACL-2571: the picture is on another computer: this run makes/reuses a form without it
+        try:
+            row = self.client.get(f"/{existing_id}", {"fields": _fc.COVER_ONLY_FIELDS})
+        except GraphError:
+            return
+        if _fc.existing_cover_state(tpl, row, want) in ("missing", "different"):
+            raise PlanError(_fc.MSG_COVER_MISSING_ON_EXISTING.format(name=_ft.form_name(tpl)))
 
     def _check_form_permission(self) -> None:
         """Право `pages_manage_ads` у снятого токена: только предупреждение (ACL-1776).
@@ -3953,6 +3992,44 @@ class CampaignCreator:
             return replace(ad, form_id=placeholder)
         return ad
 
+    def _upload_form_covers(self, out: Outcome, plan: CampaignPlan) -> None:
+        """ACL-2571: upload the local picture of every template whose form will be CREATED on this Page.
+
+        Once per Page + picture hash: a cached photo id is reused without an upload. A refusal stops the
+        campaign here, before any object is created, with Meta's own answer.
+        """
+        seen: dict[str, dict] = {}
+        for ad_set in plan.ad_sets:
+            for ad in ad_set.ads:
+                if ad.form_template and not ad.form_id:
+                    seen.setdefault(ad.form_template["id"], ad.form_template)
+        for tid, tpl in seen.items():
+            sha = str(tpl.get("cover_local_sha256") or "")
+            step = self._form_steps.get(tid)
+            if not sha or step is None or step.action != "create":
+                continue
+            cached = _cover_store.cached_photo(plan.page_id, sha)
+            if cached:
+                self._cover_ids[tid] = cached
+                self._step(out, f"form {step.form_name!r}: background picture already on this Page, reused (no upload)")
+                continue
+            data = _cover_store.read(tid, sha)
+            mime, bad = _cover_store.check_file(data or b"")
+            if data is None or bad:
+                raise CreationStopped(_fc.MSG_COVER_FILE_LOST.format(name=tpl["name"]) if data is None
+                                      else f"{bad} Nothing was created.", created=out.created, kind="form_cover_refused")
+            try:
+                got = self.client.upload_form_photo(plan.page_id, data, mime=mime)
+            except (GraphError, WriteUnknown, FormPhotoRefused) as exc:
+                raise CreationStopped(_fc.MSG_COVER_UPLOAD_REFUSED.format(name=tpl["name"], why=str(exc)[:300]),
+                                      created=out.created, kind="form_cover_refused") from exc
+            try:
+                _cover_store.remember_photo(plan.page_id, sha, got["photo_id"])
+            except OSError:
+                pass        # only a cache: the next publish to this Page uploads again
+            self._cover_ids[tid] = got["photo_id"]
+            self._step(out, f"form {step.form_name!r}: background picture uploaded to the Page")
+
     def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
         """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
         read = _forms.read_page_forms(self.client, plan.page_id)
@@ -3961,13 +4038,31 @@ class CampaignCreator:
         existing, _why = _fc.match_existing(read, tpl)
         return existing or None
 
-    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str) -> None:
-        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп."""
-        row = self.client.get(f"/{form_id}", {"fields": _fc.READBACK_FIELDS})
+    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str, reused: bool = False,
+                     cover_id: str = "") -> None:
+        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп.
+
+        Картинка (ACL-2188): у новой формы расхождение - стоп, у переиспользованной - заметка и дальше
+        (фото могли удалить со Страницы, рабочая форма не должна блокировать каждую публикацию).
+        """
+        # ACL-2571: the Page photo id of a local picture is known only at publish; the name stays the template's.
+        cov = dict(tpl, cover_photo_id=cover_id) if cover_id else tpl
+        row = self.client.get(f"/{form_id}", {"fields": _fc.readback_fields(cov)})
         bad = _fc.compare_form(tpl, plan.page_id, row)
+        cover = _fc.compare_cover(cov, row)
+        if cover and reused and not bad:
+            self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
+            cover = []
+        bad += cover
+        logic = _fc.compare_logic(tpl, row)     # ACL-2178: a changed or missing condition always stops the run
+        bad += logic
         if bad:
+            tail = (" The form stays on the Page; the next run reuses it with a note."
+                    if "background image" in bad and not reused else "")
+            if logic and not reused:
+                tail += " The form stays on the Page; it can't be edited or deleted by the robot."
             raise CreationStopped(f"The form {_ft.form_name(tpl)!r} was read back with differences ("
-                                  + "; ".join(bad) + "). Nothing that depends on it was created.",
+                                  + "; ".join(bad) + "). Nothing that depends on it was created." + tail,
                                   created=out.created, kind="form_mismatch")
 
     def _ensure_form(self, out: Outcome, plan: CampaignPlan, ad: AdPlan) -> None:
@@ -3990,19 +4085,24 @@ class CampaignCreator:
                 except OSError as exc:
                     raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
                                           kind="form_state") from exc
+                cover_id = self._cover_ids.get(tpl["id"], "")
                 try:
                     step.form_id = self._write(
                         out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
-                        _ft.form_params(tpl), lambda: self._find_form_id(plan, tpl),
+                        _ft.form_params(tpl, cover_id), lambda: self._find_form_id(plan, tpl),
                         form_page=plan.page_id)
                 except GraphError as exc:
                     _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
-                    raise CreationStopped(_fc.refused_message(exc), created=out.created,
-                                          kind="form_refused") from exc
+                    if cover_id and tpl.get("cover_local_sha256"):
+                        # The cached photo may be gone from the Page: the next publish uploads again.
+                        _cover_store.forget_photo(plan.page_id, tpl["cover_local_sha256"])
+                    raise CreationStopped(_fc.refused_message(exc, dict(tpl, cover_photo_id=cover_id) if cover_id else tpl),
+                                          created=out.created, kind="form_refused") from exc
                 _fc.clear_pending(plan.act, plan.page_id, step.form_name)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
-            self._verify_form(out, plan, tpl, step.form_id)
+            self._verify_form(out, plan, tpl, step.form_id, reused=bool(step.existing_id),
+                              cover_id=self._cover_ids.get(tpl["id"], ""))
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
@@ -4374,6 +4474,8 @@ class CampaignCreator:
         submitted = (self._plan_view(plan), plan.tag)
         targetings, files = self._prepare(plan, out)
         self._check_reviewed_ids(plan)
+        # ACL-2571: the picture of a shared template goes to this Page BEFORE the first object is created.
+        self._upload_form_covers(out, plan)
 
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
