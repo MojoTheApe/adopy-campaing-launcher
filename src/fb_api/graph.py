@@ -129,6 +129,20 @@ def _read_context(path: str, params: dict | None) -> dict[str, str]:
     return context
 
 
+def classify_stop_url(path: str) -> str:
+    """ACL-2091: one reading of a Facebook page path: `login`, `checkpoint` or "" (nothing special).
+
+    `checkpoint` covers the security pages: /checkpoint, two-step/two-factor and /hacked-protection.
+    Used by the warm path, the timeout probe and mirrored by the page script in `token_capture`.
+    """
+    low = str(path or "").lower()
+    if low.startswith(("/login", "/recover")):
+        return "login"
+    if "/checkpoint" in low or "two_step" in low or "two_factor" in low or "/hacked-protection" in low:
+        return "checkpoint"
+    return ""
+
+
 class GraphStop(RuntimeError):
     """Остановка: дальше этот клиент не зовёт Graph вовсе."""
 
@@ -143,7 +157,14 @@ class GraphStop(RuntimeError):
 
 
 class LoggedOut(GraphStop):
+    """The session is gone. `page_seen` is True only when the browser showed the login page (ACL-2091):
+    a token-only logout (Graph 190, page still on Ads Manager) heals by itself and is never a hold."""
+
     kind = "logged_out"
+
+    def __init__(self, message: str, *, page_seen: bool = False, **kw: Any):
+        super().__init__(message, **kw)
+        self.page_seen = bool(page_seen)
 
 
 class Checkpoint(GraphStop):
@@ -376,7 +397,7 @@ class GraphClient:
         if kind == "checkpoint":
             raise self._stop(Checkpoint("the profile is on a Facebook checkpoint"))
         if kind == "login":
-            raise self._stop(LoggedOut("the profile is logged out of Facebook"))
+            raise self._stop(LoggedOut("the profile is logged out of Facebook", page_seen=True))
         return state
 
     # -- повтор чтения (ACL-2301)
