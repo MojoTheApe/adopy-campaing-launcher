@@ -875,7 +875,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     for s in plan.ad_sets:
         for ad in s.ads:
             ext = Path(ad.path).suffix.lower()
-            if ext not in cr.IMAGE_EXT and ext not in cr.VIDEO_EXT:
+            if ext not in cr.IMAGE_EXT and ext not in cr.VIDEO_EXT and ext not in cr._imgconv.CONVERTIBLE_EXT:
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file type {ext or '(none)'} is not an image or video Meta accepts"))
             try:
                 data = (files or {}).get(ad.path)
