@@ -247,3 +247,91 @@ def test_stored_image_name_accepts_repeated_suffixes(suffix):
 def test_stored_image_name_still_flags_a_different_image():
     other = "acl-bbbbbbbbbbbbbbbb.png_105"
     assert cr.stored_image_name("acl-aa5e593c3fc5d36f.png", other) == other
+
+
+class _LoseCampaignAnswers(Crashy):
+    """The first `lose` campaign POSTs land at Meta but the answer is a network timeout."""
+    lose = 1
+
+    def write(self, path, params, files=None, filename="", **kw):
+        body = super().write(path, params, files, filename, **kw)
+        if path.endswith("/campaigns") and self.lose > 0:
+            self.lose -= 1
+            return {"error": "network_timeout"}
+        return body
+
+
+def _campaign_names(meta):
+    return sorted(o["name"] for o in meta.objects.values() if o["_kind"] == "campaign")
+
+
+def _rerun(meta, journal, clock, tmp_path):
+    creator, _client = _creator(meta, journal)
+    creator.sleep = lambda s: setattr(clock, "t", clock.t + s)
+    clock.t += 60
+    return creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+
+
+def test_two_lost_answers_across_runs_never_repeat_a_campaign_name(tmp_path, journal, clock, monkeypatch):
+    """Runs: X lost -> X copy 1 lost -> the third run (name search lagging) must write X copy 2, not X copy 1 again."""
+    meta = Crashy()
+    _lagging_search(monkeypatch)
+    meta.fail_next["campaigns"] = "lost"
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert first.stop_kind == "unknown"
+    meta.fail_next["campaigns"] = "lost"
+    _rerun(meta, journal, clock, tmp_path)
+    third = _rerun(meta, journal, clock, tmp_path)
+    names = _campaign_names(meta)
+    assert len(names) == len(set(names)) == 3, names
+    base = names[0]
+    assert names == sorted([base, f"{base} copy 1", f"{base} copy 2"]), names
+    assert third.error == "", third.error
+
+
+def test_two_lost_answers_in_one_run_never_repeat_a_campaign_name(tmp_path, journal, clock, monkeypatch):
+    meta = _LoseCampaignAnswers()
+    meta.lose = 2
+    _lagging_search(monkeypatch)
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert first.stop_kind != "unexpected", first.error
+    assert "Something unexpected" not in first.error
+    names = _campaign_names(meta)
+    assert len(names) == len(set(names)), names
+    again = _rerun(meta, journal, clock, tmp_path)
+    assert again.stop_kind != "unexpected", again.error
+    names = _campaign_names(meta)
+    assert len(names) == len(set(names)), names
+
+
+def test_repeated_lost_answers_end_in_a_bounded_unknown_stop(tmp_path, journal, clock, monkeypatch):
+    meta = _LoseCampaignAnswers()
+    meta.lose = 50
+    _lagging_search(monkeypatch)
+    out, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert out.stop_kind == "unknown", (out.stop_kind, out.error)
+    names = _campaign_names(meta)
+    assert len(names) == len(set(names)) <= cr.MAX_CAMPAIGN_REWRITES + 1, names
+
+
+def test_set_published_does_not_lower_the_counter_of_an_unresolved_campaign_stage(tmp_path, journal, clock, monkeypatch):
+    meta = Crashy()
+    _lagging_search(monkeypatch)
+    meta.fail_next["campaigns"] = "lost"
+    _go(meta, _draft(tmp_path, ads=1), journal)
+    meta.fail_next["campaigns"] = "lost"
+    _rerun(meta, journal, clock, tmp_path)
+    import json
+    d = json.loads(next(journal.root.glob("op-*.json")).read_text(encoding="utf-8"))
+    assert d["copy_number"] >= 1 and d["stages"]["campaign"]["name"].endswith(" copy 1")
+    seen = []
+    real = cr.CampaignCreator._journaled
+
+    def spy(self, out, what, kind, send, find, **kw):
+        if kind == "campaign":
+            seen.append(int(self._op.data.get("copy_number") or 0))
+        return real(self, out, what, kind, send, find, **kw)
+
+    monkeypatch.setattr(cr.CampaignCreator, "_journaled", spy)
+    _rerun(meta, journal, clock, tmp_path)
+    assert seen and seen[0] >= 1, seen       # the counter was not reset to 0 by the name choice
