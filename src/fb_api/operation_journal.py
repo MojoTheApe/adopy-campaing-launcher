@@ -28,6 +28,8 @@ log = logging.getLogger(__name__)
 SCHEMA = 1
 #: Сколько после неизвестного результата записи мы не повторяем её вслепую (спека §7, решение 2).
 UNKNOWN_HOLD_S = 10 * 60
+#: How long after a campaign was confirmed a missing name-search hit counts as Meta lag (then it counts as gone).
+NOT_LISTED_LAG_S = 10 * 60
 #: How long any operation file is kept after its last change (complete, open, stopped or failed alike), and the side
 #: files (.corrupt, .superseded, .v1.json, orphan locks) after their own last change.
 RETENTION_S = 30 * 24 * 3600
@@ -128,6 +130,12 @@ class Operation:
         """Id of the confirmed campaign of this operation ('' when none)."""
         st = self.data["stages"].get("campaign") or {}
         return str(st.get("object_id") or "") if st.get("state") == CONFIRMED else ""
+
+    def campaign_age_s(self) -> float:
+        """Seconds since the campaign stage was confirmed (infinite when unknown)."""
+        st = self.data["stages"].get("campaign") or {}
+        at = float(st.get("confirmed_at") or 0.0)
+        return max(0.0, self._journal.clock() - at) if at else float("inf")
 
     @property
     def published_name(self) -> str:
@@ -270,8 +278,10 @@ class Operation:
         if note == "journal":
             return "Free some disk space or check the folder permissions, then publish again."
         # Only a write whose outcome is really unknown waits; one that was looked for and not found is sent again.
+        # The wait ends with the 10-minute hold: after it the creator sends the step again.
         unknown = [k for k, s_ in st.items() if s_["state"] == UNKNOWN and s_.get("note") != NOT_FOUND_NOTE]
-        if unknown or any(s_["state"] == SENT for s_ in st.values()):
+        sent = [k for k, s_ in st.items() if s_["state"] == SENT and self.age_s(k) < UNKNOWN_HOLD_S]
+        if unknown or sent:
             return "Wait 10 minutes, then publish again - Meta may still be processing the last step."
         if any(s_["state"] == CONFIRMED for s_ in st.values()) or self.state in (OP_STOPPED, OP_FAILED):
             return "Publish again - what was already created is checked and nothing will be created twice."

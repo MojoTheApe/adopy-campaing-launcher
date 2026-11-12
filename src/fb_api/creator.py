@@ -1911,16 +1911,17 @@ class CampaignCreator:
             return v
         return norm(asdict(plan))
 
-    def _campaign_alive(self, campaign_id: str) -> bool:
-        """The campaign is still in Ads Manager (readable and not deleted/archived). Read only."""
+    def _campaign_alive(self, campaign_id: str) -> "tuple[bool, str]":
+        """(still in Ads Manager - readable and not deleted/archived, its live name). Read only."""
         try:
-            row = self.client.get(f"/{campaign_id}", {"fields": "id,status,effective_status"})
+            row = self.client.get(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
         except GraphError:
-            return False                         # does not exist / not readable: gone
+            return False, ""                     # does not exist / not readable: gone
         if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
-            return False
-        return not ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
-                    & {"DELETED", "ARCHIVED"})
+            return False, ""
+        gone = ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
+                & {"DELETED", "ARCHIVED"})
+        return (not gone), str(row.get("name") or "")
 
     def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict, *,
                         submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> None:
@@ -1946,12 +1947,18 @@ class CampaignCreator:
             camp = op.campaign_id()
             same_name = not op.published_name or op.published_name == plan.name
             if camp and (not same_name or camp != existing_id):
-                if same_name and self._campaign_alive(camp):
-                    # The campaign of the earlier run exists but the name search did not list it (Meta lag):
-                    # creating another one could duplicate it.
-                    self._snapshot_operation_of(op, out)
-                    raise CreationStopped(MSG_NOT_LISTED.format(name=plan.name), created=out.created,
-                                          kind="resume_mismatch")
+                if same_name:
+                    alive, live_name = self._campaign_alive(camp)
+                    # Meta lag only while the campaign is young AND still carries the recorded name. A campaign
+                    # renamed in Ads Manager is taken over by the buyer; after the lag window a campaign the name
+                    # search still does not list counts as gone. Both start a new operation.
+                    lag = (alive and (not live_name or live_name == op.published_name)
+                           and op.campaign_age_s() < _oj.NOT_LISTED_LAG_S)
+                    if lag:
+                        # Creating another one could duplicate it.
+                        self._snapshot_operation_of(op, out)
+                        raise CreationStopped(MSG_NOT_LISTED.format(name=plan.name), created=out.created,
+                                              kind="resume_mismatch")
                 op = self.journal.supersede(op, request_id=self.request_key)
                 if same_name:
                     op.warnings.append(MSG_SUPERSEDED)

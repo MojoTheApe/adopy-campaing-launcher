@@ -390,24 +390,17 @@ def _by_kind(meta, kind):
     return next(o for o in meta.objects.values() if o["_kind"] == kind)
 
 
-@pytest.mark.parametrize("damage", ["renamed", "other_account"])
+@pytest.mark.parametrize("damage", ["other_account"])
 def test_resume_mismatch_stops_with_zero_writes(tmp_path, journal, damage):
     meta, _first = _partial(tmp_path, journal)
     camp = _by_kind(meta, "campaign")
-    if damage == "renamed":
-        camp["name"] = "Renamed by hand"
-    elif damage == "other_account":
-        camp["account_id"] = "999"
-    elif damage == "not_paused":
-        camp["status"] = "ACTIVE"
-    else:
-        camp["adlabels"] = []
+    camp["account_id"] = "999"
     posts = len(meta.posts)
     out, client = _go(meta, _draft(tmp_path, ads=2), journal)
     assert out.stop_kind == "resume_mismatch", (out.stop_kind, out.error)
     assert len(meta.posts) == posts and client.writes == 0
     assert out.operation["partial_ids"]["campaign"] == camp["id"]
-    assert out.error.startswith('"') and "Ads Manager" in out.error or "different ad account" in out.error
+    assert out.error == cr.MSG_OTHER_ACCOUNT.format(name="MX Leads 1")
 
 
 @pytest.mark.parametrize("damage", ["not_paused", "label_gone"])
@@ -662,6 +655,42 @@ def test_a_live_campaign_that_the_name_search_does_not_list_yet_stops_without_a_
     out, client = _go(meta, _draft(tmp_path, ads=2), journal)
     assert out.stop_kind == "resume_mismatch" and "does not list it yet" in out.error
     assert len(meta.posts) == posts and client.writes == 0 and _count(meta, "campaign") == 1
+
+
+def test_a_campaign_renamed_in_ads_manager_is_taken_over_and_never_asks_to_wait(tmp_path, journal, clock):
+    meta, _first = _partial(tmp_path, journal)
+    renamed = _by_kind(meta, "campaign")
+    renamed["name"] = "Renamed by hand"
+    for _ in range(3):                                                  # the buyer keeps publishing; the clock moves on
+        clock.t += 3600
+        writes_into_renamed = lambda: [p for p, _ in meta.posts if p.startswith(f"/{renamed['id']}/")]
+        before = len(writes_into_renamed())
+        out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+        assert "Wait" not in (out.error or "") and "does not list it yet" not in (out.error or "")
+        assert "Wait" not in ((out.operation or {}).get("next_action") or "")
+        assert len(writes_into_renamed()) == before                     # nothing is written into the renamed campaign
+    assert renamed["name"] == "Renamed by hand"
+    assert list(journal.root.glob("*.superseded"))                      # the old record was set aside
+
+
+def test_a_campaign_the_name_search_still_does_not_list_after_the_lag_window_is_a_new_operation(
+        tmp_path, journal, clock, monkeypatch):
+    meta, first = _partial(tmp_path, journal)
+    nr.delete(ACT, "MX Leads 1")
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+    clock.t += oj.NOT_LISTED_LAG_S + 60
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert "does not list it yet" not in (out.error or "")
+    assert out.error == "" and out.campaign_id and out.campaign_id != first.campaign_id
+    assert list(journal.root.glob("*.superseded"))
+
+
+def test_next_action_says_publish_again_once_the_hold_of_a_sent_stage_has_passed(journal, clock):
+    op = journal.open(ACT, "tag", "fp-hold", "C")
+    op.begin("campaign", "campaign", name="C")
+    assert op.next_action().startswith("Wait 10 minutes")
+    clock.t += oj.UNKNOWN_HOLD_S + 1
+    assert op.next_action().startswith("Publish again")
 
 
 def test_a_second_publish_of_a_finished_plan_is_a_new_copy_and_a_new_operation(tmp_path, journal):
