@@ -896,9 +896,11 @@ def test_image_hash_is_compared_with_what_meta_returned_not_with_md5(tmp_path):
 def test_duplicate_ad_names_are_refused_before_any_call(tmp_path):
     d = _draft(tmp_path, ads=2)
     a, b = d.ad_sets[0].ads
-    b.creative_id, b.copy_name = a.creative_id, a.copy_name
-    with pytest.raises(cr.PlanError, match="different"):
-        cr.plan_from_draft(d)
+    a.creative_id, a.copy_name = "X", ""
+    b.creative_id, b.copy_name = "X", ""
+    plan = cr.plan_from_draft(d)  # ACL-2538: no refusal, the later ad is numbered
+    assert [x.name for x in plan.ad_sets[0].ads] == ["X", "X 2"]
+    assert "Ad 2 named 'X 2' because Ad 1 has the same creative and text" in plan.warnings
 
 
 def test_duplicate_ad_set_names_are_refused(tmp_path):

@@ -629,10 +629,10 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "give the ads different creatives or texts: their names must differ inside a campaign",
+      "hint": "ads with the same creative file and the same text get '2', '3'... added to their names",
       "id": "ad_names_unique",
       "label": "Ad names are unique",
-      "severity": "error",
+      "severity": "warning",
       "side": "client",
       "topic": "names",
       "unit": "ad"
