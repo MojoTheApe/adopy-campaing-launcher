@@ -194,16 +194,17 @@ def test_disabled_with_spend_stays_dead_and_shows_time_and_reason():
     assert old["key"] == "dead" and old["status_line"].endswith(" · not refreshed")
 
 
-def test_stale_clear_with_spend_is_unknown_not_active():
+def test_stale_clear_with_spend_is_active_not_refreshed():
+    # ACL-2556 (owner 2026-11-11): spend in the period keeps the account Active, with the freshness stated.
     s = A.account_state(row({"status": "clear", "at": "2026-10-23 14:02:11"}), TODAY)
-    assert s["key"] == "unknown" and s["reason"] == "last status 23.10 14:02"
-    assert s["status_line"] == "unknown · last status 23.10 14:02"
+    assert s["key"] == "active"
+    assert s["status_line"] == "status not refreshed · last read 23.10 14:02"
 
 
-def test_failed_read_after_clear_is_unknown_with_the_failure_date():
+def test_failed_read_after_clear_is_active_not_refreshed():
     s = A.account_state(row({"status": "clear", "at": "2026-11-06 08:00:00", "stale": "1",
                              "tried_at": "2026-11-06 09:30:00", "tried_error": "logged out"}), TODAY)
-    assert s["key"] == "unknown" and s["status_line"] == "unknown · read failed 06.11 09:30"
+    assert s["key"] == "active" and s["status_line"] == "status not refreshed · last read 06.11 08:00"
 
 
 def test_fresh_api_clear_with_spend_is_active():
