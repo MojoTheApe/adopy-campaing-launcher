@@ -755,6 +755,25 @@ class ProfileSlots:
             self._cond.notify_all()
         return len(gone)
 
+    def resolve_kept(self, profile: str) -> int:
+        """ACL-2549: the problem of a kept window is solved (a Retry read succeeded): `review` -> `convenience`.
+
+        The window then yields to idle eviction like a clean one instead of holding a place forever; `kept_at`
+        restarts so the idle timer counts from now. Only rows of this profile; the window is not closed and no
+        hold is cleared here. Returns how many rows changed."""
+        profile = str(profile or "").strip().lower()
+        changed = 0
+        with self._cond:
+            for r in self._running.values():
+                if (r.get("kept") and (r.get("kept_kind") or KEPT_REVIEW) == KEPT_REVIEW
+                        and str(r.get("profile") or "").strip().lower() == profile):
+                    r["kept_kind"] = KEPT_CONVENIENCE
+                    r["kept_at"] = self._clock()
+                    changed += 1
+            if changed:
+                self._cond.notify_all()
+        return changed
+
     def _reuse_kept(self, profile: str) -> str:
         """Новое задание на профиль берёт место оставленного там окна.
 

@@ -18,7 +18,7 @@
     '.warm-chip{display:inline-flex;align-items:center;gap:.3rem;margin-left:.45rem;font-size:.68rem;font-weight:400;white-space:nowrap;vertical-align:middle}',
     '.warm-chip .warm-state{padding:.05rem .4rem;border-radius:999px;border:1px solid var(--border,#8884);color:var(--muted,#888)}',
     '.warm-chip[data-state="warm"] .warm-state{color:var(--ok,#2a9d4b);border-color:currentColor}',
-    '.warm-chip[data-state="logged_out"] .warm-state,.warm-chip[data-state="by_hand"] .warm-state{color:var(--bad,#c0392b);border-color:currentColor}',
+    '.warm-chip[data-state="logged_out"] .warm-state,.warm-chip[data-state="checkpoint"] .warm-state,.warm-chip[data-state="by_hand"] .warm-state{color:var(--bad,#c0392b);border-color:currentColor}',
     '.warm-chip input{margin:0;cursor:pointer}',
     '.warm-chip button,.warm-bar button{font:inherit;font-size:.68rem;padding:.05rem .4rem;cursor:pointer}',
     '.warm-chip button:disabled,.warm-bar button:disabled{opacity:.6;cursor:default}',
@@ -162,7 +162,7 @@
       if (info.state === 'closed' || info.state === 'open') {
         act.hidden = false; act.textContent = 'Open'; act.setAttribute('data-do', 'open');
         act.title = 'Open this profile with automation and keep it open';
-      } else if (info.closable && (info.state === 'warm' || info.state === 'logged_out')) {
+      } else if (info.closable && (info.state === 'warm' || info.state === 'logged_out' || info.state === 'checkpoint')) {
         act.hidden = false; act.textContent = 'Close'; act.setAttribute('data-do', 'close');
         act.title = 'Close this profile (opened by the dashboard)';
       } else {

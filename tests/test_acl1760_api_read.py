@@ -605,7 +605,7 @@ def test_logged_out_read_keeps_the_profile_it_started_open(world):
     assert r.state == "failed" and r.error_code == "profile_logged_out"
     assert [c[0] for c in world.queue.calls] == ["acquire", "keep"]
     assert world.soft_stops == []
-    assert world.cdp.closed_targets == ["T-mine"]
+    assert world.cdp.closed_targets == []      # ACL-2549: the login page tab is left open
 
 
 def test_tab_failure_after_the_start_still_stops_the_profile(world, monkeypatch):

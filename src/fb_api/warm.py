@@ -55,7 +55,7 @@ from typing import Any, Callable
 from src.fb_api import profile as _fb_profile
 from src.fb_api import stop_log as _stop_log
 from src.fb_api.graph import (Checkpoint, GraphStop, LoggedOut, PageFailed, PageUnresponsive,
-                              classify_stop_url)
+                              PolicyBlocked, classify_stop_url)
 from src.fb_api.telemetry import scrub
 
 # Upper limit of the connection preparation. It was 45 s: on a loaded machine (a profile takes 2-3 minutes to start)
@@ -226,6 +226,7 @@ WARM = "warm"
 OPEN = "open"
 CLOSED = "closed"
 LOGGED_OUT = "logged_out"
+CHECKPOINT = "checkpoint"
 BY_HAND = "by_hand"
 CLOSING = "closing"
 UNKNOWN = "unknown"
@@ -561,6 +562,8 @@ class WarmSession:
     #: Профиль поднял дешборд (MLX `start` вызвали мы): только такой закрывает «Close profiles».
     dashboard_started: bool = False
     logged_out: bool = False
+    #: ACL-2549: kind of the stop that left the tab open (checkpoint / logged_out / policy_block); "" = none.
+    problem_kind: str = ""
     target_id: str = ""
     #: Вкладка прошлого запуска, чей владелец мёртв: её закроем при открытии новой.
     stale_target: str = ""
@@ -591,6 +594,7 @@ class WarmSession:
     def record(self) -> dict:
         return {"account": self.account, "port": self.port, "started_at": self.started_at,
                 "dashboard_started": self.dashboard_started, "logged_out": self.logged_out,
+                "problem_kind": self.problem_kind,
                 "target_id": self.target_id, "owner_pid": self.owner_pid,
                 "owner_started": self.owner_started}
 
@@ -691,6 +695,7 @@ class WarmRegistry:
                 started_at=float(rec.get("started_at") or 0.0),
                 dashboard_started=bool(rec.get("dashboard_started")),
                 logged_out=bool(rec.get("logged_out")),
+                problem_kind=str(rec.get("problem_kind") or ""),
                 # Вкладка принадлежала умершему процессу — закроем её, когда откроем свою.
                 stale_target=str(rec.get("target_id") or ""),
                 owner_pid=self._me[0], owner_started=self._me[1])
@@ -755,6 +760,7 @@ class WarmRegistry:
             sess.account = account
             sess.port = int(port)
             sess.logged_out = False
+            sess.problem_kind = ""
             sess.verified = True
             sess.owner_pid, sess.owner_started = self._me
             self._foreign.pop(profile_id, None)
@@ -916,6 +922,10 @@ class WarmRegistry:
         if kind == "port":
             if sess is not None and sess.port == int(port or 0):
                 since = _hhmm(sess.started_at)
+                if sess.logged_out and sess.problem_kind == "checkpoint":
+                    return _chip(CHECKPOINT, "Security check", "Facebook shows a security check in this profile. "
+                                 "Solve it in the open profile window, then run the action again.",
+                                 closable=sess.dashboard_started)
                 if sess.logged_out:
                     return _chip(LOGGED_OUT, "Logged out", "Facebook asked for a login in this profile. "
                                  "Log in inside Multilogin, then run the action again.",
@@ -1435,7 +1445,9 @@ class WarmRegistry:
     def _finish(self, sess: WarmSession, stop: BaseException | None) -> None:
         try:
             if isinstance(stop, (LoggedOut, Checkpoint)):
-                self._note_login_stop(sess)
+                self._note_login_stop(sess, stop)
+            elif isinstance(stop, PolicyBlocked):
+                self._leave_for_problem(sess, stop.kind)      # ACL-2549: the buyer may need this tab
             elif isinstance(stop, PageUnresponsive):
                 self._drop_tab(sess)   # зависшую не копим: следующая — после охлаждения, свежая
         finally:
@@ -1443,10 +1455,42 @@ class WarmRegistry:
             sess.owner = 0
             sess.lock.release()
 
-    def _note_login_stop(self, sess: WarmSession) -> None:
+    def _note_login_stop(self, sess: WarmSession, stop: BaseException | None = None) -> None:
+        """A checkpoint or login page stop. ACL-2549: the tab that shows the page is LEFT open (the buyer solves it
+        there); a token-only logout (page still Ads Manager, `page_seen` False) heals by itself, so its tab is
+        dropped as before."""
         sess.logged_out = True
-        self._drop_tab(sess)
+        kind = str(getattr(stop, "kind", "") or "logged_out")
+        if stop is None or isinstance(stop, Checkpoint) or getattr(stop, "page_seen", False):
+            self._leave_for_problem(sess, kind)
+        else:
+            self._drop_tab(sess)
+            self._save()
+
+    def _leave_for_problem(self, sess: WarmSession, kind: str) -> None:
+        sess.problem_kind = kind
+        self._leave_tab(sess)
         self._save()
+
+    def _leave_tab(self, sess: WarmSession) -> None:
+        """ACL-2549: detach from the robot tab WITHOUT closing it (no click, typing, reload or navigation).
+
+        `sess.target_id` stays, so `known_targets()` protects it from another tab's clean-up; it is also the
+        `stale_target` that the next good checkout closes (never the last tab)."""
+        tab = sess.tab
+        leave = getattr(tab, "leave_open", None)
+        if tab is None or not callable(leave):
+            self._drop_tab(sess)
+            return
+        target = str(getattr(tab, "target_id", "") or "")
+        sess.tab, sess.graphs = None, {}
+        sess.mode_kind, sess.light_since, sess.light_fallback = "ads_manager", 0.0, False
+        try:
+            leave()
+        except Exception:
+            log.exception("Could not detach from the robot tab of %s", sess.account)
+        if target:
+            sess.target_id = sess.stale_target = target
 
     def _drop_tab(self, sess: WarmSession) -> None:
         tab, sess.tab, sess.graphs = sess.tab, None, {}
@@ -1527,7 +1571,7 @@ class WarmRegistry:
             state = graph.wait_ready(timeout=self._remaining())
         except GraphStop as exc:
             if isinstance(exc, (LoggedOut, Checkpoint)):
-                self._note_login_stop(sess)
+                self._note_login_stop(sess, exc)
             raise
         except BaseException:
             self._drop_tab(sess)
@@ -1536,6 +1580,7 @@ class WarmRegistry:
         self._remaining()
         sess.graphs = {mode: graph}
         sess.logged_out = False
+        sess.problem_kind = ""
         return graph, state
 
     def _raise_for_state(self, sess: WarmSession, state: dict) -> None:
@@ -1547,11 +1592,13 @@ class WarmRegistry:
         except Exception:  # noqa: BLE001 — телеметрия не роняет действие
             pass
         if kind == "checkpoint":
-            self._note_login_stop(sess)
-            raise Checkpoint("the profile is on a Facebook checkpoint")
+            stop = Checkpoint("the profile is on a Facebook checkpoint")
+            self._note_login_stop(sess, stop)
+            raise stop
         if kind == "login":
-            self._note_login_stop(sess)
-            raise LoggedOut("the profile is logged out of Facebook", page_seen=True)
+            stop = LoggedOut("the profile is logged out of Facebook", page_seen=True)
+            self._note_login_stop(sess, stop)
+            raise stop
         if not state.get("has_token"):
             self._drop_tab(sess)
             raise PageFailed("Ads Manager did not finish loading (no Graph session in the page); "
@@ -1566,7 +1613,7 @@ class WarmRegistry:
             return None                       # цель исчезла или браузер молчит
         stop = _url_stop(url)
         if stop is not None:
-            self._note_login_stop(sess)
+            self._note_login_stop(sess, stop)
             raise stop
         if not _is_ads_manager(url):
             return None                       # about:blank / чужой сайт — не наша рабочая страница
@@ -1587,7 +1634,7 @@ class WarmRegistry:
                 graph.navigate(act, timeout=self._remaining(30.0))
                 state = graph.wait_ready(timeout=self._remaining())
             except (LoggedOut, Checkpoint) as exc:
-                self._note_login_stop(sess)
+                self._note_login_stop(sess, exc)
                 raise exc
             except Exception:
                 return None
@@ -1597,8 +1644,8 @@ class WarmRegistry:
             return graph, state
         try:
             state = graph.live_state(timeout=self._remaining(5.0))
-        except (LoggedOut, Checkpoint):
-            self._note_login_stop(sess)
+        except (LoggedOut, Checkpoint) as exc:
+            self._note_login_stop(sess, exc)
             raise
         except Exception:                      # PageUnresponsive, CdpError, TimeoutError: заменяем
             return None
@@ -1609,6 +1656,7 @@ class WarmRegistry:
         self._remaining()
         sess.graphs[mode] = graph
         sess.logged_out = False
+        sess.problem_kind = ""
         return graph, state
 
     def _prepare(self, sess: WarmSession, act: str, mode: str,
@@ -1822,7 +1870,7 @@ class WarmRegistry:
             state = cap_graph.wait_ready(timeout=self._remaining())
         except GraphStop as exc:
             if isinstance(exc, (LoggedOut, Checkpoint)):
-                self._note_login_stop(sess)
+                self._note_login_stop(sess, exc)
             raise
         except BaseException:
             self._drop_tab(sess)
@@ -1847,6 +1895,7 @@ class WarmRegistry:
             _light.settle_and_close(work)
             sess.graphs = {mode: cap_graph}
             sess.logged_out = False
+            sess.problem_kind = ""
             sess.light_fallback = True
             sess.light_fallbacks += 1
             self._record_light(sess, mode="ads_manager", handover_ok=False, fallback_reason=reason,
@@ -1862,6 +1911,7 @@ class WarmRegistry:
         sess.light_fallbacks = 0
         sess.tab_since = self._wall()
         sess.logged_out = False
+        sess.problem_kind = ""
         closed = True
         try:
             cap_graph._eval_helper(".retire()", timeout=10.0)
@@ -1892,7 +1942,7 @@ class WarmRegistry:
             return None
         stop = _url_stop(url)
         if stop is not None:
-            self._note_login_stop(sess)
+            self._note_login_stop(sess, stop)
             raise stop
         if url != _light.LIGHT_URL or getattr(tab, "light", None) is None:
             return None
@@ -1922,8 +1972,8 @@ class WarmRegistry:
         sess.light_act = act
         try:
             state = graph.live_state(timeout=self._remaining(5.0))
-        except (LoggedOut, Checkpoint):
-            self._note_login_stop(sess)
+        except (LoggedOut, Checkpoint) as exc:
+            self._note_login_stop(sess, exc)
             raise
         except Exception:  # noqa: BLE001
             return None
@@ -1934,6 +1984,7 @@ class WarmRegistry:
         graph.light_recaptures = 0                         # the re-capture bound is per lease
         sess.graphs[mode] = graph
         sess.logged_out = False
+        sess.problem_kind = ""
         return graph, state
 
 
