@@ -496,6 +496,11 @@ _HELPER_JS = r"""
       if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
       if ('cover_photo_id' in x && !(typeof x.cover_photo_id === 'string' && new RegExp(F.photo_id_re).test(x.cover_photo_id))) return 'form_card';
     }
+    // ACL-2579: the intro background choice; only "UPLOAD", only with a cover photo; an old table fails closed.
+    if ('background_image_option' in c) {
+      if (!Array.isArray(F.background_options) || F.background_options.indexOf(c.background_image_option) < 0
+          || !c.context_card || typeof c.context_card !== 'object' || !('cover_photo_id' in c.context_card)) return 'form_card';
+    }
     return null;
   }
 

@@ -32,7 +32,7 @@ MSG_COVER_OTHER_PAGE = ("Form template {name!r}: the background image belongs to
 MSG_COVER_REFUSED = ("Meta refused the form {form_name!r} with its background image: {why}. "
                      "Choose another picture or remove the image, then publish again.")
 #: ACL-2579: the one-field read of an existing form's background (preflight).
-COVER_ONLY_FIELDS = "id,context_card{cover_photo{id}}"
+COVER_ONLY_FIELDS = "id,background_image_option,context_card{cover_photo{id}}"
 MSG_COVER_UNCONFIRMED = "the background image could not be confirmed"
 #: ACL-2579: a form of this exact name is already on the Page but Meta shows it without the template's background.
 MSG_COVER_MISSING_ON_EXISTING = (
@@ -135,7 +135,7 @@ def readback_fields(tpl: dict[str, Any] | None = None) -> str:
     шаблона с картинкой.
     """
     if tpl and tpl.get("cover_photo_id"):
-        return READBACK_FIELDS + ",context_card{cover_photo{id}}"
+        return READBACK_FIELDS + ",background_image_option,context_card{cover_photo{id}}"
     return READBACK_FIELDS
 
 
@@ -147,7 +147,10 @@ def compare_cover(tpl: dict[str, Any], row: dict[str, Any]) -> list[str]:
     card = row.get("context_card") if isinstance(row, dict) else None
     photo = card.get("cover_photo") if isinstance(card, dict) else None
     got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
-    return [] if got == want else ["background image"]
+    if got != want:
+        return ["background image"]
+    # ACL-2579: the photo is stored but Ads Manager shows it only with the option UPLOAD.
+    return [] if str(row.get("background_image_option") or "") == "UPLOAD" else ["background image"]
 
 
 def existing_cover_state(tpl: dict[str, Any], row: Any, want: str = "") -> str:
@@ -164,6 +167,8 @@ def existing_cover_state(tpl: dict[str, Any], row: Any, want: str = "") -> str:
     got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
     if not got:
         return "missing"
+    if str(row.get("background_image_option") or "") != "UPLOAD":
+        return "missing"  # ACL-2579: photo on the card but not shown by Ads Manager
     return "different" if want and got != want else "ok"
 
 

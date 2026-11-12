@@ -729,7 +729,10 @@ FORM_EDGE = "leadgen_forms"
 #: Ключи верхнего уровня запроса. `tos_accepted` сюда не попадёт никогда.
 FORM_KEYS = frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
                        "question_page_custom_headline", "locale", "follow_up_action_url",
-                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer",
+                       "background_image_option"})
+#: ACL-2579: the only intro background choice allowed, and only together with context_card.cover_photo_id.
+FORM_BACKGROUND_OPTIONS = ("UPLOAD",)
 #: Булевы ключи верхнего уровня (ACL-2053): только true/false, не строки и не числа.
 FORM_BOOL_KEYS = frozenset({"is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 #: Ключи, которые Graph читает как JSON (строку разбираем до проверок, как у `act_X`).
@@ -772,7 +775,7 @@ def policy_for_form_create(page: str = "") -> dict:
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
         "max_options": FORM_MAX_OPTIONS, "max_text": FORM_MAX_TEXT,
         "name_re": FORM_NAME_RE, "page_re": FORM_PAGE_RE, "locale_re": FORM_LOCALE_RE,
-        "photo_id_re": FORM_PHOTO_ID_RE,
+        "photo_id_re": FORM_PHOTO_ID_RE, "background_options": list(FORM_BACKGROUND_OPTIONS),
         "url_re": FORM_URL_RE, "forbidden": sorted(FORM_FORBIDDEN_ANYWHERE),
     }
 
@@ -961,6 +964,12 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
             photo = cc["cover_photo_id"]
             if not (isinstance(photo, str) and re.match(FORM_PHOTO_ID_RE, photo)):
                 raise WriteRefused("write refused: context_card.cover_photo_id must be a photo id of digits")
+    if "background_image_option" in checked:
+        card = checked.get("context_card")
+        if checked["background_image_option"] not in FORM_BACKGROUND_OPTIONS:
+            raise WriteRefused("write refused: background_image_option is not allowed")
+        if not (isinstance(card, dict) and "cover_photo_id" in card):
+            raise WriteRefused("write refused: background_image_option needs context_card.cover_photo_id")
     return FORM_EDGE
 
 

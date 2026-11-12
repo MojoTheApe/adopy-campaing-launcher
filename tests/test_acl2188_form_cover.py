@@ -183,6 +183,8 @@ class CoverMeta(FormsMeta):
             elif photo and self.readback_cover == "other":
                 card["cover_photo"] = {"id": "1"}
             self.details[res["body"]["id"]]["context_card"] = card
+            if params.get("background_image_option"):  # ACL-2579: Meta stores the option and reads it back
+                self.details[res["body"]["id"]]["background_image_option"] = params["background_image_option"]
         return res
 
 
@@ -199,8 +201,9 @@ def test_readback_fields_without_a_cover_is_todays_string():
 
 def test_compare_cover_match_different_missing():
     t = covered()
-    assert fc.compare_cover(t, {"context_card": {"cover_photo": {"id": PHOTO}}}) == []
-    assert fc.compare_cover(t, {"context_card": {"cover_photo": {"id": "5"}}}) == ["background image"]
+    ok = {"context_card": {"cover_photo": {"id": PHOTO}}, "background_image_option": "UPLOAD"}
+    assert fc.compare_cover(t, ok) == []
+    assert fc.compare_cover(t, {**ok, "context_card": {"cover_photo": {"id": "5"}}}) == ["background image"]
     assert fc.compare_cover(t, {"context_card": {}}) == ["background image"]
     assert fc.compare_cover(t, {}) == ["background image"]
     assert fc.compare_cover(ft.validate(tpl())[0], {}) == []

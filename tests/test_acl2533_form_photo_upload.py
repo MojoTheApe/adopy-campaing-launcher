@@ -692,7 +692,8 @@ def test_a_republish_on_the_same_page_finds_the_form_and_uploads_nothing(tmp_pat
     t = ft.get(saved["id"])
     meta = CoverMeta(rows=[{"id": "7000050", "name": ft.form_name(t), "status": "ACTIVE", "locale": "en_US"}])
     meta.details["7000050"] = {**meta.rows[0], "page": {"id": PAGE}, "questions": {"data": ft.expected_questions(t)},
-                               "context_card": {"cover_photo": {"id": NEW_PHOTO}}}
+                               "context_card": {"cover_photo": {"id": NEW_PHOTO}},
+                               "background_image_option": "UPLOAD"}
     out, _ = _run(meta, _tpl_draft(tmp_path, [saved["id"]]))
     assert out.error == "" and not meta.form_posts
     assert any("found on the Page, reused" in s for s in out.steps)
