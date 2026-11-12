@@ -7657,16 +7657,22 @@ window.cbPreflight = (function () {
         }
         out.push(v(id, codeS ? 'error' : 'ok', codeS));
       } else if (id === 'ad_names_unique') {
-        /* Имена различаются внутри набора (так создатель ищет и сверяет объявления). */
-        var bad = [], all = numbered(inp);
+        /* ACL-2538: одинаковое имя (тот же файл и текст) - не ошибка: создатель назовёт
+           следующие «Имя 2», «Имя 3»; здесь только заметка. */
+        var bad = [], notes = [], all = numbered(inp);
         sets.forEach(function (st, i) {
-          var mine = all.filter(function (x) { return x.si === i + 1; });
-          mine.forEach(function (x) {
+          var first = {}, counts = {};
+          all.filter(function (x) { return x.si === i + 1; }).forEach(function (x) {
             var nm = s(x.ad.name);
-            if (nm && mine.filter(function (y) { return s(y.ad.name) === nm; }).length > 1) bad.push(x.n);
+            if (!nm) return;
+            if (!Object.prototype.hasOwnProperty.call(first, nm)) { first[nm] = x.n; return; }
+            counts[nm] = (counts[nm] || 1) + 1;
+            bad.push(x.n);
+            notes.push('Ad ' + x.n + " will be named '" + nm + ' ' + counts[nm] + "' because Ad " + first[nm] +
+              ' has the same creative and text');
           });
         });
-        out.push(v(id, bad.length ? 'error' : 'ok', bad.length ? 'Ad ' + bad.join(', ') : '', bad));
+        out.push(v(id, bad.length ? 'warning' : 'ok', notes.join('; '), bad));
       } else if (id === 'adset_names_unique') {
         var names = sets.map(function (st) { return s(st.name).toLowerCase(); }), badSets = [];
         names.forEach(function (nm, i) {
@@ -7770,8 +7776,19 @@ window.cbPreflight = (function () {
     m = /(?<!\d)(\d{1,2})$/.exec(tail.replace(/[\s_\-]+$/, ''));
     return m ? String(parseInt(m[1], 10)) : '';
   }
+  /* ACL-2538: нет номера в имени файла - сам файл (без расширения, до 40 знаков, тире -> пробел),
+     как _file_stem_label на сервере. */
+  function fileStem(file) {
+    var stem = String(file || '').split(/[\\/]/).pop();
+    if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
+    stem = stem.slice(0, 40);
+    stem = stem.replace(/\d{3,4}\s*[x\u0445\u00d7]\s*\d{3,4}/gi, ' ').replace(/(^|\D)(\d)(\d{2,3})(?!\d)/g, '$1$2 $3');
+    stem = stem.replace(/\s*[-–—]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[ _]+|[ _]+$/g, '');
+    return stem.slice(0, 40).replace(/^[ _]+|[ _]+$/g, '');
+  }
   function adName(file, copy) {
     var creative = creativeNumber(file), text = s(copy);
+    if (!creative && file) creative = fileStem(file);
     if (creative && file && creative === creativeNumber(file)) {
       var variant = fileVariant(file);
       if (variant) creative = creative + ' ' + variant;
