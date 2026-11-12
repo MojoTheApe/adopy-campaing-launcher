@@ -376,7 +376,7 @@ def test_the_two_policy_chains_do_not_overlap():
     assert wp.FORM_KEYS == frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
                                       "question_page_custom_headline", "locale", "follow_up_action_url",
                                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer",
-                                      "conditional_logic", "end_pages"})
+                                      "background_image_option", "conditional_logic", "end_pages"})
 
 
 def test_the_policy_does_not_mutate_the_callers_params():

@@ -423,3 +423,20 @@ def test_the_english_labels_are_on_the_page():
                  "Only shown after an answer", "Non-lead end page", "This answer no longer exists",
                  "Remove all conditions from this template?"):
         assert text in page, text
+
+
+def test_a_form_with_conditions_and_a_cover_sends_both_and_the_name_marks_both():
+    """ACL-2579 + ACL-2178 together: UPLOAD background, intro-less card, logic, and one name hash for both."""
+    over = {"cover_photo_id": "111222333", "cover_page_id": "444555666", "intro": "Welcome"}
+    clean, errors = ft.validate(tpl(**over))
+    assert errors == []
+    params = ft.form_params(clean)
+    assert params["background_image_option"] == "UPLOAD"
+    assert params["context_card"]["cover_photo_id"] == "111222333"
+    assert params["conditional_logic"] == LOGIC["create"]["conditional_logic"]
+    assert params["end_pages"] == LOGIC["create"]["end_pages"]
+    check(params)
+    plain, _ = ft.validate(tpl())
+    assert ft.content_hash(clean) != ft.content_hash(plain)
+    fields = fc.readback_fields(clean)
+    assert "background_image_option" in fields and "conditional_logic,end_pages" in fields

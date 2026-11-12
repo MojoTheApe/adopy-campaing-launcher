@@ -371,9 +371,20 @@ def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], li
     return out, errors
 
 
+#: ACL-2579: version marker mixed into the name hash of templates with a picture (see `content_hash`).
+COVER_SHAPE = "cover-v2"
+#: ACL-2579: the intro "Background image" choice Ads Manager sends with an uploaded picture.
+FORM_BACKGROUND_UPLOAD = "UPLOAD"
+
+
 def content_hash(tpl: dict[str, Any]) -> str:
     """Короткий хэш СОДЕРЖАНИЯ (без id и имени): другое содержание -> другая форма."""
     body = {k: tpl.get(k) for k in sorted(tpl) if k not in ("id", "name")}
+    if tpl.get("cover_photo_id") or tpl.get("cover_local_sha256"):
+        # ACL-2579: forms with a picture made before `background_image_option=UPLOAD` was sent (live 12.11, Doc284)
+        # show no background in Ads Manager and cannot be edited; a new shape marker gives them a NEW name, so the
+        # next publish creates a good form instead of reusing the broken one. Templates without a picture keep names.
+        body["_shape"] = COVER_SHAPE
     raw = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:6]
 
@@ -470,11 +481,15 @@ def form_params(tpl: dict[str, Any], cover_photo_id: str = "") -> dict[str, Any]
     }
     if tpl.get("follow_up_action_url"):
         params["follow_up_action_url"] = tpl["follow_up_action_url"]
-    if tpl.get("intro"):
+    photo = cover_photo_id or tpl.get("cover_photo_id")
+    if tpl.get("intro") or photo:
+        # A picture without intro text still needs its card (ACL-2579): the headline stands in for the text.
         params["context_card"] = {"title": tpl.get("intro_title") or tpl["headline"],
-                                  "style": "PARAGRAPH_STYLE", "content": [tpl["intro"]]}
-        if tpl.get("cover_photo_id") or cover_photo_id:
-            params["context_card"]["cover_photo_id"] = cover_photo_id or tpl["cover_photo_id"]
+                                  "style": "PARAGRAPH_STYLE", "content": [tpl.get("intro") or tpl["headline"]]}
+        if photo:
+            params["context_card"]["cover_photo_id"] = photo
+            # Live 12.11 (Doc284): without this Ads Manager ignores the stored photo (HAR 2533 #469/#472).
+            params["background_image_option"] = FORM_BACKGROUND_UPLOAD
     if has_logic(tpl):
         params["conditional_logic"] = {"version": 1, "logic_data": logic_data(tpl)}
         params["end_pages"] = end_pages(tpl)

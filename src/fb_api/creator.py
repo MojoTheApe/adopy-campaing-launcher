@@ -3879,6 +3879,7 @@ class CampaignCreator:
                 raise PlanError(why + ".")
             fname = _ft.form_name(tpl)
             if existing:
+                self._refuse_existing_without_cover(plan, tpl, existing)
                 _fc.clear_pending(plan.act, plan.page_id, fname)
             elif _fc.is_pending(plan.act, plan.page_id, fname):
                 # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
@@ -3891,6 +3892,29 @@ class CampaignCreator:
                 raise PlanError(_fc.MSG_TERMS_STOP + ".")
             self._check_form_permission()
         self._page_forms = read
+
+    def _refuse_existing_without_cover(self, plan: CampaignPlan, tpl: dict, existing_id: str) -> None:
+        """ACL-2579: a same-name form without the template's background is NOT reused (stop before any write).
+
+        The name carries the template hash, so a form of this name may exist without a background (made by a run
+        where the picture was missing, or one Meta stored without it). Reusing it would publish ads with the wrong
+        form. Only a readable form that shows no / another picture stops; an unreadable one keeps the old
+        behaviour (reuse, with a note after the readback).
+        """
+        want = str(tpl.get("cover_photo_id") or "")
+        sha = str(tpl.get("cover_local_sha256") or "")
+        if not want and sha:
+            want = _cover_store.cached_photo(plan.page_id, sha) or ""
+        if not want and not sha:
+            return
+        if not want and not _cover_store.exists(tpl["id"], sha):
+            return      # ACL-2571: the picture is on another computer: this run makes/reuses a form without it
+        try:
+            row = self.client.get(f"/{existing_id}", {"fields": _fc.COVER_ONLY_FIELDS})
+        except GraphError:
+            return
+        if _fc.existing_cover_state(tpl, row, want) in ("missing", "different"):
+            raise PlanError(_fc.MSG_COVER_MISSING_ON_EXISTING.format(name=_ft.form_name(tpl)))
 
     def _check_form_permission(self) -> None:
         """Право `pages_manage_ads` у снятого токена: только предупреждение (ACL-1776).
