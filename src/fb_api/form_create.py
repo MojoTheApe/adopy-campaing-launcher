@@ -31,7 +31,14 @@ MSG_COVER_OTHER_PAGE = ("Form template {name!r}: the background image belongs to
                         "template and choose a picture of this Page, or remove the image.")
 MSG_COVER_REFUSED = ("Meta refused the form {form_name!r} with its background image: {why}. "
                      "Choose another picture or remove the image, then publish again.")
+#: ACL-2579: the one-field read of an existing form's background (preflight).
+COVER_ONLY_FIELDS = "id,context_card{cover_photo{id}}"
 MSG_COVER_UNCONFIRMED = "the background image could not be confirmed"
+#: ACL-2579: a form of this exact name is already on the Page but Meta shows it without the template's background.
+MSG_COVER_MISSING_ON_EXISTING = (
+    "A form named {name!r} is already on this Page, but it has no background image (or another one), while the "
+    "template has a background. The robot will not reuse it. Archive that form in Ads Manager (or change the "
+    "template), then publish again.")
 #: ACL-2571: the picture of a shared template is a file on one computer; each Page gets its own upload at publish.
 MSG_COVER_ON_OTHER_COMPUTER = ("the background picture of form template {name!r} is on another computer, so this form "
                                "is created without a background. Choose the picture again in the template on this "
@@ -141,6 +148,23 @@ def compare_cover(tpl: dict[str, Any], row: dict[str, Any]) -> list[str]:
     photo = card.get("cover_photo") if isinstance(card, dict) else None
     got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
     return [] if got == want else ["background image"]
+
+
+def existing_cover_state(tpl: dict[str, Any], row: Any, want: str = "") -> str:
+    """Cover of an EXISTING same-name form against the template: "ok" | "missing" | "different" | "unknown".
+
+    `want` is the Page photo id the template resolves to (empty when only "some picture" is expected, as for a
+    local picture that is not uploaded to this Page yet). "unknown" = the row could not be read: the caller keeps
+    the old behaviour (reuse, with a note).
+    """
+    if not isinstance(row, dict) or not row.get("id"):
+        return "unknown"
+    card = row.get("context_card")
+    photo = card.get("cover_photo") if isinstance(card, dict) else None
+    got = str(photo.get("id") or "") if isinstance(photo, dict) else ""
+    if not got:
+        return "missing"
+    return "different" if want and got != want else "ok"
 
 
 def refused_message(exc: Exception, tpl: dict[str, Any] | None = None) -> str:
