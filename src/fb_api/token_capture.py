@@ -424,7 +424,7 @@ _HELPER_JS = r"""
   // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
   function checkForm(spec) {
     const F = WRITE && WRITE.form_create;
-    if (!F || !Array.isArray(F.bool_keys)) return 'form_policy';
+    if (!F || !Array.isArray(F.bool_keys) || typeof F.photo_id_re !== 'string') return 'form_policy';
     const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
     if (!m) return 'form_path';
     // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
@@ -494,6 +494,7 @@ _HELPER_JS = r"""
       const x = c.context_card;
       if (!only(x, 'context_card') || !txt(x.title) || F.card_styles.indexOf(x.style) < 0) return 'form_card';
       if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
+      if ('cover_photo_id' in x && !(typeof x.cover_photo_id === 'string' && new RegExp(F.photo_id_re).test(x.cover_photo_id))) return 'form_card';
     }
     return null;
   }
@@ -536,6 +537,8 @@ _HELPER_JS = r"""
   async function write(spec, job) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
+    // ACL-2533: a helper installed only for the form-background upload has no Graph write chain at all.
+    if (WRITE.form_photo_only) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
@@ -738,6 +741,115 @@ _HELPER_JS = r"""
     j.aborted = true;
     try { if (j.xhr) j.xhr.abort(); } catch (e) {}
     return { ok: true };
+  }
+
+  // ACL-2533: загрузка фона формы лидов - НЕ Graph, а тот же запрос, что шлёт сам Ads Manager
+  // (`/ads/leadgen/upload/photo/`), с этой вкладки, по сессии пользователя, от имени закреплённой Страницы.
+  // Зеркало write_policy.check_form_photo_upload. fb_dtsg/lsd читаются здесь и наружу не выходят.
+  function checkPhoto(P, spec) {
+    if (!P || typeof P.url !== 'string' || typeof P.host !== 'string' || !Array.isArray(P.mimes)
+        || typeof P.max_bytes !== 'number' || typeof P.page_re !== 'string') return 'photo_policy';
+    if (location.hostname !== P.host || location.protocol !== 'https:') return 'photo_host';
+    const pageRe = new RegExp(P.page_re);
+    if (!P.page || !pageRe.test(String(P.page))) return 'photo_no_page';
+    if (!spec || typeof spec.av !== 'string' || !pageRe.test(spec.av)) return 'photo_av';
+    if (spec.av !== String(P.page)) return 'photo_page';
+    if (P.mimes.indexOf(spec.mime) < 0) return 'photo_type';
+    const expect = spec.expect || {};
+    if (typeof expect.bytes !== 'number' || expect.bytes < 1 || expect.bytes > P.max_bytes) return 'photo_size';
+    if (!/^[a-z0-9_]{1,40}$/.test(String(spec.stage || ''))) return 'photo_stage';
+    return null;
+  }
+
+  function pageSecrets() {
+    let dtsg = '';
+    let lsd = '';
+    let user = '';
+    try {
+      const el = document.querySelector('input[name="fb_dtsg"]');
+      if (el && el.value) dtsg = String(el.value);
+    } catch (e) {}
+    const scripts = document.scripts || [];
+    for (let i = 0; i < scripts.length && !(dtsg && lsd && user); i++) {
+      const t = scripts[i].textContent || '';
+      if (t.length < 20 || t.length > 3000000) continue;
+      let m;
+      if (!dtsg && (m = /\["DTSGInitialData",\[\],\{"token":"([^"]{8,200})"/.exec(t))) dtsg = m[1];
+      if (!lsd && (m = /\["LSD",\[\],\{"token":"([^"]{4,100})"/.exec(t))) lsd = m[1];
+      if (!user && (m = /"USER_ID":"([0-9]{1,25})"/.exec(t))) user = m[1];
+    }
+    if (!/^[A-Za-z0-9_:\-]{8,200}$/.test(dtsg) || !/^[A-Za-z0-9_\-]{4,100}$/.test(lsd)
+        || !/^[1-9][0-9]{0,24}$/.test(user)) return null;
+    return { dtsg: dtsg, lsd: lsd, user: user };
+  }
+
+  async function uploadFormPhoto(spec) {
+    if (retired) return { error: 'retired' };
+    const refused = (why) => ({ error: 'write_refused', why: why });
+    const P = WRITE && WRITE.form_photo;
+    const why = checkPhoto(P, spec);
+    if (why) return refused(why);
+    const id = String(spec.stage);
+    const parts = staged[id];
+    if (!parts || !parts.length) return { error: 'no_file' };
+    try {
+      const blob = new Blob(parts, { type: spec.mime });
+      if (blob.size !== spec.expect.bytes || blob.size > P.max_bytes) return refused('file_size');
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+        const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        if (hex !== String(spec.expect.sha256 || '')) return refused('file_hash');
+      } catch (e) { return refused('file_hash'); }
+      const sec = pageSecrets();
+      if (!sec) return { error: 'no_session' };
+      if (typeof fetch !== 'function') return { error: 'no_fetch' };
+      let sum = 0;
+      for (let i = 0; i < sec.dtsg.length; i++) sum += sec.dtsg.charCodeAt(i);
+      const q = new URLSearchParams();
+      q.set('av', P.page); q.set('__user', sec.user); q.set('__a', '1');
+      q.set('fb_dtsg', sec.dtsg); q.set('jazoest', '2' + sum); q.set('lsd', sec.lsd);
+      const body = new FormData();
+      body.append('fb_dtsg', sec.dtsg);
+      const rnd = Array.from(crypto.getRandomValues(new Uint8Array(8))).map((b) => b.toString(16).padStart(2, '0')).join('');
+      body.append('file', blob, rnd + (spec.mime === 'image/png' ? '.png' : '.jpg'));
+      const scrub = (text) => {
+        let out = clean(text);
+        for (const v of [sec.dtsg, sec.lsd]) out = out.split(v).join('<hidden>');
+        return out;
+      };
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 120000) : null;
+      let resp;
+      let text;
+      try {
+        // One request: no redirects, no retry; the cookies are the page's own (same origin).
+        resp = await fetch(P.url + '?' + q.toString(), {
+          method: 'POST', body: body, credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+          headers: { 'x-fb-lsd': sec.lsd }, ...(controller ? { signal: controller.signal } : {}) });
+        text = await resp.text();
+      } catch (e) {
+        return { error: (controller && controller.signal.aborted) ? 'network_timeout' : 'network' };
+      } finally {
+        if (timer !== null) clearTimeout(timer);
+      }
+      text = scrub(text).replace(/^\s*for\s*\(;;\);\s*/, '');
+      let parsed;
+      try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+      const photo = parsed && parsed.payload && parsed.payload.photo;
+      if (photo && /^[0-9]{1,25}$/.test(String(photo.id))) {
+        const num = (v) => (typeof v === 'number' && isFinite(v) && v > 0 ? Math.floor(v) : 0);
+        // Only the id and the size leave the helper; the CDN address (`src`) is dropped.
+        return { ok: true, photo_id: String(photo.id), width: num(photo.width), height: num(photo.height) };
+      }
+      let reason = '';
+      if (parsed && typeof parsed === 'object') {
+        reason = [parsed.errorSummary, parsed.errorDescription].filter((x) => typeof x === 'string' && x).join(': ');
+      }
+      if (!reason) reason = 'HTTP ' + resp.status + ', unexpected reply';
+      return { error: 'upload_refused', text: reason.slice(0, 300), status: resp.status };
+    } finally {
+      unstage(id);
+    }
   }
 
   // Общая отправка записи: политика уже проверена (цепочка act_X или цепочка форм).
@@ -986,7 +1098,7 @@ _HELPER_JS = r"""
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
                           listen: listen, listenStatus: listenStatus, stopListen: stopListen,
                           handOver: handOver,
-                          validatePage: validatePage,
+                          validatePage: validatePage, uploadFormPhoto: uploadFormPhoto,
                           stage: stage, unstage: unstage,
                           startCall: startCall, poll: poll, abort: abort });
 })();
@@ -1016,11 +1128,16 @@ class InPageGraph:
     помощник вырезает токены сам).
     """
 
+    #: ACL-2533: class-level defaults, so a helper built without `__init__` (test doubles) reads as "not a photo session".
+    form_photo = False
+    form_photo_page: str | None = None
+
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
                  write_page: str | None = None,
                  allow_object_updates: bool = False,
+                 form_photo: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
         # ACL-1761: запись — только явно и только в один проверенный кабинет.
@@ -1028,12 +1145,22 @@ class InPageGraph:
         # существующих объектов (статус/бюджет/ставка), создание невозможно.
         if allow_writes and allow_object_updates:
             raise ValueError("creation writes and object updates are separate modes")
+        # ACL-2533: `form_photo` - a third, separate mode: ONLY the form-background upload (a web-session
+        # request, not Graph). It never enables Graph writes or object edits.
+        if form_photo and (allow_writes or allow_object_updates):
+            raise ValueError("the form-photo upload is a separate mode")
+        self.form_photo = bool(form_photo)
+        self.form_photo_page: str | None = None
         self.object_updates = bool(allow_object_updates)
         self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
         self.validation_act: str | None = None
         self.write_page: str | None = None
         self._write_policy: dict | None = None
+        if self.form_photo:
+            from src.fb_api import write_policy as _wp
+
+            self._write_policy = _wp.policy_for_form_photo_only("")
         if self.allow_writes:
             from src.fb_api import write_policy as _wp
 
@@ -1156,6 +1283,25 @@ class InPageGraph:
         # `if (g[NAME]) return` would not install a new one - the old policy would stay and a form write
         # is refused as form_no_page. A new world name = a fresh helper with the Page policy.
         self.world_name = f"acl_{secrets.token_hex(6)}"
+        self._reset_world()
+        return self.wait_ready(timeout=timeout)
+
+    def pin_photo_page(self, page: str, *, timeout: float = 30.0) -> dict:
+        """ACL-2533: pin the Page of the form-photo upload to the session (once; the same value again is a no-op)."""
+        if not self.form_photo:
+            raise ValueError("this page is not in the form-photo mode")
+        page = str(page or "")
+        if not re.fullmatch(r"[0-9]{1,25}", page):
+            raise ValueError("the Page to pin must be a numeric Page id")
+        if self.form_photo_page:
+            if self.form_photo_page != page:
+                raise ValueError("a different Page is already pinned for this session")
+            return {"kind": "ads_manager", "has_token": True, "pinned": True}
+        from src.fb_api import write_policy as _wp
+
+        self.form_photo_page = page
+        self._write_policy = _wp.policy_for_form_photo_only(page)
+        self.world_name = f"acl_{secrets.token_hex(6)}"     # a fresh helper with the Page in its policy
         self._reset_world()
         return self.wait_ready(timeout=timeout)
 
@@ -1299,10 +1445,10 @@ class InPageGraph:
                         if episode is not None:
                             episode.finish(stop)
                         else:
-                            patience.begin(stop, writes=bool(self.allow_writes))      # readings only
+                            patience.begin(stop, writes=bool(self.allow_writes or self.form_photo))      # readings only
                         raise
                     if episode is None:
-                        episode = patience.begin(stop, writes=bool(self.allow_writes))
+                        episode = patience.begin(stop, writes=bool(self.allow_writes or self.form_photo))
                         if episode is None:
                             raise
                     if not episode.wait(self._sleep):
@@ -1535,7 +1681,7 @@ class InPageGraph:
         раз): кусок не переотправляется в пустой новый мир под старым id.
         Итоговое число байт сверяется с `len(data)`. Возвращает (мир, id).
         """
-        if not self.allow_writes or self.object_updates:
+        if (not self.allow_writes and not self.form_photo) or self.object_updates:
             raise ValueError("read-only: staging a file needs allow_writes")
         for attempt in (0, 1):
             self._ready_for_call()
@@ -1616,6 +1762,43 @@ class InPageGraph:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
         except (CdpTimeout, TimeoutError):
             # ACL-2338: вызов в странице не вернулся за срок - как сетевой таймаут: запрос мог уйти или нет.
+            return {"error": "call_unknown", "reason": "cdp_timeout"}
+        except StaleContextError:
+            return {"error": "call_unknown", "reason": "context_stale"}
+        except (PageError, CdpError):
+            return {"error": "call_unknown", "reason": "page_closed"}
+        return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    #: ACL-2533: the in-page upload has its own 120 s deadline; the CDP wait is a little longer.
+    FORM_PHOTO_CALL_S = 150.0
+
+    def upload_form_photo(self, page_id: str, data: bytes, *, mime: str) -> dict:
+        """Upload ONE background image for a lead form as the pinned Page (web session, not Graph).
+
+        Policy first (`write_policy.check_form_photo_upload`), then the file goes into the helper (size +
+        SHA-256 are checked there again), then one request. Exactly once: a failure after sending is
+        `call_unknown`. Returns the helper's reply: `{ok, photo_id, width, height}` or `{error, ...}`.
+        """
+        if not self.form_photo:
+            raise ValueError("read-only: the form-background upload is not enabled for this page")
+        import hashlib
+
+        from src.fb_api import write_policy as _wp
+
+        pinned = self.form_photo_page or ""
+        if not isinstance(data, (bytes, bytearray)):
+            raise ValueError("file content must be bytes")
+        _wp.check_form_photo_upload(_wp.FORM_PHOTO_HOST, page_id, pinned, mime, len(data))
+        try:
+            ctx, stage_id = self.stage_file(bytes(data), timeout=self.STAGE_CALL_S)
+        except (PageError, CdpError) as exc:
+            return {"error": "no_file", "why": str(exc)[:120]}      # nothing was sent
+        spec = {"av": str(page_id), "mime": mime, "stage": stage_id,
+                "expect": {"bytes": len(data), "sha256": hashlib.sha256(bytes(data)).hexdigest()}}
+        expr = f"globalThis[{json.dumps(self.name)}].uploadFormPhoto({json.dumps(spec)})"
+        try:
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.FORM_PHOTO_CALL_S))
+        except (CdpTimeout, TimeoutError):
             return {"error": "call_unknown", "reason": "cdp_timeout"}
         except StaleContextError:
             return {"error": "call_unknown", "reason": "context_stale"}
