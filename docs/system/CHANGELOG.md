@@ -1,5 +1,48 @@
 # System history
 
+## ACL-2591 — Light work tab on by default for every buyer — 2026-11-12
+
+Publishing no longer keeps a heavy Ads Manager tab open: the light work tab is now on for every buyer by default, with no setup step after an update. `ACL_LIGHT_WORK_TAB` stays only as an emergency off-switch (`0`, `false`, `no` or `off`); when it is turned off explicitly, leases use the Ads Manager tab and report `fallback_reason: flag_off`. The per-lease fallback to the Ads Manager tab on a failed hand-over is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1591).
+
+## ACL-2584 — Several texts on an Instant Form ad in Ads Manager's shape, many ads per ad set — 2026-11-12
+
+An Instant Form ad with several texts now goes the way Ads Manager sends it (owner capture 2026-11-11, variant A2):
+an asset feed with `optimization_type: PLACEMENT` and two placement rules. Every text carries the main label, text 1 also
+the Stories / Reels label; the file, the form link and the headlines are labelled the same way, and the lead form stays in
+the feed button. The ad set is no longer Dynamic Creative, so it takes as many ads as Meta allows (the "one ad per ad
+set" rule stays only for Website ad sets). Write policy and the page helper accept exactly this shape and nothing else
+on an Instant Form; the old dynamic form feed is refused. Read-back checks the texts as a set, the mode, the label
+sharing and the rule-to-label mapping. The main rule is always the empty catch-all, like Ads Manager (live 12.11: with an explicit main group the editor showed one text per ad); write policy and the page helper refuse any other main rule. With Manual placements both Feed and Stories / Reels must still be selected. An Instant Form ad without a headline now goes out the way Ads Manager sent it: exactly one empty headline carrying both labels, the headline label kept in both rules (write policy and the page helper accept an empty text only in that exact case; empty primary texts and descriptions stay refused). In Check plan the missing headline is a warning for an Instant Form ad; a Website ad with several texts and no headline stays blocked, because that case is not verified yet. Read-back treats an empty headline on both sides as a match, reads the rule label keys in both spellings (star-label and star-adlabel) and treats one file that Meta stores as two rows (same id, one cropped) as one file. A rule with platforms but no position lists, and an ad set write for an Instant Form ad set that is also Dynamic Creative, are refused. The paused test write with the owner shows whether Meta accepts the empty headline. A Stories / Reels file next to a
+form ad is still refused. Live acceptance by Meta is a separate paused test write with the owner. Everything stays PAUSED.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1584).
+
+Republishing no longer stops on a creative Meta stored with the same labels in another order (live 12.11: "expected acl_body_main got acl_body_vertical"): when an earlier creative is checked for reuse, and in read-back, the labels of each asset are compared as a set of names and the lists inside the asset feed (texts, files, rules) as unordered collections; every text, id, label name, button and link is still compared exactly, so a changed text or a missing or extra label still stops.
+
+## ACL-2583 — A failed read of the journal's campaign no longer counts as "campaign gone" — 2026-11-12
+
+Depends on ACL-1856 (#1569) and ACL-2578 (#1580).
+
+When a publish finds an earlier operation in the journal, it reads that campaign by id. Before, any failed read (timeout, rate limit, Meta 5xx) was taken as "the campaign is gone" and a new operation started, which could create a second campaign next to a live one. Now only a campaign row actually read with a DELETED/ARCHIVED status counts as gone (a "does not exist" answer, code 100 / subcode 33, does not: see the last paragraph). A read that fails any other way (timeout, Meta 5xx, code 1/2) is retried 2-3 times over about 30 s; if Meta still does not answer, the publish does not stop: it continues as a new operation under a distinct `<name> copy N` name (a possible duplicate is accepted, the same name is never reused) and says so in a warning. Rate limits (codes 4/17) stay a stop.
+Publishing no longer asks the buyer to wait: a campaign that is alive by id with the recorded name is always resumed (no lag window), and a write whose result is unknown is read back once more after the same ~30 s pause and, if Meta still does not have it, written again (a duplicate is possible; objects are PAUSED). Only Meta's own refusals such as rate limits stop a publish.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1583).
+If the result of the campaign write itself stays unknown and ACL cannot find the campaign after the second read, it is never written again under the same name (Meta's name search is the part that lags): the publish continues as a new operation under the next `<name> copy N`, records `unknown_rewritten` with the new name in the journal, and warns that a possible PAUSED duplicate of the earlier name may exist. Only the campaign name is protected: ad sets and ads written again inside our own campaign keep their names.
+The same holds when the earlier stage was already settled as "not found" by the first run (that readback is the same lagging name search) and for the in-run resend after a network answer lost (ACL-2301): the campaign is resent under the next `<name> copy N` with the duplicate warning, never under the same name. Ad sets and ads still resend under their own names. The readback also accepts an image name that Meta suffixed more than once (`acl-<hash>.png_105_105`).
+The next copy number is always above every campaign name the operation has written: a later run never lowers the operation's counter while the campaign stage is unresolved, the readback of that stage searches for the name recorded in it, and a second lost answer inside one run continues under the following copy name (up to 5 tries, then a plain "unknown" stop that asks to check Ads Manager). The same campaign name is never written twice.
+When the name search lags but the operation already recorded a copy name (`<name> copy N`), the rest of the run continues under that copy (campaign, ad set names, tag, receipt, journal) instead of the base name, so the tag check matches the adopted campaign and a campaign this operation itself wrote is never taken for a buyer rename.
+A Meta "does not exist / cannot be loaded due to missing permissions" answer (code 100 / subcode 33) for a campaign this draft recorded (name receipt or journal) no longer frees the name either: Meta gives that answer for live campaigns it cannot load right now (Doc284 made two campaigns with one name this way). The publish continues as the next `<name> copy N`. Every gone/unknown decision now logs the Graph code, subcode and message (ids masked) as the `campaign_read_decision` event and a publish log line.
+
+## ACL-2528 — Several primary texts on an Instant Form ad (first step, offline) — 2026-11-11
+
+An Instant Form ad with several texts and ONE file now builds an asset feed whose button carries the lead form
+(`asset_feed_spec.call_to_actions[0].value.lead_gen_form_id`), as Ads Manager stores it (owner capture 2026-11-11).
+The ad set runs as Dynamic Creative, like a Website ad with several texts. Allowed only for on-ad lead ad sets, with
+the same numeric-id checks; Python policy and page helper agree on one matrix. Read-back verifies the form id, the
+button and the placeholder link. A Stories / Reels file next to a form ad is still refused. Live acceptance of the shape
+by Meta is a separate paused test write with the owner. Everything stays PAUSED.
+Owner decision 2026-11-12: the rule "choose Primary text 1 first" is gone. An empty Primary text 1, or a library entry with only a headline, never blocks (warning only, as before); texts 2-5 with a body are used in order, and an ad with no body at all is created without a primary text.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1528).
+
 ## ACL-2579 — Instant Form with a background is never reused without it — 2026-11-12
 
 A form template with a background picture creates its form with `context_card.cover_photo_id` (unchanged) and the readback still stops a new form whose background does not read back (no picture or another one). New: before anything is written, a form of the same name that is already on the Page is read once; if Meta shows it with no background (or another one) while the template has one, Check plan stops with a plain message ("archive that form in Ads Manager or change the template") instead of reusing it with only a note. A form that cannot be read keeps the old behaviour (reused, with a note). Offline tests now run the posted form body through the Python write policy and the in-page helper mirror.
