@@ -249,6 +249,7 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
     try:
         _first(p)
         _fill_valid(p)
+        _settled_name(p)
         # Правки клавишами сеть не трогают.
         p.locator(".cbd-pf-line[data-rule='budget_set']")      # карточка есть
         assert state["plan_posts"] == 0
@@ -289,6 +290,8 @@ def test_under_api_the_check_button_loads_the_account_verdicts_and_only_on_press
         assert p.locator(".cbd-pf-check").inner_text() == "Check again"
         assert p.locator(".cbd-publish-all").is_enabled()
         assert state["plan_posts"] == 1, "правка вызвала запрос"
+        # Имя могло ещё дописываться после правки — ждём, чтобы вердикт лёг под актуальное имя.
+        _settled_name(p)
         # Publish с устаревшими вердиктами сначала обновляет их — и ошибка кабинета не пускает.
         p.locator(".cbd-publish-all").click()
         p.wait_for_function("document.querySelector('.cbd-pf-line[data-rule=\"page_ok\"]').classList.contains('cbd-pf-error')")
