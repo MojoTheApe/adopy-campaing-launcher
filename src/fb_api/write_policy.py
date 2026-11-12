@@ -132,7 +132,10 @@ CTA_WEBSITE = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "
 #: (Marketing API, Lead Ads: «call_to_action must be one of …»). Остальные из списка сайта
 #: (CONTACT_US, GET_OFFER, BOOK_NOW, REQUEST_TIME, ORDER_NOW) для формы не предлагаются и
 #: не подменяются другими: Meta отвергла бы их, а молчаливая замена меняла бы смысл кнопки.
-CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "DOWNLOAD")
+#: Седьмая, SEE_DETAILS (ACL-2056), в документации Meta НЕТ: значение взято с живых объявлений
+#: байеров (D71, 2026-10-21). Стоит последней, чтобы LEARN_MORE оставалась кнопкой по умолчанию;
+#: в CTA_WEBSITE её нет. Принимает ли её API, подтверждает живая проверка до main.
+CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "DOWNLOAD", "SEE_DETAILS")
 CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
 
 #: Тексты и вертикальный файл (ACL-1774): ключ креатива `asset_feed_spec` с ЗАКРЫТОЙ схемой.
