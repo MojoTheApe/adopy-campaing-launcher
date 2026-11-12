@@ -1,0 +1,179 @@
+{
+  "create": {
+    "conditional_logic": {
+      "version": 1,
+      "logic_data": {
+        "customized_0": [
+          {
+            "destination_id": "customized_1",
+            "destination_type": "QUESTION"
+          },
+          {
+            "destination_id": "disqualified_page_0",
+            "destination_type": "DISQUALIFIED_END_COMPONENT"
+          }
+        ],
+        "customized_1": [
+          {
+            "destination_id": "thank_you_page_0",
+            "destination_type": "THANK_YOU_PAGE"
+          },
+          {
+            "destination_id": "thank_you_page_0",
+            "destination_type": "THANK_YOU_PAGE"
+          },
+          {
+            "destination_id": "thank_you_page_0",
+            "destination_type": "THANK_YOU_PAGE"
+          },
+          {
+            "destination_id": "thank_you_page_0",
+            "destination_type": "THANK_YOU_PAGE"
+          }
+        ]
+      }
+    },
+    "end_pages": {
+      "thank_you_pages": [
+        {
+          "name": "End page for leads",
+          "title": "Thank you",
+          "body": "We will call you.",
+          "button_type": "VIEW_WEBSITE",
+          "button_text": "Visit website",
+          "website_url": "https://example.com/thanks"
+        }
+      ],
+      "disqualified_end_components": [
+        {
+          "name": "End page for non-leads",
+          "title": "Sorry",
+          "body": "This offer is not for you.",
+          "button_text": "Visit website",
+          "website_url": "https://example.com/"
+        }
+      ]
+    },
+    "template": {
+      "name": "Cars",
+      "headline": "Quick questions",
+      "intro": "",
+      "privacy_url": "https://example.com/privacy",
+      "privacy_link_text": "Privacy",
+      "contact_fields": [
+        "email",
+        "phone"
+      ],
+      "thank_you_title": "Thank you",
+      "thank_you_text": "We will call you.",
+      "website_url": "https://example.com/thanks",
+      "button_text": "Visit website",
+      "locale": "EN_US",
+      "questions": [
+        {
+          "label": "Do you own a car?",
+          "type": "multiple_choice_logic",
+          "options": [
+            "Yes",
+            "No"
+          ],
+          "logic": {
+            "Yes": "q2",
+            "No": "close"
+          }
+        },
+        {
+          "label": "When do you plan to buy?",
+          "type": "multiple_choice_logic",
+          "options": [
+            "This month",
+            "In 3 months",
+            "In 6 months",
+            "Later"
+          ],
+          "logic": {
+            "This month": "submit",
+            "In 3 months": "submit",
+            "In 6 months": "submit",
+            "Later": "submit"
+          }
+        }
+      ],
+      "non_lead_end": {
+        "title": "Sorry",
+        "text": "This offer is not for you.",
+        "website_url": "https://example.com/",
+        "button_text": "Visit website"
+      }
+    }
+  },
+  "readback": {
+    "conditional_logic": {
+      "version": 1,
+      "logic_data": [
+        {
+          "key": "customized_0",
+          "value": [
+            {
+              "destination_id": "customized_1",
+              "destination_type": "QUESTION"
+            },
+            {
+              "destination_id": "disqualified_page_0",
+              "destination_type": "DISQUALIFIED_END_COMPONENT"
+            }
+          ]
+        },
+        {
+          "key": "customized_1",
+          "value": [
+            {
+              "destination_id": "thank_you_page_0",
+              "destination_type": "THANK_YOU_PAGE"
+            },
+            {
+              "destination_id": "thank_you_page_0",
+              "destination_type": "THANK_YOU_PAGE"
+            },
+            {
+              "destination_id": "thank_you_page_0",
+              "destination_type": "THANK_YOU_PAGE"
+            },
+            {
+              "destination_id": "thank_you_page_0",
+              "destination_type": "THANK_YOU_PAGE"
+            }
+          ]
+        }
+      ],
+      "id": "<ID>"
+    },
+    "end_pages": {
+      "thank_you_pages": [
+        {
+          "name": "End page for leads",
+          "title": "Thank you",
+          "body": "We will call you.",
+          "button_type": "VIEW_WEBSITE",
+          "button_text": "Visit website",
+          "website_url": "https://example.com/thanks",
+          "enable_messenger": false,
+          "should_link_to_catalog": false,
+          "id": "<ID>"
+        }
+      ],
+      "disqualified_end_components": [
+        {
+          "name": "End page for non-leads",
+          "title": "Sorry",
+          "body": "This offer is not for you.",
+          "button_text": "Visit website",
+          "website_url": "https://example.com/",
+          "button_type": "VIEW_WEBSITE",
+          "id": "<ID>"
+        }
+      ]
+    },
+    "form_type": "MORE_VOLUME"
+  }
+}

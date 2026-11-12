@@ -207,3 +207,21 @@ def test_a_successful_light_lease_resets_the_fallback_count(rig):
     LightGraph.handover_reason = ""
     rig.checkout().release()
     assert rig.reg.session(PID).light_fallbacks == 0 and rig.reg.session(PID).mode_kind == "light"
+
+
+def test_acl2533_photo_leases_run_on_the_ads_manager_tab_with_the_light_switch_on(rig):
+    """A form-photo upload needs the Ads Manager page (fb_dtsg/lsd) and a fresh graph per Page."""
+    rig.checkout().release()                                             # a normal read: the light tab
+    sess = rig.reg.session(PID)
+    assert sess.mode_kind == "light"
+    graphs = []
+    for _ in range(2):                                                   # two uploads (two Pages) in a row
+        lease = rig.checkout(mode="photo")
+        assert lease.tab is sess.tab and sess.mode_kind == "ads_manager"
+        assert lease.tab.url != light_tab.LIGHT_URL and getattr(lease.tab, "light", None) is None
+        graphs.append(lease.graph)
+        lease.release()
+    assert graphs[0] is not graphs[1]                                    # never the previous upload's graph
+    lease = rig.checkout()                                               # a normal read: light again
+    assert sess.mode_kind == "light" and lease.tab.light is not None
+    lease.release()
