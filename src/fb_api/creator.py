@@ -291,6 +291,8 @@ SUPPORTED_OBJECTIVES = frozenset({"leads"})
 #: ACL-2250: повтор имени получает счётчик в конце: `<имя> copy <n>` (у кампании и всех её наборов).
 COPY_WORD = " copy "
 #: Остановки выбора имени: в Check plan это ERROR правила имени, а не сбой плана.
+MSG_ALIVE_UNSURE = ("Meta did not answer: cannot tell whether the earlier campaign of this publish is still on the ad "
+                    "account. Nothing was created; publish again in a few minutes.")
 NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
 #: копий за её пределами могло не быть видно - тогда ищем точнее.
@@ -1931,10 +1933,14 @@ class CampaignCreator:
         """(still in Ads Manager - readable and not deleted/archived, its live name). Read only."""
         try:
             row = self.client.get(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
-        except GraphError:
-            return False, ""                     # does not exist / not readable: gone
+        except GraphError as exc:
+            if _object_gone(exc):
+                return False, ""                 # Meta says it does not exist: gone
+            # ACL-2583: a transient failure (timeout, code 1/2/4/17, 5xx) says nothing about the campaign. Starting a
+            # new operation here could create a second campaign next to a live one, so stop before any write.
+            raise CreationStopped(MSG_ALIVE_UNSURE, kind="name_unsure") from exc
         if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
-            return False, ""
+            raise CreationStopped(MSG_ALIVE_UNSURE, kind="name_unsure")
         gone = ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
                 & {"DELETED", "ARCHIVED"})
         return (not gone), str(row.get("name") or "")
