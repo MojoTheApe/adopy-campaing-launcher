@@ -300,6 +300,9 @@ TRANSIENT_READ_WAITS_S = (10.0, 10.0, 10.0)
 MSG_CONTINUED_AS_COPY = ('Meta did not answer when ACL checked the earlier campaign of this publish, so this publish '
                          'continues as a new campaign named "{name}". If the earlier campaign is still in Ads Manager, '
                          "it is left as it is.")
+MSG_CAMPAIGN_REWRITTEN = ('The earlier attempt to create the campaign "{old}" got no answer from Meta, and ACL could not '
+                          'find it afterwards. This publish created a new campaign named "{name}". A possible '
+                          'duplicate "{old}" (PAUSED) may exist in Ads Manager; it is left as it is.')
 NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
 #: копий за её пределами могло не быть видно - тогда ищем точнее.
@@ -1573,6 +1576,15 @@ class _AliveUnknown(Exception):
         self.campaign_id = campaign_id
 
 
+class _CampaignRewrite(Exception):
+    """ACL-2583: the campaign write's result stayed unknown and the readbacks found nothing. The name search is exactly
+    what lags behind Meta, so the caller must not write the campaign again under the SAME name."""
+
+    def __init__(self, copy_number: int) -> None:
+        super().__init__("campaign rewrite")
+        self.copy_number = copy_number
+
+
 @dataclass
 class NameChoice:
     """Итог выбора имени кампании (ACL-1902, ACL-2250): план с итоговым именем и меткой, до первой записи."""
@@ -1873,6 +1885,11 @@ class CampaignCreator:
 
         Без журнала - просто `send()`. Этап, оставшийся `sent`/`unknown` с прошлого запуска, сначала ищется
         чтением: нашли - принимаем; не нашли - повторное чтение через ~30 с, затем запись заново (без стопа по времени).
+
+        ACL-2583: only the CAMPAIGN name is protected. A campaign stage that is still not found after the second read
+        raises `_CampaignRewrite` (the caller continues under the next "<name> copy N"), because the name search is the
+        part of Meta that lags. Ad sets and ads written again inside our own campaign keep their names (a duplicate
+        is acceptable; the owner rule protects campaign names).
         """
         op = self._op
         if op is None:
@@ -1907,6 +1924,10 @@ class CampaignCreator:
                     self._journal_event("unknown_adopted", what=what)
                     self._journal_confirm(out, what, str(found))
                     return str(found)
+                if kind == "campaign":
+                    # Only the campaign NAME is protected (owner rule): the caller continues as a new operation under
+                    # the next "<name> copy N". Ad sets and ads written again inside our own campaign keep their names.
+                    raise _CampaignRewrite(int(op.data.get("copy_number") or 0))
                 self._step(out, f"{what}: not found, writing it again (a duplicate is possible; objects are PAUSED)")
                 self._journal_event("unknown_rewritten", what=what)
         try:
@@ -4467,9 +4488,35 @@ class CampaignCreator:
             self._step(out, "campaign: found from a previous run")
             self._step(out, "existing campaign and ad sets match the builder")
         else:
-            out.campaign_id = self._write(
-                out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
-                lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
+            try:
+                out.campaign_id = self._write(
+                    out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
+                    lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
+            except _CampaignRewrite as rw:
+                # ACL-2583: the earlier campaign write is unknown and not found: never the same name again.
+                # Set the old operation aside and continue as a new one under the next copy name.
+                old_name = plan.name
+                n = max(choice.copy_number, rw.copy_number) + 1
+                plan = copy_plan(base_plan, n)
+                self._check_name_length(plan)
+                choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+                out.published_as, out.copy_number = plan.name, n
+                found_sets = choice.found_sets
+                self._check_planned(plan, targetings, found_sets)
+                self._save_name_receipt(out, requested, choice)
+                try:
+                    self._op = self.journal.supersede(self._op, request_id=self.request_key)
+                    self._op.set_published(plan.name, n)
+                except _oj.JournalError as exc:
+                    self._journal_event("journal_save_failed", what="open", phase="supersede", error=type(exc).__name__)
+                    raise CreationStopped(MSG_JOURNAL, created=out.created, kind="journal") from exc
+                out.warnings.append(MSG_CAMPAIGN_REWRITTEN.format(old=old_name, name=plan.name))
+                self._step(out, f"campaign: not found, creating a new one as {plan.name!r}")
+                self._journal_event("unknown_rewritten", what="campaign", renamed_to=plan.name)
+                self._snapshot_operation(out)
+                out.campaign_id = self._write(
+                    out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
+                    lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
             out.created["campaign"] = out.campaign_id
             self._attach_name_receipt(out, plan.act, requested)
             self._verify_label(out, f"The campaign {plan.name!r}", out.campaign_id, plan.label)

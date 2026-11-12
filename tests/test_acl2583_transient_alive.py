@@ -13,7 +13,7 @@ from src.fb_api import name_receipt as nr  # noqa: E402
 from src.fb_api import operation_journal as oj  # noqa: E402
 from tests.test_acl1761_api_create import ACT, _draft  # noqa: E402
 from tests.test_acl1856_operation_journal import (  # noqa: E402,F401
-    _by_kind, _count, _creator, _delete_campaign_tree, _go, _partial, journal, clock)
+    Crashy, _by_kind, _count, _creator, _delete_campaign_tree, _go, _partial, journal, clock)
 
 
 def _inject_read_error(meta, monkeypatch, camp_id, body):
@@ -157,3 +157,34 @@ def test_each_retry_read_is_added_to_the_call_budget(tmp_path, journal, clock, m
     row = creator._get_retrying(f"/{camp}", {"fields": "id,name,status,effective_status"})
     assert row.get("id") == camp
     assert client.max_calls == before + 2
+
+
+def test_unknown_campaign_write_is_never_rewritten_under_the_same_name(tmp_path, journal, clock, monkeypatch):
+    """The campaign POST went through, the run died, and the name search lags: the rerun a minute later must not create
+    a second campaign with the same name. It continues as a new operation under "<name> copy 1"."""
+    meta = Crashy()
+    meta.crash_at, meta.phase = 1, "after"
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert meta.posts[-1][0].endswith("/campaigns")
+    assert [s["state"] for s in first.operation["stages"] if s["label"] == "campaign"] == [oj.SENT]
+    meta.crash_at = None
+    # the name search is exactly what lags behind Meta
+    monkeypatch.setattr(cr.CampaignCreator, "_campaign_rows", lambda self, act, name: [])
+    monkeypatch.setattr(cr.CampaignCreator, "_find_campaign", lambda self, plan, after_unknown=False: None)
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+    creator, _client = _creator(meta, journal)
+    creator.sleep = lambda s: setattr(clock, "t", clock.t + s)
+    clock.t += 60
+    events = []
+    monkeypatch.setattr(cr.CampaignCreator, "_journal_event", staticmethod(lambda e, **d: events.append((e, d))))
+    again = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert again.error == "", again.error
+    names = sorted(o["name"] for o in meta.objects.values() if o["_kind"] == "campaign")
+    assert len(names) == 2 and names[0] != names[1]
+    assert names[1] == f"{names[0]} copy 1"
+    assert again.published_as == names[1] and again.copy_number == 1
+    assert any(e == "unknown_rewritten" and d.get("renamed_to") == names[1] for e, d in events)
+    assert any("duplicate" in w and "PAUSED" in w and names[0] in w for w in again.warnings)
+    text = " ".join(again.warnings + list(getattr(again, "steps", []) or []))
+    assert "Wait" not in text and "few minutes" not in text
+    assert len(list(journal.root.glob("op-*.superseded"))) == 1
