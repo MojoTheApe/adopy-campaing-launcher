@@ -478,7 +478,19 @@ def test_final_p1_probe_offline(browser):  # noqa: F811
         light_probe.run_final_p3("http://127.0.0.1:9222", "act_1", "PROF-121")
 
 
-def test_flag_default_off():
-    assert light_tab.enabled({}) is False
+def test_flag_default_on():
+    assert light_tab.enabled({}) is True
+    assert light_tab.enabled({"ACL_LIGHT_WORK_TAB": ""}) is True
     assert light_tab.enabled({"ACL_LIGHT_WORK_TAB": "1"}) is True
-    assert light_tab.enabled({"ACL_LIGHT_WORK_TAB": "no"}) is False
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", " OFF ", "False"])
+def test_flag_explicit_off_values(value):
+    assert light_tab.enabled({"ACL_LIGHT_WORK_TAB": value}) is False
+
+
+def test_flag_reads_process_env_default_on(monkeypatch):
+    monkeypatch.delenv("ACL_LIGHT_WORK_TAB", raising=False)
+    assert light_tab.enabled() is True
+    monkeypatch.setenv("ACL_LIGHT_WORK_TAB", "0")
+    assert light_tab.enabled() is False
