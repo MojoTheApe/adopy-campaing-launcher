@@ -49,11 +49,13 @@ from src.fb_api import write_policy as _wpol
 from src.fb_api import team_time as _tt
 
 from src.fb_api import creative_recovery as _cr
+from src.fb_api import image_convert as _imgconv
 from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
+from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
 log = logging.getLogger(__name__)
 
@@ -904,11 +906,29 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     for dup in sorted({x.name for x in ad_sets if set_names.count(x.name.casefold()) > 1}):
         problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
     for x in ad_sets:
-        names = [a.name for a in x.ads]
-        for dup in sorted({n for n in names if names.count(n) > 1}):
-            idx = ", ".join(str(a.index) for a in x.ads if a.name == dup)
-            problems.append(f"Ads {idx} would all be named {dup!r}; give them different creatives "
-                            "or ad texts (names must differ inside a campaign)")
+        # ACL-2538: the same file with the same text twice is not a buyer error:
+        # the later ads get " 2", " 3"... and Check plan shows a note.
+        seen: dict[str, int] = {}
+        for a in x.ads:
+            if a.name not in seen:
+                seen[a.name] = a.index
+        used = set(seen)
+        counts: dict[str, int] = {}
+        for a in x.ads:
+            first = seen[a.name]
+            if a.index == first:
+                continue
+            base = a.name
+            n = counts.get(base, 1)
+            while True:
+                n += 1
+                cand = f"{base} {n}"
+                if cand not in used:
+                    break
+            counts[base] = n
+            used.add(cand)
+            a.name = cand
+            warnings.append(f"Ad {a.index} named {cand!r} because Ad {first} has the same creative and text")
     if problems:
         raise PlanError("; ".join(problems))
     name = str(draft.name).strip()
@@ -1468,9 +1488,11 @@ def _md5(data: "bytes | LargeFile") -> str:
     return hashlib.md5(data).hexdigest()  # noqa: S324 — только имя/поиск, не защита
 
 
-def image_name(path: str, data: bytes) -> str:
-    """Имя картинки в библиотеке кабинета: `acl-<md5[:16]><ext>` (помощник его не меняет)."""
-    ext = Path(path).suffix.lower()
+def image_name(path: str, data: bytes, ext: str = "") -> str:
+    """Имя картинки в библиотеке кабинета: `acl-<md5[:16]><ext>` (помощник его не меняет).
+
+    `ext` (ACL-2575): расширение после локальной конвертации WebP -> PNG/JPEG; иначе - от исходного файла."""
+    ext = ext or Path(path).suffix.lower()
     ext = ext if ext in IMAGE_EXT else ".jpg"
     return f"acl-{_md5(data)[:16]}{ext}"
 
@@ -2779,9 +2801,20 @@ class CampaignCreator:
             return None
 
         # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
-        got = self._write(out, f"{who}: image upload", f"/{plan.act}/adimages", {}, find,
-                          files={"filename": data}, filename=image_name(path, data), id_of=hash_of,
-                          upload=(ad.index, f"{role.strip()} image".strip()))
+        try:
+            got = self._write(out, f"{who}: image upload", f"/{plan.act}/adimages", {}, find,
+                              files={"filename": data}, filename=image_name(path, data, self._converted_ext(path)),
+                              id_of=hash_of, upload=(ad.index, f"{role.strip()} image".strip()))
+        except GraphError as exc:
+            if exc.subcode not in _FILE_REFUSAL_SUBCODES:
+                raise
+            # ACL-2575: Meta's definite answer (FileTypeNotSupported, not transient) is a refusal of THIS file,
+            # not an unknown result: no "check Ads Manager" advice; the objects already created are listed.
+            ad_label = f"{ad.index}{role}"
+            failure = _plain.file_refused(ad_label, Path(path).name, exc)
+            raise CreationStopped(
+                f"Meta refused the file of ad {ad_label} ({Path(path).name}): {_plain.FILE_REFUSED_REASON}.",
+                created=out.created, kind="graph_error", failure=failure) from exc
         out.created.setdefault("images", []).append(got)
         self._step(out, f"{who}: image uploaded")
         return got
@@ -3694,6 +3727,27 @@ class CampaignCreator:
                             f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
                             "to the ad account in Business Manager. Nothing was created.", key="page_unavailable")
 
+    def _converted_ext(self, path: str) -> str:
+        return self.__dict__.get("_image_ext", {}).get(path, "")
+
+    def _meta_image(self, out: Outcome, path: str, data: bytes, who: str) -> bytes:
+        """ACL-2575: WebP/AVIF/HEIC -> PNG/JPEG in memory before any write (the file on disk is not touched).
+
+        The conversion is listed in the warnings; the library name keeps the new extension (`_image_ext`).
+        A file that cannot be converted stops the run here with its name and reason: nothing was created."""
+        try:
+            done = _imgconv.convert(path, data, IMAGE_MAX_BYTES, who)
+        except _imgconv.ImageConversionError as exc:
+            err = PlanError(str(exc) + " Nothing was created.", key="creative_file")
+            err.file_name = Path(path).name
+            raise err from exc
+        if done is None:
+            return data
+        self.__dict__.setdefault("_image_ext", {})[path] = done.ext
+        if done.note not in out.warnings:
+            out.warnings.append(done.note)
+        return done.data
+
     def _prepare(self, plan: CampaignPlan, out: Outcome, *,
                  writing: bool = True) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы.
@@ -3743,6 +3797,8 @@ class CampaignCreator:
                 if not data or len(data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
+                if ad.kind != "video":
+                    data = self._meta_image(out, ad.path, data, f"ad {ad.index}")
                 files[ad.path] = data
                 if ad.vertical_path:
                     try:
@@ -3755,6 +3811,8 @@ class CampaignCreator:
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
+                    if ad.vertical_kind != "video":
+                        vdata = self._meta_image(out, ad.vertical_path, vdata, f"ad {ad.index} Stories / Reels file")
                     if len(vdata) == len(data) and _md5(vdata) == _md5(data):
                         # ACL-2084: копия того же файла под другим именем. Meta отказывает в ленте с одним
                         # хэшем под двумя метками («All ad asset values must be unique», живой прогон
@@ -4105,7 +4163,7 @@ class CampaignCreator:
                                     "vertical_bytes": len(files.get(ad.vertical_path, b""))}
                                    if ad.vertical_path else {}),
                                 "library_name": (video_title(plan.video_tag, data) if ad.kind == "video"
-                                                 else image_name(ad.path, data)),
+                                                 else image_name(ad.path, data, self._converted_ext(ad.path))),
                                 "creative": (self.creative_params(plan, ad, ad_set, media, ad.name)
                                              if ad.uses_feed else self._story(plan, ad, ad_set, media))})
                 sets.append({**self.adset_params(plan, ad_set, "<campaign>", targeting), "ads": ads})
@@ -4720,7 +4778,7 @@ class CampaignCreator:
                 "hashes": sorted({h for _, _, h in image_ads}), "fields": "hash,name"}, max_pages=1)
             names = {str(r.get("hash")): str(r.get("name") or "") for r in rows}
             for aobj, path, h in image_ads:
-                want_name = image_name(path, files[path])
+                want_name = image_name(path, files[path], self._converted_ext(path))
                 check(aobj, "image_file", want_name, stored_image_name(want_name, names.get(h, "")))
         mismatches = [c for c in checks if not c["ok"]]
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
