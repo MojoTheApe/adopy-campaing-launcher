@@ -7574,16 +7574,24 @@ window.cbPreflight = (function () {
       else if (id === 'texts_vertical' || id === 'texts_dynamic') out.push(perAd(id, inp, function (a, st) {
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
         return multi && (id === 'texts_vertical') === !!s(a.vertical_file)
-          && (id === 'texts_vertical' || (st.ads || []).length > 1);
+          && (id === 'texts_vertical' || ((st.ads || []).length > 1 && destOf(st) !== 'instant_form')); /* ACL-2584 */
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }, 'warning'));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !a.shared_headline && !s(a.headline); }, 'warning'));
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return !a.shared_headline && s(a.headline).length > C.max_headline; }, 'warning'));
-      else if (id === 'feed_texts') out.push(perAd(id, inp, function (a) {
-        var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
-        if (!multi && !s(a.vertical_file)) return false;
-        return !(s(a.headline) || distinct(a.headlines).length); // ACL-2474: основной текст не обязателен
-      }));
+      else if (id === 'feed_texts') {
+        /* ACL-2584: без заголовка Instant Form - предупреждение (уходит один пустой заголовок), Website - блок. */
+        var ftBad = [], ftWeb = false;
+        numbered(inp).forEach(function (x) {
+          var a = x.ad;
+          var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
+          if (!multi && !s(a.vertical_file)) return;
+          if (s(a.headline) || distinct(a.headlines).length) return; // ACL-2474: основной текст не обязателен
+          ftBad.push(x.n);
+          if (destOf(x.st) !== 'instant_form') ftWeb = true;
+        });
+        out.push(v(id, !ftBad.length ? 'ok' : (ftWeb ? 'error' : 'warning'), ftBad.length ? 'Ad ' + ftBad.join(', ') : '', ftBad));
+      }
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
         var objective = s(inp.objective).toLowerCase() || C.default_objective;

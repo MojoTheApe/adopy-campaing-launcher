@@ -130,11 +130,12 @@ def test_a_sixth_text_is_refused_before_any_write(tmp_path):
     assert meta.posts == []
 
 
-def test_an_instant_form_ad_with_several_texts_is_refused_not_guessed(tmp_path):
-    d = _ad_with(tmp_path, vertical=None, texts=1)
+def test_an_instant_form_ad_with_a_stories_reels_file_is_refused_not_guessed(tmp_path):
+    """ACL-2528: несколько текстов на форме разрешены (один файл); вертикальный файл на форме - по-прежнему нет."""
+    d = _ad_with(tmp_path, texts=0)
     d.ad_sets[0].destination = "instant_form"
     d.ad_sets[0].ads[0].lead_form_id = "123456"
-    with pytest.raises(cr.PlanError, match="Instant Form with an asset feed is not verified"):
+    with pytest.raises(cr.PlanError, match="Stories / Reels file works only with a Website ad set"):
         cr.plan_from_draft(d)
 
 
