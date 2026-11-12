@@ -255,8 +255,8 @@ RULES: list[dict[str, Any]] = [
     _r("schedule_valid", "Ad schedule", ERROR, "client",
        "a schedule needs a lifetime budget and at least one selected hour",
        sel='[name$="_schedule"]', level="campaign"),
-    _r("ad_names_unique", "Ad names are unique", ERROR, "client",
-       "give the ads different creatives or texts: their names must differ inside a campaign",
+    _r("ad_names_unique", "Ad names are unique", WARNING, "client",
+       "ads with the same creative file and the same text get '2', '3'... added to their names",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("adset_names_unique", "Ad set names are unique", ERROR, "client",
        "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
@@ -571,14 +571,27 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 return ""
             out.append(_per_set(rid, inp, start_bad))
         elif rid == "ad_names_unique":
-            # Имена объявлений различаются внутри набора (так создатель ищет и сверяет их).
-            bad: list[int] = []
+            # ACL-2538: the same file + same text twice is not an error: the creator names the
+            # later ads "Name 2", "Name 3"... (inside a set), so this is a note, not a block.
+            later: list[int] = []
+            notes: list[str] = []
             for si, st in enumerate(sets, start=1):
-                nums = [(n, _s(ad.get("name"))) for s1, n, _s2, ad in _numbered(inp) if s1 == si]
-                names = [nm for _n, nm in nums]
-                dup = {nm for nm in names if nm and names.count(nm) > 1}
-                bad += [n for n, nm in nums if nm in dup]
-            out.append(_v(rid, ERROR if bad else OK, ("Ad " + ", ".join(map(str, bad))) if bad else "", bad))
+                first: dict[str, int] = {}
+                counts: dict[str, int] = {}
+                for s1, n, _s2, ad in _numbered(inp):
+                    if s1 != si:
+                        continue
+                    nm = _s(ad.get("name"))
+                    if not nm:
+                        continue
+                    if nm not in first:
+                        first[nm] = n
+                        continue
+                    counts[nm] = counts.get(nm, 1) + 1
+                    later.append(n)
+                    notes.append(f"Ad {n} will be named '{nm} {counts[nm]}' because Ad {first[nm]} has the "
+                                 "same creative and text")
+            out.append(_v(rid, WARNING if later else OK, "; ".join(notes), later))
         elif rid == "adset_names_unique":
             names = [_s(st.get("name")).casefold() for st in sets]
             bad_sets = [i + 1 for i, nm in enumerate(names) if nm and names.count(nm) > 1]
