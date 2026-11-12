@@ -387,6 +387,8 @@ class ApiPublisher:
         self._finished_receipts: list[tuple[str, str]] = []
         #: ACL-2283: local load reading taken right before the profile start (None - unknown).
         self._load_before: dict[str, Any] | None = None
+        #: ACL-2353: снимок ревью (имя кампании -> отпечаток, Page, пиксель); None - задание без ревью.
+        self.reviewed: dict[str, Any] | None = None
 
     # -- совместимость с `publish_jobs` (как у RpaPublisher)
     def cancel(self) -> None:
@@ -676,6 +678,21 @@ class ApiPublisher:
             plan = plan_from_draft(draft)
         except PlanError as exc:
             return result_dict(Outcome(campaign_name=name), error=f"{exc}. Nothing was created.")
+        if self.reviewed is not None:
+            # ACL-2353: за время очереди мог смениться шаблон формы или файл: отпечаток плана уже не тот,
+            # что в ревью. Отказ по этой кампании, ни одной записи; остальные идут.
+            from src.web import publish_review
+
+            want = ((self.reviewed.get("campaigns") or {}).get(name) or {}).get("fp")
+            if not want or publish_review.review_fingerprint(plan) != want:
+                try:
+                    from src.acl_event_log import emit
+                    from src.acl_event_log.events import review_refused_payload
+
+                    emit("review.refused", review_refused_payload("publish", [name]), account=self.account_label)
+                except Exception:  # noqa: BLE001
+                    pass
+                return result_dict(Outcome(campaign_name=name), error=publish_review.publish_stale_text(name))
         if plan.act != self.act:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
@@ -731,6 +748,8 @@ class ApiPublisher:
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
                                   live_progress=lambda text: self.progress(f"{name}: {text}"))
+        if self.reviewed is not None:
+            creator.reviewed = self.reviewed
         if self.dry_run:
             outcome = creator.plan_only(plan)
             if self._client.writes:
@@ -1123,6 +1142,22 @@ def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, count
     return result
 
 
+def _stamp_review_fp(rows: list[dict[str, Any]], drafts: list[Any]) -> list[dict[str, Any]]:
+    """ACL-2353: каждой строке проверки - отпечаток кампании (`review_fp`), по которому окно ревью решает,
+    годится ли вердикт: другой отпечаток (поменяли текст в библиотеке) - проверять заново. Копии строк."""
+    from src.web import publish_review
+
+    try:
+        fps = publish_review.fingerprints(drafts)
+    except Exception:  # noqa: BLE001 - без отпечатка строка просто не переиспользуется
+        return rows
+    out = []
+    for row in rows:
+        fp = fps.get(str((row or {}).get("campaign_name") or ""))
+        out.append({**row, "review_fp": fp} if fp and isinstance(row, dict) else row)
+    return out
+
+
 def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str,
                      force: bool = False) -> dict[str, Any]:
     """Одна проверка: профиль → чтение → ответ."""
@@ -1145,7 +1180,7 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
     part = _pc.Partition(drafts, account_label, country, force=force)
     todo = part.todo
     if not todo:
-        merged = part.merge([])
+        merged = _stamp_review_fp(part.merge([]), drafts)
         _record("api_plan_check", True,
                 diag={"campaigns": len(drafts), "results": len(merged), "cached": len(part.hits), "read": 0,
                       "forced": bool(force), "graph_calls": 0, "build_s": build_s, "read_s": 0.0},
@@ -1206,7 +1241,7 @@ def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country
     # или остановка Graph не кэшируют ничего.
     fresh_n = len(results)
     part.store(results, skip=contract_violation or bool(session_info.get("stopped")))
-    results = part.merge(results)
+    results = _stamp_review_fp(part.merge(results), drafts)
     _record("api_plan_check", not error,
             diag={"campaigns": len(drafts), "results": len(results), "cached": len(part.hits), "read": fresh_n,
                   "forced": bool(force), "graph_calls": session_info.get("graph_calls"), "build_s": build_s,

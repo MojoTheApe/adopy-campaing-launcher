@@ -201,6 +201,7 @@ def create_job(
     hand_off: bool = False,
     total: int | None = None,
     campaign_names: list[str] | None = None,
+    reviewed: bool = False,
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
@@ -237,6 +238,8 @@ def create_job(
             "backend": "rpa" if use_rpa_publish() else "api",
             # ACL-1761: чем создаются кампании — роботом или Graph API (PAUSED).
             "fb_backend": _fb_backend(),
+            # ACL-2353: задание создано из ревью (замороженные черновики); без ревью - False.
+            "reviewed": bool(reviewed),
             "status": "pending",
             "created_at": _now_iso(),
             "started_at": None,
@@ -266,7 +269,7 @@ def create_job(
         _log_event("job.created", job_id, {
             "plan_revision": snapshot.get("plan_revision"), "plan_hash": plan_hash(country, slots),
             "total": total if total is not None else len(slots), "country": country,
-            "dry_run": dry_run, "fb_backend": _fb_backend(),
+            "dry_run": dry_run, "fb_backend": _fb_backend(), "reviewed": bool(reviewed),
             "campaign_names": list(campaign_names or []), "slots_brief": slots_brief(slots),
         }, account=account_label)
     except Exception:
@@ -746,6 +749,8 @@ def _run_job_inner(
     activate: bool,
     dry_run: bool = False,
     hand_off: bool = False,
+    frozen_drafts: list[Any] | None = None,
+    review: dict[str, Any] | None = None,
 ) -> None:
     # Must be first: clear any asyncio event loop inherited from the parent
     # async handler (Python 3.14+ ContextVar propagation via threading.Thread).
@@ -871,7 +876,7 @@ def _run_job_inner(
                     with _warm.job_wait(lambda: _is_cancelled(job_id),
                                         lambda view: _show_resource_wait(job_id, account_label, view)):
                         _run_api(job_id, slots, account_label=account_label, country=country,
-                                 dry_run=dry_run)
+                                 dry_run=dry_run, frozen_drafts=frozen_drafts, review=review)
                     return
                 _run_rpa(
                     job_id,
@@ -1738,7 +1743,8 @@ def _fb_backend() -> str:
 
 
 def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, country: str,
-             dry_run: bool = False) -> None:
+             dry_run: bool = False, frozen_drafts: list[Any] | None = None,
+             review: dict[str, Any] | None = None) -> None:
     """ACL-1761: те же черновики, но кампании создаёт Graph API, всё PAUSED.
 
     Место по памяти и замок профиля уже взяты (`_run_job_inner`). Итоги — в том
@@ -1766,6 +1772,8 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
         _started = {"slot_wait_s": _job0.get("slot_wait_s"), "started_ahead": _job0.get("started_ahead")}
     _log_event("job.started", job_id, _started, account=account_label)
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
+    # ACL-2353: что показали в ревью (Page, пиксель, отпечаток) - `publish_draft` сверяет перед записью.
+    publisher.reviewed = review
     publisher.units = units
     with _jobs_lock:
         # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
@@ -1777,7 +1785,10 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     if _is_cancelled(job_id):
         publisher.cancel()
     try:
-        drafts = publisher.build_drafts(slots, account_label=account_label, country=country)
+        # ACL-2353: из ревью черновики уже построены и сверены с отпечатками - берём ИХ, а не строим заново:
+        # правка библиотеки или книги за время очереди ничего не меняет в этом задании.
+        drafts = (list(frozen_drafts) if frozen_drafts is not None
+                  else publisher.build_drafts(slots, account_label=account_label, country=country))
     except Exception as e:
         job_cancel.unbind()
         _fatal(job_id, f"Failed to build campaign drafts: {e}")
@@ -2328,6 +2339,23 @@ def _evict_kept_window(kept_job_id: str, account_label: str, profile: str,
     return True
 
 
+def known_request_job(request_id: str) -> str:
+    """ACL-2353: id of the live job already started under this request key, else ''.
+
+    A resend (ACL-1399) must be answered with that job BEFORE any review check: the first request was
+    accepted against the review, and a later library or file change must not turn the resend into a refusal.
+    """
+    key = (request_id or "").strip()[:100]
+    if not key:
+        return ""
+    with _request_lock:
+        known = _request_jobs.get(key)
+    if known is None:
+        return ""
+    with _jobs_lock:
+        return known if known in _jobs else ""
+
+
 def start_job(
     account_label: str,
     country: str,
@@ -2338,8 +2366,12 @@ def start_job(
     dry_run: bool = False,
     hand_off: bool = False,
     request_id: str = "",
+    reviewed: dict[str, Any] | None = None,
+    frozen_drafts: list[Any] | None = None,
 ) -> str:
     """Create a job and launch it in a background daemon thread. Returns job_id.
+
+    `reviewed` / `frozen_drafts` (ACL-2353): снимок ревью и уже построенные черновики. Без них - как раньше.
 
     `request_id` — ключ отправки со страницы (ACL-1399): повтор с тем же
     ключом возвращает уже созданное задание, второго не будет.
@@ -2347,7 +2379,8 @@ def start_job(
     request_id = (request_id or "").strip()[:100]
     if not request_id:
         return _start_job(account_label, country, slots, via_multilogin=via_multilogin,
-                          activate=activate, dry_run=dry_run, hand_off=hand_off)
+                          activate=activate, dry_run=dry_run, hand_off=hand_off,
+                          reviewed=reviewed, frozen_drafts=frozen_drafts)
     # Под замком этого ключа целиком: исходный запрос и его повтор могут
     # прийти почти разом (первый ещё собирает черновики), и проверить-потом-
     # создать раздельно значило бы два задания. Замок — на ключ, а не общий:
@@ -2363,7 +2396,8 @@ def start_job(
                     if known in _jobs:
                         return known
             job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
-                                activate=activate, dry_run=dry_run, hand_off=hand_off)
+                                activate=activate, dry_run=dry_run, hand_off=hand_off,
+                                reviewed=reviewed, frozen_drafts=frozen_drafts)
             with _request_lock:
                 while len(_request_jobs) >= _REQUEST_KEYS_MAX:
                     _request_jobs.pop(next(iter(_request_jobs)))
@@ -2388,6 +2422,8 @@ def _start_job(
     activate: bool,
     dry_run: bool,
     hand_off: bool,
+    reviewed: dict[str, Any] | None = None,
+    frozen_drafts: list[Any] | None = None,
 ) -> str:
     if activate:
         raise ValueError("ACM is draft-only: live activation is disabled")
@@ -2398,7 +2434,8 @@ def _start_job(
     hand_off = True
     from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 
-    drafts = slots_to_campaign_drafts(
+    # ACL-2353: из ревью число и имена кампаний берутся из замороженных черновиков (часть уже могла быть отказана).
+    drafts = list(frozen_drafts) if frozen_drafts is not None else slots_to_campaign_drafts(
         slots,
         account_label=account_label,
         country=country,
@@ -2412,6 +2449,7 @@ def _start_job(
         hand_off=hand_off,
         total=len(drafts),
         campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
+        reviewed=reviewed is not None,
     )
     # Event конца потока заводится здесь, прямо перед потоком: у задания, чей
     # поток не стартовал, он не остаётся навсегда.
@@ -2426,6 +2464,8 @@ def _start_job(
             "activate": activate,
             "dry_run": dry_run,
             "hand_off": hand_off,
+            "frozen_drafts": list(frozen_drafts) if frozen_drafts is not None else None,
+            "review": reviewed,
         },
         daemon=True,
         name=f"publish-{job_id[:8]}",
