@@ -4675,7 +4675,7 @@ class CampaignCreator:
         if ad.vertical_path:
             check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
         elif instant:
-            check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), [n for r in rows for n in names_of(r)])
+            check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), sorted(n for r in rows for n in names_of(r)))
         else:
             check(aobj, "placement_rules", [], fs.get("asset_customization_rules") or [])
         extra: list[tuple[str, str, str]] = []

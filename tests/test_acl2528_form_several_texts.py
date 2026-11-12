@@ -751,3 +751,77 @@ def test_instant_rule_positions_main_is_always_the_empty_catch_all():
         assert main == {} and vert
     _, vert = cr.CampaignCreator.instant_rule_positions(both)
     assert vert["facebook_positions"] == ["story"] and vert["instagram_positions"] == ["reels"]
+
+
+# ───────────────── Meta returns labels / assets in another order (ACL-2584, live 12.11 Doc284) ─────────────────
+
+def _meta_reorders(feed):
+    """What Meta answered live: labels of every asset in the other order, assets listed the other way round."""
+    for key in ("bodies", "titles", "descriptions", "images", "videos", "link_urls"):
+        for item in feed.get(key) or []:
+            if isinstance(item.get("adlabels"), list):
+                item["adlabels"].reverse()
+        if isinstance(feed.get(key), list):
+            feed[key].reverse()
+    return feed
+
+
+def test_a_creative_whose_labels_came_back_in_the_other_order_is_still_reused(tmp_path):
+    meta = FormMeta()
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, _draft(tmp_path, texts=2))
+    assert first.stop_kind == "unknown"
+    old = _of(meta, "creative")
+    feed = old["asset_feed_spec"]
+    assert any(len(t["adlabels"]) == 2 for t in feed["bodies"])          # text 1 carries both labels
+    _meta_reorders(feed)
+    second, _ = _run(meta, _draft(tmp_path, texts=2))
+    assert second.error == "" and second.stop_kind != "creative_unverified", (second.error, second.stop_kind)
+    assert second.readback["ok"], second.mismatches
+    assert len(_objs(meta, "creative")) == 1 and len(_objs(meta, "ad")) == 1
+    assert any("creative found from a previous run" in s for s in second.steps)
+
+
+def test_a_reused_creative_with_one_text_changed_still_stops(tmp_path):
+    meta = FormMeta()
+    meta.fail_next["ads"] = "unsent"
+    _run(meta, _draft(tmp_path, texts=2))
+    feed = _meta_reorders(_of(meta, "creative")["asset_feed_spec"])
+    feed["bodies"][0]["text"] = "something else"
+    second, _ = _run(meta, _draft(tmp_path, texts=2))
+    assert not second.ad_ids and len(_objs(meta, "ad")) == 0
+
+
+def test_a_reused_creative_with_a_wrong_label_name_still_stops(tmp_path):
+    meta = FormMeta()
+    meta.fail_next["ads"] = "unsent"
+    _run(meta, _draft(tmp_path, texts=2))
+    feed = _meta_reorders(_of(meta, "creative")["asset_feed_spec"])
+    feed["bodies"][0]["adlabels"][0] = {"name": "acl_body_other"}
+    second, _ = _run(meta, _draft(tmp_path, texts=2))
+    assert not second.ad_ids and len(_objs(meta, "ad")) == 0
+
+
+def test_readback_accepts_labels_and_assets_in_the_order_meta_returned_them(tmp_path):
+    first = FormMeta()
+    _run(first, _draft(tmp_path, texts=2))
+    feed = _meta_reorders(copy.deepcopy(_of(first, "creative")["asset_feed_spec"]))
+    meta = FormMeta()
+    meta.mutate_ads["creative.asset_feed_spec"] = feed
+    out, _ = _run(meta, _draft(tmp_path, texts=2))
+    assert out.error == "" and out.readback["ok"], out.mismatches
+
+
+def test_creative_matching_treats_labels_as_a_set_and_nothing_else_loosely():
+    from src.fb_api import creative_recovery as rec
+    want = {"asset_feed_spec": {"bodies": [{"text": "a", "adlabels": [{"name": "m"}, {"name": "v"}]},
+                                           {"text": "b", "adlabels": [{"name": "m"}]}]}}
+    row = {"id": "1", "account_id": ACT.removeprefix("act_"),
+           "asset_feed_spec": {"bodies": [{"text": "b", "adlabels": [{"name": "m", "id": "9"}]},
+                                          {"text": "a", "adlabels": [{"name": "v"}, {"name": "m"}]}]}}
+    assert rec.matches(ACT, want, row)
+    row["asset_feed_spec"]["bodies"][1]["adlabels"].pop()             # a label is missing
+    assert not rec.matches(ACT, want, row)
+    assert "adlabels" in rec.first_diff(ACT, want, row)
+    row["asset_feed_spec"]["bodies"][1]["adlabels"] = [{"name": "v"}, {"name": "m"}, {"name": "x"}]
+    assert not rec.matches(ACT, want, row)                            # an extra label is a difference too

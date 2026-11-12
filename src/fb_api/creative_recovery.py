@@ -35,12 +35,60 @@ def fingerprint(params):
                                      ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
-def _contains(expected, actual):
+# The file lists keep their order: another order of the same labelled files is the ACL-2284 "order" case
+# (accepted with a warning by media_diff), not a silent match.
+_ORDERED_MEDIA = ("images", "videos")
+
+
+def _label_names(value):
+    """Names of an `adlabels` list as a sorted tuple, or None when it is not a plain list of {name} rows."""
+    if not isinstance(value, list) or not all(isinstance(x, dict) and set(x) <= {"name", "id"} for x in value):
+        return None
+    return tuple(sorted(str(x.get("name") or "") for x in value))
+
+
+def _unordered_match(expected, actual):
+    """Every expected item pairs with its own distinct actual item (any order); counts must be equal."""
+    if len(expected) != len(actual):
+        return False
+    used = [False] * len(actual)
+
+    def place(i):
+        if i == len(expected):
+            return True
+        for j, got in enumerate(actual):
+            if not used[j] and _contains(expected[i], got, True):
+                used[j] = True
+                if place(i + 1):
+                    return True
+                used[j] = False
+        return False
+    return place(0)
+
+
+def _contains(expected, actual, unordered=False):
+    """Strict content comparison. ACL-2584: Meta reorders what we send, so `adlabels` are compared as sets of
+    label NAMES, and lists inside `asset_feed_spec` (texts, files, rules) as unordered collections; their
+    items, texts, ids and every other value stay compared exactly."""
     if isinstance(expected, dict):
-        return isinstance(actual, dict) and all(_contains(v, actual.get(k)) for k, v in expected.items())
+        if not isinstance(actual, dict):
+            return False
+        for k, v in expected.items():
+            got = actual.get(k)
+            if k == "adlabels" and isinstance(v, list) and isinstance(got, list):
+                names = _label_names(v)
+                if names is None or names != _label_names(got):
+                    return False
+                continue
+            if not _contains(v, got, (unordered or k == "asset_feed_spec") and k not in _ORDERED_MEDIA):
+                return False
+        return True
     if isinstance(expected, list):
-        return isinstance(actual, list) and len(expected) == len(actual) and all(
-            _contains(e, a) for e, a in zip(expected, actual))
+        if not isinstance(actual, list):
+            return False
+        if unordered:
+            return _unordered_match(expected, actual)
+        return len(expected) == len(actual) and all(_contains(e, a) for e, a in zip(expected, actual))
     if expected == "":
         return actual in ("", None)
     return type(expected) is type(actual) and expected == actual
@@ -101,7 +149,8 @@ def first_diff(act, params, row):
     actual["object_story_spec"] = story
 
     def walk(want, got, where):
-        if _contains(want, got):
+        unordered = where.startswith("asset_feed_spec") and where.rsplit(".", 1)[-1] not in _ORDERED_MEDIA
+        if _contains(want, got, unordered):
             return ""
         if isinstance(want, dict):
             if not isinstance(got, dict):
@@ -116,6 +165,22 @@ def first_diff(act, params, row):
                 return f"{where}: expected a list got {_short(got)!r}"
             if len(want) != len(got):
                 return f"{where}: expected {len(want)} items got {len(got)}"
+            if where.endswith("adlabels"):
+                return (f"{where}: expected labels {sorted(_label_names(want) or ())!r} "
+                        f"got {sorted(_label_names(got) or ())!r}")
+            if unordered:
+                for i, x in enumerate(want):
+                    if not any(_contains(x, y, True) for y in got):
+                        # Report against the actual item with the same text / file id, else any of them.
+                        ident = isinstance(x, dict) and next(
+                            (k for k in ("text", "hash", "video_id", "website_url") if k in x), None)
+                        same = [y for y in got if ident and isinstance(y, dict) and y.get(ident) == x[ident]]
+                        for y in same or got:
+                            found = walk(x, y, f"{where}[{i}]")
+                            if found:
+                                return found
+                        return f"{where}[{i}]: no matching item"
+                return f"{where}: the items cannot be paired one to one"
             for i, (x, y) in enumerate(zip(want, got)):
                 found = walk(x, y, f"{where}[{i}]")
                 if found:
