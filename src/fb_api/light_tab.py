@@ -233,11 +233,29 @@ def capture_into(work: Any, open_tab: Any, act: str, *, timeout: float = 90.0) -
         return result
     finally:
         closed = settle_and_close(capture)
+        mb = heap_used_mb(getattr(work, "tab", None))
         _record({"event": "fb_api_tab_context", "phase": "light_recapture", "mode": "light",
+                 **({"work_tab_mb": mb} if mb is not None else {}),
                  "handover_ok": not reason, "fallback_reason": reason or None,
                  "capture_tab_closed": closed,
                  "capture_open_s": round(time.monotonic() - began, 1),
                  "recapture_count": getattr(work, "light_recaptures", 0)})
+
+
+def heap_used_mb(tab: Any) -> float | None:
+    """ACL-2523: JS heap of the work tab in MB (`Performance.getMetrics` JSHeapUsedSize), `None` when it
+    cannot be read. A number only - never page content, URLs or tokens. Never raises."""
+    try:
+        tab.call("Performance.enable", timeout=5.0)
+        metrics = (tab.call("Performance.getMetrics", timeout=5.0) or {}).get("metrics")
+        for item in metrics if isinstance(metrics, list) else []:
+            if isinstance(item, dict) and item.get("name") == "JSHeapUsedSize":
+                value = item.get("value")
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+                    return round(float(value) / (1024 * 1024), 1)
+    except Exception:  # noqa: BLE001 - telemetry only
+        pass
+    return None
 
 
 def _record(row: dict) -> None:
