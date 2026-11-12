@@ -55,8 +55,17 @@ BUILDER_ROUTES = frozenset({
     "/api/page-forms",    # формы страницы под слоты билдера
 })
 
+#: ACL-2533: единственный маршрут, который принимает файл - фон формы (jpeg/png до 8 МиБ) с локальной
+#: страницы дешборда; дальше файл уходит только через сессию профиля. Тело - файл плюс короткие поля.
+FORM_PHOTO_ROUTE = "/api/form-photo-upload"
+FORM_PHOTO_MAX_BODY = 9 * MiB
+
 #: Предел тела по маршруту; всё, чего здесь нет, живёт с DEFAULT_MAX_BODY.
 ROUTE_MAX_BODY: dict[str, int] = {path: BUILDER_MAX_BODY for path in BUILDER_ROUTES}
+ROUTE_MAX_BODY[FORM_PHOTO_ROUTE] = FORM_PHOTO_MAX_BODY
+#: ACL-2571: the same file, kept on this computer for a shared template (no Meta call, no account or Page).
+FORM_COVER_FILE_ROUTE = "/api/form-templates/cover-file"
+ROUTE_MAX_BODY[FORM_COVER_FILE_ROUTE] = FORM_PHOTO_MAX_BODY
 
 
 @dataclass(frozen=True)
@@ -72,6 +81,9 @@ SMALL_FORM = FormLimits(max_fields=50, max_files=0, max_part_size=64 * KiB)
 #: Форма билдера: на слот кампании ~десяток полей и ~пять на объявление.
 #: Двадцать тысяч полей — это сотни кампаний; настоящий билд много меньше.
 BUILDER_FORM = FormLimits(max_fields=20_000, max_files=0, max_part_size=1 * MiB)
+
+#: ACL-2533: форма загрузки фона - аккаунт, Страница и ОДИН файл не больше потолка политики записи.
+FORM_PHOTO_FORM = FormLimits(max_fields=6, max_files=1, max_part_size=8 * MiB + 64 * KiB)
 
 
 async def read_form(request: Request, limits: FormLimits = SMALL_FORM) -> FormData:
