@@ -615,8 +615,8 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
         # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
         problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
-    if plan_ad.bodies and not plan_ad.body:
-        problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
+    # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 never blocks. `bodies` already
+    # holds only the non-empty texts in order; with none, the ad goes without a primary text (warning only).
     if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
         problems.append(f"Ad {i}: the Stories / Reels file was not found")
     if vertical:
@@ -627,10 +627,12 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         elif plan_ad.vertical_kind != plan_ad.kind:
             problems.append(f"Ad {i}: the main file is {plan_ad.kind} and the Stories / Reels file is "
                             f"{plan_ad.vertical_kind}; use two images or two videos")
-    if plan_ad.uses_feed and plan_set.instant:
-        problems.append(f"Ad {i}: several texts and a Stories / Reels file work only with a Website ad set "
-                        "for now (Instant Form with an asset feed is not verified on Meta yet); "
-                        "use one text and one file, or switch the ad set to Website")
+    if plan_ad.uses_feed and plan_set.instant and plan_ad.vertical_path:
+        # ACL-2528: several texts + ONE file work on an Instant Form (asset feed with the form in its button);
+        # a Stories / Reels file next to it still needs placement rules, which are not verified on a form yet.
+        problems.append(f"Ad {i}: a Stories / Reels file works only with a Website ad set for now "
+                        "(Instant Form with placement rules is not verified on Meta yet); "
+                        "use one file for this ad, or switch the ad set to Website")
 
 
 def placement_targeting(placements: dict | None) -> dict:
@@ -3256,7 +3258,7 @@ class CampaignCreator:
         if ad.uses_feed:
             # ACL-1774: несколько текстов и/или вертикальный файл - лента ассетов; рядом только страница.
             story: dict = {"page_id": plan.page_id}
-            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media)}
+            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media, instant=ad_set.instant)}
         else:
             story, extra = self._story(plan, ad, ad_set, media), {}
         return {"name": name, "object_story_spec": self.with_instagram(story), **extra,
@@ -3286,8 +3288,11 @@ class CampaignCreator:
         return main, vertical
 
     @staticmethod
-    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
-        """`asset_feed_spec` сайтового объявления: тексты (до 5) и один или два файла с метками.
+    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict, *, instant: bool = False) -> dict:
+        """`asset_feed_spec` объявления: тексты (до 5) и один или два файла с метками.
+
+        ACL-2528: у Instant Form (`instant`) ссылка - заглушка формы, а форма Страницы лежит в кнопке ленты
+        (`call_to_actions[0].value.lead_gen_form_id`), как её пишет Ads Manager; файл один, без правил.
 
         Один файл — без правил. Два — правило Stories/Reels на вертикальный и правило на остальные
         площадки на основной (Meta требует минимум два правила). Текстовые улучшения и Multi-advertiser
@@ -3305,8 +3310,12 @@ class CampaignCreator:
         spec: dict[str, Any] = {
             "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
-            "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
+            "link_urls": [{"website_url": INSTANT_FORM_LINK if instant else plan.link}],
+            "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
+        if instant:
+            spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
+                                                                  "lead_gen_form_id": ad.form_id}}]
         if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
             spec["bodies"] = [{"text": t} for t in ad.bodies]
         if ad.descriptions:
@@ -4181,7 +4190,7 @@ class CampaignCreator:
                     "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
                     "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
                     "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
-                    "link": (plan.link if ad.uses_feed else
+                    "link": ((INSTANT_FORM_LINK if ad_set.instant else plan.link) if ad.uses_feed else
                              data.get("link") or (cta.get("value") or {}).get("link")),
                     "placements": aset["targeting"],
                     "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
@@ -4643,7 +4652,8 @@ class CampaignCreator:
 
     def _feed_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str, plan: CampaignPlan,
                      ad: AdPlan, creative: dict, rec: dict, files: dict[str, bytes],
-                     identities: list[dict] | None = None) -> list[tuple[str, str, str]]:
+                     identities: list[dict] | None = None, *, instant: bool = False,
+                     page_forms: _forms.FormsRead | None = None) -> list[tuple[str, str, str]]:
         """Сверка ленты ассетов (ACL-1774): все тексты как набор и привязка файлов к площадкам.
 
         Возвращает картинки, чей хэш не равен md5 нашего файла, — по ним ещё сверяется имя в библиотеке.
@@ -4665,7 +4675,14 @@ class CampaignCreator:
         ctas = fs.get("call_to_action_types") or [""]
         check(aobj, "call_to_action", ad.cta, ctas[0] if isinstance(ctas, list) and ctas else "")
         links = fs.get("link_urls") or [{}]
-        check(aobj, "link", plan.link, (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        check(aobj, "link", INSTANT_FORM_LINK if instant else plan.link,
+              (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        if instant:
+            # ACL-2528: the form id sits in the feed button; same id and page-membership checks as the single-text path.
+            feed_ctas = fs.get("call_to_actions")
+            feed_cta = feed_ctas[0] if isinstance(feed_ctas, list) and feed_ctas and isinstance(feed_ctas[0], dict) else {}
+            check(aobj, "feed_call_to_action", ad.cta, feed_cta.get("type"))
+            self._form_checks(check, aobj, ad, feed_cta, page_forms)
         key = "videos" if ad.kind == "video" else "images"
         check(aobj, "format", ad.kind, "video" if fs.get("videos") else ("image" if fs.get("images") else ""))
         id_key = "video_id" if ad.kind == "video" else "hash"
@@ -4828,7 +4845,8 @@ class CampaignCreator:
                 if ad.uses_feed:
                     # ACL-1774: тексты и файлы в ленте ассетов, а не в object_story_spec.
                     image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files,
-                                                   diag.setdefault("video_identity", []))
+                                                   diag.setdefault("video_identity", []),
+                                                   instant=ad_set.instant, page_forms=page_forms)
                     continue
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":

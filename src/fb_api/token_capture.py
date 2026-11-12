@@ -277,28 +277,44 @@ _HELPER_JS = r"""
     else if (fk.length) return 'file';
     return null;
   }
-  // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
-  // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
+  // ACL-1775, ACL-2528: места, где разрешён lead_gen_form_id (зеркало
+  // write_policy._without_lead_form): кнопка link_data|video_data и кнопка ленты ассетов
+  // (asset_feed_spec.call_to_actions[0].value). Возвращает копию без ключа, null — отказ,
   // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
   function withoutLeadForm(edge, checked, onAd) {
     const LF = WRITE.lead_form;
     if (!LF || edge !== LF.edge) return checked;
-    const spec = checked.object_story_spec;
-    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return checked;
-    for (const fmt of LF.formats) {
-      const data = spec[fmt];
-      const cta = data && typeof data === 'object' ? data.call_to_action : null;
-      const value = cta && typeof cta === 'object' ? cta.value : null;
-      if (!value || typeof value !== 'object' || Array.isArray(value) || !(LF.key in value)) continue;
-      if (!onAd) return null;
+    let out = checked;
+    const verify = (value, extra) => {
+      if (!onAd) return false;
       const form = value[LF.key];
-      if (typeof form !== 'string' || !new RegExp(LF.id_re).test(form)) return null;
-      if (Object.keys(value).length !== 1) return null;
-      const copy = JSON.parse(JSON.stringify(checked));
-      delete copy.object_story_spec[fmt].call_to_action.value[LF.key];
-      return copy;
+      if (typeof form !== 'string' || !new RegExp(LF.id_re).test(form)) return false;
+      return Object.keys(value).every((k) => k === LF.key || extra.indexOf(k) >= 0);
+    };
+    const spec = checked.object_story_spec;
+    if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+      for (const fmt of LF.formats) {
+        const data = spec[fmt];
+        const cta = data && typeof data === 'object' ? data.call_to_action : null;
+        const value = cta && typeof cta === 'object' ? cta.value : null;
+        if (!value || typeof value !== 'object' || Array.isArray(value) || !(LF.key in value)) continue;
+        if (!verify(value, [])) return null;
+        out = JSON.parse(JSON.stringify(checked));
+        delete out.object_story_spec[fmt].call_to_action.value[LF.key];
+        break;
+      }
     }
-    return checked;
+    const feed = checked[WRITE.asset_feed.key];
+    const buttons = feed && typeof feed === 'object' ? feed[LF.feed_key] : null;
+    if (Array.isArray(buttons) && buttons.length === 1 && buttons[0] && typeof buttons[0] === 'object') {
+      const value = buttons[0].value;
+      if (value && typeof value === 'object' && !Array.isArray(value) && LF.key in value) {
+        if (!verify(value, ['link'])) return null;
+        if (out === checked) out = JSON.parse(JSON.stringify(checked));
+        delete out[WRITE.asset_feed.key][LF.feed_key][0].value[LF.key];
+      }
+    }
+    return out;
   }
 
   // ACL-1774: зеркало write_policy._check_asset_feed (закрытая схема ленты ассетов).
@@ -321,11 +337,25 @@ _HELPER_JS = r"""
       && typeof raw[0].name === 'string' && new RegExp(AF.label_re).test(raw[0].name))) return null;
     return [raw[0].name];
   }
-  function assetFeedOk(spec, creative) {
+  // ACL-2528: кнопка ленты Instant Form (зеркало write_policy._check_feed_form_button).
+  function feedButtonOk(spec, ctas) {
+    const LF = WRITE.lead_form;
+    const items = spec[LF.feed_key];
+    if (!(Array.isArray(items) && items.length === 1 && isObj(items[0]))) return false;
+    const bk = Object.keys(items[0]);
+    if (!(bk.length === 2 && bk.indexOf('type') >= 0 && bk.indexOf('value') >= 0)) return false;
+    if (!(Array.isArray(ctas) && ctas.length === 1 && items[0].type === ctas[0])) return false;
+    const value = items[0].value;
+    if (!(isObj(value) && LF.key in value && Object.keys(value).every((k) => k === LF.key || k === 'link'))) return false;
+    if (!(typeof value[LF.key] === 'string' && new RegExp(LF.id_re).test(value[LF.key]))) return false;
+    return !('link' in value) || value.link === WRITE.asset_feed.form_link;
+  }
+  function assetFeedOk(spec, creative, onAd) {
     const AF = WRITE.asset_feed;
     if (!isObj(spec)) return false;
     const allowed = ['bodies', 'titles', 'descriptions', 'images', 'videos', 'link_urls',
                      'call_to_action_types', 'ad_formats', 'asset_customization_rules'];
+    if (onAd) allowed.push(WRITE.lead_form.feed_key);
     for (const k of Object.keys(spec)) if (allowed.indexOf(k) < 0) return false;
     const story = creative.object_story_spec;
     if (!(isObj(story) && Object.keys(story).every(k => ['page_id', IGK()].includes(k))
@@ -336,6 +366,7 @@ _HELPER_JS = r"""
     const kind = hasImages ? 'images' : 'videos';
     const media = spec[kind];
     if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
+    if (onAd && media.length !== 1) return false;
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
     // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
     if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
@@ -361,9 +392,11 @@ _HELPER_JS = r"""
       const l = spec.link_urls;
       if (!(Array.isArray(l) && l.length === 1 && isObj(l[0]) && Object.keys(l[0]).length === 1
         && typeof l[0].website_url === 'string' && l[0].website_url.indexOf('https://') === 0)) return false;
+      if (onAd && l[0].website_url !== AF.form_link) return false;
     }
     const ctas = spec.call_to_action_types;
-    if (!(Array.isArray(ctas) && ctas.length === 1 && WRITE.cta_website.indexOf(ctas[0]) >= 0)) return false;
+    if (!(Array.isArray(ctas) && ctas.length === 1 && (onAd ? WRITE.cta_form : WRITE.cta_website).indexOf(ctas[0]) >= 0)) return false;
+    if (WRITE.lead_form.feed_key in spec && !feedButtonOk(spec, ctas)) return false;
     const want = kind === 'images' ? 'SINGLE_IMAGE' : 'SINGLE_VIDEO';
     if (!(Array.isArray(spec.ad_formats) && spec.ad_formats.length === 1 && spec.ad_formats[0] === want)) return false;
     const rules = spec.asset_customization_rules;
@@ -671,7 +704,7 @@ _HELPER_JS = r"""
       }
     }
     if ('contextual_multi_ads' in checked && !multiAdsOk(checked.contextual_multi_ads)) return refused('multi_ads');
-    if (WRITE.asset_feed.key in checked && !assetFeedOk(checked[WRITE.asset_feed.key], checked)) return refused('asset_feed');
+    if (WRITE.asset_feed.key in checked && !assetFeedOk(checked[WRITE.asset_feed.key], checked, spec.on_ad === true)) return refused('asset_feed');
     if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
     if (edge === 'adsets' && 'targeting' in checked && !targetingOk(checked.targeting)) return refused('targeting');
     if (WRITE.asset_feed.dynamic_key in checked && checked[WRITE.asset_feed.dynamic_key] !== true) return refused('dynamic');
