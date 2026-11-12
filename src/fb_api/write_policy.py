@@ -464,8 +464,11 @@ def _check_instant_feed(spec: dict, refuse: Any) -> None:
             if rule[key] != {"name": name}:
                 refuse(f"rule {key} must name {name!r}")
         cs = rule["customization_spec"]
-        if n == 0 and cs == {}:
-            continue  # Advantage+ placements: the main rule is the catch-all, as in Ads Manager
+        if n == 0:
+            if cs != {}:
+                # ACL-2584: only the empty catch-all keeps the several-text editor of Ads Manager.
+                refuse("the main rule must be the empty catch-all")
+            continue
         _check_customization_spec(cs, refuse)
         if not (cs.get("facebook_positions") or cs.get("instagram_positions")):
             # Platforms alone would make the two rules overlap completely.

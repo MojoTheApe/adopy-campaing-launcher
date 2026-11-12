@@ -498,7 +498,7 @@ _HELPER_JS = r"""
         if (!(isObj(lab) && Object.keys(lab).length === 1 && lab.name === keys[k])) return false;
       }
       const cs = rule.customization_spec;
-      if (n === 0 && isObj(cs) && Object.keys(cs).length === 0) continue;
+      if (n === 0) { if (isObj(cs) && Object.keys(cs).length === 0) continue; return false; }  // main rule: empty catch-all only
       if (!csOk(cs)) return false;
       if (!((cs.facebook_positions || []).length || (cs.instagram_positions || []).length)) return false;  // platforms alone overlap fully
       for (const k of Object.keys(I.vertical_positions)) {

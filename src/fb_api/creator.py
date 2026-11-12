@@ -878,8 +878,9 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                         problems.append(f"Ad {i}: the current app mapping for a two-file pair needs both Feed and Stories / Reels placements; clear the unused file and use the required file as main")
             if (plan_set.instant and planned_ad.uses_feed and plan_set.placements is not None
                     and plan_set.placements.get("mode") == "manual"):
-                main_pos, vert_pos = CampaignCreator.instant_rule_positions(plan_set.placements)
-                if not main_pos or not vert_pos:
+                # The main rule is an empty catch-all now: test the real placement groups.
+                feed_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
+                if not feed_pos or not vert_pos:
                     problems.append(f"Ad {i}: several texts on an Instant Form use two placement rules (Feed and "
                                     "Stories / Reels); select both Feed and Stories / Reels placements, or use one text")
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
@@ -3293,11 +3294,12 @@ class CampaignCreator:
     def instant_rule_positions(placements: dict | None) -> tuple[dict, dict]:
         """Площадки двух правил ленты Instant Form: (основное, Stories/Reels).
 
-        Advantage+ площадки: основное правило пустое (всё остальное, как в Ads Manager), вертикальное - Stories/Reels.
+        ACL-2584 (live 12.11): основное правило всегда пустое (catch-all, как у Ads Manager): только такой набор
+        Ads Manager показывает со всеми текстами. Доставку ограничивает таргетинг набора; вертикальное правило -
+        Stories/Reels выбранных площадок (Advantage+ - все).
         """
-        if placements is not None and placements.get("mode") == "advantage_plus":
-            return {}, CampaignCreator.rule_positions(None)[1]
-        return CampaignCreator.rule_positions(placements)
+        manual = placements is not None and placements.get("mode") != "advantage_plus"
+        return {}, CampaignCreator.rule_positions(placements if manual else None)[1]
 
     @staticmethod
     def instant_feed_spec(ad: AdPlan, media: dict) -> dict:

@@ -80,7 +80,7 @@ def test_several_texts_on_a_form_ad_go_as_the_ads_manager_placement_feed(tmp_pat
     assert main["body_label"] == {"name": "acl_body_main"} and vertical["body_label"] == {"name": "acl_body_vertical"}
     assert main["image_label"] == {"name": "acl_image_main"} and vertical["link_url_label"] == {"name": "acl_link_vertical"}
     assert "story" in vertical["customization_spec"]["facebook_positions"]
-    assert not set(main["customization_spec"]["facebook_positions"]) & {"story", "facebook_reels"}
+    assert main["customization_spec"] == {}  # empty catch-all, like Ads Manager
     # Page (+ Instagram identity) only next to the feed; no link_data / video_data.
     assert set(cre["object_story_spec"]) <= {"page_id", wp.INSTAGRAM_KEY}
     assert cre["object_story_spec"]["page_id"] == PAGE
@@ -213,7 +213,7 @@ def test_the_check_plan_summary_describes_the_mode(tmp_path):
       {"text": "Body variant 3", "adlabels": [{"name": "acl_body_main"}]}]),
     ("rule_main_labels", "creative.asset_feed_spec.asset_customization_rules", []),
     ("rule_main_placements", "creative.asset_feed_spec.asset_customization_rules",
-     [{"customization_spec": {"publisher_platforms": ["facebook"]},
+     [{"customization_spec": {"publisher_platforms": ["facebook"], "facebook_positions": ["feed"]},
        "body_label": {"name": "acl_body_main"}, "title_label": {"name": "acl_title_main"},
        "description_label": {"name": "acl_description_main"}, "link_url_label": {"name": "acl_link_main"},
        "image_label": {"name": "acl_image_main"}}]),
@@ -276,8 +276,10 @@ def _feed(**over):
     return spec
 
 
-MAIN_POS = {"publisher_platforms": ["facebook", "instagram"], "facebook_positions": ["feed"],
-            "instagram_positions": ["stream"]}
+# ACL-2584 (live 12.11): the main rule is the empty catch-all (the only shape the Ads Manager editor shows with several texts).
+MAIN_POS: dict = {}
+EXPLICIT_MAIN_POS = {"publisher_platforms": ["facebook", "instagram"], "facebook_positions": ["feed"],
+                     "instagram_positions": ["stream"]}
 VERT_POS = {"publisher_platforms": ["facebook", "instagram"], "facebook_positions": ["story", "facebook_reels"],
             "instagram_positions": ["story", "reels"]}
 
@@ -322,6 +324,9 @@ MATRIX = [
      True, True),
     ("ok_instagram", _cre(_feed(), story={"page_id": PAGE, "instagram_user_id": "1784140000001"}), True, True),
     ("ok_catch_all_main_rule", _cre(_feed(asset_customization_rules=[_rule(0, {}), _rule(1, VERT_POS)])), True, True),
+    # The explicit main group is refused: only the empty catch-all is allowed.
+    ("main_rule_explicit_group", _cre(_feed(asset_customization_rules=[
+        _rule(0, EXPLICIT_MAIN_POS), _rule(1, VERT_POS)])), True, False),
     # Not an on-ad set: the form (and its button key) is refused everywhere.
     ("no_on_ad", _cre(_feed()), False, False),
     # The mode and the shape are exact.
@@ -379,7 +384,7 @@ MATRIX = [
         _rule(0, MAIN_POS, ("body", "title", "image")), _rule(1, VERT_POS)])), True, False),
     ("rule_extra_key", _cre(_feed(asset_customization_rules=[_rule(0, MAIN_POS, x=1), _rule(1, VERT_POS)])), True, False),
     ("main_rule_has_stories", _cre(_feed(asset_customization_rules=[_rule(0, VERT_POS), _rule(1, VERT_POS)])), True, False),
-    ("vertical_rule_has_feed", _cre(_feed(asset_customization_rules=[_rule(0, MAIN_POS), _rule(1, MAIN_POS)])), True, False),
+    ("vertical_rule_has_feed", _cre(_feed(asset_customization_rules=[_rule(0, MAIN_POS), _rule(1, EXPLICIT_MAIN_POS)])), True, False),
     ("vertical_rule_empty", _cre(_feed(asset_customization_rules=[_rule(0, MAIN_POS), _rule(1, {})])), True, False),
     ("rule_unknown_position", _cre(_feed(asset_customization_rules=[
         _rule(0, dict(MAIN_POS, facebook_positions=["marketplace"])), _rule(1, VERT_POS)])), True, False),
@@ -737,3 +742,12 @@ def test_the_draft_keeps_texts_2_and_3_when_text_1_is_title_only(monkeypatch, tm
     assert [v["body"] for v in ad.text_variants] == ["Body two", "Body three"]
     assert any("has no body" in w for w in draft.warnings)  # warning only
     assert not [e for e in draft.errors if "text" in e.lower()], draft.errors
+
+
+def test_instant_rule_positions_main_is_always_the_empty_catch_all():
+    both = {"mode": "manual", "facebook_positions": ["feed", "story"], "instagram_positions": ["stream", "reels"]}
+    for placements in (None, {"mode": "advantage_plus"}, both):
+        main, vert = cr.CampaignCreator.instant_rule_positions(placements)
+        assert main == {} and vert
+    _, vert = cr.CampaignCreator.instant_rule_positions(both)
+    assert vert["facebook_positions"] == ["story"] and vert["instagram_positions"] == ["reels"]
