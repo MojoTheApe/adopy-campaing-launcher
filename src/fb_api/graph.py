@@ -189,6 +189,14 @@ class PolicyBlocked(GraphStop):
     kind = "policy_block"
 
 
+def keeps_tab_open(stop: Any) -> bool:
+    """ACL-2549: a stop whose tab must be LEFT open for the buyer: checkpoint, login page (page evidence only;
+    a token-only logout heals itself) and policy block. A frozen tab is never kept."""
+    if isinstance(stop, LoggedOut):
+        return bool(stop.page_seen)
+    return isinstance(stop, (Checkpoint, PolicyBlocked))
+
+
 class PageFailed(GraphStop):
     kind = "page_failed"
 

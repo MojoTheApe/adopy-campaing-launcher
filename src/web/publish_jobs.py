@@ -1875,11 +1875,17 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
                     # Publishing is already confirmed. Never turn a failed
                     # local refresh into a retry of a successful write.
                     logging.getLogger(__name__).warning("Post-publish account list refresh failed")
+        # ACL-2549: the profile closed on purpose by the automatic resume (ACL-2345) has no window to keep;
+        # read it before `finish_job`. An abandoned job (ACL-1614) never touches the job dict.
+        with _jobs_lock:
+            window_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
         try:
-            outcome = publisher.finish_job(account_label, clean=settled, other_job_waits=other)
+            extra = {} if window_open else {"problem_window_open": False}
+            outcome = publisher.finish_job(account_label, clean=settled, other_job_waits=other, **extra)
         except Exception:
             outcome = ""
             publisher.close()
+        problem = _profile_problem(publisher, account_label) if outcome == "kept_problem" else None
         if outcome == "closed":
             with _jobs_lock:
                 if not _abandoned(job_id):
@@ -1892,7 +1898,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             started = bool(publisher.started_profile)
         except Exception:
             started = True
-        still_open = outcome != "closed" and started
+        still_open = outcome != "closed" and (started or outcome == "kept_problem")
         # ACL-2113: окно, оставленное намеренно после чистой публикации, — «для удобства»
         # (уступает место простоем); всё остальное оставленное — на проверку.
         convenience = bool(clean and getattr(publisher, "stop", None) is None
@@ -1901,11 +1907,32 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             if not _abandoned(job_id):
                 _jobs[job_id]["review_window"] = (not settled) or still_open
                 _jobs[job_id]["kept_kind"] = KEPT_CONVENIENCE if convenience else KEPT_REVIEW
-        if outcome != "closed":
+                if problem is not None:
+                    _jobs[job_id]["review_window"] = True
+                    _jobs[job_id]["kept_kind"] = KEPT_REVIEW
+                    _jobs[job_id]["profile_problem"] = problem
+        if problem is not None:
+            _append_creative_notice(job_id, problem["reason"])
+        elif outcome != "closed":
             _append_creative_notice(
                 job_id, _api_review_window_notice(wrote=wrote, clean=clean, still_open=still_open,
                                                   convenience=convenience))
         _finish(job_id, cancelled=cancelled)
+
+
+def _profile_problem(publisher: Any, account_label: str) -> dict[str, str] | None:
+    """ACL-2549: `{kind, reason, next}` of the stop that kept the profile window open (texts of ACL-2091 A)."""
+    from src.fb_api import account_blocks
+
+    stop = getattr(publisher, "stop", None)
+    try:
+        kind = str(publisher.problem_kind() or "")
+    except Exception:  # noqa: BLE001
+        kind = ""
+    if not kind:
+        return None
+    reason, step = account_blocks.describe(kind, account_label, "Publish", getattr(stop, "code", None))
+    return {"kind": kind, "reason": reason, "next": step}
 
 
 #: ACL-1784: почему окно профиля после API-задания оставлено (или нет) — в панель задания.

@@ -43,6 +43,7 @@ from src.fb_api.creator import (
 )
 from src.web.api_build_progress import BuildCounter
 from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
+from src.fb_api.graph import LoggedOut as _LoggedOut
 
 log = logging.getLogger(__name__)
 
@@ -931,13 +932,37 @@ class ApiPublisher:
         tab, self._tab = self._tab, None
         if tab is not None:
             try:
-                tab.close()
+                from src.fb_api.graph import keeps_tab_open
+
+                if keeps_tab_open(self.stop) and callable(getattr(tab, "leave_open", None)):
+                    tab.leave_open()      # ACL-2549: the buyer solves the checkpoint / login in this tab
+                else:
+                    tab.close()
             except Exception:
                 log.exception("Could not close our tab for %s", self.account_label)
 
-    def finish_job(self, account_label: str, *, clean: bool, other_job_waits: bool = False) -> str:
-        """Вкладку закрыть; профиль — только если его подняли мы и всё чисто."""
+    def problem_kind(self) -> str:
+        """ACL-2549: kind of the stop that keeps the profile window open for the buyer ("" - none).
+
+        A token-only logout (the page stayed on Ads Manager) heals by itself and is not a keep-open problem."""
+        from src.analysis_agent.account_spend import keep_open_problem
+
+        stop = self.stop
+        if isinstance(stop, _LoggedOut) and not stop.page_seen:
+            return ""
+        return keep_open_problem(stop)
+
+    def finish_job(self, account_label: str, *, clean: bool, other_job_waits: bool = False,
+                   problem_window_open: bool = True) -> str:
+        """Вкладку закрыть; профиль — только если его подняли мы и всё чисто.
+
+        ACL-2549: a job that ends on a checkpoint / login / policy block / frozen tab keeps the profile window
+        (`kept_problem`) whatever `ACL_KEEP_PROFILES_OPEN` says, and also when the job did not start it (warm
+        path). `problem_window_open` is False when the profile was closed on purpose (auto resume)."""
         self.close()
+        if problem_window_open and self.problem_kind():
+            _record("profile_closed_after_job", None, diag={"note": "kept_problem"})
+            return "kept_problem"
         if self.dry_run:
             clean = False   # после пробного запуска окно остаётся: настоящий запуск следом
         opened = self._opened

@@ -782,6 +782,19 @@ class PageTab:
         except Exception:
             return False
 
+    # -- ACL-2549: leave the tab open
+    def leave_open(self) -> None:
+        """Stop driving this tab but do NOT close it: the buyer solves a checkpoint / login there.
+
+        Marks the tab closed for us, drops it from `_LIVE` (no focus emulation or helper from now on),
+        closes our CDP socket. `Target.closeTarget` is never sent; nothing is clicked, typed or navigated.
+        """
+        if self.closed:
+            return
+        self.closed = True
+        PageTab._LIVE.discard(self.target_id)
+        self._safe_cdp_close()
+
     # -- закрытие
     def close(self) -> None:
         """Закрыть СВОЮ вкладку. Сокет не ответил — через HTTP отладочного порта.

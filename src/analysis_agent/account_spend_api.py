@@ -801,7 +801,12 @@ def _open_session(account: str, *, commands: bool = False):
     finally:
         if tab is not None:
             try:
-                tab.close()
+                from src.fb_api.graph import keeps_tab_open
+
+                if keeps_tab_open(problem) and callable(getattr(tab, "leave_open", None)):
+                    tab.leave_open()      # ACL-2549: the buyer solves the checkpoint / login in this tab
+                else:
+                    tab.close()
             except Exception:
                 log.exception("Could not close our tab for %s", account)
         # ACL-1580: профиль, который поднято этим чтением, закрывается мягкой
