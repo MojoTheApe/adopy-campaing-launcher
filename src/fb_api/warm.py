@@ -1745,6 +1745,9 @@ class WarmRegistry:
         self._remaining()
         from src.fb_api import light_tab as _light
         light = _light.enabled()                  # ACL-2344: read once per lease (spec 5.1)
+        if not light:
+            # ACL-2591: reported only when the switch was explicitly turned off
+            self._record_light(sess, mode="ads_manager", handover_ok=False, fallback_reason="flag_off")
         if light and mode.startswith("photo"):
             # ACL-2533: a form-photo upload needs the Ads Manager page (fb_dtsg/lsd, a fresh per-Page helper
             # pin); the light page has neither. Only this lease runs on the Ads Manager tab; switching the
@@ -1778,7 +1781,7 @@ class WarmRegistry:
             sess.verified = False
             return self._fresh(sess,act,mode,make_graph,self._remaining())
 
-    # -- ACL-2344: the light work tab (ACL_LIGHT_WORK_TAB=1; off by default)
+    # -- ACL-2344: the light work tab (on by default; ACL_LIGHT_WORK_TAB=0 is the emergency off-switch)
     #: Decision 5: a light session takes the token again after this long even when nothing failed.
     LIGHT_MAX_AGE_S = 6 * 3600.0
     #: After this many consecutive light fallbacks on one profile the light mode is skipped for it (and its
