@@ -30,6 +30,8 @@ HOLD_KINDS = ("checkpoint", "logged_out", "policy_block", "page_unresponsive")
 #: Codes of a Meta block that mean "stop and let a person look" (368 is POLICY_CODES in graph.py).
 POLICY_CODES = (368, 1404078, 2859015, 1404163)
 ACCOUNT_BLOCKED_CODE = "account_blocked"
+#: ACL-2595: Graph code of "Please authenticate your account" (31/3858385) kept on a checkpoint-kind hold.
+AUTH_REQUIRED_CODE = 31
 HOLDS_FILE = "account_holds.json"
 
 _LOCK = threading.RLock()
@@ -237,6 +239,8 @@ def forget_timed(key: str) -> None:
 
 def _reason(kind: str, label: str, action: str, code: int | None, same_profile: bool) -> str:
     who = f"{label} (same profile)" if same_profile else (label or "the profile")
+    if kind == "checkpoint" and code == AUTH_REQUIRED_CODE:
+        return "Meta asks to confirm this account (security check)."
     if kind == "checkpoint":
         return f"Facebook security check on {who}, found during {action}."
     if kind == "logged_out":
@@ -253,6 +257,9 @@ def _reason(kind: str, label: str, action: str, code: int | None, same_profile: 
 
 
 def _next_step(kind: str, code: int | None, *, mins: int = 0, replaceable: bool = False) -> str:
+    if kind == "checkpoint" and code == AUTH_REQUIRED_CODE:
+        return ("Open Ads Manager in this profile and complete the check, then publish again. "
+                "Existing ads keep running.")
     if kind == "checkpoint":
         return "Solve the checkpoint in the open profile window, then press Retry."
     if kind == "logged_out":

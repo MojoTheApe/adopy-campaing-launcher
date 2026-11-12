@@ -42,7 +42,7 @@ from src.fb_api.creator import (
     preflight_account,
 )
 from src.web.api_build_progress import BuildCounter
-from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
+from src.fb_api.graph import AuthRequired, CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -691,6 +691,9 @@ class ApiPublisher:
         name = str(getattr(draft, "name", "") or "")
         if self.stop is not None:
             # Only the stop kind is named here (no Meta text), so there is nothing raw to hide.
+            if isinstance(self.stop, AuthRequired):
+                # ACL-2595: the account waits for its security check; no write and no read for this campaign.
+                return result_dict(Outcome(campaign_name=name), not_started=True, error=_plain.AUTH_NOT_STARTED)
             return result_dict(Outcome(campaign_name=name), not_started=True,
                                error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):

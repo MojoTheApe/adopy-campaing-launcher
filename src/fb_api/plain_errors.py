@@ -14,7 +14,7 @@ from src.fb_api import error_catalog as _catalog
 from src.fb_api import mlx_session as _mlx
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
-    REJECTION_SUBCODES, CallBudget, Checkpoint, GraphError, GraphStop, LoggedOut, PageUnresponsive,
+    REJECTION_SUBCODES, AuthRequired, CallBudget, Checkpoint, GraphError, GraphStop, LoggedOut, PageUnresponsive,
     PolicyBlocked, RateLimited, WriteUnknown, WritesBlocked,
 )
 
@@ -38,9 +38,17 @@ class Plain:
     retry: str = "after_fix"     # after_fix | later | never | now
 
 
+AUTH_REQUIRED_SHORT = "Meta asks to confirm this account (security check)"
+AUTH_REQUIRED_NEXT = ("Open Ads Manager in this profile and complete the check, then publish again. "
+                      "Existing ads keep running.")
+#: A campaign that was never begun because its account is waiting for that check.
+AUTH_NOT_STARTED = "Not started: account needs authentication. Nothing was created for it."
+
 TABLE: dict[str, Plain] = {
     "logged_out": Plain("Account logged out", "log in and republish"),
     "checkpoint": Plain("Facebook asks to confirm this account", "open the profile, finish the check and republish"),
+    # ACL-2595: Meta 31/3858385 "Please authenticate your account"; one sentence pair, joined with ". ".
+    "auth_required": Plain(AUTH_REQUIRED_SHORT, AUTH_REQUIRED_NEXT, "hold", "after_fix"),
     "targeting_merged": Plain("Targeting options were merged by Meta", "replace the interests and republish"),
     "targeting_term": Plain("Meta did not accept a targeting term{names}", "replace it and republish"),
     "page_unavailable": Plain("The Facebook Page is not available for this ad account",
@@ -122,7 +130,7 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     if key == "mlx_token_rejected":
         short = str(ctx.get("text") or _mlx.SESSION_LOST_MESSAGE)
     return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry,
-                   stage=str(ctx.get("stage") or ""), **over)
+                   **({"sep": ". "} if key == "auth_required" else {}), stage=str(ctx.get("stage") or ""), **over)
 
 
 FILE_REFUSED_REASON = "The type of file is not supported"
@@ -185,6 +193,7 @@ _API_CODE_KEYS = {
     # GraphStop.kind carried by ApiPublishError (publish_api._halt)
     "rate_limited": "rate_limited", "call_budget": "rate_limited", "policy_block": "policy_block",
     "page_failed": "unknown", "logged_out": "logged_out", "checkpoint": "checkpoint",
+    "auth_required": "auth_required",
 }
 
 _SNIFFERS: list[tuple[re.Pattern, str]] = [
@@ -256,7 +265,9 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
                             extra={**(ctx.pop("details", None) or {}), **({"stage": stage} if stage else {})})
     key = getattr(exc, "key", "") or ""
     code, sub = getattr(exc, "code", None), getattr(exc, "subcode", None)
-    if not key and isinstance(exc, Checkpoint):
+    if not key and isinstance(exc, AuthRequired):
+        key = "auth_required"
+    elif not key and isinstance(exc, Checkpoint):
         key = "checkpoint"
     elif not key and isinstance(exc, LoggedOut):
         key = "logged_out"
