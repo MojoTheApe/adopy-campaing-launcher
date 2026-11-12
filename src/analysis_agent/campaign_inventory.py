@@ -1109,6 +1109,14 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
     It deliberately does not require the queued dispatcher. A publisher already
     owns this physical target and can reenter this same-thread read fence.
     """
+    from src.fb_api import account_blocks as _blocks
+
+    _inner_operation = operation
+
+    def operation():  # noqa: F811 - the same read, now naming its action for a stop's explanation (ACL-2091)
+        with _blocks.problem_action(_blocks.action_for_trigger(trigger.split(":")[0])):
+            return _inner_operation()
+
     from src.analysis_agent.account_refresh_machine import MachineStore, binding
     from src.analysis_agent.account_refresh_state import read_session, target_activity
     coordinator = machine if machine is not None else MachineStore()
