@@ -90,3 +90,13 @@ def test_recapture_row_carries_work_tab_mb_only_when_available(monkeypatch):
         row = [r for r in rows if r.get("phase") == "light_recapture"][-1]
         assert ("work_tab_mb" in row) is expect
         assert not expect or row["work_tab_mb"] == 33.0
+
+
+def test_work_mode_follows_the_lease_transport_not_a_default():
+    """ACL-2591: `_work_mode` reads what the lease actually used; the default-on switch lives in light_tab.enabled."""
+    from types import SimpleNamespace
+    from src.web.publish_api import _work_mode
+
+    assert _work_mode(SimpleNamespace(transport=SimpleNamespace(light=True))) == "light"
+    assert _work_mode(SimpleNamespace(transport=SimpleNamespace(light=False))) == "ads_manager"
+    assert _work_mode(SimpleNamespace()) == "ads_manager"

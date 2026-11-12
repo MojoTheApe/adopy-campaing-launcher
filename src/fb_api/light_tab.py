@@ -46,9 +46,13 @@ REASONS = frozenset({"handover_no_listener", "handover_timeout", "handover_rejec
 
 
 def enabled(env: dict | None = None) -> bool:
-    """The switch, read once per lease by the caller (spec 5.1). Default off."""
+    """The switch, read once per lease by the caller (spec 5.1).
+
+    ACL-2591: on by default - unset, empty or any unknown value means on. Only an explicit
+    `0` / `false` / `no` / `off` turns it off (an emergency off-switch).
+    """
     value = (env if env is not None else os.environ).get(FLAG, "")
-    return str(value).strip().lower() in ("1", "true", "yes")
+    return str(value).strip().lower() not in ("0", "false", "no", "off")
 
 
 #: ACL-2593: a lease that is known to need the Ads Manager page (a form-background upload) says so here, before

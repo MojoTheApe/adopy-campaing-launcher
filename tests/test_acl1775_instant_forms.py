@@ -205,7 +205,8 @@ def test_policy_still_forbids_terms_acceptance_anywhere():
 def test_page_policy_describes_the_only_allowed_place():
     pol = wp.policy_for_page(ACT)
     assert pol["lead_form"] == {"key": "lead_gen_form_id", "edge": "adcreatives",
-                                "formats": ["link_data", "video_data"], "id_re": "^[0-9]{5,25}$"}
+                                "formats": ["link_data", "video_data"], "id_re": "^[0-9]{5,25}$",
+                                "feed_key": "call_to_actions"}
     assert "lead_gen_form_id" in pol["forbidden"]
 
 
