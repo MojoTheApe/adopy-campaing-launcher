@@ -1661,13 +1661,9 @@ MSG_MISMATCH = ('"{name}" was changed or removed in Ads Manager after it was cre
 MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campaign. '
                      "Delete or move it, then publish again.")
 MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
-                       "Wait a few minutes and publish again, or replace the video.")
-MSG_UNKNOWN_YOUNG = ("Meta may still be processing {what}. Wait 10 minutes, then publish again. "
-                     "Nothing will be created twice.")
+                       "Publish again once it is ready, or replace the video.")
 MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
             "Nothing was created twice.")
-MSG_NOT_LISTED = ('"{name}" was created earlier but Ads Manager does not list it yet. '
-                  "Wait a few minutes, then publish again. Nothing was created.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
                   "is no longer in Ads Manager; this is a new publish.")
 MSG_SUPERSEDED_RENAMED = ("The earlier campaign was renamed in Ads Manager and is left as it is; "
@@ -1876,7 +1872,7 @@ class CampaignCreator:
         """Протокол журнала вокруг одной записи (спека §2.1): `sent` ДО отправки, итог - после.
 
         Без журнала - просто `send()`. Этап, оставшийся `sent`/`unknown` с прошлого запуска, сначала ищется
-        чтением: нашли - принимаем; не нашли и прошло меньше `UNKNOWN_HOLD_S` - стоп без записи.
+        чтением: нашли - принимаем; не нашли - повторное чтение через ~30 с, затем запись заново (без стопа по времени).
         """
         op = self._op
         if op is None:
@@ -1895,12 +1891,24 @@ class CampaignCreator:
                 self._journal_event("unknown_adopted", what=what)
                 self._journal_confirm(out, what, str(found))
                 return str(found)
-            # Looked and found nothing (the earlier run's own readbacks found nothing either): the ACL-2250
-            # contract is to write it again. The hold applies only while the outcome is really unknown:
-            # a stage left `sent` (the run died mid-send) or an unknown one the readback could not settle.
+            # Looked and found nothing. ACL-2583 owner rule: no time-based stop. When the outcome is really unknown
+            # (a stage left `sent`, or an unknown one the readback could not settle) read back once more after the
+            # same ~30 s pause as a transient read; still nothing -> write again (a duplicate is acceptable, the
+            # objects are PAUSED and the name is never reused). A stage already settled as not found is just sent.
             settled = old["state"] == _oj.UNKNOWN and old.get("note") == _oj.NOT_FOUND_NOTE
-            if not settled and op.age_s(what) < _oj.UNKNOWN_HOLD_S:
-                raise CreationStopped(MSG_UNKNOWN_YOUNG.format(what=what), created=out.created, kind="unknown")
+            if not settled:
+                self._step(out, f"{what}: result of the earlier write is unknown, reading it back once more")
+                self._pause(sum(TRANSIENT_READ_WAITS_S))
+                if hasattr(self.client, "max_calls"):
+                    self.client.max_calls += 1
+                found = find()
+                if found:
+                    self._step(out, f"{what}: found by the second readback")
+                    self._journal_event("unknown_adopted", what=what)
+                    self._journal_confirm(out, what, str(found))
+                    return str(found)
+                self._step(out, f"{what}: not found, writing it again (a duplicate is possible; objects are PAUSED)")
+                self._journal_event("unknown_rewritten", what=what)
         try:
             op.begin(what, kind, name=name, content_md5=content_md5, supersede=(kind == "creative"))
         except _oj.StageBusy as exc:
@@ -1965,6 +1973,16 @@ class CampaignCreator:
             return v
         return norm(asdict(plan))
 
+    def _pause(self, left: float) -> None:
+        """Pause through the injected `sleep` in 5 s slices, keeping the run alive (heartbeat)."""
+        while left > 0:
+            step = min(5.0, left)
+            self.sleep(step)
+            left -= step
+            beat = getattr(self.client, "_beat", None)
+            if callable(beat):
+                beat()
+
     def _get_retrying(self, path: str, params: dict) -> dict:
         """Read by id; a transient failure (not "does not exist") is retried after short pauses (ACL-2583).
 
@@ -1978,14 +1996,9 @@ class CampaignCreator:
             except GraphError as exc:
                 if _object_gone(exc) or attempt == len(waits):
                     raise
-                left = float(waits[attempt])
-                while left > 0:
-                    step = min(5.0, left)
-                    self.sleep(step)
-                    left -= step
-                    beat = getattr(self.client, "_beat", None)
-                    if callable(beat):
-                        beat()
+                if hasattr(self.client, "max_calls"):
+                    self.client.max_calls += 1          # the retry read is part of this run's call budget
+                self._pause(float(waits[attempt]))
         raise AssertionError("unreachable")  # pragma: no cover
 
     def _campaign_alive(self, campaign_id: str) -> "tuple[bool | None, str]":
@@ -2039,16 +2052,8 @@ class CampaignCreator:
                         # ACL-2583: Meta does not answer. Neither stop nor reuse of the name: the caller continues
                         # under a new copy name, which makes the new operation distinct from this one.
                         raise _AliveUnknown(int(op.data.get("copy_number") or 0), camp)
-                    # Meta lag only while the campaign is young AND still carries the recorded name. A campaign
-                    # renamed in Ads Manager is taken over by the buyer; after the lag window a campaign the name
-                    # search still does not list counts as gone. Both start a new operation.
-                    lag = (alive and (not live_name or live_name == op.published_name)
-                           and op.campaign_age_s() < _oj.NOT_LISTED_LAG_S)
-                    if lag:
-                        # Creating another one could duplicate it.
-                        self._snapshot_operation_of(op, out)
-                        raise CreationStopped(MSG_NOT_LISTED.format(name=plan.name), created=out.created,
-                                              kind="resume_mismatch")
+                    # ACL-2583 owner rule: a campaign alive by id with the recorded name is always ours; no time
+                    # window. A campaign renamed in Ads Manager is taken over by the buyer (new operation).
                     if alive and (not live_name or live_name == op.published_name):
                         adopt = camp         # alive with the recorded name, only the name search misses it: resume
                 if not adopt:
@@ -2225,14 +2230,14 @@ class CampaignCreator:
                     if upload and not stopped and self.cancelled():
                         raise CreationStopped(
                             f"Stopped by the user while checking the {what} result. Meta may still be "
-                            "processing the upload: wait a few minutes before publishing again.",
+                            "processing the upload; publish again to check it first.",
                             created=out.created, kind="cancelled")
                     if wait > 0:
                         self.sleep(wait)
                     if upload and not stopped and self.cancelled():
                         raise CreationStopped(
                             f"Stopped by the user while checking the {what} result. Meta may still be "
-                            "processing the upload: wait a few minutes before publishing again.",
+                            "processing the upload; publish again to check it first.",
                             created=out.created, kind="cancelled")
                     # Повторные чтения дешевле: свежий файл в первых страницах списка.
                     found = find(pages=UPLOAD_RECONCILE_PAGES) if (upload and n > 0) else find()
@@ -2250,7 +2255,7 @@ class CampaignCreator:
                 if stopped:
                     raise CreationStopped("Stopped by the user during the upload; nothing was found "
                                           "in the ad account yet. Meta may still be processing the "
-                                          "upload: wait a few minutes before publishing again.",
+                                          "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
                 if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.

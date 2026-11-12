@@ -33,7 +33,7 @@ def _left_over(tmp_path, journal, clock, monkeypatch):
     meta, _first = _partial(tmp_path, journal)
     nr.delete(ACT, "MX Leads 1")
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
-    clock.t += oj.NOT_LISTED_LAG_S + 60
+    clock.t += 11 * 60
     return meta, _by_kind(meta, "campaign")["id"]
 
 
@@ -146,3 +146,14 @@ def test_alive_campaign_is_resumed(tmp_path, journal, clock, monkeypatch):
     assert out.error == "", out.error
     assert out.campaign_id == camp and _count(meta, "campaign") == 1
     assert out.operation["state"] == oj.OP_COMPLETE
+
+
+def test_each_retry_read_is_added_to_the_call_budget(tmp_path, journal, clock, monkeypatch):
+    meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
+    _inject_failures(meta, monkeypatch, camp, BODIES[0], 2)          # two failures, then the real answer
+    creator, client = _creator(meta, journal)
+    creator.sleep = lambda s: None
+    before = client.max_calls
+    row = creator._get_retrying(f"/{camp}", {"fields": "id,name,status,effective_status"})
+    assert row.get("id") == camp
+    assert client.max_calls == before + 2
