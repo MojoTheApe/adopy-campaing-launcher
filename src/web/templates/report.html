@@ -5185,8 +5185,15 @@ async function dashRefresh(ev) {
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone" checked> Phone</label></div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
+      <label style="display:block;margin:0.3rem 0"><input type="checkbox" id="fm-logic-on"> Conditional logic</label>
+      <div id="fm-logic-help" style="font-size:var(--adopy-text-sm);color:var(--muted)" hidden>Choose what happens after each answer. Custom questions come first on forms with conditions. Forms with conditions cannot be edited after publishing; a change creates a new form.</div>
       <div id="fm-questions"></div>
       <button type="button" id="fm-add-q-btn" class="btn">+ Add question</button></div>
+    <div id="fm-nonlead" hidden style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Non-lead end page. People who close the form see this page. They are not counted as leads.</div>
+      <input id="fm-nl-title" type="text" maxlength="60" placeholder="Title" style="width:100%;margin-top:0.2rem">
+      <textarea id="fm-nl-text" rows="2" maxlength="300" placeholder="Text" style="width:100%;font-family:inherit;margin-top:0.2rem"></textarea>
+      <input id="fm-nl-site" type="text" placeholder="Website link (https)" style="width:100%;margin-top:0.2rem">
+      <input id="fm-nl-button" type="text" maxlength="30" placeholder="Button text (default: Visit website)" style="width:100%;margin-top:0.2rem"></div>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Privacy policy URL</div>
       <input id="fm-privacy" type="text" placeholder="https://example.com/privacy" style="width:100%"></label>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Completion screen text</div>
@@ -7266,6 +7273,69 @@ window.cbLayout = (function () {
 
   function squeeze(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 
+  /* ACL-2178: answer conditions; mirror of form_templates._clean_logic / _validate_flow / _clean_non_lead_end. */
+  function cleanLogic(raw, opts, n, total, e) {
+    var given = {}, out = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      Object.keys(raw).forEach(function (k) { given[squeeze(k)] = squeeze(raw[k]).toLowerCase(); });
+    }
+    Object.keys(given).forEach(function (k) {
+      if (opts.indexOf(k) === -1) e.push('Question ' + n + ': the condition for "' + k + '" does not match any answer');
+    });
+    opts.forEach(function (opt) {
+      var action = given[opt] || '';
+      if (!action) { e.push('Question ' + n + ': choose what happens after the answer "' + opt + '"'); return; }
+      var m = /^q([0-9]{1,2})$/.exec(action);
+      if (action === 'next' || action === 'submit' || action === 'close') out[opt] = action;
+      else if (!m) e.push('Question ' + n + ': "' + action + '" is not a valid action');
+      else if (parseInt(m[1], 10) > total || parseInt(m[1], 10) < 1) e.push('Question ' + n + ': the answer "' + opt + '" goes to question ' + parseInt(m[1], 10) + ', which does not exist');
+      else if (parseInt(m[1], 10) <= n) e.push('Question ' + n + ': the answer "' + opt + '" can only go to a later question');
+      else out[opt] = action;
+    });
+    return out;
+  }
+
+  function nextIndex(flow, i) {
+    for (var j = i + 1; j < flow.length; j++) if (!flow[j].after_answer) return j;
+    return null;
+  }
+
+  function validateFlow(flow, e) {
+    if (flow.length && flow[0].after_answer) e.push("The first question can't be shown only after an answer");
+    var targeted = {}, submits = false;
+    flow.forEach(function (q, i) {
+      var nxt = nextIndex(flow, i);
+      (q.logic ? Object.keys(q.logic).map(function (k) { return q.logic[k]; }) : ['next']).forEach(function (a) {
+        var m = /^q([0-9]{1,2})$/.exec(a);
+        if (m) targeted[parseInt(m[1], 10) - 1] = true;
+        else if (a === 'submit' || (a === 'next' && nxt === null)) submits = true;
+        else if (a === 'next') targeted[nxt] = true;
+      });
+    });
+    flow.forEach(function (q, i) {
+      if (q.after_answer && !targeted[i] && i > 0) e.push('Question ' + (i + 1) + ': only shown after an answer, but no answer leads to it');
+    });
+    if (!submits && !e.some(function (x) { return x.indexOf('Question') === 0; })) e.push('At least one answer must submit the form');
+  }
+
+  function validateNonLeadEnd(raw, e) {
+    raw = raw && typeof raw === 'object' ? raw : {};
+    var title = squeeze(raw.title), text = String(raw.text == null ? '' : raw.text).trim(), site = String(raw.website_url || '').trim();
+    if (!title) e.push('Non-lead end page: title is required');
+    else if (title.length > 60) e.push('Non-lead end page: title is longer than 60 characters');
+    if (!text) e.push('Non-lead end page: text is required');
+    else if (text.length > FORM_LIMITS.thanks) e.push('Non-lead end page: text is longer than ' + FORM_LIMITS.thanks + ' characters');
+    if (!httpsUrl(site)) e.push('Non-lead end page: website link must start with https://');
+  }
+
+  /* The choices of the "Then" selector of question `i` (0-based): continue, a later question, submit, close. */
+  function logicActions(qs, i) {
+    var out = [{ value: 'next', label: 'Continue to next question' }];
+    for (var j = i + 1; j < qs.length; j++) out.push({ value: 'q' + (j + 1), label: 'Go to question ' + (j + 1) + (squeeze(qs[j].label) ? ': ' + squeeze(qs[j].label) : '') });
+    out.push({ value: 'submit', label: 'Submit the form' }, { value: 'close', label: 'Close the form' });
+    return out;
+  }
+
   /* legacyLocale - язык уже сохранённого шаблона: он допустим, даже если его нет в списке. */
   function validateTemplate(t, legacyLocale) {
     var e = [], L = FORM_LIMITS;
@@ -7297,21 +7367,35 @@ window.cbLayout = (function () {
     if (!chosen.length) e.push('Choose at least one contact field (name, first name, last name, email or phone)');
     if (chosen.indexOf('name') !== -1 && (chosen.indexOf('first_name') !== -1 || chosen.indexOf('last_name') !== -1))
       e.push('Choose either full name or first and last name, not both');
-    var qs = t.questions || [];
+    var qs = t.questions || [], flow = [];
     qs.forEach(function (q, i) {
-      var n = i + 1, label = squeeze(q && q.label), kind = (q && q.type) || 'short_answer';
+      var n = i + 1, label = squeeze(q && q.label), kind = squeeze(q && q.type).toLowerCase() || 'short_answer';
       if (!label) e.push('Question ' + n + ': text is required (remove the question if it is not needed)');
       else if (label.length > L.label) e.push('Question ' + n + ': text is longer than ' + L.label + ' characters');
-      if (kind === 'multiple_choice') {
+      if (kind !== 'short_answer' && kind !== 'multiple_choice' && kind !== 'multiple_choice_logic') {
+        e.push('Question ' + n + ': type must be short answer or multiple choice');
+        kind = 'short_answer';
+      }
+      var item = { type: kind, after_answer: !!(q && (q.after_answer === true || squeeze(q.after_answer).toLowerCase() === 'true')) };
+      if (kind === 'multiple_choice' || kind === 'multiple_choice_logic') {
         var opts = ((q && q.options) || []).map(squeeze).filter(Boolean);
         if (opts.length < 2) e.push('Question ' + n + ': a multiple choice question needs at least 2 options');
         if (opts.length > L.options) e.push('Question ' + n + ': more than ' + L.options + ' options');
         var low = opts.map(function (o) { return o.toLowerCase(); });
         if (low.some(function (o, k) { return low.indexOf(o) !== k; })) e.push('Question ' + n + ': options must differ');
         if (opts.some(function (o) { return o.length > L.option; })) e.push('Question ' + n + ': an option is longer than ' + L.option + ' characters');
+        if (kind === 'multiple_choice_logic') item.logic = cleanLogic(q && q.logic, opts, n, qs.length, e);
+      } else if (q && q.logic && Object.keys(q.logic).length) {
+        e.push('Question ' + n + ': conditions need a multiple choice question');
       }
+      flow.push(item);
     });
     if (qs.length > L.questions) e.push('At most ' + L.questions + ' custom questions');
+    var hasLogic = flow.some(function (f) { return f.type === 'multiple_choice_logic'; });
+    if (hasLogic || flow.some(function (f) { return f.after_answer; })) validateFlow(flow, e);
+    if (hasLogic && flow.some(function (f) { return f.logic && Object.keys(f.logic).some(function (a) { return f.logic[a] === 'close'; }); })) {
+      validateNonLeadEnd(t.non_lead_end, e);
+    }
     var url = String(t.privacy_url || '').trim();
     if (!url) e.push('Privacy policy URL is required');
     else if (!httpsUrl(url)) e.push('Privacy policy URL must start with https://');
@@ -7357,7 +7441,7 @@ window.cbLayout = (function () {
   return {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
-    validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
+    validateTemplate: validateTemplate, logicActions: logicActions, formSource: formSource, templateOptions: templateOptions,
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
     FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
@@ -18143,15 +18227,98 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<input type="text" class="cb-input cb-fc-q-label" maxlength="80" placeholder="Question text" aria-label="Custom question">' +
       '<select class="cb-input cb-select cb-fc-q-type" onchange="cbFormQuestionType(this)" aria-label="Question type">' +
       '<option value="short_answer">Short answer</option><option value="multiple_choice">Multiple choice</option></select>' +
-      '<textarea class="cb-input cb-fc-q-options" rows="3" hidden placeholder="One option per line (at least 2)" aria-label="Options"></textarea>' +
+      '<textarea class="cb-input cb-fc-q-options" rows="3" hidden placeholder="One option per line (at least 2)" aria-label="Options" onchange="cbFormLogicRefresh(this)"></textarea>' +
+      '<label class="cb-fc-inline cb-fc-q-after-box" hidden><input type="checkbox" class="cb-fc-q-after"> Only shown after an answer</label>' +
+      '<div class="cb-fc-q-logic" hidden></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionRemove(this)">Remove</button></div>';
   }
 
   window.cbFormQuestionType = function (sel) {
     var q = sel.closest('.cb-fc-q'), box = q.querySelector('.cb-fc-q-options');
     box.hidden = sel.value !== 'multiple_choice';
+    window.cbFormLogicRefresh(sel);
   };
-  window.cbFormQuestionRemove = function (btn) { btn.closest('.cb-fc-q').remove(); };
+
+  /* ACL-2178: answer conditions. The selects hold the choice; a refresh rebuilds the rows from the options
+     box and keeps what was chosen for an answer that still exists. Answer text goes in with textContent. */
+  function panelQuestions(panel) { return Array.prototype.slice.call(panel.querySelectorAll('.cb-fc-q')); }
+  function panelLogicOn(panel) { var c = panel.querySelector('.cb-fc-logic-on'); return !!(c && c.checked); }
+  function panelAnswers(q) {
+    return String(panelValue(q, '.cb-fc-q-options')).split('\n').map(function (o) { return o.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+  }
+  window.cbFormLogicRefresh = function (el) {
+    var panel = el.closest ? el.closest('.cb-form-create') : el;
+    if (!panel) return;
+    var on = panelLogicOn(panel), qs = panelQuestions(panel);
+    var shape = qs.map(function (q) { return { label: panelValue(q, '.cb-fc-q-label') }; });
+    var closes = false;
+    qs.forEach(function (q, i) {
+      var box = q.querySelector('.cb-fc-q-logic'), after = q.querySelector('.cb-fc-q-after-box');
+      var multi = panelValue(q, '.cb-fc-q-type') === 'multiple_choice';
+      var kept = {};
+      Array.prototype.slice.call(box.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) { kept[sel.getAttribute('data-answer')] = sel.value; });
+      box.textContent = '';
+      after.hidden = !on;
+      box.hidden = !(on && multi);
+      if (!(on && multi)) return;
+      var acts = window.cbLayout.logicActions(shape, i);
+      panelAnswers(q).forEach(function (a) {
+        var row = document.createElement('div'), name = document.createElement('span'), sel = document.createElement('select');
+        row.className = 'cb-fc-logic-row';
+        name.textContent = a + ' - Then: ';
+        sel.className = 'cb-input cb-select cb-fc-logic-sel';
+        sel.setAttribute('data-answer', a);
+        sel.setAttribute('aria-label', 'What happens after the answer ' + a);
+        var blank = document.createElement('option'); blank.value = ''; blank.textContent = 'Choose an action'; sel.appendChild(blank);
+        acts.forEach(function (x) { var o = document.createElement('option'); o.value = x.value; o.textContent = x.label; sel.appendChild(o); });
+        sel.value = kept[a] || '';
+        if (sel.value === 'close') closes = true;
+        sel.onchange = function () { window.cbFormLogicRefresh(sel); };
+        row.appendChild(name); row.appendChild(sel); box.appendChild(row);
+        if (kept[a] === 'close') closes = true;
+      });
+    });
+    var nl = panel.querySelector('.cb-fc-nonlead');
+    if (nl) nl.hidden = !(on && closes);
+    var help = panel.querySelector('.cb-fc-logic-help');
+    if (help) help.hidden = !on;
+  };
+  window.cbFormLogicToggle = function (box) {
+    var panel = box.closest('.cb-form-create');
+    if (!panel) return;
+    if (box.checked) {
+      window.cbFormLogicRefresh(panel);
+      // A fresh condition continues in order until the author chooses otherwise.
+      panelQuestions(panel).forEach(function (q) {
+        Array.prototype.slice.call(q.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) { if (!sel.value) sel.value = 'next'; });
+      });
+      window.cbFormLogicRefresh(panel);
+      return;
+    }
+    var used = panelQuestions(panel).some(function (q) {
+      var after = q.querySelector('.cb-fc-q-after');
+      return (after && after.checked) || Array.prototype.slice.call(q.querySelectorAll('.cb-fc-logic-sel')).some(function (sel) { return sel.value && sel.value !== 'next'; });
+    });
+    if (used && !window.confirm('Remove all conditions from this template?')) { box.checked = true; return; }
+    window.cbFormLogicRefresh(panel);
+  };
+  window.cbFormQuestionRemove = function (btn) {
+    var q = btn.closest('.cb-fc-q'), panel = btn.closest('.cb-form-create');
+    var at = panel ? panelQuestions(panel).indexOf(q) : -1;
+    q.remove();
+    if (panel && at >= 0) {
+      // Jumps to the removed question are cleared (chosen again); later targets move up by one.
+      panelQuestions(panel).forEach(function (other) {
+        Array.prototype.slice.call(other.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) {
+          var m = /^q([0-9]+)$/.exec(sel.value);
+          if (!m) return;
+          var n = Number(m[1]) - 1;
+          if (n === at) sel.value = ''; else if (n > at) sel.value = 'q' + n;
+        });
+      });
+      window.cbFormLogicRefresh(panel);
+    }
+  };
   window.cbFormQuestionAdd = function (btn) {
     var panel = formPanel(btn), list = panel.querySelector('.cb-fc-questions');
     var max = (window.cbLayout && window.cbLayout.FORM_LIMITS.questions) || 5;
@@ -18160,6 +18327,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       return;
     }
     list.insertAdjacentHTML('beforeend', questionHTML());
+    window.cbFormLogicRefresh(panel);
   };
 
   function panelValue(panel, sel) { var el = panel.querySelector(sel); return el ? String(el.value || '') : ''; }
@@ -18368,14 +18536,28 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   window.cbFormPanelTemplate = function (panel) {
     var contacts = [];
     panel.querySelectorAll('.cb-fc-contact').forEach(function (c) { if (c.checked) contacts.push(c.value); });
-    var qs = [];
+    var qs = [], logicOn = panelLogicOn(panel);
     panel.querySelectorAll('.cb-fc-q').forEach(function (q) {
       var kind = panelValue(q, '.cb-fc-q-type') || 'short_answer';
       var item = { label: panelValue(q, '.cb-fc-q-label'), type: kind };
       if (kind === 'multiple_choice') item.options = panelValue(q, '.cb-fc-q-options').split('\n');
+      if (logicOn) {
+        if (kind === 'multiple_choice') {
+          item.type = 'multiple_choice_logic';
+          item.logic = {};
+          Array.prototype.slice.call(q.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) {
+            if (sel.value) item.logic[sel.getAttribute('data-answer')] = sel.value;
+          });
+        }
+        var after = q.querySelector('.cb-fc-q-after');
+        if (after && after.checked) item.after_answer = true;
+      }
       qs.push(item);
     });
+    var closing = logicOn && qs.some(function (q) { return q.logic && Object.keys(q.logic).some(function (a) { return q.logic[a] === 'close'; }); });
     var cover = coverOf(panel);
+    var nonLead = closing ? { non_lead_end: { title: panelValue(panel, '.cb-fc-nl-title'), text: panelValue(panel, '.cb-fc-nl-text'),
+      website_url: panelValue(panel, '.cb-fc-nl-site'), button_text: panelValue(panel, '.cb-fc-nl-button') } } : {};
     return Object.assign({
       name: panelValue(panel, '.cb-fc-name'), headline: panelValue(panel, '.cb-fc-headline'),
       intro: panelValue(panel, '.cb-fc-intro'), intro_title: panelValue(panel, '.cb-fc-intro-title'),
@@ -18385,7 +18567,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
       form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
       locale: panelValue(panel, '.cb-fc-locale') || 'AUTO'
-    }, cover ? cover.get() : {});
+    }, nonLead, cover ? cover.get() : {});
   };
 
   window.cbFormCreateOpen = function (btn) {
@@ -18464,8 +18646,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label><input type="checkbox" class="cb-fc-contact" value="phone" checked> Phone</label></div>' +
       '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
+      '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-logic-on" onchange="cbFormLogicToggle(this)"> Conditional logic</label>' +
+      '<div class="cb-form-note cb-fc-logic-help" hidden>Choose what happens after each answer. Custom questions come first on forms with conditions. Forms with conditions cannot be edited after publishing; a change creates a new form.</div>' +
       '<div class="cb-fc-questions"></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionAdd(this)">+ Add question</button></div>' +
+      '<div class="cb-fc-label cb-fc-nonlead" hidden>Non-lead end page <span class="cb-fc-opt">(people who close the form see this page; they are not counted as leads)</span>' +
+      '<input type="text" class="cb-input cb-fc-nl-title" maxlength="60" placeholder="Title">' +
+      '<textarea class="cb-input cb-fc-nl-text" rows="2" maxlength="300" placeholder="Text"></textarea>' +
+      '<input type="text" class="cb-input cb-fc-nl-site" placeholder="Website link (https)">' +
+      '<input type="text" class="cb-input cb-fc-nl-button" maxlength="30" placeholder="Button text (default: Visit website)"></div>' +
       '<div class="cb-fc-label cb-fc-cover"></div>' +
       '<label class="cb-fc-label">Privacy policy URL<input type="text" class="cb-input cb-fc-privacy" placeholder="https://example.com/privacy"></label>' +
       '<label class="cb-fc-label">Completion screen<textarea class="cb-input cb-fc-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you."></textarea></label>' +
@@ -25106,7 +25295,41 @@ window.aclTeamLibrary = (function () {
   }
 
   // ── редактор ──
+  /* ACL-2178: conditions. `logicOn` is the "Conditional logic" checkbox; each question keeps `logic`
+     ({answer text: action}) and `after_answer` next to its text and options. */
+  var logicOn = false;
+  function answersOf(q) {
+    return (q.options || []).map(function (o) { return String(o).replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+  }
+  function logicRowsHtml(q, i) {
+    var lay = window.cbLayout, acts = lay && lay.logicActions ? lay.logicActions(questions, i) : [];
+    var answers = answersOf(q), have = q.logic || {};
+    var rows = answers.map(function (a) {
+      var cur = have[a] || '';
+      return '<div class="fm-logic-row" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin:0.2rem 0 0 1rem">'
+        + '<span style="flex:1 1 8rem">' + esc(a) + '</span><span style="color:var(--muted)">Then:</span>'
+        + '<select data-fm-q="' + i + '" data-fm-logic="' + esc(a) + '">'
+        + (cur ? '' : '<option value="" selected>Choose an action</option>')
+        + acts.map(function (x) { return '<option value="' + x.value + '"' + (x.value === cur ? ' selected' : '') + '>' + esc(x.label) + '</option>'; }).join('')
+        + '</select></div>';
+    });
+    Object.keys(have).forEach(function (a) {
+      if (answers.indexOf(a) === -1) {
+        rows.push('<div class="fm-logic-row" style="margin:0.2rem 0 0 1rem;color:#b00020">' + esc(a) + ' - This answer no longer exists</div>');
+      }
+    });
+    return rows.join('');
+  }
+  function syncLogicUi() {
+    var closes = logicOn && questions.some(function (q) {
+      return q.type === 'multiple_choice' && Object.keys(q.logic || {}).some(function (a) { return q.logic[a] === 'close'; });
+    });
+    el('fm-logic-on').checked = logicOn;
+    el('fm-logic-help').hidden = !logicOn;
+    el('fm-nonlead').hidden = !closes;
+  }
   function questionsHtml() {
+    syncLogicUi();
     el('fm-questions').innerHTML = questions.map(function (q, i) {
       var multi = q.type === 'multiple_choice';
       return '<div class="fm-q">'
@@ -25115,8 +25338,25 @@ window.aclTeamLibrary = (function () {
         + '<option value="multiple_choice"' + (multi ? ' selected' : '') + '>Multiple choice</option></select>'
         + (multi ? '<textarea rows="3" placeholder="One option per line (at least 2)" data-fm-q="' + i + '" data-fm-f="options" style="flex:1 1 12rem">'
           + esc((q.options || []).join('\n')) + '</textarea>' : '')
-        + '<button type="button" class="btn" data-fm-qdel="' + i + '">Remove</button></div>';
+        + '<button type="button" class="btn" data-fm-qdel="' + i + '">Remove</button>'
+        + (logicOn ? '<label style="flex:1 0 100%;margin-left:1rem"><input type="checkbox" data-fm-q="' + i + '" data-fm-f="after_answer"'
+          + (q.after_answer ? ' checked' : '') + '> Only shown after an answer</label>' : '')
+        + (logicOn && multi ? '<div style="flex:1 0 100%">' + logicRowsHtml(q, i) + '</div>' : '')
+        + '</div>';
     }).join('');
+  }
+
+  /* Removing question `at` (0-based): jumps to it are cleared (chosen again), later targets renumber. */
+  function renumberLogic(at) {
+    questions.forEach(function (q) {
+      Object.keys(q.logic || {}).forEach(function (a) {
+        var m = /^q([0-9]+)$/.exec(q.logic[a]);
+        if (!m) return;
+        var n = Number(m[1]) - 1;
+        if (n === at) delete q.logic[a];
+        else if (n > at) q.logic[a] = 'q' + n;
+      });
+    });
   }
 
   /* ACL-2188: фоновая картинка. Аккаунт и Страница выбираются здесь, потому что у вкладки Forms
@@ -25191,9 +25431,19 @@ window.aclTeamLibrary = (function () {
     // Старые шаблоны с «Full name»: поле убрано из редактора, при правке имя превращается в имя + фамилию.
     if (contacts.indexOf('name') !== -1) contacts = contacts.filter(function (k) { return k !== 'name'; }).concat(['first_name', 'last_name']);
     contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
+    logicOn = (tpl.questions || []).some(function (q) { return q.type === 'multiple_choice_logic'; });
     questions = (tpl.questions || []).map(function (q) {
-      return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
+      var item = {label: q.label || '', type: q.type === 'multiple_choice_logic' ? 'multiple_choice' : (q.type || 'short_answer'),
+                  options: (q.options || []).slice()};
+      if (q.logic) item.logic = Object.assign({}, q.logic);
+      if (q.after_answer) item.after_answer = true;
+      return item;
     });
+    var nl = tpl.non_lead_end || {};
+    el('fm-nl-title').value = nl.title || '';
+    el('fm-nl-text').value = nl.text || '';
+    el('fm-nl-site').value = nl.website_url || '';
+    el('fm-nl-button').value = nl.button_text || '';
     questionsHtml();
     el('fm-editor-title').textContent = title;
     var note = el('fm-invalid-note');
@@ -25216,6 +25466,15 @@ window.aclTeamLibrary = (function () {
     contactKeys.forEach(function (k) {
       if (el('fm-c-' + k).checked && contacts.indexOf(k) === -1) contacts.push(k);
     });
+    // ACL-2178: conditions are written only while the checkbox is on; off, none of the keys is sent.
+    delete base.non_lead_end;
+    var closing = logicOn && questions.some(function (q) {
+      return q.type === 'multiple_choice' && Object.keys(q.logic || {}).some(function (a) { return q.logic[a] === 'close'; });
+    });
+    if (closing) {
+      base.non_lead_end = {title: el('fm-nl-title').value, text: el('fm-nl-text').value,
+                           website_url: el('fm-nl-site').value, button_text: el('fm-nl-button').value};
+    }
     return Object.assign(base, {
       id: editing && editing.id ? editing.id : '',
       _expected_revision: editing ? editing.revision : undefined,
@@ -25223,7 +25482,11 @@ window.aclTeamLibrary = (function () {
       contact_fields: contacts,
       questions: questions.map(function (q) {
         var item = {label: q.label, type: q.type};
-        if (q.type === 'multiple_choice') item.options = q.options;
+        if (q.type === 'multiple_choice') {
+          item.options = q.options;
+          if (logicOn) { item.type = 'multiple_choice_logic'; item.logic = Object.assign({}, q.logic || {}); }
+        }
+        if (logicOn && q.after_answer) item.after_answer = true;
         return item;
       }),
       privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
@@ -25329,7 +25592,7 @@ window.aclTeamLibrary = (function () {
     id = t.getAttribute('data-fm-restore');
     if (id) { act('/api/form-templates/restore', {id: id}, 'Restored.'); return; }
     var qi = t.getAttribute('data-fm-qdel');
-    if (qi) { questions.splice(Number(qi), 1); questionsHtml(); return; }
+    if (qi) { questions.splice(Number(qi), 1); renumberLogic(Number(qi)); questionsHtml(); return; }
     if (t.getAttribute('data-view') === 'forms') load(false);
   });
   // Вопросы живут в массиве: ввод обновляет его, а не читает DOM при сохранении.
@@ -25340,15 +25603,52 @@ window.aclTeamLibrary = (function () {
     if (i === null || i === undefined) return;
     var q = questions[Number(i)], f = t.getAttribute('data-fm-f');
     if (!q) return;
-    if (f === 'options') q.options = String(t.value || '').split('\n');
+    var answer = t.getAttribute('data-fm-logic');
+    if (answer !== null && answer !== undefined) {
+      q.logic = q.logic || {};
+      if (t.value) q.logic[answer] = t.value; else delete q.logic[answer];
+      syncLogicUi();
+      return;
+    }
+    if (f === 'options') {
+      q.options = String(t.value || '').split('\n');
+      if (logicOn && ev.type === 'change') questionsHtml();      // answer rows follow the options box once it is left
+    }
+    else if (f === 'after_answer') q.after_answer = !!t.checked;
     else if (f === 'type') { q.type = t.value; questionsHtml(); }
     else q[f] = t.value;
+  }
+  function toggleLogic(on) {
+    if (on) {
+      logicOn = true;
+      questions.forEach(function (q) {
+        if (q.type !== 'multiple_choice') return;
+        q.logic = q.logic || {};
+        answersOf(q).forEach(function (a) { if (!q.logic[a]) q.logic[a] = 'next'; });
+      });
+      questionsHtml();
+      return;
+    }
+    var used = questions.some(function (q) { return q.after_answer || Object.keys(q.logic || {}).some(function (a) { return q.logic[a] !== 'next'; }); });
+    var off = function () {
+      logicOn = false;
+      questions.forEach(function (q) { delete q.logic; delete q.after_answer; });
+      questionsHtml();
+    };
+    if (!used) { off(); return; }
+    el('fm-logic-on').checked = true;
+    aclConfirm('The answers go back to continuing in order. The non-lead end page is removed from this template.',
+      { title: 'Remove all conditions from this template?', okLabel: 'Remove conditions', danger: true })
+      .then(function (yes) { if (yes) off(); });
   }
   document.addEventListener('input', function (ev) {
     if (ev.target && ev.target.id === 'fm-search') { render(); return; }
     questionInput(ev);
   });
-  document.addEventListener('change', questionInput);
+  document.addEventListener('change', function (ev) {
+    if (ev.target && ev.target.id === 'fm-logic-on') { toggleLogic(!!ev.target.checked); return; }
+    questionInput(ev);
+  });
   if ((location.hash || '').indexOf('forms') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
   document.addEventListener('acl:viewchange', function (e) {
     if (e.detail && e.detail.view === 'forms') load(false);

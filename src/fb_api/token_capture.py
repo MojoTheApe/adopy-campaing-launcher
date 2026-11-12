@@ -496,6 +496,51 @@ _HELPER_JS = r"""
       if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
       if ('cover_photo_id' in x && !(typeof x.cover_photo_id === 'string' && new RegExp(F.photo_id_re).test(x.cover_photo_id))) return 'form_card';
     }
+    // ACL-2178: answer conditions (mirror of write_policy._check_form_logic). Fail closed on an old table.
+    if ('conditional_logic' in c || 'end_pages' in c) {
+      const L = F.logic;
+      if (!L || !Array.isArray(L.dest_types) || typeof L.key_re !== 'string') return 'form_logic';
+      if (!('conditional_logic' in c) || !('end_pages' in c) || 'thank_you_page' in c) return 'form_logic';
+      const cl = c.conditional_logic;
+      if (!only(cl, 'conditional_logic') || cl.version !== L.version) return 'form_logic';
+      const custom = qs.filter((q) => q.type === 'CUSTOM');
+      const data = cl.logic_data;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return 'form_logic';
+      const want = custom.map((_, n) => 'customized_' + n);
+      const have = Object.keys(data);
+      if (have.length !== want.length || !want.every((k) => have.indexOf(k) >= 0)) return 'form_logic';
+      const used = [];
+      for (let n = 0; n < custom.length; n++) {
+        const dests = data['customized_' + n];
+        const count = Math.max(1, (custom[n].options || []).length);
+        if (!Array.isArray(dests) || dests.length !== count) return 'form_logic';
+        for (const d of dests) {
+          if (!only(d, 'destination') || L.dest_types.indexOf(d.destination_type) < 0) return 'form_logic';
+          if (d.destination_type === 'QUESTION') {
+            const t = typeof d.destination_id === 'string' && new RegExp(L.key_re).test(d.destination_id)
+              ? parseInt(d.destination_id.slice('customized_'.length), 10) : -1;
+            if (!(t > n && t < custom.length)) return 'form_logic';
+          } else if (d.destination_id !== (d.destination_type === 'THANK_YOU_PAGE' ? L.thanks_id : L.disqualified_id)) {
+            return 'form_logic';
+          }
+          if (used.indexOf(d.destination_type) < 0) used.push(d.destination_type);
+        }
+      }
+      const ep = c.end_pages;
+      if (!only(ep, 'end_pages')) return 'form_logic';
+      const page = (p, kind) => only(p, kind) && txt(p.name) && txt(p.title)
+        && (!('body' in p) || txt(p.body)) && (!('button_text' in p) || txt(p.button_text))
+        && (!('button_type' in p) || F.button_types.indexOf(p.button_type) >= 0)
+        && (!('website_url' in p) || url(p.website_url));
+      const ty = ep.thank_you_pages;
+      if (!Array.isArray(ty) || ty.length !== 1 || !page(ty[0], 'thank_you_end_page')) return 'form_logic';
+      const dq = ep.disqualified_end_components;
+      if (used.indexOf('DISQUALIFIED_END_COMPONENT') >= 0) {
+        if (!Array.isArray(dq) || dq.length !== 1 || !page(dq[0], 'non_lead_end_page')) return 'form_logic';
+      } else if ('disqualified_end_components' in ep) {
+        return 'form_logic';
+      }
+    }
     return null;
   }
 

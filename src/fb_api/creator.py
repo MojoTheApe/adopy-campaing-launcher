@@ -3570,9 +3570,13 @@ class CampaignCreator:
             self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
             cover = []
         bad += cover
+        logic = _fc.compare_logic(tpl, row)     # ACL-2178: a changed or missing condition always stops the run
+        bad += logic
         if bad:
             tail = (" The form stays on the Page; the next run reuses it with a note."
                     if "background image" in bad and not reused else "")
+            if logic and not reused:
+                tail += " The form stays on the Page; it can't be edited or deleted by the robot."
             raise CreationStopped(f"The form {_ft.form_name(tpl)!r} was read back with differences ("
                                   + "; ".join(bad) + "). Nothing that depends on it was created." + tail,
                                   created=out.created, kind="form_mismatch")
