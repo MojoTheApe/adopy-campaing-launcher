@@ -15,7 +15,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,8 +28,16 @@ log = logging.getLogger(__name__)
 SCHEMA = 1
 #: Сколько после неизвестного результата записи мы не повторяем её вслепую (спека §7, решение 2).
 UNKNOWN_HOLD_S = 10 * 60
-#: Сколько хранится законченная операция (решение 3); незаконченные не удаляются.
+#: How long any operation file is kept after its last change (complete, open, stopped or failed alike), and the side
+#: files (.corrupt, .superseded, .v1.json, orphan locks) after their own last change.
 RETENTION_S = 30 * 24 * 3600
+#: The folder is scanned for old files at most this often (the scan reads files; `open` runs for every campaign).
+PRUNE_EVERY_S = 6 * 3600
+#: A request id can only collide with a recent operation: the duplicate scan reads this many newest files at most.
+REQUEST_SCAN_MAX = 200
+REQUEST_SCAN_AGE_S = 7 * 24 * 3600
+#: Stage note of an unknown write that was looked for by readback and not found (the next run sends it again).
+NOT_FOUND_NOTE = "not_found"
 
 NOT_SENT, SENT, CONFIRMED, REJECTED, CANCELLED, UNKNOWN = (
     "not_sent", "sent", "confirmed", "rejected", "cancelled", "unknown")
@@ -58,18 +68,26 @@ class JournalError(Exception):
     """Журнал нельзя прочитать или записать (диск полон, нет прав, замок): запись в Meta не уходит."""
 
 
+class StageBusy(JournalError):
+    """Another run (this or another process) sent this stage a moment ago: it is not sent again from here."""
+
+
 def _canon(value: Any) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
-def plan_fingerprint(plan_view: dict, file_md5: dict[str, Any]) -> str:
-    """Отпечаток плана: канонический JSON плана (без `warnings`) + md5 файлов каждого объявления.
+def plan_fingerprint(plan_view: dict, file_md5: dict[str, Any], slot: int = 0) -> str:
+    """Отпечаток плана: канонический JSON плана (без `warnings`) + md5 файлов каждого объявления + место черновика.
+
+    The plan is the one SUBMITTED (before name choice and start-time moves), so the same request has the same
+    fingerprint whatever Meta holds and whatever the clock says. `slot` is the draft position in its submit:
+    two identical drafts of one submit are two operations.
 
     Без временных меток и абсолютных путей: вызывающий отдаёт имена файлов, а не пути кэша сжатого видео.
     Изменённый файл или план = другой отпечаток = новая операция.
     """
     view = {k: v for k, v in plan_view.items() if k != "warnings"}
-    return hashlib.sha256(_canon({"plan": view, "files": file_md5}).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_canon({"plan": view, "files": file_md5, "slot": int(slot)}).encode("utf-8")).hexdigest()
 
 
 def operation_id(act: str, tag: str, fingerprint: str) -> str:
@@ -91,6 +109,8 @@ class Operation:
         self.data = data
         #: Что случилось с файлом при открытии (повреждён, неизвестная версия): в предупреждения запуска.
         self.warnings: list[str] = []
+        #: Owner token of THIS run (process + random): stamped on every stage it sends, checked under the file lock.
+        self.owner = f"{os.getpid()}-{uuid.uuid4().hex[:10]}"
 
     @property
     def id(self) -> str:
@@ -103,6 +123,24 @@ class Operation:
     def stage(self, key: str) -> dict | None:
         st = self.data["stages"].get(key)
         return dict(st) if st else None
+
+    def campaign_id(self) -> str:
+        """Id of the confirmed campaign of this operation ('' when none)."""
+        st = self.data["stages"].get("campaign") or {}
+        return str(st.get("object_id") or "") if st.get("state") == CONFIRMED else ""
+
+    @property
+    def published_name(self) -> str:
+        return str(self.data.get("published_name") or "")
+
+    def refresh(self) -> None:
+        """Re-read the file (another process may have moved a stage). Unreadable: keep the copy in memory."""
+        try:
+            disk = self._journal._read_file(self.path)
+        except JournalError:
+            return
+        if disk is not None:
+            self.data = disk
 
     def confirmed_stages(self) -> list[tuple[str, dict]]:
         """Подтверждённые этапы с id, в порядке записи (для сверки перед возобновлением)."""
@@ -142,7 +180,12 @@ class Operation:
                 st.update(state=NOT_SENT, note=f"replaced {st['object_id']}", object_id="")
             elif SENT not in _ALLOWED[st["state"]]:
                 raise JournalError(f"stage {key!r}: {st['state']} -> sent is not allowed")
-            st.update(state=SENT, sent_at=self._journal.clock(), note="", attempts=int(st.get("attempts", 0)) + 1)
+            if (st["state"] == SENT and st.get("owner") and st["owner"] != self.owner
+                    and self._journal.clock() - float(st.get("sent_at") or 0.0) < UNKNOWN_HOLD_S):
+                # Decided under the file lock on the CURRENT file: two processes cannot both send the same step.
+                raise StageBusy(f"stage {key!r} was sent by another run a moment ago")
+            st.update(state=SENT, sent_at=self._journal.clock(), note="", attempts=int(st.get("attempts", 0)) + 1,
+                      owner=self.owner)
             if name:
                 st["name"] = name
             if content_md5:
@@ -160,7 +203,8 @@ class Operation:
                 return
             if CONFIRMED not in _ALLOWED[st["state"]]:
                 raise JournalError(f"stage {key!r}: {st['state']} -> confirmed is not allowed")
-            st.update(state=CONFIRMED, object_id=str(object_id), confirmed_at=self._journal.clock())
+            st.update(state=CONFIRMED, object_id=str(object_id), confirmed_at=self._journal.clock(),
+                      owner=self.owner)
         self._mutate(apply)
 
     def mark(self, key: str, state: str, note: str = "") -> None:
@@ -187,11 +231,18 @@ class Operation:
                 d["request_ids"].append(request_id)
         self._mutate(apply)
 
-    def finish(self, state: str, note: str = "") -> None:
-        """Итог операции: complete / stopped / failed."""
+    def set_published(self, name: str, copy_number: int = 0) -> None:
+        """The campaign name this operation publishes under (after name choice); the identity is the SUBMITTED plan."""
         def apply(d: dict) -> None:
-            if d["state"] == OP_COMPLETE and state != OP_COMPLETE:
-                return
+            d["published_name"] = str(name)
+            d["copy_number"] = int(copy_number)
+        if self.published_name != str(name) or int(self.data.get("copy_number") or 0) != int(copy_number):
+            self._mutate(apply)
+
+    def finish(self, state: str, note: str = "") -> None:
+        """Итог операции: complete / stopped / failed. A run that stops decides the state even after an earlier
+        complete one: the summary and the next action must agree with the error of the run that just stopped."""
+        def apply(d: dict) -> None:
             d["state"] = state
             d["note"] = note
             if state == OP_COMPLETE:
@@ -212,8 +263,15 @@ class Operation:
         st = self.data["stages"]
         if self.state == OP_COMPLETE:
             return "Nothing to do - everything was created and checked (campaign is PAUSED)."
-        unknown = [k for k, s_ in st.items() if s_["state"] == UNKNOWN]
-        if unknown:
+        note = str(self.data.get("note") or "")
+        if note == "resume_mismatch":
+            return ("Check the object named in the error in Ads Manager (fix it or delete it there), "
+                    "then publish again.")
+        if note == "journal":
+            return "Free some disk space or check the folder permissions, then publish again."
+        # Only a write whose outcome is really unknown waits; one that was looked for and not found is sent again.
+        unknown = [k for k, s_ in st.items() if s_["state"] == UNKNOWN and s_.get("note") != NOT_FOUND_NOTE]
+        if unknown or any(s_["state"] == SENT for s_ in st.values()):
             return "Wait 10 minutes, then publish again - Meta may still be processing the last step."
         if any(s_["state"] == CONFIRMED for s_ in st.values()) or self.state in (OP_STOPPED, OP_FAILED):
             return "Publish again - what was already created is checked and nothing will be created twice."
@@ -289,7 +347,8 @@ class OperationJournal:
                         data = self._read_file(path) if path.exists() else None
                     else:
                         try:
-                            path.replace(path.with_suffix(".corrupt"))
+                            # Timestamped: an earlier .corrupt file of the same operation is never overwritten.
+                            path.replace(path.with_name(f"{op_id}.{int(self.clock())}.corrupt"))
                         except OSError:
                             pass
                         warnings.append("The saved progress of this campaign was unreadable and was set aside; "
@@ -318,12 +377,22 @@ class OperationJournal:
         return op
 
     def _request_owner(self, request_id: str, skip: Path | None = None) -> str:
-        """Operation id that already holds this request id ('' if none). Read-only scan of the journal folder."""
+        """Operation id that already holds this request id ('' if none). Read-only, capped scan of recent files:
+        a submit key can only collide with a recent operation, and `open` runs for every campaign."""
         try:
-            files = list(self.root.glob("op-*.json"))
+            stamped = []
+            for f in self.root.glob("op-*.json"):
+                try:
+                    stamped.append((f.stat().st_mtime, f))
+                except OSError:
+                    continue
         except OSError:
             return ""
-        for f in files:
+        stamped.sort(key=lambda t: t[0], reverse=True)
+        horizon = time.time() - REQUEST_SCAN_AGE_S
+        for mtime, f in stamped[:REQUEST_SCAN_MAX]:
+            if mtime < horizon:
+                break
             try:
                 d = self._read_file(f)
             except JournalError:
@@ -332,22 +401,68 @@ class OperationJournal:
                 return str(d.get("operation_id") or "")
         return ""
 
-    def prune(self) -> int:
-        """Удалить законченные операции старше срока. Незаконченные (open/stopped/failed) остаются. Ошибки не бросает."""
+    def supersede(self, op: Operation, *, request_id: str = "") -> Operation:
+        """Set the earlier record aside (`.superseded` file, kept for the retention period) and open a fresh operation
+        with the same identity: used when the campaign it describes is gone from Ads Manager or was replaced."""
+        d = op.data
+        try:
+            with machine_file_lock(op.path.with_suffix(".lock")):
+                if op.path.exists():
+                    op.path.replace(op.path.with_name(f"{op.id}.{int(self.clock())}.superseded"))
+        except (OSError, TimeoutError) as exc:
+            raise JournalError(f"operation journal cannot be updated: {exc}") from exc
+        return self.open(d["act"], d["tag"], d["fingerprint"], d.get("name", ""), request_id=request_id)
+
+    def _prune_due(self) -> bool:
+        marker = self.root / ".last_prune"
+        now = self.clock()
+        try:
+            last = float(marker.read_text(encoding="utf-8").strip() or 0)
+        except (OSError, ValueError):
+            last = 0.0
+        if 0 <= now - last < PRUNE_EVERY_S:
+            return False
+        try:
+            marker.write_text(str(now), encoding="utf-8")
+        except OSError:
+            pass
+        return True
+
+    def prune(self, *, force: bool = False) -> int:
+        """Delete operation files, and the side files, that were last touched longer ago than the retention period.
+
+        Any state (complete, open, stopped, failed) goes after `RETENTION_S`: the name/tag lookup of the next run
+        does not need the file. At most one scan per `PRUNE_EVERY_S`. Errors are never raised.
+        """
+        if not force and not self._prune_due():
+            return 0
         removed = 0
         try:
             now = self.clock()
-            for path in self.root.glob("op-*.json"):
+            for path in list(self.root.glob("op-*.json")):
                 try:
                     data = json.loads(path.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     continue
-                if not isinstance(data, dict) or data.get("state") not in _FINISHED:
+                if not isinstance(data, dict):
                     continue
-                if now - float(data.get("completed_at") or data.get("updated_at") or now) > RETENTION_S:
+                last = float(data.get("completed_at") or data.get("updated_at") or now) \
+                    if data.get("state") in _FINISHED else float(data.get("updated_at") or now)
+                if now - last > RETENTION_S:
                     path.unlink(missing_ok=True)
                     path.with_suffix(".lock").unlink(missing_ok=True)
                     removed += 1
+            # Side files have no state: their own age (file time) decides.
+            real = time.time()
+            for pattern in ("op-*.corrupt", "op-*.superseded", "op-*.v1.json", "op-*.lock"):
+                for path in list(self.root.glob(pattern)):
+                    try:
+                        if real - path.stat().st_mtime > RETENTION_S and (
+                                path.suffix != ".lock" or not path.with_suffix(".json").exists()):
+                            path.unlink(missing_ok=True)
+                            removed += 1
+                    except OSError:
+                        continue
         except OSError:
             log.debug("operation journal prune failed", exc_info=True)
         return removed

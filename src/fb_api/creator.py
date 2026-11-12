@@ -344,10 +344,12 @@ class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
     def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
-                 failure: Any = None):
+                 failure: Any = None, not_found: bool = False):
         super().__init__(message)
         self.created = dict(created or {})
         self.kind = kind
+        #: ACL-1856: an unknown write that the readback looked for and did not find (not "could not look").
+        self.not_found = not_found
         #: ACL-2392: the plain text for the buyer (`plain_errors.Failure`); None -> classified from the message.
         self.failure = failure
 
@@ -1538,6 +1540,27 @@ class NameChoice:
         return self.copy_number > 0
 
 
+def resume_verify_calls(stages: "list[tuple[str, dict]]") -> int:
+    """Upper bound of the Graph reads `_verify_resume` makes for these confirmed stages."""
+    kinds = [st["kind"] for _k, st in stages]
+    reads = sum(1 for k in kinds if k in ("campaign", "creative", "image", "video"))
+    sets, ads = kinds.count("adset"), kinds.count("ad")
+    if sets or ads:
+        reads += 2                           # the ad set listing (two pages at most)
+    if ads:
+        reads += 2 * (sets + 1)              # one ad listing per ad set (two pages at most)
+    return reads
+
+
+def plan_copy_number(plan: CampaignPlan, submitted_view: dict) -> int:
+    """Copy number of the chosen plan against the name that was submitted (0 = the builder's own name)."""
+    base = str(submitted_view.get("name") or "")
+    prefix = f"{base}{COPY_WORD}"
+    if plan.name.startswith(prefix) and plan.name[len(prefix):].isdigit():
+        return int(plan.name[len(prefix):])
+    return 0
+
+
 def copy_name(base: str, n: int) -> str:
     return base if n <= 0 else f"{base}{COPY_WORD}{n}"
 
@@ -1589,6 +1612,12 @@ MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected
                        "Wait a few minutes and publish again, or replace the video.")
 MSG_UNKNOWN_YOUNG = ("Meta may still be processing {what}. Wait 10 minutes, then publish again. "
                      "Nothing will be created twice.")
+MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
+            "Nothing was created twice.")
+MSG_NOT_LISTED = ('"{name}" was created earlier but Ads Manager does not list it yet. '
+                  "Wait a few minutes, then publish again. Nothing was created.")
+MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
+                  "is no longer in Ads Manager; this is a new publish.")
 #: Вид объекта по ребру записи (для журнала).
 _EDGE_KIND = {"campaigns": "campaign", "adsets": "adset", "ads": "ad", "adcreatives": "creative",
               "adimages": "image", "advideos": "video"}
@@ -1611,12 +1640,14 @@ class CampaignCreator:
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None,
                  compress_video: Callable[[str], Any] | None = None,
-                 journal: "_oj.OperationJournal | None" = None, request_key: str = ""):
+                 journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0):
         self.client = client
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
         self.journal = journal
         #: ACL-1856: the submit key of the page (bound per campaign); the journal refuses its reuse for another plan.
         self.request_key = request_key
+        #: ACL-1856: position of the draft in its submit; part of the operation identity (two identical drafts = two).
+        self.slot = int(slot)
         self._op: "_oj.Operation | None" = None
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
@@ -1797,7 +1828,12 @@ class CampaignCreator:
         if op is None:
             return send()
         self._check_cancel(out)
+        op.refresh()                  # another process may have moved this stage since the operation was opened
         old = op.stage(what)
+        if (old and old["state"] == _oj.CONFIRMED and old["object_id"] and kind != "creative"
+                and old.get("owner") and old["owner"] != op.owner):
+            self._step(out, f"{what}: already created by another run")
+            return str(old["object_id"])
         if old and old["state"] in (_oj.SENT, _oj.UNKNOWN):
             found = find()
             if found:
@@ -1805,18 +1841,24 @@ class CampaignCreator:
                 self._journal_event("unknown_adopted", what=what)
                 self._journal_confirm(out, what, str(found))
                 return str(found)
-            if op.age_s(what) < _oj.UNKNOWN_HOLD_S:
+            # Looked and found nothing (the earlier run's own readbacks found nothing either): the ACL-2250
+            # contract is to write it again. The hold applies only while the outcome is really unknown:
+            # a stage left `sent` (the run died mid-send) or an unknown one the readback could not settle.
+            settled = old["state"] == _oj.UNKNOWN and old.get("note") == _oj.NOT_FOUND_NOTE
+            if not settled and op.age_s(what) < _oj.UNKNOWN_HOLD_S:
                 raise CreationStopped(MSG_UNKNOWN_YOUNG.format(what=what), created=out.created, kind="unknown")
         try:
             op.begin(what, kind, name=name, content_md5=content_md5, supersede=(kind == "creative"))
+        except _oj.StageBusy as exc:
+            raise CreationStopped(MSG_BUSY.format(what=what), created=out.created, kind="busy") from exc
         except _oj.JournalError as exc:
             self._journal_event("journal_save_failed", what=what, phase="sent", error=type(exc).__name__)
             raise CreationStopped(MSG_JOURNAL, created=out.created, kind="journal") from exc
         try:
             got = send()
         except CreationStopped as exc:
-            self._journal_mark(what, {"unknown": _oj.UNKNOWN, "cancelled": _oj.CANCELLED}.get(exc.kind, ""),
-                               exc.kind)
+            state = {"unknown": _oj.UNKNOWN, "cancelled": _oj.CANCELLED}.get(exc.kind, "")
+            self._journal_mark(what, state, _oj.NOT_FOUND_NOTE if exc.not_found else exc.kind)
             raise
         except WritesBlocked:
             self._journal_mark(what, _oj.NOT_SENT, "blocked")      # политика не пустила: в Meta не уходило
@@ -1869,25 +1911,63 @@ class CampaignCreator:
             return v
         return norm(asdict(plan))
 
-    def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict) -> None:
-        """Открыть журнал по итоговому плану (после выбора имени) - до первой записи запуска."""
+    def _campaign_alive(self, campaign_id: str) -> bool:
+        """The campaign is still in Ads Manager (readable and not deleted/archived). Read only."""
+        try:
+            row = self.client.get(f"/{campaign_id}", {"fields": "id,status,effective_status"})
+        except GraphError:
+            return False                         # does not exist / not readable: gone
+        if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
+            return False
+        return not ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
+                    & {"DELETED", "ARCHIVED"})
+
+    def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict, *,
+                        submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> None:
+        """Open the journal before the first write of the run.
+
+        The identity is the plan AS SUBMITTED (`submitted` = its view and tag, taken before name choice and any start
+        move) plus the draft slot, so it does not depend on what Meta holds or on the clock. The name chosen for this
+        run (`plan`, after the ACL-2250 choice) is kept in the record. An earlier record whose campaign is gone from
+        Ads Manager, or that published under another name, is set aside and a NEW operation starts.
+        """
         if self.journal is None:
             return
+        view, requested_tag = submitted if submitted is not None else (self._plan_view(plan), plan.tag)
         md5s: dict[str, list[str]] = {}
         for s_ in plan.ad_sets:
             for ad in s_.ads:
                 md5s[str(ad.index)] = [_md5(files[p]) if p in files else ""
                                        for p in (ad.path, ad.vertical_path) if p]
-        fp = _oj.plan_fingerprint(self._plan_view(plan), md5s)
+        fp = _oj.plan_fingerprint(view, md5s, self.slot)
         try:
-            self._op = self.journal.open(plan.act, plan.tag, fp, plan.name, request_id=self.request_key)
+            op = self.journal.open(plan.act, requested_tag, fp, str(view.get("name") or plan.name),
+                                   request_id=self.request_key)
+            camp = op.campaign_id()
+            same_name = not op.published_name or op.published_name == plan.name
+            if camp and (not same_name or camp != existing_id):
+                if same_name and self._campaign_alive(camp):
+                    # The campaign of the earlier run exists but the name search did not list it (Meta lag):
+                    # creating another one could duplicate it.
+                    self._snapshot_operation_of(op, out)
+                    raise CreationStopped(MSG_NOT_LISTED.format(name=plan.name), created=out.created,
+                                          kind="resume_mismatch")
+                op = self.journal.supersede(op, request_id=self.request_key)
+                if same_name:
+                    op.warnings.append(MSG_SUPERSEDED)
+            op.set_published(plan.name, plan_copy_number(plan, view))
         except _oj.RequestConflict as exc:
             raise CreationStopped(f"{exc} Nothing was created.", kind="request_conflict") from exc
         except _oj.JournalError as exc:
             self._journal_event("journal_save_failed", what="open", phase="open", error=type(exc).__name__)
             raise CreationStopped(MSG_JOURNAL, kind="journal") from exc
-        out.warnings.extend(self._op.warnings)
+        self._op = op
+        out.warnings.extend(op.warnings)
         self._snapshot_operation(out)
+
+    @staticmethod
+    def _snapshot_operation_of(op: "_oj.Operation", out: Outcome) -> None:
+        out.operation = op.summary()
 
     def _verify_resume(self, plan: CampaignPlan, out: Outcome, campaign_id: str = "") -> None:
         """Подтверждённые этапы прошлых запусков - сверка чтением ДО первой записи (спека §2.1).
@@ -1901,6 +1981,9 @@ class CampaignCreator:
         if not stages:
             return
         acct = normalize_act(plan.act).removeprefix("act_")
+        # The reads of this check come out of the budget of the run: the allowance follows the confirmed objects
+        # (one read each, the ad set listing and one ad listing per ad set), not a flat number (ACL-1856).
+        self.client.max_calls += resume_verify_calls(stages)
 
         def mismatch(name: str, text: str = MSG_MISMATCH) -> CreationStopped:
             self._snapshot_operation(out)
@@ -2100,7 +2183,8 @@ class CampaignCreator:
                     raise CreationStopped(
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
-                        created=out.created, kind="unknown", failure=rejection) from exc
+                        created=out.created, kind="unknown", failure=rejection,
+                        not_found=not (files or upload)) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -2111,7 +2195,8 @@ class CampaignCreator:
             found = find()
             if not found:
                 raise CreationStopped(f"{what}: Graph answered without an id and nothing was found "
-                                      "by readback.", created=out.created, kind="unknown")
+                                      "by readback.", created=out.created, kind="unknown",
+                                      not_found=not (files or upload))
             self.client.reconciled(path)
             return str(found)
         return str(got)
@@ -4156,6 +4241,8 @@ class CampaignCreator:
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
+        # ACL-1856: the request as submitted - before name choice and before any start-time move.
+        submitted = (self._plan_view(plan), plan.tag)
         targetings, files = self._prepare(plan, out)
         self._check_reviewed_ids(plan)
 
@@ -4169,8 +4256,9 @@ class CampaignCreator:
         self._drain_start_move_notes(out)
         self._save_name_receipt(out, requested, choice)
         # ACL-1856: журнал по итоговому плану (имя уже выбрано) и сверка прошлых этапов - до первой записи.
-        self._open_operation(plan, out, files)
-        self._verify_resume(plan, out, str(choice.existing["id"]) if choice.existing else "")
+        existing_id = str(choice.existing["id"]) if choice.existing else ""
+        self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+        self._verify_resume(plan, out, existing_id)
         if choice.renamed:
             out.warnings.append(_rename_message(requested, plan.name, choice.earlier, future=False))
             self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")

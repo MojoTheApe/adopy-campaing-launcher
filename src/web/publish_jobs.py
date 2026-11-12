@@ -1817,6 +1817,8 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             _active_publishers.pop(job_id, None)
         return
 
+    # ACL-1856: the position of each draft in the submit (a stable part of its operation identity).
+    publisher.draft_slots = {id(d): i for i, d in enumerate(drafts)}
     ready: list[Any] = []
     for draft in drafts:
         if draft.errors:

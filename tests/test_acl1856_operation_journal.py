@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -93,7 +95,13 @@ def test_corrupt_file_is_set_aside_and_the_operation_starts_fresh(journal):
     op.path.write_text("{not json", encoding="utf-8")
     fresh = journal.open(ACT, "t", "f", "C")
     assert fresh.stage("campaign") is None and fresh.warnings
-    assert op.path.with_suffix(".corrupt").exists()
+    assert len(list(op.path.parent.glob(f"{op.id}.*.corrupt"))) == 1
+    # a second corruption of the same operation keeps the first .corrupt file (timestamped names)
+    fresh.begin("campaign", "campaign")
+    fresh.path.write_text("{again", encoding="utf-8")
+    journal.clock.t += 5
+    journal.open(ACT, "t", "f", "C")
+    assert len(list(op.path.parent.glob(f"{op.id}.*.corrupt"))) == 2
 
 
 def test_unknown_version_is_not_used_and_not_damaged(journal):
@@ -106,15 +114,49 @@ def test_unknown_version_is_not_used_and_not_damaged(journal):
     assert json.loads(op.path.read_text(encoding="utf-8"))["v"] == 99
 
 
-def test_prune_removes_only_old_finished_operations(journal, clock):
+def test_prune_removes_old_operations_of_every_state_and_old_side_files(journal, clock):
     done_old = journal.open(ACT, "t", "old", "C")
     done_old.finish(oj.OP_COMPLETE)
     open_old = journal.open(ACT, "t", "open", "C")
+    stopped_old = journal.open(ACT, "t", "stopped", "C")
+    stopped_old.finish(oj.OP_STOPPED, "unknown")
+    failed_old = journal.open(ACT, "t", "failed", "C")
+    failed_old.finish(oj.OP_FAILED, "RuntimeError")
+    side = [journal.root / "op-aaaa.1.corrupt", journal.root / "op-aaaa.2.superseded", journal.root / "op-aaaa.v1.json"]
+    for f in side:
+        f.write_text("x", encoding="utf-8")
+        os.utime(f, (1, 1))                                    # very old file time
     clock.t += oj.RETENTION_S + 10
-    done_new = journal.open(ACT, "t", "new", "C")        # open() сам чистит
+    done_new = journal.open(ACT, "t", "new", "C")        # open() runs the prune (at most once per PRUNE_EVERY_S)
     done_new.finish(oj.OP_COMPLETE)
-    assert not done_old.path.exists()
-    assert open_old.path.exists() and done_new.path.exists()
+    for gone in (done_old, open_old, stopped_old, failed_old):
+        assert not gone.path.exists()
+    assert done_new.path.exists()
+    assert not any(f.exists() for f in side)
+
+
+def test_prune_scans_at_most_once_per_interval(journal, clock, monkeypatch):
+    journal.open(ACT, "t", "a", "C")
+    reads = []
+    real = oj.json.loads
+    monkeypatch.setattr(oj.json, "loads", lambda *a, **k: reads.append(1) or real(*a, **k))
+    clock.t += 60
+    journal.open(ACT, "t", "b", "C")                     # within PRUNE_EVERY_S: no scan of the folder
+    assert journal.prune() == 0
+    n_open = len(reads)
+    clock.t += oj.PRUNE_EVERY_S + 1
+    journal.prune()
+    assert len(reads) > n_open
+
+
+def test_the_request_scan_reads_only_recent_files(journal, clock):
+    old = journal.open(ACT, "t", "old", "C", request_id="rq-old")
+    os.utime(old.path, (1, 1))                           # untouched for ages
+    reads = []
+    real = journal._read_file
+    journal._read_file = lambda p: reads.append(p.name) or real(p)
+    assert journal._request_owner("rq-old") == ""        # an old file cannot hold a live submit key
+    assert old.path.name not in reads
 
 
 def test_reads_do_not_write(journal):
@@ -295,18 +337,31 @@ def test_a_lost_confirmation_record_is_only_a_note_and_the_next_run_adopts(tmp_p
     assert second.error == "" and _count(meta, "campaign") == 1
 
 
-def test_an_unknown_write_is_held_then_written_once(tmp_path, journal, clock):
+def test_an_unsent_write_found_nowhere_is_written_again_without_waiting(tmp_path, journal):
+    """ACL-2250 contract: the earlier run looked and found nothing; a rerun does not wait 10 minutes."""
     meta = FakeMeta()
     meta.fail_next["ads"] = "unsent"                  # ответа нет, объект не создан
     first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
     assert first.stop_kind == "unknown"
     assert first.operation["stages"][-1]["state"] == oj.UNKNOWN
+    assert "Wait 10 minutes" not in first.operation["next_action"]
+    again, _c = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert again.error == "" and _count(meta, "ad") == 1
+
+
+def test_a_stage_left_sent_by_a_dead_run_is_held_then_written_once(tmp_path, journal, clock):
+    meta = Crashy()
+    meta.crash_at, meta.phase = 5, "before"           # the run dies before the first ad leaves: stage stays `sent`
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert first.stop_kind == "unexpected"
+    meta.crash_at = None
     posts = len(meta.posts)
-    young, client = _go(meta, _draft(tmp_path, ads=1), journal)         # сразу: держим, ничего не пишем
+    young, client = _go(meta, _draft(tmp_path, ads=1), journal)
     assert young.stop_kind == "unknown" and "Wait 10 minutes" in young.error
+    assert "Wait 10 minutes" in young.operation["next_action"]
     assert len(meta.posts) == posts and client.writes == 0
     clock.t += oj.UNKNOWN_HOLD_S + 1
-    later, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    later, _c = _go(meta, _draft(tmp_path, ads=1), journal)
     assert later.error == "" and _count(meta, "ad") == 1
 
 
@@ -335,14 +390,12 @@ def _by_kind(meta, kind):
     return next(o for o in meta.objects.values() if o["_kind"] == kind)
 
 
-@pytest.mark.parametrize("damage", ["renamed", "deleted", "other_account"])
+@pytest.mark.parametrize("damage", ["renamed", "other_account"])
 def test_resume_mismatch_stops_with_zero_writes(tmp_path, journal, damage):
     meta, _first = _partial(tmp_path, journal)
     camp = _by_kind(meta, "campaign")
     if damage == "renamed":
         camp["name"] = "Renamed by hand"
-    elif damage == "deleted":
-        del meta.objects[camp["id"]]
     elif damage == "other_account":
         camp["account_id"] = "999"
     elif damage == "not_paused":
@@ -365,9 +418,10 @@ def test_verify_resume_rejects_a_campaign_that_is_not_ours_or_not_paused(tmp_pat
     creator, _c = _creator(meta, journal)
     out = cr.Outcome(campaign_name="MX Leads 1")
     plan = cr.plan_from_draft(_draft(tmp_path, ads=2))
+    submitted = (creator._plan_view(plan), plan.tag)          # as submitted: before `_prepare` fills Page and pixel
     targetings, files = creator._prepare(plan, out)
     choice = creator._resolve_name(plan, targetings)          # до порчи: то же имя, что у первого запуска
-    creator._open_operation(choice.plan, out, files)
+    creator._open_operation(choice.plan, out, files, submitted=submitted, existing_id=camp["id"])
     assert creator._op.confirmed_stages()                      # это та же операция, что оборвалась
     camp["status" if damage == "not_paused" else "adlabels"] = "ACTIVE" if damage == "not_paused" else []
     posts = len(meta.posts)
@@ -543,3 +597,351 @@ def test_the_journal_can_be_turned_off(monkeypatch):
     assert publish_api.journal_enabled()
     monkeypatch.setenv("ACL_OPERATION_JOURNAL", "0")
     assert not publish_api.journal_enabled()
+
+
+# ───────────────────────── review round 1 (PR 1569): regression tests ─────────────────────────
+
+from src.fb_api import name_receipt as nr  # noqa: E402
+
+
+def _delete_campaign_tree(meta, camp_id=None):
+    """The buyer deletes the campaign (and what hangs under it) in Ads Manager."""
+    camp = _by_kind(meta, "campaign") if camp_id is None else meta.objects[camp_id]
+    for oid in [o for o, v in meta.objects.items() if v["_kind"] in ("adset", "ad")]:
+        del meta.objects[oid]
+    del meta.objects[camp["id"]]
+    return camp["id"]
+
+
+def test_republish_after_the_campaign_was_deleted_in_meta_starts_a_new_operation(tmp_path, journal):
+    meta = FakeMeta()
+    first, _ = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert first.error == "" and first.operation["state"] == oj.OP_COMPLETE
+    gone = _delete_campaign_tree(meta)
+    posts = len(meta.posts)
+    second, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert second.error == "", second.error
+    assert second.campaign_id and second.campaign_id != gone and len(meta.posts) > posts
+    assert second.operation["state"] == oj.OP_COMPLETE
+    assert any("set aside" in w for w in second.warnings)
+    assert len(list(journal.root.glob("op-*.superseded"))) == 1          # the earlier record is kept, not deleted
+    assert len(list(journal.root.glob("op-*.json"))) == 1
+    _assert_safe(meta)
+    third, _c = _go(meta, _draft(tmp_path, ads=2), journal)              # and a third publish is just as unblocked
+    assert third.error == ""
+
+
+def test_republish_after_a_partly_created_campaign_was_deleted(tmp_path, journal):
+    meta, first = _partial(tmp_path, journal)
+    assert first.operation["partial_ids"]["campaign"]
+    _delete_campaign_tree(meta)
+    nr.delete(ACT, "MX Leads 1")                                         # no receipt either: a clean slate in Meta
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "", out.error
+    assert out.operation["state"] == oj.OP_COMPLETE
+    assert _count(meta, "campaign") == 1 and _count(meta, "ad") == 2
+
+
+def test_a_campaign_gone_to_the_deleted_status_is_not_a_block_either(tmp_path, journal):
+    meta = FakeMeta()
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    camp = _by_kind(meta, "campaign")
+    camp["status"] = "DELETED"
+    camp["effective_status"] = "DELETED"
+    nr.delete(ACT, "MX Leads 1")
+    out, _c = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert out.error == "" and out.campaign_id != first.campaign_id
+
+
+def test_a_live_campaign_that_the_name_search_does_not_list_yet_stops_without_a_write(tmp_path, journal,
+                                                                                       monkeypatch):
+    meta, _first = _partial(tmp_path, journal)
+    nr.delete(ACT, "MX Leads 1")
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])      # Meta lag: not listed yet
+    posts = len(meta.posts)
+    out, client = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.stop_kind == "resume_mismatch" and "does not list it yet" in out.error
+    assert len(meta.posts) == posts and client.writes == 0 and _count(meta, "campaign") == 1
+
+
+def test_a_second_publish_of_a_finished_plan_is_a_new_copy_and_a_new_operation(tmp_path, journal):
+    meta = FakeMeta()
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    nr.delete(ACT, "MX Leads 1")                                         # the job ended clean: receipts are cleared
+    second, _c = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert second.error == "" and second.published_as == "MX Leads 1 copy 1"
+    assert second.campaign_id != first.campaign_id and _count(meta, "campaign") == 2
+    assert second.operation["state"] == oj.OP_COMPLETE
+
+
+def test_next_action_never_says_nothing_to_do_next_to_an_error(tmp_path, journal):
+    meta = FakeMeta()
+    first, _ = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert first.error == ""
+    creative = next(o for o in meta.objects.values() if o["_kind"] == "creative")
+    del meta.objects[creative["id"]]                                     # a confirmed creative is gone
+    posts = len(meta.posts)
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
+    assert out.operation["state"] == oj.OP_STOPPED                       # a COMPLETE record that stops is not "complete"
+    assert "Nothing to do" not in out.operation["next_action"] and "Ads Manager" in out.operation["next_action"]
+    assert json.loads(next(journal.root.glob("op-*.json")).read_text(encoding="utf-8"))["state"] == oj.OP_STOPPED
+
+
+@pytest.mark.parametrize("scenario", ["crash", "unknown", "cancel", "mismatch", "journal"])
+def test_next_action_agrees_with_every_failed_result(tmp_path, journal, monkeypatch, scenario):
+    meta = Crashy() if scenario == "crash" else FakeMeta()
+    kw = {}
+    if scenario == "crash":
+        meta.crash_at, meta.phase = 4, "after"
+    elif scenario == "unknown":
+        meta.fail_next["ads"] = "unsent"
+    elif scenario == "cancel":
+        flag = {"stop": False}
+        real = meta.write
+
+        def write(path, params, *a, **k):
+            body = real(path, params, *a, **k)
+            flag["stop"] = flag["stop"] or path.endswith("/campaigns")
+            return body
+        meta.write = write
+        kw["cancelled"] = lambda: flag["stop"]
+    elif scenario == "mismatch":
+        _go(meta, _draft(tmp_path, ads=1), journal)
+        del meta.objects[next(o for o in meta.objects.values() if o["_kind"] == "creative")["id"]]
+    elif scenario == "journal":
+        def refuse(self, *a, **k):
+            raise oj.JournalError("disk full")
+        monkeypatch.setattr(oj.Operation, "begin", refuse)
+    out, _c = _go(meta, _draft(tmp_path, ads=1), journal, **kw)
+    assert out.error, scenario
+    text = out.operation.get("next_action", "") if out.operation else ""
+    assert "Nothing to do" not in text
+    if scenario == "unknown":
+        assert "Wait 10 minutes" not in text                              # looked for and not found: sent again
+    if scenario == "mismatch":
+        assert "Ads Manager" in text
+
+
+def test_two_identical_drafts_of_one_submit_are_both_created(tmp_path, journal):
+    meta = FakeMeta()
+    a, _ = _go(meta, _draft(tmp_path, ads=1), journal, request_key="req#0", slot=0)
+    nr.delete(ACT, "MX Leads 1")                                         # no receipt: the second one gets a copy name
+    b, _c = _go(meta, _draft(tmp_path, ads=1), journal, request_key="req#1", slot=1)
+    assert a.error == "" and b.error == "", (a.error, b.error)
+    assert (a.published_as, b.published_as) == ("MX Leads 1", "MX Leads 1 copy 1")
+    assert _count(meta, "campaign") == 2
+    assert len(list(journal.root.glob("op-*.json"))) == 2
+    # a restart of the same submit sees the same keys as the same operations, with no conflict
+    again, _c = _go(meta, _draft(tmp_path, ads=1), journal, request_key="req#0", slot=0)
+    assert again.stop_kind != "request_conflict"
+
+
+def test_the_publisher_binds_the_key_to_the_draft_position_not_to_the_name(tmp_path, monkeypatch):
+    from src.web import publish_api
+    from tests.test_acl1761_api_create import _publisher
+
+    seen = []
+    real = cr.CampaignCreator.__init__
+
+    def spy(self, *a, **k):
+        seen.append((k.get("request_key"), k.get("slot")))
+        real(self, *a, **k)
+    monkeypatch.setattr(cr.CampaignCreator, "__init__", spy)
+    pub = _publisher(FakeMeta())
+    pub.request_id = "rid-1"
+    d1, d2 = _draft(tmp_path, ads=1), _draft(tmp_path, ads=1)               # the same campaign name
+    pub.draft_slots = {id(d1): 0, id(d2): 1}
+    pub.publish_draft(d1)
+    pub.publish_draft(d2)
+    assert seen == [("rid-1#0", 0), ("rid-1#1", 1)]
+    assert publish_api.ApiPublisher.draft_slots is None
+
+
+def _zone_run(meta, draft, now, journal):
+    from tests.test_acl1443_lifetime_budget import _plan
+
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=300)
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=lambda s: None,
+                                 now=lambda: now, journal=journal)
+    return creator.run(_plan(draft))
+
+
+def test_a_lifetime_plan_with_a_start_today_keeps_its_operation_when_the_clock_moves(tmp_path, journal,
+                                                                                    monkeypatch):
+    from tests.test_acl1443_lifetime_budget import ZoneMeta, _at, _life
+
+    monkeypatch.setenv("ACL_TEAM_TIMEZONE", "America/New_York")
+    meta = ZoneMeta()
+    meta.fail_next["ads"] = "unsent"
+    first = _zone_run(meta, _life(tmp_path, start="2026-10-20T09:00"), _at(9, 30), journal)    # start moves to 09:45
+    assert first.error and first.operation["stages"]
+    ops = list(journal.root.glob("op-*.json"))
+    assert len(ops) == 1
+    second = _zone_run(meta, _life(tmp_path, start="2026-10-20T09:00"), _at(9, 50), journal)   # start moves to 10:00
+    assert second.error == "", second.error
+    assert list(journal.root.glob("op-*.json")) == ops                   # the SAME operation, not a second empty one
+    assert second.operation["id"] == first.operation["id"]
+
+
+def test_the_identity_does_not_depend_on_the_chosen_name(tmp_path, journal):
+    meta = FakeMeta()
+    _go(meta, _draft(tmp_path, ads=1), journal)
+    nr.delete(ACT, "MX Leads 1")
+    second, _c = _go(meta, _draft(tmp_path, ads=1), journal)             # published as "MX Leads 1 copy 1"
+    assert second.published_as.endswith("copy 1")
+    rec = json.loads(next(journal.root.glob("op-*.json")).read_text(encoding="utf-8"))
+    assert rec["published_name"] == "MX Leads 1 copy 1" and rec["copy_number"] == 1
+    assert rec["tag"] == cr.campaign_tag(ACT, "MX Leads 1")              # identity = the submitted name's tag
+
+
+# -- two runs, one step
+
+def test_a_second_run_cannot_send_a_step_that_another_run_just_sent(journal):
+    a = journal.open(ACT, "t", "f", "C")
+    b = journal.open(ACT, "t", "f", "C")                                 # opened earlier: knows no stage
+    a.begin("ad 1", "ad")
+    with pytest.raises(oj.StageBusy):
+        b.begin("ad 1", "ad")
+    a.begin("ad 1", "ad")                                                # the owner may send again (a resend)
+    assert journal.read(a.id)["stages"]["ad 1"]["attempts"] == 2
+
+
+def test_a_step_sent_long_ago_by_a_dead_run_can_be_taken_over(journal, clock):
+    a = journal.open(ACT, "t", "f", "C")
+    b = journal.open(ACT, "t", "f", "C")
+    a.begin("ad 1", "ad")
+    clock.t += oj.UNKNOWN_HOLD_S + 1
+    b.begin("ad 1", "ad")
+    assert journal.read(a.id)["stages"]["ad 1"]["owner"] == b.owner
+
+
+_RACER = r"""
+import sys, time
+sys.path.insert(0, sys.argv[1])
+from src.fb_api import operation_journal as oj
+j = oj.OperationJournal(sys.argv[2])
+op = j.open("act_1", "t", "f", "C")
+while time.time() < float(sys.argv[3]):
+    pass
+try:
+    op.begin("campaign", "campaign")
+    print("SENT")
+except oj.StageBusy:
+    print("BUSY")
+"""
+
+
+def test_two_processes_cannot_both_send_the_same_step(tmp_path):
+    import time
+
+    script = tmp_path / "racer.py"
+    script.write_text(_RACER, encoding="utf-8")
+    root = tmp_path / "shared_ops"
+    go_at = time.time() + 8
+    procs = [subprocess.Popen([sys.executable, str(script), str(ROOT), str(root), str(go_at)],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(2)]
+    outs = []
+    for p in procs:
+        out, err = p.communicate(timeout=120)
+        assert p.returncode == 0, err
+        outs.append(out.strip())
+    assert sorted(outs) == ["BUSY", "SENT"]
+    rec = json.loads(next(root.glob("op-*.json")).read_text(encoding="utf-8"))
+    assert rec["stages"]["campaign"]["attempts"] == 1
+
+
+def test_the_creator_does_not_send_a_step_another_process_just_sent(tmp_path, journal, monkeypatch):
+    monkeypatch.setattr(oj.Operation, "refresh", lambda self: None)      # this run's view of the file is stale
+    real_begin = oj.Operation.begin
+    raced = {"done": False}
+
+    def racing(self, key, *a, **k):
+        if key == "campaign" and not raced["done"]:
+            raced["done"] = True
+            other = journal.open(self.data["act"], self.data["tag"], self.data["fingerprint"], "C")
+            real_begin(other, key, "campaign")                           # the other process wins the race
+        return real_begin(self, key, *a, **k)
+    monkeypatch.setattr(oj.Operation, "begin", racing)
+    meta = FakeMeta()
+    out, client = _go(meta, _draft(tmp_path, ads=1), journal)
+    assert out.stop_kind == "busy" and "right now" in out.error
+    assert meta.posts == [] and client.writes == 0
+
+
+def test_a_stage_the_other_run_already_confirmed_is_adopted_not_sent(tmp_path, journal):
+    creator, client = _creator(FakeMeta(), journal)
+    plan = cr.plan_from_draft(_draft(tmp_path, ads=1))
+    out = cr.Outcome(campaign_name=plan.name)
+    creator._open_operation(plan, out, {})
+    other = journal.open(plan.act, plan.tag, creator._op.data["fingerprint"], plan.name)
+    other.begin("campaign", "campaign")
+    other.confirm("campaign", "777")
+    sent = []
+    got = creator._journaled(out, "campaign", "campaign", lambda: sent.append(1) or "888", lambda: None)
+    assert got == "777" and sent == []
+
+
+# -- one revision cannot touch another's readiness (criterion 5)
+
+def test_a_late_worker_of_an_older_revision_cannot_touch_a_newer_revisions_record(journal):
+    rev1 = journal.open(ACT, "tag", "fp-rev1", "C")
+    rev1.begin("campaign", "campaign")
+    rev2 = journal.open(ACT, "tag", "fp-rev2", "C")                      # the user edited the plan: a newer revision
+    rev2.begin("campaign", "campaign")
+    rev2.confirm("campaign", "22")
+    rev2.finish(oj.OP_COMPLETE)
+    assert rev1.path != rev2.path
+    before = rev2.path.read_bytes()
+    rev1.mark("campaign", oj.CANCELLED, "cancelled")                     # the older run is cancelled / finishes late
+    rev1.finish(oj.OP_STOPPED, "cancelled")
+    assert rev2.path.read_bytes() == before                              # the newer record is byte for byte unchanged
+    now = journal.read(rev2.id)
+    assert now["state"] == oj.OP_COMPLETE and now["stages"]["campaign"]["object_id"] == "22"
+
+
+# -- resume reads come out of the confirmed objects, not a flat number
+
+def _wide_draft(tmp_path, sets=3, ads=5):
+    import copy
+
+    d = _draft(tmp_path, ads=ads)
+    base = d.ad_sets[0]
+    for i in range(2, sets + 1):
+        extra = copy.deepcopy(base)
+        extra.name = f"MX Leads {i}"
+        for j, ad in enumerate(extra.ads):
+            ad.copy_name = f"Text{i}-{j}"
+            ad.ad_title = f"Head {i}-{j}"
+        d.ad_sets.append(extra)
+    return d
+
+
+def test_the_resume_check_allowance_follows_the_confirmed_objects(tmp_path, journal):
+    meta = FakeMeta()
+    done, _ = _go(meta, _wide_draft(tmp_path), journal)
+    assert done.error == "", done.error
+    creator, client = _creator(meta, journal)
+    plan = cr.plan_from_draft(_wide_draft(tmp_path))
+    submitted = (creator._plan_view(plan), plan.tag)
+    out = cr.Outcome(campaign_name=plan.name)
+    targetings, files = creator._prepare(plan, out)
+    choice = creator._resolve_name(plan, targetings)
+    creator._open_operation(choice.plan, out, files, submitted=submitted, existing_id=str(choice.existing["id"]))
+    stages = creator._op.confirmed_stages()
+    assert len(stages) > 30
+    allowance = cr.resume_verify_calls(stages)
+    assert allowance > 4                                                 # a flat +4 could not cover a 3x5 plan
+    client.reset_budget(0)                                               # nothing but the allowance is left
+    creator._verify_resume(choice.plan, out, str(choice.existing["id"]))
+    assert 0 < client.calls <= allowance and client.max_calls == allowance
+
+
+def test_resume_verify_calls_counts_each_kind():
+    def st(kind):
+        return ("k", {"kind": kind})
+    assert cr.resume_verify_calls([]) == 0
+    assert cr.resume_verify_calls([st("campaign")]) == 1
+    assert cr.resume_verify_calls([st("campaign"), st("creative"), st("video"), st("image")]) == 4
+    assert cr.resume_verify_calls([st("campaign"), st("adset"), st("adset"), st("ad")]) == 1 + 2 + 2 * 3

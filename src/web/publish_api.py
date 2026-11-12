@@ -115,10 +115,6 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
-#: ACL-1856: extra Graph reads of a verified resume (campaign, ad sets, ads, creatives).
-RESUME_VERIFY_CALLS = 4
-
-
 def journal_enabled() -> bool:
     """ACL-1856: durable operation journal; `ACL_OPERATION_JOURNAL=0` turns it off."""
     return os.environ.get("ACL_OPERATION_JOURNAL", "1").strip().lower() not in ("0", "false", "off", "no")
@@ -424,6 +420,8 @@ class ApiPublisher:
     auto_resumed = False
     #: ACL-1856: the page's submit key (set by publish_jobs); bound to the plan revision per campaign.
     request_id = ""
+    #: ACL-1856: position of each draft in its submit (`id(draft)` -> index); set by the job, else first-seen order.
+    draft_slots: dict | None = None
 
     #: ACL-2299: writes of clients replaced by a fresh tab earlier in the same job (the count never goes down).
     _writes_base = 0
@@ -674,6 +672,11 @@ class ApiPublisher:
         raise ApiPublishError(f"{self.account_label}: Graph API stopped ({stop.kind}): {stop}",
                               code=stop.kind, stage=getattr(stop, "stage", "") or "while loading Ads Manager") from stop
 
+    def _slot_of(self, draft: Any) -> int:
+        if self.draft_slots is None:
+            self.draft_slots = {}
+        return self.draft_slots.setdefault(id(draft), len(self.draft_slots))
+
     # -- одна кампания
     def publish_draft(self, draft: Any) -> dict[str, Any]:
         began = time.monotonic()
@@ -744,11 +747,10 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
+        slot = self._slot_of(draft)
         journal = None
         if not self.dry_run and journal_enabled():
-            journal = _oj.OperationJournal()
-            if journal.root.exists() and any(journal.root.glob("op-*.json")):
-                budget += RESUME_VERIFY_CALLS      # a verified resume reads the saved objects back first
+            journal = _oj.OperationJournal()      # a resume check adds its own reads to the budget (creator)
         self._client.reset_budget(budget)
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
@@ -768,8 +770,9 @@ class ApiPublisher:
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
                                   live_progress=lambda text: self.progress(f"{name}: {text}"),
                                   journal=journal,
-                                  # one submit holds several campaigns: the key is bound per campaign (its tag)
-                                  request_key=(f"{self.request_id}#{plan.tag}" if self.request_id else ""))
+                                  # one submit holds several campaigns: the key is bound to the draft position
+                                  # in the submit (not to the name, which two drafts can share)
+                                  request_key=(f"{self.request_id}#{slot}" if self.request_id else ""), slot=slot)
         if self.reviewed is not None:
             creator.reviewed = self.reviewed
         if self.dry_run:
