@@ -268,6 +268,9 @@ def policy_for_page(act: str, page: str = "") -> dict:
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern,
                       "feed_key": "call_to_actions"},
         "form_create": policy_for_form_create(page),
+        # ACL-2571: the same narrow upload as the form-photo session, in the creation session too, so the
+        # picture of a shared template reaches the campaign's Page from inside its profile. Needs the Page.
+        "form_photo": policy_for_form_photo(page),
     }
 
 
@@ -907,19 +910,37 @@ FORM_EDGE = "leadgen_forms"
 #: Ключи верхнего уровня запроса. `tos_accepted` сюда не попадёт никогда.
 FORM_KEYS = frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
                        "question_page_custom_headline", "locale", "follow_up_action_url",
-                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer",
+                       "background_image_option", "conditional_logic", "end_pages"})
+#: ACL-2579: the only intro background choice allowed, and only together with context_card.cover_photo_id.
+FORM_BACKGROUND_OPTIONS = ("UPLOAD",)
 #: Булевы ключи верхнего уровня (ACL-2053): только true/false, не строки и не числа.
 FORM_BOOL_KEYS = frozenset({"is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 #: Ключи, которые Graph читает как JSON (строку разбираем до проверок, как у `act_X`).
-FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card"})
+FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card",
+                            "conditional_logic", "end_pages"})
 #: Допустимые ключи вложенных объектов.
 FORM_NESTED: dict[str, list[str]] = {
     "privacy_policy": ["link_text", "url"],
     "thank_you_page": ["body", "button_text", "button_type", "title", "website_url"],
-    "context_card": ["button_text", "content", "style", "title"],
+    "context_card": ["button_text", "content", "cover_photo_id", "style", "title"],
     "question": ["key", "label", "options", "type"],
     "option": ["key", "value"],
+    # ACL-2178: answer conditions. Create shape proven on Doc120 (03.11) and in the owner's HAR (11.11):
+    # `logic_data` is an object keyed `customized_N`; Meta reads it back as a list of {key, value}.
+    "conditional_logic": ["logic_data", "version"],
+    "destination": ["destination_id", "destination_type"],
+    "end_pages": ["disqualified_end_components", "thank_you_pages"],
+    "thank_you_end_page": ["body", "button_text", "button_type", "name", "title", "website_url"],
+    # The non-lead page refuses `button_type` on create (Meta sets VIEW_WEBSITE itself).
+    "non_lead_end_page": ["body", "button_text", "name", "title", "website_url"],
 }
+#: ACL-2178: destination kinds of a condition and the ids each one may carry.
+FORM_DEST_QUESTION, FORM_DEST_THANKS, FORM_DEST_DISQUALIFIED = "QUESTION", "THANK_YOU_PAGE", "DISQUALIFIED_END_COMPONENT"
+FORM_DEST_TYPES = (FORM_DEST_QUESTION, FORM_DEST_THANKS, FORM_DEST_DISQUALIFIED)
+FORM_DEST_THANKS_ID, FORM_DEST_DISQUALIFIED_ID = "thank_you_page_0", "disqualified_page_0"
+FORM_LOGIC_KEY_RE = r"^customized_[0-9]{1,2}$"
+FORM_LOGIC_VERSION = 1
 FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FIRST_NAME", "FULL_NAME", "LAST_NAME", "PHONE")
 #: `NONE` - кнопки нет (нет ссылки на сайт): `button_type` у thank_you_page обязателен
 #: (справочник Meta page/leadgen_forms), для «без ссылки» там предусмотрен `NONE`.
@@ -932,6 +953,8 @@ FORM_MAX_TEXT = 1000
 FORM_NAME_RE = r" · ACL [0-9a-f]{6}$"
 FORM_PAGE_RE = r"^[0-9]{1,25}$"
 FORM_LOCALE_RE = r"^[A-Z]{2}_[A-Z]{2}$"
+#: ACL-2188: id существующего фото Страницы в context_card. Только строка из цифр; `cover_photo` (файл) отказ.
+FORM_PHOTO_ID_RE = r"^[0-9]{1,25}$"
 FORM_URL_RE = r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$"
 #: Ключи, которых нет нигде и на любой глубине (условия, токены, обходные пути).
 FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "tos", "terms",
@@ -948,6 +971,9 @@ def policy_for_form_create(page: str = "") -> dict:
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
         "max_options": FORM_MAX_OPTIONS, "max_text": FORM_MAX_TEXT,
         "name_re": FORM_NAME_RE, "page_re": FORM_PAGE_RE, "locale_re": FORM_LOCALE_RE,
+        "photo_id_re": FORM_PHOTO_ID_RE, "background_options": list(FORM_BACKGROUND_OPTIONS),
+        "logic": {"version": FORM_LOGIC_VERSION, "key_re": FORM_LOGIC_KEY_RE, "dest_types": list(FORM_DEST_TYPES),
+                  "thanks_id": FORM_DEST_THANKS_ID, "disqualified_id": FORM_DEST_DISQUALIFIED_ID},
         "url_re": FORM_URL_RE, "forbidden": sorted(FORM_FORBIDDEN_ANYWHERE),
     }
 
@@ -1007,6 +1033,119 @@ def _check_form_question(q: Any, i: int) -> None:
             o = _form_keys(o, "option", f"{where}.options[{j}]")
             _form_text(o.get("key"), f"{where}.options[{j}].key")
             _form_text(o.get("value"), f"{where}.options[{j}].value")
+
+
+def _check_form_end_page(page: Any, kind: str, where: str) -> None:
+    page = _form_keys(page, kind, where)
+    _form_text(page.get("name"), f"{where}.name")
+    _form_text(page.get("title"), f"{where}.title")
+    for key in ("body", "button_text"):
+        if key in page:
+            _form_text(page[key], f"{where}.{key}")
+    if "button_type" in page and page["button_type"] not in FORM_BUTTON_TYPES:
+        raise WriteRefused(f"write refused: {where}.button_type is not allowed")
+    if "website_url" in page:
+        _form_url(page["website_url"], f"{where}.website_url")
+
+
+def _check_form_logic(checked: dict, questions: list) -> None:
+    """ACL-2178: `conditional_logic` and `end_pages` go together, forward-only, one entry per answer."""
+    cl, ep = checked.get("conditional_logic"), checked.get("end_pages")
+    if cl is None and ep is None:
+        return
+    if cl is None or ep is None:
+        raise WriteRefused("write refused: conditional_logic and end_pages are sent together")
+    if "thank_you_page" in checked:
+        raise WriteRefused("write refused: a form with conditions has its lead end page in end_pages only")
+    cl = _form_keys(cl, "conditional_logic", "conditional_logic")
+    version = cl.get("version")
+    if isinstance(version, bool) or version != FORM_LOGIC_VERSION:
+        raise WriteRefused("write refused: conditional_logic.version must be 1")
+    data = cl.get("logic_data")
+    custom = [q for q in questions if q.get("type") == "CUSTOM"]
+    if not isinstance(data, dict) or set(data) != {f"customized_{n}" for n in range(len(custom))}:
+        raise WriteRefused("write refused: conditional_logic.logic_data needs one entry per custom question")
+    used: set[str] = set()
+    for n, q in enumerate(custom):
+        key = f"customized_{n}"
+        dests = data[key]
+        want = max(1, len(q.get("options") or []))
+        if not (isinstance(dests, list) and len(dests) == want):
+            raise WriteRefused(f"write refused: logic_data.{key} needs one destination per answer")
+        for d in dests:
+            d = _form_keys(d, "destination", f"logic_data.{key}[]")
+            kind, dest = d.get("destination_type"), d.get("destination_id")
+            if kind not in FORM_DEST_TYPES:
+                raise WriteRefused(f"write refused: logic_data.{key} destination_type is not allowed")
+            if kind == FORM_DEST_QUESTION:
+                m = re.match(FORM_LOGIC_KEY_RE, str(dest))
+                if not (isinstance(dest, str) and m and n < int(dest[len("customized_"):]) < len(custom)):
+                    raise WriteRefused(f"write refused: logic_data.{key} may only go to a later question")
+            elif dest != (FORM_DEST_THANKS_ID if kind == FORM_DEST_THANKS else FORM_DEST_DISQUALIFIED_ID):
+                raise WriteRefused(f"write refused: logic_data.{key} destination_id does not match its type")
+            used.add(kind)
+    ep = _form_keys(ep, "end_pages", "end_pages")
+    pages = ep.get("thank_you_pages")
+    if not (isinstance(pages, list) and len(pages) == 1):
+        raise WriteRefused("write refused: end_pages.thank_you_pages must hold exactly one page")
+    _check_form_end_page(pages[0], "thank_you_end_page", "end_pages.thank_you_pages[0]")
+    disq = ep.get("disqualified_end_components")
+    if FORM_DEST_DISQUALIFIED in used:
+        if not (isinstance(disq, list) and len(disq) == 1):
+            raise WriteRefused("write refused: a closing answer needs exactly one non-lead end page")
+        _check_form_end_page(disq[0], "non_lead_end_page", "end_pages.disqualified_end_components[0]")
+    elif disq is not None:
+        raise WriteRefused("write refused: a non-lead end page without a closing answer")
+
+
+# ───────────────────── фон формы: загрузка картинки (ACL-2533) ─────────────────────
+#
+# НЕ Graph: тот же запрос, что шлёт сам Ads Manager (`/ads/leadgen/upload/photo/`), с вкладки профиля,
+# от имени Страницы (`av`) и по сессии пользователя. Отдельная узкая политика: фиксированный адрес,
+# хост страницы, `av` = закреплённая Страница, jpeg/png, потолок размера. Зеркало на странице-помощнике -
+# `uploadFormPhoto` в token_capture (читает ту же таблицу из `policy_for_form_photo()`).
+
+FORM_PHOTO_HOST = "adsmanager.facebook.com"
+FORM_PHOTO_URL = "https://adsmanager.facebook.com/ads/leadgen/upload/photo/"
+FORM_PHOTO_MIMES = ("image/jpeg", "image/png")
+FORM_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+#: Один запрос на одну картинку; идёт в оценку вызовов вместе с чтениями Страницы.
+FORM_PHOTO_UPLOAD_CALLS = 1
+
+
+def policy_for_form_photo(page: str = "") -> dict:
+    """Политика загрузки фона формы для помощника страницы (JSON-сериализуемая)."""
+    return {"host": FORM_PHOTO_HOST, "url": FORM_PHOTO_URL, "page": str(page or ""),
+            "mimes": list(FORM_PHOTO_MIMES), "max_bytes": FORM_PHOTO_MAX_BYTES, "page_re": FORM_PAGE_RE}
+
+
+def policy_for_form_photo_only(page: str = "") -> dict:
+    """Помощник, который умеет ТОЛЬКО эту загрузку: ни рёбер Graph, ни правок объектов."""
+    return {"form_photo_only": True, "form_photo": policy_for_form_photo(page)}
+
+
+def check_form_photo_upload(host: str, av: str, pinned_page: str, mime: str, size: int) -> str:
+    """Проверить загрузку фона формы. Возвращает адрес запроса; иначе `WriteRefused`.
+
+    Хост - только `adsmanager.facebook.com`; `av` (Страница-актёр) - числовой id и ровно закреплённая
+    Страница сессии; файл - jpeg/png, не пустой и не больше потолка.
+    """
+    if str(host or "").lower() != FORM_PHOTO_HOST:
+        raise WriteRefused(f"write refused: the form background is uploaded only from {FORM_PHOTO_HOST}")
+    if not re.match(FORM_PAGE_RE, str(pinned_page or "")):
+        raise WriteRefused("write refused: no Page is pinned for this session; the upload is off")
+    if not re.match(FORM_PAGE_RE, str(av or "")):
+        raise WriteRefused("write refused: the Page of the upload is not set")
+    if str(av) != str(pinned_page):
+        raise WriteRefused("write refused: the upload Page is not the Page of the plan")
+    if mime not in FORM_PHOTO_MIMES:
+        raise WriteRefused("write refused: the background image must be a JPEG or PNG")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 1:
+        raise WriteRefused("write refused: the background image is empty")
+    if size > FORM_PHOTO_MAX_BYTES:
+        raise WriteRefused(f"write refused: the background image is larger than "
+                           f"{FORM_PHOTO_MAX_BYTES // (1024 * 1024)} MB")
+    return FORM_PHOTO_URL
 
 
 def check_form_create(page_id: str, method: str, path: str, params: dict | None,
@@ -1082,6 +1221,17 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         content = cc.get("content")
         if not (isinstance(content, list) and content and all(isinstance(x, str) and x.strip() for x in content)):
             raise WriteRefused("write refused: context_card.content must be a list of texts")
+        if "cover_photo_id" in cc:
+            photo = cc["cover_photo_id"]
+            if not (isinstance(photo, str) and re.match(FORM_PHOTO_ID_RE, photo)):
+                raise WriteRefused("write refused: context_card.cover_photo_id must be a photo id of digits")
+    _check_form_logic(checked, qs)
+    if "background_image_option" in checked:
+        card = checked.get("context_card")
+        if checked["background_image_option"] not in FORM_BACKGROUND_OPTIONS:
+            raise WriteRefused("write refused: background_image_option is not allowed")
+        if not (isinstance(card, dict) and "cover_photo_id" in card):
+            raise WriteRefused("write refused: background_image_option needs context_card.cover_photo_id")
     return FORM_EDGE
 
 

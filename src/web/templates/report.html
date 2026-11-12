@@ -5168,14 +5168,32 @@ async function dashRefresh(ev) {
     </div>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Description (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
+    <div id="fm-cover-box" style="margin-top:0.6rem">
+      <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:flex-end">
+        <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Account</div>
+          <select id="fm-cover-account" style="width:100%"></select></label>
+        <label style="flex:1 1 14rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Page</div>
+          <select id="fm-cover-page" style="width:100%"></select></label>
+        <button type="button" id="fm-cover-pages-btn" class="btn">Refresh pages</button>
+      </div>
+      <div id="fm-cover-pages-msg" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
+      <div id="fm-cover"></div>
+    </div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
       <label><input type="checkbox" id="fm-c-first_name" checked> First name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name" checked> Last name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone" checked> Phone</label></div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
+      <label style="display:block;margin:0.3rem 0"><input type="checkbox" id="fm-logic-on"> Conditional logic</label>
+      <div id="fm-logic-help" style="font-size:var(--adopy-text-sm);color:var(--muted)" hidden>Choose what happens after each answer. Custom questions come first on forms with conditions. Forms with conditions cannot be edited after publishing; a change creates a new form.</div>
       <div id="fm-questions"></div>
       <button type="button" id="fm-add-q-btn" class="btn">+ Add question</button></div>
+    <div id="fm-nonlead" hidden style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Non-lead end page. People who close the form see this page. They are not counted as leads.</div>
+      <input id="fm-nl-title" type="text" maxlength="60" placeholder="Title" style="width:100%;margin-top:0.2rem">
+      <textarea id="fm-nl-text" rows="2" maxlength="300" placeholder="Text" style="width:100%;font-family:inherit;margin-top:0.2rem"></textarea>
+      <input id="fm-nl-site" type="text" placeholder="Website link (https)" style="width:100%;margin-top:0.2rem">
+      <input id="fm-nl-button" type="text" maxlength="30" placeholder="Button text (default: Visit website)" style="width:100%;margin-top:0.2rem"></div>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Privacy policy URL</div>
       <input id="fm-privacy" type="text" placeholder="https://example.com/privacy" style="width:100%"></label>
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Completion screen text</div>
@@ -7255,6 +7273,69 @@ window.cbLayout = (function () {
 
   function squeeze(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 
+  /* ACL-2178: answer conditions; mirror of form_templates._clean_logic / _validate_flow / _clean_non_lead_end. */
+  function cleanLogic(raw, opts, n, total, e) {
+    var given = {}, out = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      Object.keys(raw).forEach(function (k) { given[squeeze(k)] = squeeze(raw[k]).toLowerCase(); });
+    }
+    Object.keys(given).forEach(function (k) {
+      if (opts.indexOf(k) === -1) e.push('Question ' + n + ': the condition for "' + k + '" does not match any answer');
+    });
+    opts.forEach(function (opt) {
+      var action = given[opt] || '';
+      if (!action) { e.push('Question ' + n + ': choose what happens after the answer "' + opt + '"'); return; }
+      var m = /^q([0-9]{1,2})$/.exec(action);
+      if (action === 'next' || action === 'submit' || action === 'close') out[opt] = action;
+      else if (!m) e.push('Question ' + n + ': "' + action + '" is not a valid action');
+      else if (parseInt(m[1], 10) > total || parseInt(m[1], 10) < 1) e.push('Question ' + n + ': the answer "' + opt + '" goes to question ' + parseInt(m[1], 10) + ', which does not exist');
+      else if (parseInt(m[1], 10) <= n) e.push('Question ' + n + ': the answer "' + opt + '" can only go to a later question');
+      else out[opt] = action;
+    });
+    return out;
+  }
+
+  function nextIndex(flow, i) {
+    for (var j = i + 1; j < flow.length; j++) if (!flow[j].after_answer) return j;
+    return null;
+  }
+
+  function validateFlow(flow, e) {
+    if (flow.length && flow[0].after_answer) e.push("The first question can't be shown only after an answer");
+    var targeted = {}, submits = false;
+    flow.forEach(function (q, i) {
+      var nxt = nextIndex(flow, i);
+      (q.logic ? Object.keys(q.logic).map(function (k) { return q.logic[k]; }) : ['next']).forEach(function (a) {
+        var m = /^q([0-9]{1,2})$/.exec(a);
+        if (m) targeted[parseInt(m[1], 10) - 1] = true;
+        else if (a === 'submit' || (a === 'next' && nxt === null)) submits = true;
+        else if (a === 'next') targeted[nxt] = true;
+      });
+    });
+    flow.forEach(function (q, i) {
+      if (q.after_answer && !targeted[i] && i > 0) e.push('Question ' + (i + 1) + ': only shown after an answer, but no answer leads to it');
+    });
+    if (!submits && !e.some(function (x) { return x.indexOf('Question') === 0; })) e.push('At least one answer must submit the form');
+  }
+
+  function validateNonLeadEnd(raw, e) {
+    raw = raw && typeof raw === 'object' ? raw : {};
+    var title = squeeze(raw.title), text = String(raw.text == null ? '' : raw.text).trim(), site = String(raw.website_url || '').trim();
+    if (!title) e.push('Non-lead end page: title is required');
+    else if (title.length > 60) e.push('Non-lead end page: title is longer than 60 characters');
+    if (!text) e.push('Non-lead end page: text is required');
+    else if (text.length > FORM_LIMITS.thanks) e.push('Non-lead end page: text is longer than ' + FORM_LIMITS.thanks + ' characters');
+    if (!httpsUrl(site)) e.push('Non-lead end page: website link must start with https://');
+  }
+
+  /* The choices of the "Then" selector of question `i` (0-based): continue, a later question, submit, close. */
+  function logicActions(qs, i) {
+    var out = [{ value: 'next', label: 'Continue to next question' }];
+    for (var j = i + 1; j < qs.length; j++) out.push({ value: 'q' + (j + 1), label: 'Go to question ' + (j + 1) + (squeeze(qs[j].label) ? ': ' + squeeze(qs[j].label) : '') });
+    out.push({ value: 'submit', label: 'Submit the form' }, { value: 'close', label: 'Close the form' });
+    return out;
+  }
+
   /* legacyLocale - язык уже сохранённого шаблона: он допустим, даже если его нет в списке. */
   function validateTemplate(t, legacyLocale) {
     var e = [], L = FORM_LIMITS;
@@ -7266,25 +7347,55 @@ window.cbLayout = (function () {
     else if (headline.length > L.headline) e.push('Headline is longer than ' + L.headline + ' characters');
     if (String(t.intro || '').trim().length > L.intro) e.push('Intro is longer than ' + L.intro + ' characters');
     if (squeeze(t.intro_title).length > L.introTitle) e.push('Intro title is longer than ' + L.introTitle + ' characters');
+    /* ACL-2188: фоновая картинка - пара «фото + Страница»; зеркало form_templates.validate. */
+    var coverPhoto = squeeze(t.cover_photo_id), coverPage = squeeze(t.cover_page_id);
+    if (coverPhoto || coverPage) {
+      if (!(coverPhoto && coverPage)) e.push('Background image needs both a Photo ID and a Page');
+      else if (!(/^[0-9]{1,25}$/.test(coverPhoto) && /^[0-9]{1,25}$/.test(coverPage))) e.push('Photo ID must contain digits only');
+      var coverSha = squeeze(t.cover_sha256).toLowerCase();
+      if (coverSha && !/^[0-9a-f]{64}$/.test(coverSha)) e.push('Background image checksum must be 64 hex characters');
+      if (!String(t.intro || '').trim()) e.push('Background image needs a Description (Meta shows it on the intro screen)');
+    }
+    /* ACL-2571: a picture kept on this computer - only its hash is in the template; mirror of form_templates.validate. */
+    var coverLocal = squeeze(t.cover_local_sha256).toLowerCase();
+    if (coverLocal) {
+      if (!/^[0-9a-f]{64}$/.test(coverLocal)) e.push('Background picture checksum must be 64 hex characters');
+      else if (coverPhoto || coverPage) e.push('Choose either a Page photo or a picture from this computer for the background, not both');
+      else if (!String(t.intro || '').trim()) e.push('Background image needs a Description (Meta shows it on the intro screen)');
+    }
     var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
     if (!chosen.length) e.push('Choose at least one contact field (name, first name, last name, email or phone)');
     if (chosen.indexOf('name') !== -1 && (chosen.indexOf('first_name') !== -1 || chosen.indexOf('last_name') !== -1))
       e.push('Choose either full name or first and last name, not both');
-    var qs = t.questions || [];
+    var qs = t.questions || [], flow = [];
     qs.forEach(function (q, i) {
-      var n = i + 1, label = squeeze(q && q.label), kind = (q && q.type) || 'short_answer';
+      var n = i + 1, label = squeeze(q && q.label), kind = squeeze(q && q.type).toLowerCase() || 'short_answer';
       if (!label) e.push('Question ' + n + ': text is required (remove the question if it is not needed)');
       else if (label.length > L.label) e.push('Question ' + n + ': text is longer than ' + L.label + ' characters');
-      if (kind === 'multiple_choice') {
+      if (kind !== 'short_answer' && kind !== 'multiple_choice' && kind !== 'multiple_choice_logic') {
+        e.push('Question ' + n + ': type must be short answer or multiple choice');
+        kind = 'short_answer';
+      }
+      var item = { type: kind, after_answer: !!(q && (q.after_answer === true || squeeze(q.after_answer).toLowerCase() === 'true')) };
+      if (kind === 'multiple_choice' || kind === 'multiple_choice_logic') {
         var opts = ((q && q.options) || []).map(squeeze).filter(Boolean);
         if (opts.length < 2) e.push('Question ' + n + ': a multiple choice question needs at least 2 options');
         if (opts.length > L.options) e.push('Question ' + n + ': more than ' + L.options + ' options');
         var low = opts.map(function (o) { return o.toLowerCase(); });
         if (low.some(function (o, k) { return low.indexOf(o) !== k; })) e.push('Question ' + n + ': options must differ');
         if (opts.some(function (o) { return o.length > L.option; })) e.push('Question ' + n + ': an option is longer than ' + L.option + ' characters');
+        if (kind === 'multiple_choice_logic') item.logic = cleanLogic(q && q.logic, opts, n, qs.length, e);
+      } else if (q && q.logic && Object.keys(q.logic).length) {
+        e.push('Question ' + n + ': conditions need a multiple choice question');
       }
+      flow.push(item);
     });
     if (qs.length > L.questions) e.push('At most ' + L.questions + ' custom questions');
+    var hasLogic = flow.some(function (f) { return f.type === 'multiple_choice_logic'; });
+    if (hasLogic || flow.some(function (f) { return f.after_answer; })) validateFlow(flow, e);
+    if (hasLogic && flow.some(function (f) { return f.logic && Object.keys(f.logic).some(function (a) { return f.logic[a] === 'close'; }); })) {
+      validateNonLeadEnd(t.non_lead_end, e);
+    }
     var url = String(t.privacy_url || '').trim();
     if (!url) e.push('Privacy policy URL is required');
     else if (!httpsUrl(url)) e.push('Privacy policy URL must start with https://');
@@ -7330,7 +7441,7 @@ window.cbLayout = (function () {
   return {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
-    validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
+    validateTemplate: validateTemplate, logicActions: logicActions, formSource: formSource, templateOptions: templateOptions,
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES, formLocaleOptions: formLocaleOptions,
     FORM_LOCALE_NAMES: FORM_LOCALE_NAMES, FORM_LOCALE_RULES: FORM_LOCALE_RULES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
@@ -17886,6 +17997,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
       var resolvedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
       var entry = window.cbForms[formAccount(row) + '|' + resolvedPage] || null;
+      var createPanel = row.querySelector('.cb-form-create');
+      if (createPanel && createPanel._cover) createPanel._cover.gate();   // ACL-2533: the file waits for a Page
       var opts = L.formOptions(entry && entry.forms, hid.value);
       var sig = JSON.stringify([opts, hid.value]);
       if (sel.dataset.sig !== sig) {
@@ -18139,15 +18252,97 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<input type="text" class="cb-input cb-fc-q-label" maxlength="80" placeholder="Question text" aria-label="Custom question">' +
       '<select class="cb-input cb-select cb-fc-q-type" onchange="cbFormQuestionType(this)" aria-label="Question type">' +
       '<option value="short_answer">Short answer</option><option value="multiple_choice">Multiple choice</option></select>' +
-      '<textarea class="cb-input cb-fc-q-options" rows="3" hidden placeholder="One option per line (at least 2)" aria-label="Options"></textarea>' +
+      '<textarea class="cb-input cb-fc-q-options" rows="3" hidden placeholder="One option per line (at least 2)" aria-label="Options" onchange="cbFormLogicRefresh(this)"></textarea>' +
+      '<label class="cb-fc-inline cb-fc-q-after-box" hidden><input type="checkbox" class="cb-fc-q-after"> Only shown after an answer</label>' +
+      '<div class="cb-fc-q-logic" hidden></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionRemove(this)">Remove</button></div>';
   }
 
   window.cbFormQuestionType = function (sel) {
     var q = sel.closest('.cb-fc-q'), box = q.querySelector('.cb-fc-q-options');
     box.hidden = sel.value !== 'multiple_choice';
+    window.cbFormLogicRefresh(sel);
   };
-  window.cbFormQuestionRemove = function (btn) { btn.closest('.cb-fc-q').remove(); };
+
+  /* ACL-2178: answer conditions. The selects hold the choice; a refresh rebuilds the rows from the options
+     box and keeps what was chosen for an answer that still exists. Answer text goes in with textContent. */
+  function panelQuestions(panel) { return Array.prototype.slice.call(panel.querySelectorAll('.cb-fc-q')); }
+  function panelLogicOn(panel) { var c = panel.querySelector('.cb-fc-logic-on'); return !!(c && c.checked); }
+  function panelAnswers(q) {
+    return String(panelValue(q, '.cb-fc-q-options')).split('\n').map(function (o) { return o.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+  }
+  window.cbFormLogicRefresh = function (el, remap) {
+    var panel = el.closest ? el.closest('.cb-form-create') : el;
+    if (!panel) return;
+    var on = panelLogicOn(panel), qs = panelQuestions(panel);
+    var shape = qs.map(function (q) { return { label: panelValue(q, '.cb-fc-q-label') }; });
+    var closes = false;
+    qs.forEach(function (q, i) {
+      var box = q.querySelector('.cb-fc-q-logic'), after = q.querySelector('.cb-fc-q-after-box');
+      var multi = panelValue(q, '.cb-fc-q-type') === 'multiple_choice';
+      var kept = {};
+      Array.prototype.slice.call(box.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) { kept[sel.getAttribute('data-answer')] = remap ? remap(sel.value) : sel.value; });
+      box.textContent = '';
+      after.hidden = !on;
+      box.hidden = !(on && multi);
+      if (!(on && multi)) return;
+      var acts = window.cbLayout.logicActions(shape, i);
+      panelAnswers(q).forEach(function (a) {
+        var row = document.createElement('div'), name = document.createElement('span'), sel = document.createElement('select');
+        row.className = 'cb-fc-logic-row';
+        name.textContent = a + ' - Then: ';
+        sel.className = 'cb-input cb-select cb-fc-logic-sel';
+        sel.setAttribute('data-answer', a);
+        sel.setAttribute('aria-label', 'What happens after the answer ' + a);
+        var blank = document.createElement('option'); blank.value = ''; blank.textContent = 'Choose an action'; sel.appendChild(blank);
+        acts.forEach(function (x) { var o = document.createElement('option'); o.value = x.value; o.textContent = x.label; sel.appendChild(o); });
+        sel.value = kept[a] || '';
+        if (sel.value === 'close') closes = true;
+        sel.onchange = function () { window.cbFormLogicRefresh(sel); };
+        row.appendChild(name); row.appendChild(sel); box.appendChild(row);
+        if (kept[a] === 'close') closes = true;
+      });
+    });
+    var nl = panel.querySelector('.cb-fc-nonlead');
+    if (nl) nl.hidden = !(on && closes);
+    var help = panel.querySelector('.cb-fc-logic-help');
+    if (help) help.hidden = !on;
+  };
+  window.cbFormLogicToggle = function (box) {
+    var panel = box.closest('.cb-form-create');
+    if (!panel) return;
+    if (box.checked) {
+      window.cbFormLogicRefresh(panel);
+      // A fresh condition continues in order until the author chooses otherwise.
+      panelQuestions(panel).forEach(function (q) {
+        Array.prototype.slice.call(q.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) { if (!sel.value) sel.value = 'next'; });
+      });
+      window.cbFormLogicRefresh(panel);
+      return;
+    }
+    var used = panelQuestions(panel).some(function (q) {
+      var after = q.querySelector('.cb-fc-q-after');
+      return (after && after.checked) || Array.prototype.slice.call(q.querySelectorAll('.cb-fc-logic-sel')).some(function (sel) { return sel.value && sel.value !== 'next'; });
+    });
+    if (used && !window.confirm('Remove all conditions from this template?')) { box.checked = true; return; }
+    window.cbFormLogicRefresh(panel);
+  };
+  window.cbFormQuestionRemove = function (btn) {
+    var q = btn.closest('.cb-fc-q'), panel = btn.closest('.cb-form-create');
+    var at = panel ? panelQuestions(panel).indexOf(q) : -1;
+    q.remove();
+    if (panel && at >= 0) {
+      // Jumps to the removed question are cleared (chosen again); later targets move up by one. The new targets
+      // go into the refresh's kept map: an old select does not have the option list of its new position.
+      window.cbFormLogicRefresh(panel, function (v) {
+        var m = /^q([0-9]+)$/.exec(v);
+        if (!m) return v;
+        var n = Number(m[1]) - 1;
+        if (n === at) return '';
+        return n > at ? 'q' + n : v;
+      });
+    }
+  };
   window.cbFormQuestionAdd = function (btn) {
     var panel = formPanel(btn), list = panel.querySelector('.cb-fc-questions');
     var max = (window.cbLayout && window.cbLayout.FORM_LIMITS.questions) || 5;
@@ -18156,22 +18351,238 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       return;
     }
     list.insertAdjacentHTML('beforeend', questionHTML());
+    window.cbFormLogicRefresh(panel);
   };
 
   function panelValue(panel, sel) { var el = panel.querySelector(sel); return el ? String(el.value || '') : ''; }
+
+  /* ACL-2188/2533: выбор фоновой картинки формы - общий для вкладки Forms и панели билдера.
+     Одно чтение на нажатие «Choose from Page»: ни опроса, ни чтения при отрисовке.
+     ACL-2533: «Upload» берёт файл с этого компьютера; предпросмотр - ТОЛЬКО из локального файла
+     (blob:), адреса Meta из дешборда не грузим никогда. Файл уходит на Страницу по отдельной кнопке
+     «Upload to Page», через вкладку профиля. Строки и подписи - только textContent (имена приходят извне). */
+  window.formCoverPicker = function (box, getContext, opts) {
+    var btnClass = (opts && opts.btnClass) || 'btn';
+    var st = { photo: '', page: '', sha: '', local: '', localTid: '' };   // ACL-2571: `local` = hash of the picture kept on this computer (not uploaded until publish)
+    var MAX_BYTES = 8 * 1024 * 1024;
+    var MISSING = 'Background picture is on another computer \u2014 choose it again here';
+    var file = null, localUrl = '', storedFile = null, inflight = null, fileState = '';
+    function node(tag, text, cls) {
+      var n = document.createElement(tag);
+      if (text) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    }
+    function button(text) { var b = node('button', text, btnClass); b.type = 'button'; return b; }
+    box.textContent = '';
+    var title = node('div', 'Background image (optional)');
+    title.style.fontWeight = '600';
+    var help = node('div', 'Upload a picture from this computer (JPEG or PNG, up to 8 MB) or choose one already on this Page. It is shown on the intro screen.', 'cb-form-note');
+    var hint = node('div', 'Landscape pictures around 1.91:1 (for example 1200×628) usually fit best.', 'cb-form-note');
+    var keptNote = node('div', 'A picture from this computer stays on this computer and is uploaded to each campaign\u2019s Page when you publish. No account or Page is needed to choose it.', 'cb-form-note');
+    var state = node('div', '', 'cb-form-note');
+    var idLabel = node('label', 'Photo ID ');
+    var idInput = node('input'); idInput.type = 'text'; idInput.setAttribute('inputmode', 'numeric'); idInput.maxLength = 25;
+    idLabel.appendChild(idInput);
+    var pick = button('Choose from Page'), remove = button('Remove');
+    var fileLabel = node('label', 'Picture from this computer ');
+    var fileInput = node('input'); fileInput.type = 'file'; fileInput.setAttribute('accept', 'image/jpeg,image/png');
+    fileLabel.appendChild(fileInput);
+    var preview = node('img'); preview.alt = 'Preview of the selected background image'; preview.hidden = true;
+    // An inline display would override the hidden attribute: the display is switched together with it.
+    preview.style.cssText = 'max-width:240px;max-height:160px;margin:0.3rem 0;border-radius:4px';
+    preview.style.display = 'none';
+    var fstate = node('div', '', 'cb-form-note'); fstate.style.fontWeight = '600'; fstate.setAttribute('aria-live', 'polite');
+    var errBox = node('div', '', 'cb-form-note'); errBox.setAttribute('role', 'alert'); errBox.style.color = 'var(--danger, #b00020)'; errBox.style.fontWeight = '600'; errBox.hidden = true;
+    var actions = node('div'); actions.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.3rem 0';
+    actions.appendChild(fileLabel); actions.appendChild(idLabel); actions.appendChild(pick); actions.appendChild(remove);
+    var msg = node('div', '', 'cb-form-note'); msg.setAttribute('role', 'status');
+    var list = node('div');
+    [title, help, hint, keptNote, state, preview, fstate, errBox, actions, msg, list].forEach(function (n) { box.appendChild(n); });
+
+    function showError(text) { errBox.textContent = text || ''; errBox.hidden = !text; }
+    function paintFileState() { fstate.textContent = fileState; fstate.hidden = !fileState; }
+    function setFileState(text) { fileState = text || ''; paintFileState(); }
+    /* ACL-2571: the file input no longer waits for an account and a Page (kept so callers need no change). */
+    function gate() { fileInput.disabled = false; }
+    function clearLocal(keepInput) {
+      if (localUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) { try { URL.revokeObjectURL(localUrl); } catch (e) {} }
+      file = null; localUrl = ''; storedFile = null;
+      preview.hidden = true; preview.style.display = 'none';
+      if (preview.removeAttribute) preview.removeAttribute('src');
+      // The input must not keep showing a file that is gone - but while a change is being handled the
+      // input holds the file just chosen and must not be emptied.
+      if (!keepInput) { try { fileInput.value = ''; } catch (e) {} }
+      setFileState(''); showError('');
+    }
+    function paint() {
+      state.textContent = st.photo ? 'Photo ' + st.photo + ', Page ' + (st.page || '—') + (st.sha ? ', uploaded from this computer' : '')
+        : (st.local ? 'Picture from this computer, uploaded to each Page at publish' : '');
+      if (idInput.value !== st.photo) idInput.value = st.photo;
+    }
+    idInput.addEventListener('input', function () {
+      st.photo = idInput.value.trim();
+      st.sha = '';
+      if (st.photo && (file || st.local)) dropLocal();       // one picture: a pasted id replaces the local picture
+      if (!st.photo) st.page = '';
+      else if (!st.page) st.page = String((getContext() || {}).pageId || '');
+      paint();
+    });
+    /* Forget the picture from this computer: the chosen file, the stored one and its preview. */
+    function dropLocal() { st.local = ''; st.localTid = ''; clearLocal(); }
+    remove.addEventListener('click', function () { st.photo = ''; st.page = ''; st.sha = ''; dropLocal(); list.textContent = ''; msg.textContent = ''; paint(); });
+    preview.onerror = function () {          // the stored file is not on this computer (the template came from the team library)
+      preview.hidden = true; preview.style.display = 'none';
+      if (st.local && !file) setFileState(MISSING);
+    };
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      st.local = ''; st.localTid = '';
+      clearLocal(true);
+      msg.textContent = '';
+      if (!f) return;
+      function refuse(text) { msg.textContent = text; showError(text); try { fileInput.value = ''; } catch (e) {} }
+      if (f.type !== 'image/jpeg' && f.type !== 'image/png') { refuse('The background image must be a JPEG or PNG file.'); return; }
+      if (f.size > MAX_BYTES) { refuse('The background image is larger than 8 MB.'); return; }
+      file = f;
+      st.photo = ''; st.page = ''; st.sha = ''; paint();      // one picture: the chosen file replaces a Page photo
+      localUrl = URL.createObjectURL(f);          // blob: from the local file; never a Meta address
+      preview.src = localUrl; preview.hidden = false; preview.style.display = 'block';
+      setFileState('Chosen (not saved yet)');
+      msg.textContent = 'Preview from this computer. Saving the template keeps the picture on this computer; each Page gets it at publish.';
+    });
+    /* ACL-2571: keep the chosen file on THIS computer (the dashboard, not Meta); one request, shared by every
+       caller. Resolves {ok, message}. The template record gets only the returned hash. */
+    function store() {
+      if (inflight) return inflight;
+      list.textContent = '';
+      if (!file) return Promise.resolve({ ok: false, message: 'Choose a JPEG or PNG file first.' });
+      showError('');
+      var sent = file;
+      msg.textContent = 'Keeping the picture on this computer\u2026';
+      setFileState('Saving the picture\u2026');
+      var body = new FormData();
+      body.append('file', file, 'background');
+      function done(text, ok) {
+        inflight = null;
+        if (file !== sent) return { ok: false, message: 'The chosen picture changed while it was being saved.' };
+        if (ok) { storedFile = sent; msg.textContent = text || ''; setFileState('Stored on this computer'); showError(''); }
+        else { msg.textContent = text || ''; setFileState('Not saved: ' + (text || '')); showError(text); }
+        return { ok: !!ok, message: text || '' };
+      }
+      inflight = fetch('/api/form-templates/cover-file', { method: 'POST', body: body })
+        .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
+        .then(function (d) {
+          if (d.ok && d.sha256) { st.local = String(d.sha256); paint(); return done('Kept on this computer. Save the template to keep it.', true); }
+          return done(d.message || (d.errors || []).join('. ') || d.error || 'The picture could not be kept on this computer');
+        })
+        .catch(function () { return done('The dashboard did not answer; try again'); });
+      return inflight;
+    }
+    function row(p) {
+      var label = p.form_name ? 'Cover of form "' + p.form_name + '"'
+        : 'Page photo, ' + (p.width || '?') + '×' + (p.height || '?') + (p.created_time ? ', ' + String(p.created_time).slice(0, 10) : '');
+      var b = button(label + ' — ' + p.id);
+      b.style.cssText = 'display:block;margin:0.2rem 0;text-align:left';
+      b.addEventListener('click', function () {
+        if (file || st.local) dropLocal();                   // one picture: a chosen Page picture replaces the local one
+        st.photo = String(p.id); st.page = String((getContext() || {}).pageId || ''); st.sha = ''; paint();
+      });
+      return b;
+    }
+    pick.addEventListener('click', function () {
+      var ctx = getContext() || {};
+      list.textContent = '';
+      if (!ctx.account || !ctx.pageId) { msg.textContent = 'Refresh Facebook Pages before choosing an image.'; return; }
+      if (pick.disabled) return;
+      pick.disabled = true;
+      msg.textContent = 'Reading the pictures of the Page from Meta…';
+      var body = new FormData();
+      body.append('account_label', ctx.account);
+      body.append('page_id', ctx.pageId);
+      function finish(text) { pick.disabled = false; msg.textContent = text || ''; }
+      fetch('/api/page-photos', { method: 'POST', body: body })
+        .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
+        .then(function (d) {
+          var photos = d.photos || [];
+          if (!d.ok || !photos.length) {
+            return finish(d.state === 'failed' || !d.state ? (d.message || d.error || 'The pictures could not be read')
+              : 'No pictures could be read on this Page. Paste a Photo ID, or upload a picture once in a form in Ads Manager.');
+          }
+          photos.forEach(function (p) { list.appendChild(row(p)); });
+          finish(d.truncated ? 'Showing the most recent ones. Paste a Photo ID for an older picture.' : '');
+        })
+        .catch(function () { finish('The dashboard did not answer; try again'); });
+    });
+    paint(); paintFileState(); gate();
+    return {
+      get: function () { return { cover_photo_id: st.photo, cover_page_id: st.page, cover_sha256: st.sha, cover_local_sha256: st.local }; },
+      /* `local` + `tid`: the hash of the picture kept on this computer and the template it belongs to. */
+      set: function (photo, page, sha, local, tid) {
+        st.photo = String(photo || ''); st.page = String(page || ''); st.sha = st.photo ? String(sha || '') : '';
+        st.local = st.photo ? '' : String(local || ''); st.localTid = st.local ? String(tid || '') : '';
+        clearLocal(); list.textContent = ''; msg.textContent = ''; paint();
+        if (st.local && st.localTid) {            // same-origin image of the stored file; a 404 says "on another computer"
+          preview.src = '/api/form-templates/cover-file?id=' + encodeURIComponent(st.localTid) + '&sha=' + encodeURIComponent(st.local);
+          preview.hidden = false; preview.style.display = 'block';
+        } else if (st.local) { setFileState(MISSING); }
+      },
+      /* A file is chosen and not yet kept on this computer: a save must keep it first or stop. */
+      pending: function () { return !!file && storedFile !== file; },
+      /* Resolves {ok, message}; ok when nothing is pending. */
+      ensureStored: function () {
+        if (!file || storedFile === file) return Promise.resolve({ ok: true, message: '' });
+        return store();
+      },
+      gate: gate
+    };
+  };
+
+  function coverContext(panel) {
+    var row = panel.closest('.cb-ad-row'), slotEl = row ? row.closest('.cb-slot') : null;
+    var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+    return {
+      account: row ? formAccount(row) : '',
+      pageId: window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : ''),
+      formName: panelValue(panel, '.cb-fc-name')
+    };
+  }
+  function coverOf(panel) {
+    if (!panel._cover) {
+      var box = panel.querySelector('.cb-fc-cover');
+      if (!box) return null;
+      panel._cover = window.formCoverPicker(box, function () { return coverContext(panel); }, { btnClass: 'cb-form-refresh' });
+    }
+    return panel._cover;
+  }
 
   /* Содержимое панели -> шаблон (то, что понимает сервер и cbLayout.validateTemplate). */
   window.cbFormPanelTemplate = function (panel) {
     var contacts = [];
     panel.querySelectorAll('.cb-fc-contact').forEach(function (c) { if (c.checked) contacts.push(c.value); });
-    var qs = [];
+    var qs = [], logicOn = panelLogicOn(panel);
     panel.querySelectorAll('.cb-fc-q').forEach(function (q) {
       var kind = panelValue(q, '.cb-fc-q-type') || 'short_answer';
       var item = { label: panelValue(q, '.cb-fc-q-label'), type: kind };
       if (kind === 'multiple_choice') item.options = panelValue(q, '.cb-fc-q-options').split('\n');
+      if (logicOn) {
+        if (kind === 'multiple_choice') {
+          item.type = 'multiple_choice_logic';
+          item.logic = {};
+          Array.prototype.slice.call(q.querySelectorAll('.cb-fc-logic-sel')).forEach(function (sel) {
+            if (sel.value) item.logic[sel.getAttribute('data-answer')] = sel.value;
+          });
+        }
+        var after = q.querySelector('.cb-fc-q-after');
+        if (after && after.checked) item.after_answer = true;
+      }
       qs.push(item);
     });
-    return {
+    var closing = logicOn && qs.some(function (q) { return q.logic && Object.keys(q.logic).some(function (a) { return q.logic[a] === 'close'; }); });
+    var cover = coverOf(panel);
+    var nonLead = closing ? { non_lead_end: { title: panelValue(panel, '.cb-fc-nl-title'), text: panelValue(panel, '.cb-fc-nl-text'),
+      website_url: panelValue(panel, '.cb-fc-nl-site'), button_text: panelValue(panel, '.cb-fc-nl-button') } } : {};
+    return Object.assign({
       name: panelValue(panel, '.cb-fc-name'), headline: panelValue(panel, '.cb-fc-headline'),
       intro: panelValue(panel, '.cb-fc-intro'), intro_title: panelValue(panel, '.cb-fc-intro-title'),
       contact_fields: contacts, questions: qs,
@@ -18180,7 +18591,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
       form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
       locale: panelValue(panel, '.cb-fc-locale') || 'AUTO'
-    };
+    }, nonLead, cover ? cover.get() : {});
   };
 
   window.cbFormCreateOpen = function (btn) {
@@ -18192,6 +18603,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     if (msg) msg.textContent = '';
     var main = row.querySelector('.cb-form-templatebox');
     if (main) main.hidden = true;
+    var picker = coverOf(panel);
+    if (picker) picker.gate();
   };
 
   window.cbFormCreateClose = function (btn) {
@@ -18204,28 +18617,43 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
 
   window.cbFormCreateSave = function (btn) {
     var panel = formPanel(btn), msg = panel.querySelector('[data-fc-msg]');
+    var cover = coverOf(panel);
     var tpl = window.cbFormPanelTemplate(panel);
-    var errors = window.cbLayout.validateTemplate(tpl);
+    var pendingFile = !!(cover && cover.pending());
+    // ACL-2571: a chosen picture is kept on this computer first; the check below only needs a stand-in hash
+    // for it (the real one comes back from the dashboard).
+    var errors = window.cbLayout.validateTemplate(pendingFile ? Object.assign({}, tpl, { cover_local_sha256: 'a'.repeat(64) }) : tpl);
     if (errors.length) { msg.textContent = errors.join('. ') + '.'; return; }
     if (btn.disabled) return;
     btn.disabled = true;
-    msg.textContent = 'Saving the template to the team library…';
     var row = btn.closest('.cb-ad-row');
     function fail(text) { btn.disabled = false; msg.textContent = text; }
-    fetch('/api/form-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                   body: JSON.stringify(tpl) })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
-      .then(function (x) {
-        if (!x.ok || !x.d.template) return fail(((x.d.errors || ['The template was not saved']).join('. ')) + '.');
-        var saved = x.d.template;
-        window.cbFormTemplates = window.cbFormTemplates.filter(function (t) { return t.id !== saved.id; }).concat([saved]);
-        var hid = row.querySelector('input[name$="_form_template"]');
-        if (hid) { hid.value = saved.id; hid.dispatchEvent(new Event('input', { bubbles: true })); }
-        btn.disabled = false;
-        window.cbFormCreateClose(btn);
-        window.cbFillTemplateSelects(row.closest('.cb-slot'));
-      })
-      .catch(function () { fail('The dashboard did not answer; try again'); });
+    function save(final) {
+      msg.textContent = 'Saving the template to the team library…';
+      fetch('/api/form-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                     body: JSON.stringify(final) })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
+        .then(function (x) {
+          if (!x.ok || !x.d.template) return fail(((x.d.errors || ['The template was not saved']).join('. ')) + '.');
+          var saved = x.d.template;
+          window.cbFormTemplates = window.cbFormTemplates.filter(function (t) { return t.id !== saved.id; }).concat([saved]);
+          var hid = row.querySelector('input[name$="_form_template"]');
+          if (hid) { hid.value = saved.id; hid.dispatchEvent(new Event('input', { bubbles: true })); }
+          btn.disabled = false;
+          window.cbFormCreateClose(btn);
+          window.cbFillTemplateSelects(row.closest('.cb-slot'));
+        })
+        .catch(function () { fail('The dashboard did not answer; try again'); });
+    }
+    if (!pendingFile) { save(tpl); return; }
+    msg.textContent = 'Keeping the picture on this computer first…';
+    cover.ensureStored().then(function (r) {
+      if (!r.ok) return fail('The form was not saved. ' + (r.message || 'The picture could not be kept on this computer.') + ' Fix this, or press Remove to save without a picture.');
+      var final = window.cbFormPanelTemplate(panel);
+      var again = window.cbLayout.validateTemplate(final);
+      if (again.length) return fail(again.join('. ') + '.');
+      save(final);
+    });
   };
 
   function formCreatePanelHTML() {
@@ -18242,8 +18670,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<label><input type="checkbox" class="cb-fc-contact" value="phone" checked> Phone</label></div>' +
       '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
+      '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-logic-on" onchange="cbFormLogicToggle(this)"> Conditional logic</label>' +
+      '<div class="cb-form-note cb-fc-logic-help" hidden>Choose what happens after each answer. Custom questions come first on forms with conditions. Forms with conditions cannot be edited after publishing; a change creates a new form.</div>' +
       '<div class="cb-fc-questions"></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionAdd(this)">+ Add question</button></div>' +
+      '<div class="cb-fc-label cb-fc-nonlead" hidden>Non-lead end page <span class="cb-fc-opt">(people who close the form see this page; they are not counted as leads)</span>' +
+      '<input type="text" class="cb-input cb-fc-nl-title" maxlength="60" placeholder="Title">' +
+      '<textarea class="cb-input cb-fc-nl-text" rows="2" maxlength="300" placeholder="Text"></textarea>' +
+      '<input type="text" class="cb-input cb-fc-nl-site" placeholder="Website link (https)">' +
+      '<input type="text" class="cb-input cb-fc-nl-button" maxlength="30" placeholder="Button text (default: Visit website)"></div>' +
+      '<div class="cb-fc-label cb-fc-cover"></div>' +
       '<label class="cb-fc-label">Privacy policy URL<input type="text" class="cb-input cb-fc-privacy" placeholder="https://example.com/privacy"></label>' +
       '<label class="cb-fc-label">Completion screen<textarea class="cb-input cb-fc-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you."></textarea></label>' +
       '<label class="cb-fc-label">Website link on the completion screen <span class="cb-fc-opt">(optional, https)</span><input type="text" class="cb-input cb-fc-site"></label>' +
@@ -19322,6 +19758,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   }
 
   window.aclAccountOptionsFor = accountOptionsFor;
+  /* ACL-2188: все подписи аккаунтов без привязки к стране (у вкладки Forms страны нет). */
+  window.aclAllAccountLabels = function () {
+    var seen = {};
+    Object.keys(ACCOUNT_ALIAS_MAP || {}).forEach(function (c) {
+      Object.values(ACCOUNT_ALIAS_MAP[c] || {}).forEach(function (label) { if (label) seen[label] = true; });
+    });
+    return Object.keys(seen).sort();
+  };
   window.aclFindAccountRow = findAccountRow;
 
   // ── Корзинка и «Send to Builder» убраны ───────────────────────────────
@@ -24754,6 +25198,7 @@ window.aclTeamLibrary = (function () {
 (function () {
   var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
   var contactKeys = ['first_name', 'last_name', 'email', 'phone'];
+  var cover = null, coverPages = [];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -24761,6 +25206,7 @@ window.aclTeamLibrary = (function () {
   function busy(value) {
     pending = value;
     document.querySelectorAll('#view-forms button, #fm-editor input, #fm-editor textarea').forEach(function (b) { b.disabled = value; });
+    if (!value && cover) cover.gate();       // the picture controls keep their own state (the file waits for a Page)
   }
   function errorText(d, fallback) { return (d && d.errors && d.errors.length ? d.errors.join('. ') + '.' : '') || (d && d.error) || fallback; }
 
@@ -24873,7 +25319,41 @@ window.aclTeamLibrary = (function () {
   }
 
   // ── редактор ──
+  /* ACL-2178: conditions. `logicOn` is the "Conditional logic" checkbox; each question keeps `logic`
+     ({answer text: action}) and `after_answer` next to its text and options. */
+  var logicOn = false;
+  function answersOf(q) {
+    return (q.options || []).map(function (o) { return String(o).replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+  }
+  function logicRowsHtml(q, i) {
+    var lay = window.cbLayout, acts = lay && lay.logicActions ? lay.logicActions(questions, i) : [];
+    var answers = answersOf(q), have = q.logic || {};
+    var rows = answers.map(function (a) {
+      var cur = have[a] || '';
+      return '<div class="fm-logic-row" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin:0.2rem 0 0 1rem">'
+        + '<span style="flex:1 1 8rem">' + esc(a) + '</span><span style="color:var(--muted)">Then:</span>'
+        + '<select data-fm-q="' + i + '" data-fm-logic="' + esc(a) + '">'
+        + (cur ? '' : '<option value="" selected>Choose an action</option>')
+        + acts.map(function (x) { return '<option value="' + x.value + '"' + (x.value === cur ? ' selected' : '') + '>' + esc(x.label) + '</option>'; }).join('')
+        + '</select></div>';
+    });
+    Object.keys(have).forEach(function (a) {
+      if (answers.indexOf(a) === -1) {
+        rows.push('<div class="fm-logic-row" style="margin:0.2rem 0 0 1rem;color:#b00020">' + esc(a) + ' - This answer no longer exists</div>');
+      }
+    });
+    return rows.join('');
+  }
+  function syncLogicUi() {
+    var closes = logicOn && questions.some(function (q) {
+      return q.type === 'multiple_choice' && Object.keys(q.logic || {}).some(function (a) { return q.logic[a] === 'close'; });
+    });
+    el('fm-logic-on').checked = logicOn;
+    el('fm-logic-help').hidden = !logicOn;
+    el('fm-nonlead').hidden = !closes;
+  }
   function questionsHtml() {
+    syncLogicUi();
     el('fm-questions').innerHTML = questions.map(function (q, i) {
       var multi = q.type === 'multiple_choice';
       return '<div class="fm-q">'
@@ -24882,12 +25362,86 @@ window.aclTeamLibrary = (function () {
         + '<option value="multiple_choice"' + (multi ? ' selected' : '') + '>Multiple choice</option></select>'
         + (multi ? '<textarea rows="3" placeholder="One option per line (at least 2)" data-fm-q="' + i + '" data-fm-f="options" style="flex:1 1 12rem">'
           + esc((q.options || []).join('\n')) + '</textarea>' : '')
-        + '<button type="button" class="btn" data-fm-qdel="' + i + '">Remove</button></div>';
+        + '<button type="button" class="btn" data-fm-qdel="' + i + '">Remove</button>'
+        + (logicOn ? '<label style="flex:1 0 100%;margin-left:1rem"><input type="checkbox" data-fm-q="' + i + '" data-fm-f="after_answer"'
+          + (q.after_answer ? ' checked' : '') + '> Only shown after an answer</label>' : '')
+        + (logicOn && multi ? '<div style="flex:1 0 100%">' + logicRowsHtml(q, i) + '</div>' : '')
+        + '</div>';
     }).join('');
+  }
+
+  /* Removing question `at` (0-based): jumps to it are cleared (chosen again), later targets renumber. */
+  function renumberLogic(at) {
+    questions.forEach(function (q) {
+      Object.keys(q.logic || {}).forEach(function (a) {
+        var m = /^q([0-9]+)$/.exec(q.logic[a]);
+        if (!m) return;
+        var n = Number(m[1]) - 1;
+        if (n === at) delete q.logic[a];
+        else if (n > at) q.logic[a] = 'q' + n;
+      });
+    });
+  }
+
+  /* ACL-2188: фоновая картинка. Аккаунт и Страница выбираются здесь, потому что у вкладки Forms
+     своего аккаунта нет; список Страниц - из кэша, с профиля только по кнопке Refresh pages. */
+  function setOptions(select, items, keep, emptyLabel) {
+    select.textContent = '';
+    var first = document.createElement('option'); first.value = ''; first.textContent = emptyLabel; select.appendChild(first);
+    items.forEach(function (it) {
+      var o = document.createElement('option'); o.value = it.value; o.textContent = it.label; select.appendChild(o);
+    });
+    if (keep && !items.some(function (it) { return it.value === keep; })) {
+      var k = document.createElement('option'); k.value = keep; k.textContent = 'Page ' + keep; select.appendChild(k);
+    }
+    select.value = keep || '';
+  }
+  function loadCoverPages(force, keep) {
+    var account = el('fm-cover-account').value, msg = el('fm-cover-pages-msg');
+    if (!account) { coverPages = []; setOptions(el('fm-cover-page'), [], keep, 'Choose a Page'); msg.textContent = ''; if (cover) cover.gate(); return; }
+    var body = new FormData();
+    body.append('account_label', account);
+    body.append(force ? 'force' : 'cached', '1');
+    msg.textContent = force ? 'Reading the Pages from Meta…' : '';
+    fetch('/api/account-pages', {method: 'POST', body: body})
+      .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
+      .then(function (d) {
+        if (el('fm-cover-account').value !== account) return;
+        coverPages = (d.pages || []).map(function (p) { return {value: String(p.id), label: (p.name || p.id) + ' (' + p.id + ')'}; });
+        var current = el('fm-cover-page').value || keep || '';
+        if (!current && coverPages.length === 1) current = coverPages[0].value;      // one obvious choice
+        setOptions(el('fm-cover-page'), coverPages, current, 'Choose a Page');
+        if (cover) cover.gate();
+        msg.textContent = d.ok === false ? (d.message || 'The Pages could not be read') : (coverPages.length || !force ? '' : 'No Pages found for this account.');
+      })
+      .catch(function () { msg.textContent = 'The dashboard did not answer; try again'; });
+  }
+  function coverCtx() {
+    var sel = el('fm-cover-page'), opt = sel.options && sel.options[sel.selectedIndex];
+    return {account: el('fm-cover-account').value, pageId: sel.value, pageLabel: sel.value && opt ? opt.textContent : '',
+            formName: el('fm-name').value};
+  }
+  function initCover(tpl) {
+    var labels = typeof window.aclAllAccountLabels === 'function' ? window.aclAllAccountLabels() : [];
+    var sel = el('fm-cover-account');
+    sel.textContent = '';
+    var first = document.createElement('option'); first.value = ''; first.textContent = 'Choose an account'; sel.appendChild(first);
+    labels.forEach(function (l) { var o = document.createElement('option'); o.value = l; o.textContent = l; sel.appendChild(o); });
+    coverPages = [];
+    setOptions(el('fm-cover-page'), [], tpl.cover_page_id || '', 'Choose a Page');
+    el('fm-cover-pages-msg').textContent = '';
+    if (!cover) {
+      cover = window.formCoverPicker(el('fm-cover'), coverCtx);
+    }
+    cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256, tpl.cover_local_sha256, tpl.id);
+    // One obvious account: choose it, and its Page when there is only one (or the template's own Page).
+    if (labels.length === 1) { sel.value = labels[0]; loadCoverPages(false, tpl.cover_page_id || ''); }
+    cover.gate();
   }
 
   function fillEditor(tpl, title, invalidErrors) {
     tpl = tpl || {};
+    initCover(tpl);
     el('fm-name').value = tpl.name || '';
     el('fm-headline').value = tpl.headline || '';
     el('fm-intro').value = tpl.intro || '';
@@ -24901,9 +25455,19 @@ window.aclTeamLibrary = (function () {
     // Старые шаблоны с «Full name»: поле убрано из редактора, при правке имя превращается в имя + фамилию.
     if (contacts.indexOf('name') !== -1) contacts = contacts.filter(function (k) { return k !== 'name'; }).concat(['first_name', 'last_name']);
     contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
+    logicOn = (tpl.questions || []).some(function (q) { return q.type === 'multiple_choice_logic'; });
     questions = (tpl.questions || []).map(function (q) {
-      return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
+      var item = {label: q.label || '', type: q.type === 'multiple_choice_logic' ? 'multiple_choice' : (q.type || 'short_answer'),
+                  options: (q.options || []).slice()};
+      if (q.logic) item.logic = Object.assign({}, q.logic);
+      if (q.after_answer) item.after_answer = true;
+      return item;
     });
+    var nl = tpl.non_lead_end || {};
+    el('fm-nl-title').value = nl.title || '';
+    el('fm-nl-text').value = nl.text || '';
+    el('fm-nl-site').value = nl.website_url || '';
+    el('fm-nl-button').value = nl.button_text || '';
     questionsHtml();
     el('fm-editor-title').textContent = title;
     var note = el('fm-invalid-note');
@@ -24926,6 +25490,15 @@ window.aclTeamLibrary = (function () {
     contactKeys.forEach(function (k) {
       if (el('fm-c-' + k).checked && contacts.indexOf(k) === -1) contacts.push(k);
     });
+    // ACL-2178: conditions are written only while the checkbox is on; off, none of the keys is sent.
+    delete base.non_lead_end;
+    var closing = logicOn && questions.some(function (q) {
+      return q.type === 'multiple_choice' && Object.keys(q.logic || {}).some(function (a) { return q.logic[a] === 'close'; });
+    });
+    if (closing) {
+      base.non_lead_end = {title: el('fm-nl-title').value, text: el('fm-nl-text').value,
+                           website_url: el('fm-nl-site').value, button_text: el('fm-nl-button').value};
+    }
     return Object.assign(base, {
       id: editing && editing.id ? editing.id : '',
       _expected_revision: editing ? editing.revision : undefined,
@@ -24933,12 +25506,16 @@ window.aclTeamLibrary = (function () {
       contact_fields: contacts,
       questions: questions.map(function (q) {
         var item = {label: q.label, type: q.type};
-        if (q.type === 'multiple_choice') item.options = q.options;
+        if (q.type === 'multiple_choice') {
+          item.options = q.options;
+          if (logicOn) { item.type = 'multiple_choice_logic'; item.logic = Object.assign({}, q.logic || {}); }
+        }
+        if (logicOn && q.after_answer) item.after_answer = true;
         return item;
       }),
       privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
       website_url: el('fm-site').value, locale: el('fm-locale').value || 'AUTO'
-    });
+    }, cover ? cover.get() : {});      // Remove даёт пустую пару: сервер её не хранит и убирает из записи
   }
 
   async function saveEditor() {
@@ -24946,9 +25523,26 @@ window.aclTeamLibrary = (function () {
     var tpl = collect();
     var layout = window.cbLayout;
     var legacyLocale = editing && editing.template ? editing.template.locale : null;
-    var errors = layout && layout.validateTemplate ? layout.validateTemplate(tpl, legacyLocale) : [];
+    var uploadFirst = !!(cover && cover.pending());
+    // ACL-2571: a picture that is chosen but not yet kept on this computer is kept first (the check needs a
+    // stand-in hash for it); if that fails the save stops - never a save without the picture.
+    var checked = uploadFirst ? Object.assign({}, tpl, {cover_local_sha256: 'a'.repeat(64)}) : tpl;
+    var errors = layout && layout.validateTemplate ? layout.validateTemplate(checked, legacyLocale) : [];
     if (errors.length) { editorSay(errors.join('. ') + '.', true); return; }
-    busy(true); editorSay('Saving…');
+    busy(true);
+    if (uploadFirst) {
+      editorSay('Keeping the picture on this computer first…');
+      var up = await cover.ensureStored();
+      if (!up.ok) {
+        editorSay('The template was not saved. ' + (up.message || 'The picture could not be kept on this computer.') + ' Fix this, or press Remove to save without a picture.', true);
+        busy(false);
+        return;
+      }
+      tpl = collect();
+      errors = layout && layout.validateTemplate ? layout.validateTemplate(tpl, legacyLocale) : [];
+      if (errors.length) { editorSay(errors.join('. ') + '.', true); busy(false); return; }
+    }
+    editorSay('Saving…');
     var ok = false;
     try {
       await post('/api/form-templates', tpl);
@@ -24962,6 +25556,19 @@ window.aclTeamLibrary = (function () {
 
   function rowById(id) { return rows.find(function (r) { return r.id === id; }); }
 
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (!t || pending) return;
+    if (t.id === 'fm-cover-account') loadCoverPages(false, '');
+    if (t.id === 'fm-cover-page' && cover) cover.gate();
+    // ACL-2533: a picture belongs to the Page it was uploaded to / picked from. Another Page = no picture
+    // (never re-label it: Page B would get Page A's photo id).
+    if (t.id === 'fm-cover-page' && cover) {
+      var held = cover.get();
+      if (held.cover_photo_id && String(held.cover_page_id || '') !== String(t.value || '')) cover.set('', '', '');
+    }
+  });
+
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (!t || !t.getAttribute || pending) return;
@@ -24969,6 +25576,7 @@ window.aclTeamLibrary = (function () {
     if (t.id === 'fm-refresh-btn') { load(false); return; }
     if (t.id === 'fm-cancel-btn') { closeEditor(); return; }
     if (t.id === 'fm-save-btn') { saveEditor(); return; }
+    if (t.id === 'fm-cover-pages-btn') { loadCoverPages(true, el('fm-cover-page').value); return; }
     if (t.id === 'fm-add-q-btn') {
       var max = (window.cbLayout && window.cbLayout.FORM_LIMITS && window.cbLayout.FORM_LIMITS.questions) || 5;
       if (questions.length >= max) { editorSay('At most ' + max + ' custom questions', true); return; }
@@ -25008,7 +25616,7 @@ window.aclTeamLibrary = (function () {
     id = t.getAttribute('data-fm-restore');
     if (id) { act('/api/form-templates/restore', {id: id}, 'Restored.'); return; }
     var qi = t.getAttribute('data-fm-qdel');
-    if (qi) { questions.splice(Number(qi), 1); questionsHtml(); return; }
+    if (qi) { questions.splice(Number(qi), 1); renumberLogic(Number(qi)); questionsHtml(); return; }
     if (t.getAttribute('data-view') === 'forms') load(false);
   });
   // Вопросы живут в массиве: ввод обновляет его, а не читает DOM при сохранении.
@@ -25019,15 +25627,52 @@ window.aclTeamLibrary = (function () {
     if (i === null || i === undefined) return;
     var q = questions[Number(i)], f = t.getAttribute('data-fm-f');
     if (!q) return;
-    if (f === 'options') q.options = String(t.value || '').split('\n');
+    var answer = t.getAttribute('data-fm-logic');
+    if (answer !== null && answer !== undefined) {
+      q.logic = q.logic || {};
+      if (t.value) q.logic[answer] = t.value; else delete q.logic[answer];
+      syncLogicUi();
+      return;
+    }
+    if (f === 'options') {
+      q.options = String(t.value || '').split('\n');
+      if (logicOn && ev.type === 'change') questionsHtml();      // answer rows follow the options box once it is left
+    }
+    else if (f === 'after_answer') q.after_answer = !!t.checked;
     else if (f === 'type') { q.type = t.value; questionsHtml(); }
     else q[f] = t.value;
+  }
+  function toggleLogic(on) {
+    if (on) {
+      logicOn = true;
+      questions.forEach(function (q) {
+        if (q.type !== 'multiple_choice') return;
+        q.logic = q.logic || {};
+        answersOf(q).forEach(function (a) { if (!q.logic[a]) q.logic[a] = 'next'; });
+      });
+      questionsHtml();
+      return;
+    }
+    var used = questions.some(function (q) { return q.after_answer || Object.keys(q.logic || {}).some(function (a) { return q.logic[a] !== 'next'; }); });
+    var off = function () {
+      logicOn = false;
+      questions.forEach(function (q) { delete q.logic; delete q.after_answer; });
+      questionsHtml();
+    };
+    if (!used) { off(); return; }
+    el('fm-logic-on').checked = true;
+    aclConfirm('The answers go back to continuing in order. The non-lead end page is removed from this template.',
+      { title: 'Remove all conditions from this template?', okLabel: 'Remove conditions', danger: true })
+      .then(function (yes) { if (yes) off(); });
   }
   document.addEventListener('input', function (ev) {
     if (ev.target && ev.target.id === 'fm-search') { render(); return; }
     questionInput(ev);
   });
-  document.addEventListener('change', questionInput);
+  document.addEventListener('change', function (ev) {
+    if (ev.target && ev.target.id === 'fm-logic-on') { toggleLogic(!!ev.target.checked); return; }
+    questionInput(ev);
+  });
   if ((location.hash || '').indexOf('forms') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
   document.addEventListener('acl:viewchange', function (e) {
     if (e.detail && e.detail.view === 'forms') load(false);

@@ -6459,6 +6459,54 @@ async def api_page_forms(request: Request) -> JSONResponse:
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 
+@app.post("/api/page-photos")
+async def api_page_photos(request: Request) -> JSONResponse:
+    """ACL-2188: картинки Страницы для фона формы. Только по нажатию человека; без ссылок на картинки.
+
+    Чтение без права записи; ни опроса, ни расписания. Страница обязательна и должна принадлежать аккаунту.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await read_form(request, BUILDER_FORM)
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    page_id = str(form.get("page_id") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not page_id:
+        return JSONResponse({"ok": False, "error": "page_id is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Background images need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_photos, account, page_id))
+
+
+@app.post("/api/form-photo-upload")
+async def api_form_photo_upload(request: Request) -> JSONResponse:
+    """ACL-2533: фон формы из файла. Файл с локальной страницы -> вкладка профиля -> id фото.
+
+    Только по нажатию человека; картинка из Meta назад не читается (предпросмотр - из локального файла).
+    Тип определяется по байтам, а не по имени; не jpeg/png и больше 8 МБ - отказ до профиля.
+    """
+    from src.web import page_forms, publish_api
+    from src.web.request_limits import FORM_PHOTO_FORM
+
+    form = await read_form(request, FORM_PHOTO_FORM)
+    account = str(form.get("account_label") or form.get("account") or "").strip()
+    page_id = str(form.get("page_id") or "").strip()
+    upload = form.get("file")
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not page_id:
+        return JSONResponse({"ok": False, "error": "page_id is required"}, status_code=400)
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse({"ok": False, "error": "an image file is required"}, status_code=400)
+    data = await upload.read()
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Background images need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.upload_photo, account, page_id, data))
+
+
 @app.get("/api/form-templates")
 def api_form_templates_list(force: bool = False) -> JSONResponse:
     """ACL-1776/2054: шаблоны Instant Form из общей библиотеки (в Meta не ходит).
@@ -6526,7 +6574,46 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
     except OSError:
         return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
                             status_code=500)
+    # ACL-2571: the picture kept on this computer now belongs to the saved template (the library has only its hash).
+    if saved.get("cover_local_sha256"):
+        from src.fb_api import form_cover_store
+
+        await asyncio.to_thread(form_cover_store.adopt, saved["id"], saved["cover_local_sha256"])
     return JSONResponse({"ok": True, "template": saved})
+
+
+@app.post("/api/form-templates/cover-file")
+async def api_form_template_cover_stage(request: Request) -> JSONResponse:
+    """ACL-2571: keep the background picture of a shared template ON THIS COMPUTER; nothing goes to Meta.
+
+    No account or Page is needed. The type comes from the bytes, JPEG/PNG up to 8 MB. The answer is the
+    hash that the template record keeps - the team library never receives image bytes.
+    """
+    from src.fb_api import form_cover_store
+    from src.web.request_limits import FORM_PHOTO_FORM
+
+    form = await read_form(request, FORM_PHOTO_FORM)
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse({"ok": False, "message": "An image file is required"}, status_code=400)
+    data = await upload.read()
+    try:
+        got = await asyncio.to_thread(form_cover_store.stage, data)
+    except OSError:
+        return JSONResponse({"ok": False, "message": "The picture could not be kept on this computer"}, status_code=500)
+    return JSONResponse(got, status_code=200 if got.get("ok") else 400)
+
+
+@app.get("/api/form-templates/cover-file")
+def api_form_template_cover_file(id: str = "", sha: str = "") -> Response:
+    """ACL-2571: the stored picture of a template, for the editor preview (same origin, so `img-src 'self'`)."""
+    from src.fb_api import form_cover_store
+
+    data = form_cover_store.read(id, sha)
+    if data is None:
+        return Response(status_code=404)
+    return Response(content=data, media_type=form_cover_store.sniff_image(data) or "application/octet-stream",
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/form-templates/delete")
@@ -6552,7 +6639,20 @@ async def api_form_templates_restore(request: Request) -> JSONResponse:
 async def api_form_templates_duplicate(request: Request) -> JSONResponse:
     from src.fb_api import form_templates
 
-    return await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+    resp = await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+    if resp.status_code == 200:
+        # ACL-2571: a copy keeps the picture kept on this computer.
+        from src.fb_api import form_cover_store
+
+        try:
+            raw = await request.json()
+            src_id = str((raw or {}).get("id") or "")
+            new = json.loads(resp.body)["template"]
+            if new.get("cover_local_sha256"):
+                await asyncio.to_thread(form_cover_store.copy_to, src_id, new["id"], new["cover_local_sha256"])
+        except (ValueError, KeyError, OSError, TypeError):
+            pass
+    return resp
 
 
 @app.post("/api/form-templates/migrate")
