@@ -198,6 +198,27 @@ class AdSetDraft:
         return out
 
 
+def share_first_headline(draft: Any) -> None:
+    """ACL-2406: объявления 2+ набора берут заголовок и описание у объявления 1 этого набора.
+
+    Ad 1 набора по Primary text 1 задаёт заголовок и описание всего набора (наборы могут
+    различаться языком и аудиторией); у остальных остаются только свои тексты. Тексты 2-5
+    объявления 2+ тоже получают эти заголовок и описание. Идемпотентно; объявление 1 набора
+    и его тексты не трогаются.
+    """
+    for ad_set in getattr(draft, "ad_sets", None) or []:
+        first = None
+        for ad in ad_set.ads:
+            if first is None:
+                first = ad
+                continue
+            ad.ad_title = first.ad_title
+            ad.ad_link_description = first.ad_link_description
+            for variant in ad.text_variants:
+                variant["headline"] = first.ad_title
+                variant["description"] = first.ad_link_description
+
+
 @dataclass
 class CampaignDraft:
     """One campaign to create in Ads Manager UI.

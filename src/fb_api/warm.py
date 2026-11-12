@@ -92,6 +92,24 @@ def job_wait(cancelled: Callable[[], bool], show: Callable[[dict | None], None])
         _JOB_WAIT.reset(token)
 
 
+#: ACL-2268: background warm-up from the Builder. Inside, `open_one` never waits (memory, closing, slot), never
+#: evicts another window and never restarts a window that a person opened.
+_QUIET = ContextVar("acl_warm_quiet_start",default=False)
+
+
+@contextmanager
+def quiet_start():
+    token = _QUIET.set(True)
+    try:
+        yield
+    finally:
+        _QUIET.reset(token)
+
+
+def quiet_active() -> bool:
+    return _QUIET.get()
+
+
 @contextmanager
 def defer_memory_wait():
     """Inside: a memory shortage returns at once (code `memory_low`) instead of waiting."""
@@ -716,6 +734,11 @@ class WarmRegistry:
         with self._lock:
             return profile_id in self._sessions
 
+    def open_profile_ids(self) -> set[str]:
+        """ACL-2268: profiles registered as open (warm sessions), for the auto-warm ceiling count."""
+        with self._lock:
+            return set(self._sessions)
+
     def session(self, profile_id: str) -> WarmSession | None:
         with self._lock:
             return self._sessions.get(profile_id)
@@ -939,11 +962,15 @@ class WarmRegistry:
             if may_reopen_manual():
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
+        if kind == "closing" and quiet_active():
+            return _result(False, f"The {label} profile is still closing; nothing was started.", "profile_closing")
+        waited_close = False
         if kind == "closing":
             # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
             # released it ends in "can't lock profile". Wait (bounded, one local look every few seconds,
             # no network) until it is gone, then start.
             kind = self._wait_until_closed(pid, cancelled)
+            waited_close = kind == "none"
             if kind != "none":
                 return _result(False, f"The {label} profile is still closing in Multilogin; nothing was "
                                "started. Try again in a minute.", "profile_closing")
@@ -956,8 +983,11 @@ class WarmRegistry:
                            busy_code="profile_lease") as refusal:
                 if refusal:
                     return refusal
-                self._forget(pid, stopped=True)
-        why = _stop_log.refusal(pid, self._stops)
+                # ACL-2273: after our own wait for the closing profile the stop clock must not restart
+                # from "now" (that refused the open with restart_cooldown on a 180 s default machine).
+                self._forget(pid, stopped=not waited_close)
+        # ACL-2273: the bounded wait above already outlasted the closing of a profile our job just closed.
+        why = "" if waited_close else _stop_log.refusal(pid, self._stops)
         if why:
             return _result(False, why, "restart_cooldown", wait_s=round(self.restart_wait_s(pid)))
         # S3: память под ещё один профиль с учётом роста уже запущенных и прогревающихся.
@@ -1002,15 +1032,20 @@ class WarmRegistry:
             from src.fb_ads_rpa.run_telemetry import current_job_id
 
             holds = getattr(queue, "holds", None)
+            # ACL-2273: the slot is recorded under the lower-case canonical UUID; an upper-case id in the
+            # account map must still find it (else the job waited for its own slot).
             own_slot = bool(queue is not None and callable(holds) and current_job_id()
-                            and holds(current_job_id(), pid))
+                            and holds(current_job_id(), pid.lower()))
         except Exception:  # noqa: BLE001
             own_slot = False
         try:
             if queue is not None and not own_slot:
                 # ACL-2278: a job waits for the place as long as it takes; others keep the time limit.
-                grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
-                                      or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
+                if quiet_active():
+                    grant = queue.acquire(slot_id, pid, cancelled=cancelled, once=True)
+                else:
+                    grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
+                                          or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
                 if grant is None:
                     return _result(False, self._slot_refusal_text(), "memory_low")
             refusal = lease_stack.enter_context(try_lease(
@@ -1193,7 +1228,7 @@ class WarmRegistry:
         `START_MEMORY_WAIT_S`; запрос подготовки соединения (`defer_memory_wait`) не ждёт вовсе.
         """
         job = _JOB_WAIT.get()
-        defer = _DEFER_MEMORY.get() and job is None
+        defer = (_DEFER_MEMORY.get() or _QUIET.get()) and job is None
         deadline = self._mono() + START_MEMORY_WAIT_S
         # ACL-2470: nobody queued this start - re-check memory for a short grace (not the 2 minutes), then refuse.
         grace_end = self._mono() + MEMORY_GRACE_S
@@ -1834,8 +1869,10 @@ class WarmRegistry:
         except Exception:  # noqa: BLE001
             closed = False
         self._save()
+        mb = _light.heap_used_mb(work)
         self._record_light(sess, mode="light", handover_ok=True, fallback_reason=None,
-                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1))
+                           capture_tab_closed=closed, capture_open_s=round(self._mono() - began, 1),
+                           **({"work_tab_mb": mb} if mb is not None else {}))
         return graph, {**state, "light": True}
 
     def _reuse_light(self, sess: WarmSession, act: str, mode: str, make_graph: Callable[[Any], Any]):

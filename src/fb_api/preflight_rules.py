@@ -385,9 +385,29 @@ def _numbered(inp: dict[str, Any]) -> list[tuple[int, int, dict[str, Any], dict[
     out = []
     n = 0
     for si, st in enumerate(audit_sets(inp), start=1):
+        first: dict[str, Any] | None = None  # ACL-2406: Ad 1 of each ad set
         for ad in st.get("ads") or []:
             n += 1
+            if first is None:
+                first = ad
+            else:
+                ad = shared_headline_ad(ad, first)
             out.append((si, n, st, ad))
+    return out
+
+
+def shared_headline_ad(ad: dict[str, Any], first: dict[str, Any]) -> dict[str, Any]:
+    """ACL-2406: объявление 2+ берёт заголовок и описание у объявления 1 (свои поля не читаются).
+
+    Зеркало `sharedHeadlineAd` в report.html. Ad 1 задаёт их по Primary text 1; у объявления 2+
+    остаются только его тексты (`bodies`, `body`).
+    """
+    out = dict(ad)
+    out["shared_headline"] = True
+    head = _s(first.get("headline"))
+    out["headline"] = head
+    out["headlines"] = [head] if head else []
+    out["descriptions"] = list(first.get("descriptions") or [])[:1]
     return out
 
 
@@ -467,9 +487,9 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body")), WARNING))
         elif rid == "headline":
-            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline")), WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: not a.get("shared_headline") and not _s(a.get("headline")), WARNING))
         elif rid == "headline_len":
-            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: not a.get("shared_headline") and len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "feed_texts":
             out.append(_per_ad(rid, inp, lambda a, st: _feed_missing_text(a)))
         elif rid == "primary_len":

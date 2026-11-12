@@ -166,3 +166,45 @@ def account_payload(act: str, row: dict | None, acc: dict | None = None, facts: 
         "pages_n": len(getattr(facts, "pages", []) or []) if facts is not None else None,
         "pixels_n": len(getattr(facts, "pixels", []) or []) if facts is not None else None,
     }
+
+
+# ── ACL-2353: «Before create review» ────────────────────────────────────────
+#: Событийные имена, которые принимает маршрут страницы; остальные он отбрасывает.
+REVIEW_UI_EVENTS = ("review.opened", "review.closed")
+_REVIEW_CLOSE_REASONS = ("cancel", "edit", "stale")
+
+
+def _small_int(value: Any, cap: int = 100000) -> int:
+    try:
+        return max(0, min(int(value), cap))
+    except (TypeError, ValueError):
+        return 0
+
+
+def review_ui_payload(name: str, body: Any) -> dict | None:
+    """Payload события окна ревью со страницы: только счётчики и короткая причина; иное - None.
+
+    Ни ссылок, ни текстов: берутся лишь перечисленные числовые поля и причина из белого списка.
+    """
+    if name not in REVIEW_UI_EVENTS or not isinstance(body, dict):
+        return None
+    if name == "review.opened":
+        return {"accounts": _small_int(body.get("accounts")), "campaigns": _small_int(body.get("campaigns"))}
+    reason = str(body.get("reason") or "")
+    return {"reason": reason if reason in _REVIEW_CLOSE_REASONS else "cancel",
+            "open_s": _small_int(body.get("open_s"), 86400)}
+
+
+def review_confirmed_payload(review: dict, fps: dict[str, str]) -> dict:
+    """`review.confirmed` по аккаунту: счётчики предупреждений и блокировок по id правил, отпечатки."""
+    return {
+        "warnings": dict(review.get("warnings") or {}), "blocked": dict(review.get("blocked") or {}),
+        "checked": int(review.get("checked") or 0), "not_checked": int(review.get("not_checked") or 0),
+        "open_s": int(review.get("open_s") or 0), "fp": dict(fps),
+    }
+
+
+def review_refused_payload(stage: str, campaigns: list[str]) -> dict:
+    """`review.refused`: на каком шаге (`submit` / `publish`) и какие кампании (имена из билдера)."""
+    return {"stage": stage if stage in ("submit", "publish") else "submit",
+            "campaigns": [str(c) for c in campaigns]}

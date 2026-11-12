@@ -2009,7 +2009,7 @@
     .aov-st.active { background: var(--st-active-bg); color: var(--st-active); } .aov-st.issue { background: var(--st-issue-bg); color: var(--st-issue); }
     .aov-st.dead { background: var(--st-dead-bg); color: var(--st-dead); } .aov-st.new { background: var(--st-new-bg); color: var(--st-new); }
     .aov-st.unknown { background: var(--st-unknown-bg); color: var(--st-unknown); border: 1px dashed var(--adopy-border-strong); }
-    .aov-stline { display: block; margin-top: 2px; font-size: var(--adopy-text-xs, 11px); color: var(--adopy-text-muted, #6b7280); white-space: nowrap; } .aov-stline.stale { opacity: .8; }
+    .aov-stline { display: block; margin-top: 2px; font-size: var(--adopy-text-xs, 11px); color: var(--adopy-text-muted, #6b7280); white-space: normal; overflow-wrap: anywhere; line-height: 1.3; } .aov-stline.stale { opacity: .8; }
     .aov-empty { padding: 10px 14px; font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
     .aov-warn { padding: 10px 14px; background: var(--adopy-danger-bg); color: var(--adopy-danger); font-size: var(--adopy-text-table); }
     .aov-virtual { border-color: var(--adopy-danger); }
@@ -2055,7 +2055,8 @@
     .aov-table col.c10 { width: 210px; }
     /* Имя и номер кабинета читаются целиком: перенос вместо многоточия, номер мелкой второй строкой. */
     .aov-table td.acc { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-    .aov-table td.acc .aov-acc { display: inline-flex; flex-direction: column; vertical-align: middle; }
+    .aov-table td.acc .aov-accrow { display: inline-flex; align-items: flex-start; gap: 8px; vertical-align: middle; }
+    .aov-table td.acc .aov-acc { display: flex; flex-direction: column; flex: 0 0 11rem; min-width: 0; }
     .aov-table td.acc .aov-act { color: var(--adopy-text-muted); font-size: var(--adopy-text-xs); font-variant-numeric: tabular-nums; }
     /* Хост таблицы кампаний нужен только как точка монтирования: без рамки и отступов он рисовался пустой скруглённой полосой над шапкой. */
     .aov .hc.hc-scoped.amap-campaigns { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; border-radius: 0; }
@@ -3447,6 +3448,25 @@
     .pc-note.pc-warn { border-left-color: var(--warn); background: var(--warn-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
     .pc-note.pc-block { border-left-color: var(--bad); background: var(--bad-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
     .pc-note ul { margin: 0.2rem 0 0.1rem 1.1rem; padding: 0; }
+    /* ACL-2353 begin: ревью внутри окна подтверждения (те же .pc-* и .sfc-*) */
+    .rv-camps { margin-top: 0.2rem; }
+    .rv-camp { margin: 0.15rem 0; }
+    .rv-camp > summary { cursor: pointer; }
+    .rv-out { color: var(--muted); }
+    .rv-set { margin: 0.1rem 0 0.1rem 1rem; }
+    .rv-set > summary { cursor: pointer; color: var(--text); }
+    .rv-line { margin-left: 1rem; font-size: var(--adopy-text-sm); }
+    .rv-k { color: var(--muted); }
+    .rv-ad { margin: 0.15rem 0 0.25rem 1rem; padding-left: 0.5rem; border-left: 2px solid var(--border); }
+    .rv-grey { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .rv-edit { display: inline-block; margin: 0.2rem 0 0.2rem 1rem; font-size: var(--adopy-text-sm); color: var(--accent); }
+    .rv-btn { margin-left: 0.4rem; cursor: pointer; }
+    .rv-vis { margin: 0.2rem 0 0 1rem; }
+    .pc-budget, .pc-checked { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .rv-foot-wrap { flex: none; margin-top: 0.5rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .rv-nothing { margin-top: 0.25rem; color: var(--bad); }
+    #sfc-ok:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* ACL-2353 end */
     .pc-hint { color: var(--muted); }
     .pc-help { margin-top: 0.4rem; font-size: var(--adopy-text-sm); color: var(--muted); }
     .pc-i { cursor: help; color: var(--accent); border: 1px solid var(--border-strong); border-radius: 50%;
@@ -3933,6 +3953,9 @@
     .cb-textx-add { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
     .cb-textx-add:disabled { opacity: 0.55; cursor: not-allowed; }
     .cb-textx-note { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .cb-note-shared { display: none; }
+    .cb-hl-shared .cb-note-own { display: none; }
+    .cb-hl-shared .cb-note-shared { display: inline; }
     /* ACL-1775: выбор формы Страницы в объявлении */
     .cb-form-wrap { min-width: 0; }
     .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
@@ -7356,8 +7379,23 @@ window.cbPreflight = (function () {
   function numbered(inp) {
     var out = [], n = 0;
     auditSets(inp).forEach(function (st, i) {
-      (st.ads || []).forEach(function (ad) { n += 1; out.push({ si: i + 1, n: n, st: st, ad: ad }); });
+      var first = null; /* ACL-2406: Ad 1 of each ad set */
+      (st.ads || []).forEach(function (ad) {
+        n += 1;
+        if (!first) first = ad; else ad = sharedHeadlineAd(ad, first);
+        out.push({ si: i + 1, n: n, st: st, ad: ad });
+      });
     });
+    return out;
+  }
+  /* ACL-2406: объявление 2+ берёт заголовок и описание у объявления 1 (зеркало shared_headline_ad). */
+  function sharedHeadlineAd(ad, first) {
+    var out = {}, head = s(first.headline);
+    out.shared_headline = true;
+    Object.keys(ad).forEach(function (k) { out[k] = ad[k]; });
+    out.headline = head;
+    out.headlines = head ? [head] : [];
+    out.descriptions = (first.descriptions || []).slice(0, 1);
     return out;
   }
 
@@ -7428,8 +7466,8 @@ window.cbPreflight = (function () {
           && (id === 'texts_vertical' || (st.ads || []).length > 1);
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }, 'warning'));
-      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }, 'warning'));
-      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
+      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !a.shared_headline && !s(a.headline); }, 'warning'));
+      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return !a.shared_headline && s(a.headline).length > C.max_headline; }, 'warning'));
       else if (id === 'feed_texts') out.push(perAd(id, inp, function (a) {
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
         if (!multi && !s(a.vertical_file)) return false;
@@ -9217,6 +9255,7 @@ window.cbTree = (function () {
     Array.prototype.forEach.call(secs, function (sec, i) { sec.classList.toggle('cbd-set-off', i !== setIdx); });
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
+    var seenSets = {};
     for (var i = 0; i < rows.length; i += 1) {
       /* ACL-1774: тексты 3-5 и вертикальный файл — только API; ряды 3-5 открываются
          кнопкой или когда в них уже есть значение (восстановленный черновик). */
@@ -9224,8 +9263,14 @@ window.cbTree = (function () {
       /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
       var line = rows[i].querySelector('[data-headline]');
       var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
+      /* ACL-2406: заголовок и описание задаёт только Ad 1 набора;
+         у остальных объявлений набора строки нет, у них только свои Primary text. */
+      var setKey = (window.cbRowSet ? window.cbRowSet(rows[i]) : 0);
+      var shared = !!seenSets[setKey];
+      seenSets[setKey] = true;
+      if (rows[i].classList.contains('cb-hl-shared') !== shared) rows[i].classList.toggle('cb-hl-shared', shared);
       if (line) {
-        var entry = pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
+        var entry = !shared && pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
         line.hidden = !entry;
         /* Только при изменении: запись в textContent — мутация формы, её слушает
            наблюдатель дерева, и безусловная запись зациклила бы страницу. */
@@ -9914,7 +9959,9 @@ window.cbTree = (function () {
         : '<span class="cbd-q-bad">✕</span>';
       var tail = r.skipped ? ' · ' + r.skipped + ' skipped' : '';
       return '<div class="cbd-q-line">' + mark + ' ' + aclEscHtml(r.account) + tail
-        + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '') + '</div>';
+        + (r.why ? '<span class="cbd-q-why">' + aclEscHtml(r.why) + '</span>' : '')
+        + (r.again ? ' <button type="button" class="cbd-q-retry" data-cb-review-again="' + aclEscHtml(r.key || '') + '">Review again</button>' : '')
+        + '</div>';
     });
 
     // ACL-1355: идущая сборка кнопку не держит — остальные аккаунты
@@ -9986,6 +10033,13 @@ window.cbTree = (function () {
     if (stopRetry) stopRetry.addEventListener('click', function () {
       window.cbPublishAll(showQueue, selectedForPublish(), lost.map(function (r) { return r.key; }));
     });
+    box.querySelectorAll('[data-cb-review-again]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-cb-review-again');
+        var names = (window.CB_REVIEW_REFUSED || {})[k] || [];
+        if (window.cbReview && names.length) window.cbReview.again(k, names);
+      });
+    });
     box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
       b.addEventListener('click', function () {
         if (window.CB_QUEUE && window.CB_QUEUE.retry) window.CB_QUEUE.retry(b.getAttribute('data-cb-retry'));
@@ -10037,6 +10091,7 @@ window.cbTree = (function () {
     var before = {};
     form.querySelectorAll('.cb-slot').forEach(function (s) { before[slotId(s)] = true; });
     window.cbAddSlot(form);
+    addCampaign.form = form;      /* ACL-2268: the click handler tells warm_auto.js which form got the card */
     var made = null;
     form.querySelectorAll('.cb-slot').forEach(function (s) {
       var id = slotId(s);
@@ -10101,7 +10156,8 @@ window.cbTree = (function () {
           paint();
         });
     } else if (act === 'add-here') {
-      addCampaign(hit.dataset.country, hit.dataset.account);
+      var madeHere = addCampaign(hit.dataset.country, hit.dataset.account);
+      if (madeHere && window.aclWarmAutoUser) window.aclWarmAutoUser(addCampaign.form, 'add', e.isTrusted);
     } else if (act === 'connect' || act === 'connect-picked') {
       var picked = foot.querySelector('.cbd-pick-country');
       var country = act === 'connect-picked' ? (picked && picked.value) : hit.dataset.country;
@@ -10146,7 +10202,8 @@ window.cbTree = (function () {
       /* Вкладку не переключаем: ящик затем и сделан, чтобы не уходить с
          того, что читаешь. Блок аккаунта найдётся и в скрытой вкладке — на
          странице отрисованы все. */
-      addCampaign(countrySel.value, accountSel.value);
+      var madePicked = addCampaign(countrySel.value, accountSel.value);
+      if (madePicked && window.aclWarmAutoUser) window.aclWarmAutoUser(addCampaign.form, 'add', e.isTrusted);
     }
   });
 
@@ -12597,6 +12654,24 @@ document.addEventListener('acl:viewchange', function () { setTimeout(function ()
     p.appendChild(dl);
     var why = d.why || (d.key === 'active' ? 'Spending in the selected period.' : '');
     p.appendChild(el('div', 'why', 'What happened: ' + (why || '—') + (d.read ? ' · read ' + d.read : '')));
+    /* ACL-2557/2560: действия аккаунта стопкой — Open profile (если есть профиль), Take out of <country>. Поведение — warm_sessions.js */
+    var wrap = el('span', 'aov-acts aov-open-wrap');
+    if (d.profile) {
+      var ob = el('button', 'aov-btn aov-open', 'Open profile');
+      ob.type = 'button'; ob.hidden = true; ob.setAttribute('data-aov-open', d.name);
+      wrap.appendChild(ob);
+    }
+    var tb = el('button', 'aov-btn danger aov-takeout', 'Take out of ' + d.country);
+    tb.type = 'button'; tb.setAttribute('data-aov-takeout', d.name); tb.setAttribute('data-aov-ckey', d.ckey || d.country);
+    tb.setAttribute('data-aov-cname', d.country);
+    tb.title = 'Take this account out of ' + d.country + '. It stays in ACL and moves to Available accounts.';
+    wrap.appendChild(tb);
+    if (d.profile) {
+      var om = el('small', 'aov-open-msg'); om.setAttribute('role', 'status'); om.setAttribute('aria-live', 'polite');
+      wrap.appendChild(om);
+    }
+    p.appendChild(wrap);
+    if (d.profile && window.aclWarmHome) window.aclWarmHome.paint();
     var go = el('button', 'aov-btn', 'Open in Manage →');
     go.type = 'button'; go.setAttribute('data-aov-go', d.slug);
     p.appendChild(go);
@@ -14830,7 +14905,7 @@ async function goalSend(body) {
 // ── Account map: placing accounts in countries ───────────────────────
 // Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
 // перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
-async function amapSend(body, msgEl, errorAnchor) {
+async function amapSend(body, msgEl, errorAnchor, onOk) {
   if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
   var r = await fetch('/account-links', {
     method: 'POST',
@@ -14840,7 +14915,11 @@ async function amapSend(body, msgEl, errorAnchor) {
   });
   var data = null;
   try { data = await r.json(); } catch (e) { data = null; }
-  if (data && data.ok) { location.reload(); return true; }
+  if (data && data.ok) {
+    /* ACL-2560: Home перерисовывает себя сам (onOk), остальные места — перезагрузка как раньше */
+    if (typeof onOk === 'function') { await onOk(); return true; }
+    location.reload(); return true;
+  }
 
   // Счёт идёт на деньги: аккаунт, который сегодня тратил, не убирается
   // молча. Подтверждение спрашивается один раз и с текстом, который
@@ -14848,7 +14927,7 @@ async function amapSend(body, msgEl, errorAnchor) {
   if (data && data.needs_confirm) {
     if (await aclConfirm(data.error, { title: 'Take it out anyway?', okLabel: 'Take it out', danger: true })) {
       body.confirm = true;
-      return amapSend(body, msgEl, errorAnchor);
+      return amapSend(body, msgEl, errorAnchor, onOk);
     }
     if (msgEl) msgEl.textContent = '';
     return false;
@@ -15035,7 +15114,7 @@ function amapLink(select, kind, value) {
   amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
 }
 
-async function amapUnlink(account, kind, value, anchor) {
+async function amapUnlink(account, kind, value, anchor, onOk) {
   /* ACL-142: «×» убирает аккаунт из ОДНОЙ страны, а выглядит как «удалить».
      Спрашиваем и говорим, что останется; удаление из ACL — отдельная кнопка. */
   if (!await aclConfirm('Take ' + account + ' out of ' + value + '?' + String.fromCharCode(10, 10)
@@ -15044,7 +15123,7 @@ async function amapUnlink(account, kind, value, anchor) {
   if (anchor) anchor.disabled = true;
   aclInlineError(anchor, '');
   try {
-    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor);
+    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor, onOk);
   } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
   finally {
     if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }
@@ -17154,7 +17233,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
     var cards = [];
+    /* ACL-2406: Ad 1 of each ad set gives the Headline to the later ads of that set. */
+    var setFirstRow = {};
+    slot.querySelectorAll('.cb-ad-row').forEach(function(r) {
+      var k = rowSet(r);
+      if (!setFirstRow[k]) setFirstRow[k] = r;
+    });
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
+      var isFirstInSet = setFirstRow[rowSet(row)] === row;
       var fileHidden = row.querySelector('input[type="hidden"][name$="_creative_file"]');
       var fileSearch = row.querySelector('.cb-creative-search');
       var fileVal = ((fileHidden && fileHidden.value) || (fileSearch && fileSearch.value) || '').trim();
@@ -17193,8 +17279,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       var bodyHtml = copy && copy.body
         ? cbpEsc(copy.body)
         : (copyVal ? cbpEsc(copyVal) : '<span class="cbp-skel-text">pick the copy…</span>');
-      var headlineHtml = copy && copy.headline
-        ? cbpEsc(copy.headline)
+      /* ACL-2406: объявления 2+ набора показывают заголовок Ad 1 этого набора. */
+      var hlCopy = copy;
+      if (!isFirstInSet) {
+        var firstRow = setFirstRow[rowSet(row)];
+        var firstHid = firstRow && firstRow.querySelector('input[type="hidden"][name$="_copy"]');
+        var firstVal = ((firstHid && firstHid.value) || '').trim();
+        hlCopy = firstVal ? AD_TITLES.find(function(t) { return t.ad_title === firstVal; }) : null;
+      }
+      var headlineHtml = hlCopy && hlCopy.headline
+        ? cbpEsc(hlCopy.headline)
         : '<span class="cbp-skel-text">headline</span>';
 
       cards.push(
@@ -18207,7 +18301,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       textxRowHtml(pfx, 3) + textxRowHtml(pfx, 4) + textxRowHtml(pfx, 5) +
       '<span class="cb-label cb-textx-add-label">More primary texts</span>' +
       '<div class="cb-textx-add-wrap"><button type="button" class="cb-textx-add" onclick="cbAddTextRow(this)">+ Primary text 3</button>' +
-      '<span class="cb-textx-note">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span></div>' +
+      '<span class="cb-textx-note"><span class="cb-note-own">Up to 5 primary texts per ad. Each brings its own headline and description; all belong to the same ad.</span><span class="cb-note-shared">Up to 5 primary texts per ad. The headline and description come from Ad 1.</span></span></div>' +
       /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
          поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
          оно выключено, но значение живёт дальше. */
@@ -19773,10 +19867,12 @@ function cbPublishConfirmParts(m) {
   var total = m.campaigns === undefined
     ? accounts.reduce(function (n, a) { return n + a.camps.length; }, 0) : m.campaigns;
   var collapse = total > (m.collapseOver === undefined ? 6 : m.collapseOver);
+  /* ACL-2353: ревью считает аккаунты и кампании, которые правда будут созданы. */
+  var nAcc = m.accountsCount === undefined ? accounts.length : m.accountsCount;
   var lead = '<div class="pc-sum">' + esc(m.verb || 'Publish') + ' <strong>' + total + '</strong> '
-    + (total === 1 ? 'campaign' : 'campaigns') + ' on <strong>' + accounts.length + '</strong> '
-    + (accounts.length === 1 ? 'account' : 'accounts') + ' — ' + esc(m.targetText || '') + '</div>'
-    + '<div class="pc-mode">Mode: ' + (m.modeHtml || '') + '</div>';
+    + (total === 1 ? 'campaign' : 'campaigns') + ' on <strong>' + nAcc + '</strong> '
+    + (nAcc === 1 ? 'account' : 'accounts') + ' — ' + esc(m.targetText || '') + '</div>'
+    + '<div class="pc-mode">Mode: ' + (m.modeHtml || '') + '</div>' + (m.leadExtraHtml || '');
 
   var left = accounts.map(function (a) {
     var chips = a.camps.map(function (c) { return '<span class="pc-chip">' + esc(c) + '</span>'; })
@@ -19784,6 +19880,13 @@ function cbPublishConfirmParts(m) {
     var head = '<strong>' + esc(a.name) + '</strong>'
       + (a.camps.length ? ' <span class="pc-n">(' + a.camps.length + ')</span>' : '');
     if (!a.camps.length) return '<div class="pc-acc">' + head + '</div>';
+    if (m.campaignHtml) {
+      // ACL-2353: каждая кампания раскрывается (наборы и объявления); без хука - прежние чипы.
+      var items = a.camps.map(function (c, i) { return m.campaignHtml(a, i); }).join('');
+      return collapse
+        ? '<details class="pc-acc"><summary>' + head + '</summary><div class="rv-camps">' + items + '</div></details>'
+        : '<div class="pc-acc">' + head + '<div class="rv-camps">' + items + '</div></div>';
+    }
     // «Demo: имя1, имя2» читается подряд и в раскрытом виде, и для скринридера.
     return collapse
       ? '<details class="pc-acc"><summary>' + head + '</summary><div class="pc-chips">' + chips + '</div></details>'
@@ -19802,7 +19905,8 @@ function cbPublishConfirmParts(m) {
   var body = '<div class="pc-cols"><div class="pc-left"><div class="pc-h">Accounts and campaigns</div><div class="cb-selected-list">' + left + '</div>'
     + (m.skipped && m.skipped.length
       ? '<div class="pc-skipped">Already being built, skipped: ' + esc(m.skipped.join(', ')) + '</div>' : '')
-    + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>';
+    + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>'
+    + (m.footerHtml || '');
   return { lead: lead, body: body };
 }
 /* ACL-2118 end */
@@ -21135,7 +21239,8 @@ function cbNewRun(notify) {
       var ok = !(job.errors || []).length && (job.results || []).length
         && (job.results || []).every(function (r) { return r.publishable === true; });
       settle(e, { account: e.label, state: ok ? 'ok' : 'bad', skipped: skipped,
-                  why: ok ? '' : 'draft blocked — see the account panel' });
+                  why: ok ? (e.refusedText || '') : 'draft blocked — see the account panel',
+                  again: !!e.refusedText, key: e.key });
     }, function (job) {
       // Каждый опрос: ждёт ли аккаунт место или уже собирается.
       if (window.CB_QUEUE !== batch || e.state === 'settled') return;
@@ -21192,16 +21297,36 @@ function cbNewRun(notify) {
           settle(e, { account: e.label, state: 'dup', why: data.error, skipped: skipped });
           return;
         }
+        if (data.error && data.code === 'review_stale') {
+          // ACL-2353: все кампании аккаунта изменились после ревью - заданий нет, остальные аккаунты идут.
+          (window.CB_REVIEW_REFUSED = window.CB_REVIEW_REFUSED || {})[e.key] = data.changed || [];
+          if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">' + aclEscHtml(data.error) + '</span>';
+          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped, key: e.key, again: true });
+          return;
+        }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
           settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped, code: data.code || '', key: e.key });
           return;
         }
         if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
-        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, sentNames, e.country);
+        if (data.refused && data.refused.length) {
+          // ACL-2353: часть кампаний изменилась после ревью - отказ по ним, остальные идут (D5).
+          e.refusedText = data.refused_text || '';
+          e.refusedNames = data.refused.map(function (x) { return x.name; });
+          (window.CB_REVIEW_REFUSED = window.CB_REVIEW_REFUSED || {})[e.key] = e.refusedNames;
+          skipped += e.refusedNames.length;
+        }
+        // ACL-2353: refused campaigns were not created - no build dot for them and they keep their tick.
+        var refusedNow = e.refusedNames || [];
+        var watched = sentNames.filter(function (n) { return refusedNow.indexOf(n) < 0; });
+        if (window.cbBuild) window.cbBuild.watch(data.job_id, e.account, watched, e.country);
         // ACL-1360: ушедшие роботу кампании больше не отмечены.
         if (window.cbTree && window.cbTree.untick) {
-          try { window.cbTree.untick(e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : [])); }
+          try {
+            var sentSlots = e.sent || (e.form ? Array.from(e.form.querySelectorAll('.cb-slot')) : []);
+            window.cbTree.untick(sentSlots.filter(function (sl) { return refusedNow.indexOf(cbPfName(sl)) < 0; }));
+          }
           catch (err) { /* отметка — удобство, задание уже ушло */ }
         }
         follow(e, data.job_id, skipped);
@@ -21230,6 +21355,11 @@ function cbNewRun(notify) {
     e.state = 'retry';
     e.resend = function () {
       if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
+      // ACL-2353: замороженная отправка уже прошла ревью; живая карточка больше ничего не решает.
+      if (e.frozen) {
+        post(e, fd, skipped, sentNames);
+        return true;
+      }
       // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
       // нет ворот — нет повтора.
       if (typeof window.cbPreflightGate !== 'function' || !e.form) {
@@ -21359,6 +21489,17 @@ function cbNewRun(notify) {
     if (!entries.length) batch.active = false;   // пустая сборка никого не держит
     pump();
     return { added: added, skipped: skipped };
+  };
+  /* ACL-2353: снимок из окна ревью уходит как есть, без превью и без повторного чтения формы.
+     `slots` - карточки, ушедшие в снимок; `left` - сколько кампаний ревью оставило дома. */
+  batch.frozen = function (form, fd, slots, left) {
+    var key = cbFormKey(form), label = cbFormTitle(form);
+    if (batch.busy(key)) return { added: [], skipped: [label] };
+    var e = entry(form, key, label, null);
+    e.frozen = true;
+    e.sent = slots;
+    submit(e, fd, left || 0);
+    return { added: [label], skipped: [] };
   };
   /* Весь аккаунт без превью — кнопка Publish на странице страны. */
   batch.direct = function (form, fd) {
@@ -21980,6 +22121,702 @@ function _doCbPublish(form) {
     };
   }
 })();
+
+/* ACL-2353 begin
+ * «Before create review»: окно подтверждения Publish (ACL-2118) становится ревью. Только Graph API;
+ * у RPA обёртки сразу отдают дорогу прежним функциям. Снимок формы берётся при открытии, на Confirm
+ * сверяется и уходит на сервер как есть, без второго превью (сервер строит черновики один раз).
+ * Весь код ревью живёт в этом блоке. */
+(function () {
+  'use strict';
+  var prevAll = window.cbPublishAll, prevOne = window.cbPublish;
+  var esc = aclEscHtml;
+  var REUSE_NOTE = 'not checked with Meta';
+  var model = null;          // идущее ревью (одно на вкладку)
+  var preparing = false;     // Preview и проверка аккаунтов ещё идут: второе нажатие не нужно
+
+  /* ── события для журнала: только счётчики ───────────────────────────── */
+  function emit(name, body) {
+    try {
+      fetch('/api/publish-review/event', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ event: name }, body || {})) }).catch(function () {});
+    } catch (e) { /* журнал не условие работы */ }
+  }
+
+  /* ── снимок ─────────────────────────────────────────────────────────── */
+  function allSlots(form) { return Array.prototype.slice.call(form.querySelectorAll('.cb-slot')); }
+  function slotId(slot) { return (slot.dataset && slot.dataset.cbdId) || ''; }
+  function skipMap(form, keep) {
+    var m = {};
+    allSlots(form).forEach(function (s, i) { if (keep.indexOf(s) < 0) m[i] = true; });
+    return m;
+  }
+  /* FormData только выбранных карточек (номера сдвинуты, camp_count пересчитан). */
+  function snapshotOf(form, keep) {
+    return cbFormDataSkipping(form, skipMap(form, keep), cbCollectFormData(form)).body;
+  }
+  function entriesOf(fd) {
+    var a = [];
+    fd.forEach(function (v, k) { a.push([k, typeof v === 'string' ? v : 'file:' + ((v && v.name) || '')]); });
+    return a;
+  }
+  /* {rest: поля уровня формы, camps: {имя: поля кампании без номера}} - чем различаются два снимка. */
+  function digest(fd) {
+    var rest = [], camps = {}, order = [], names = {};
+    var list = entriesOf(fd);
+    list.forEach(function (kv) { var m = /^camp_(\d+)_name$/.exec(kv[0]); if (m) names[m[1]] = kv[1]; });
+    list.forEach(function (kv) {
+      var m = /^camp_(\d+)_(.+)$/.exec(kv[0]);
+      if (!m) { if (kv[0] !== 'camp_count' && kv[0] !== 'request_id') rest.push(kv); return; }
+      var name = names[m[1]] || ('#' + m[1]);
+      if (!camps[name]) { camps[name] = []; order.push(name); }
+      camps[name].push([m[2], kv[1]]);
+    });
+    var flat = {};
+    order.forEach(function (n) { flat[n] = JSON.stringify(camps[n]); });
+    return { rest: JSON.stringify(rest), camps: flat, order: order };
+  }
+
+  /* ── данные кампании ────────────────────────────────────────────────── */
+  function hitOf(c) {
+    var store = c.form._pfAudit, hit = store && store.byName[c.name];
+    if (!hit || hit.rev !== window.cbPfRev(c.slot)) return null;
+    return hit;
+  }
+  function checkedOk(c) {
+    var hit = hitOf(c);
+    return !!(hit && hit.result && !hit.error && hit.errorKind !== 'not_checked' && !c.fpMismatch);
+  }
+  function summaryOf(c) {
+    var hit = checkedOk(c) ? hitOf(c) : null;
+    return (hit && hit.result && hit.result.plan && hit.result.plan.summary) || null;
+  }
+  function previewRowOf(e, name) {
+    var found = null;
+    (e.plan || []).forEach(function (p) { if (!found && String(p['Campaign Name'] || '') === name) found = p; });
+    return found;
+  }
+  function numberText(n) { return (n % 1 ? n.toFixed(2) : String(n)); }
+  /* {n, cur, lifetime}: lifetime is a total for the whole run, never a daily amount (it stays out of the daily sum). */
+  function budgetOf(c) {
+    var sum = summaryOf(c);
+    if (sum && Number(sum.lifetime_budget) > 0) return { n: Number(sum.lifetime_budget), cur: String(sum.currency || ''), lifetime: true };
+    if (sum && isFinite(Number(sum.daily_budget))) return { n: Number(sum.daily_budget), cur: String(sum.currency || ''), lifetime: false };
+    var life = false;
+    try { life = !!(window.cbLifetime && window.cbLifetime.preview(c.slot)); } catch (err) { life = false; }
+    if (life) {
+      var f = c.slot.querySelector('[name$="_budget"]'), n = f ? Number(f.value) : NaN;
+      return isFinite(n) && n > 0 ? { n: n, cur: '', lifetime: true } : null;
+    }
+    var m = c.row && /([\d]+(?:\.\d+)?)/.exec(String(c.row['Campaign Daily Budget'] || ''));
+    return m ? { n: Number(m[1]), cur: '', lifetime: false } : null;
+  }
+
+  /* Блокеры кампании: тот же признак, что у ворот (cbPreflight.blocks), плюс то, что знает только ревью. */
+  function blockersOf(e, c) {
+    var out = [];
+    if (e.previewError) return [{ rule: 'preview', label: e.previewError, hint: '', detail: '' }];
+    if (!c.row) out.push({ rule: 'preview', label: 'Preview did not cover this campaign', hint: 'reload the page and try again', detail: '' });
+    else if (cbBlockingErrors(c.row).length) {
+      cbBlockingErrors(c.row).forEach(function (t) { out.push({ rule: 'preview', label: String(t), hint: '', detail: '' }); });
+    }
+    (window.cbMissingCreatives ? window.cbMissingCreatives(c.slot.closest ? c.slot : e.form) : []).forEach(function (m) {
+      if (m.slot === c.slot) out.push({ rule: 'media_file_missing', label: 'File missing — pick it again',
+        hint: '', detail: 'Ad ' + m.ad + ': ' + m.file });
+    });
+    var lines = [];
+    try { lines = window.cbTree.auditLines(c.slot); } catch (err) { lines = null; }
+    if (lines === null) return out.concat([{ rule: 'audit', label: 'Pre-flight audit unavailable', hint: 'reload the page', detail: '' }]);
+    lines.forEach(function (x) {
+      if (x.status === 'error') out.push({ rule: x.rule, label: x.label || x.rule, hint: x.hint || '', detail: cleanDetail(x.detail) });
+    });
+    if (!c.fp && !out.length) out.push({ rule: 'review', label: 'No review fingerprint', hint: 'reload the page and try again', detail: '' });
+    return out;
+  }
+  function cleanDetail(d) { return d && !/^(empty|not_https|no_valid_link)$/.test(d) ? d : ''; }
+
+  function warningsOf(e, c, perAccount) {
+    var out = [];
+    var lines = [];
+    try { lines = window.cbTree.auditLines(c.slot); } catch (err) { lines = []; }
+    var trackingText = perAccount.tracking;
+    lines.forEach(function (x) {
+      if (x.status !== 'warning') return;
+      if (x.rule === 'link_tracking' && trackingText) return;            // W3c: только если W3b молчит
+      out.push({ level: x.rule === 'media_vertical' ? 'warn' : cbNoticeLevel(x.rule, x.status), rule: x.rule,
+        label: x.label || x.rule, hint: x.hint || '', detail: cleanDetail(x.detail), campaign: c.name });
+    });
+    var sum = summaryOf(c);
+    if (sum && sum.pixel_source === 'account default') {
+      out.push({ level: 'warn', rule: 'pixel_source', label: 'No pixel in the account map',
+        hint: 'the only pixel on the ad account will be used (' + (sum.pixel_id || '—') + ').', detail: '', campaign: c.name });
+    }
+    if (trackingText) out.push({ level: 'warn', rule: 'tracking_link', label: trackingText, hint: '', detail: '', campaign: c.name });
+    if (c.twin && c.rep) out.push({ level: 'warn', rule: 'twin', label: 'Same name',
+      hint: 'these cards become one campaign (' + c.name + ').', detail: '', campaign: c.name });
+    if (sum && (sum.manual_required || []).length) {
+      out.push({ level: 'warn', rule: 'manual_page', label: 'Manual completion required',
+        hint: sum.manual_required.join(' '), detail: '', campaign: c.name });
+    }
+    return out;
+  }
+
+  function leftOut(e) { return !!(e.notReady && !model.anyway); }
+  function blockedReason(e, c) {
+    if (c._blockers.length) return c._blockers.map(function (b) {
+      return b.label + (b.detail ? ': ' + b.detail : '') + (b.hint ? ' — ' + b.hint : '');
+    }).join('; ');
+    return '';
+  }
+
+  /* ── подсчёт состояния окна ─────────────────────────────────────────── */
+  function evaluate() {
+    var create = [], blocked = [], notices = [], w7 = [];
+    model.entries.forEach(function (e) {
+      var tw = null;
+      try { tw = window.cbTrackingWarning ? window.cbTrackingWarning(e.form) : null; } catch (err) { tw = null; }
+      var trackingText = tw && !/^No tracking link/.test(tw.text) ? tw.text : '';
+      var perAccount = { tracking: trackingText };
+      e.camps.forEach(function (c) { c._blockers = blockersOf(e, c); });
+      /* W5: cards with one name become ONE campaign, so they are created together or not at all:
+         a blocker on one card blocks every card of the name (the server would otherwise get a partial
+         draft and refuse it as "changed"). */
+      e.camps.forEach(function (c) {
+        if (!c.twin) return;
+        var group = e.camps.filter(function (x) { return x.name === c.name; }), all = [];
+        group.forEach(function (x) {
+          x._blockers.forEach(function (b) {
+            if (!all.some(function (y) { return y.label === b.label && y.detail === b.detail; })) all.push(b);
+          });
+        });
+        if (all.length) c._blockers = all;
+      });
+      e.camps.forEach(function (c) {
+        c._warnings = c._blockers.length ? [] : warningsOf(e, c, perAccount);
+        c._out = leftOut(e);
+        c._willCreate = !c._blockers.length && !c._out;
+        if (!c.rep) { c._warnings.forEach(function (w) { notices.push(w); }); return; }   // a twin is counted once
+        if (c._blockers.length) blocked.push({ e: e, c: c });
+        if (!model.checking && !c._blockers.length && !checkedOk(c)) w7.push({ e: e, c: c });
+        if (c._willCreate) create.push({ e: e, c: c });
+        c._warnings.forEach(function (w) { notices.push(w); });
+      });
+      e.lostTargeting.forEach(function (typed) {
+        notices.push({ level: 'warn', rule: 'targeting_unpicked', label: 'Targeting not selected',
+          hint: typed + '. The campaign goes without detailed targeting.', detail: '', campaign: e.title });
+      });
+    });
+    return { create: create, blocked: blocked, notices: notices, w7: w7 };
+  }
+
+  /* ── разметка ───────────────────────────────────────────────────────── */
+  function line(label, value) {
+    return value ? '<div class="rv-line"><span class="rv-k">' + esc(label) + '</span> ' + value + '</div>' : '';
+  }
+  function adSetHtml(s, no) {
+    var dest = String(s.destination || 'Website');
+    var h = '<details class="rv-set"><summary>Ad set ' + (no < 10 ? '0' : '') + no + ' · ' + esc(dest) + ' · '
+      + (s.ads || []).length + ((s.ads || []).length === 1 ? ' ad' : ' ads') + '</summary>';
+    var interests = (s.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
+    h += line('Audience', esc(interests || 'no detailed targeting'));
+    h += line('Age', esc(s.age || ''));
+    h += line('Gender', esc(s.gender || ''));
+    h += line('Languages', esc((s.languages_picked || [s.language]).filter(Boolean).join(', ')));
+    h += line('Devices', esc(s.devices || (s.os && s.os !== 'All' ? s.os : '')));
+    h += line('Placements', esc(s.placements || ''));
+    if (s.ads_not_created) h += line('Ads', esc(String(s.pending_ad_count || 0) + ' — not created: needs a manual step (see the warning)'));
+    (s.ads || []).forEach(function (a) {
+      h += '<div class="rv-ad"><strong>Ad ' + esc(a.index) + '</strong>'
+        + line('Primary text', esc((a.primary_texts || [a.primary_text]).filter(Boolean).join(' / ')))
+        + line('Headline', esc((a.headlines || [a.headline]).filter(Boolean).join(' / ')))
+        + line('Button', esc(a.cta || ''))
+        + (a.form_name ? line('Form', esc(a.form_name) + (a.form_note ? ' <span class="rv-grey">' + esc(a.form_note) + '</span>' : ''))
+                       : line('URL', esc(a.link || '')))
+        + line('Feed file', esc(a.file || ''))
+        + line('Stories / Reels file', esc(a.stories_reels_file || '')) + '</div>';
+    });
+    return h + '</details>';
+  }
+  function previewOnlyHtml(c) {
+    var r = c.row || {};
+    var grey = ' <span class="rv-grey">' + REUSE_NOTE + '</span>';
+    return '<div class="rv-set-flat">'
+      + line('Audience', esc(r.Targeting || '') + grey)
+      + line('Age', esc(r['Age Min'] != null ? r['Age Min'] + '-' + r['Age Max'] : '') + grey)
+      + line('Page', '— ' + grey) + line('Pixel', '— ' + grey)
+      + line('Headline', esc(r['Ad Title'] || '') + grey)
+      + line('Feed file', esc(r['Creative Path'] || '') + grey)
+      + '</div>';
+  }
+  function campaignHtml(e, c) {
+    var b = budgetOf(c), sum = summaryOf(c), checked = checkedOk(c);
+    var bud = b ? ' · CBO · ' + numberText(b.n) + (b.cur ? ' ' + esc(b.cur) : '') + (b.lifetime ? ' lifetime' : ' / day') : '';
+    var published = '';
+    var hit = hitOf(c), res = hit && hit.result;
+    if (res && res.published_as && res.published_as !== c.name) {
+      published = ' → published as <strong>' + esc(res.published_as) + '</strong>';
+    }
+    var existing = sum && sum.existing ? ' <span class="rv-grey">already exists; a publish would reuse it</span>' : '';
+    var unchecked = !checked && !c._blockers.length ? ' <span class="rv-grey">' + REUSE_NOTE + '</span>' : '';
+    if (c._blockers.length || c._out) {
+      return '<div class="rv-camp rv-out"><s>' + esc(c.name) + '</s> <span class="rv-grey">— '
+        + esc(c._out ? 'account not ready' : blockedReason(e, c)) + '</span></div>';
+    }
+    var body = '';
+    if (sum) {
+      var pg = sum.page_name ? sum.page_name + (sum.page_id ? ' (' + sum.page_id + ')' : '') : String(sum.page_id || '');
+      body += line('Page', esc(pg)) + line('Pixel', esc(String(sum.pixel_id || '')));
+      if ((sum.manual_required || []).length) {
+        body += '<div class="rv-line rv-manual"><strong>Manual completion required</strong>: ' + esc(sum.manual_required.join(' ')) + '</div>';
+      }
+    }
+    if (sum && (sum.ad_sets || []).length) {
+      sum.ad_sets.forEach(function (s, i) { body += adSetHtml(s, s.index || i + 1); });
+    } else body += previewOnlyHtml(c);
+    if (c.visual) body += c.visual;
+    body += '<a href="#" class="rv-edit" data-rv-edit="' + esc(slotId(c.slot)) + '">Edit campaign</a>';
+    return '<details class="rv-camp"><summary><strong>' + esc(c.name) + '</strong>' + bud + published + existing + unchecked
+      + '</summary>' + body + '</details>';
+  }
+
+  function budgetLine(ev) {
+    var daily = {}, dOrder = [], life = {}, lOrder = [];
+    ev.create.forEach(function (x) {
+      var b = budgetOf(x.c);
+      if (!b) return;
+      var k = b.cur || '', into = b.lifetime ? life : daily, order = b.lifetime ? lOrder : dOrder;
+      if (!(k in into)) { into[k] = 0; order.push(k); }
+      into[k] += b.n;
+    });
+    if (!dOrder.length && !lOrder.length) return '';
+    var unknown = ' <span class="rv-grey">(currency ' + REUSE_NOTE + ')</span>';
+    var parts = dOrder.map(function (k) { return numberText(daily[k]) + (k ? ' ' + esc(k) : '') + ' / day' + (k ? '' : unknown); })
+      .concat(lOrder.map(function (k) { return numberText(life[k]) + (k ? ' ' + esc(k) : '') + ' lifetime' + (k ? '' : unknown); }));
+    return '<div class="pc-budget">Budget: ' + parts.join(' · ') + '</div>';
+  }
+  function checkLine() {
+    if (model.checking) {
+      var secs = Math.max(0, Math.floor((Date.now() - model.startedAt) / 1000));
+      return '<div class="pc-checked rv-checking">Checking with Meta… ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2) + '</div>';
+    }
+    if (!model.checkedAt) return '';
+    /* The age of the OLDEST verdict shown (a reused one is older than this popup), not the time this check ended. */
+    var since = model.checkedAt;
+    model.entries.forEach(function (e) {
+      e.camps.forEach(function (c) {
+        var hit = checkedOk(c) ? hitOf(c) : null;
+        if (hit && isFinite(hit.at) && hit.at > 0 && hit.at < since) since = hit.at;
+      });
+    });
+    var min = Math.max(0, Math.round((Date.now() - since) / 60000));
+    return '<div class="pc-checked">Checked with Meta ' + (min < 1 ? 'just now' : min + ' min ago') + '.</div>';
+  }
+
+  function notReadyHtml() {
+    var bad = model.badList;
+    if (!bad.length) return '';
+    return '<div class="cb-preflight pc-note pc-block">'
+      + '<strong>✕ Not ready (' + bad.length + ')</strong> — skipped unless you run them anyway:<br>'
+      + bad.map(function (a) {
+          return '<div>' + esc(a.account) + ' — ' + esc((a.reasons || []).map(function (r) {
+            return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
+          }).join('; ')) + '</div>';
+        }).join('')
+      + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway" data-rv-anyway="1"'
+      + (model.anyway ? ' checked' : '') + '> Run anyway</label></div>';
+  }
+  function blockedHtml(ev) {
+    if (!ev.blocked.length) return '';
+    return '<div class="pc-note pc-block rv-blocked"><strong>✕ Will not be created (' + ev.blocked.length + ')</strong><ul>'
+      + ev.blocked.map(function (x) {
+          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + '</li>';
+        }).join('') + '</ul></div>';
+  }
+  function warningsHtml(ev) {
+    var groups = cbGroupNotices(ev.notices);
+    var n = ev.notices.length;
+    var html = '<div class="pc-notes rv-warnings"><div class="pc-h">'
+      + (n ? 'Warnings (' + n + '): they do not block' : 'No warnings.') + '</div>';
+    if (n) html += cbNoticesHtml(groups);
+    if (ev.w7.length) {
+      var reasons = [];
+      ev.w7.forEach(function (x) {
+        var hit = x.c.form && x.c.form._pfAudit && x.c.form._pfAudit.byName[x.c.name];
+        var r = (hit && hit.error) || 'no answer';
+        if (reasons.indexOf(r) < 0) reasons.push(r);
+      });
+      html += '<div class="pc-note pc-warn rv-w7">⚠ Could not check with Meta (' + esc(reasons.join('; '))
+        + '). The pixel and vertical file warnings are unknown for: '
+        + esc(ev.w7.map(function (x) { return x.c.name; }).join(', ')) + '. '
+        + '<button type="button" class="rv-btn" data-rv-recheck="1">Check again</button></div>';
+    }
+    return html + '</div>';
+  }
+  function noteHtml() {
+    var open = (model.pf && model.pf.accounts || []).filter(function (a) {
+      return a.ready !== false && (a.notes || []).some(function (n) { return n.code === 'open_now'; });
+    });
+    return open.length ? '<div class="cb-preflight-note pc-note">' + esc(open.map(function (a) { return a.account; }).join(', '))
+      + ': profile is open — the robot will reuse or reopen it.</div>' : '';
+  }
+
+  var FOOT = 'On confirmation, this request is frozen. Each campaign is created PAUSED, ad sets and ads active, '
+    + 'then read back and compared. Later draft edits do not change this batch.';
+  var NOTHING = 'Nothing can be created: fix the campaigns listed under Will not be created.';
+
+  function bannerHtml() {
+    if (!model.stale || !model.stale.length) return '';
+    return '<div class="pc-note pc-block rv-stale" role="alert"><strong>Campaigns changed since this review: '
+      + esc(model.stale.join(', ')) + '.</strong> <button type="button" class="rv-btn" data-rv-again="1">Review again</button></div>';
+  }
+
+  function paint() {
+    var ev = evaluate();
+    model.ev = ev;
+    var accounts = model.entries.map(function (e) { return { name: e.title, camps: e.reps.map(function (c) { return c.name; }), e: e }; });
+    var accWithCreate = {};
+    ev.create.forEach(function (x) { accWithCreate[x.e.key] = true; });
+    var skipped = model.running;
+    var parts = cbPublishConfirmParts({
+      verb: 'Publish', targetText: 'campaign PAUSED, ad sets and ads active', accounts: accounts,
+      campaigns: ev.create.length, accountsCount: Object.keys(accWithCreate).length, skipped: skipped,
+      collapseOver: 6,
+      modeHtml: '<b>' + esc(cbPublishMode().split(' — ')[0]) + '</b> ' + esc(cbPublishMode().split(' — ').slice(1).join(' — ')),
+      leadExtraHtml: budgetLine(ev) + checkLine(),
+      campaignHtml: function (a, i) { return campaignHtml(a.e, a.e.reps[i]); },
+      noticesHtml: bannerHtml() + blockedHtml(ev) + notReadyHtml() + warningsHtml(ev) + noteHtml(),
+    });
+    var box = document.getElementById('safe-confirm-modal');
+    if (!box) return;
+    var lead = box.querySelector('.sfc-lead'), body = box.querySelector('.sfc-body');
+    if (lead) lead.innerHTML = parts.lead;
+    if (body) body.innerHTML = parts.body;
+    // Строка о заморозке стоит над кнопками и не прокручивается вместе с телом.
+    var foot = box.querySelector('.rv-foot-wrap');
+    if (!foot) {
+      foot = document.createElement('div');
+      foot.className = 'rv-foot-wrap';
+      var actions = box.querySelector('.sfc-actions');
+      if (actions && actions.parentNode) actions.parentNode.insertBefore(foot, actions);
+    }
+    foot.innerHTML = '<div class="rv-foot">' + esc(FOOT) + '</div>'
+      + (!model.checking && !ev.create.length ? '<div class="rv-nothing">' + esc(NOTHING) + '</div>' : '');
+    var ok = box.querySelector('#sfc-ok');
+    if (ok) {
+      ok.disabled = !!(model.checking || !ev.create.length);
+      ok.title = model.checking ? 'Checking with Meta…' : (!ev.create.length ? NOTHING : '');
+    }
+  }
+
+  /* ── проверка Meta (одна функция: ACL-1266 поменяет только её) ──────── */
+  window.cbReviewCheck = function (form, slots) {
+    var run = window.cbPreflightRun;
+    if (typeof run !== 'function') return Promise.resolve(null);
+    return Promise.resolve(run(form, slots)).then(function (data) {
+      var again = [];
+      var e = model && model.entries.filter(function (x) { return x.form === form; })[0];
+      slots.forEach(function (slot) {
+        var c = e && e.camps.filter(function (x) { return x.slot === slot; })[0];
+        var hit = c && hitOf(c), fp = c && e.review && e.review[c.name];
+        if (hit && hit.result && hit.result.review_fp && fp && hit.result.review_fp !== fp) again.push(slot);
+      });
+      if (!again.length) return data;
+      /* Вердикт другого отпечатка (поменяли текст в библиотеке): проверить заново, кэш не читать. */
+      return Promise.resolve(run(form, again, { force: true })).then(function (d2) {
+        again.forEach(function (slot) {
+          var c = e.camps.filter(function (x) { return x.slot === slot; })[0];
+          var hit = c && hitOf(c);
+          c.fpMismatch = !!(hit && hit.result && hit.result.review_fp && hit.result.review_fp !== e.review[c.name]);
+        });
+        return d2;
+      });
+    });
+  };
+
+  function runChecks() {
+    if (!model) return;
+    var mine = model;
+    mine.checking = true;
+    mine.startedAt = Date.now();
+    paint();
+    var jobs = mine.entries.map(function (e) {
+      var slots = e.camps.filter(function (c) { return !c.noCheck; }).map(function (c) { return c.slot; });
+      if (!slots.length) return Promise.resolve();
+      return window.cbReviewCheck(e.form, slots).catch(function () { return null; });
+    });
+    Promise.all(jobs).then(function () {
+      if (model !== mine) return;
+      mine.checking = false;
+      mine.checkedAt = Date.now();
+      try { window.cbTree.refreshAudit(); } catch (err) { /* карточки перерисуются сами */ }
+      paint();
+    });
+  }
+
+  /* ── подготовка: снимок, Preview, проверка аккаунтов ────────────────── */
+  function makeEntry(form, slots) {
+    var sel = allSlots(form).filter(function (s) { return slots.indexOf(s) >= 0; });
+    var names = {};
+    allSlots(form).forEach(function (s) { var n = cbPfName(s); names[n] = (names[n] || 0) + 1; });
+    var lost = [];
+    form.querySelectorAll('.cb-targeting-wrap').forEach(function (wrap) {
+      var input = wrap.querySelector('.cb-targeting-search'), hidden = wrap.querySelector('.cb-targeting-hidden');
+      if (input && typeof cbTargetingCommit === 'function') cbTargetingCommit(input);
+      var typed = input ? (input.value || '').trim() : '';
+      if (typed && !(hidden && hidden.value)) lost.push(typed);
+    });
+    var e = { form: form, key: cbFormKey(form), title: cbFormTitle(form), account: cbFormAccount(form), slots: sel,
+              fd: snapshotOf(form, sel), plan: null, review: {}, previewError: '', lostTargeting: lost, notReady: false, camps: [] };
+    e.camps = sel.map(function (slot) {
+      var n = cbPfName(slot);
+      return { form: form, slot: slot, name: n || cbSlotTitle(slot), twin: names[n] > 1, row: null, fp: '' };
+    });
+    var seen = {};
+    e.camps.forEach(function (c) { c.rep = !seen[c.name]; seen[c.name] = true; });   // twins are counted once
+    e.reps = e.camps.filter(function (c) { return c.rep; });
+    return e;
+  }
+  function runPreview(e) {
+    return fetch('/preview-publish', { method: 'POST', body: e.fd })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }, function () { return { ok: false, d: {} }; }); })
+      .then(function (x) {
+        if (!x.ok || !Array.isArray(x.d.plan)) { e.previewError = String(x.d.error || 'Preview did not answer'); return; }
+        e.plan = x.d.plan;
+        e.review = x.d.review || {};
+        e.camps.forEach(function (c) {
+          c.row = previewRowOf(e, c.name); c.fp = e.review[c.name] || '';
+          try {
+            if (c.row && c.row._ads_raw && window.buildVisualPreviewHtml) {
+              var acc = e.account, pfm = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
+              c.visual = '<details class="rv-vis"><summary>Ad previews</summary>'
+                + window.buildVisualPreviewHtml([c.row], pfm.page_name || acc || 'Your Page', {}) + '</details>';
+            }
+          } catch (err) { c.visual = ''; }
+        });
+      })
+      .catch(function () { e.previewError = 'The dashboard did not answer the preview'; });
+  }
+
+  function begin(reselect, opts) {
+    if (cbQueueUncertain()) return;
+    var items = reselect();
+    var running = [], live = [];
+    items.forEach(function (it) {
+      if (cbAccountBusy(cbFormKey(it.form))) running.push(cbFormTitle(it.form)); else live.push(it);
+    });
+    if (!live.length && !running.length) {
+      aclInlineError(document.querySelector('.cbd-publish-all'), 'Nothing is being assembled yet.');
+      return;
+    }
+    if (!live.length) { cbSayAlreadyBuilding(running); return; }
+    var rules = window.cbPreflight && window.cbPreflight.table ? window.cbPreflight.table() : [];
+    if (!window.cbTree || !window.cbTree.auditLines || !rules.length) { cbPfUnavailable(); return; }
+    if (preparing) {
+      aclInlineError(document.querySelector('.cbd-publish-all') || document.querySelector('.cb-publish-btn'), 'Still preparing the review — it opens when Preview and the checks have answered.');
+      return;
+    }
+    preparing = true;
+    if (window.cbPublishPending) window.cbPublishPending.start();
+    var entries = live.map(function (it) { return makeEntry(it.form, it.slots); });
+    var accounts = entries.map(function (e) { return e.account; });
+    var pf = typeof window.cbPreflightFetch === 'function' ? window.cbPreflightFetch(accounts) : Promise.resolve(null);
+    Promise.all([Promise.all(entries.map(runPreview)), pf]).then(function (r) {
+      preparing = false;
+      if (window.cbPublishPending) window.cbPublishPending.end();
+      open({ entries: entries, running: running, pf: r[1], opts: opts, reselect: reselect, openedAt: Date.now() });
+    }, function () { preparing = false; if (window.cbPublishPending) window.cbPublishPending.end(); });
+  }
+
+  function open(m) {
+    var bad = {}, badList = [];
+    ((m.pf && m.pf.accounts) || []).forEach(function (a) {
+      if (a && a.ready === false) { bad[String(a.account).toLowerCase()] = a; badList.push(a); }
+    });
+    m.badList = badList;
+    m.entries.forEach(function (e) { e.notReady = !!bad[e.account.toLowerCase()]; });
+    m.anyway = false; m.checking = false; m.stale = null; m.checkedAt = 0; m.closeReason = '';
+    model = m;
+    var opts = m.opts;
+    _safeConfirm(opts.title, '', function () {}, { confirmLabel: opts.confirmLabel, wide: true, lead: '&nbsp;' });
+    var overlay = document.getElementById('safe-confirm-modal');
+    var okBtn = overlay.querySelector('#sfc-ok');
+    okBtn.onclick = function () { if (!okBtn.disabled) confirm(); };
+    overlay.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var edit = t.closest('[data-rv-edit]');
+      if (edit) {
+        ev.preventDefault();
+        m.closeReason = 'edit';
+        overlay.remove();
+        try { window.cbTree.open(edit.getAttribute('data-rv-edit')); } catch (err) { /* карточка могла уйти */ }
+      } else if (t.closest('[data-rv-recheck]')) {
+        runChecks();
+      } else if (t.closest('[data-rv-again]')) {
+        m.closeReason = 'stale';
+        overlay.remove();
+        begin(m.reselect, m.opts);
+      }
+    });
+    overlay.addEventListener('change', function (ev) {
+      if (ev.target && ev.target.getAttribute && ev.target.getAttribute('data-rv-anyway')) { m.anyway = !!ev.target.checked; paint(); }
+    });
+    emit('review.opened', { accounts: m.entries.length, campaigns: m.entries.reduce(function (n, e) { return n + e.camps.length; }, 0) });
+    var tick = setInterval(function () {
+      if (!document.getElementById('safe-confirm-modal')) {
+        clearInterval(tick);
+        if (model === m && m.closeReason !== 'confirm') emit('review.closed', { reason: m.closeReason || 'cancel', open_s: Math.round((Date.now() - m.openedAt) / 1000) });
+        if (model === m) model = null;
+        return;
+      }
+      if (m.checking) paint();
+    }, 1000);
+    paint();
+    runChecks();
+  }
+
+  /* ── Confirm ────────────────────────────────────────────────────────── */
+  function staleNames() {
+    var fresh = model.reselect(), names = [];
+    var byKey = {};
+    fresh.forEach(function (it) { byKey[cbFormKey(it.form)] = it; });
+    model.entries.forEach(function (e) {
+      var f = byKey[e.key];
+      if (!f) { names = names.concat(e.camps.map(function (c) { return c.name; })); return; }
+      delete byKey[e.key];
+      var picked = allSlots(f.form).filter(function (s) { return f.slots.indexOf(s) >= 0; });
+      var sameSet = picked.length === e.slots.length && picked.every(function (s, i) { return s === e.slots[i]; });
+      var a = digest(e.fd), b = digest(snapshotOf(f.form, picked));
+      if (!sameSet || a.rest !== b.rest) {
+        e.camps.forEach(function (c) { names.push(c.name); });
+        picked.forEach(function (s) { var n = cbPfName(s); if (names.indexOf(n) < 0) names.push(n); });
+        return;
+      }
+      a.order.concat(b.order).forEach(function (n) { if (a.camps[n] !== b.camps[n] && names.indexOf(n) < 0) names.push(n); });
+    });
+    Object.keys(byKey).forEach(function (k) { byKey[k].slots.forEach(function (s) { names.push(cbPfName(s) || cbSlotTitle(s)); }); });
+    return names;
+  }
+
+  function countBy(list, pick) {
+    var out = {};
+    list.forEach(function (x) { pick(x).forEach(function (r) { out[r] = (out[r] || 0) + 1; }); });
+    return out;
+  }
+
+  function confirm() {
+    if (!model || model.checking) return;
+    var ev = model.ev || evaluate();
+    if (!ev.create.length) return;
+    var names = staleNames();
+    if (names.length) {
+      model.stale = names;
+      paint();
+      var box = document.getElementById('safe-confirm-modal');
+      var banner = box && box.querySelector('.rv-stale');
+      if (banner && banner.scrollIntoView) banner.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    var run = cbPublishRun(model.opts.onProgress || (window.cbTree ? window.cbTree.showQueue : null));
+    if (!run) return;
+    var m = model;
+    m.closeReason = 'confirm';
+    if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);
+    var go = [], skippedAcc = [], anywayAcc = [], busy = [];
+    var openS = Math.round((Date.now() - m.openedAt) / 1000);
+    m.entries.forEach(function (e) {
+      if (e.notReady) (m.anyway ? anywayAcc : skippedAcc).push(e.account);
+      var send = e.camps.filter(function (c) { return c._willCreate; });
+      if (!send.length) return;
+      go.push(e.account);
+      var skip = {};
+      e.camps.forEach(function (c, i) { if (!c._willCreate) skip[i] = true; });
+      var body = cbFormDataSkipping(e.form, skip, e.fd).body;
+      var campaigns = {};
+      send.forEach(function (c) {
+        var sum = summaryOf(c);
+        campaigns[c.name] = { fp: c.fp, page_id: sum ? String(sum.page_id || '') : '', pixel_id: sum ? String(sum.pixel_id || '') : '' };
+      });
+      var warnings = countBy(send.map(function (c) { return c._warnings; }), function (ws) { return ws.map(function (w) { return w.rule; }); });
+      var blocked = countBy(ev.blocked.filter(function (x) { return x.e === e; }), function (x) { return x.c._blockers.map(function (b) { return b.rule; }); });
+      var checked = send.filter(checkedOk).length;
+      body.set('review_json', JSON.stringify({ v: 1, campaigns: campaigns, warnings: warnings, blocked: blocked,
+        checked: checked, not_checked: send.length - checked, open_s: openS }));
+      var got = run.frozen(e.form, body, send.map(function (c) { return c.slot; }), e.camps.length - send.length);
+      if (got && got.skipped && got.skipped.length) busy = busy.concat(got.skipped);
+    });
+    if (m.pf && window.cbPreflightDecision) {
+      window.cbPreflightDecision(go, m.anyway ? [] : skippedAcc, m.anyway ? anywayAcc : []);
+    }
+    var overlay = document.getElementById('safe-confirm-modal');
+    if (overlay) overlay.remove();
+    if (busy.length) cbSayAlreadyBuilding(busy);
+  }
+
+  /* «Review again» из строки итога: те же кампании, которые сервер вернул как изменившиеся. */
+  window.cbReview = {
+    again: function (key, names) {
+      var forms = Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'))
+        .filter(function (f) { return cbKeyMatches(cbFormKey(f), key); });
+      var reselect = function () {
+        return forms.map(function (f) { return { form: f, slots: allSlots(f).filter(function (s) { return names.indexOf(cbPfName(s)) >= 0; }) }; })
+          .filter(function (it) { return it.slots.length; });
+      };
+      begin(reselect, { title: 'Create the changed campaigns as PAUSED campaigns?', confirmLabel: 'Publish selected → ' + cbPublishTarget(),
+        onProgress: window.cbTree ? window.cbTree.showQueue : null });
+    },
+    model: function () { return model; }
+  };
+
+  /* ── обёртки кнопок: только Graph API, иначе прежняя дорога ─────────── */
+  function ticked(form) { return allSlots(form).filter(function (s) { return !!s._cbdPick; }); }
+
+  if (typeof prevAll === 'function') {
+    window.cbPublishAll = function (onProgress, picked, onlyKeys) {
+      if (!cbApiMode()) return prevAll(onProgress, picked, onlyKeys);
+      var hadPick = !!(picked && picked.length);
+      var firstCall = true;
+      var reselect = function () {
+        var out = [];
+        // Первый раз - то, что передала кнопка; на Confirm - то, что отмечено сейчас (как подпись кнопки Publish).
+        var pick = null;
+        if (firstCall && hadPick) pick = picked;
+        else if (!firstCall) {
+          var t = []; document.querySelectorAll('form.open-account-form').forEach(function (f) { t = t.concat(ticked(f)); });
+          pick = t.length ? t : null;
+        }
+        firstCall = false;
+        document.querySelectorAll('form.open-account-form').forEach(function (form) {
+          var all = allSlots(form);
+          if (!all.length) return;
+          if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
+          var mine = pick ? cbPickedIn(form, pick) : all;
+          if (mine.length) out.push({ form: form, slots: mine });
+        });
+        return out;
+      };
+      begin(reselect, { onProgress: onProgress, confirmLabel: (hadPick ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(),
+        title: hadPick ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?' });
+    };
+  }
+  if (typeof prevOne === 'function') {
+    window.cbPublish = function (form) {
+      if (!cbApiMode()) return prevOne(form);
+      var reselect = function () {
+        var all = allSlots(form);
+        var shown = form.classList.contains('cb-in-drawer') ? all.filter(function (s) { return !s.hidden; })[0] : null;
+        var tk = shown ? [] : ticked(form);
+        var slots = shown ? [shown] : (tk.length && tk.length !== all.length ? tk : all);
+        return [{ form: form, slots: slots }];
+      };
+      var several = reselect()[0].slots.length > 1;
+      begin(reselect, { onProgress: window.cbTree ? window.cbTree.showQueue : null,
+        confirmLabel: 'Publish → PAUSED campaign',
+        title: several ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?' });
+    };
+  }
+})();
+/* ACL-2353 end */
 
 // ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
 // добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
@@ -25023,6 +25860,7 @@ window.cwWorkbench = (function () {
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
 <script src="/static/account_pages.js"></script>
 <script src="/static/warm_sessions.js"></script>
+<script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>
 <script src="/static/connections.js"></script>
 </body>

@@ -146,11 +146,11 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
     "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
                              "texts_vertical", "error", [1]),
-    "texts_vertical_titles": (_with(ads=_ad(1, vertical_file="v.png", headlines=["a", "b"])),
-                              "texts_vertical", "error", [2]),
+    "texts_vertical_titles": (_with(ads=_ad(0, vertical_file="v.png", headlines=["a", "b"])),
+                              "texts_vertical", "error", [1]),
     "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
     "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
-    "texts_dynamic_descriptions": (_with(ads=_ad(1, descriptions=["a", "b"])), "texts_dynamic", "error", [2]),
+    "texts_dynamic_descriptions": (_with(ads=_ad(0, descriptions=["a", "b"])), "texts_dynamic", "error", [1]),
     # Решение владельца 2026-10-20: несколько текстов - Dynamic Creative, объявление одно в наборе.
     "texts_dynamic_alone_ok": (_with(ads=_ad(0, bodies=["a", "b", "c", "d", "e"])[:1]), "texts_dynamic", "ok", []),
     "texts_dynamic_not_with_vertical": (_with(ads=_ad(0, vertical_file="v.png", bodies=["a", "b"])),
@@ -886,7 +886,8 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     i = page.index("    e.resend = function () {")
     body = page[i:page.index("    e.dismiss = function () {", i)]
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
-    assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
+    # ACL-2353: замороженная отправка (из ревью) повторяется без ворот; живая карточка идёт через ворота.
+    assert body.index("if (e.frozen)") < body.index("cbPreflightGate") < body.rindex("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
 
 

@@ -25,7 +25,7 @@ def iso(days_ago: int) -> str:
     return (date.today() - timedelta(days=days_ago)).isoformat() + "T10:00:00"
 
 
-def build_amap(web, links, monkeypatch, spec: dict[str, list[tuple]]):
+def build_amap(web, links, monkeypatch, spec: dict[str, list[tuple]], status_extra: dict | None = None):
     """spec: {страна: [(аккаунт, спенд|None, статус, текст статуса, дней назад, in_workbook)]} → amap-представление."""
     statuses, report_countries, not_in_book = {}, [], set()
     for country, accounts in spec.items():
@@ -47,6 +47,8 @@ def build_amap(web, links, monkeypatch, spec: dict[str, list[tuple]]):
                                  "my_spend": sum(a[1] or 0 for a in accounts),
                                  # книжные тоталы страны: из них _amap_totals строит «Total · all countries»
                                  "my_totals": {"spend": sum(a[1] or 0 for a in accounts), "leads": 12 * len(accounts), "deposits": len(accounts)}})
+    for acc, extra in (status_extra or {}).items():
+        statuses[acc] = {**statuses.get(acc, {}), **extra}
     monkeypatch.setattr(web, "_account_status", lambda a: statuses.get(a, {}))
     monkeypatch.setattr(web, "_workbook_has_account", lambda df, country, label: label not in not_in_book)
     return web._build_account_map_view({"countries": report_countries})
