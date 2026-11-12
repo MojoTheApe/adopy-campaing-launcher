@@ -76,7 +76,18 @@ def _route_for(html, state):
         if path == '/preview-publish':
             f = fields(r.request)
             data = {'plan': [{'Campaign Name': f[f'camp_{i}_name'], 'errors': [], 'warnings': [], '_ads_raw': []}
-                             for i in range(int(f['camp_count']))]}
+                             for i in range(int(f['camp_count']))],
+                    'review': {f[f'camp_{i}_name']: 'fp-%d' % i for i in range(int(f['camp_count']))}}
+        elif path == '/publish-plan' and r.request.method == 'POST':
+            f = fields(r.request)
+            data = {'account': f['account_label'], 'error': '', 'account_audit': None,
+                    'results': [{'campaign_name': f[f'camp_{i}_name'], 'error': None, 'audit': [], 'review_fp': 'fp-%d' % i}
+                                for i in range(int(f['camp_count']))]}
+        elif path == '/api/publish-preflight':
+            data = {'accounts': []}
+        elif path == '/api/ad-copy':
+            data = {'rows': [{'ad_title': 'Text A', 'headline': 'Short headline', 'body': 'A body that fits.',
+                              'description': '', 'asset': '', 'language': ''}]}
         elif path == '/connection/prepare' and r.request.method == 'POST':
             body = json.loads(r.request.post_data or '{}')
             state.setdefault('prepares', []).append(body['account'])
@@ -149,6 +160,19 @@ def add(page, account=0, count=1):
 
 
 def ready(page):
+    if page.evaluate("window.ACL_FB_BACKEND === 'api'"):
+        # ACL-2353: ревью блокирует кампании с ошибками pre-flight audit - под API карточки заполнены целиком.
+        page.evaluate("""() => {
+          const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); };
+          document.querySelectorAll('form.open-account-form').forEach(f => {
+            set(f.querySelector('input[name="tracking_link"]'), 'https://track.example.com/c?sub=1');
+            f.querySelectorAll('.cb-slot').forEach(s => {
+              set(s.querySelector('[name$="_budget"]'), '20');
+              set(s.querySelector('input[type="hidden"][name$="_ad_0_copy"]'), 'Text A');
+            });
+          });
+        }""")
+        page.wait_for_timeout(700)
     page.wait_for_function("Array.from(document.querySelectorAll('.cb-slot')).every(s => s._drawerResult && s._drawerResult.state === 'ok')")
 
 
@@ -585,7 +609,10 @@ def test_a_job_saved_with_its_country_keeps_only_that_country_busy(browser, two_
 
 
 def _api_backend(page):
+    # ACL-2353: ревью строится на таблице правил pre-flight audit (как на настоящей странице).
+    from src.fb_api import preflight_rules as pf
     page.evaluate("window.ACL_FB_BACKEND = 'api'")
+    page.evaluate("r => { window.CB_PREFLIGHT_RULES = r; }", pf.export_rules())
 
 
 def test_refused_preparation_stops_only_its_account_and_says_nothing_was_submitted(ui):

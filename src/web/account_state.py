@@ -67,8 +67,20 @@ def _heavy_word(code: str, text: str) -> str:
 
 
 def _status_line(code: str, text: str, res: dict, st: dict, label: str, tried_label: str,
-                 has_binding: bool) -> str:
-    """Строка под словом состояния (ACL-2419 §4): слово статуса, время чтения, причина."""
+                 has_binding: bool, key: str = "", by_spend: bool = False) -> str:
+    """Строка под словом состояния (ACL-2419 §4): слово статуса, время чтения, причина.
+
+    ACL-2556: строка не спорит со значком. Active по спенду/старому clear —
+    «not refreshed»; под New и прочими не-Unknown никогда нет «unknown · …».
+    """
+    if by_spend:
+        if code == "clear" and label:
+            return f"status not refreshed · last read {label}"
+        if tried_label:
+            return f"status not refreshed · last read failed {tried_label}"
+        return "active by spend · status not read yet"
+    if key == "new":
+        return ""
     if res["known"] and code == "clear":
         return ("active" if st.get("source") == "api" else "no warning") + (f" · {label}" if label else "")
     if res["known"]:
@@ -86,8 +98,12 @@ def _status_line(code: str, text: str, res: dict, st: dict, label: str, tried_la
     return "unknown · never read" if has_binding else ""
 
 
-def _status_tip(code: str, res: dict, st: dict, label: str) -> str:
+def _status_tip(code: str, res: dict, st: dict, label: str, by_spend: bool = False,
+                tried_label: str = "") -> str:
     """Подсказка к слову состояния (ACL-2419 §4)."""
+    if by_spend:
+        return ("Active by spend in the period; the account status could not be read"
+                + (f" {tried_label}." if tried_label else " yet."))
     if res["known"] and code == "clear":
         if st.get("source") == "api":
             return f"Account status from Meta (account_status = 1), read {label}."
@@ -100,6 +116,12 @@ def _status_tip(code: str, res: dict, st: dict, label: str) -> str:
                 '"no warning" or "active" until it is read again.')
         return f"{base} {failure}".strip()
     return ""
+
+
+def stale_clear_too_old(at: str, today: date) -> bool:
+    """Удачное чтение `clear` старше STATE_STALE_DAYS (или без даты) не считается фактом."""
+    day = _parse_day(at)
+    return day is None or (today - day).days > STATE_STALE_DAYS
 
 
 def account_state(row: dict, today: date | None = None) -> dict:
@@ -125,14 +147,24 @@ def account_state(row: dict, today: date | None = None) -> dict:
     # Не распознанный API-код (`unknown` со словами Meta) — тоже незнание, не «нет статуса».
     has_status = bool(code)
 
+    by_spend = False
     if code in DEAD_STATUSES:
         key = "dead"
     elif code in ISSUE_STATUSES:
         key = "issue"
+    elif res["known"] and code == "clear":
+        key = "active"
+    elif row.get("has_data") and spend > 0:
+        # ACL-2556: не прочитанный/просроченный/упавший статус не делает «Unknown»
+        # аккаунт, который тратит; тяжёлые статусы выше уже выиграли.
+        key = "active"
+        by_spend = True
+    elif code == "clear" and not stale_clear_too_old(at, today):
+        # Последнее удачное чтение было active/clear не старше порога, новое упало.
+        key = "active"
+        by_spend = True
     elif has_status and not res["known"]:
         key = "unknown"
-    elif row.get("has_data") and spend > 0:
-        key = "active"
     elif row.get("in_workbook") is False:
         key = "new"
     else:
@@ -179,8 +211,9 @@ def account_state(row: dict, today: date | None = None) -> dict:
         "status_word": res["shown"],
         "status_read": label,
         "status_line": _status_line(code, text, res, st, label, tried_label,
-                                    bool(row.get("act_id") or row.get("profile_id"))),
-        "status_tip": _status_tip(code, res, st, label),
+                                    bool(row.get("act_id") or row.get("profile_id")), key, by_spend),
+        "status_tip": _status_tip(code, res, st, label, by_spend, tried_label),
+        "by_spend": by_spend,
     }
 
 

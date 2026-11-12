@@ -33,7 +33,12 @@ def machine(tmp_path, monkeypatch):
     monkeypatch.setenv("ACL_CONFIG_DIR", str(config))
     monkeypatch.delenv("GSHEET_OAUTH_TOKEN", raising=False)
     monkeypatch.delenv("MULTILOGIN_AUTOMATION_TOKEN_A", raising=False)
-    return config
+    # update_machine_env / connection_settings.apply write os.environ directly; restore it afterwards
+    # so ACL_LIBRARY_TOKEN and friends do not leak into later tests in the same worker (ACL-2565).
+    before = dict(os.environ)
+    yield config
+    os.environ.clear()
+    os.environ.update(before)
 
 
 def test_saving_a_token_stores_ciphertext_but_the_process_gets_the_plain_value(machine, fake_dpapi):

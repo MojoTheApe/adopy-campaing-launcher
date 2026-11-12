@@ -932,7 +932,8 @@ def test_report_page_wiring_is_isolated_and_has_no_timers():
     js = (root / "static" / "warm_sessions.js").read_text(encoding="utf-8")
     assert page.count('<script src="/static/warm_sessions.js"></script>') == 1
     assert "setInterval" not in js, "no timers: the screen never polls on its own"
-    assert js.count("setTimeout") == 2, "the only waits: the local open-job status and the refresh debounce"
+    # ACL-2557: плюс те же два ожидания у кнопки Home (задание открытия и локальная очередь статус-чтения)
+    assert js.count("setTimeout") == 4, "the only waits: the local open-job status, the refresh debounce and the Home open button's two local waits"
     assert "window.aclConfirm(" in js and "confirm: true" in js
     for url in ("/warm/state", "/warm/open", "/warm/close", "/warm/job/"):
         assert url in js
