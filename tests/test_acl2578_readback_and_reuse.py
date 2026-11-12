@@ -112,3 +112,75 @@ def test_left_over_known_by_receipt_is_never_given_the_same_name_when_the_listin
     res = _publisher(meta).publish_draft(d)
     assert res["error"] is None and res["published_as"] == BASE + " copy 1"
     assert sorted(_names(meta)) == [BASE, BASE + " copy 1"], "never two campaigns with one name"
+
+
+# ── B1: a left-over with no ads is judged by its settings, not by Meta's derived placement aggregate ──
+
+def test_left_over_without_ads_is_reused_even_if_meta_reports_a_different_placement_aggregate(dirs):
+    meta, first = _stop_at_first_image(dirs)
+    # Meta's aggregate on a campaign that has no ads yet: the settings are identical to the builder.
+    meta.mutate_on_read[("campaign", "advantage_state_info")] = {"advantage_placement_state": "DISABLED"}
+    d = _draft(dirs / "b", ads=3)                           # renamed / extra creatives do not matter
+    res = _publisher(meta).publish_draft(d)
+    assert res["campaign_id"] == first["campaign_id"] and res["reused"].get("campaign")
+    assert not res["published_as"] and _names(meta) == [BASE]
+
+
+def test_campaign_with_ads_and_a_wrong_placement_aggregate_is_still_not_reused(dirs):
+    meta = FakeMeta()
+    meta.mutate_on_read[("campaign", "advantage_state_info")] = {"advantage_placement_state": "ENABLED"}
+    drafts = [_draft(dirs / x, ads=1) for x in "ab"]
+    for d in drafts:
+        for adset in d.ad_sets:
+            adset.placements = {"mode": "advantage_plus"}
+    first = _publisher(meta).publish_draft(drafts[0])
+    assert first["error"] is None
+    meta.mutate_on_read[("campaign", "advantage_state_info")] = {"advantage_placement_state": "DISABLED"}
+    res = _publisher(meta).publish_draft(drafts[1])
+    assert res["campaign_id"] != first["campaign_id"]       # the ACL-1772 policy is unchanged when ads exist
+
+
+# ── B2: the name stays taken in every branch of the receipt check ──
+
+def test_failed_read_of_the_receipt_campaign_stops_without_any_write(dirs, monkeypatch):
+    meta, first = _stop_at_first_image(dirs)
+    before = len(meta.posts)
+    real = meta.request
+
+    def request(method, path, params=None):
+        if method == "GET" and path.strip("/").split("/")[-1] == first["campaign_id"]:
+            return {"status": 500, "body": {"error": {"code": 2, "message": "Service temporarily unavailable"}}}
+        return real(method, path, params)
+    monkeypatch.setattr(meta, "request", request)
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+    res = _publisher(meta).publish_draft(_draft(dirs / "b", ads=2))
+    assert res["error"] and len(meta.posts) == before, "no write after an unreadable receipt campaign"
+    assert _names(meta) == [BASE]
+
+
+def test_deleted_receipt_campaign_does_not_block_the_name(dirs):
+    meta, first = _stop_at_first_image(dirs)
+    meta.objects.pop(first["campaign_id"])                  # Meta: "Object with ID ... does not exist"
+    res = _publisher(meta).publish_draft(_draft(dirs / "b", ads=2))
+    assert res["error"] is None and res["campaign_id"] != first["campaign_id"]
+
+
+def test_live_campaign_with_the_exact_name_but_no_label_holds_the_name(dirs, monkeypatch):
+    meta, first = _stop_at_first_image(dirs)
+    meta.objects[first["campaign_id"]]["adlabels"] = []     # Meta did not keep the tag
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])      # search lag
+    res = _publisher(meta).publish_draft(_draft(dirs / "b", ads=2))
+    assert res["error"] is None and res["published_as"] == BASE + " copy 1"
+    assert sorted(_names(meta)) == [BASE, BASE + " copy 1"]
+
+
+def test_receipt_campaign_state_is_read_once_when_it_is_the_family_top(dirs, monkeypatch):
+    meta, first = _stop_at_first_image(dirs)
+    calls = []
+    real = cr.CampaignCreator._resume_state
+    monkeypatch.setattr(cr.CampaignCreator, "_resume_state",
+                        lambda self, *a, **k: calls.append(a[2]) or real(self, *a, **k))
+    d = _draft(dirs / "b", ads=2)
+    d.ad_sets[0].daily_budget = 77.0                        # not reusable
+    _publisher(meta).publish_draft(d)
+    assert calls.count(first["campaign_id"]) == 1

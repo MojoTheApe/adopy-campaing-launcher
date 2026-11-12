@@ -2316,7 +2316,7 @@ class CampaignCreator:
         want = set() if manual else {ad.name for s in cand.ad_sets for ad in s.ads}
         if {str(r.get("name") or "").strip() for r in ads} - want:
             return found_sets, False, ["it is a campaign with other ads"]
-        bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
+        bad = self._existing_differences(cand, targetings, campaign_id, found_sets, has_ads=bool(ads))
         if bad:
             return found_sets, False, [f"{f['object']}: " + "; ".join(f["differences"]) for f in bad]
         have: dict[str, set[str]] = {}
@@ -2331,10 +2331,13 @@ class CampaignCreator:
                         ) -> tuple[NameChoice | None, tuple[int, dict, list[str]] | None]:
         """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
 
-        Возвращает (выбор, остаток). Любое сомнение (нет кампании, ошибка Meta на чтении по id, не наша, не живая) -
-        квитанция не используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
-        ACL-2578: если кампания жива и наша, но расходится с билдером, она не дописывается, а возвращается вторым
-        элементом (номер, строка, причины): её имя занято, даже если листинг Meta её сейчас не показал.
+        Возвращает (выбор, остаток). Нет кампании (id не существует), не живая, переименована - квитанция не
+        используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
+        ACL-2578: (1) чтение по id упало по другой причине (сеть, лимит) - имя неизвестно: стоп `name_unsure`
+        до записей, а не тихое «квитанции нет»; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
+        (метка не важна); (3) наша, но расходится с билдером - не дописывается. В (2) и (3) она возвращается вторым
+        элементом (номер, строка, причины): имя занято, даже если листинг Meta её сейчас не показал.
+        Не обнаружить: квитанции нет и листинг промахнулся - тогда о кампании ничего не известно.
         """
         n = receipt.get("n")
         if not isinstance(n, int) or n < 0:
@@ -2346,16 +2349,23 @@ class CampaignCreator:
         if campaign_id:
             try:
                 row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
-            except GraphError:
-                return None, None
+            except GraphError as exc:
+                if _object_gone(exc):
+                    return None, None
+                raise CreationStopped(
+                    f"Cannot tell whether the earlier campaign {cand.name!r} is still on the ad account (Meta did not "
+                    "answer the read). Nothing was created, so no second campaign with the same name appears; "
+                    "publish again in a minute.", kind="name_unsure") from exc
             row = {**row, "id": campaign_id} if isinstance(row, dict) else None
         else:
             hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
             row = next((r for r in hits if cand.label in _labels(r)), None)
-        if not row or str(row.get("name") or "").strip() != cand.name or cand.label not in _labels(row):
+        if not row or str(row.get("name") or "").strip() != cand.name:
             return None, None
         if str(row.get("effective_status") or row.get("status") or "") not in LIVE_STATES:
             return None, None
+        if cand.label not in _labels(row):
+            return None, (n, row, ["it was not created by ACL (no ACL tag)"])
         found_sets, _partial, why = self._resume_state(cand, targetings, str(row["id"]))
         if why:
             return None, (n, row, why)
@@ -2393,7 +2403,10 @@ class CampaignCreator:
         ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
         notes: list[str] = []
         if ours:
-            found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
+            if leftover and top == leftover[0] and str(ours.get("id")) == str(leftover[1].get("id")):
+                found_sets, partial, why = None, False, leftover[2]        # already read by the receipt check
+            else:
+                found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
             if partial and not why:
                 return NameChoice(cand, ours, found_sets, top, len(fam) - 1)
             if why:
@@ -3449,8 +3462,12 @@ class CampaignCreator:
 
     # -- найденные кампания и группы против плана (до любой записи под ними)
     def _existing_differences(self, plan: CampaignPlan, targetings: list[dict], campaign_id: str,
-                              found_sets: list[dict | None]) -> list[dict]:
+                              found_sets: list[dict | None], *, has_ads: bool = True) -> list[dict]:
         """Что в уже существующих кампании/группах не совпадает с билдером. Только чтение.
+
+        ACL-2578: `has_ads=False` (кампания-остаток без объявлений) - агрегат `advantage_placement_state` не
+        сверяется: Meta считает его по набору с объявлениями, а площадки каждого набора сверяются отдельно ниже;
+        сам агрегат проверит сверка после записи, когда объявления уже есть.
 
         Имя, метка, campaign_id и расписание не показываем: имя и метку доказал поиск,
         остальное сверит сверка после записи. Ничего не обновляется и не удаляется.
@@ -3458,7 +3475,10 @@ class CampaignCreator:
         found: list[dict] = []
         camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
         self._budget_type_conflict(plan, camp)
-        diffs = _describe_diffs(self._campaign_checks(plan, camp))
+        camp_checks = self._campaign_checks(plan, camp)
+        if not has_ads:
+            camp_checks = [c for c in camp_checks if c["field"] != "advantage_placement_state"]
+        diffs = _describe_diffs(camp_checks)
         if diffs:
             found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
         for ad_set, targeting, hit in zip(plan.ad_sets, targetings, found_sets):
@@ -4765,6 +4785,11 @@ def graph_problem(exc: BaseException) -> dict:
                 "severity": "blocking", "step": "graph_error", "raw": raw or "Meta refused the request (no details given)."}
     return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
             "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
+
+
+def _object_gone(exc: GraphError) -> bool:
+    """ACL-2578: Meta says the object does not exist (deleted); any other failed read leaves the question open."""
+    return exc.code == 100 and (exc.subcode == 33 or "does not exist" in str(exc).lower())
 
 
 def _advantage_info(camp: dict) -> dict:
