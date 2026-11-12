@@ -1611,10 +1611,12 @@ class CampaignCreator:
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None,
                  compress_video: Callable[[str], Any] | None = None,
-                 journal: "_oj.OperationJournal | None" = None):
+                 journal: "_oj.OperationJournal | None" = None, request_key: str = ""):
         self.client = client
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
         self.journal = journal
+        #: ACL-1856: the submit key of the page (bound per campaign); the journal refuses its reuse for another plan.
+        self.request_key = request_key
         self._op: "_oj.Operation | None" = None
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
@@ -1878,7 +1880,9 @@ class CampaignCreator:
                                        for p in (ad.path, ad.vertical_path) if p]
         fp = _oj.plan_fingerprint(self._plan_view(plan), md5s)
         try:
-            self._op = self.journal.open(plan.act, plan.tag, fp, plan.name)
+            self._op = self.journal.open(plan.act, plan.tag, fp, plan.name, request_id=self.request_key)
+        except _oj.RequestConflict as exc:
+            raise CreationStopped(f"{exc} Nothing was created.", kind="request_conflict") from exc
         except _oj.JournalError as exc:
             self._journal_event("journal_save_failed", what="open", phase="open", error=type(exc).__name__)
             raise CreationStopped(MSG_JOURNAL, kind="journal") from exc

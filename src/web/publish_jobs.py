@@ -204,6 +204,7 @@ def create_job(
     campaign_names: list[str] | None = None,
     reviewed: bool = False,
     review_refused: list[dict[str, Any]] | None = None,
+    request_id: str = "",
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
@@ -237,6 +238,8 @@ def create_job(
             "activate": activate,
             "dry_run": dry_run,
             "hand_off": hand_off,
+            #: ACL-1856: the page's submit key; the durable operation journal binds it to the plan revision.
+            "request_id": request_id,
             "backend": "rpa" if use_rpa_publish() else "api",
             # ACL-1761: чем создаются кампании — роботом или Graph API (PAUSED).
             "fb_backend": _fb_backend(),
@@ -1782,6 +1785,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     publisher.reviewed = review
     publisher.units = units
     with _jobs_lock:
+        publisher.request_id = str((_jobs.get(job_id) or {}).get("request_id") or "")
         # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
         # решаем так же, как окно, поднятое этим заданием.
         publisher.inherited_profile = bool((_jobs.get(job_id) or {}).get("reused_kept"))
@@ -2420,7 +2424,7 @@ def start_job(
         return _start_job(account_label, country, slots, via_multilogin=via_multilogin,
                           activate=activate, dry_run=dry_run, hand_off=hand_off,
                           reviewed=reviewed, frozen_drafts=frozen_drafts,
-                          review_refused=review_refused)
+                          review_refused=review_refused, request_id="")
     # Под замком этого ключа целиком: исходный запрос и его повтор могут
     # прийти почти разом (первый ещё собирает черновики), и проверить-потом-
     # создать раздельно значило бы два задания. Замок — на ключ, а не общий:
@@ -2438,7 +2442,7 @@ def start_job(
             job_id = _start_job(account_label, country, slots, via_multilogin=via_multilogin,
                                 activate=activate, dry_run=dry_run, hand_off=hand_off,
                                 reviewed=reviewed, frozen_drafts=frozen_drafts,
-                                review_refused=review_refused)
+                                review_refused=review_refused, request_id=request_id)
             with _request_lock:
                 while len(_request_jobs) >= _REQUEST_KEYS_MAX:
                     _request_jobs.pop(next(iter(_request_jobs)))
@@ -2466,6 +2470,7 @@ def _start_job(
     reviewed: dict[str, Any] | None = None,
     frozen_drafts: list[Any] | None = None,
     review_refused: list[dict[str, Any]] | None = None,
+    request_id: str = "",
 ) -> str:
     if activate:
         raise ValueError("ACM is draft-only: live activation is disabled")
@@ -2493,6 +2498,7 @@ def _start_job(
         campaign_names=[str(getattr(d, "name", "") or "") for d in drafts],
         reviewed=reviewed is not None,
         review_refused=review_refused,
+        request_id=request_id,
     )
     # Event конца потока заводится здесь, прямо перед потоком: у задания, чей
     # поток не стартовал, он не остаётся навсегда.

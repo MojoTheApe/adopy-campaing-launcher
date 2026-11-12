@@ -29,6 +29,7 @@ from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import plain_errors as _plain
+from src.fb_api import operation_journal as _oj
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
     resolve_page,
@@ -112,6 +113,15 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
                          f"chunks, {need + reads} for the rest), more than one run allows ({ceiling}). "
                          "Use a smaller or shorter video, or split the campaign. Nothing was created.")
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
+
+
+#: ACL-1856: extra Graph reads of a verified resume (campaign, ad sets, ads, creatives).
+RESUME_VERIFY_CALLS = 4
+
+
+def journal_enabled() -> bool:
+    """ACL-1856: durable operation journal; `ACL_OPERATION_JOURNAL=0` turns it off."""
+    return os.environ.get("ACL_OPERATION_JOURNAL", "1").strip().lower() not in ("0", "false", "off", "no")
 
 
 def _now_iso() -> str:
@@ -350,6 +360,8 @@ def result_dict(outcome: Outcome, *, error: str = "", not_started: bool = False)
         "created": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.created.items()},
         "reused": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.reused.items()},
         "ts": _now_iso(),
+        #: ACL-1856: durable progress (stages, partial ids, plain next action); None when not recorded.
+        "operation": outcome.operation or None,
     }
 
 
@@ -410,6 +422,8 @@ class ApiPublisher:
 
     #: ACL-2345: this job already took its one automatic resume (the final campaign row says so).
     auto_resumed = False
+    #: ACL-1856: the page's submit key (set by publish_jobs); bound to the plan revision per campaign.
+    request_id = ""
 
     #: ACL-2299: writes of clients replaced by a fresh tab earlier in the same job (the count never goes down).
     _writes_base = 0
@@ -730,6 +744,11 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
+        journal = None
+        if not self.dry_run and journal_enabled():
+            journal = _oj.OperationJournal()
+            if journal.root.exists() and any(journal.root.glob("op-*.json")):
+                budget += RESUME_VERIFY_CALLS      # a verified resume reads the saved objects back first
         self._client.reset_budget(budget)
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
@@ -747,7 +766,10 @@ class ApiPublisher:
         spec = self._log_spec(plan, name)
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
-                                  live_progress=lambda text: self.progress(f"{name}: {text}"))
+                                  live_progress=lambda text: self.progress(f"{name}: {text}"),
+                                  journal=journal,
+                                  # one submit holds several campaigns: the key is bound per campaign (its tag)
+                                  request_key=(f"{self.request_id}#{plan.tag}" if self.request_id else ""))
         if self.reviewed is not None:
             creator.reviewed = self.reviewed
         if self.dry_run:
@@ -796,6 +818,9 @@ class ApiPublisher:
                 diag={"calls": self._client.calls, "writes": self._client.writes,
                       "created": res["created"], "reused": res["reused"],
                       "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind,
+                      **({"operation": outcome.operation.get("id"), "operation_state": outcome.operation.get("state"),
+                          "stages_confirmed": len(outcome.operation.get("partial_ids") or [])}
+                         if outcome.operation else {}),
                       "copy_number": outcome.copy_number,
                       "mode": _work_mode(self._client),
                       **({"auto_resumed": True} if self.auto_resumed else {}),

@@ -50,6 +50,10 @@ _ALLOWED = {
 }
 
 
+class RequestConflict(ValueError):
+    """The same request id was already used for a different plan revision (another operation)."""
+
+
 class JournalError(Exception):
     """Журнал нельзя прочитать или записать (диск полон, нет прав, замок): запись в Meta не уходит."""
 
@@ -203,12 +207,24 @@ class Operation:
         return {k: s["object_id"] for k, s in self.data["stages"].items()
                 if s["state"] == CONFIRMED and s["object_id"]}
 
+    def next_action(self) -> str:
+        """One plain next step for the manager (English). Reads only."""
+        st = self.data["stages"]
+        if self.state == OP_COMPLETE:
+            return "Nothing to do - everything was created and checked (campaign is PAUSED)."
+        unknown = [k for k, s_ in st.items() if s_["state"] == UNKNOWN]
+        if unknown:
+            return "Wait 10 minutes, then publish again - Meta may still be processing the last step."
+        if any(s_["state"] == CONFIRMED for s_ in st.values()) or self.state in (OP_STOPPED, OP_FAILED):
+            return "Publish again - what was already created is checked and nothing will be created twice."
+        return "Publish again."
+
     def summary(self) -> dict:
-        """Для результата задания (PR 2): состояние, этапы и подтверждённые id. Файл не меняет."""
+        """Для результата задания: состояние, этапы, подтверждённые id и следующий шаг. Файл не меняет."""
         return {"id": self.id, "state": self.state,
                 "stages": [{"label": k, "state": self.data["stages"][k]["state"],
                             "id": self.data["stages"][k]["object_id"]} for k in self.data["order"]],
-                "partial_ids": self.partial_ids()}
+                "partial_ids": self.partial_ids(), "next_action": self.next_action()}
 
 
 class OperationJournal:
@@ -279,6 +295,10 @@ class OperationJournal:
                         warnings.append("The saved progress of this campaign was unreadable and was set aside; "
                                         "the campaign will be checked in Ads Manager by name.")
                         data = None
+                if request_id:
+                    owner = self._request_owner(request_id, skip=path)
+                    if owner and owner != op_id:
+                        raise RequestConflict("This request ID was used for a different campaign plan.")
                 if data is None:
                     now = self.clock()
                     data = {"v": SCHEMA, "operation_id": op_id, "act": str(act), "tag": str(tag),
@@ -287,6 +307,8 @@ class OperationJournal:
                             "stages": {}, "order": []}
                     _atomic_write(path, _canon(data).encode("utf-8"))
             self.prune()
+        except RequestConflict:
+            raise
         except (OSError, ValueError, TimeoutError) as exc:
             raise JournalError(f"operation journal cannot be opened: {exc}") from exc
         op = Operation(self, data, path)
@@ -294,6 +316,21 @@ class OperationJournal:
         if request_id:
             op.add_request_id(request_id)
         return op
+
+    def _request_owner(self, request_id: str, skip: Path | None = None) -> str:
+        """Operation id that already holds this request id ('' if none). Read-only scan of the journal folder."""
+        try:
+            files = list(self.root.glob("op-*.json"))
+        except OSError:
+            return ""
+        for f in files:
+            try:
+                d = self._read_file(f)
+            except JournalError:
+                continue
+            if d and request_id in (d.get("request_ids") or []):
+                return str(d.get("operation_id") or "")
+        return ""
 
     def prune(self) -> int:
         """Удалить законченные операции старше срока. Незаконченные (open/stopped/failed) остаются. Ошибки не бросает."""

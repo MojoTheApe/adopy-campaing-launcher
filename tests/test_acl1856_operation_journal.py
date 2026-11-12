@@ -457,3 +457,89 @@ def test_without_a_journal_nothing_is_written_to_disk(tmp_path):
     meta = FakeMeta()
     out, _ = _go(meta, _draft(tmp_path, ads=1), None)
     assert out.error == "" and out.operation == {}
+
+
+# ───────────────────────── PR 2: request key, result, publish wiring ─────────────────────────
+
+def test_request_id_is_bound_to_one_plan_revision(journal):
+    a = journal.open(ACT, "tag", "fp1", "C", request_id="req#tag")
+    again = journal.open(ACT, "tag", "fp1", "C", request_id="req#tag")      # duplicate submit, also after a restart
+    assert again.id == a.id and again.data["request_ids"] == ["req#tag"]
+    fresh = oj.OperationJournal(journal.root)                              # another process / restart
+    assert fresh.open(ACT, "tag", "fp1", "C", request_id="req#tag").id == a.id
+    with pytest.raises(oj.RequestConflict):
+        fresh.open(ACT, "tag", "fp2", "C", request_id="req#tag")            # same key, other plan revision
+    assert len(list(journal.root.glob("op-*.json"))) == 1                   # the refused revision left no file
+
+
+def test_creator_refuses_a_reused_request_key_before_any_write(tmp_path, journal):
+    meta = FakeMeta()
+    first, _ = _go(meta, _draft(tmp_path, ads=1), journal, request_key="r1#t")
+    assert first.error == ""
+    posts = len(meta.posts)
+    other, client = _go(meta, _draft(tmp_path, ads=2), journal, request_key="r1#t")
+    assert other.stop_kind == "request_conflict" and "different campaign plan" in other.error
+    assert client.writes == 0 and len(meta.posts) == posts
+    again, client = _go(meta, _draft(tmp_path, ads=1), journal, request_key="r1#t")
+    assert again.error == "" and client.writes == 0                         # same plan, same key: same operation
+
+
+def test_next_action_is_plain_and_reads_do_not_write(tmp_path, journal, clock):
+    meta = FakeMeta()
+    flag = {"stop": False}
+    real = meta.write
+
+    def write(path, params, *a, **k):
+        body = real(path, params, *a, **k)
+        if path.endswith("/campaigns"):
+            flag["stop"] = True
+        return body
+    meta.write = write
+    out, _ = _go(meta, _draft(tmp_path, ads=1), journal, cancelled=lambda: flag["stop"])
+    path = next(journal.root.glob("op-*.json"))
+    before = path.read_bytes()
+    assert "Publish again" in out.operation["next_action"] and "twice" in out.operation["next_action"]
+    op = journal.open(ACT, out_tag(path), json.loads(before)["fingerprint"], "C")
+    op.summary()
+    assert path.read_bytes() == before or json.loads(path.read_bytes())["stages"] == json.loads(before)["stages"]
+
+
+def out_tag(path):
+    return json.loads(path.read_text(encoding="utf-8"))["tag"]
+
+
+def test_an_unknown_stage_never_reads_as_success_and_says_to_wait(journal):
+    op = journal.open(ACT, "tag", "fp", "C")
+    op.begin("campaign", "campaign")
+    op.mark("campaign", oj.UNKNOWN)
+    assert "Wait 10 minutes" in op.summary()["next_action"]
+    assert op.summary()["partial_ids"] == {}
+
+
+def test_result_dict_carries_the_operation(tmp_path, journal):
+    from src.web import publish_api
+
+    meta = FakeMeta()
+    out, _ = _go(meta, _draft(tmp_path, ads=1), journal)
+    res = publish_api.result_dict(out)
+    assert res["operation"]["state"] == oj.OP_COMPLETE and res["operation"]["partial_ids"]["campaign"]
+    assert res["operation"]["next_action"]
+    assert publish_api.result_dict(cr.Outcome(campaign_name="X"))["operation"] is None
+
+
+def test_the_job_passes_its_request_id_to_the_publisher():
+    import inspect
+
+    from src.web import publish_api, publish_jobs
+
+    assert "request_id" in inspect.signature(publish_jobs.create_job).parameters
+    assert "request_id" in inspect.signature(publish_jobs._start_job).parameters
+    assert publish_api.ApiPublisher.request_id == ""
+
+
+def test_the_journal_can_be_turned_off(monkeypatch):
+    from src.web import publish_api
+
+    assert publish_api.journal_enabled()
+    monkeypatch.setenv("ACL_OPERATION_JOURNAL", "0")
+    assert not publish_api.journal_enabled()
