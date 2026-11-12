@@ -1745,11 +1745,14 @@ class WarmRegistry:
         self._remaining()
         from src.fb_api import light_tab as _light
         light = _light.enabled()                  # ACL-2344: read once per lease (spec 5.1)
-        if light and mode.startswith("photo"):
-            # ACL-2533: a form-photo upload needs the Ads Manager page (fb_dtsg/lsd, a fresh per-Page helper
-            # pin); the light page has neither. Only this lease runs on the Ads Manager tab; switching the
-            # kept tab's kind drops it below, which is fine for a button press.
+        # ACL-2533: a form-photo upload needs the Ads Manager page (fb_dtsg/lsd, a fresh per-Page helper
+        # pin); the light page has neither. ACL-2593: so does a publish job that will upload a background:
+        # the caller says so before the lease starts. Only this lease runs on the Ads Manager tab; switching
+        # the kept tab's kind drops it below, which is fine for a button press.
+        forced = "form_photo_upload" if mode.startswith("photo") else _light.forced_reason()
+        if light and forced:
             light = False
+            self._record_light(sess, mode="ads_manager", fallback_reason=forced, forced=True)
         if light and sess.light_fallbacks >= self.LIGHT_FALLBACK_LIMIT:
             light = False                         # this profile's light page keeps failing: keep its Ads Manager tab
         had_tab = sess.tab is not None and not getattr(sess.tab,"closed",False)
@@ -1942,6 +1945,28 @@ class WarmRegistry:
         sess.graphs[mode] = graph
         sess.logged_out = False
         return graph, state
+
+
+    def lease_to_ads_manager(self, lease: "Lease", act: str, mode: str, make_graph: Callable[[Any], Any],
+                             reason: str, *, timeout: float = 90.0) -> Any:
+        """ACL-2593: a light lease needs the Ads Manager page after all (a form-background upload reached it).
+
+        The light tab is closed and the SAME lease continues on a fresh Ads Manager tab (the profile lock and
+        the gate are still held). Returns the new graph; the old one is dead. Nothing is sent by this call.
+        """
+        from src.fb_api import light_tab as _light
+
+        sess = lease._session
+        if sess.mode_kind != "light":
+            return lease.graph
+        with _light.force_ads_manager(reason):
+            graph, state = self._prepare(sess, act, mode, make_graph, timeout)
+        lease.graph, lease.state, lease.tab = graph, state, sess.tab
+        try:
+            graph.patience = self.patience_for(sess)
+        except Exception:  # noqa: BLE001 - fakes without attributes
+            pass
+        return graph
 
 
 class _LightNotReady(Exception):

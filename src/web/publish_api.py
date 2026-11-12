@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import threading
@@ -397,6 +398,18 @@ class ApiPublisher:
         self._load_before: dict[str, Any] | None = None
         #: ACL-2353: снимок ревью (имя кампании -> отпечаток, Page, пиксель); None - задание без ревью.
         self.reviewed: dict[str, Any] | None = None
+        #: ACL-2593: the job will upload a form-background picture: its work lease runs on the Ads Manager tab.
+        self.needs_form_photo = False
+        #: ACL-2593: why the lease left the light mode (telemetry `fallback_reason`); "" - it did not.
+        self.light_fallback_reason = ""
+
+    def plan_form_photo(self, drafts: list[Any]) -> bool:
+        """ACL-2593: decide BEFORE the lease starts whether this job has to upload a form background."""
+        try:
+            self.needs_form_photo = drafts_need_form_photo(drafts)
+        except Exception:  # noqa: BLE001 - unknown = the safe side (Ads Manager mode)
+            self.needs_form_photo = True
+        return self.needs_form_photo
 
     # -- совместимость с `publish_jobs` (как у RpaPublisher)
     def cancel(self) -> None:
@@ -622,9 +635,13 @@ class ApiPublisher:
             return _make_graph(tab, act, writes=not dry)
 
         _release_frozen_tab_cooldown(account_label)
+        from src.fb_api import light_tab as _light
+
         try:
-            self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
-                                       make_graph=make, ready_timeout=READY_TIMEOUT_S)
+            with (_light.force_ads_manager("form_photo_upload") if self.needs_form_photo and not dry
+                  else contextlib.nullcontext()):
+                self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
+                                           make_graph=make, ready_timeout=READY_TIMEOUT_S)
             _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
             self._requeue_if_closed(exc)
@@ -632,6 +649,16 @@ class ApiPublisher:
         except GraphStop as exc:
             self._halt(exc)
         self.progress("profile attached (warm)")
+        if _work_mode_of_graph(self._lease.graph) == "ads_manager":
+            if self.needs_form_photo and _light.enabled():
+                self.light_fallback_reason = "form_photo_upload"
+        else:
+            # ACL-2593: a background upload that still reaches a light tab switches this lease first
+            def leave_light(lease=self._lease):
+                graph = reg.lease_to_ads_manager(lease, act, mode, make, "form_photo_upload")
+                self.light_fallback_reason = "form_photo_upload"
+                return graph
+            self._lease.graph.leave_light = leave_light
         self._finish_open(account_label, self._lease.graph)
         return True
 
@@ -802,6 +829,7 @@ class ApiPublisher:
                     duration_s=round(time.monotonic() - began, 1),
                     diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind,
                           "mode": _work_mode(self._client),
+                          **({"fallback_reason": self.light_fallback_reason} if self.light_fallback_reason else {}),
                           **({"auto_resumed": True} if self.auto_resumed else {}),
                           **_tab_load(exc)})
             _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
@@ -834,6 +862,7 @@ class ApiPublisher:
                          if outcome.operation else {}),
                       "copy_number": outcome.copy_number,
                       "mode": _work_mode(self._client),
+                      **({"fallback_reason": self.light_fallback_reason} if self.light_fallback_reason else {}),
                       **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
@@ -1011,6 +1040,45 @@ def _tab_load(stop: BaseException | None) -> dict[str, Any]:
     """ACL-2299: CPU %, memory %, page_count (before/after the tab clean-up) and the patient wait of a tab stop."""
     load = getattr(stop, "tab_load", None)
     return dict(load) if isinstance(load, dict) else {}
+
+
+def _work_mode_of_graph(graph: Any) -> str:
+    return "light" if getattr(graph, "light", False) is True else "ads_manager"
+
+
+def drafts_need_form_photo(drafts: list[Any], template_loader: Any = None) -> bool:
+    """ACL-2593: True when publishing `drafts` has to upload at least one form-background picture.
+
+    Mirrors the creator: a template with a picture file on this computer (`cover_local_sha256`) needs an upload
+    unless its photo id for the draft's Page is already stored (`form_cover_store.cached_photo`) or the template
+    carries its own `cover_photo_id` of that Page. A draft without a Page yet ("Automatic") cannot prove reuse:
+    it counts as needing the upload. A form that turns out to exist already costs only the heavier tab.
+    """
+    from src.fb_api import form_cover_store as _store
+    from src.fb_api import form_templates as _ft
+
+    load = template_loader or _ft.get
+    for draft in drafts:
+        if getattr(draft, "errors", None):
+            continue
+        page = str(getattr(draft, "page_id", "") or "").strip()
+        for ad_set in getattr(draft, "ad_sets", None) or []:
+            for ad in getattr(ad_set, "ads", None) or []:
+                tid = str(getattr(ad, "lead_form_template", "") or "").strip()
+                if not tid or str(getattr(ad, "lead_form_id", "") or "").strip():
+                    continue
+                tpl = load(tid)
+                if not tpl:
+                    continue
+                sha = str(tpl.get("cover_local_sha256") or "")
+                if not sha or not _store.exists(tid, sha):
+                    continue                  # no picture (or it is on another computer: made without it)
+                if tpl.get("cover_photo_id") and str(tpl.get("cover_page_id") or "") == page:
+                    continue
+                if page and _store.cached_photo(page, sha):
+                    continue
+                return True
+    return False
 
 
 def _work_mode(client: Any) -> str:

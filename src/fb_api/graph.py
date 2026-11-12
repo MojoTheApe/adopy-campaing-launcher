@@ -686,6 +686,34 @@ class GraphClient:
     #: ACL-2533: the address of the form-background upload (a web-session request, not a Graph path).
     FORM_PHOTO_PATH = "/ads/leadgen/upload/photo/"
 
+    def _leave_light_tab(self) -> None:
+        """ACL-2593: the upload needs the Ads Manager page (fb_dtsg / LSD), which a light work tab never has.
+
+        A light transport hands the lease over to an Ads Manager tab first (`leave_light`, set by the lease
+        owner) and the Page pinned for the writes is pinned again there. Nothing has been sent yet, so the
+        upload that follows is the only one. No hook or a failed switch: refused before sending.
+        """
+        old = self.transport
+        if getattr(old, "light", False) is not True:
+            return
+        hook = getattr(old, "leave_light", None)
+        if not callable(hook):
+            raise FormPhotoRefused("The work tab runs in the light mode and cannot upload the background "
+                                   "picture; nothing was sent.", code="light_tab")
+        try:
+            new = hook()
+            page = getattr(old, "write_page", None)
+            if new is None or getattr(new, "light", False) is True:
+                raise RuntimeError("no Ads Manager tab")
+            if page:
+                new.pin_page(page)
+        except GraphStop:
+            raise
+        except Exception as exc:  # noqa: BLE001 - nothing was sent: a plain refusal
+            raise FormPhotoRefused("The work tab could not be switched to Ads Manager for the background "
+                                   f"upload; nothing was sent ({type(exc).__name__}).", code="light_switch") from exc
+        self.transport = new
+
     def upload_form_photo(self, page_id: str, data: bytes, *, mime: str) -> dict:
         """ACL-2533: ONE upload of a lead form background as the pinned Page. Returns `{photo_id, width, height}`.
 
@@ -697,6 +725,7 @@ class GraphClient:
             raise ValueError("this transport cannot upload a form background")
         if self.stopped is not None:
             raise self.stopped
+        self._leave_light_tab()          # ACL-2593: before anything is counted or sent
         if self.calls >= self.max_calls:
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()

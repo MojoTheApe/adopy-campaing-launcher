@@ -1970,6 +1970,9 @@ class InPageGraph:
     #: `callable(graph, timeout) -> state`: opens a capture tab, loads Ads Manager once, hands the token into
     #: `graph` (set by the warm lease). None - a lost token cannot be taken again (the action stops).
     light_recapture: Callable[["InPageGraph", float], dict] | None = None
+    #: ACL-2593: set by the lease owner; switches the lease to an Ads Manager tab and returns its graph
+    #: (a form-background upload needs the page secrets, which a light tab does not have).
+    leave_light: Callable[[], Any] | None = None
     #: How many times the token may be taken again within ONE lease (each = one Ads Manager load). Enforced
     #: in `_light_recapture`, so it holds for every path (`_light_check`, `reacquire`, `pin_page`); the warm
     #: lease resets the counter (`light_recaptures = 0`) when it hands the graph out.
