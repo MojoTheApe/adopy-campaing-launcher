@@ -2055,7 +2055,8 @@
     .aov-table col.c10 { width: 210px; }
     /* Имя и номер кабинета читаются целиком: перенос вместо многоточия, номер мелкой второй строкой. */
     .aov-table td.acc { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-    .aov-table td.acc .aov-acc { display: inline-flex; flex-direction: column; vertical-align: middle; }
+    .aov-table td.acc .aov-accrow { display: inline-flex; align-items: flex-start; gap: 8px; vertical-align: middle; }
+    .aov-table td.acc .aov-acc { display: flex; flex-direction: column; flex: 0 0 11rem; min-width: 0; }
     .aov-table td.acc .aov-act { color: var(--adopy-text-muted); font-size: var(--adopy-text-xs); font-variant-numeric: tabular-nums; }
     /* Хост таблицы кампаний нужен только как точка монтирования: без рамки и отступов он рисовался пустой скруглённой полосой над шапкой. */
     .aov .hc.hc-scoped.amap-campaigns { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; border-radius: 0; }
@@ -12633,6 +12634,24 @@ document.addEventListener('acl:viewchange', function () { setTimeout(function ()
     p.appendChild(dl);
     var why = d.why || (d.key === 'active' ? 'Spending in the selected period.' : '');
     p.appendChild(el('div', 'why', 'What happened: ' + (why || '—') + (d.read ? ' · read ' + d.read : '')));
+    /* ACL-2557/2560: действия аккаунта стопкой — Open profile (если есть профиль), Take out of <country>. Поведение — warm_sessions.js */
+    var wrap = el('span', 'aov-acts aov-open-wrap');
+    if (d.profile) {
+      var ob = el('button', 'aov-btn aov-open', 'Open profile');
+      ob.type = 'button'; ob.hidden = true; ob.setAttribute('data-aov-open', d.name);
+      wrap.appendChild(ob);
+    }
+    var tb = el('button', 'aov-btn danger aov-takeout', 'Take out of ' + d.country);
+    tb.type = 'button'; tb.setAttribute('data-aov-takeout', d.name); tb.setAttribute('data-aov-ckey', d.ckey || d.country);
+    tb.setAttribute('data-aov-cname', d.country);
+    tb.title = 'Take this account out of ' + d.country + '. It stays in ACL and moves to Available accounts.';
+    wrap.appendChild(tb);
+    if (d.profile) {
+      var om = el('small', 'aov-open-msg'); om.setAttribute('role', 'status'); om.setAttribute('aria-live', 'polite');
+      wrap.appendChild(om);
+    }
+    p.appendChild(wrap);
+    if (d.profile && window.aclWarmHome) window.aclWarmHome.paint();
     var go = el('button', 'aov-btn', 'Open in Manage →');
     go.type = 'button'; go.setAttribute('data-aov-go', d.slug);
     p.appendChild(go);
@@ -14866,7 +14885,7 @@ async function goalSend(body) {
 // ── Account map: placing accounts in countries ───────────────────────
 // Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
 // перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
-async function amapSend(body, msgEl, errorAnchor) {
+async function amapSend(body, msgEl, errorAnchor, onOk) {
   if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
   var r = await fetch('/account-links', {
     method: 'POST',
@@ -14876,7 +14895,11 @@ async function amapSend(body, msgEl, errorAnchor) {
   });
   var data = null;
   try { data = await r.json(); } catch (e) { data = null; }
-  if (data && data.ok) { location.reload(); return true; }
+  if (data && data.ok) {
+    /* ACL-2560: Home перерисовывает себя сам (onOk), остальные места — перезагрузка как раньше */
+    if (typeof onOk === 'function') { await onOk(); return true; }
+    location.reload(); return true;
+  }
 
   // Счёт идёт на деньги: аккаунт, который сегодня тратил, не убирается
   // молча. Подтверждение спрашивается один раз и с текстом, который
@@ -14884,7 +14907,7 @@ async function amapSend(body, msgEl, errorAnchor) {
   if (data && data.needs_confirm) {
     if (await aclConfirm(data.error, { title: 'Take it out anyway?', okLabel: 'Take it out', danger: true })) {
       body.confirm = true;
-      return amapSend(body, msgEl, errorAnchor);
+      return amapSend(body, msgEl, errorAnchor, onOk);
     }
     if (msgEl) msgEl.textContent = '';
     return false;
@@ -15071,7 +15094,7 @@ function amapLink(select, kind, value) {
   amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
 }
 
-async function amapUnlink(account, kind, value, anchor) {
+async function amapUnlink(account, kind, value, anchor, onOk) {
   /* ACL-142: «×» убирает аккаунт из ОДНОЙ страны, а выглядит как «удалить».
      Спрашиваем и говорим, что останется; удаление из ACL — отдельная кнопка. */
   if (!await aclConfirm('Take ' + account + ' out of ' + value + '?' + String.fromCharCode(10, 10)
@@ -15080,7 +15103,7 @@ async function amapUnlink(account, kind, value, anchor) {
   if (anchor) anchor.disabled = true;
   aclInlineError(anchor, '');
   try {
-    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor);
+    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor, onOk);
   } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
   finally {
     if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }

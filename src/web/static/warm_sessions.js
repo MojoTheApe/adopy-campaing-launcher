@@ -24,7 +24,14 @@
     '.warm-chip button:disabled,.warm-bar button:disabled{opacity:.6;cursor:default}',
     '.warm-bar{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:flex-end;padding:.3rem .85rem 0;font-size:.72rem}',
     '.warm-msg{color:var(--muted,#888)}',
-    '.warm-msg.warm-bad{color:var(--bad,#c0392b)}'
+    '.warm-msg.warm-bad{color:var(--bad,#c0392b)}',
+    '.aov-acts{display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;flex:0 0 auto}',
+    '.aov-pop .aov-acts{margin:0 0 .5rem}',
+    '.aov-open,.aov-takeout{padding:0 .5rem;min-height:24px}',
+    '.aov-open:disabled,.aov-takeout:disabled{opacity:.6;cursor:default}',
+    '.aov-acts .acl-inline-err{display:block;color:var(--bad,#c0392b);font-size:.72rem}',
+    '.aov-open-msg{color:var(--adopy-text-muted,#888)}',
+    '.aov-open-msg.warm-bad{color:var(--bad,#c0392b)}'
   ].join('\n');
 
   var busy = false;
@@ -198,6 +205,7 @@
   function setBusy(v) {
     busy = v;
     document.querySelectorAll('.warm-bar button, .warm-chip .warm-act').forEach(function (b) { b.disabled = v; });
+    homePaint();
   }
 
   function post(url, body) {
@@ -325,14 +333,235 @@
     else if (btn.getAttribute('data-do') === 'close') runClose(grid, [account]);
   }
 
+  /* ACL-2557: «Open profile» у каждого аккаунта на Home (строка Expanded и поповер плитки Compact).
+     Тот же путь, что в Manage: POST /warm/open -> задание -> статус-чтение из ACL-2419. Кнопку рисует
+     шаблон только аккаунтам с профилем; здесь: доступность, одно открытие за раз, причина отказа и
+     перерисовка строки после открытия. Ничего не открывается само и таймеров на живые аккаунты нет:
+     пока идёт задание, опрашивается только локальное состояние (задание и очередь чтения). */
+  var homeAvail = null;
+
+  function homeButtons() { return Array.prototype.slice.call(document.querySelectorAll('[data-aov-open]')); }
+
+  function homePaint() {
+    var on = !!(homeAvail && homeAvail.available);
+    var acts = !!(homeAvail && homeAvail.actions);
+    homeButtons().forEach(function (b) {
+      b.hidden = !on;
+      if (b.getAttribute('data-aov-busy') === '1') return;
+      b.disabled = busy || !acts;
+      b.title = !acts ? ((homeAvail && homeAvail.reason) || '')
+        : 'Open this account’s Multilogin profile with automation and check its status';
+    });
+  }
+
+  function homeRefresh() {
+    var seen = {}, all = [];
+    homeButtons().forEach(function (b) {
+      var a = b.getAttribute('data-aov-open');
+      if (a && !seen[a]) { seen[a] = true; all.push(a); }
+    });
+    if (!all.length) return Promise.resolve();
+    var q = all.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
+    return fetch('/warm/state?' + q, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { homeAvail = data || null; homePaint(); })
+      .catch(function () { /* подсказка не должна ломать страницу */ });
+  }
+
+  function homeMsg(btn) {
+    var wrap = btn.parentNode, m = wrap && wrap.querySelector('.aov-open-msg');
+    if (!m && wrap) {
+      m = document.createElement('small'); m.className = 'aov-open-msg'; m.setAttribute('role', 'status');
+      wrap.appendChild(m);
+    }
+    return m;
+  }
+
+  function homeSay(btn, text, bad) {
+    var m = homeMsg(btn);
+    if (!m) return null;
+    m.textContent = text || '';
+    m.classList.toggle('warm-bad', !!bad);
+    var old = m.parentNode.querySelector('.aov-open-reopen');
+    if (old) old.remove();
+    return m;
+  }
+
+  function homeFinish(btn, text, bad) {
+    btn.removeAttribute('data-aov-busy');
+    btn.textContent = 'Open profile';
+    busy = false;
+    setBusy(false);
+    return homeSay(btn, text, bad);
+  }
+
+  function homeOpen(btn, account, confirmed) {
+    if (busy) return;   // второй щелчок, пока идёт открытие, ничего не делает
+    busy = true;
+    btn.setAttribute('data-aov-busy', '1');
+    setBusy(true);
+    btn.disabled = true;
+    btn.textContent = 'Opening…';
+    homeSay(btn, '', false);
+    post('/warm/open', { accounts: [account], confirm_reopen: confirmed === true }).then(function (res) {
+      if (res.status >= 400 || !res.body.job_id) {
+        homeFinish(btn, res.body.error || 'Could not start opening the profile.', true);
+        return;
+      }
+      homePoll(btn, account, res.body.job_id);
+    }).catch(function () { homeFinish(btn, 'Could not reach the dashboard.', true); });
+  }
+
+  function homePoll(btn, account, jobId) {
+    fetch('/warm/job/' + encodeURIComponent(jobId), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (job) {
+        if (job.state === 'running') { setTimeout(function () { homePoll(btn, account, jobId); }, 2000); return; }
+        var r = (job.results || {})[account] || {};
+        if (r.state === 'ok' || r.ok) {
+          var queued = r.status_read === 'queued';
+          homeFinish(btn, queued ? 'Opened. Checking the account status…'
+            : 'Opened. The status was not read now; it updates with the next list read.', false);
+          if (queued) homeAwaitStatus(btn, account, 0);
+          else homeRepaint(account);
+          return;
+        }
+        var m = homeFinish(btn, r.message || r.code || 'Could not open the profile.', true);
+        if (r.code === 'open_by_hand' && m) {
+          var again = document.createElement('button');
+          again.type = 'button'; again.className = 'aov-btn aov-open-reopen'; again.textContent = 'Reopen for automation';
+          again.addEventListener('click', function () {
+            window.aclConfirm('Close and reopen this profile for automation: ' + account,
+              { title: 'Reopen for automation', okLabel: 'Reopen' })
+              .then(function (yes) { if (yes) homeOpen(btn, account, true); });
+          });
+          m.parentNode.appendChild(again);
+        }
+      })
+      .catch(function () { homeFinish(btn, 'Lost the opening job; check the account state.', true); });
+  }
+
+  // Исход статус-чтения ждём только по локальной очереди (GET своего сервера), не по Meta.
+  function homeAwaitStatus(btn, account, tries) {
+    fetch('/account-refresh/state', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (v) {
+        var waiting = (v.queued || []).some(function (q) { return q.account === account; });
+        if ((waiting || v.running) && tries < 45) {
+          setTimeout(function () { homeAwaitStatus(btn, account, tries + 1); }, 2000);
+          return;
+        }
+        homeRepaint(account).then(function (ok) {
+          homeSay(btn, ok ? 'Status updated.' : 'Opened. Reload the page to see the new status.', !ok);
+        });
+      })
+      .catch(function () { homeSay(btn, 'Opened. Reload the page to see the new status.', true); });
+  }
+
+  // Перерисовать состояние аккаунта на Home из свежего фрагмента /account-map: ячейку состояния
+  // строки, плитку и счётчики. Остальные ячейки, раскрытые блоки и фильтры остаются как были.
+  function homeFresh() {
+    var per = typeof window.amapPeriod === 'function' ? window.amapPeriod() : {};
+    var url = '/account-map?date_from=' + encodeURIComponent(per.from || '') + '&date_to=' + encodeURIComponent(per.to || '')
+      + '&span=' + encodeURIComponent(per.span || '');
+    return fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error('refresh'); return r.text(); })
+      .then(function (html) {
+        var fresh = new DOMParser().parseFromString(html, 'text/html');
+        if (!fresh.querySelector('#aov')) throw new Error('refresh');
+        return fresh;
+      });
+  }
+
+  function homeRepaint(account) {
+    return homeFresh()
+      .then(function (fresh) {
+        function rowOf(root) {
+          var out = null;
+          root.querySelectorAll('.aov-row').forEach(function (tr) {
+            var c = tr.querySelector('td.amap-list[data-account]');
+            if (c && c.getAttribute('data-account') === account) out = tr;
+          });
+          return out;
+        }
+        function tileOf(root) {
+          var out = null;
+          root.querySelectorAll('.aov-tile').forEach(function (t) { if (t.getAttribute('data-name') === account) out = t; });
+          return out;
+        }
+        var oldRow = rowOf(document), newRow = rowOf(fresh);
+        if (oldRow && newRow) {
+          oldRow.setAttribute('data-state', newRow.getAttribute('data-state'));
+          oldRow.className = newRow.className;
+          var cell = oldRow.firstElementChild, nc = newRow.firstElementChild;
+          if (cell && nc) cell.replaceWith(nc.cloneNode(true));
+        }
+        var oldTile = tileOf(document), newTile = tileOf(fresh);
+        if (oldTile && newTile) oldTile.replaceWith(newTile.cloneNode(true));
+        var bar = document.querySelector('#aov .aov-fbar'), nbar = fresh.querySelector('#aov .aov-fbar');
+        if (bar && nbar) bar.innerHTML = nbar.innerHTML;
+        fresh.querySelectorAll('#aov .aov-block').forEach(function (blk) {
+          var key = blk.getAttribute('data-aov-country');
+          document.querySelectorAll('#aov .aov-block').forEach(function (cur) {
+            if (cur.getAttribute('data-aov-country') !== key) return;
+            var a = cur.querySelectorAll('.aov-bh .aov-cnt'), b = blk.querySelectorAll('.aov-bh .aov-cnt');
+            if (a.length === b.length) a.forEach(function (n, i) { n.replaceWith(b[i].cloneNode(true)); });
+          });
+        });
+        if (typeof window.aovApply === 'function') window.aovApply();
+        homePaint();
+        return true;
+      })
+      .catch(function () { return false; });
+  }
+
+  // ACL-2560: после «Take out of <country>» страна на Home перерисовывается из свежего /account-map:
+  // блок страны (таблица), её строка плиток, строка фильтров и итог. Раскрытие других стран и фильтр остаются.
+  function homeAfterTakeOut(ckey) {
+    return homeFresh().then(function (fresh) {
+      ['#aov .aov-block', '#aov .aov-crow'].forEach(function (sel) {
+        var cur = null, nw = null;
+        document.querySelectorAll(sel).forEach(function (n) { if (n.getAttribute('data-aov-country') === ckey) cur = n; });
+        fresh.querySelectorAll(sel).forEach(function (n) { if (n.getAttribute('data-aov-country') === ckey) nw = n; });
+        if (cur && nw) cur.replaceWith(nw.cloneNode(true));
+      });
+      ['#aov .aov-fbar', '#amap-totals'].forEach(function (sel) {
+        var a = document.querySelector(sel), b = fresh.querySelector(sel);
+        if (a && b) a.innerHTML = b.innerHTML;
+      });
+      var pop = document.getElementById('aov-pop');
+      if (pop) pop.hidden = true;
+      if (typeof window.amapCampaignMountVisible === 'function' && window.AMAP_CAMPAIGN_TABLE) {
+        try { window.amapCampaignMountVisible(); } catch (e) { /* дерево подтянется при следующем открытии */ }
+      }
+      if (typeof window.aovApply === 'function') window.aovApply();
+      homePaint();
+    }).catch(function () { window.location.reload(); });
+  }
+
+  document.addEventListener('click', function (e) {
+    var tk = e.target && e.target.closest ? e.target.closest('[data-aov-takeout]') : null;
+    if (tk && !tk.disabled && typeof window.amapUnlink === 'function') {
+      e.preventDefault(); e.stopPropagation();
+      var ck = tk.getAttribute('data-aov-ckey');
+      window.amapUnlink(tk.getAttribute('data-aov-takeout'), 'country', ck, tk, function () { return homeAfterTakeOut(ck); });
+      return;
+    }
+    var t = e.target && e.target.closest ? e.target.closest('[data-aov-open]') : null;
+    if (!t || t.disabled) return;
+    homeOpen(t, t.getAttribute('data-aov-open'), false);
+  });
+
+  window.aclWarmHome = { paint: homePaint, refresh: homeRefresh, repaint: homeRepaint, afterTakeOut: homeAfterTakeOut };
+
   addStyle();
-  document.addEventListener('DOMContentLoaded', refresh);
-  if (document.readyState !== 'loading') refresh();
+  document.addEventListener('DOMContentLoaded', function () { refresh(); homeRefresh(); });
+  if (document.readyState !== 'loading') { refresh(); homeRefresh(); }
   var settleTimer = null;
   document.addEventListener('htmx:afterSettle', function () {
     // Одно обновление на пачку подмен: каждое — обход процессов на машине.
     if (settleTimer) clearTimeout(settleTimer);
-    settleTimer = setTimeout(function () { settleTimer = null; refresh(); }, 800);
+    settleTimer = setTimeout(function () { settleTimer = null; refresh(); homeRefresh(); }, 800);
   });
   window.aclWarmRefresh = refresh;
 })();
