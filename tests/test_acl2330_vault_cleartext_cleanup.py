@@ -60,3 +60,8 @@ def test_an_already_encrypted_line_is_not_rewritten(machine, fake_dpapi, monkeyp
     saved = []
     result = cs.apply({"ACL_LIBRARY_TOKEN": SECRET}, writer=lambda changed: saved.append(changed))
     assert saved == [] and result["updated"] == 0
+
+
+def test_the_2330_tests_leave_the_library_token_out_of_the_environment():
+    # ACL-2565: the machine fixture restores os.environ, so nothing from the tests above leaks on.
+    assert not os.environ.get("ACL_LIBRARY_TOKEN")
