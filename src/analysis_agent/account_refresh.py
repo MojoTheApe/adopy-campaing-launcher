@@ -102,11 +102,34 @@ def is_fresh(account: str, *, now: float | None = None) -> bool:
     return 0 <= (time.time() if now is None else now) - done < FRESH_S
 
 
+def _profile_held(account: str) -> bool:
+    """ACL-2091: the physical profile of this account has a persisted hold (checkpoint, login, policy, frozen)."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.fb_api import account_blocks
+
+        return account_blocks.is_held(account_spend._profile_key(account))  # noqa: SLF001
+    except Exception:  # noqa: BLE001 — an unreadable hold file never stops the queue
+        return False
+
+
+def _held_blocks(account: str, trigger: str) -> bool:
+    """ACL-2548: a held profile is not touched by any read except a person's Retry (D8).
+
+    Scheduled, background, page-open and after-action reads all stop here, forced or not.
+    The skip writes no attempt row, so `campaign_inventory.latest_stops()` and a persisted
+    global halt stay exactly as they were.
+    """
+    return trigger.split(":")[0] != "retry" and _profile_held(account)
+
+
 def recently_failed(account: str, *, now: float | None = None) -> bool:
     """Последняя попытка чтения не удалась и моложе `FRESH_S`: автоматические заявки её не повторяют.
 
     Только явные Retry/действие (force) читают такой аккаунт раньше срока.
     """
+    if _profile_held(account):
+        return True     # ACL-2091: a held profile waits for a person; no automatic read is queued for it
     attempt = campaign_inventory.get_attempt(account)
     if not attempt or attempt.get("state") != "failed":
         return False
@@ -132,6 +155,8 @@ def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
     Сначала коды и вид остановки, строки — только запасной путь.
     """
     code = (snap.error_code or "").strip()
+    if code == "account_blocked":
+        return None   # ACL-2548: a refusal of a held profile is an account-level code; its text says "checkpoint" but nothing was read
     if code in _GLOBAL_CODES:
         return _GLOBAL_CODES[code]
     kind = (snap.stop or "").strip()
@@ -470,6 +495,8 @@ class RefreshQueue:
                 return {"queued": False, "reason": "invalid_account_map"}
             if self._running == account:
                 return {"queued": False, "reason": "running"}
+            if _held_blocks(account, trigger):
+                return {"queued": False, "reason": "profile_held"}
             if not force and is_fresh(account, now=self._clock()):
                 snap = campaign_inventory.get_snapshot(account)
                 self._rows[account] = {"list_at": snap.finished_at if snap else "",
@@ -560,6 +587,9 @@ class RefreshQueue:
         self._maybe_lift()
         if self._halt is not None:
             # Пауза: только аккаунты с явным Retry/действием, самый приоритетный первым.
+            for a in [a for a, e in self._entries.items() if a in self._bypass and _held_blocks(a, e[2])]:
+                self._sweep_complete(a, self._entries.pop(a)[2])   # ACL-2548: held while queued; nothing is read
+                self._bypass.discard(a)
             ready = [(e[:2], a) for a, e in self._entries.items() if a in self._bypass]
             if not ready:
                 return None
@@ -585,6 +615,9 @@ class RefreshQueue:
                     continue
             if not self._known_account(account):
                 self._sweep_complete(account, entry[2])
+                continue
+            if _held_blocks(account, entry[2]):
+                self._sweep_complete(account, entry[2])   # ACL-2548: a hold appeared while it waited, even a forced one
                 continue
             # Свежесть проверяется и при выборе: пока заявка стояла, аккаунт могли прочитать
             # другой триггер или второй процесс дешборда. Явные заявки (force) читаются всегда.
@@ -748,6 +781,10 @@ class RefreshQueue:
                             self._requeue(account, trigger, force, bypassed)
                             return done
                         self._import_result(account)
+                        if _held_blocks(account, trigger):
+                            with self._state_guard():
+                                self._sweep_complete(account, trigger)   # ACL-2548: nothing is read, no attempt row
+                            continue
                         if force and not self._machine.pending(key, self._owner):
                             with self._state_guard():
                                 self._sweep_complete(account, trigger)

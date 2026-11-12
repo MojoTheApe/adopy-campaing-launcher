@@ -1,5 +1,22 @@
 # System history
 
+## ACL-2578 — Readback accepts Meta's image-name suffix; a re-run reuses its left-over and never repeats a campaign name — 2026-11-12
+
+Depends on ACL-1856 (#1569).
+
+Readback no longer flags an image whose library name Meta stored with a `_<digits>` suffix (a different image still fails). A re-run after a stop now reuses its own left-over campaign and ad set when their settings match the builder, even if the creatives were replaced or added: for a campaign that has no ads yet, Meta's derived placement aggregate (`advantage_placement_state`) is no longer part of that comparison (the ad sets' own placements are still compared, and the aggregate is checked after the writes). The campaign name is never taken twice: a live campaign with the exact name counts as taken whatever its tag, a left-over known from the local name record counts even when the Meta listing misses it, and a failed read of that campaign (not "does not exist") stops the run before any write. The stop message names the real copy name instead of "_2". Not detectable: no local record and a listing miss.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1578).
+
+## ACL-2548 — Background refresh skips held profiles — 2026-11-12
+
+Part B of ACL-2091. While a profile waits for a person (checkpoint, login page, Meta block, frozen tab), the account refresh queue does not read it at all: scheduled 08/13/18 reads, background reads, page-open reads and refreshes after an action are skipped before any call, even when forced. Only a person's Retry reaches the profile. A skip writes no attempt row, so the stored stops and a persisted global halt stay as they were. A refusal with the account-level code `account_blocked` no longer counts as a stop for the text fallback, so its "checkpoint" wording cannot raise a halt for every account. Other accounts are read as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1548).
+
+## ACL-2547 — Account blocks: persisted holds, action context, reason texts — 2026-11-11
+
+Part A of ACL-2091. A checkpoint, a login page, a Meta policy block (368, 1404078, 2859015, 1404163) and a frozen Ads Manager tab whose one replacement is spent now become a persisted hold (`account_holds.json`, no timer, survives a restart) kept by the new `fb_api/account_blocks.py`; a person's Retry (or an explicit Read) that finds the page healthy lifts it, and background reads are not queued for a held profile. A token-only logout keeps its 1 minute timer. Refusals name the kind, the profile and the action that found the problem (for example "a background read") instead of "waiting about 10 min", with code `account_blocked`. One classifier now recognises `/hacked-protection` and `two_factor` in all three detectors. No window or tab handling changes yet.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1547).
+
 ## ACL-2575 — WebP/AVIF/HEIC image creatives are converted before publishing — 2026-11-12
 
 A WebP ad image passed every check, the paused campaign and ad set were created, and then Meta refused the upload
