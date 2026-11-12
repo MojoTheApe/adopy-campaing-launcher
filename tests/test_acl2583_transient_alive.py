@@ -13,7 +13,7 @@ from src.fb_api import name_receipt as nr  # noqa: E402
 from src.fb_api import operation_journal as oj  # noqa: E402
 from tests.test_acl1761_api_create import ACT, _draft  # noqa: E402
 from tests.test_acl1856_operation_journal import (  # noqa: E402,F401
-    _by_kind, _count, _delete_campaign_tree, _go, _partial, journal, clock)
+    _by_kind, _count, _creator, _delete_campaign_tree, _go, _partial, journal, clock)
 
 
 def _inject_read_error(meta, monkeypatch, camp_id, body):
@@ -37,25 +37,82 @@ def _left_over(tmp_path, journal, clock, monkeypatch):
     return meta, _by_kind(meta, "campaign")["id"]
 
 
-@pytest.mark.parametrize("body", [
+def _inject_failures(meta, monkeypatch, camp_id, body, times):
+    """The journal's liveness read fails `times` times (None = always); returns the count of reads."""
+    real = meta.request
+    left = {"n": times}
+    seen = {"reads": 0}
+
+    def request(method, path, params=None):
+        if (method == "GET" and path.strip("/").split("/")[-1] == camp_id
+                and (params or {}).get("fields") == "id,name,status,effective_status"):
+            seen["reads"] += 1
+            if left["n"] is None or left["n"] > 0:
+                if left["n"] is not None:
+                    left["n"] -= 1
+                return {"status": 500, "body": {"error": body}}
+        return real(method, path, params)
+    monkeypatch.setattr(meta, "request", request)
+    return seen
+
+
+def _go_recording(meta, draft, journal):
+    creator, client = _creator(meta, journal)
+    sleeps = []
+    creator.sleep = sleeps.append
+    return creator.run(cr.plan_from_draft(draft)), client, sleeps
+
+
+BODIES = [
     {"code": 2, "message": "Service temporarily unavailable"},
     {"code": 1, "message": "An unknown error occurred"},
     {"code": 100, "message": "Invalid parameter"},                   # code 100 without subcode 33 is not "gone"
-])
-def test_transient_read_error_stops_without_a_write_or_new_operation(tmp_path, journal, clock, monkeypatch, body):
+]
+
+
+@pytest.mark.parametrize("body", BODIES)
+def test_persistent_read_failure_continues_as_a_new_operation_with_a_copy_name(
+        tmp_path, journal, clock, monkeypatch, body):
     meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
-    _inject_read_error(meta, monkeypatch, camp, body)
-    posts = len(meta.posts)
-    out, client = _go(meta, _draft(tmp_path, ads=2), journal)
-    assert out.stop_kind == "name_unsure" and "Meta did not answer" in out.error, (out.stop_kind, out.error)
-    assert "publish again in a few minutes" in out.error
-    assert len(meta.posts) == posts and client.writes == 0
-    assert _count(meta, "campaign") == 1
-    assert not list(journal.root.glob("op-*.superseded")), "no new operation was started"
+    old_name = meta.objects[camp]["name"]
+    seen = _inject_failures(meta, monkeypatch, camp, body, None)
+    out, client, sleeps = _go_recording(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "" and not out.stop_kind, (out.stop_kind, out.error)
+    assert seen["reads"] == len(cr.TRANSIENT_READ_WAITS_S) + 1       # one try and the retries, no busy loop
+    assert 25 <= sum(sleeps) <= 35, sleeps                           # about 30 s, through the injected sleep
+    assert out.campaign_id != camp and out.published_as == old_name + " copy 1"
+    assert meta.objects[out.campaign_id]["name"] == old_name + " copy 1"
+    assert meta.objects[camp]["name"] == old_name, "the earlier campaign is left untouched"
+    assert len(list(journal.root.glob("op-*.superseded"))) == 1
+    assert any("continues as a new campaign" in w for w in out.warnings)
+    assert "few minutes" not in " ".join([out.error, *out.warnings])
+
+
+def test_the_same_name_is_never_reused(tmp_path, journal, clock, monkeypatch):
+    meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
+    old_name = meta.objects[camp]["name"]
+    _inject_failures(meta, monkeypatch, camp, BODIES[0], None)
+    first, _c, _s = _go_recording(meta, _draft(tmp_path, ads=2), journal)
+    assert first.error == "" and first.published_as == old_name + " copy 1"
+    names = [o["name"] for o in meta.objects.values() if o["_kind"] == "campaign"]
+    assert sorted(names) == sorted([old_name, old_name + " copy 1"]) and len(set(names)) == len(names)
+
+
+@pytest.mark.parametrize("failures", [1, 2, 3])
+def test_transient_failure_then_success_resumes_the_same_campaign(tmp_path, journal, clock, monkeypatch, failures):
+    meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
+    _inject_failures(meta, monkeypatch, camp, BODIES[0], failures)
+    out, _c, sleeps = _go_recording(meta, _draft(tmp_path, ads=2), journal)
+    assert out.error == "", out.error
+    assert out.campaign_id == camp and _count(meta, "campaign") == 1
+    assert " copy " not in out.published_as
+    assert len(sleeps) >= failures * 2                               # sliced pauses, all injected
+    assert not list(journal.root.glob("op-*.superseded"))
+    assert out.operation["state"] == oj.OP_COMPLETE
 
 
 @pytest.mark.parametrize("code", [4, 17])
-def test_rate_limit_on_the_read_also_stops_without_a_write(tmp_path, journal, clock, monkeypatch, code):
+def test_rate_limit_on_the_read_stays_a_stop_without_a_write(tmp_path, journal, clock, monkeypatch, code):
     meta, camp = _left_over(tmp_path, journal, clock, monkeypatch)
     _inject_read_error(meta, monkeypatch, camp, {"code": code, "message": "request limit reached"})
     posts = len(meta.posts)

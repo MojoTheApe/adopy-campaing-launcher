@@ -293,8 +293,13 @@ SUPPORTED_OBJECTIVES = frozenset({"leads"})
 #: ACL-2250: повтор имени получает счётчик в конце: `<имя> copy <n>` (у кампании и всех её наборов).
 COPY_WORD = " copy "
 #: Остановки выбора имени: в Check plan это ERROR правила имени, а не сбой плана.
-MSG_ALIVE_UNSURE = ("Meta did not answer: cannot tell whether the earlier campaign of this publish is still on the ad "
-                    "account. Nothing was created; publish again in a few minutes.")
+#: ACL-2583 / ACL-2578 (owner decision): a read by id that keeps failing is never a stop. It is retried (about 30 s in
+#: total: one try plus three pauses), and if Meta still does not answer the publish continues as a NEW operation under a
+#: distinct `<name> copy <n>` name. A possible duplicate is accepted; the same name is never reused.
+TRANSIENT_READ_WAITS_S = (10.0, 10.0, 10.0)
+MSG_CONTINUED_AS_COPY = ('Meta did not answer when ACL checked the earlier campaign of this publish, so this publish '
+                         'continues as a new campaign named "{name}". If the earlier campaign is still in Ads Manager, '
+                         "it is left as it is.")
 NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
 #: копий за её пределами могло не быть видно - тогда ищем точнее.
@@ -1559,6 +1564,15 @@ class Outcome:
         return list(self.readback.get("mismatches") or [])
 
 
+class _AliveUnknown(Exception):
+    """ACL-2583: the journal's campaign could not be read after the retries; `copy_number` is its name's counter."""
+
+    def __init__(self, copy_number: int, campaign_id: str) -> None:
+        super().__init__(campaign_id)
+        self.copy_number = copy_number
+        self.campaign_id = campaign_id
+
+
 @dataclass
 class NameChoice:
     """Итог выбора имени кампании (ACL-1902, ACL-2250): план с итоговым именем и меткой, до первой записи."""
@@ -1951,18 +1965,42 @@ class CampaignCreator:
             return v
         return norm(asdict(plan))
 
-    def _campaign_alive(self, campaign_id: str) -> "tuple[bool, str]":
-        """(still in Ads Manager - readable and not deleted/archived, its live name). Read only."""
+    def _get_retrying(self, path: str, params: dict) -> dict:
+        """Read by id; a transient failure (not "does not exist") is retried after short pauses (ACL-2583).
+
+        Rate limits and other Graph stops are not GraphError: they leave at once and stay a stop. The last GraphError
+        is raised when every try failed. The pause goes through the injected `sleep`, in slices that keep the run alive.
+        """
+        waits = TRANSIENT_READ_WAITS_S
+        for attempt in range(len(waits) + 1):
+            try:
+                return self.client.get(path, params)
+            except GraphError as exc:
+                if _object_gone(exc) or attempt == len(waits):
+                    raise
+                left = float(waits[attempt])
+                while left > 0:
+                    step = min(5.0, left)
+                    self.sleep(step)
+                    left -= step
+                    beat = getattr(self.client, "_beat", None)
+                    if callable(beat):
+                        beat()
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _campaign_alive(self, campaign_id: str) -> "tuple[bool | None, str]":
+        """(still in Ads Manager - readable and not deleted/archived, its live name). Read only.
+
+        `None` = Meta did not answer after the retries: nothing is known about the campaign (ACL-2583).
+        """
         try:
-            row = self.client.get(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
+            row = self._get_retrying(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
         except GraphError as exc:
             if _object_gone(exc):
                 return False, ""                 # Meta says it does not exist: gone
-            # ACL-2583: a transient failure (timeout, code 1/2/4/17, 5xx) says nothing about the campaign. Starting a
-            # new operation here could create a second campaign next to a live one, so stop before any write.
-            raise CreationStopped(MSG_ALIVE_UNSURE, kind="name_unsure") from exc
+            return None, ""
         if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
-            raise CreationStopped(MSG_ALIVE_UNSURE, kind="name_unsure")
+            return None, ""
         gone = ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
                 & {"DELETED", "ARCHIVED"})
         return (not gone), str(row.get("name") or "")
@@ -1997,6 +2035,10 @@ class CampaignCreator:
             if camp and (not same_name or camp != existing_id):
                 if same_name:
                     alive, live_name = self._campaign_alive(camp)
+                    if alive is None:
+                        # ACL-2583: Meta does not answer. Neither stop nor reuse of the name: the caller continues
+                        # under a new copy name, which makes the new operation distinct from this one.
+                        raise _AliveUnknown(int(op.data.get("copy_number") or 0), camp)
                     # Meta lag only while the campaign is young AND still carries the recorded name. A campaign
                     # renamed in Ads Manager is taken over by the buyer; after the lag window a campaign the name
                     # search still does not list counts as gone. Both start a new operation.
@@ -2361,8 +2403,8 @@ class CampaignCreator:
 
         Возвращает (выбор, остаток). Нет кампании (id не существует), не живая, переименована - квитанция не
         используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
-        ACL-2578: (1) чтение по id упало по другой причине (сеть, лимит) - имя неизвестно: стоп `name_unsure`
-        до записей, а не тихое «квитанции нет»; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
+        ACL-2578: (1) чтение по id упало по другой причине (не «не существует») - 2-3 повтора за ~30 с; всё ещё без ответа -
+        имя считается занятым (второй элемент без причин), идём новой кампанией со следующим `copy N`, не стоп; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
         (метка не важна); (3) наша, но расходится с билдером - не дописывается. В (2) и (3) она возвращается вторым
         элементом (номер, строка, причины): имя занято, даже если листинг Meta её сейчас не показал.
         Не обнаружить: квитанции нет и листинг промахнулся - тогда о кампании ничего не известно.
@@ -2376,14 +2418,13 @@ class CampaignCreator:
         campaign_id = str(receipt.get("campaign_id") or "")
         if campaign_id:
             try:
-                row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
+                row = self._get_retrying(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
             except GraphError as exc:
                 if _object_gone(exc):
                     return None, None
-                raise CreationStopped(
-                    f"Cannot tell whether the earlier campaign {cand.name!r} is still on the ad account (Meta did not "
-                    "answer the read). Nothing was created, so no second campaign with the same name appears; "
-                    "publish again in a minute.", kind="name_unsure") from exc
+                # ACL-2578 / owner decision: Meta still does not answer after the retries. The earlier campaign may
+                # exist, so its name is held (never reused): the caller takes the next copy number, as a new campaign.
+                return None, (n, {"id": campaign_id, "name": cand.name}, None)
             row = {**row, "id": campaign_id} if isinstance(row, dict) else None
         else:
             hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
@@ -2431,7 +2472,8 @@ class CampaignCreator:
         ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
         notes: list[str] = []
         if ours:
-            if leftover and top == leftover[0] and str(ours.get("id")) == str(leftover[1].get("id")):
+            if (leftover and leftover[2] is not None and top == leftover[0]
+                    and str(ours.get("id")) == str(leftover[1].get("id"))):
                 found_sets, partial, why = None, False, leftover[2]        # already read by the receipt check
             else:
                 found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
@@ -4375,6 +4417,7 @@ class CampaignCreator:
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
         choice = self._resolve_name(plan, targetings)
+        base_plan = plan
         requested, plan = plan.name, choice.plan
         out.published_as = plan.name
         out.copy_number = choice.copy_number
@@ -4383,7 +4426,20 @@ class CampaignCreator:
         self._save_name_receipt(out, requested, choice)
         # ACL-1856: журнал по итоговому плану (имя уже выбрано) и сверка прошлых этапов - до первой записи.
         existing_id = str(choice.existing["id"]) if choice.existing else ""
-        adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+        try:
+            adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+        except _AliveUnknown as unsure:
+            # ACL-2583 (owner decision): the earlier campaign of the journal cannot be read even after the retries.
+            # No stop: a new operation under a copy name that differs from the earlier one (never the same name).
+            n = max(choice.copy_number, unsure.copy_number) + 1
+            plan = copy_plan(base_plan, n)
+            self._check_name_length(plan)
+            choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+            out.published_as, out.copy_number, existing_id = plan.name, n, ""
+            self._check_planned(plan, targetings, choice.found_sets)
+            self._save_name_receipt(out, requested, choice)
+            out.warnings.append(MSG_CONTINUED_AS_COPY.format(name=plan.name))
+            adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id="")
         if adopt and not existing_id:
             # The name search missed our live campaign: resume into it, never create a second one (ACL-1856).
             found_sets, _partial, why = self._resume_state(plan, targetings, adopt)

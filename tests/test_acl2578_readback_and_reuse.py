@@ -88,7 +88,7 @@ def test_rerun_after_a_stop_at_the_first_image_reuses_campaign_and_ad_set_with_a
     d.ad_sets[0].ads[0].creative_path = str(dirs / "b" / "replaced.png")
     (dirs / "b" / "replaced.png").write_bytes(b"another picture")
     res = _publisher(meta).publish_draft(d)                 # a new job = a new publisher
-    assert res["error"] is None and not res["published_as"]
+    assert res["error"] is None and " copy " not in (res["published_as"] or "")
     assert res["campaign_id"] == first["campaign_id"] and res["reused"].get("campaign")
     assert _names(meta) == [BASE] and _names(meta, "adset") == [BASE]
     assert sum(1 for o in meta.objects.values() if o["_kind"] == "ad") == 3
@@ -142,19 +142,61 @@ def test_campaign_with_ads_and_a_wrong_placement_aggregate_is_still_not_reused(d
 
 # ── B2: the name stays taken in every branch of the receipt check ──
 
-def test_failed_read_of_the_receipt_campaign_stops_without_any_write(dirs, monkeypatch):
-    meta, first = _stop_at_first_image(dirs)
-    before = len(meta.posts)
+def _fail_reads_of(meta, monkeypatch, campaign_id, times, body=None):
+    """The read by id of one campaign fails `times` times (None = always), then Meta answers."""
     real = meta.request
+    left = {"n": times}
+    seen = {"reads": 0}
+    body = body or {"code": 2, "message": "Service temporarily unavailable"}
 
     def request(method, path, params=None):
-        if method == "GET" and path.strip("/").split("/")[-1] == first["campaign_id"]:
-            return {"status": 500, "body": {"error": {"code": 2, "message": "Service temporarily unavailable"}}}
+        if method == "GET" and path.strip("/").split("/")[-1] == campaign_id:
+            seen["reads"] += 1
+            if left["n"] is None or left["n"] > 0:
+                if left["n"] is not None:
+                    left["n"] -= 1
+                return {"status": 500, "body": {"error": body}}
         return real(method, path, params)
     monkeypatch.setattr(meta, "request", request)
+    return seen
+
+
+def test_unreadable_receipt_campaign_is_retried_then_continues_as_a_new_copy(dirs, monkeypatch):
+    """Owner decision (ACL-2583): no stop and no "publish again" text; a new operation under a distinct copy name."""
+    meta, first = _stop_at_first_image(dirs)
+    seen = _fail_reads_of(meta, monkeypatch, first["campaign_id"], None)
+    monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
+    sleeps = []
+    pub = _publisher(meta)
+    pub.sleep = sleeps.append
+    res = pub.publish_draft(_draft(dirs / "b", ads=2))
+    assert res["error"] is None, res["error"]
+    assert res["published_as"] == BASE + " copy 1" and res["campaign_id"] != first["campaign_id"]
+    assert sorted(_names(meta)) == [BASE, BASE + " copy 1"], "the earlier name is never reused"
+    assert seen["reads"] >= len(cr.TRANSIENT_READ_WAITS_S) + 1
+    assert 25 <= sum(sleeps) <= 35, sleeps                       # about 30 s in total, through the injected sleep
+    assert "few minutes" not in str(res)
+
+
+def test_receipt_campaign_read_that_recovers_is_resumed(dirs, monkeypatch):
+    meta, first = _stop_at_first_image(dirs)
+    _fail_reads_of(meta, monkeypatch, first["campaign_id"], 2)       # two failures, the third try answers
+    d = _draft(dirs / "b", ads=3)                           # replaced creative file and one more ad (as above)
+    d.ad_sets[0].ads[0].creative_path = str(dirs / "b" / "replaced.png")
+    (dirs / "b" / "replaced.png").write_bytes(b"another picture")
+    res = _publisher(meta).publish_draft(d)
+    assert res["error"] is None, res["error"]
+    assert res["campaign_id"] == first["campaign_id"] and res["reused"].get("campaign")
+    assert _names(meta) == [BASE]
+
+
+def test_rate_limit_on_the_receipt_read_stays_a_stop(dirs, monkeypatch):
+    meta, first = _stop_at_first_image(dirs)
+    before = len(meta.posts)
+    _fail_reads_of(meta, monkeypatch, first["campaign_id"], None, {"code": 17, "message": "request limit reached"})
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
     res = _publisher(meta).publish_draft(_draft(dirs / "b", ads=2))
-    assert res["error"] and len(meta.posts) == before, "no write after an unreadable receipt campaign"
+    assert res["error"] and len(meta.posts) == before
     assert _names(meta) == [BASE]
 
 
