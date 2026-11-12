@@ -74,6 +74,58 @@ def test_the_picture_on_another_computer_needs_no_upload(tmp_path, _config):
     assert pa.drafts_need_form_photo([d]) is False
 
 
+# --------------------------- ACL-2596: an "Automatic" Page ---------------------------
+
+LABEL = "KLD_AUTO_PAGE"
+
+
+def _stored_pages(*ids, state="ready"):
+    from src.web import account_pages as ap
+    ap.remember_pages(LABEL, {"ok": True, "state": state,
+                              "pages": [{"id": i, "name": f"P{i}", "source": "ad account"} for i in ids]})
+
+
+def _auto_draft(tmp_path):
+    d = _tpl_draft(tmp_path, [save_with_picture()["id"]])
+    d.page_id = ""
+    return d
+
+
+def test_automatic_page_with_a_stored_photo_stays_light(tmp_path, monkeypatch):
+    d = _auto_draft(tmp_path)
+    _stored_pages(PAGE, "777")
+    store.remember_photo(PAGE, SHA, "9001")
+    reads = []
+    monkeypatch.setattr(g.GraphClient, "get", lambda *a, **k: reads.append(a), raising=False)
+    pub = pa.ApiPublisher()
+    pub.account_label = LABEL
+    assert pub.plan_form_photo([d]) is False and not pub.needs_form_photo
+    assert reads == []                     # the decision made no Graph read
+
+
+def test_automatic_page_without_a_stored_photo_needs_the_upload(tmp_path):
+    d = _auto_draft(tmp_path)
+    _stored_pages(PAGE)                    # the Page is known, but this picture was never uploaded to it
+    assert pa.ApiPublisher().plan_form_photo([d], account_label=LABEL) is True
+
+
+def test_automatic_page_that_cannot_be_resolved_locally_stays_safe(tmp_path):
+    d = _auto_draft(tmp_path)
+    store.remember_photo(PAGE, SHA, "9001")
+    pub = pa.ApiPublisher()
+    assert pub.plan_form_photo([d], account_label=LABEL) is True       # no stored Page list at all
+    _stored_pages(state="empty")
+    assert pub.plan_form_photo([d], account_label=LABEL) is True       # the list is empty
+    assert pub.plan_form_photo([d]) is True                            # no account label
+
+
+def test_automatic_page_is_the_first_of_the_list_like_the_creator(tmp_path):
+    d = _auto_draft(tmp_path)
+    _stored_pages("777", PAGE)             # the creator would take 777; the photo is stored for the other Page
+    store.remember_photo(PAGE, SHA, "9001")
+    assert pa.ApiPublisher().plan_form_photo([d], account_label=LABEL) is True
+
+
 # --------------------------- the lease ---------------------------
 
 def test_a_job_with_an_upload_runs_the_lease_in_ads_manager_mode(rig):
