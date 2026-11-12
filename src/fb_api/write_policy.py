@@ -158,6 +158,28 @@ MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be c
                       "text per placement group. Use several texts without the vertical file, or one text with it.")
 MSG_TEXTS_DYNAMIC_SET = ("An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an "
                          "ad set: move the other ads of this ad set to a separate ad set")
+#: ACL-2584: лента Instant Form с несколькими текстами - форма Ads Manager (HAR владельца 2026-11-11, вариант A2):
+#: `optimization_type: PLACEMENT`, ДВА правила площадок, ВСЕ тексты несут метку основного правила, первый ещё и метку
+#: вертикального (Stories/Reels/Status берут первый текст). Набор НЕ Dynamic Creative, поэтому объявлений в наборе
+#: сколько позволит Meta. Один файл, обе метки на нём; метки по виду ассета: `acl_<вид>_main|vertical`.
+INSTANT_OPTIMIZATION_KEY = "optimization_type"
+INSTANT_OPTIMIZATION = "PLACEMENT"
+#: вид ассета -> (короткое имя метки, ключ метки в правиле)
+INSTANT_ASSET_KINDS = {"bodies": ("body", "body_label"), "titles": ("title", "title_label"),
+                       "descriptions": ("description", "description_label"),
+                       "link_urls": ("link", "link_url_label"),
+                       "images": ("image", "image_label"), "videos": ("video", "video_label")}
+#: Площадки вертикального правила (Stories и Reels); основное правило не несёт ни одной из них.
+INSTANT_VERTICAL_POSITIONS = {"facebook_positions": ("story", "facebook_reels"),
+                              "instagram_positions": ("story", "reels")}
+
+
+def instant_labels(kind: str) -> tuple[str, str]:
+    """(метка основного правила, метка вертикального) для вида ассета ленты Instant Form."""
+    short = INSTANT_ASSET_KINDS[kind][0]
+    return f"acl_{short}_main", f"acl_{short}_vertical"
+
+
 ASSET_FEED_TEXT_MAX = {"bodies": 1024, "titles": 255, "descriptions": 255}
 ASSET_FEED_MAX_MEDIA = 2
 ASSET_FEED_FORMATS = ("SINGLE_IMAGE", "SINGLE_VIDEO")
@@ -228,6 +250,11 @@ def policy_for_page(act: str, page: str = "") -> dict:
                        "text_max": dict(ASSET_FEED_TEXT_MAX), "max_media": ASSET_FEED_MAX_MEDIA,
                        "formats": list(ASSET_FEED_FORMATS), "label_re": ASSET_LABEL_RE.pattern,
                        "hash_re": IMAGE_HASH_RE.pattern, "video_id_re": VIDEO_ID_RE.pattern,
+                       "instant": {"optimization_key": INSTANT_OPTIMIZATION_KEY,
+                                   "optimization": INSTANT_OPTIMIZATION,
+                                   "kinds": {k: {"labels": list(instant_labels(k)), "rule_key": v[1]}
+                                             for k, v in INSTANT_ASSET_KINDS.items()},
+                                   "vertical_positions": {k: list(v) for k, v in INSTANT_VERTICAL_POSITIONS.items()}},
                        "platforms": sorted(RULE_PLATFORMS),
                        "facebook_positions": sorted(RULE_FACEBOOK_POSITIONS),
                        "instagram_positions": sorted(RULE_INSTAGRAM_POSITIONS)},
@@ -340,6 +367,122 @@ def _check_feed_form_button(spec: dict, ctas: Any, refuse: Any) -> None:
         refuse("call_to_actions link must be the Instant Form placeholder link")
 
 
+def _check_customization_spec(cs: Any, refuse: Any) -> None:
+    """Площадки одного правила: непустой объект из трёх известных ключей со списками известных значений."""
+    if not (isinstance(cs, dict) and cs and set(cs) <= {"publisher_platforms", "facebook_positions",
+                                                       "instagram_positions"}):
+        refuse("customization_spec keys are not allowed")
+    for key, allowed_values in (("publisher_platforms", RULE_PLATFORMS),
+                                ("facebook_positions", RULE_FACEBOOK_POSITIONS),
+                                ("instagram_positions", RULE_INSTAGRAM_POSITIONS)):
+        if key in cs and not (isinstance(cs[key], list) and cs[key]
+                              and all(isinstance(x, str) and x in allowed_values for x in cs[key])):
+            refuse(f"{key} value is not allowed")
+
+
+def _instant_labelled_list(spec: dict, kind: str, refuse: Any, *, texts: bool) -> list:
+    """Список ассетов ленты Instant Form: у каждого ровно наши метки (первый - обе, остальные - основную)."""
+    items = spec.get(kind)
+    main, vertical = instant_labels(kind)
+    cap = ASSET_FEED_MAX_TEXTS if texts else 1
+    if not (isinstance(items, list) and 1 <= len(items) <= cap):
+        refuse(f"{kind} must hold 1-{cap} items")
+    for n, item in enumerate(items):
+        want = [main, vertical] if n == 0 else [main]
+        if not isinstance(item, dict):
+            refuse(f"{kind} item must be an object")
+        labels = item.get("adlabels")
+        if not (isinstance(labels, list) and labels == [{"name": x} for x in want]):
+            refuse(f"{kind} item {n + 1} must carry exactly the labels {want}")
+    return items
+
+
+def _check_instant_feed(spec: dict, refuse: Any) -> None:
+    """ACL-2584: ЕДИНСТВЕННАЯ форма ленты Instant Form (вариант A2 из Ads Manager); всё иное - отказ.
+
+    Рядом с `object_story_spec` (проверен выше): тексты с метками, один файл с двумя метками, ссылка-заглушка формы
+    с двумя метками, кнопка формы, `optimization_type: PLACEMENT` и ровно два правила: основное (все тексты) и
+    вертикальное (первый текст). Заголовок: 1-5 непустых текстов либо ровно один пустой (`""`) с обеими метками -
+    так Ads Manager отправил объявление без заголовка (HAR владельца); любые другие пустые тексты - отказ.
+    """
+    allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls", "call_to_action_types",
+               "call_to_actions", "ad_formats", "optimization_type", "asset_customization_rules"}
+    extra = sorted(set(spec) - allowed)
+    if extra:
+        refuse(f"key {extra[0]!r} is not allowed")
+    if spec.get(INSTANT_OPTIMIZATION_KEY) != INSTANT_OPTIMIZATION:
+        refuse(f"an Instant Form feed needs {INSTANT_OPTIMIZATION_KEY} {INSTANT_OPTIMIZATION}")
+    has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
+    if has_images == has_videos or ("images" in spec and "videos" in spec):
+        refuse("needs either images or videos")
+    media_kind = "images" if has_images else "videos"
+    if "titles" not in spec:
+        refuse("titles must be present: 1-5 non-empty texts, or exactly one empty text when the ad has no headline")
+    present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_kind]
+    for kind in ("bodies", "titles", "descriptions"):
+        if kind not in spec:
+            continue
+        items = _instant_labelled_list(spec, kind, refuse, texts=True)
+        limit = ASSET_FEED_TEXT_MAX[kind]
+        # ACL-2584: the ONE empty text allowed is a lone title "" (no headline, as Ads Manager sent it).
+        no_headline = kind == "titles" and len(items) == 1
+        for item in items:
+            text = item.get("text")
+            if set(item) != {"text", "adlabels"} or not isinstance(text, str)                     or not (text.strip() or (no_headline and text == "")):
+                refuse(f"{kind} must hold non-empty texts with labels only")
+            if len(text) > limit:
+                refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
+    media = _instant_labelled_list(spec, media_kind, refuse, texts=False)[0]
+    if media_kind == "images":
+        ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str) \
+            and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+    else:
+        thumb = media.get("thumbnail_url")
+        ok = set(media) == {"video_id", "thumbnail_url", "adlabels"} \
+            and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"])) \
+            and isinstance(thumb, str) and thumb.startswith("https://")
+    if not ok:
+        refuse(f"{media_kind} item is not allowed")
+    link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
+    if set(link) != {"website_url", "adlabels"} or link["website_url"] != LEAD_FEED_LINK:
+        refuse("link_urls must hold the Instant Form placeholder link")
+    ctas = spec.get("call_to_action_types")
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_FORM):
+        refuse("call_to_action_types must hold one allowed button")
+    if "call_to_actions" not in spec:
+        refuse("an Instant Form feed needs the form button")
+    _check_feed_form_button(spec, ctas, refuse)
+    want = "SINGLE_IMAGE" if media_kind == "images" else "SINGLE_VIDEO"
+    if spec.get("ad_formats") != [want]:
+        refuse(f"ad_formats must be exactly [{want!r}]")
+    rules = spec.get("asset_customization_rules")
+    if not (isinstance(rules, list) and len(rules) == 2):
+        refuse("an Instant Form feed needs exactly two rules (main and Stories/Reels)")
+    for n, rule in enumerate(rules):
+        # Порядок: основное правило, затем вертикальное (как в Ads Manager).
+        label_keys = {INSTANT_ASSET_KINDS[k][1]: instant_labels(k)[n] for k in present}
+        if not (isinstance(rule, dict) and set(rule) == {"customization_spec"} | set(label_keys)):
+            refuse("rule keys are not allowed")
+        for key, name in label_keys.items():
+            if rule[key] != {"name": name}:
+                refuse(f"rule {key} must name {name!r}")
+        cs = rule["customization_spec"]
+        if n == 0:
+            if cs != {}:
+                # ACL-2584: only the empty catch-all keeps the several-text editor of Ads Manager.
+                refuse("the main rule must be the empty catch-all")
+            continue
+        _check_customization_spec(cs, refuse)
+        if not (cs.get("facebook_positions") or cs.get("instagram_positions")):
+            # Platforms alone would make the two rules overlap completely.
+            refuse("a rule with publisher_platforms needs position lists")
+        for key, vertical in INSTANT_VERTICAL_POSITIONS.items():
+            values = cs.get(key) or []
+            inside = [x for x in values if x in vertical]
+            if (n == 1 and len(inside) != len(values)) or (n == 0 and inside):
+                refuse(f"{key} of the {'Stories/Reels' if n else 'main'} rule are not allowed")
+
+
 def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     """Закрытая схема `asset_feed_spec` (ACL-1774); всё сверх неё - отказ.
 
@@ -353,17 +496,19 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
 
     if not isinstance(spec, dict):
         refuse("must be an object")
-    allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls",
-               "call_to_action_types", "ad_formats", "asset_customization_rules"}
-    if on_ad:
-        allowed = allowed | {"call_to_actions"}
-    extra = sorted(set(spec) - allowed)
-    if extra:
-        refuse(f"key {extra[0]!r} is not allowed")
+    if not on_ad:
+        allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls",
+                   "call_to_action_types", "ad_formats", "asset_customization_rules"}
+        extra = sorted(set(spec) - allowed)
+        if extra:
+            refuse(f"key {extra[0]!r} is not allowed")
     story = creative.get("object_story_spec")
     if not (isinstance(story, dict) and set(story) <= {"page_id", INSTAGRAM_KEY}
             and isinstance(story.get("page_id"), str)):
         refuse("needs object_story_spec with page_id and optional Instagram identity only")
+    if on_ad:
+        _check_instant_feed(spec, refuse)  # ACL-2584: the only Instant Form feed shape; the rest is Website
+        return
     has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
     if has_images == has_videos or ("images" in spec and "videos" in spec):
         refuse("needs either images or videos")
@@ -371,8 +516,6 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     media = spec[kind]
     if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
         refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
-    if on_ad and len(media) != 1:
-        refuse("an Instant Form ad takes one file (placement rules are not verified on a form)")
     cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
     for kind_name in ("bodies", "titles", "descriptions"):
         # Длина - отдельная причина: «1-N текстов» скрыла бы её (ACL-1774).
@@ -386,7 +529,7 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     if "bodies" in spec and not _is_text_list(spec["bodies"], "bodies", required=True, limit_count=cap):
         refuse(f"bodies must hold 1-{cap} non-empty texts, or be left out")
     if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):
-        refuse(f"titles must hold 1-{cap} non-empty texts (a headline is required in an asset-feed ad)")
+        refuse(f"titles must hold 1-{cap} non-empty texts (a Website ad with several texts and no headline is not verified yet)")
     if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True,
                                                     limit_count=cap):
         refuse(f"descriptions must hold 1-{cap} non-empty texts")
@@ -414,13 +557,9 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
                 and set(links[0]) == {"website_url"} and isinstance(links[0]["website_url"], str)
                 and links[0]["website_url"].startswith("https://")):
             refuse("link_urls must hold one https website_url")
-        if on_ad and links[0]["website_url"] != LEAD_FEED_LINK:
-            refuse("link_urls must hold the Instant Form placeholder link")
     ctas = spec.get("call_to_action_types")
-    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in (CTA_FORM if on_ad else CTA_WEBSITE)):
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_WEBSITE):
         refuse("call_to_action_types must hold one allowed button")
-    if "call_to_actions" in spec:
-        _check_feed_form_button(spec, ctas, refuse)
     want = "SINGLE_IMAGE" if kind == "images" else "SINGLE_VIDEO"
     if spec.get("ad_formats") != [want]:
         refuse(f"ad_formats must be exactly [{want!r}]")
@@ -445,16 +584,7 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
         if not (isinstance(lab, dict) and set(lab) == {"name"} and lab["name"] in names):
             refuse("rule label must name one of the files")
         used.append(lab["name"])
-        cs = rule["customization_spec"]
-        if not (isinstance(cs, dict) and cs and set(cs) <= {"publisher_platforms", "facebook_positions",
-                                                           "instagram_positions"}):
-            refuse("customization_spec keys are not allowed")
-        for key, allowed_values in (("publisher_platforms", RULE_PLATFORMS),
-                                    ("facebook_positions", RULE_FACEBOOK_POSITIONS),
-                                    ("instagram_positions", RULE_INSTAGRAM_POSITIONS)):
-            if key in cs and not (isinstance(cs[key], list) and cs[key]
-                                  and all(isinstance(x, str) and x in allowed_values for x in cs[key])):
-                refuse(f"{key} value is not allowed")
+        _check_customization_spec(rule["customization_spec"], refuse)
     if sorted(used) != sorted(names):
         refuse("each file needs its own rule")
 
@@ -747,6 +877,9 @@ def check(act: str, method: str, path: str, params: dict | None,
         _check_targeting(checked["targeting"])
     if DYNAMIC_KEY in checked and checked[DYNAMIC_KEY] is not True:
         raise WriteRefused(f"write refused: {DYNAMIC_KEY} may only be true")
+    if edge == "adsets" and checked.get(DYNAMIC_KEY) is True and checked.get("destination_type") == "ON_AD":
+        # ACL-2584: an Instant Form ad set is never Dynamic Creative (its feed uses placement rules).
+        raise WriteRefused(f"write refused: an Instant Form (ON_AD) ad set may not set {DYNAMIC_KEY}")
     if edge == "ads" and "creative" in checked:
         # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
         # встроенный креатив провёз бы свой degrees_of_freedom_spec).
