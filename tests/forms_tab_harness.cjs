@@ -30,6 +30,17 @@ if (scenario === 'contacts') {
   });
 }
 if (scenario === 'legacy-locale') VALID.locale = 'UK_UA';
+if (scenario === 'logic') {
+  // ACL-2178: Q1 Yes -> question 3 (skips Q2), No -> close; the non-lead page rides with the template.
+  Object.assign(VALID, {
+    questions_first: true,
+    questions: [
+      {label: 'Budget', type: 'multiple_choice_logic', options: ['Yes', 'No'], logic: {Yes: 'q3', No: 'close'}},
+      {label: 'Name of the company', type: 'short_answer'},
+      {label: 'Phone model', type: 'short_answer'}],
+    non_lead_end: {title: 'Sorry', text: 'Not for you.', website_url: 'https://example.com/', button_text: 'Visit website'},
+  });
+}
 if (scenario === 'cover' || scenario === 'cover-pending') Object.assign(VALID, {intro: 'Tell us more.', cover_photo_id: '111', cover_page_id: '222'});
 const rows = [
   {id: 'aaaaaaaaaaaa', name: 'Demo <"form">', locale: 'EN_US', summary: 'Name, Email · 1 question',
@@ -180,6 +191,45 @@ const lastPost = () => requests.filter(r => r.body).pop();
     click('fm-save-btn'); await flush();
     assert.equal(requests.filter(r => r.body).length, n, 'cover without Description was submitted');
     assert(get('fm-editor-msg').textContent.includes('Background image needs a Description'));
+    return;
+  }
+
+  if (scenario === 'logic') {
+    const posts = () => requests.filter(r => r.body).length;
+    click('', {'data-fm-edit': VALID.id});
+    assert.equal(get('fm-logic-on').checked, true, 'the checkbox must be on for a template with conditions');
+    assert.equal(get('fm-nonlead').hidden, false, 'the non-lead page must show while an answer closes the form');
+    assert(get('fm-questions').innerHTML.includes('data-fm-logic="Yes"'), 'no row for the answer Yes');
+    // 1. Open and save: conditions, the follow-up flag and the non-lead page come back unchanged.
+    click('fm-save-btn'); await flush();
+    assert.deepEqual(lastPost().body.questions, VALID.questions, 'Save lost or changed the conditions');
+    assert.deepEqual(lastPost().body.non_lead_end, VALID.non_lead_end);
+    // 2. A renamed answer is flagged, nothing is sent.
+    let n = posts();
+    fire('input', {getAttribute: k => ({'data-fm-q': '0', 'data-fm-f': 'options'})[k] ?? null, value: 'Maybe\nNo'});
+    click('fm-save-btn'); await flush();
+    assert.equal(posts(), n, 'a renamed answer was saved');
+    assert(get('fm-editor-msg').textContent.includes('the condition for "Yes" does not match any answer'), get('fm-editor-msg').textContent);
+    // 3. Removing question 2 renumbers the jump to question 3 (it becomes question 2).
+    click('', {'data-fm-edit': VALID.id});
+    click('', {'data-fm-qdel': '1'});
+    click('fm-save-btn'); await flush();
+    assert.equal(lastPost().body.questions.length, 2);
+    assert.equal(lastPost().body.questions[0].logic.Yes, 'q2', 'the jump did not follow its question');
+    // 4. Removing the question a jump points at clears the jump: save is blocked until it is chosen again.
+    click('', {'data-fm-edit': VALID.id});
+    click('', {'data-fm-qdel': '2'});
+    n = posts();
+    click('fm-save-btn'); await flush();
+    assert.equal(posts(), n, 'a jump to a removed question was saved');
+    assert(get('fm-editor-msg').textContent.includes('choose what happens after the answer "Yes"'), get('fm-editor-msg').textContent);
+    // 5. Turning conditions off (confirmed) sends plain questions and no non-lead page.
+    click('', {'data-fm-edit': VALID.id});
+    fire('change', {id: 'fm-logic-on', checked: false}); await flush();
+    click('fm-save-btn'); await flush();
+    assert.equal(lastPost().body.questions[0].type, 'multiple_choice');
+    assert(!('logic' in lastPost().body.questions[0]), 'logic stayed after turning conditions off');
+    assert(!('non_lead_end' in lastPost().body), 'the non-lead page stayed after turning conditions off');
     return;
   }
 
