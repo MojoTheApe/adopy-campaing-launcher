@@ -32,6 +32,14 @@ MSG_COVER_OTHER_PAGE = ("Form template {name!r}: the background image belongs to
 MSG_COVER_REFUSED = ("Meta refused the form {form_name!r} with its background image: {why}. "
                      "Choose another picture or remove the image, then publish again.")
 MSG_COVER_UNCONFIRMED = "the background image could not be confirmed"
+#: ACL-2571: the picture of a shared template is a file on one computer; each Page gets its own upload at publish.
+MSG_COVER_ON_OTHER_COMPUTER = ("the background picture of form template {name!r} is on another computer, so this form "
+                               "is created without a background. Choose the picture again in the template on this "
+                               "computer to use it")
+MSG_COVER_FILE_LOST = ("The background picture of form template {name!r} is no longer on this computer. Choose it again "
+                       "in the template. Nothing was created.")
+MSG_COVER_UPLOAD_REFUSED = ("The background picture of form template {name!r} could not be uploaded to the Page: "
+                            "{why}. Nothing was created; fix this or remove the picture from the template.")
 
 MSG_TERMS_STOP = ("This Page has not accepted the Lead Ads terms, so the robot can't create a form. "
                   "Accept the terms for this Page in Meta (the robot never accepts them), then publish again")

@@ -52,20 +52,20 @@ let migration = {available: true, uploadable: 2, skipped: [
   {name: 'Demo <"form">', reason: 'Already in the team library'},
   {name: 'Old local', reason: 'Invalid template: Headline is required'}]};
 // ACL-2188: общий выбор картинки живёт в билдере; здесь его заменяет заглушка с тем же get/set.
-const coverState = {photo: '', page: '', sets: 0, pending: false, uploads: 0, result: {ok: true, photo: '555', page: '222'}};
+const coverState = {photo: '', page: '', local: '', sets: 0, pending: false, uploads: 0, result: {ok: true, sha: 'f'.repeat(64)}};
 const context = {
   formCoverPicker() {
     return {
-      get: () => ({cover_photo_id: coverState.photo, cover_page_id: coverState.page}),
+      get: () => ({cover_photo_id: coverState.photo, cover_page_id: coverState.page, cover_local_sha256: coverState.local}),
       set: (photo, page) => { coverState.photo = photo || ''; coverState.page = page || ''; coverState.sets++; coverState.pending = false; },
-      // ACL-2533: a chosen file that is not on the Page yet; the save must upload it first or stop.
+      // ACL-2571: a chosen file that is not yet kept on this computer; the save must keep it first or stop.
       pending: () => coverState.pending,
-      ensureUploaded: async () => {
+      ensureStored: async () => {
         if (!coverState.pending) return {ok: true, message: ''};
         coverState.uploads++;
         const r = coverState.result;
         if (!r.ok) return {ok: false, message: r.message};
-        coverState.photo = r.photo; coverState.page = r.page; coverState.pending = false;
+        coverState.local = r.sha; coverState.pending = false;
         return {ok: true, message: ''};
       },
       gate() {},
@@ -117,28 +117,29 @@ const lastPost = () => requests.filter(r => r.body).pop();
 
 
   if (scenario === 'cover-pending') {
-    // ACL-2533 round 3: a chosen file that is not on the Page is never dropped by Save.
+    // ACL-2571: a chosen file that is not yet kept on this computer is never dropped by Save.
     const posts = () => requests.filter(r => r.body).length;
     click('', {'data-fm-edit': VALID.id});
     coverState.photo = ''; coverState.page = ''; coverState.pending = true;     // a file is chosen, not uploaded
     get('fm-cover-page').value = '222';
-    // 1. Upload fails: the save stops with a visible message and sends nothing.
-    coverState.result = {ok: false, message: 'Refresh pages and choose a Page before uploading the picture.'};
+    // 1. Keeping the file fails: the save stops with a visible message and sends nothing.
+    coverState.result = {ok: false, message: 'The background image is larger than 8 MB.'};
     let n = posts();
     click('fm-save-btn'); await flush();
     assert.equal(posts(), n, 'saved without the chosen picture');
     assert(get('fm-editor-msg').textContent.includes('The template was not saved.'), get('fm-editor-msg').textContent);
-    assert(get('fm-editor-msg').textContent.includes('Refresh pages and choose a Page'), 'no fix named');
+    assert(get('fm-editor-msg').textContent.includes('larger than 8 MB'), 'no reason named');
     assert.equal(get('fm-editor-msg').style.color, 'var(--danger)');
     assert.equal(coverState.pending, true, 'the file must stay chosen after a failure');
     assert.equal(get('fm-save-btn').disabled, false, 'Save must be usable again');
-    // 2. Upload works: one upload, then one save that carries the returned pair.
-    coverState.result = {ok: true, photo: '555', page: '222'};
+    // 2. It works: one request, then one save that carries the returned hash (and no Page photo pair).
+    coverState.result = {ok: true, sha: 'f'.repeat(64)};
     n = posts(); const u = coverState.uploads;
     click('fm-save-btn'); await flush();
     assert.equal(coverState.uploads, u + 1, 'the pending file was not uploaded');
     assert.equal(posts(), n + 1);
-    assert.deepEqual([lastPost().body.cover_photo_id, lastPost().body.cover_page_id], ['555', '222']);
+    assert.equal(lastPost().body.cover_local_sha256, 'f'.repeat(64));
+    assert(!lastPost().body.cover_photo_id && !lastPost().body.cover_page_id);
     // 3. Nothing pending: Save uploads nothing.
     click('', {'data-fm-edit': VALID.id});
     const u2 = coverState.uploads;

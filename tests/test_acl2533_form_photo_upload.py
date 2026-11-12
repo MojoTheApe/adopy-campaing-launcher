@@ -90,8 +90,10 @@ def test_the_policy_table_for_the_page_helper_and_the_upload_budget():
     table = wp.policy_for_form_photo(PAGE)
     assert table == {"host": "adsmanager.facebook.com", "url": wp.FORM_PHOTO_URL, "page": PAGE,
                      "mimes": ["image/jpeg", "image/png"], "max_bytes": 8 * 1024 * 1024, "page_re": wp.FORM_PAGE_RE}
-    # The creation/publish helper does NOT carry the upload block: the upload lives in its own mode only.
-    assert "form_photo" not in wp.policy_for_page("act_1234567890", PAGE)
+    # ACL-2571: the creation/publish helper carries the same upload block (the Page of the plan), and an
+    # object-edit helper still does not.
+    assert wp.policy_for_page("act_1234567890", PAGE)["form_photo"] == table
+    assert "form_photo" not in wp.policy_for_commands("act_1234567890")
     assert wp.policy_for_form_photo_only(PAGE) == {"form_photo_only": True, "form_photo": table}
     assert wp.FORM_PHOTO_UPLOAD_CALLS == 1
 
@@ -279,9 +281,9 @@ def test_a_network_failure_is_one_request_and_is_not_retried(js):
 
 def test_the_upload_only_helper_has_no_graph_write_chain(js):
     assert js["ok"]["graphPost"] == {"error": "read_only"}
-    # the creation/publish helper has no upload block: it refuses (fail closed) and sends nothing
-    assert js["with_graph_policy"]["result"] == {"error": "write_refused", "why": "photo_policy"}
-    assert js["with_graph_policy"]["calls"] == []
+    # ACL-2571: the creation/publish policy carries the upload block of its Page, so it uploads (one request)
+    assert js["with_graph_policy"]["result"]["ok"] is True
+    assert len(js["with_graph_policy"]["calls"]) == 1
 
 
 # ───────────────────────── Python: транспорт ─────────────────────────
@@ -375,12 +377,20 @@ def test_a_page_that_goes_away_after_sending_is_unknown_not_a_retry():
     assert out == {"error": "call_unknown", "reason": "cdp_timeout"} and len(tab.uploads()) == 1
 
 
-def test_the_creation_helper_refuses_the_upload_and_sends_nothing():
+def test_the_creation_helper_uploads_only_to_its_own_page_and_the_object_edit_helper_never():
     tab = PhotoTab()
     t = tc.InPageGraph(tab, allow_writes=True, write_act="act_1234567890", write_page=PAGE)
-    with pytest.raises(ValueError, match="not enabled"):
-        t.upload_form_photo(PAGE, JPEG, mime="image/jpeg")
-    assert tab.stage_calls == 0 and tab.uploads() == []
+    assert t.upload_form_photo(PAGE, JPEG, mime="image/jpeg")["photo_id"] == NEW_PHOTO
+    assert len(tab.uploads()) == 1
+    other = PhotoTab()
+    t2 = tc.InPageGraph(other, allow_writes=True, write_act="act_1234567890", write_page=PAGE)
+    with pytest.raises(wp.WriteRefused):                    # a Page that is not the plan's
+        t2.upload_form_photo("999", JPEG, mime="image/jpeg")
+    assert other.stage_calls == 0 and other.uploads() == []
+    no_page = PhotoTab()
+    with pytest.raises(ValueError, match="not enabled"):    # the preflight helper has no Page: no upload
+        tc.InPageGraph(no_page, allow_writes=True, write_act="act_1234567890").upload_form_photo(
+            PAGE, JPEG, mime="image/jpeg")
     with pytest.raises(ValueError):                         # an object-edit helper never uploads
         tc.InPageGraph(PhotoTab(), allow_object_updates=True, write_act="act_1234567890").upload_form_photo(
             PAGE, JPEG, mime="image/jpeg")
@@ -713,8 +723,6 @@ def test_a_template_without_a_background_is_unchanged(tmp_path):
     out, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
     assert out.error == "", out.error
     assert "cover_photo_id" not in meta.form_posts[0][1]["context_card"]
-    # no upload helper is asked for anything on a publish: the creator never calls the web-session upload
-    assert "upload_form_photo" not in (ROOT / "src" / "fb_api" / "creator.py").read_text(encoding="utf-8")
 
 
 # ───────────────────────── страница: предпросмотр только локальный ─────────────────────────
@@ -730,26 +738,29 @@ def test_the_preview_is_a_blob_of_the_local_file_and_never_an_address_from_meta(
     picker = _picker_source()
     assert "https://" not in picker and "innerHTML" not in picker and "data:" not in picker
     assigned = re.findall(r"\.src\s*=\s*([^;]+);", picker)
-    assert assigned == ["localUrl"], assigned
+    # ACL-2571: the chosen file (blob:) or the stored file served by THIS dashboard; never a Meta address.
+    assert assigned == ["localUrl", "'/api/form-templates/cover-file?id=' + encodeURIComponent(st.localTid) + '&sha=' + encodeURIComponent(st.local)"], assigned
     assert "localUrl = URL.createObjectURL(f)" in picker
     app = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
     assert "img-src 'self' data: blob:;" in app
 
 
-def test_the_upload_is_one_fetch_to_one_route_by_a_separate_button():
+def test_the_picker_keeps_the_file_with_one_fetch_to_this_dashboard_and_never_calls_meta():
     page = HTML.read_text(encoding="utf-8")
-    assert len(re.findall(r"fetch\('/api/form-photo-upload'", page)) == 1
+    assert "fetch('/api/form-photo-upload'" not in page, "ACL-2571: the Page upload happens at publish, not in the editor"
     picker = _picker_source()
-    assert "send.addEventListener('click'" in picker and "fileInput.addEventListener('change'" in picker
-    change = picker[picker.index("fileInput.addEventListener('change'"):picker.index("function upload()")]
-    assert "fetch(" not in change and "upload()" not in change, "choosing a file must not send anything"
-    assert picker.count("fetch('/api/form-photo-upload'") == 1, "one upload function: the button and the save share it"
+    assert "fileInput.addEventListener('change'" in picker
+    change = picker[picker.index("fileInput.addEventListener('change'"):picker.index("function store()")]
+    assert "fetch(" not in change and "store()" not in change, "choosing a file must not send anything"
+    assert picker.count("fetch('/api/form-templates/cover-file'") == 1, "one function keeps the file; every save shares it"
+    assert "gateNote" not in picker and "pageReady" not in picker, "no Page-first gate"
 
 
 def test_the_page_validates_the_checksum_like_the_server():
     page = HTML.read_text(encoding="utf-8")
     assert "Background image checksum must be 64 hex characters" in page
-    assert "cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256)" in page
+    assert "Background picture checksum must be 64 hex characters" in page
+    assert "cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256, tpl.cover_local_sha256, tpl.id)" in page
 
 
 # ───────────────────────── тёплая вкладка: две Страницы подряд ─────────────────────────

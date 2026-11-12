@@ -7286,6 +7286,13 @@ window.cbLayout = (function () {
       if (coverSha && !/^[0-9a-f]{64}$/.test(coverSha)) e.push('Background image checksum must be 64 hex characters');
       if (!String(t.intro || '').trim()) e.push('Background image needs a Description (Meta shows it on the intro screen)');
     }
+    /* ACL-2571: a picture kept on this computer - only its hash is in the template; mirror of form_templates.validate. */
+    var coverLocal = squeeze(t.cover_local_sha256).toLowerCase();
+    if (coverLocal) {
+      if (!/^[0-9a-f]{64}$/.test(coverLocal)) e.push('Background picture checksum must be 64 hex characters');
+      else if (coverPhoto || coverPage) e.push('Choose either a Page photo or a picture from this computer for the background, not both');
+      else if (!String(t.intro || '').trim()) e.push('Background image needs a Description (Meta shows it on the intro screen)');
+    }
     var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
     if (!chosen.length) e.push('Choose at least one contact field (name, first name, last name, email or phone)');
     if (chosen.indexOf('name') !== -1 && (chosen.indexOf('first_name') !== -1 || chosen.indexOf('last_name') !== -1))
@@ -18164,11 +18171,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
      «Upload to Page», через вкладку профиля. Строки и подписи - только textContent (имена приходят извне). */
   window.formCoverPicker = function (box, getContext, opts) {
     var btnClass = (opts && opts.btnClass) || 'btn';
-    var st = { photo: '', page: '', sha: '' };
+    var st = { photo: '', page: '', sha: '', local: '', localTid: '' };   // ACL-2571: `local` = hash of the picture kept on this computer (not uploaded until publish)
     var MAX_BYTES = 8 * 1024 * 1024;
-    var NEED_PAGE = 'Refresh pages and choose a Page before uploading the picture.';
-    var GATE_HINT = 'Choose an account and a Page first (Refresh pages).';
-    var file = null, localUrl = '', uploadedFile = null, inflight = null, fileState = '';
+    var MISSING = 'Background picture is on another computer \u2014 choose it again here';
+    var file = null, localUrl = '', storedFile = null, inflight = null, fileState = '';
     function node(tag, text, cls) {
       var n = document.createElement(tag);
       if (text) n.textContent = text;
@@ -18181,16 +18187,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     title.style.fontWeight = '600';
     var help = node('div', 'Upload a picture from this computer (JPEG or PNG, up to 8 MB) or choose one already on this Page. It is shown on the intro screen.', 'cb-form-note');
     var hint = node('div', 'Landscape pictures around 1.91:1 (for example 1200×628) usually fit best.', 'cb-form-note');
+    var keptNote = node('div', 'A picture from this computer stays on this computer and is uploaded to each campaign\u2019s Page when you publish. No account or Page is needed to choose it.', 'cb-form-note');
     var state = node('div', '', 'cb-form-note');
     var idLabel = node('label', 'Photo ID ');
     var idInput = node('input'); idInput.type = 'text'; idInput.setAttribute('inputmode', 'numeric'); idInput.maxLength = 25;
     idLabel.appendChild(idInput);
     var pick = button('Choose from Page'), remove = button('Remove');
-    var fileLabel = node('label', 'Upload ');
+    var fileLabel = node('label', 'Picture from this computer ');
     var fileInput = node('input'); fileInput.type = 'file'; fileInput.setAttribute('accept', 'image/jpeg,image/png');
     fileLabel.appendChild(fileInput);
-    var send = button('Upload to Page'); send.disabled = true;
-    var gateNote = node('div', GATE_HINT, 'cb-form-note'); gateNote.hidden = true;
     var preview = node('img'); preview.alt = 'Preview of the selected background image'; preview.hidden = true;
     // An inline display would override the hidden attribute: the display is switched together with it.
     preview.style.cssText = 'max-width:240px;max-height:160px;margin:0.3rem 0;border-radius:4px';
@@ -18198,48 +18203,49 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var fstate = node('div', '', 'cb-form-note'); fstate.style.fontWeight = '600'; fstate.setAttribute('aria-live', 'polite');
     var errBox = node('div', '', 'cb-form-note'); errBox.setAttribute('role', 'alert'); errBox.style.color = 'var(--danger, #b00020)'; errBox.style.fontWeight = '600'; errBox.hidden = true;
     var actions = node('div'); actions.style.cssText = 'display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0.3rem 0';
-    actions.appendChild(fileLabel); actions.appendChild(send); actions.appendChild(idLabel); actions.appendChild(pick); actions.appendChild(remove);
+    actions.appendChild(fileLabel); actions.appendChild(idLabel); actions.appendChild(pick); actions.appendChild(remove);
     var msg = node('div', '', 'cb-form-note'); msg.setAttribute('role', 'status');
     var list = node('div');
-    [title, help, hint, state, preview, fstate, errBox, gateNote, actions, msg, list].forEach(function (n) { box.appendChild(n); });
+    [title, help, hint, keptNote, state, preview, fstate, errBox, actions, msg, list].forEach(function (n) { box.appendChild(n); });
 
     function showError(text) { errBox.textContent = text || ''; errBox.hidden = !text; }
     function paintFileState() { fstate.textContent = fileState; fstate.hidden = !fileState; }
     function setFileState(text) { fileState = text || ''; paintFileState(); }
-    function pageReady() { var c = getContext() || {}; return !!(c.account && c.pageId); }
-    /* The file input waits for an account and a Page: a picture goes to a Page, so the Page comes first. */
-    function gate() {
-      var ok = pageReady();
-      fileInput.disabled = !ok && !file;
-      gateNote.hidden = ok || !!file;
-      send.disabled = !file || uploadedFile === file || !!inflight;
-    }
+    /* ACL-2571: the file input no longer waits for an account and a Page (kept so callers need no change). */
+    function gate() { fileInput.disabled = false; }
     function clearLocal(keepInput) {
       if (localUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) { try { URL.revokeObjectURL(localUrl); } catch (e) {} }
-      file = null; localUrl = ''; uploadedFile = null;
+      file = null; localUrl = ''; storedFile = null;
       preview.hidden = true; preview.style.display = 'none';
       if (preview.removeAttribute) preview.removeAttribute('src');
       // The input must not keep showing a file that is gone - but while a change is being handled the
       // input holds the file just chosen and must not be emptied.
       if (!keepInput) { try { fileInput.value = ''; } catch (e) {} }
-      send.disabled = true; setFileState(''); showError('');
-      gate();
+      setFileState(''); showError('');
     }
     function paint() {
-      state.textContent = st.photo ? 'Photo ' + st.photo + ', Page ' + (st.page || '—') + (st.sha ? ', uploaded from this computer' : '') : '';
+      state.textContent = st.photo ? 'Photo ' + st.photo + ', Page ' + (st.page || '—') + (st.sha ? ', uploaded from this computer' : '')
+        : (st.local ? 'Picture from this computer, uploaded to each Page at publish' : '');
       if (idInput.value !== st.photo) idInput.value = st.photo;
     }
     idInput.addEventListener('input', function () {
       st.photo = idInput.value.trim();
       st.sha = '';
-      if (st.photo && file) clearLocal();                    // one picture: a pasted id replaces the chosen file
+      if (st.photo && (file || st.local)) dropLocal();       // one picture: a pasted id replaces the local picture
       if (!st.photo) st.page = '';
       else if (!st.page) st.page = String((getContext() || {}).pageId || '');
       paint();
     });
-    remove.addEventListener('click', function () { st.photo = ''; st.page = ''; st.sha = ''; clearLocal(); list.textContent = ''; msg.textContent = ''; paint(); });
+    /* Forget the picture from this computer: the chosen file, the stored one and its preview. */
+    function dropLocal() { st.local = ''; st.localTid = ''; clearLocal(); }
+    remove.addEventListener('click', function () { st.photo = ''; st.page = ''; st.sha = ''; dropLocal(); list.textContent = ''; msg.textContent = ''; paint(); });
+    preview.onerror = function () {          // the stored file is not on this computer (the template came from the team library)
+      preview.hidden = true; preview.style.display = 'none';
+      if (st.local && !file) setFileState(MISSING);
+    };
     fileInput.addEventListener('change', function () {
       var f = fileInput.files && fileInput.files[0];
+      st.local = ''; st.localTid = '';
       clearLocal(true);
       msg.textContent = '';
       if (!f) return;
@@ -18247,61 +18253,47 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       if (f.type !== 'image/jpeg' && f.type !== 'image/png') { refuse('The background image must be a JPEG or PNG file.'); return; }
       if (f.size > MAX_BYTES) { refuse('The background image is larger than 8 MB.'); return; }
       file = f;
+      st.photo = ''; st.page = ''; st.sha = ''; paint();      // one picture: the chosen file replaces a Page photo
       localUrl = URL.createObjectURL(f);          // blob: from the local file; never a Meta address
       preview.src = localUrl; preview.hidden = false; preview.style.display = 'block';
-      send.disabled = false;
-      setFileState('Chosen (not uploaded yet)');
-      msg.textContent = 'Preview from this computer. Press "Upload to Page" to send it through the profile, or just save: it is uploaded first.';
-      gate();
+      setFileState('Chosen (not saved yet)');
+      msg.textContent = 'Preview from this computer. Saving the template keeps the picture on this computer; each Page gets it at publish.';
     });
-    /* One upload of the chosen file; the button and the save use the same promise. Resolves {ok, message}. */
-    function upload() {
+    /* ACL-2571: keep the chosen file on THIS computer (the dashboard, not Meta); one request, shared by every
+       caller. Resolves {ok, message}. The template record gets only the returned hash. */
+    function store() {
       if (inflight) return inflight;
-      var ctx = getContext() || {};
       list.textContent = '';
-      if (!file) { msg.textContent = 'Choose a JPEG or PNG file first.'; return Promise.resolve({ ok: false, message: 'Choose a JPEG or PNG file first.' }); }
-      if (!ctx.account || !ctx.pageId) {
-        showError(NEED_PAGE); msg.textContent = '';
-        return Promise.resolve({ ok: false, message: NEED_PAGE });
-      }
+      if (!file) return Promise.resolve({ ok: false, message: 'Choose a JPEG or PNG file first.' });
       showError('');
-      send.disabled = true; pick.disabled = true;
       var sent = file;
-      var who = ctx.formName ? 'Form "' + ctx.formName + '": ' : '';
-      msg.textContent = 'Uploading through the profile…';
-      setFileState('Uploading…');
+      msg.textContent = 'Keeping the picture on this computer\u2026';
+      setFileState('Saving the picture\u2026');
       var body = new FormData();
-      body.append('account_label', ctx.account);
-      body.append('page_id', ctx.pageId);
       body.append('file', file, 'background');
       function done(text, ok) {
-        pick.disabled = false; inflight = null;
-        if (file !== sent) return { ok: false, message: 'The chosen picture changed during the upload.' };
-        send.disabled = ok === true;
-        if (ok) { uploadedFile = sent; msg.textContent = text || ''; setFileState('Uploaded to Page ' + (ctx.pageLabel || ctx.pageId)); showError(''); }
-        else { msg.textContent = text || ''; setFileState('Upload failed: ' + (text || '').replace(/^Form "[^"]*": /, '')); showError(text); }
+        inflight = null;
+        if (file !== sent) return { ok: false, message: 'The chosen picture changed while it was being saved.' };
+        if (ok) { storedFile = sent; msg.textContent = text || ''; setFileState('Stored on this computer'); showError(''); }
+        else { msg.textContent = text || ''; setFileState('Not saved: ' + (text || '')); showError(text); }
         return { ok: !!ok, message: text || '' };
       }
-      inflight = fetch('/api/form-photo-upload', { method: 'POST', body: body })
+      inflight = fetch('/api/form-templates/cover-file', { method: 'POST', body: body })
         .then(function (r) { return r.json().then(function (d) { return d || {}; }); })
         .then(function (d) {
-          if (d.ok && d.photo_id) {
-            st.photo = String(d.photo_id); st.page = String(d.page_id || ctx.pageId); st.sha = String(d.sha256 || ''); paint();
-            return done('Uploaded to the Page. Save the template to keep it.', true);
-          }
-          return done(who + (d.message || d.error || 'The picture could not be uploaded'));
+          if (d.ok && d.sha256) { st.local = String(d.sha256); paint(); return done('Kept on this computer. Save the template to keep it.', true); }
+          return done(d.message || (d.errors || []).join('. ') || d.error || 'The picture could not be kept on this computer');
         })
-        .catch(function () { return done(who + 'The dashboard did not answer; try again'); });
+        .catch(function () { return done('The dashboard did not answer; try again'); });
       return inflight;
     }
-    send.addEventListener('click', function () { if (!send.disabled) upload(); });
     function row(p) {
       var label = p.form_name ? 'Cover of form "' + p.form_name + '"'
         : 'Page photo, ' + (p.width || '?') + '×' + (p.height || '?') + (p.created_time ? ', ' + String(p.created_time).slice(0, 10) : '');
       var b = button(label + ' — ' + p.id);
       b.style.cssText = 'display:block;margin:0.2rem 0;text-align:left';
       b.addEventListener('click', function () {
-        if (file) clearLocal();                              // one picture: a chosen Page picture replaces the file
+        if (file || st.local) dropLocal();                   // one picture: a chosen Page picture replaces the local one
         st.photo = String(p.id); st.page = String((getContext() || {}).pageId || ''); st.sha = ''; paint();
       });
       return b;
@@ -18332,17 +18324,23 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     });
     paint(); paintFileState(); gate();
     return {
-      get: function () { return { cover_photo_id: st.photo, cover_page_id: st.page, cover_sha256: st.sha }; },
-      set: function (photo, page, sha) {
+      get: function () { return { cover_photo_id: st.photo, cover_page_id: st.page, cover_sha256: st.sha, cover_local_sha256: st.local }; },
+      /* `local` + `tid`: the hash of the picture kept on this computer and the template it belongs to. */
+      set: function (photo, page, sha, local, tid) {
         st.photo = String(photo || ''); st.page = String(page || ''); st.sha = st.photo ? String(sha || '') : '';
+        st.local = st.photo ? '' : String(local || ''); st.localTid = st.local ? String(tid || '') : '';
         clearLocal(); list.textContent = ''; msg.textContent = ''; paint();
+        if (st.local && st.localTid) {            // same-origin image of the stored file; a 404 says "on another computer"
+          preview.src = '/api/form-templates/cover-file?id=' + encodeURIComponent(st.localTid) + '&sha=' + encodeURIComponent(st.local);
+          preview.hidden = false; preview.style.display = 'block';
+        } else if (st.local) { setFileState(MISSING); }
       },
-      /* A file is chosen and not on a Page yet: a save must upload it first or stop. */
-      pending: function () { return !!file && uploadedFile !== file; },
+      /* A file is chosen and not yet kept on this computer: a save must keep it first or stop. */
+      pending: function () { return !!file && storedFile !== file; },
       /* Resolves {ok, message}; ok when nothing is pending. */
-      ensureUploaded: function () {
-        if (!file || uploadedFile === file) return Promise.resolve({ ok: true, message: '' });
-        return upload();
+      ensureStored: function () {
+        if (!file || storedFile === file) return Promise.resolve({ ok: true, message: '' });
+        return store();
       },
       gate: gate
     };
@@ -18416,9 +18414,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var cover = coverOf(panel);
     var tpl = window.cbFormPanelTemplate(panel);
     var pendingFile = !!(cover && cover.pending());
-    // ACL-2533: a chosen picture that is not on the Page yet is uploaded first; the check below only
-    // needs a stand-in pair for it (the real one comes back from the upload).
-    var errors = window.cbLayout.validateTemplate(pendingFile ? Object.assign({}, tpl, { cover_photo_id: '1', cover_page_id: coverContext(panel).pageId || '1' }) : tpl);
+    // ACL-2571: a chosen picture is kept on this computer first; the check below only needs a stand-in hash
+    // for it (the real one comes back from the dashboard).
+    var errors = window.cbLayout.validateTemplate(pendingFile ? Object.assign({}, tpl, { cover_local_sha256: 'a'.repeat(64) }) : tpl);
     if (errors.length) { msg.textContent = errors.join('. ') + '.'; return; }
     if (btn.disabled) return;
     btn.disabled = true;
@@ -18442,9 +18440,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         .catch(function () { fail('The dashboard did not answer; try again'); });
     }
     if (!pendingFile) { save(tpl); return; }
-    msg.textContent = 'Uploading the picture to the Page first…';
-    cover.ensureUploaded().then(function (r) {
-      if (!r.ok) return fail('The form was not saved. ' + (r.message || 'The picture could not be uploaded.') + ' Fix this, or press Remove to save without a picture.');
+    msg.textContent = 'Keeping the picture on this computer first…';
+    cover.ensureStored().then(function (r) {
+      if (!r.ok) return fail('The form was not saved. ' + (r.message || 'The picture could not be kept on this computer.') + ' Fix this, or press Remove to save without a picture.');
       var final = window.cbFormPanelTemplate(panel);
       var again = window.cbLayout.validateTemplate(final);
       if (again.length) return fail(again.join('. ') + '.');
@@ -25171,7 +25169,7 @@ window.aclTeamLibrary = (function () {
     if (!cover) {
       cover = window.formCoverPicker(el('fm-cover'), coverCtx);
     }
-    cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256);
+    cover.set(tpl.cover_photo_id, tpl.cover_page_id, tpl.cover_sha256, tpl.cover_local_sha256, tpl.id);
     // One obvious account: choose it, and its Page when there is only one (or the template's own Page).
     if (labels.length === 1) { sel.value = labels[0]; loadCoverPages(false, tpl.cover_page_id || ''); }
     cover.gate();
@@ -25239,17 +25237,17 @@ window.aclTeamLibrary = (function () {
     var layout = window.cbLayout;
     var legacyLocale = editing && editing.template ? editing.template.locale : null;
     var uploadFirst = !!(cover && cover.pending());
-    // ACL-2533: a picture that is chosen but not on the Page yet is uploaded first (the check needs a
-    // stand-in pair for it); if it cannot be uploaded the save stops - never a save without the picture.
-    var checked = uploadFirst ? Object.assign({}, tpl, {cover_photo_id: '1', cover_page_id: el('fm-cover-page').value || '1'}) : tpl;
+    // ACL-2571: a picture that is chosen but not yet kept on this computer is kept first (the check needs a
+    // stand-in hash for it); if that fails the save stops - never a save without the picture.
+    var checked = uploadFirst ? Object.assign({}, tpl, {cover_local_sha256: 'a'.repeat(64)}) : tpl;
     var errors = layout && layout.validateTemplate ? layout.validateTemplate(checked, legacyLocale) : [];
     if (errors.length) { editorSay(errors.join('. ') + '.', true); return; }
     busy(true);
     if (uploadFirst) {
-      editorSay('Uploading the picture to the Page first…');
-      var up = await cover.ensureUploaded();
+      editorSay('Keeping the picture on this computer first…');
+      var up = await cover.ensureStored();
       if (!up.ok) {
-        editorSay('The template was not saved. ' + (up.message || 'The picture could not be uploaded.') + ' Fix this, or press Remove to save without a picture.', true);
+        editorSay('The template was not saved. ' + (up.message || 'The picture could not be kept on this computer.') + ' Fix this, or press Remove to save without a picture.', true);
         busy(false);
         return;
       }
