@@ -324,3 +324,34 @@ def test_state_cell_shows_whole_status_line_in_both_views(open_page, amap):
     title = pg.evaluate("(n) => [...document.querySelectorAll('#aov-compact .aov-tile')].find(t => t.dataset.name === n).title", target["account"])
     assert long_line in title
     assert not pg.errors
+
+
+def test_active_by_spend_row_with_failed_read_shows_active_and_agreeing_line(monkeypatch, tmp_path):
+    """ACL-2556: spend + failed status read -> Active badge with 'not refreshed' line; never 'unknown'."""
+    from src.web import app as web
+
+    monkeypatch.setattr(links, "get_local_config_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(links, "get_ad_account_map_path", lambda: str(tmp_path / "nope.csv"))
+    monkeypatch.setattr("src.web.app.get_ad_account_map_path", lambda: str(tmp_path / "nope.csv"))
+    spec = {"Chile": [("Facebook_ACT1", 50.0, None, "", 0), ("Facebook_ACT2", 60.0, None, "", 0),
+                      ("Facebook_UNK1", 0, None, "", 0)]}
+    failed = {"tried_at": site.iso(0).replace("T", " "), "tried_error": "timeout"}
+    amap = site.build_amap(web, links, monkeypatch, spec, status_extra={"Facebook_ACT1": failed})
+    for mc in amap["countries"]:
+        for r in mc["rows_aov"]:
+            r["act_id"] = "act_1"
+    with sync_playwright() as pw:
+        browser = launch_chromium(pw)
+        pg = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
+        html = site.page_html(amap)
+        pg.route("http://acl.test/**", lambda route: route.fulfill(status=200, content_type="text/html", body=html))
+        pg.goto("http://acl.test/")
+        for acc, badge, line in (("Facebook_ACT1", "Active", "status not refreshed"),
+                                 ("Facebook_ACT2", "Active", "active by spend"),
+                                 ("Facebook_UNK1", "Unknown", "unknown")):
+            cell = pg.locator('#aov-expanded [data-aov-country="Chile"] tr.aov-row', has_text=acc).locator("td:has(.aov-st)")
+            text = cell.inner_text().lower()
+            assert badge.lower() in text and line in text, (acc, text)
+            if badge == "Active":
+                assert "unknown" not in text, (acc, text)
+        browser.close()

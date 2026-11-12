@@ -719,6 +719,8 @@ def _build_account_map_view(
                 "account": label,
                 # номер кабинета из карты аккаунтов — Home показывает его второй строкой под именем
                 "act_id": (getattr(map_entries.get(label), "ad_account_id", "") or "").strip(),
+                # ACL-2557: «Open profile» на Home только у аккаунтов с привязанным профилем Multilogin
+                "has_profile": bool((getattr(map_entries.get(label), "profile_id", "") or "").strip()),
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
