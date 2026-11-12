@@ -92,6 +92,24 @@ def job_wait(cancelled: Callable[[], bool], show: Callable[[dict | None], None])
         _JOB_WAIT.reset(token)
 
 
+#: ACL-2268: background warm-up from the Builder. Inside, `open_one` never waits (memory, closing, slot), never
+#: evicts another window and never restarts a window that a person opened.
+_QUIET = ContextVar("acl_warm_quiet_start",default=False)
+
+
+@contextmanager
+def quiet_start():
+    token = _QUIET.set(True)
+    try:
+        yield
+    finally:
+        _QUIET.reset(token)
+
+
+def quiet_active() -> bool:
+    return _QUIET.get()
+
+
 @contextmanager
 def defer_memory_wait():
     """Inside: a memory shortage returns at once (code `memory_low`) instead of waiting."""
@@ -716,6 +734,11 @@ class WarmRegistry:
         with self._lock:
             return profile_id in self._sessions
 
+    def open_profile_ids(self) -> set[str]:
+        """ACL-2268: profiles registered as open (warm sessions), for the auto-warm ceiling count."""
+        with self._lock:
+            return set(self._sessions)
+
     def session(self, profile_id: str) -> WarmSession | None:
         with self._lock:
             return self._sessions.get(profile_id)
@@ -939,6 +962,8 @@ class WarmRegistry:
             if may_reopen_manual():
                 return self._reopen_manual(label, entry, job_id=job_id, cancelled=cancelled)
             return _result(False, HAND_MESSAGE, "open_by_hand")
+        if kind == "closing" and quiet_active():
+            return _result(False, f"The {label} profile is still closing; nothing was started.", "profile_closing")
         waited_close = False
         if kind == "closing":
             # ACL-2262: the previous job has just closed this profile; starting before Multilogin has
@@ -1016,8 +1041,11 @@ class WarmRegistry:
         try:
             if queue is not None and not own_slot:
                 # ACL-2278: a job waits for the place as long as it takes; others keep the time limit.
-                grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
-                                      or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
+                if quiet_active():
+                    grant = queue.acquire(slot_id, pid, cancelled=cancelled, once=True)
+                else:
+                    grant = queue.acquire(slot_id, pid, cancelled=lambda: cancelled()
+                                          or (job is None and time.monotonic() - began > START_SLOT_WAIT_S))
                 if grant is None:
                     return _result(False, self._slot_refusal_text(), "memory_low")
             refusal = lease_stack.enter_context(try_lease(
@@ -1200,7 +1228,7 @@ class WarmRegistry:
         `START_MEMORY_WAIT_S`; запрос подготовки соединения (`defer_memory_wait`) не ждёт вовсе.
         """
         job = _JOB_WAIT.get()
-        defer = _DEFER_MEMORY.get() and job is None
+        defer = (_DEFER_MEMORY.get() or _QUIET.get()) and job is None
         deadline = self._mono() + START_MEMORY_WAIT_S
         # ACL-2470: nobody queued this start - re-check memory for a short grace (not the 2 minutes), then refuse.
         grace_end = self._mono() + MEMORY_GRACE_S
