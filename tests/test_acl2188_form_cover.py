@@ -183,6 +183,8 @@ class CoverMeta(FormsMeta):
             elif photo and self.readback_cover == "other":
                 card["cover_photo"] = {"id": "1"}
             self.details[res["body"]["id"]]["context_card"] = card
+            if params.get("background_image_option"):  # ACL-2579: Meta stores the option and reads it back
+                self.details[res["body"]["id"]]["background_image_option"] = params["background_image_option"]
         return res
 
 
@@ -199,8 +201,9 @@ def test_readback_fields_without_a_cover_is_todays_string():
 
 def test_compare_cover_match_different_missing():
     t = covered()
-    assert fc.compare_cover(t, {"context_card": {"cover_photo": {"id": PHOTO}}}) == []
-    assert fc.compare_cover(t, {"context_card": {"cover_photo": {"id": "5"}}}) == ["background image"]
+    ok = {"context_card": {"cover_photo": {"id": PHOTO}}, "background_image_option": "UPLOAD"}
+    assert fc.compare_cover(t, ok) == []
+    assert fc.compare_cover(t, {**ok, "context_card": {"cover_photo": {"id": "5"}}}) == ["background image"]
     assert fc.compare_cover(t, {"context_card": {}}) == ["background image"]
     assert fc.compare_cover(t, {}) == ["background image"]
     assert fc.compare_cover(ft.validate(tpl())[0], {}) == []
@@ -247,16 +250,15 @@ def test_a_new_form_whose_cover_does_not_read_back_stops(tmp_path):
     assert "adcreatives" not in _edges(meta)
 
 
-def test_a_reused_form_with_a_missing_cover_notes_and_continues(tmp_path):
+def test_a_same_name_form_without_the_cover_is_not_reused(tmp_path):
+    """ACL-2579 (was: noted and continued): the stop comes before any write."""
     saved = ft.save(tpl(**COVER))
     t = ft.get(saved["id"])
     meta = CoverMeta(rows=[{"id": "7000050", "name": ft.form_name(t), "status": "ACTIVE", "locale": "en_US"}])
     meta.details["7000050"] = {**meta.rows[0], "page": {"id": PAGE},
                                "questions": {"data": ft.expected_questions(t)}, "context_card": {}}
     out, _ = _run(meta, _tpl_draft(tmp_path, [saved["id"]]))
-    assert out.error == "", out.error
-    assert not meta.form_posts
-    assert any("the background image could not be confirmed" in s for s in out.steps)
+    assert "no background image" in out.error and not meta.posts and not meta.form_posts
 
 
 def test_a_meta_refusal_of_a_cover_names_the_form(tmp_path):
