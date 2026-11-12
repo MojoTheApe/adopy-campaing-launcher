@@ -272,10 +272,18 @@ _COOLDOWN_LOCK = threading.Lock()
 
 
 def _cooldown_state(key: str) -> tuple[float, str]:
-    """`(сколько секунд ещё остывать, по какой причине)`."""
+    """`(сколько секунд ещё остывать, по какой причине)`.
+
+    ACL-2091: a persisted hold has no timer, so it reads as `(inf, kind)` (a cheap read of the small holds
+    file): the readers that ask "may I touch this profile?" (warm gate, publish, background reads) all see it.
+    """
     with _COOLDOWN_LOCK:
         until, kind = _COOLDOWN.get(key, (0.0, ""))
-    return max(0.0, until - time.monotonic()), kind
+    left = max(0.0, until - time.monotonic())
+    if left > 0:
+        return left, kind
+    held = _blocks.hold_of(key)
+    return (float("inf"), str(held.get("kind") or "")) if held else (0.0, kind)
 
 
 #: ACL-2262: ключи профилей, чья пауза «вкладка не отвечает» уже снималась в этом эпизоде зависания.
@@ -308,6 +316,7 @@ def release_frozen_tab_cooldown(key: str) -> bool:
         if _COOLDOWN.get(key, (0.0, ""))[1] == "page_unresponsive":
             del _COOLDOWN[key]
             _FROZEN_RELEASED.add(key)
+            _blocks.forget_timed(key)
             return True
     return False
 
@@ -319,12 +328,14 @@ def clear_frozen_tab_cooldown(key: str) -> None:
         if _COOLDOWN.get(key, (0.0, ""))[1] == "page_unresponsive":
             del _COOLDOWN[key]
         _FROZEN_RELEASED.discard(key)
+    _blocks.forget_timed(key)
 
 
 def note_tab_recovered(key: str) -> None:
     """Вкладка выдана и отвечает: эпизод зависания закончен, следующий получит новую замену."""
     with _COOLDOWN_LOCK:
         _FROZEN_RELEASED.discard(key)
+    _blocks.forget_timed(key)
     _blocks.clear(key, "recovered", kind="page_unresponsive")     # ACL-2091: the tab answers, the freeze is over
 
 
@@ -577,6 +588,8 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
                 account, WARM_MEMORY_NOTE if why in ("below_reserve", "memory_low", "memory_unknown")
                 else WARM_WAIT_NOTE))
         note_tab_recovered(key)
+        if _blocks.buyer_started():
+            _blocks.clear(key, "retry")      # ACL-2091: the page answered a person's Retry/Read: the hold is over
     except _warm.WarmError as exc:
         raise ApiReadError(str(exc), code=exc.code) from exc
     except GraphStop as exc:
@@ -625,7 +638,9 @@ def _session(account: str, *, commands: bool = False):
     try:
         # Вызывающий уже держит физическую аренду профиля. Порядок тот же
         # у чтения после команды/публикации: профиль, затем одна общая читалка.
-        with target_activity(_as._profile_key(account)), read_session(priority=commands),                 _blocks.problem_action("command" if commands else "read", only_if_unset=True):
+        with (target_activity(_as._profile_key(account)),
+              read_session(priority=commands),
+              _blocks.problem_action("command" if commands else "read", only_if_unset=True)):
             with _open_session(account, commands=commands) as sess:
                 yield sess
     finally:
@@ -660,9 +675,12 @@ def _open_session(account: str, *, commands: bool = False):
     # ACL-2262: a hung tab is replaced once per episode by the warm checkout below; the pause is lifted
     # only right before it. If the action does not go through the warm path, the pause stands.
     frozen_deferred = left > 0 and why == "page_unresponsive" and frozen_tab_replaceable(key)
-    blocked = _blocks.refusal(key, account, "read",
-                              timed=(left, why) if left > 0 and not frozen_deferred else None,
-                              replaceable=False)
+    # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab) is refused for everything
+    # except a read a person started on purpose (Retry / Read): that one looks at the page, and lifts the hold
+    # below once the page is healthy.
+    probing = left == float("inf") and _blocks.buyer_started()
+    blocked = None if probing else _blocks.refusal(
+        key, account, "read", timed=(left, why) if left > 0 and not frozen_deferred else None, replaceable=False)
     if blocked:
         held = _blocks.is_held(key)
         raise ApiReadError(blocked[0], code=_as.LOGGED_OUT_CODE if (why == "logged_out" and not held) else blocked[1])
@@ -761,6 +779,8 @@ def _open_session(account: str, *, commands: bool = False):
             # Найдено на странице, ещё до клиента: охлаждение тоже (ревью S2).
             _start_cooldown(key, page_stop, account)
             raise page_stop
+        if _blocks.buyer_started():
+            _blocks.clear(key, "retry")      # ACL-2091: healthy page on a person's Retry/Read: the hold is over
         client = GraphClient(
             graph,
             allow_writes=bool(commands),

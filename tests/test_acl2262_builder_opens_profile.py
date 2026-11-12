@@ -129,7 +129,7 @@ def test_frozen_tab_wait_is_lifted_once_per_episode_and_rearmed_when_the_replace
     assert api.frozen_tab_replaceable(key) is True
     assert api.release_frozen_tab_cooldown(key) is True and api._cooldown_state(key)[0] == 0
     _freeze(key)                                  # the replacement tab froze as well: ACL-2091 D4, a hold until Retry
-    assert account_blocks.is_held(key) and api._cooldown_state(key)[0] == 0
+    assert account_blocks.is_held(key) and api._cooldown_state(key)[0] == float("inf")
     assert api.frozen_tab_replaceable(key) is False and api.release_frozen_tab_cooldown(key) is False
     assert account_blocks.is_held(key), "the hold must stand for the next action"
     api.note_tab_recovered(key)                   # a tab answered: the hold ends, the next freeze is a new episode

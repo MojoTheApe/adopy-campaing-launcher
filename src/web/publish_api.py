@@ -499,10 +499,13 @@ class ApiPublisher:
             held = _blocks.is_held(key)
             raise ApiPublishError(blocked[0], code=blocked[1] if held else (
                 "page_unresponsive" if why == "page_unresponsive" else ""))
-        frozen_error = ApiPublishError(
-            (_blocks.refusal(key, account_label, "publish", timed=(max(left, 1.0), "page_unresponsive")) or
-             (f"{account_label}: the Ads Manager tab stopped answering. Nothing was created.",))[0],
-            code="page_unresponsive")
+        def frozen_error() -> ApiPublishError:
+            # Built only when it is raised: building it explains (and logs) a refusal that never happens.
+            return ApiPublishError(
+                (_blocks.refusal(key, account_label, "publish", timed=(max(left, 1.0), "page_unresponsive")) or
+                 (f"{account_label}: the Ads Manager tab stopped answering. Nothing was created.",))[0],
+                code="page_unresponsive")
+
         self._entry = entry
         self._session_profile_id = profile_id
         from src.fb_api import profile as _fb_profile
@@ -510,7 +513,7 @@ class ApiPublisher:
         if self._open_warm(account_label, profile_id):
             return
         if frozen_deferred:
-            raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
+            raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 

@@ -36,11 +36,18 @@ _LOCK = threading.RLock()
 #: Test seam: a path that replaces the file in the local config dir.
 _PATH_OVERRIDE: Path | None = None
 #: key -> (action, label) of the timed stop kept in `_COOLDOWN` (not persisted).
-_TIMED_META: dict[str, tuple[str, str]] = {}
+_TIMED_META: dict[str, tuple[str, str, float]] = {}
+#: A remembered action/label older than this is not quoted (the longest timed pause is far shorter).
+_TIMED_META_TTL_S = 3600.0
 
 # ───────────────────────── action of the stop ─────────────────────────
 
 _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_action", default="")
+#: True when an entry point named the action itself (not a `only_if_unset` default). The var lives in the
+#: thread that runs the operation: `read_session`/the queued dispatcher run it in the caller's thread.
+_EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
+#: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
+BUYER_ACTIONS = ("retry", "read")
 
 ACTION_TEXT = {
     "schedule": "a scheduled read",
@@ -61,10 +68,18 @@ def problem_action(action: str, *, only_if_unset: bool = False) -> Iterator[None
     (a default for code that may run under a caller that already named the real action)."""
     keep = (only_if_unset and _ACTION.get()) or not action
     token = _ACTION.set(_ACTION.get() if keep else str(action))
+    etoken = _EXPLICIT.set(_EXPLICIT.get() or (not keep and not only_if_unset))
     try:
         yield
     finally:
+        _EXPLICIT.reset(etoken)
         _ACTION.reset(token)
+
+
+def buyer_started() -> bool:
+    """Did a person start the running action (Retry, or an explicit Read)? Schedules, background reads,
+    publish and a defaulted `a read` are not."""
+    return bool(_EXPLICIT.get()) and _ACTION.get() in BUYER_ACTIONS
 
 
 def current_action() -> str:
@@ -170,7 +185,7 @@ def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_
     if not is_hold_stop(stop, replacement_spent=replacement_spent):
         if kind in ("rate_limited", "logged_out", "page_unresponsive"):
             with _LOCK:
-                _TIMED_META[key] = (action, str(label or ""))
+                _TIMED_META[key] = (action, str(label or ""), time.monotonic())
             _event("profile_block_set", kind=kind, code=getattr(stop, "code", None), action=action, timed=True,
                    page_seen=bool(getattr(stop, "page_seen", False)))
         return False
@@ -206,12 +221,14 @@ def clear(key: str, by: str = "retry", *, kind: str = "") -> bool:
             return False
         del holds[key]
         _save(holds)
+        _TIMED_META.pop(key, None)
     _event("profile_block_cleared", kind=held.get("kind"), by=by,
            held_s=max(0, int(time.time() - float(held.get("at") or time.time()))))
     return True
 
 
 def forget_timed(key: str) -> None:
+    """Drop the action/label kept beside a timer (called when the timer ends or is replaced)."""
     with _LOCK:
         _TIMED_META.pop(key, None)
 
@@ -285,7 +302,10 @@ def refusal(key: str, label: str, verb: str = "", *, timed: tuple[float, str] | 
     if timed is not None and timed[0] > 0:
         left, kind = timed
         with _LOCK:
-            action, owner = _TIMED_META.get(key, (_FALLBACK_ACTION, ""))
+            action, owner, at = _TIMED_META.get(key, (_FALLBACK_ACTION, "", 0.0))
+            if at and time.monotonic() - at > _TIMED_META_TTL_S:
+                _TIMED_META.pop(key, None)
+                action, owner = _FALLBACK_ACTION, ""
         if kind == "logged_out":
             kind = "token_expired"
         reason, step = describe(kind, owner or label, action, None, same_profile=bool(owner and label and owner != label),

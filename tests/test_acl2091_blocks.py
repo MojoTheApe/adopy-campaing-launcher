@@ -47,7 +47,7 @@ def _stop(cls, **kw):
 ])
 def test_stops_that_need_a_person_become_persisted_holds_without_a_timer(stop, kind, code):
     api._start_cooldown(KEY, stop, "B97")
-    assert blocks.is_held(KEY) and api._cooldown_state(KEY) == (0.0, "")
+    assert blocks.is_held(KEY) and api._cooldown_state(KEY) == (float("inf"), kind)
     held = blocks.hold_of(KEY)
     assert held["kind"] == kind and held["code"] == code and held["label"] == "B97"
     msg, err = blocks.refusal(KEY, "B97", "publish")
@@ -81,7 +81,7 @@ def test_frozen_tab_is_timed_until_its_replacement_is_spent_then_a_hold_without_
     api._start_cooldown(KEY, PageUnresponsive("f"), "B97")                    # the replacement froze too
     held = blocks.hold_of(KEY)
     assert held and held["kind"] == "page_unresponsive"
-    assert api._cooldown_state(KEY) == (0.0, "")                              # no timer: only Retry lifts it
+    assert api._cooldown_state(KEY) == (float("inf"), "page_unresponsive")  # no timer: only a person lifts it
     msg, _ = blocks.refusal(KEY, "B97", "read")
     assert "Press Retry" in msg and "min" not in msg.split("Press Retry")[1]
 
@@ -191,7 +191,7 @@ def test_a_held_profile_refuses_the_next_read_with_account_blocked_and_never_cra
     first = api.read_via_api(ACCOUNT, D, D)
     assert first.state == "failed"
     assert blocks.is_held(api._as._profile_key(ACCOUNT))
-    assert api._cooldown_state(api._as._profile_key(ACCOUNT)) == (0.0, "")
+    assert api._cooldown_state(api._as._profile_key(ACCOUNT))[0] == float("inf")
     calls = len(world.page.specs)
     again = api.read_via_api(ACCOUNT, D, D)
     assert again.state == "failed" and "Nothing was called." in again.error
@@ -257,3 +257,116 @@ def test_a_tab_that_answers_ends_a_frozen_hold_but_not_a_checkpoint_hold():
     api._start_cooldown("k-cp", Checkpoint("c"), "B98")
     api.note_tab_recovered("k-cp")
     assert blocks.is_held("k-cp")
+
+
+# ───────────────────────── way out of a hold (review 1554 finding 1) ─────────────────────────
+
+@pytest.mark.parametrize("state, kind", [({"kind": "checkpoint", "has_token": False}, "checkpoint"),
+                                         ({"kind": "login", "has_token": False}, "logged_out")])
+def test_a_buyer_retry_on_a_healthy_page_lifts_the_hold_and_the_next_plain_read_works(world, state, kind):  # noqa: F811
+    key = api._as._profile_key(ACCOUNT)
+    world.page.state_value = state
+    api.read_via_api(ACCOUNT, D, D)
+    assert blocks.hold_of(key)["kind"] == kind
+    # the person solved it: the page is healthy again
+    world.page.state_value = {"kind": "ads_manager", "has_token": True}
+    assert "Nothing was called." in api.read_via_api(ACCOUNT, D, D).error         # a plain read stays refused
+    with blocks.problem_action("schedule"):
+        assert "Nothing was called." in api.read_via_api(ACCOUNT, D, D).error     # so does a background one
+    assert blocks.is_held(key)
+    with blocks.problem_action("retry"):
+        done = api.read_via_api(ACCOUNT, D, D)
+    assert done.state != "failed" and not blocks.is_held(key), done.error
+    assert api._cooldown_state(key) == (0.0, "")
+    assert api.read_via_api(ACCOUNT, D, D).state != "failed"                      # and nothing refuses afterwards
+
+
+def test_a_buyer_retry_on_a_page_that_is_still_stuck_keeps_the_hold(world):  # noqa: F811
+    key = api._as._profile_key(ACCOUNT)
+    world.page.state_value = {"kind": "checkpoint", "has_token": False}
+    api.read_via_api(ACCOUNT, D, D)
+    with blocks.problem_action("retry"):
+        again = api.read_via_api(ACCOUNT, D, D)
+    assert again.state == "failed" and blocks.hold_of(key)["kind"] == "checkpoint"
+    assert "found during Retry" in blocks.refusal(key, ACCOUNT, "read")[0]       # the hold now names the Retry
+
+
+def test_a_buyer_retry_lifts_a_policy_block_hold_when_the_page_is_healthy(world):  # noqa: F811
+    key = api._as._profile_key(ACCOUNT)
+    api._start_cooldown(key, PolicyBlocked("p", code=368), ACCOUNT)
+    assert blocks.is_held(key)
+    with blocks.problem_action("read"):                                            # an explicit, buyer-started Read
+        done = api.read_via_api(ACCOUNT, D, D)
+    assert done.state != "failed" and not blocks.is_held(key)
+
+
+def test_a_buyer_retry_on_the_warm_path_lifts_the_hold_too(monkeypatch):
+    key = "k-warm"
+    api._start_cooldown(key, Checkpoint("c"), "B97")
+    lease = SimpleNamespace(graph=SimpleNamespace(), release=lambda stop=None: None)
+    monkeypatch.setattr(api, "_warm_registry", lambda: SimpleNamespace(checkout=lambda *a, **k: lease))
+    with blocks.problem_action("attention"):
+        with api._warm_session_held("B97", "act_1", key, "p", False):
+            pass
+    assert blocks.is_held(key), "a background read never lifts a hold"
+    with blocks.problem_action("retry"):
+        with api._warm_session_held("B97", "act_1", key, "p", False):
+            pass
+    assert not blocks.is_held(key)
+
+
+# ───────────────────────── marker readable by the queue (finding 2) ─────────────────────────
+
+def test_a_hold_reads_as_an_endless_cooldown_and_the_refresh_queue_skips_automatic_reads(monkeypatch):
+    from src.analysis_agent import account_refresh, account_spend
+
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
+    base = account_refresh.recently_failed("B97")
+    api._start_cooldown(KEY, Checkpoint("c"), "B97")
+    left, kind = api._cooldown_state(KEY)
+    assert left == float("inf") and kind == "checkpoint" and api._cooldown_left(KEY) == float("inf")
+    assert account_refresh.recently_failed("B97") is True                  # automatic requests are not queued
+    blocks.clear(KEY, "test")
+    assert api._cooldown_state(KEY) == (0.0, "") and account_refresh.recently_failed("B97") is base
+
+
+# ───────────────────────── lazy frozen_error (finding 3) ─────────────────────────
+
+def test_opening_a_free_profile_emits_no_profile_block_refused_event(monkeypatch):
+    from src.web import publish_api
+    from src.analysis_agent import account_spend as _as
+
+    events = []
+    monkeypatch.setattr(blocks, "_event", lambda name, **f: events.append(name))
+    monkeypatch.setattr(publish_api, "_resolve_entry",
+                        lambda label: SimpleNamespace(profile_id="p", folder_id="F", multilogin_instance="A",
+                                                      ad_account_id="act_123456"))
+    monkeypatch.setattr(_as, "_profile_key", lambda label, *a, **k: "k-free")
+    monkeypatch.setattr(publish_api.ApiPublisher, "_open_warm", lambda self, label, pid: True)
+    publish_api.ApiPublisher().open("B97")
+    assert "profile_block_refused" not in events
+
+
+# ───────────────────────── stale timed meta (finding 4) ─────────────────────────
+
+def test_timed_action_and_label_are_forgotten_when_the_timer_is_replaced_or_old():
+    key = "k-meta"
+    with blocks.problem_action("schedule"):
+        api._start_cooldown(key, PageUnresponsive("f"), "B97")
+    assert blocks._TIMED_META[key][0] == "a scheduled read"
+    assert api.release_frozen_tab_cooldown(key) is True and key not in blocks._TIMED_META
+    # an entry that outlived any timer is not quoted
+    blocks._TIMED_META[key] = ("a scheduled read", "B97", time.monotonic() - blocks._TIMED_META_TTL_S - 1)
+    msg = blocks.refusal(key, "B98", "read", timed=(60.0, "rate_limited"))[0]
+    assert "a scheduled read" not in msg and "B97" not in msg and "during a read" in msg and key not in blocks._TIMED_META
+
+
+# ───────────────────────── action across the real read_session (finding 6) ─────────────────────────
+
+def test_the_action_survives_the_real_read_session_in_the_same_thread(world):  # noqa: F811
+    key = api._as._profile_key(ACCOUNT)
+    world.page.state_value = {"kind": "checkpoint", "has_token": False}
+    with blocks.problem_action("attention"):
+        api.read_via_api(ACCOUNT, D, D)          # goes through api._session -> read_session -> _open_session
+    assert blocks.hold_of(key)["action"] == "a background read"
+    assert "found during a background read" in api.read_via_api(ACCOUNT, D, D).error

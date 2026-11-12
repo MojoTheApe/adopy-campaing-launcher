@@ -197,7 +197,7 @@ def test_page_unresponsive_cools_the_profile_for_ten_minutes(monkeypatch, tmp_pa
     assert ei2.value.code == "page_unresponsive" and len(opened) == 1
     # ACL-2091 (D4): the replacement froze too, so the account is HELD until Retry (no timer).
     from src.fb_api import account_blocks
-    assert pa._cooldown("Acc")[0] == 0
+    assert pa._cooldown("Acc")[0] == float("inf")      # held: no timer, but the marker is readable
     assert account_blocks.hold_of(pa._frozen_api("Acc")[1])["kind"] == "page_unresponsive"
     with pytest.raises(pa.ApiPublishError) as ei3:     # third action: the profile is not touched at all
         pa.ApiPublisher().open("Acc")

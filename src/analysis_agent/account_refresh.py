@@ -102,11 +102,24 @@ def is_fresh(account: str, *, now: float | None = None) -> bool:
     return 0 <= (time.time() if now is None else now) - done < FRESH_S
 
 
+def _profile_held(account: str) -> bool:
+    """ACL-2091: the physical profile of this account has a persisted hold (checkpoint, login, policy, frozen)."""
+    try:
+        from src.analysis_agent import account_spend
+        from src.fb_api import account_blocks
+
+        return account_blocks.is_held(account_spend._profile_key(account))  # noqa: SLF001
+    except Exception:  # noqa: BLE001 — an unreadable hold file never stops the queue
+        return False
+
+
 def recently_failed(account: str, *, now: float | None = None) -> bool:
     """Последняя попытка чтения не удалась и моложе `FRESH_S`: автоматические заявки её не повторяют.
 
     Только явные Retry/действие (force) читают такой аккаунт раньше срока.
     """
+    if _profile_held(account):
+        return True     # ACL-2091: a held profile waits for a person; no automatic read is queued for it
     attempt = campaign_inventory.get_attempt(account)
     if not attempt or attempt.get("state") != "failed":
         return False
