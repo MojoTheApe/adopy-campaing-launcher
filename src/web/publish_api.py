@@ -214,7 +214,7 @@ def _start_cooldown(account_label: str, stop: GraphStop) -> None:
         from src.analysis_agent import account_spend as _as
         from src.analysis_agent import account_spend_api as _api
 
-        _api._start_cooldown(_as._profile_key(account_label), stop)
+        _api._start_cooldown(_as._profile_key(account_label), stop, account_label)
     except Exception:
         pass
 
@@ -500,16 +500,24 @@ class ApiPublisher:
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
-        frozen_error = ApiPublishError(
-            f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
-            f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
-            code="page_unresponsive")
-        if left > 0 and why == "page_unresponsive" and not frozen_deferred:
-            raise frozen_error
-        if left > 0 and why != "page_unresponsive":
-            raise ApiPublishError(
-                f"{account_label}: Meta stopped the last API call ({why}); waiting about "
-                f"{int(left // 60) + 1} min before calling again. Nothing was created.")
+        from src.fb_api import account_blocks as _blocks
+
+        key = _frozen_api(account_label)[1]
+        # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
+        # and a timed pause are explained by the one owner of that state.
+        blocked = _blocks.refusal(key, account_label, "publish",
+                                  timed=(left, why) if left > 0 and not frozen_deferred else None)
+        if blocked:
+            held = _blocks.is_held(key)
+            raise ApiPublishError(blocked[0], code=blocked[1] if held else (
+                "page_unresponsive" if why == "page_unresponsive" else ""))
+        def frozen_error() -> ApiPublishError:
+            # Built only when it is raised: building it explains (and logs) a refusal that never happens.
+            return ApiPublishError(
+                (_blocks.refusal(key, account_label, "publish", timed=(max(left, 1.0), "page_unresponsive")) or
+                 (f"{account_label}: the Ads Manager tab stopped answering. Nothing was created.",))[0],
+                code="page_unresponsive")
+
         self._entry = entry
         self._session_profile_id = profile_id
         from src.fb_api import profile as _fb_profile
@@ -517,7 +525,7 @@ class ApiPublisher:
         if self._open_warm(account_label, profile_id):
             return
         if frozen_deferred:
-            raise frozen_error      # not the warm path: nothing replaces the hung tab, the pause stands
+            raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 
@@ -558,7 +566,7 @@ class ApiPublisher:
         if state.get("kind") == "checkpoint":
             self._halt(Checkpoint("the profile is on a Facebook checkpoint"))
         if state.get("kind") == "login":
-            self._halt(LoggedOut("the profile is logged out of Facebook"))
+            self._halt(LoggedOut("the profile is logged out of Facebook", page_seen=True))
         if not state.get("has_token"):
             raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
                                   "(no Graph session in the page); nothing was created",
@@ -1156,7 +1164,10 @@ def _check_plan_logged(slots: list[dict[str, Any]], *, account_label: str, count
                        force: bool = False) -> dict[str, Any]:
     """`_check_plan_once` + событие `plan.checked` в общий журнал (ACL-2347), и на ранних выходах."""
     began = time.monotonic()
-    result = _check_plan_once(slots, account_label=account_label, country=country, force=force)
+    from src.fb_api import account_blocks as _blocks
+
+    with _blocks.problem_action("check_plan"):
+        result = _check_plan_once(slots, account_label=account_label, country=country, force=force)
     try:
         from src.acl_event_log import emit
         from src.acl_event_log.clean import plan_hash
