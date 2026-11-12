@@ -333,7 +333,9 @@ def enrich_campaign_drafts(
                 def text_key(body, headline, description):
                     return tuple("".join(str(x or "").split()) for x in (body, headline, description))
                 seen_texts = {text_key(ad.ad_body, ad.ad_title, ad.ad_link_description)}
-                wanted = ([(2, ad.copy2_name)] if ad.copy2_name and ad.ad_body else []) + [
+                # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 does not block;
+                # texts 2-5 with a body are used in order.
+                wanted = ([(2, ad.copy2_name)] if ad.copy2_name else []) + [
                     (3 + i, n) for i, n in enumerate(ad.more_copy_names) if str(n).strip()]
                 for slot_no, vname in wanted:
                     from src.analysis_agent.ad_text_registry import AdTextError

@@ -1026,7 +1026,7 @@ def _tab_load(stop: BaseException | None) -> dict[str, Any]:
 
 
 def _work_mode(client: Any) -> str:
-    """ACL-2523: which work tab served the run - `light` (ACL_LIGHT_WORK_TAB) or `ads_manager`."""
+    """ACL-2523: which work tab served the run - `light` (on by default; ACL_LIGHT_WORK_TAB=0 turns it off) or `ads_manager`."""
     transport = getattr(client, "transport", None)
     return "light" if getattr(transport, "light", False) is True else "ads_manager"
 

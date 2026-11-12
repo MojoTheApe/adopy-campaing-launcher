@@ -94,6 +94,14 @@ def pytest_configure(config):
 # `ACL_CONFIG_DIR` (или убирает её, проверяя путь по умолчанию), делает это
 # позже этой фикстуры, и действует его значение.
 @pytest.fixture(autouse=True)
+def _heavy_tab_fakes_pin_light_tab_off(monkeypatch):
+    # ACL-2591: the light work tab is ON by default. The warm-lease fakes of most tests model the Ads Manager
+    # tab only, so they pin the emergency off-switch; tests of the default delenv/setenv it themselves.
+    monkeypatch.setenv("ACL_LIGHT_WORK_TAB", "0")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl_config")))
     yield

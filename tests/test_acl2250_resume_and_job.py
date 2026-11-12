@@ -192,7 +192,9 @@ def test_14b_receipt_with_a_missing_campaign_falls_back_to_the_listing(tmp_path,
         return real(method, path, params)
     monkeypatch.setattr(meta, "request", request)
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.error == "" and out.published_as == BASE and _names(meta) == [BASE]
+    # ACL-2583: "does not exist" for a campaign the receipt names never frees its name (Meta says the same for a live
+    # campaign it cannot load): the next copy, never a second campaign with the base name.
+    assert out.error == "" and out.published_as == BASE + " copy 1" and _names(meta) == [BASE + " copy 1"]
 
 
 def test_14c_edited_draft_after_a_stop_takes_the_next_number(tmp_path):

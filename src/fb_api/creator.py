@@ -54,6 +54,7 @@ from src.fb_api import image_convert as _imgconv
 from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
+from src.fb_api.telemetry import mask_id as _mask_id
 from src.fb_api.graph import FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
@@ -297,6 +298,20 @@ SUPPORTED_OBJECTIVES = frozenset({"leads"})
 #: ACL-2250: повтор имени получает счётчик в конце: `<имя> copy <n>` (у кампании и всех её наборов).
 COPY_WORD = " copy "
 #: Остановки выбора имени: в Check plan это ERROR правила имени, а не сбой плана.
+#: ACL-2583 / ACL-2578 (owner decision): a read by id that keeps failing is never a stop. It is retried (about 30 s in
+#: total: one try plus three pauses), and if Meta still does not answer the publish continues as a NEW operation under a
+#: distinct `<name> copy <n>` name. A possible duplicate is accepted; the same name is never reused.
+TRANSIENT_READ_WAITS_S = (10.0, 10.0, 10.0)
+MSG_CONTINUED_AS_COPY = ('Meta did not answer when ACL checked the earlier campaign of this publish, so this publish '
+                         'continues as a new campaign named "{name}". If the earlier campaign is still in Ads Manager, '
+                         "it is left as it is.")
+MSG_CAMPAIGN_REWRITTEN = ('The earlier attempt to create the campaign "{old}" got no answer from Meta, and ACL could not '
+                          'find it afterwards. This publish created a new campaign named "{name}". A possible '
+                          'duplicate "{old}" (PAUSED) may exist in Ads Manager; it is left as it is.')
+MSG_CAMPAIGN_UNKNOWN_STOP = ('Meta did not answer the campaign write several times in a row, and ACL could not find the '
+                             'campaign "{name}" afterwards. Nothing else was written. Check the campaigns of this '
+                             'ad account in Ads Manager (possible PAUSED duplicates) before publishing again.')
+MAX_CAMPAIGN_REWRITES = 5
 NAME_STOPS = ("name_taken", "name_unsure", "name_too_long", "name_receipt")
 #: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
 #: копий за её пределами могло не быть видно - тогда ищем точнее.
@@ -444,8 +459,12 @@ class AdSetPlan:
 
     @property
     def dynamic(self) -> bool:
-        """Набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774)."""
-        return any(a.multi_text for a in self.ads)
+        """Website-набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774).
+
+        ACL-2584: Instant Form не Dynamic Creative: несколько текстов идут лентой с правилами площадок (форма
+        Ads Manager), набор обычный и берёт объявлений сколько позволит Meta.
+        """
+        return not self.instant and any(a.multi_text for a in self.ads)
 
 
 @dataclass
@@ -615,8 +634,8 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
         # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
         problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
-    if plan_ad.bodies and not plan_ad.body:
-        problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
+    # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 never blocks. `bodies` already
+    # holds only the non-empty texts in order; with none, the ad goes without a primary text (warning only).
     if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
         problems.append(f"Ad {i}: the Stories / Reels file was not found")
     if vertical:
@@ -627,10 +646,12 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         elif plan_ad.vertical_kind != plan_ad.kind:
             problems.append(f"Ad {i}: the main file is {plan_ad.kind} and the Stories / Reels file is "
                             f"{plan_ad.vertical_kind}; use two images or two videos")
-    if plan_ad.uses_feed and plan_set.instant:
-        problems.append(f"Ad {i}: several texts and a Stories / Reels file work only with a Website ad set "
-                        "for now (Instant Form with an asset feed is not verified on Meta yet); "
-                        "use one text and one file, or switch the ad set to Website")
+    if plan_ad.uses_feed and plan_set.instant and plan_ad.vertical_path:
+        # ACL-2528: several texts + ONE file work on an Instant Form (asset feed with the form in its button);
+        # a Stories / Reels file next to it still needs placement rules, which are not verified on a form yet.
+        problems.append(f"Ad {i}: a Stories / Reels file works only with a Website ad set for now "
+                        "(Instant Form with placement rules is not verified on Meta yet); "
+                        "use one file for this ad, or switch the ad set to Website")
 
 
 def placement_targeting(placements: dict | None) -> dict:
@@ -874,6 +895,13 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                     elif not main_pos or not vert_pos:
                         # Один тип площадок не требует непроверенных правил для пустой второй группы.
                         problems.append(f"Ad {i}: the current app mapping for a two-file pair needs both Feed and Stories / Reels placements; clear the unused file and use the required file as main")
+            if (plan_set.instant and planned_ad.uses_feed and plan_set.placements is not None
+                    and plan_set.placements.get("mode") == "manual"):
+                # The main rule is an empty catch-all now: test the real placement groups.
+                feed_pos, vert_pos = CampaignCreator.rule_positions(plan_set.placements)
+                if not feed_pos or not vert_pos:
+                    problems.append(f"Ad {i}: several texts on an Instant Form use two placement rules (Feed and "
+                                    "Stories / Reels); select both Feed and Stories / Reels placements, or use one text")
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -1504,13 +1532,14 @@ def image_name(path: str, data: bytes, ext: str = "") -> str:
     return f"acl-{_md5(data)[:16]}{ext}"
 
 
-_STORED_SUFFIX = re.compile(r"_\d+$")
+_STORED_SUFFIX = re.compile(r"(?:_\d+)+$")
 
 
 def stored_image_name(expected: str, actual: str) -> str:
     """ACL-2578: Meta may append `_<digits>` to the library name of an uploaded image (`acl-<md5>.png_105`).
 
-    It is still our file: the suffix alone is not a difference. Any other name stays as Meta returned it.
+    Uploading the same image twice can add the suffix again (`acl-<md5>.png_105_105`). It is still our file: the
+    suffixes alone are not a difference. Any other name stays as Meta returned it.
     """
     text = str(actual or "")
     if text != expected and _STORED_SUFFIX.sub("", text, count=1) == expected:
@@ -1566,6 +1595,33 @@ class Outcome:
         return list(self.readback.get("mismatches") or [])
 
 
+class _AliveUnknown(Exception):
+    """ACL-2583: the journal's campaign could not be read after the retries; `copy_number` is its name's counter."""
+
+    def __init__(self, copy_number: int, campaign_id: str) -> None:
+        super().__init__(campaign_id)
+        self.copy_number = copy_number
+        self.campaign_id = campaign_id
+
+
+class _SwitchCopy(Exception):
+    """ACL-2583: the journal's operation already wrote (or may have written) the campaign under copy name `n`, but the
+    name choice lags behind Meta's search and picked a lower counter. The run continues under copy `n`."""
+
+    def __init__(self, copy_number: int) -> None:
+        super().__init__("switch copy")
+        self.copy_number = copy_number
+
+
+class _CampaignRewrite(Exception):
+    """ACL-2583: the campaign write's result stayed unknown and the readbacks found nothing. The name search is exactly
+    what lags behind Meta, so the caller must not write the campaign again under the SAME name."""
+
+    def __init__(self, copy_number: int) -> None:
+        super().__init__("campaign rewrite")
+        self.copy_number = copy_number
+
+
 @dataclass
 class NameChoice:
     """Итог выбора имени кампании (ACL-1902, ACL-2250): план с итоговым именем и меткой, до первой записи."""
@@ -1603,6 +1659,14 @@ def plan_copy_number(plan: CampaignPlan, submitted_view: dict) -> int:
     prefix = f"{base}{COPY_WORD}"
     if plan.name.startswith(prefix) and plan.name[len(prefix):].isdigit():
         return int(plan.name[len(prefix):])
+    return 0
+
+
+def name_copy_number(name: str, base: str) -> int:
+    """Copy number carried by `name` against the builder's `base` name (0 = the base itself or an unrelated name)."""
+    prefix = f"{base}{COPY_WORD}"
+    if base and name.startswith(prefix) and name[len(prefix):].isdigit():
+        return int(name[len(prefix):])
     return 0
 
 
@@ -1654,13 +1718,9 @@ MSG_MISMATCH = ('"{name}" was changed or removed in Ads Manager after it was cre
 MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campaign. '
                      "Delete or move it, then publish again.")
 MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
-                       "Wait a few minutes and publish again, or replace the video.")
-MSG_UNKNOWN_YOUNG = ("Meta may still be processing {what}. Wait 10 minutes, then publish again. "
-                     "Nothing will be created twice.")
+                       "Publish again once it is ready, or replace the video.")
 MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
             "Nothing was created twice.")
-MSG_NOT_LISTED = ('"{name}" was created earlier but Ads Manager does not list it yet. '
-                  "Wait a few minutes, then publish again. Nothing was created.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
                   "is no longer in Ads Manager; this is a new publish.")
 MSG_SUPERSEDED_RENAMED = ("The earlier campaign was renamed in Ads Manager and is left as it is; "
@@ -1871,7 +1931,12 @@ class CampaignCreator:
         """Протокол журнала вокруг одной записи (спека §2.1): `sent` ДО отправки, итог - после.
 
         Без журнала - просто `send()`. Этап, оставшийся `sent`/`unknown` с прошлого запуска, сначала ищется
-        чтением: нашли - принимаем; не нашли и прошло меньше `UNKNOWN_HOLD_S` - стоп без записи.
+        чтением: нашли - принимаем; не нашли - повторное чтение через ~30 с, затем запись заново (без стопа по времени).
+
+        ACL-2583: only the CAMPAIGN name is protected. A campaign stage that is still not found after the second read
+        raises `_CampaignRewrite` (the caller continues under the next "<name> copy N"), because the name search is the
+        part of Meta that lags. Ad sets and ads written again inside our own campaign keep their names (a duplicate
+        is acceptable; the owner rule protects campaign names).
         """
         op = self._op
         if op is None:
@@ -1890,12 +1955,31 @@ class CampaignCreator:
                 self._journal_event("unknown_adopted", what=what)
                 self._journal_confirm(out, what, str(found))
                 return str(found)
-            # Looked and found nothing (the earlier run's own readbacks found nothing either): the ACL-2250
-            # contract is to write it again. The hold applies only while the outcome is really unknown:
-            # a stage left `sent` (the run died mid-send) or an unknown one the readback could not settle.
+            # Looked and found nothing. ACL-2583 owner rule: no time-based stop. When the outcome is really unknown
+            # (a stage left `sent`, or an unknown one the readback could not settle) read back once more after the
+            # same ~30 s pause as a transient read; still nothing -> write again (a duplicate is acceptable, the
+            # objects are PAUSED and the name is never reused). A campaign stage is never sent again under its name, settled or not.
             settled = old["state"] == _oj.UNKNOWN and old.get("note") == _oj.NOT_FOUND_NOTE
-            if not settled and op.age_s(what) < _oj.UNKNOWN_HOLD_S:
-                raise CreationStopped(MSG_UNKNOWN_YOUNG.format(what=what), created=out.created, kind="unknown")
+            if kind == "campaign" and settled:
+                # "Settled as not found" is only the first run's own name search, which is the part of Meta that lags.
+                raise _CampaignRewrite(int(op.data.get("copy_number") or 0))
+            if not settled:
+                self._step(out, f"{what}: result of the earlier write is unknown, reading it back once more")
+                self._pause(sum(TRANSIENT_READ_WAITS_S))
+                if hasattr(self.client, "max_calls"):
+                    self.client.max_calls += 1
+                found = find()
+                if found:
+                    self._step(out, f"{what}: found by the second readback")
+                    self._journal_event("unknown_adopted", what=what)
+                    self._journal_confirm(out, what, str(found))
+                    return str(found)
+                if kind == "campaign":
+                    # Only the campaign NAME is protected (owner rule): the caller continues as a new operation under
+                    # the next "<name> copy N". Ad sets and ads written again inside our own campaign keep their names.
+                    raise _CampaignRewrite(int(op.data.get("copy_number") or 0))
+                self._step(out, f"{what}: not found, writing it again (a duplicate is possible; objects are PAUSED)")
+                self._journal_event("unknown_rewritten", what=what)
         try:
             op.begin(what, kind, name=name, content_md5=content_md5, supersede=(kind == "creative"))
         except _oj.StageBusy as exc:
@@ -1960,17 +2044,62 @@ class CampaignCreator:
             return v
         return norm(asdict(plan))
 
-    def _campaign_alive(self, campaign_id: str) -> "tuple[bool, str]":
-        """(still in Ads Manager - readable and not deleted/archived, its live name). Read only."""
+    def _pause(self, left: float) -> None:
+        """Pause through the injected `sleep` in 5 s slices, keeping the run alive (heartbeat)."""
+        while left > 0:
+            step = min(5.0, left)
+            self.sleep(step)
+            left -= step
+            beat = getattr(self.client, "_beat", None)
+            if callable(beat):
+                beat()
+
+    def _get_retrying(self, path: str, params: dict) -> dict:
+        """Read by id; a transient failure (not "does not exist") is retried after short pauses (ACL-2583).
+
+        Rate limits and other Graph stops are not GraphError: they leave at once and stay a stop. The last GraphError
+        is raised when every try failed. The pause goes through the injected `sleep`, in slices that keep the run alive.
+        """
+        waits = TRANSIENT_READ_WAITS_S
+        for attempt in range(len(waits) + 1):
+            try:
+                return self.client.get(path, params)
+            except GraphError as exc:
+                if _object_gone(exc) or attempt == len(waits):
+                    raise
+                if hasattr(self.client, "max_calls"):
+                    self.client.max_calls += 1          # the retry read is part of this run's call budget
+                self._pause(float(waits[attempt]))
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _campaign_alive(self, campaign_id: str) -> "tuple[bool | None, str]":
+        """(still in Ads Manager - readable and not deleted/archived, its live name). Read only.
+
+        `None` = Meta did not answer after the retries: nothing is known about the campaign (ACL-2583).
+        """
         try:
-            row = self.client.get(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
-        except GraphError:
-            return False, ""                     # does not exist / not readable: gone
+            row = self._get_retrying(f"/{campaign_id}", {"fields": "id,name,status,effective_status"})
+        except GraphError as exc:
+            # ACL-2583 (Doc284): "does not exist / missing permissions" (100/33) is also what Meta answers for a live
+            # campaign it cannot load right now. For a campaign THIS draft recorded it never frees the name: unknown.
+            self._log_read_decision("alive_unknown", campaign_id, exc)
+            return None, ""
         if not isinstance(row, dict) or str(row.get("id") or campaign_id) != campaign_id:
-            return False, ""
+            return None, ""
         gone = ({str(row.get("status") or "").upper(), str(row.get("effective_status") or "").upper()}
                 & {"DELETED", "ARCHIVED"})
+        if gone:
+            self._log_read_decision("gone_read", campaign_id, None, status=",".join(sorted(gone)))
         return (not gone), str(row.get("name") or "")
+
+    def _log_read_decision(self, decision: str, campaign_id: str, exc: "GraphError | None", **extra: Any) -> None:
+        """ACL-2583: Graph code, subcode and message (ids masked) behind every gone/unknown decision about a campaign."""
+        diag: dict[str, Any] = {"decision": decision, "campaign": _mask_id(campaign_id), **extra}
+        if exc is not None:
+            diag.update(graph_code=exc.code, graph_subcode=exc.subcode,
+                        graph_message=str(exc).replace(campaign_id, _mask_id(campaign_id))[:300])
+        log.warning("campaign read decision: %s", json.dumps(diag, ensure_ascii=False, default=str))
+        self._journal_event("campaign_read_decision", **diag)
 
     def _open_operation(self, plan: CampaignPlan, out: Outcome, files: dict, *,
                         submitted: "tuple[dict, str] | None" = None, existing_id: str = "") -> str:
@@ -1998,27 +2127,38 @@ class CampaignCreator:
             op = self.journal.open(plan.act, requested_tag, fp, str(view.get("name") or plan.name),
                                    request_id=self.request_key)
             camp = op.campaign_id()
+            # ACL-2583: a name this operation itself recorded (campaign stage while unresolved, else the published
+            # name) is never a buyer rename and never goes back to a lower counter: continue under that copy plan.
+            cst0 = op.stage("campaign") or {}
+            rec_name = (str(cst0.get("name") or "") if cst0.get("state") in (_oj.SENT, _oj.UNKNOWN)
+                        else op.published_name) or ""
+            rec_n = name_copy_number(rec_name, str(view.get("name") or ""))
+            if rec_n > plan_copy_number(plan, view) and (camp or cst0.get("state") in (_oj.SENT, _oj.UNKNOWN)):
+                raise _SwitchCopy(rec_n)
             same_name = not op.published_name or op.published_name == plan.name
             if camp and (not same_name or camp != existing_id):
                 if same_name:
                     alive, live_name = self._campaign_alive(camp)
-                    # Meta lag only while the campaign is young AND still carries the recorded name. A campaign
-                    # renamed in Ads Manager is taken over by the buyer; after the lag window a campaign the name
-                    # search still does not list counts as gone. Both start a new operation.
-                    lag = (alive and (not live_name or live_name == op.published_name)
-                           and op.campaign_age_s() < _oj.NOT_LISTED_LAG_S)
-                    if lag:
-                        # Creating another one could duplicate it.
-                        self._snapshot_operation_of(op, out)
-                        raise CreationStopped(MSG_NOT_LISTED.format(name=plan.name), created=out.created,
-                                              kind="resume_mismatch")
+                    if alive is None:
+                        # ACL-2583: Meta does not answer. Neither stop nor reuse of the name: the caller continues
+                        # under a new copy name, which makes the new operation distinct from this one.
+                        raise _AliveUnknown(int(op.data.get("copy_number") or 0), camp)
+                    # ACL-2583 owner rule: a campaign alive by id with the recorded name is always ours; no time
+                    # window. A campaign renamed in Ads Manager is taken over by the buyer (new operation).
                     if alive and (not live_name or live_name == op.published_name):
                         adopt = camp         # alive with the recorded name, only the name search misses it: resume
                 if not adopt:
                     op = self.journal.supersede(op, request_id=self.request_key)
                     if same_name:
                         op.warnings.append(MSG_SUPERSEDED if not alive else MSG_SUPERSEDED_RENAMED)
-            op.set_published(plan.name, plan_copy_number(plan, view))
+            n_open = plan_copy_number(plan, view)
+            cst = op.stage("campaign") or {}
+            if cst.get("state") in (_oj.SENT, _oj.UNKNOWN):
+                # ACL-2583: a name this operation may already have written is never reused - the counter only
+                # goes up while the campaign stage is unresolved (name choice may lag behind Meta's search).
+                n_open = max(n_open, int(op.data.get("copy_number") or 0),
+                             name_copy_number(str(cst.get("name") or ""), str(view.get("name") or "")))
+            op.set_published(plan.name, n_open)
         except _oj.RequestConflict as exc:
             raise CreationStopped(f"{exc} Nothing was created.", kind="request_conflict") from exc
         except _oj.JournalError as exc:
@@ -2188,14 +2328,14 @@ class CampaignCreator:
                     if upload and not stopped and self.cancelled():
                         raise CreationStopped(
                             f"Stopped by the user while checking the {what} result. Meta may still be "
-                            "processing the upload: wait a few minutes before publishing again.",
+                            "processing the upload; publish again to check it first.",
                             created=out.created, kind="cancelled")
                     if wait > 0:
                         self.sleep(wait)
                     if upload and not stopped and self.cancelled():
                         raise CreationStopped(
                             f"Stopped by the user while checking the {what} result. Meta may still be "
-                            "processing the upload: wait a few minutes before publishing again.",
+                            "processing the upload; publish again to check it first.",
                             created=out.created, kind="cancelled")
                     # Повторные чтения дешевле: свежий файл в первых страницах списка.
                     found = find(pages=UPLOAD_RECONCILE_PAGES) if (upload and n > 0) else find()
@@ -2213,7 +2353,7 @@ class CampaignCreator:
                 if stopped:
                     raise CreationStopped("Stopped by the user during the upload; nothing was found "
                                           "in the ad account yet. Meta may still be processing the "
-                                          "upload: wait a few minutes before publishing again.",
+                                          "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
                 if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
@@ -2232,6 +2372,11 @@ class CampaignCreator:
                             "Nothing else was written; reconcile the existing object in Ads Manager before retrying.",
                             created=out.created, kind="unknown") from rexc
                     self._note_unknown_write(what, exc, began, first=False, second=bool(found))
+                    if not found and what == "campaign" and self._op is not None:
+                        # ACL-2583 owner rule: the same campaign name is never written twice. The name search lags, so
+                        # the caller continues under the next "<name> copy N" (a duplicate is acceptable).
+                        self.client.reconciled(path)
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
                     if not found:
                         self.client.reconciled(path)
                         self._step(out, f"{what}: not found by readback after {exc.reason} - sending once more")
@@ -2292,6 +2437,20 @@ class CampaignCreator:
                 "created by ACL. Nothing was created; rename the draft or remove the old campaign.",
                 kind="name_taken")
         return None
+
+    def _campaign_finder(self, plan: CampaignPlan, base_plan: CampaignPlan) -> Callable[[], str | None]:
+        """Readback of the campaign write. ACL-2583: while the journal's campaign stage is sent/unknown it holds the
+        name that was really written; that name is searched, not the current plan name."""
+        def find() -> str | None:
+            target = plan
+            st = (self._op.stage("campaign") if self._op is not None else None) or {}
+            rec = str(st.get("name") or "")
+            if st.get("state") in (_oj.SENT, _oj.UNKNOWN) and rec and rec != plan.name:
+                n = name_copy_number(rec, base_plan.name)
+                if n > 0 or rec == base_plan.name:
+                    target = copy_plan(base_plan, n)
+            return (self._find_campaign(target, after_unknown=True) or {}).get("id")
+        return find
 
     def _campaign_rows(self, act: str, name: str) -> list[dict]:
         """Живые кампании кабинета, чьё имя содержит `name` (одно чтение, максимум 2 страницы)."""
@@ -2364,10 +2523,10 @@ class CampaignCreator:
                         ) -> tuple[NameChoice | None, tuple[int, dict, list[str]] | None]:
         """Квитанция прошлого запуска: та же кампания дописывается, пока она жива, наша и не расходится с билдером.
 
-        Возвращает (выбор, остаток). Нет кампании (id не существует), не живая, переименована - квитанция не
+        Возвращает (выбор, остаток). ACL-2583: «id не существует» (100/33) имя НЕ освобождает - как нет ответа. Не живая (прочитана DELETED/ARCHIVED), переименована - квитанция не
         используется, решает листинг. Остановка Graph (GraphStop) идёт наружу.
-        ACL-2578: (1) чтение по id упало по другой причине (сеть, лимит) - имя неизвестно: стоп `name_unsure`
-        до записей, а не тихое «квитанции нет»; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
+        ACL-2578: (1) чтение по id упало по другой причине (не «не существует») - 2-3 повтора за ~30 с; всё ещё без ответа -
+        имя считается занятым (второй элемент без причин), идём новой кампанией со следующим `copy N`, не стоп; (2) живая кампания с ТОЧНЫМ именем занимает его, чья бы она ни была
         (метка не важна); (3) наша, но расходится с билдером - не дописывается. В (2) и (3) она возвращается вторым
         элементом (номер, строка, причины): имя занято, даже если листинг Meta её сейчас не показал.
         Не обнаружить: квитанции нет и листинг промахнулся - тогда о кампании ничего не известно.
@@ -2381,14 +2540,15 @@ class CampaignCreator:
         campaign_id = str(receipt.get("campaign_id") or "")
         if campaign_id:
             try:
-                row = self.client.get(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
+                row = self._get_retrying(f"/{campaign_id}", {"fields": "name,effective_status,adlabels{name}"})
             except GraphError as exc:
-                if _object_gone(exc):
-                    return None, None
-                raise CreationStopped(
-                    f"Cannot tell whether the earlier campaign {cand.name!r} is still on the ad account (Meta did not "
-                    "answer the read). Nothing was created, so no second campaign with the same name appears; "
-                    "publish again in a minute.", kind="name_unsure") from exc
+                # ACL-2583 (Doc284): "does not exist" (100/33) does not free the name either: the receipt names a
+                # campaign this draft created, and Meta answers the same for a live one it cannot load. Only a row
+                # read with a non-live status (below) lets the base name go.
+                self._log_read_decision("receipt_unknown", campaign_id, exc)
+                # ACL-2578 / owner decision: Meta still does not answer after the retries. The earlier campaign may
+                # exist, so its name is held (never reused): the caller takes the next copy number, as a new campaign.
+                return None, (n, {"id": campaign_id, "name": cand.name}, None)
             row = {**row, "id": campaign_id} if isinstance(row, dict) else None
         else:
             hits = family_rows(plan.name, self._family_rows(plan)).get(n, [])
@@ -2436,7 +2596,8 @@ class CampaignCreator:
         ours = next((r for r in fam[top] if cand.label in _labels(r)), None)
         notes: list[str] = []
         if ours:
-            if leftover and top == leftover[0] and str(ours.get("id")) == str(leftover[1].get("id")):
+            if (leftover and leftover[2] is not None and top == leftover[0]
+                    and str(ours.get("id")) == str(leftover[1].get("id"))):
                 found_sets, partial, why = None, False, leftover[2]        # already read by the receipt check
             else:
                 found_sets, partial, why = self._resume_state(cand, targetings, str(ours["id"]))
@@ -3256,7 +3417,7 @@ class CampaignCreator:
         if ad.uses_feed:
             # ACL-1774: несколько текстов и/или вертикальный файл - лента ассетов; рядом только страница.
             story: dict = {"page_id": plan.page_id}
-            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media)}
+            extra: dict = {"asset_feed_spec": self.feed_spec(plan, ad, media, instant=ad_set.instant)}
         else:
             story, extra = self._story(plan, ad, ad_set, media), {}
         return {"name": name, "object_story_spec": self.with_instagram(story), **extra,
@@ -3286,13 +3447,18 @@ class CampaignCreator:
         return main, vertical
 
     @staticmethod
-    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
-        """`asset_feed_spec` сайтового объявления: тексты (до 5) и один или два файла с метками.
+    def feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict, *, instant: bool = False) -> dict:
+        """`asset_feed_spec` объявления: тексты (до 5) и один или два файла с метками.
+
+        ACL-2584: у Instant Form (`instant`) лента - форма Ads Manager (`instant_feed_spec`): заглушка вместо ссылки,
+        форма Страницы в кнопке ленты, `optimization_type: PLACEMENT` и два правила площадок.
 
         Один файл — без правил. Два — правило Stories/Reels на вертикальный и правило на остальные
         площадки на основной (Meta требует минимум два правила). Текстовые улучшения и Multi-advertiser
         выключены рядом, в самом креативе.
         """
+        if instant:
+            return CampaignCreator.instant_feed_spec(ad, media)
         key = "videos" if ad.kind == "video" else "images"
 
         def item(m: dict, label: str | None) -> dict:
@@ -3305,7 +3471,8 @@ class CampaignCreator:
         spec: dict[str, Any] = {
             "titles": [{"text": t} for t in ad.titles],
             key: [item(media, LABEL_MAIN if ad.vertical_path else None)],
-            "link_urls": [{"website_url": plan.link}], "call_to_action_types": [ad.cta],
+            "link_urls": [{"website_url": plan.link}],
+            "call_to_action_types": [ad.cta],
             "ad_formats": ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]}
         if ad.bodies:  # ACL-2474: без основного текста ключ `bodies` не отправляем
             spec["bodies"] = [{"text": t} for t in ad.bodies]
@@ -3318,6 +3485,52 @@ class CampaignCreator:
             spec["asset_customization_rules"] = [
                 {"customization_spec": vert_pos, label_key: {"name": LABEL_VERTICAL}},
                 {"customization_spec": main_pos, label_key: {"name": LABEL_MAIN}}]
+        return spec
+
+    @staticmethod
+    def instant_rule_positions(placements: dict | None) -> tuple[dict, dict]:
+        """Площадки двух правил ленты Instant Form: (основное, Stories/Reels).
+
+        ACL-2584 (live 12.11): основное правило всегда пустое (catch-all, как у Ads Manager): только такой набор
+        Ads Manager показывает со всеми текстами. Доставку ограничивает таргетинг набора; вертикальное правило -
+        Stories/Reels выбранных площадок (Advantage+ - все).
+        """
+        manual = placements is not None and placements.get("mode") != "advantage_plus"
+        return {}, CampaignCreator.rule_positions(placements if manual else None)[1]
+
+    @staticmethod
+    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
+        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
+        Файл один с обеими метками; набор не Dynamic Creative. Форма Страницы - в кнопке ленты.
+        """
+        def labelled(key: str, row: dict, first: bool) -> dict:
+            main, vertical = _wpol.instant_labels(key)
+            return {**row, "adlabels": [{"name": main}] + ([{"name": vertical}] if first else [])}
+
+        media_key = "videos" if ad.kind == "video" else "images"
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
+        for key, texts in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
+            if texts:  # ACL-2474: пустой вид текста ключ не отправляет
+                spec[key] = [labelled(key, {"text": t}, n == 0) for n, t in enumerate(texts)]
+        if "titles" not in spec:
+            # ACL-2584: без заголовка уходит ровно один пустой, как у Ads Manager (HAR владельца): Meta его сохранила.
+            spec["titles"] = [labelled("titles", {"text": ""}, True)]
+        file_row = ({"video_id": media["video_id"], "thumbnail_url": media["thumb"]} if ad.kind == "video"
+                    else {"hash": media["image_hash"]})
+        spec[media_key] = [labelled(media_key, file_row, True)]
+        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK}, True)]
+        spec["call_to_action_types"] = [ad.cta]
+        spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
+                                                              "lead_gen_form_id": ad.form_id}}]
+        spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
+        present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
+        spec["asset_customization_rules"] = [
+            {"customization_spec": positions,
+             **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
+            for n, positions in enumerate((main_pos, vert_pos))]
         return spec
 
     @staticmethod
@@ -4181,7 +4394,7 @@ class CampaignCreator:
                     "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
                     "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
                     "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
-                    "link": (plan.link if ad.uses_feed else
+                    "link": ((INSTANT_FORM_LINK if ad_set.instant else plan.link) if ad.uses_feed else
                              data.get("link") or (cta.get("value") or {}).get("link")),
                     "placements": aset["targeting"],
                     "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
@@ -4398,6 +4611,9 @@ class CampaignCreator:
             self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.dynamic:
                 sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
+            elif ad_set.instant and any(a.uses_feed for a in ad_set.ads):
+                sets[-1]["creative_mode"] = ("Several texts with placement rules (Stories / Reels show the first "
+                                             "text; any number of ads in this ad set)")
             if ad_set.instant:
                 # ACL-1775: вместо сайта - форма Страницы (имя и id); ключей сайта у такого набора нет.
                 known = self._page_forms.by_id() if self._page_forms else {}
@@ -4471,6 +4687,7 @@ class CampaignCreator:
         # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
         #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
         choice = self._resolve_name(plan, targetings)
+        base_plan = plan
         requested, plan = plan.name, choice.plan
         out.published_as = plan.name
         out.copy_number = choice.copy_number
@@ -4479,7 +4696,31 @@ class CampaignCreator:
         self._save_name_receipt(out, requested, choice)
         # ACL-1856: журнал по итоговому плану (имя уже выбрано) и сверка прошлых этапов - до первой записи.
         existing_id = str(choice.existing["id"]) if choice.existing else ""
-        adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+        for _attempt in range(4):
+            try:
+                adopt = self._open_operation(plan, out, files, submitted=submitted, existing_id=existing_id)
+                break
+            except (_SwitchCopy, _AliveUnknown) as sw:
+                if isinstance(sw, _SwitchCopy):
+                    # ACL-2583: the operation already wrote (or may have written) the campaign under a higher copy
+                    # name than the lagging name choice: switch the rest of the run to that copy plan (labels,
+                    # names, receipt), never back to the base name.
+                    n = sw.copy_number
+                else:
+                    # ACL-2583 (owner decision): the earlier campaign of the journal cannot be read even after the
+                    # retries. No stop: a new operation under a copy name that differs from the earlier one.
+                    n = max(choice.copy_number, sw.copy_number) + 1
+                plan = copy_plan(base_plan, n)
+                self._check_name_length(plan)
+                choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+                out.published_as, out.copy_number, existing_id = plan.name, n, ""
+                self._check_planned(plan, targetings, choice.found_sets)
+                self._save_name_receipt(out, requested, choice)
+                if isinstance(sw, _AliveUnknown):
+                    out.warnings.append(MSG_CONTINUED_AS_COPY.format(name=plan.name))
+        else:
+            raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name), created=out.created,
+                                  kind="unknown")
         if adopt and not existing_id:
             # The name search missed our live campaign: resume into it, never create a second one (ACL-1856).
             found_sets, _partial, why = self._resume_state(plan, targetings, adopt)
@@ -4502,9 +4743,42 @@ class CampaignCreator:
             self._step(out, "campaign: found from a previous run")
             self._step(out, "existing campaign and ad sets match the builder")
         else:
-            out.campaign_id = self._write(
-                out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
-                lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
+            rewrites = 0
+            while True:
+                try:
+                    out.campaign_id = self._write(
+                        out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
+                        self._campaign_finder(plan, base_plan))
+                    break
+                except _CampaignRewrite as rw:
+                    # ACL-2583: the campaign write is unknown and not found: never the same name again. Set the old
+                    # operation aside and continue as a new one under the next copy name (bounded).
+                    rewrites += 1
+                    if rewrites > MAX_CAMPAIGN_REWRITES:
+                        self._snapshot_operation(out)
+                        raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name),
+                                              created=out.created, kind="unknown") from None
+                    old_name = plan.name
+                    n = max(choice.copy_number, rw.copy_number,
+                            name_copy_number(old_name, base_plan.name)) + 1
+                    plan = copy_plan(base_plan, n)
+                    self._check_name_length(plan)
+                    choice = NameChoice(plan, None, [None] * len(plan.ad_sets), n, choice.earlier + 1)
+                    out.published_as, out.copy_number = plan.name, n
+                    found_sets = choice.found_sets
+                    self._check_planned(plan, targetings, found_sets)
+                    self._save_name_receipt(out, requested, choice)
+                    try:
+                        self._op = self.journal.supersede(self._op, request_id=self.request_key)
+                        self._op.set_published(plan.name, n)
+                    except _oj.JournalError as exc:
+                        self._journal_event("journal_save_failed", what="open", phase="supersede",
+                                            error=type(exc).__name__)
+                        raise CreationStopped(MSG_JOURNAL, created=out.created, kind="journal") from exc
+                    out.warnings.append(MSG_CAMPAIGN_REWRITTEN.format(old=old_name, name=plan.name))
+                    self._step(out, f"campaign: not found, creating a new one as {plan.name!r}")
+                    self._journal_event("unknown_rewritten", what="campaign", renamed_to=plan.name)
+                    self._snapshot_operation(out)
             out.created["campaign"] = out.campaign_id
             self._attach_name_receipt(out, plan.act, requested)
             self._verify_label(out, f"The campaign {plan.name!r}", out.campaign_id, plan.label)
@@ -4643,7 +4917,8 @@ class CampaignCreator:
 
     def _feed_checks(self, check: Callable[[str, str, Any, Any], None], aobj: str, plan: CampaignPlan,
                      ad: AdPlan, creative: dict, rec: dict, files: dict[str, bytes],
-                     identities: list[dict] | None = None) -> list[tuple[str, str, str]]:
+                     identities: list[dict] | None = None, *, instant: bool = False,
+                     page_forms: _forms.FormsRead | None = None) -> list[tuple[str, str, str]]:
         """Сверка ленты ассетов (ACL-1774): все тексты как набор и привязка файлов к площадкам.
 
         Возвращает картинки, чей хэш не равен md5 нашего файла, — по ним ещё сверяется имя в библиотеке.
@@ -4659,17 +4934,44 @@ class CampaignCreator:
             # ACL-2290: Meta returns [' '] for "none"; whitespace-only values count as empty on both sides.
             return [v for v in values if str(v).strip()]
 
-        check(aobj, "primary_texts", nonblank(list(ad.bodies)), nonblank(texts("bodies")))
-        check(aobj, "headlines", nonblank(list(ad.titles)), nonblank(texts("titles")))
-        check(aobj, "descriptions", nonblank(list(ad.descriptions)), nonblank(texts("descriptions")))
+        def listed(values: list[str]) -> list[str]:
+            # ACL-2584: on an Instant Form feed the texts are compared as a set (Meta may reorder them).
+            return sorted(values) if instant else values
+
+        check(aobj, "primary_texts", listed(nonblank(list(ad.bodies))), listed(nonblank(texts("bodies"))))
+        check(aobj, "headlines", listed(nonblank(list(ad.titles))), listed(nonblank(texts("titles"))))
+        check(aobj, "descriptions", listed(nonblank(list(ad.descriptions))), listed(nonblank(texts("descriptions"))))
         ctas = fs.get("call_to_action_types") or [""]
         check(aobj, "call_to_action", ad.cta, ctas[0] if isinstance(ctas, list) and ctas else "")
         links = fs.get("link_urls") or [{}]
-        check(aobj, "link", plan.link, (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        check(aobj, "link", INSTANT_FORM_LINK if instant else plan.link,
+              (links[0] or {}).get("website_url") if isinstance(links, list) and links else "")
+        if instant:
+            # ACL-2528: the form id sits in the feed button; same id and page-membership checks as the single-text path.
+            feed_ctas = fs.get("call_to_actions")
+            feed_cta = feed_ctas[0] if isinstance(feed_ctas, list) and feed_ctas and isinstance(feed_ctas[0], dict) else {}
+            check(aobj, "feed_call_to_action", ad.cta, feed_cta.get("type"))
+            self._form_checks(check, aobj, ad, feed_cta, page_forms)
         key = "videos" if ad.kind == "video" else "images"
         check(aobj, "format", ad.kind, "video" if fs.get("videos") else ("image" if fs.get("images") else ""))
         id_key = "video_id" if ad.kind == "video" else "hash"
         rows = [x for x in (fs.get(key) or []) if isinstance(x, dict)]
+        if instant:
+            # ACL-2584: Ads Manager's own readback shows one file stored as two rows (same id, the second with a
+            # crop). Rows with the same id are one file carrying the labels of all of them.
+            merged: dict[str, dict] = {}
+            for r in rows:
+                ident = str(r.get(id_key) or "")
+                if not ident:
+                    merged[f"#{len(merged)}"] = r
+                    continue
+                names = merged.get(ident, {}).get("adlabels") or []
+                raw = r.get("adlabels")
+                raw = raw.get("data") if isinstance(raw, dict) else raw
+                more = [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
+                have = {x.get("name") for x in names}
+                merged[ident] = {id_key: ident, "adlabels": names + [x for x in more if x.get("name") not in have]}
+            rows = list(merged.values())
 
         def label_of(row: dict) -> str:
             raw = row.get("adlabels")
@@ -4678,12 +4980,55 @@ class CampaignCreator:
             first = raw[0] if isinstance(raw, list) and len(raw) == 1 else None
             return str(first.get("name") or "") if isinstance(first, dict) else ""
 
+        def names_of(row: dict) -> list[str]:
+            raw = row.get("adlabels")
+            if isinstance(raw, dict):
+                raw = raw.get("data")
+            return sorted(str(x.get("name") or "") for x in raw if isinstance(x, dict)) if isinstance(raw, list) else []
+
+        if instant:
+            # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
+                if not nonblank(list(base)):
+                    continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
+                main, vertical = _wpol.instant_labels(kind)
+                got = [x for x in (fs.get(kind) or []) if isinstance(x, dict) and str(x.get("text") or "").strip()]
+                check(aobj, kind + "_main_label", sorted(nonblank(list(base))),
+                      sorted(str(x.get("text")) for x in got if main in names_of(x)))
+                check(aobj, kind + "_vertical_label", [base[0]],
+                      [str(x.get("text")) for x in got if vertical in names_of(x)])
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
+            media_key = "videos" if ad.kind == "video" else "images"
+            # The empty title is sent with its label in both rules, so the rules always name it.
+            present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
+                                         ("descriptions", ad.descriptions)) if nonblank(list(base)) or k == "titles"
+                       ] + ["link_urls", media_key]
+
+            def rule_label(r: dict, lk: str) -> Any:
+                # ACL-2584: the public Graph names these `*_label`, the internal readback `*_adlabel`.
+                lab = r.get(lk) or r.get(lk.replace("_label", "_adlabel"))
+                return lab if isinstance(lab, dict) else {}
+
+            got_rules = [r for r in (fs.get("asset_customization_rules") or []) if isinstance(r, dict)]
+            for n, (name, want) in enumerate((("main", main_pos), ("stories_reels", vert_pos))):
+                want_labels = {_wpol.INSTANT_ASSET_KINDS[k][1]: _wpol.instant_labels(k)[n] for k in present}
+                rule = next((r for r in got_rules if all(
+                    rule_label(r, lk).get("name") == v for lk, v in want_labels.items())), {})
+                check(aobj, f"rule_{name}_labels", want_labels,
+                      {lk: rule_label(rule, lk).get("name") for lk in want_labels} if rule else {})
+                cs = rule.get("customization_spec") or {}
+                check(aobj, f"rule_{name}_placements",
+                      {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")},
+                      {k: sorted(cs.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")})
         by_label = {label_of(r): str(r.get(id_key) or "") for r in rows}
         bound = {"main": by_label.get(LABEL_MAIN) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
         bound["vertical"] = by_label.get(LABEL_VERTICAL, "")
         check(aobj, "file_count", 2 if ad.vertical_path else 1, len(rows))
         if ad.vertical_path:
             check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
+        elif instant:
+            check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), sorted(n for r in rows for n in names_of(r)))
         else:
             check(aobj, "placement_rules", [], fs.get("asset_customization_rules") or [])
         extra: list[tuple[str, str, str]] = []
@@ -4828,7 +5173,8 @@ class CampaignCreator:
                 if ad.uses_feed:
                     # ACL-1774: тексты и файлы в ленте ассетов, а не в object_story_spec.
                     image_ads += self._feed_checks(check, aobj, plan, ad, creative, rec, files,
-                                                   diag.setdefault("video_identity", []))
+                                                   diag.setdefault("video_identity", []),
+                                                   instant=ad_set.instant, page_forms=page_forms)
                     continue
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":

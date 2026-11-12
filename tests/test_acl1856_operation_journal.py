@@ -349,20 +349,60 @@ def test_an_unsent_write_found_nowhere_is_written_again_without_waiting(tmp_path
     assert again.error == "" and _count(meta, "ad") == 1
 
 
-def test_a_stage_left_sent_by_a_dead_run_is_held_then_written_once(tmp_path, journal, clock):
+def test_a_stage_left_sent_by_a_dead_run_is_read_back_then_written_without_a_time_stop(tmp_path, journal, clock):
+    """ACL-2583 owner rule: no "wait 10 minutes". The unknown stage is read back (after the ~30 s pause), then sent."""
     meta = Crashy()
     meta.crash_at, meta.phase = 5, "before"           # the run dies before the first ad leaves: stage stays `sent`
     first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
     assert first.stop_kind == "unexpected"
+    assert "Wait 10 minutes" not in first.operation["next_action"]
     meta.crash_at = None
-    posts = len(meta.posts)
-    young, client = _go(meta, _draft(tmp_path, ads=1), journal)
-    assert young.stop_kind == "unknown" and "Wait 10 minutes" in young.error
-    assert "Wait 10 minutes" in young.operation["next_action"]
-    assert len(meta.posts) == posts and client.writes == 0
-    clock.t += oj.UNKNOWN_HOLD_S + 1
-    later, _c = _go(meta, _draft(tmp_path, ads=1), journal)
-    assert later.error == "" and _count(meta, "ad") == 1
+    creator, client = _creator(meta, journal)
+    sleeps = []
+
+    def sleep(s_):
+        sleeps.append(s_)
+        clock.t += s_                                 # the pause is real time for the journal's busy window
+    creator.sleep = sleep
+    again = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=1)))
+    assert again.error == "" and not again.stop_kind, again.error
+    assert _count(meta, "ad") == 1 and _count(meta, "campaign") == 1
+    assert 25 <= sum(sleeps) <= 35, sleeps            # the same ~30 s pause as a transient read
+
+
+def test_an_unknown_stage_found_by_the_second_readback_is_adopted_not_written(tmp_path, journal):
+    meta = FakeMeta()
+    creator, client = _creator(meta, journal)
+    sleeps = []
+    creator.sleep = sleeps.append
+    creator._op = journal.open(ACT, "tag", "fp-late", "C")
+    creator._op.begin("ad 1", "ad", name="Ad 1")                      # an earlier run died mid-send: stage `sent`
+    reads = []
+
+    def find():
+        reads.append(1)
+        return None if len(reads) == 1 else "AD-LATE"                 # Meta lists it only on the second read
+
+    def send():
+        raise AssertionError("must not be written again")
+    out = cr.Outcome("C")
+    assert creator._journaled(out, "ad 1", "ad", send, find, name="Ad 1") == "AD-LATE"
+    assert len(reads) == 2 and 25 <= sum(sleeps) <= 35, (reads, sleeps)
+    assert creator._op.stage("ad 1")["state"] == oj.CONFIRMED
+
+
+def test_an_unknown_stage_not_found_twice_is_written_again_and_recorded(tmp_path, journal):
+    meta = FakeMeta()
+    creator, client = _creator(meta, journal)
+    creator.sleep = lambda s: None
+    creator._op = journal.open(ACT, "tag", "fp-late2", "C")
+    creator._op.begin("ad 1", "ad", name="Ad 1")
+    sent = []
+    out = cr.Outcome("C")
+    got = creator._journaled(out, "ad 1", "ad", lambda: sent.append(1) or "AD-NEW", lambda: None, name="Ad 1")
+    assert got == "AD-NEW" and sent == [1]
+    st = creator._op.stage("ad 1")
+    assert st["state"] == oj.CONFIRMED and st["attempts"] == 2        # the journal keeps both sends
 
 
 def test_an_unknown_write_that_did_land_is_adopted_not_repeated(tmp_path, journal):
@@ -559,7 +599,7 @@ def test_an_unknown_stage_never_reads_as_success_and_says_to_wait(journal):
     op = journal.open(ACT, "tag", "fp", "C")
     op.begin("campaign", "campaign")
     op.mark("campaign", oj.UNKNOWN)
-    assert "Wait 10 minutes" in op.summary()["next_action"]
+    assert "Wait" not in op.summary()["next_action"] and "minutes" not in op.summary()["next_action"]
     assert op.summary()["partial_ids"] == {}
 
 
@@ -616,12 +656,15 @@ def test_republish_after_the_campaign_was_deleted_in_meta_starts_a_new_operation
     assert second.error == "", second.error
     assert second.campaign_id and second.campaign_id != gone and len(meta.posts) > posts
     assert second.operation["state"] == oj.OP_COMPLETE
-    assert any("set aside" in w for w in second.warnings)
-    assert len(list(journal.root.glob("op-*.superseded"))) == 1          # the earlier record is kept, not deleted
-    assert len(list(journal.root.glob("op-*.json"))) == 1
+    # ACL-2583 (Doc284): "does not exist" (100) for a campaign THIS draft recorded never frees its name - Meta says
+    # the same for a live campaign it cannot load. The new campaign continues as "<name> copy 1".
+    assert second.published_as.endswith(" copy 1")
+    assert any("copy" in w for w in second.warnings)
     _assert_safe(meta)
     third, _c = _go(meta, _draft(tmp_path, ads=2), journal)              # and a third publish is just as unblocked
     assert third.error == ""
+    names = [o["name"] for o in meta.objects.values() if o["_kind"] == "campaign"]
+    assert len(names) == len(set(names))
 
 
 def test_republish_after_a_partly_created_campaign_was_deleted(tmp_path, journal):
@@ -646,15 +689,25 @@ def test_a_campaign_gone_to_the_deleted_status_is_not_a_block_either(tmp_path, j
     assert out.error == "" and out.campaign_id != first.campaign_id
 
 
-def test_a_live_campaign_that_the_name_search_does_not_list_yet_stops_without_a_write(tmp_path, journal,
-                                                                                       monkeypatch):
-    meta, _first = _partial(tmp_path, journal)
+def test_a_live_campaign_the_name_search_misses_inside_the_window_is_resumed_not_stopped(tmp_path, journal, clock,
+                                                                                         monkeypatch):
+    # ACL-2583 owner rule: no lag window; the run stays inside 10 minutes of the earlier one and resumes by id.
+    meta, first = _partial(tmp_path, journal)
     nr.delete(ACT, "MX Leads 1")
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])      # Meta lag: not listed yet
-    posts = len(meta.posts)
-    out, client = _go(meta, _draft(tmp_path, ads=2), journal)
-    assert out.stop_kind == "resume_mismatch" and "does not list it yet" in out.error
-    assert len(meta.posts) == posts and client.writes == 0 and _count(meta, "campaign") == 1
+    creator, _client = _creator(meta, journal)
+
+    def sleep(s_):
+        clock.t += s_                                  # a real pause moves the journal's clock (still < 10 minutes)
+    creator.sleep = sleep
+    out = creator.run(cr.plan_from_draft(_draft(tmp_path, ads=2)))
+    assert out.error == "" and not out.stop_kind, (out.stop_kind, out.error)
+    assert out.campaign_id == first.operation["partial_ids"]["campaign"]
+    assert _count(meta, "campaign") == 1 and _count(meta, "ad") == 2
+    assert not list(journal.root.glob("*.superseded"))
+    text = " ".join([out.error, *out.warnings])
+    assert "few minutes" not in text and "does not list it yet" not in text
+    _assert_safe(meta)
 
 
 def test_a_campaign_renamed_in_ads_manager_is_taken_over_and_never_asks_to_wait(tmp_path, journal, clock):
@@ -679,7 +732,7 @@ def test_a_live_campaign_the_name_search_misses_after_the_lag_window_is_resumed_
     meta, first = _partial(tmp_path, journal)
     nr.delete(ACT, "MX Leads 1")
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
-    clock.t += oj.NOT_LISTED_LAG_S + 60
+    clock.t += 11 * 60
     out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
     assert out.error == "", out.error
     assert "does not list it yet" not in (out.error or "")
@@ -698,7 +751,7 @@ def test_a_campaign_really_gone_after_the_lag_window_is_a_new_operation(tmp_path
     camp["effective_status"] = status
     nr.delete(ACT, "MX Leads 1")
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
-    clock.t += oj.NOT_LISTED_LAG_S + 60
+    clock.t += 11 * 60
     out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
     assert out.error == "" and out.campaign_id and out.campaign_id != camp["id"]
     assert list(journal.root.glob("*.superseded"))
@@ -712,7 +765,7 @@ def test_a_campaign_whose_read_by_id_fails_after_the_lag_window_is_a_new_operati
     del meta.objects[old_id]
     nr.delete(ACT, "MX Leads 1")
     monkeypatch.setattr(cr.CampaignCreator, "_family_rows", lambda self, plan: [])
-    clock.t += oj.NOT_LISTED_LAG_S + 60
+    clock.t += 11 * 60
     out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
     assert out.error == "" and out.campaign_id and out.campaign_id != old_id
     assert list(journal.root.glob("*.superseded"))
@@ -727,10 +780,10 @@ def test_a_renamed_campaign_warning_says_renamed_not_gone(tmp_path, journal, clo
     assert not any("no longer in Ads Manager" in w for w in out.warnings)
 
 
-def test_next_action_says_publish_again_once_the_hold_of_a_sent_stage_has_passed(journal, clock):
+def test_next_action_never_tells_to_wait_for_a_sent_stage(journal, clock):
     op = journal.open(ACT, "tag", "fp-hold", "C")
     op.begin("campaign", "campaign", name="C")
-    assert op.next_action().startswith("Wait 10 minutes")
+    assert op.next_action().startswith("Publish again") and "minutes" not in op.next_action()
     clock.t += oj.UNKNOWN_HOLD_S + 1
     assert op.next_action().startswith("Publish again")
 
