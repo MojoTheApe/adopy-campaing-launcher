@@ -8,7 +8,6 @@ from starlette.requests import Request
 
 from src.analysis_agent import account_spend, bi_stats
 from src.web import account_links, app as web
-from tests.test_acl103_saved_source import SavedPanel
 from tests.test_acl103_source_contract import history_frame, isolated_source  # noqa: F401
 
 
@@ -54,7 +53,7 @@ def comparison_routes(monkeypatch, tmp_path):
             request, date_from=start, date_to=end, span=span)
         api = json.loads(web.api_source_vs_account.__wrapped__(date_from=start, date_to=end).body)
         assert response.status_code == 200 and not forbidden
-        return response.context["amap"], SavedPanel(response.body.decode()), api
+        return response.context["amap"], response.body.decode(), api
     return setup, get, save
 
 
@@ -67,38 +66,22 @@ def test_each_open_bound_matches_primary_rows_without_borrowing_a_single_day(com
     account = setup()
     amap, panel, api = get(start, end)
     primary = next(r for c in amap["countries"] for r in c["rows"] if r["account"] == account)
-    saved = amap["saved_source_check"]["rows"][0]
     row = api["rows"][0]
-    assert primary["spend"] == saved["source_spend"] == row["source_spend"] == amount
-    assert saved["source"]["source"] == row["source"]["source"] == source
-    assert (amap["saved_source_check"]["date_from"], amap["saved_source_check"]["date_to"]) == (start, end)
+    assert primary["spend"] == row["source_spend"] == amount
+    assert row["source"]["source"] == source
     assert (api["date_from"], api["date_to"]) == (start, end)
-    assert label in panel.content()
-    for value in [saved, row]:
-        assert value["account_spend"] is None and value["gap"] is None
-        assert value["comparison_state"] == "missing_account"
-    assert "USD 14.00" not in panel.content()
+    assert row["account_spend"] is None and row["gap"] is None
+    assert row["comparison_state"] == "missing_account"
+    assert "saved_source_check" not in amap and "Saved source/account check" not in panel
 
 
 def test_closed_single_day_control_keeps_the_exact_saved_reading(comparison_routes):
     setup, get, _save = comparison_routes
     setup()
     amap, panel, api = get("2026-01-05", "2026-01-05")
-    saved = amap["saved_source_check"]["rows"][0]
-    for row in [saved, api["rows"][0]]:
-        assert (row["source_spend"], row["account_spend"], row["gap"]) == (7.0, 14.0, 7.0)
-        assert row["comparison_state"] == "comparable"
-    assert "USD 7.00" in panel.content() and "USD 14.00" in panel.content()
-
-
-def test_maximum_keeps_all_source_dates_and_no_fabricated_account_period(comparison_routes):
-    setup, get, _save = comparison_routes
-    setup()
-    amap, panel, _api = get("", "", "all")
-    saved = amap["saved_source_check"]["rows"][0]
-    assert saved["source_spend"] == 19.5 and saved["account_spend"] is None and saved["gap"] is None
-    assert amap["saved_source_check"]["date_from"] == amap["saved_source_check"]["date_to"] == ""
-    assert "All dates" in panel.content()
+    row = api["rows"][0]
+    assert (row["source_spend"], row["account_spend"], row["gap"]) == (7.0, 14.0, 7.0)
+    assert row["comparison_state"] == "comparable"
 
 
 def test_endpoint_resolves_one_known_canonical_source_alias_and_account_label(comparison_routes):

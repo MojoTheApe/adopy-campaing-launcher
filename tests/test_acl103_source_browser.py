@@ -11,7 +11,6 @@ import pytest
 from src.web import app as web
 from tests import ds_routes_harness as H
 from tests.test_acl103_source_contract import history_frame, isolated_source  # noqa: F401
-from tests.test_acl103_saved_source import saved_comparison_context  # noqa: F401
 
 pw = pytest.importorskip("playwright.sync_api")
 
@@ -43,64 +42,6 @@ def local_refresh_route(calls=None):
         else:
             fallback(request)
     return route
-
-
-@pytest.mark.parametrize("width,theme", [(390, "dark"), (1365, "light")])
-def test_saved_comparison_opens_and_changes_dates_without_an_external_read(browser, saved_comparison_context, tmp_path, width, theme):
-    context = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=theme)
-    page = context.new_page()
-    errors, forbidden, calls, navigations = [], [], [], []
-    page.on("pageerror", lambda error: errors.append(str(error)))
-    page.add_init_script(f"localStorage.setItem('acl.theme', '{theme}')")
-    fallback = local_refresh_route(calls)
-    def route(request):
-        path = urlparse(request.request.url).path
-        if path in {"/api/source-vs-account", "/account-refresh/request", "/account-spend/read", "/campaign-inventory/read"}:
-            forbidden.append(path)
-            request.abort()
-        elif request.request.resource_type == "document":
-            query = parse_qs(urlparse(request.request.url).query)
-            navigations.append(query)
-            start = query.get("date_from", ["2026-10-18"])[0]
-            end = query.get("date_to", [start])[0]
-            request.fulfill(content_type="text/html", body=saved_comparison_context["render"](start, end, full=True))
-        else:
-            fallback(request)
-    page.route("**/*", route)
-    try:
-        with page.expect_response(lambda r: urlparse(r.url).path == "/static/account_refresh.js") as script:
-            with page.expect_response(lambda r: urlparse(r.url).path == "/account-refresh/state"):
-                page.goto("http://acl.test/?date_from=2026-10-18&date_to=2026-10-18")
-        assert script.value.body() == (H.ROOT / "src/web/static/account_refresh.js").read_bytes()
-        assert calls.count(("POST", "/account-refresh/page-open")) == 1
-        panel = page.locator("#amap-slot details[data-source-check]")
-        assert panel.count() == 1, "API presence alone is not a visible comparison"
-        assert not panel.evaluate("e => e.open")
-        panel.locator("summary").focus()
-        page.keyboard.press("Enter")
-        assert panel.evaluate("e => e.open")
-        assert "USD 12.50" in panel.inner_text() and "USD 14.00" in panel.inner_text()
-        assert panel.locator("[data-source-account]").count() == 1
-        assert panel.locator("button, [onclick], [hx-get]").count() == 0
-        geometry = panel.evaluate("e => {const r=e.getBoundingClientRect();return {left:r.left,right:r.right,scroll:e.scrollWidth,client:e.clientWidth}}")
-        assert geometry["left"] >= 0 and geometry["right"] <= width + 1, geometry
-        assert geometry["scroll"] <= geometry["client"] + 1, geometry
-        artifacts = Path(os.environ.get("ACL_REVIEW_ARTIFACT_DIR", str(tmp_path)))
-        artifacts.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(artifacts / f"saved-check-{width}-{theme}.png"))
-        with page.expect_response(lambda r: urlparse(r.url).path == "/account-refresh/state"):
-            page.evaluate("amapApply('2026-01-05','2026-01-05','')")
-        page.wait_for_url("**date_from=2026-01-05&date_to=2026-01-05*")
-        assert navigations[-1]["view_only"] == ["1"]
-        assert calls.count(("POST", "/account-refresh/page-open")) == 1
-        assert calls.count(("GET", "/account-refresh/state")) >= 2
-        panel.locator("summary").click()
-        assert "USD 7.00" in panel.inner_text()
-        assert "No saved account figure for these dates" in panel.inner_text()
-        assert "USD 14.00" not in panel.inner_text() and "999.00" not in panel.inner_text()
-        assert not forbidden and not errors and saved_comparison_context["blocked"] == []
-    finally:
-        context.close()
 
 
 @pytest.fixture(scope="module")
