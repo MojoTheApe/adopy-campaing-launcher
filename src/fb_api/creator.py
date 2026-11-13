@@ -55,7 +55,7 @@ from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
 from src.fb_api.telemetry import mask_id as _mask_id, scrub
-from src.fb_api.graph import FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.graph import AuthRequired, FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, is_auth_required, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
@@ -2197,10 +2197,21 @@ class CampaignCreator:
             self._snapshot_operation(out)
             return CreationStopped(text.format(name=name), created=out.created, kind="resume_mismatch")
 
-        def read(oid: str, fields: str) -> dict | None:
+        def refused(exc: GraphError, what: str) -> None:
+            """ACL-2614: отказ чтения из-за незавершённой проверки подлинности - это стоп `checkpoint`, а не расхождение."""
+            title = str((exc.details or {}).get("error_user_title") or "")
+            if is_auth_required(exc.code, exc.subcode, title):
+                raise AuthRequired(f"Meta asks to authenticate this account ({exc.code}/{exc.subcode}): {exc}",
+                                   code=exc.code, subcode=exc.subcode) from exc
+            # Только код/подкод и вид объекта: ни номеров кабинета/объекта, ни токенов в журнал не идёт.
+            log.warning("resume check: read of %s refused (code=%s subcode=%s status=%s)",
+                        what, exc.code, exc.subcode, exc.status)
+
+        def read(oid: str, fields: str, what: str = "object") -> dict | None:
             try:
                 row = self.client.get(f"/{oid}", {"fields": fields})
-            except GraphError:
+            except GraphError as exc:
+                refused(exc, what)
                 return None                      # объекта нет / не читается: расхождение, а не сбой запуска
             return row if isinstance(row, dict) and str(row.get("id") or oid) == oid else None
 
@@ -2213,7 +2224,7 @@ class CampaignCreator:
         for key, st in stages:
             oid, name, kind = st["object_id"], st["name"], st["kind"]
             if kind == "campaign":
-                row = read(oid, "id,name,status,account_id,adlabels{name}")
+                row = read(oid, "id,name,status,account_id,adlabels{name}", "campaign")
                 if row is None or str(row.get("name") or "").strip() != plan.name:
                     raise mismatch(name or plan.name)
                 if other_account(row):
@@ -2225,17 +2236,21 @@ class CampaignCreator:
             elif kind == "ad":
                 ad_names[oid] = name
             elif kind == "creative":
-                row = read(oid, "id,name,account_id")
+                row = read(oid, "id,name,account_id", "creative")
                 if row is None:
                     raise mismatch(name or key)
                 if other_account(row):
                     raise mismatch(name or key, MSG_OTHER_ACCOUNT)
             elif kind == "image":
-                rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [oid], "fields": "hash"}, max_pages=1)
+                try:
+                    rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [oid], "fields": "hash"}, max_pages=1)
+                except GraphError as exc:
+                    refused(exc, "image")
+                    raise
                 if not any(str(r.get("hash")) == oid for r in rows):
                     raise mismatch(key)
             elif kind == "video":
-                row = read(oid, "id,title,status,account_id")
+                row = read(oid, "id,title,status,account_id", "video")
                 if row is None or (name and row.get("title") is not None and str(row["title"]) != name):
                     raise mismatch(key)
                 if other_account(row):
@@ -2246,15 +2261,22 @@ class CampaignCreator:
         if adset_names or ad_names:
             # Кампания: найденная выбором имени, иначе подтверждённая в журнале (запись о ней могла не сохраниться).
             campaign_id = campaign_id or next((st["object_id"] for _k, st in stages if st["kind"] == "campaign"), "")
+            def children(parent: str, edge: str) -> list[dict]:
+                try:
+                    return self._children(parent, edge, "id,name")
+                except GraphError as exc:
+                    refused(exc, edge)
+                    raise
+
             seen_sets = {str(r["id"]): str(r.get("name") or "").strip()
-                         for r in self._children(campaign_id, "adsets", "id,name")} if campaign_id else {}
+                         for r in children(campaign_id, "adsets")} if campaign_id else {}
             for oid, name in adset_names.items():
                 if seen_sets.get(oid) != name:
                     raise mismatch(name)
             seen_ads: dict[str, str] = {}
             if ad_names:
                 for set_id in seen_sets:
-                    for r in self._children(set_id, "ads", "id,name"):
+                    for r in children(set_id, "ads"):
                         seen_ads[str(r["id"])] = str(r.get("name") or "").strip()
             for oid, name in ad_names.items():
                 if seen_ads.get(oid) != name:
