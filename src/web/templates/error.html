@@ -26,15 +26,56 @@
           white-space: pre-wrap; word-break: break-word; color: var(--adopy-text); font-family: var(--adopy-font-mono);
           font-size: var(--adopy-text-table); }
     p.hint { color: var(--adopy-text-muted); margin-top: 1.5rem; font-size: var(--adopy-text-body); }
+    .amap-btn { font: inherit; padding: .4rem .9rem; border-radius: var(--adopy-radius-md); border: 1px solid var(--adopy-border); background: var(--adopy-surface); color: var(--adopy-text); cursor: pointer; margin-right: .5rem; }
+    .amap-btn.primary { background: var(--adopy-accent, var(--adopy-text)); color: var(--adopy-bg); }
     code { background: var(--adopy-neutral-bg); padding: 0.1rem 0.3rem; border-radius: 3px; font-family: var(--adopy-font-mono); }
   </style>
 </head>
 <body>
   <h1>{{ title }}</h1>
   <pre>{{ message }}</pre>
+{% if connect %}
+  <p class="hint">
+    This computer gets its stats connection from your team's connection file. Sign in with
+    your Adopy Google account, then check again. Nothing is shown or pasted.
+  </p>
+  <p>
+    <button type="button" id="nd-signin" class="amap-btn primary">Sign in with Google</button>
+    <button type="button" id="nd-check" class="amap-btn">Check again</button>
+  </p>
+  <p id="nd-msg" role="status" style="min-height:1.4em"></p>
+  <p class="hint">
+    No team connection file? Set <code>FB_STATS_EXCEL</code> in your shell or <code>.env</code>,
+    place the Stats workbook at that path, and reload.
+  </p>
+  <script>
+    (function () {
+      var msg = document.getElementById('nd-msg');
+      function say(t, bad) { msg.style.color = bad ? 'var(--adopy-danger)' : 'var(--adopy-text-muted)'; msg.textContent = t || ''; }
+      function post(url) {
+        return fetch(url, { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function (r) { return r.json().catch(function () { return { ok: false }; }); });
+      }
+      function run(url, busy) {
+        say(busy);
+        post(url).then(function (j) {
+          if (!j || !j.ok) { say((j && j.error) || 'Could not reach the team connection file.', true); return; }
+          var bi = (j.checks || []).filter(function (c) { return c.name === 'BI'; })[0];
+          if (bi && !bi.ok) { say(bi.line, true); return; }
+          say('Connected. Loading the dashboard…');
+          location.href = '/';
+        }).catch(function () { say('Could not reach the dashboard.', true); });
+      }
+      document.getElementById('nd-signin').onclick = function () { run('/api/connections/sign-in', 'Waiting for Google sign-in in your browser…'); };
+      document.getElementById('nd-check').onclick = function () { run('/api/connections/check', 'Checking…'); };
+    })();
+  </script>
+{% else %}
   <p class="hint">
     Set <code>FB_STATS_EXCEL</code> in your shell or <code>.env</code>, place the file at
     that path, and reload.
   </p>
+{% endif %}
 </body>
 </html>

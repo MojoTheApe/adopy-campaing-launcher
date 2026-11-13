@@ -236,9 +236,11 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
 
     notes: List[str] = []
     window = None
+    bi_reason = "no answer"
     try:
         window = bi_stats.normalize(bi_stats.fetch_raw())
     except Exception as e:  # noqa: BLE001 — покажем архив/книгу ниже
+        bi_reason = bi_stats.describe_error(e)
         notes.append(f"BI unavailable ({bi_stats.describe_error(e)}) — showing saved days.")
     try:
         if window is not None:
@@ -255,7 +257,8 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
     if stored is None:
         if window is None:
             if not os.path.isfile(excel_path):
-                raise bi_stats.BIUnavailable("BI and the stats archive are unavailable and there is no Stats workbook")
+                raise bi_stats.BIUnavailable(
+                    f"BI unavailable ({bi_reason}), the stats archive is unavailable and there is no Stats workbook")
             return bi_compare.annotate_source(_read_workbook_cached(excel_path), "workbook"), "excel", " ".join(notes)
         bi = bi_stats.assign_cm(window, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
         if bi.attrs.get("unmapped_cm_rows"):
@@ -264,7 +267,8 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
         return merge_bi_with_history(bi, book), "bi", " ".join(notes)
 
     if stored.empty:
-        raise bi_stats.BIUnavailable("BI unavailable, the stats archive is empty and there is no Stats workbook")
+        raise bi_stats.BIUnavailable(
+            f"BI unavailable ({bi_reason}), the stats archive is empty and there is no Stats workbook")
     stored = stored.rename(columns={"source": bi_compare.SOURCE_COLUMN})
     from_bi = stored[stored[bi_compare.SOURCE_COLUMN] == "bi"].drop(columns=["CM"])
     from_book = stored[stored[bi_compare.SOURCE_COLUMN] == "workbook"].drop(columns=["CM_ID"])
