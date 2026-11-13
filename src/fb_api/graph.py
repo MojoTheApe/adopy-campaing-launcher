@@ -38,6 +38,10 @@ BLOCK_CODES = {1404078, 2859015, 1404163}
 #: Подкоды 190, при которых сессия стоит на checkpoint: перезагрузка Ads
 #: Manager не поможет, только лишний заход в кабинет — стоп сразу (ревью O3).
 CHECKPOINT_SUBCODES = {459, 464}
+#: ACL-2595: Meta's "Please authenticate your account" (code 31 / subcode 3858385): the ad account is under a
+#: security check and cannot create or change ads until it is confirmed in Ads Manager. Not a step refusal:
+#: it stops the account like a checkpoint (every further write is one more signal to Meta).
+AUTH_REQUIRED = (31, 3858385)
 
 #: ACL-2301: сетевой сбой ЧТЕНИЯ повторяется на каждом вызове отдельно: 3 попытки с паузами 5/10/20 с.
 NETWORK_BACKOFF_S = (5.0, 10.0, 20.0)
@@ -171,6 +175,11 @@ class Checkpoint(GraphStop):
     kind = "checkpoint"
 
 
+class AuthRequired(Checkpoint):
+    """ACL-2595: Meta asks to authenticate this ad account (31/3858385). A checkpoint-kind stop (persisted hold,
+    no retry, nothing more is written); the class only lets the texts say what to do."""
+
+
 class RateLimited(GraphStop):
     kind = "rate_limited"
 
@@ -264,6 +273,16 @@ FILE_REFUSAL_SUBCODES = frozenset({1487411})
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
 _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", "retired",
              "bad_path", "forbidden_param", "no_session"}
+
+
+AUTH_REQUIRED_TITLE = "please authenticate your account"
+
+
+def is_auth_required(code: int | None, subcode: int | None = None, title: str = "") -> bool:
+    """31/3858385, or code 31 with Meta's title "Please authenticate your account" (the subcode may be absent)."""
+    if (code, subcode) == AUTH_REQUIRED:
+        return True
+    return code == AUTH_REQUIRED[0] and str(title or "").strip().lower() == AUTH_REQUIRED_TITLE
 
 
 def classify(code: int | None, subcode: int | None = None) -> str:
@@ -492,6 +511,9 @@ class GraphClient:
             details.update(_read_context(path, params))
             msg = _with_details(msg, details)
             kind = classify(code, sub)
+            if is_auth_required(code, sub, str(gerr.get("error_user_title") or "")):
+                raise self._stop(AuthRequired(f"Meta asks to authenticate this account ({code}/{sub}): {msg}",
+                                              code=code, subcode=sub))
             if kind == "policy":
                 raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
@@ -559,6 +581,9 @@ class GraphClient:
             code, sub = _int(gerr.get("code")), _int(gerr.get("error_subcode"))
             msg = str(gerr.get("message") or "Page validation refused")
             kind = classify(code)
+            if is_auth_required(code, sub, str(gerr.get("error_user_title") or "")):
+                raise self._stop(AuthRequired(f"Meta asks to authenticate this account ({code}/{sub}): {msg}",
+                                              code=code, subcode=sub))
             if kind == "policy":
                 raise self._stop(PolicyBlocked(msg, code=code, subcode=sub))
             if kind == "rate_limit":
@@ -652,6 +677,9 @@ class GraphClient:
             details = error_details(gerr, reply)
             msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
             kind = classify(code, sub)
+            if is_auth_required(code, sub, str(gerr.get("error_user_title") or "")):
+                raise self._stop(AuthRequired(f"Meta asks to authenticate this account ({code}/{sub}): {msg}",
+                                              code=code, subcode=sub))
             if kind == "policy":
                 raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
@@ -686,6 +714,34 @@ class GraphClient:
     #: ACL-2533: the address of the form-background upload (a web-session request, not a Graph path).
     FORM_PHOTO_PATH = "/ads/leadgen/upload/photo/"
 
+    def _leave_light_tab(self) -> None:
+        """ACL-2593: the upload needs the Ads Manager page (fb_dtsg / LSD), which a light work tab never has.
+
+        A light transport hands the lease over to an Ads Manager tab first (`leave_light`, set by the lease
+        owner) and the Page pinned for the writes is pinned again there. Nothing has been sent yet, so the
+        upload that follows is the only one. No hook or a failed switch: refused before sending.
+        """
+        old = self.transport
+        if getattr(old, "light", False) is not True:
+            return
+        hook = getattr(old, "leave_light", None)
+        if not callable(hook):
+            raise FormPhotoRefused("The work tab runs in the light mode and cannot upload the background "
+                                   "picture; nothing was sent.", code="light_tab")
+        try:
+            new = hook()
+            page = getattr(old, "write_page", None)
+            if new is None or getattr(new, "light", False) is True:
+                raise RuntimeError("no Ads Manager tab")
+            if page:
+                new.pin_page(page)
+        except GraphStop:
+            raise
+        except Exception as exc:  # noqa: BLE001 - nothing was sent: a plain refusal
+            raise FormPhotoRefused("The work tab could not be switched to Ads Manager for the background "
+                                   f"upload; nothing was sent ({type(exc).__name__}).", code="light_switch") from exc
+        self.transport = new
+
     def upload_form_photo(self, page_id: str, data: bytes, *, mime: str) -> dict:
         """ACL-2533: ONE upload of a lead form background as the pinned Page. Returns `{photo_id, width, height}`.
 
@@ -697,6 +753,7 @@ class GraphClient:
             raise ValueError("this transport cannot upload a form background")
         if self.stopped is not None:
             raise self.stopped
+        self._leave_light_tab()          # ACL-2593: before anything is counted or sent
         if self.calls >= self.max_calls:
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()

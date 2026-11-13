@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import threading
@@ -42,7 +43,7 @@ from src.fb_api.creator import (
     preflight_account,
 )
 from src.web.api_build_progress import BuildCounter
-from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
+from src.fb_api.graph import AuthRequired, CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -397,6 +398,22 @@ class ApiPublisher:
         self._load_before: dict[str, Any] | None = None
         #: ACL-2353: снимок ревью (имя кампании -> отпечаток, Page, пиксель); None - задание без ревью.
         self.reviewed: dict[str, Any] | None = None
+        #: ACL-2593: the job will upload a form-background picture: its work lease runs on the Ads Manager tab.
+        self.needs_form_photo = False
+        #: ACL-2593: why the lease left the light mode (telemetry `fallback_reason`); "" - it did not.
+        self.light_fallback_reason = ""
+
+    def plan_form_photo(self, drafts: list[Any], account_label: str = "") -> bool:
+        """ACL-2593: decide BEFORE the lease starts whether this job has to upload a form background.
+
+        ACL-2596: an "Automatic" Page is resolved from the Page list already stored on this computer (no reads).
+        """
+        try:
+            label = account_label or self.account_label
+            self.needs_form_photo = drafts_need_form_photo(drafts, auto_page=lambda: _stored_automatic_page(label))
+        except Exception:  # noqa: BLE001 - unknown = the safe side (Ads Manager mode)
+            self.needs_form_photo = True
+        return self.needs_form_photo
 
     # -- совместимость с `publish_jobs` (как у RpaPublisher)
     def cancel(self) -> None:
@@ -497,6 +514,15 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        try:
+            # ACL-2595: pressing Publish after the owner finished the Meta check lifts that one hold; a pending
+            # check is answered by Meta once and the stop sets the hold again.
+            from src.analysis_agent import account_spend as _as_
+            from src.fb_api import account_blocks as _b_
+
+            _b_.lift_auth_hold(_as_._profile_key(account_label), "publish")
+        except Exception:  # noqa: BLE001 - never breaks the open
+            log.debug("auth hold lift failed", exc_info=True)
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
@@ -622,9 +648,13 @@ class ApiPublisher:
             return _make_graph(tab, act, writes=not dry)
 
         _release_frozen_tab_cooldown(account_label)
+        from src.fb_api import light_tab as _light
+
         try:
-            self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
-                                       make_graph=make, ready_timeout=READY_TIMEOUT_S)
+            with (_light.force_ads_manager("form_photo_upload") if self.needs_form_photo and not dry
+                  else contextlib.nullcontext()):
+                self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
+                                           make_graph=make, ready_timeout=READY_TIMEOUT_S)
             _note_tab_recovered(account_label)
         except _warm.WarmError as exc:
             self._requeue_if_closed(exc)
@@ -632,6 +662,16 @@ class ApiPublisher:
         except GraphStop as exc:
             self._halt(exc)
         self.progress("profile attached (warm)")
+        if _work_mode_of_graph(self._lease.graph) == "ads_manager":
+            if self.needs_form_photo and _light.enabled():
+                self.light_fallback_reason = "form_photo_upload"
+        else:
+            # ACL-2593: a background upload that still reaches a light tab switches this lease first
+            def leave_light(lease=self._lease):
+                graph = reg.lease_to_ads_manager(lease, act, mode, make, "form_photo_upload")
+                self.light_fallback_reason = "form_photo_upload"
+                return graph
+            self._lease.graph.leave_light = leave_light
         self._finish_open(account_label, self._lease.graph)
         return True
 
@@ -691,6 +731,9 @@ class ApiPublisher:
         name = str(getattr(draft, "name", "") or "")
         if self.stop is not None:
             # Only the stop kind is named here (no Meta text), so there is nothing raw to hide.
+            if isinstance(self.stop, AuthRequired):
+                # ACL-2595: the account waits for its security check; no write and no read for this campaign.
+                return result_dict(Outcome(campaign_name=name), not_started=True, error=_plain.AUTH_NOT_STARTED)
             return result_dict(Outcome(campaign_name=name), not_started=True,
                                error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
@@ -802,6 +845,7 @@ class ApiPublisher:
                     duration_s=round(time.monotonic() - began, 1),
                     diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind,
                           "mode": _work_mode(self._client),
+                          **({"fallback_reason": self.light_fallback_reason} if self.light_fallback_reason else {}),
                           **({"auto_resumed": True} if self.auto_resumed else {}),
                           **_tab_load(exc)})
             _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
@@ -834,6 +878,7 @@ class ApiPublisher:
                          if outcome.operation else {}),
                       "copy_number": outcome.copy_number,
                       "mode": _work_mode(self._client),
+                      **({"fallback_reason": self.light_fallback_reason} if self.light_fallback_reason else {}),
                       **({"auto_resumed": True} if self.auto_resumed else {}),
                       **_tab_load(self._client.stopped)})
         _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
@@ -1011,6 +1056,67 @@ def _tab_load(stop: BaseException | None) -> dict[str, Any]:
     """ACL-2299: CPU %, memory %, page_count (before/after the tab clean-up) and the patient wait of a tab stop."""
     load = getattr(stop, "tab_load", None)
     return dict(load) if isinstance(load, dict) else {}
+
+
+def _work_mode_of_graph(graph: Any) -> str:
+    return "light" if getattr(graph, "light", False) is True else "ads_manager"
+
+
+def _stored_automatic_page(account_label: str) -> str:
+    """ACL-2596: the Page "Automatic" will pick (the first of the account's Page list, as `resolve_page` does),
+    read only from the list stored on this computer. "" - unknown (no fresh stored list): the caller stays safe."""
+    if not account_label:
+        return ""
+    from src.web import account_pages as _ap
+
+    hit = _ap.cached_pages(account_label)
+    rows = (hit or {}).get("pages") or []
+    first = rows[0] if rows and isinstance(rows[0], dict) else {}
+    pid = str(first.get("id") or "").strip()
+    return pid if pid.isdigit() else ""
+
+
+def drafts_need_form_photo(drafts: list[Any], template_loader: Any = None, auto_page: Any = None) -> bool:
+    """ACL-2593: True when publishing `drafts` has to upload at least one form-background picture.
+
+    Mirrors the creator: a template with a picture file on this computer (`cover_local_sha256`) needs an upload
+    unless its photo id for the draft's Page is already stored (`form_cover_store.cached_photo`) or the template
+    carries its own `cover_photo_id` of that Page. A draft without a Page yet ("Automatic") is judged by the Page
+    `auto_page()` names (ACL-2596, local data only); when that is unknown it cannot prove reuse and counts as
+    needing the upload. A form that turns out to exist already costs only the heavier tab.
+    """
+    from src.fb_api import form_cover_store as _store
+    from src.fb_api import form_templates as _ft
+
+    load = template_loader or _ft.get
+    auto: list[str] = []                      # the Automatic Page, looked up at most once and only when needed
+    for draft in drafts:
+        if getattr(draft, "errors", None):
+            continue
+        page = str(getattr(draft, "page_id", "") or "").strip()
+        resolved = False
+        for ad_set in getattr(draft, "ad_sets", None) or []:
+            for ad in getattr(ad_set, "ads", None) or []:
+                tid = str(getattr(ad, "lead_form_template", "") or "").strip()
+                if not tid or str(getattr(ad, "lead_form_id", "") or "").strip():
+                    continue
+                tpl = load(tid)
+                if not tpl:
+                    continue
+                sha = str(tpl.get("cover_local_sha256") or "")
+                if not sha or not _store.exists(tid, sha):
+                    continue                  # no picture (or it is on another computer: made without it)
+                if not page and not resolved:
+                    resolved = True
+                    if not auto:
+                        auto.append(str(auto_page() or "").strip() if callable(auto_page) else "")
+                    page = auto[0]
+                if tpl.get("cover_photo_id") and page and str(tpl.get("cover_page_id") or "") == page:
+                    continue
+                if page and _store.cached_photo(page, sha):
+                    continue
+                return True
+    return False
 
 
 def _work_mode(client: Any) -> str:

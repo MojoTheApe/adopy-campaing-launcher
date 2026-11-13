@@ -1835,6 +1835,9 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
     pending: list[Any] = list(ready)
     try:
         if ready and not _is_cancelled(job_id):
+            plan_photo = getattr(publisher, "plan_form_photo", None)
+            if callable(plan_photo):
+                plan_photo(ready, account_label=account_label)              # ACL-2593: the work tab mode is decided before the lease starts
             _open_with_load_requeue(job_id, publisher, account_label)
             _publish_pending(job_id, publisher, account_label, pending)
     except job_cancel.JobCancelled:
