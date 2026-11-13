@@ -2078,6 +2078,27 @@ def _build_compare(
         return None, "Could not calculate the earlier period; showing the selected period only."
 
 
+def _no_data_message(exc: BaseException) -> str:
+    """ACL-2607: why there is no stats data, in terms safe to show (no host, user or password)."""
+    if not bi_stats.bi_enabled() and (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() != "excel":
+        return ("BI is not connected on this computer, and there is no Stats workbook. "
+                "Sign in below to load the connection settings.")
+    return bi_stats.redact(str(exc))
+
+
+def _after_connections_change() -> None:
+    """ACL-2607: new connection settings mean a failed load may work now - drop the remembered
+    failure and the stale BI revision so the next request rebuilds, no restart."""
+    from src.web.cache import forget_background_error
+
+    forget_background_error()
+    if bi_stats.bi_enabled():
+        try:
+            bi_stats.refresh_revision(force=True)
+        except Exception:  # noqa: BLE001 - the next page load decides
+            pass
+
+
 def _render_report(
     request: Request,
     *,
@@ -2092,10 +2113,13 @@ def _render_report(
     try:
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
+        # ACL-2607: first run with no stats data - the page offers the Connections
+        # sign-in, because that is how a fresh computer gets its BI credentials.
         return templates.TemplateResponse(
             request,
             "error.html",
-            {"request": request, "title": "No data file", "message": str(e)},
+            {"request": request, "title": "No data file", "message": _no_data_message(e),
+             "connect": True},
             status_code=200,
         )
     except ValueError as e:
@@ -3930,6 +3954,7 @@ async def api_connections_sign_in() -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not sign in. Try again."}, status_code=500)
     checks = await asyncio.to_thread(cs.check_all)
+    await asyncio.to_thread(_after_connections_change)
     return JSONResponse({"ok": True, "updated": applied["updated"], "checks": checks})
 
 
@@ -3938,7 +3963,9 @@ async def api_connections_check() -> JSONResponse:
     """One read per connection; a green or red line each."""
     from src.analysis_agent import connection_settings as cs
 
-    return JSONResponse({"ok": True, "checks": await asyncio.to_thread(cs.check_all)})
+    checks = await asyncio.to_thread(cs.check_all)
+    await asyncio.to_thread(_after_connections_change)
+    return JSONResponse({"ok": True, "checks": checks})
 
 
 @app.get("/api/connections/shareable")

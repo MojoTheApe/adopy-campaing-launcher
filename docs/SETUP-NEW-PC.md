@@ -71,6 +71,9 @@ and *Step N of 7*. Nothing is published during setup, and no campaign is touched
    each: *Team library: connected (N targets, M texts)* and *BI: connected (last
    data date …)*. Click **Next**. You may skip this step and do it later in the
    dashboard (**Connections**). A red line gives its reason; see the table below.
+   If you skip it and have no Stats workbook, the dashboard opens on a **No data
+   file** page saying *BI is not connected on this computer*. Click **Sign in with
+   Google** on that page (then **Check again** if needed); no restart is needed.
 4. **Your name.** Type it exactly as in the CM column (or as BI knows you). ACL
    finds your ad accounts by this name. Click **Next**.
 5. **Local files.** Fill in both, then click **Next**. ACL opens the workbook
