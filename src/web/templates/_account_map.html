@@ -24,8 +24,6 @@
       </span>
     </div>
 
-    {% if amap.saved_source_check and amap.saved_source_check.rows %}{% include "_saved_source_comparison.html" %}{% endif %}
-
     {#- Общий поиск аккаунтов над списком стран: по имени аккаунта и имени из книги (в нём профиль). Фильтрует строки во всех
         странах, скрывает страны без совпадений, раскрывает совпавшие, не меняя запомненное раскрытие (`amapSearch*` в report.html). -#}
     <div class="amap-search-row" role="search">
