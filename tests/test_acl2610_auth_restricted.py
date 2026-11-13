@@ -136,3 +136,47 @@ def test_status_only_clear_is_stored_when_nothing_restricted_is_kept(store):
 
 def test_next_step_for_plain_restricted_is_unchanged():
     assert ns.next_step("restricted", "Ad account is restricted: payment is unsettled").startswith("Check Billing")
+
+
+# ── ошибка записи/чтения 31/3858385 (образец publish 13.11; тексты Meta из него) ──
+
+WRITE_MSG = ("We think someone may have tried to access your account without permission. For your protection, "
+             "you won't be able to create or modify ads until you authenticate your account in Ads Manager.")
+
+
+def _auth_stop():
+    from src.fb_api import graph as g
+    return g.AuthRequired(f"Meta asks to authenticate this account (31/3858385): {WRITE_MSG}",
+                          code=31, subcode=3858385)
+
+
+def _no_hold(monkeypatch):
+    monkeypatch.setattr(api._blocks, "note_stop", lambda *a, **k: False)
+
+
+def test_write_stop_31_3858385_marks_the_account_restricted_without_requests(store, monkeypatch):
+    _no_hold(monkeypatch)
+    api._start_cooldown("profile-key", _auth_stop(), ACC)
+    got = sp.get_status(ACC)
+    assert got["status"] == "restricted" and got["source"] == "api"
+    assert got["status_text"] == api.AUTH_RESTRICTED_TEXT and "Start authentication" in got["next_step"]
+
+
+def test_plain_code_pair_without_the_class_also_counts(store, monkeypatch):
+    from src.fb_api import graph as g
+    _no_hold(monkeypatch)
+    api._start_cooldown("profile-key", g.Checkpoint("x", code=31, subcode=3858385), ACC)
+    assert sp.get_status(ACC)["status"] == "restricted"
+
+
+def test_other_stops_do_not_touch_the_status(store, monkeypatch):
+    from src.fb_api import graph as g
+    _no_hold(monkeypatch)
+    api._start_cooldown("profile-key", g.Checkpoint("x", code=1, subcode=2), ACC)
+    api._start_cooldown("profile-key", g.RateLimited("x", code=17), ACC)
+    assert not sp.get_status(ACC).get("status")
+
+
+def test_write_error_phrases_match_the_matcher():
+    for text in ("Please authenticate your account", WRITE_MSG):
+        assert api.is_auth_restriction({"summary": text, "message": ""})

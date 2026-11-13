@@ -179,8 +179,12 @@ _LONG_NUM_RE = re.compile(r"\d{6,}")
 _TOKEN_RE = re.compile(r"EAA[A-Za-z0-9]{10,}")
 #: Фразы баннера Meta. НЕПРОВЕРЕНО на живом образце (кабинет уже прошёл проверку):
 #: подобраны по тексту баннера и по старому списку RPA («we restricted your ad account»).
+#: Образец с ошибки записи (publish 13.11, код 31 / подкод 3858385) добавил две последние фразы.
 _AUTH_PHRASES = ("restricted your ad account", "authenticate your account", "authenticate your ad account",
-                 "start authentication", "confirm your identity to keep running ads")
+                 "start authentication", "confirm your identity to keep running ads",
+                 "please authenticate your account", "authenticate your account in ads manager")
+#: Graph-код «Please authenticate your account»: чтение и запись отвечают им, а `account_status` остаётся 1.
+AUTH_CODE, AUTH_SUBCODE = 31, 3858385
 MAX_ISSUES = 20
 
 
@@ -216,6 +220,25 @@ def is_auth_restriction(issue: dict) -> bool:
     """Это проблема «кабинет ограничен, пройдите аутентификацию»? Только по тексту Meta."""
     text = f"{issue.get('summary', '')} {issue.get('message', '')}".lower()
     return any(p in text for p in _AUTH_PHRASES)
+
+
+def is_auth_stop(stop: Any) -> bool:
+    """Стоп Graph «authenticate your account»: класс `AuthRequired` или пара 31/3858385."""
+    return (getattr(stop, "code", None) == AUTH_CODE and getattr(stop, "subcode", None) == AUTH_SUBCODE)         or type(stop).__name__ == "AuthRequired"
+
+
+def note_auth_stop(stop: Any, account: str) -> bool:
+    """Стоп 31/3858385 по кабинету → его статус `restricted` с шагом аутентификации (ACL-2610).
+
+    Ни одного запроса: стоп уже получен чтением или записью. Идёт через `put_status` (правила ACL-2419).
+    """
+    if not account or not is_auth_stop(stop):
+        return False
+    try:
+        return _as.put_status(account, "restricted", AUTH_RESTRICTED_TEXT, source="api", at=_as._now())  # noqa: SLF001
+    except Exception:  # noqa: BLE001 — статус вторичен, стоп важнее
+        log.exception("Could not store the authentication status of %s", account)
+        return False
 
 
 def has_auth_restriction(issues: Any) -> bool:
@@ -424,6 +447,7 @@ def _start_cooldown(key: str, stop: GraphStop, label: str = "") -> None:
     secs = COOLDOWN_S.get(stop.kind)
     if secs is None:
         return
+    note_auth_stop(stop, label)
     # ACL-2091: checkpoint, a login page, a policy block and a frozen tab whose replacement is spent are
     # holds: persisted, no timer, lifted only by a person (Retry). Everything else stays a timed pause.
     if _blocks.note_stop(key, label, stop, replacement_spent=_replacement_spent(key)):
