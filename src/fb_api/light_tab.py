@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import atexit
 import base64
+import contextlib
+import contextvars
 import json
 import os
 import secrets
@@ -39,7 +41,8 @@ FLAG = "ACL_LIGHT_WORK_TAB"
 
 #: Fallback reasons (spec 5.5); the only texts that leave this module besides booleans.
 REASONS = frozenset({"handover_no_listener", "handover_timeout", "handover_rejected", "light_doc_failed",
-                     "light_doc_wrong_origin", "light_doc_replaced", "work_tab_dead", "flag_off"})
+                     "light_doc_wrong_origin", "light_doc_replaced", "work_tab_dead", "flag_off",
+                     "form_photo_upload"})
 
 
 def enabled(env: dict | None = None) -> bool:
@@ -50,6 +53,27 @@ def enabled(env: dict | None = None) -> bool:
     """
     value = (env if env is not None else os.environ).get(FLAG, "")
     return str(value).strip().lower() not in ("0", "false", "no", "off")
+
+
+#: ACL-2593: a lease that is known to need the Ads Manager page (a form-background upload) says so here, before
+#: the lease starts. Not a failure of the light page: it is not counted as a light fallback.
+_FORCED: "contextvars.ContextVar[str]" = contextvars.ContextVar("acl_light_forced_reason", default="")
+
+
+@contextlib.contextmanager
+def force_ads_manager(reason: str):
+    """Leases prepared inside this block run on the Ads Manager tab (`reason` is in `REASONS`)."""
+    if reason not in REASONS:
+        raise ValueError("unknown light fallback reason")
+    token = _FORCED.set(reason)
+    try:
+        yield
+    finally:
+        _FORCED.reset(token)
+
+
+def forced_reason() -> str:
+    return _FORCED.get()
 
 
 def _body(marker: str) -> bytes:
