@@ -54,9 +54,8 @@ from src.fb_api import image_convert as _imgconv
 from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
-from src.fb_api.telemetry import mask_id as _mask_id
+from src.fb_api.telemetry import mask_id as _mask_id, scrub
 from src.fb_api.graph import FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
-from src.fb_api.telemetry import scrub
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
@@ -2757,7 +2756,8 @@ class CampaignCreator:
         rows = self._creative_listing(plan, fresh=fresh)
         # Explicit ownership by another ACL campaign is not our orphan. A name
         # suffix alone is not ownership: untagged legacy creatives still reconcile.
-        same = [r for r in rows if _cr.same_ad(r.get("name"), stem)
+        # ACL-2589: a DELETED creative is never a candidate (a resume or replacement must not reuse a deleted twin).
+        same = [r for r in rows if _cr.same_ad(r.get("name"), stem) and not self._creative_gone(row=r)
                 and not any(label.startswith("acl-") and label != plan.label
                             for label in _labels(r))]
         # A creative of an earlier repeat that the listing returned only partly is not stopped on (that blocked
@@ -2768,6 +2768,8 @@ class CampaignCreator:
         for r in same:
             if not (str(r.get("account_id") or "") == plan.act.removeprefix("act_") and _cr.complete(params, r)):
                 r = self._reread_creative(r)
+                if r and self._creative_gone(row=r):
+                    continue
                 if not (r and str(r.get("account_id") or "") == plan.act.removeprefix("act_")
                         and _cr.complete(params, r)):
                     continue
@@ -2789,16 +2791,15 @@ class CampaignCreator:
         Only these two answers mean "stale receipt". Rate limits, 5xx, timeouts and every other code are not:
         they keep the ordinary handling (the caller re-raises)."""
         if exc is not None:
-            return (isinstance(exc, GraphError) and exc.code == 100 and exc.subcode == 33)
-        return isinstance(row, dict) and "DELETED" in (str(row.get("status") or "").upper(),
-                                                       str(row.get("effective_status") or "").upper())
+            return isinstance(exc, GraphError) and exc.code == 100 and exc.subcode == 33
+        return isinstance(row, dict) and str(row.get("status") or "").upper() == "DELETED"
 
     def _log_creative_gone(self, creative_id: str, exc: Exception | None, row: Any = None) -> None:
         code = getattr(exc, "code", None)
         sub = getattr(exc, "subcode", None)
         msg = scrub(str(exc)) if exc is not None else f"status={scrub(str((row or {}).get('status')))}"
-        log.warning("stale creative receipt: creative %s is gone in Meta (code=%s subcode=%s): %s",
-                    scrub(creative_id), code, sub, msg)
+        log.warning("stale creative receipt: creative %s not found or not accessible in Meta (code=%s subcode=%s): %s",
+                    _mask_id(creative_id), code, sub, msg)
 
     def _recoverable_creative(self, out: Outcome, plan: CampaignPlan, ad: AdPlan,
                              ad_set: AdSetPlan, media: dict, name: str) -> tuple[str, bool]:

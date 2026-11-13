@@ -9,7 +9,7 @@ from tests.test_acl1761_api_create import ACT, FakeMeta, _draft, _run, g
 
 #: Fields that exist on the AdCreative node (what creative_recovery.FIELDS may ask for). Graph answers (#100) otherwise.
 CREATIVE_FIELDS = {"id", "name", "account_id", "adlabels", "object_story_spec", "asset_feed_spec",
-                   "degrees_of_freedom_spec", "contextual_multi_ads", "instagram_user_id"}
+                   "degrees_of_freedom_spec", "contextual_multi_ads", "instagram_user_id", "status"}
 
 
 def _top_level(fields):

@@ -16,7 +16,7 @@ from pathlib import Path
 from config.paths import get_local_config_dir, machine_file_lock, _atomic_write
 
 FIELDS = ("id,name,account_id,adlabels{name},object_story_spec,asset_feed_spec,"
-          "degrees_of_freedom_spec,contextual_multi_ads,instagram_user_id")
+          "degrees_of_freedom_spec,contextual_multi_ads,instagram_user_id,status")
 
 
 def material(params):
