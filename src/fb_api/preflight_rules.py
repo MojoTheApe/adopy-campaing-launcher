@@ -132,7 +132,6 @@ _TOPIC_OF = {
     "vertical_needs_main": "creative",
     "vertical_ratio": "creative",
     "texts_limit": "creative",
-    "texts_vertical": "creative",
     "texts_dynamic": "creative",
     "devices_consistent": "audience",
     "start_time_valid": "budget",
@@ -215,8 +214,6 @@ RULES: list[dict[str, Any]] = [
     _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
        "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
-       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
     _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
        _wp.MSG_TEXTS_DYNAMIC_SET,
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -494,8 +491,6 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "texts_limit":
             out.append(_per_ad(rid, inp, lambda a, st: any(
                 len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
-        elif rid == "texts_vertical":
-            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
             # ACL-2584: only a Website ad set runs several texts as Dynamic Creative (one ad per set); an
             # Instant Form ad set uses placement rules (Ads Manager shape) and takes as many ads as Meta allows.

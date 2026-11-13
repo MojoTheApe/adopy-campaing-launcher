@@ -168,19 +168,6 @@ def test_a_website_feed_is_unchanged(tmp_path):
     assert next(o for o in meta.objects.values() if o["_kind"] == "adset")["is_dynamic_creative"] is True
 
 
-def test_a_stories_reels_file_on_a_form_ad_is_still_refused_before_any_write(tmp_path):
-    meta = FormMeta()
-    for texts in (0, 2):
-        d = _draft(tmp_path, texts=texts, vertical=True)
-        with pytest.raises(cr.PlanError, match="Stories / Reels file works only with a Website ad set"):
-            cr.plan_from_draft(d)
-        try:
-            _run(meta, d)
-        except cr.PlanError:
-            pass
-    assert meta.posts == []
-
-
 def test_a_website_dynamic_ad_must_still_be_alone_in_its_ad_set(tmp_path):
     from tests.test_acl1774_texts_vertical import _ad_with
     d = _ad_with(tmp_path, vertical=None, texts=1)
@@ -672,7 +659,7 @@ def test_check_plan_rules_let_several_texts_pass_for_a_form_ad_set():
     inp = {"destination": "instant_form", "objective": "leads", "link": "https://example.invalid/l", "country": "US",
            "ads": [{"file": "a.png", "form_id": FORM, "bodies": ["a", "b"], "headlines": ["h1", "h2"]}]}
     rules = {v["rule"]: v for v in pf.evaluate_client(inp)}
-    for rule in ("texts_vertical", "texts_dynamic", "texts_limit", "feed_texts"):
+    for rule in ("texts_dynamic", "texts_limit", "feed_texts"):
         assert rules[rule]["status"] == "ok", rules[rule]
 
 

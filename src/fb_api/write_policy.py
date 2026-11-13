@@ -154,8 +154,6 @@ ASSET_FEED_TEXTS_WITH_RULES = 1
 #: Ключ набора, включающий Dynamic Creative: только значение True.
 DYNAMIC_KEY = "is_dynamic_creative"
 #: Тексты отказов (один источник для плана, предпроверки и страницы).
-MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be combined: Meta applies one "
-                      "text per placement group. Use several texts without the vertical file, or one text with it.")
 MSG_TEXTS_DYNAMIC_SET = ("An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an "
                          "ad set: move the other ads of this ad set to a separate ad set")
 #: ACL-2584: лента Instant Form с несколькими текстами - форма Ads Manager (HAR владельца 2026-11-11, вариант A2):
@@ -380,21 +378,78 @@ def _check_customization_spec(cs: Any, refuse: Any) -> None:
             refuse(f"{key} value is not allowed")
 
 
-def _instant_labelled_list(spec: dict, kind: str, refuse: Any, *, texts: bool) -> list:
-    """Список ассетов ленты Instant Form: у каждого ровно наши метки (первый - обе, остальные - основную)."""
+def _instant_labelled_list(spec: dict, kind: str, refuse: Any, *, texts: bool, files: bool = False) -> list:
+    """Список ассетов размеченной ленты: у каждого ровно наши метки (первый - обе, остальные - основную).
+
+    ACL-2611: `files` - список файлов (1-2): один файл несёт обе метки, два - основной метку основного правила,
+    вертикальный метку вертикального.
+    """
     items = spec.get(kind)
     main, vertical = instant_labels(kind)
-    cap = ASSET_FEED_MAX_TEXTS if texts else 1
+    cap = ASSET_FEED_MAX_TEXTS if texts else (ASSET_FEED_MAX_MEDIA if files else 1)
     if not (isinstance(items, list) and 1 <= len(items) <= cap):
         refuse(f"{kind} must hold 1-{cap} items")
     for n, item in enumerate(items):
         want = [main, vertical] if n == 0 else [main]
+        if files and len(items) == 2:
+            want = [main] if n == 0 else [vertical]
         if not isinstance(item, dict):
             refuse(f"{kind} item must be an object")
         labels = item.get("adlabels")
         if not (isinstance(labels, list) and labels == [{"name": x} for x in want]):
             refuse(f"{kind} item {n + 1} must carry exactly the labels {want}")
     return items
+
+
+def _has_labelled_text(spec: dict, kind: str) -> bool:
+    items = spec.get(kind)
+    return isinstance(items, list) and any(isinstance(x, dict) and "adlabels" in x for x in items)
+
+
+def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> None:
+    """ACL-2611: Website, несколько текстов + вертикальный файл - размеченная лента (форма Ads Manager, ACL-2584).
+
+    Ровно два файла (основной и вертикальный) с метками, тексты 1-5 непустых: все с основной меткой, первый ещё с
+    вертикальной; ссылка https с обеими метками; два правила, каждое называет метки всех видов ассета. Без заголовка
+    такая лента не проверена (как у Website с одним текстом).
+    """
+    present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_kind]
+    if "titles" not in spec:
+        refuse("titles must hold 1-5 non-empty texts (a Website ad with several texts and no headline is not verified yet)")
+    for kind in ("bodies", "titles", "descriptions"):
+        if kind not in spec:
+            continue
+        limit = ASSET_FEED_TEXT_MAX[kind]
+        for item in _instant_labelled_list(spec, kind, refuse, texts=True):
+            text = item.get("text")
+            if set(item) != {"text", "adlabels"} or not isinstance(text, str) or not text.strip():
+                refuse(f"{kind} must hold non-empty texts with labels only")
+            if len(text) > limit:
+                refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
+    files = _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True)
+    if len(files) != 2:
+        refuse(f"{media_kind} must hold the main and the Stories/Reels file")
+    link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
+    if set(link) != {"website_url", "adlabels"} or not (isinstance(link["website_url"], str)
+                                                         and link["website_url"].startswith("https://")):
+        refuse("link_urls must hold one https website_url")
+    ctas = spec.get("call_to_action_types")
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_WEBSITE):
+        refuse("call_to_action_types must hold one allowed button")
+    want = "SINGLE_IMAGE" if media_kind == "images" else "SINGLE_VIDEO"
+    if spec.get("ad_formats") != [want]:
+        refuse(f"ad_formats must be exactly [{want!r}]")
+    rules = spec.get("asset_customization_rules")
+    if not (isinstance(rules, list) and len(rules) == 2):
+        refuse("two files need exactly two rules")
+    for n, rule in enumerate(rules):
+        label_keys = {INSTANT_ASSET_KINDS[k][1]: instant_labels(k)[n] for k in present}
+        if not (isinstance(rule, dict) and set(rule) == {"customization_spec"} | set(label_keys)):
+            refuse("rule keys are not allowed")
+        for key, name in label_keys.items():
+            if rule[key] != {"name": name}:
+                refuse(f"rule {key} must name {name!r}")
+        _check_customization_spec(rule["customization_spec"], refuse)
 
 
 def _check_instant_feed(spec: dict, refuse: Any) -> None:
@@ -432,17 +487,17 @@ def _check_instant_feed(spec: dict, refuse: Any) -> None:
                 refuse(f"{kind} must hold non-empty texts with labels only")
             if len(text) > limit:
                 refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
-    media = _instant_labelled_list(spec, media_kind, refuse, texts=False)[0]
-    if media_kind == "images":
-        ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str) \
-            and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
-    else:
-        thumb = media.get("thumbnail_url")
-        ok = set(media) == {"video_id", "thumbnail_url", "adlabels"} \
-            and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"])) \
-            and isinstance(thumb, str) and thumb.startswith("https://")
-    if not ok:
-        refuse(f"{media_kind} item is not allowed")
+    for media in _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True):
+        if media_kind == "images":
+            ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str) \
+                and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+        else:
+            thumb = media.get("thumbnail_url")
+            ok = set(media) == {"video_id", "thumbnail_url", "adlabels"} \
+                and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"])) \
+                and isinstance(thumb, str) and thumb.startswith("https://")
+        if not ok:
+            refuse(f"{media_kind} item is not allowed")
     link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
     if set(link) != {"website_url", "adlabels"} or link["website_url"] != LEAD_FEED_LINK:
         refuse("link_urls must hold the Instant Form placeholder link")
@@ -516,6 +571,9 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     media = spec[kind]
     if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
         refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
+    if len(media) > 1 and any(_has_labelled_text(spec, k) for k in ("bodies", "titles", "descriptions")):
+        _check_website_labelled_feed(spec, kind, refuse)  # ACL-2611: тексты с метками правил + два файла
+        return
     cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
     for kind_name in ("bodies", "titles", "descriptions"):
         # Длина - отдельная причина: «1-N текстов» скрыла бы её (ACL-1774).

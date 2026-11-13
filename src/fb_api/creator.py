@@ -468,7 +468,9 @@ class AdSetPlan:
         ACL-2584: Instant Form не Dynamic Creative: несколько текстов идут лентой с правилами площадок (форма
         Ads Manager), набор обычный и берёт объявлений сколько позволит Meta.
         """
-        return not self.instant and any(a.multi_text for a in self.ads)
+        # ACL-2611: несколько текстов + вертикальный файл - лента с метками и правилами (форма Ads Manager),
+        # не Dynamic Creative: набор обычный.
+        return not self.instant and any(a.multi_text and not a.vertical_path for a in self.ads)
 
 
 @dataclass
@@ -634,10 +636,9 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         if warnings is not None:
             warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
                             "it will be used once as the main file.")
-    if plan_ad.multi_text and vertical:
-        # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
-        # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
-        problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
+    # ACL-2611: несколько текстов + вертикальный файл больше не отказ. Живой прогон 2026-10-14 (ACL-1774): Meta
+    # отказала ленте с НЕразмеченными текстами и двумя правилами; ACL-2584 (12.11): тексты с метками правил принят.
+    # Все тексты идут на основной файл, первый текст каждого вида - ещё и на Stories/Reels (`feed_spec`).
     # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 never blocks. `bodies` already
     # holds only the non-empty texts in order; with none, the ad goes without a primary text (warning only).
     if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
@@ -650,12 +651,6 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         elif plan_ad.vertical_kind != plan_ad.kind:
             problems.append(f"Ad {i}: the main file is {plan_ad.kind} and the Stories / Reels file is "
                             f"{plan_ad.vertical_kind}; use two images or two videos")
-    if plan_ad.uses_feed and plan_set.instant and plan_ad.vertical_path:
-        # ACL-2528: several texts + ONE file work on an Instant Form (asset feed with the form in its button);
-        # a Stories / Reels file next to it still needs placement rules, which are not verified on a form yet.
-        problems.append(f"Ad {i}: a Stories / Reels file works only with a Website ad set for now "
-                        "(Instant Form with placement rules is not verified on Meta yet); "
-                        "use one file for this ad, or switch the ad set to Website")
 
 
 def placement_targeting(placements: dict | None) -> dict:
@@ -3505,6 +3500,8 @@ class CampaignCreator:
         """
         if instant:
             return CampaignCreator.instant_feed_spec(ad, media)
+        if ad.vertical_path and ad.multi_text:
+            return CampaignCreator.website_labelled_feed_spec(plan, ad, media)  # ACL-2611
         key = "videos" if ad.kind == "video" else "images"
 
         def item(m: dict, label: str | None) -> dict:
@@ -3545,34 +3542,79 @@ class CampaignCreator:
         return {}, CampaignCreator.rule_positions(placements if manual else None)[1]
 
     @staticmethod
-    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
-        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+    def _labelled_texts_and_files(ad: AdPlan, media: dict, spec: dict) -> str:
+        """Тексты, файлы и их метки ленты (ACL-2584, ACL-2611); возвращает ключ файлов (`images`/`videos`).
 
-        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
-        Файл один с обеими метками; набор не Dynamic Creative. Форма Страницы - в кнопке ленты.
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый
+        текст). Один файл несёт обе метки; два файла (ACL-2611) - основной метку основного правила, вертикальный -
+        метку вертикального.
         """
         def labelled(key: str, row: dict, first: bool) -> dict:
             main, vertical = _wpol.instant_labels(key)
             return {**row, "adlabels": [{"name": main}] + ([{"name": vertical}] if first else [])}
 
+        def file_row(m: dict) -> dict:
+            return ({"video_id": m["video_id"], "thumbnail_url": m["thumb"]} if ad.kind == "video"
+                    else {"hash": m["image_hash"]})
+
         media_key = "videos" if ad.kind == "video" else "images"
-        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
         for key, texts in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
             if texts:  # ACL-2474: пустой вид текста ключ не отправляет
                 spec[key] = [labelled(key, {"text": t}, n == 0) for n, t in enumerate(texts)]
         if "titles" not in spec:
             # ACL-2584: без заголовка уходит ровно один пустой, как у Ads Manager (HAR владельца): Meta его сохранила.
             spec["titles"] = [labelled("titles", {"text": ""}, True)]
-        file_row = ({"video_id": media["video_id"], "thumbnail_url": media["thumb"]} if ad.kind == "video"
-                    else {"hash": media["image_hash"]})
-        spec[media_key] = [labelled(media_key, file_row, True)]
-        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK}, True)]
+        if ad.vertical_path:
+            main_l, vert_l = _wpol.instant_labels(media_key)
+            spec[media_key] = [{**file_row(media), "adlabels": [{"name": main_l}]},
+                               {**file_row(media["vertical"]), "adlabels": [{"name": vert_l}]}]
+        else:
+            spec[media_key] = [labelled(media_key, file_row(media), True)]
+        return media_key
+
+    @staticmethod
+    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
+        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
+        Файл один с обеими метками (ACL-2611: с вертикальным файлом - два, по метке на файл); набор не Dynamic
+        Creative. Форма Страницы - в кнопке ленты.
+        """
+        def labelled(key: str, row: dict) -> dict:
+            main, vertical = _wpol.instant_labels(key)
+            return {**row, "adlabels": [{"name": main}, {"name": vertical}]}
+
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
+        media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
+        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK})]
         spec["call_to_action_types"] = [ad.cta]
         spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
                                                               "lead_gen_form_id": ad.form_id}}]
         spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
         present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
         main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
+        spec["asset_customization_rules"] = [
+            {"customization_spec": positions,
+             **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
+            for n, positions in enumerate((main_pos, vert_pos))]
+        return spec
+
+    @staticmethod
+    def website_labelled_feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
+        """ACL-2611: Website, несколько текстов + вертикальный файл - та же размеченная лента, что у Instant Form.
+
+        Основной файл - метка основного правила, вертикальный - метка вертикального; все тексты - основная метка,
+        первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
+        двумя файлами (`rule_positions`). Набор не Dynamic Creative.
+        """
+        spec: dict[str, Any] = {}
+        media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
+        main_l, vert_l = _wpol.instant_labels("link_urls")
+        spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
+        spec["call_to_action_types"] = [ad.cta]
+        spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
+        present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
+        main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
         spec["asset_customization_rules"] = [
             {"customization_spec": positions,
              **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
@@ -4083,6 +4125,12 @@ class CampaignCreator:
                         # хэшем под двумя метками («All ad asset values must be unique», живой прогон
                         # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
                         # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        if ad.multi_text and not s.instant:
+                            # ACL-2611: с одним файлом несколько текстов Website - Dynamic Creative, а набор уже
+                            # построен как обычный (вертикальный файл был): не угадываем, отказ до записи.
+                            raise PlanError(f"ad {ad.index}: the Stories / Reels file is the same picture or video as "
+                                            "the main file; remove it (several texts then run as Dynamic Creative) "
+                                            "or choose a different Stories / Reels file", key="creative_file")
                         ad.vertical_path = ad.vertical_kind = ""
                         out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
                                             "it will be used once as the main file.")
@@ -4657,7 +4705,8 @@ class CampaignCreator:
             self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.dynamic:
                 sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
-            elif ad_set.instant and any(a.uses_feed for a in ad_set.ads):
+            elif any((ad_set.instant and a.uses_feed) or (a.multi_text and a.vertical_path) for a in ad_set.ads):
+                # ACL-2611: Website with a Stories / Reels file takes the same labelled shape as an Instant Form.
                 sets[-1]["creative_mode"] = ("Several texts with placement rules (Stories / Reels show the first "
                                              "text; any number of ads in this ad set)")
             if ad_set.instant:
@@ -4980,9 +5029,12 @@ class CampaignCreator:
             # ACL-2290: Meta returns [' '] for "none"; whitespace-only values count as empty on both sides.
             return [v for v in values if str(v).strip()]
 
+        # ACL-2611: a Website ad with several texts and a vertical file uses the same labelled shape as an Instant Form.
+        labelled = instant or (bool(ad.vertical_path) and ad.multi_text)
+
         def listed(values: list[str]) -> list[str]:
-            # ACL-2584: on an Instant Form feed the texts are compared as a set (Meta may reorder them).
-            return sorted(values) if instant else values
+            # ACL-2584: on a labelled feed the texts are compared as a set (Meta may reorder them).
+            return sorted(values) if labelled else values
 
         check(aobj, "primary_texts", listed(nonblank(list(ad.bodies))), listed(nonblank(texts("bodies"))))
         check(aobj, "headlines", listed(nonblank(list(ad.titles))), listed(nonblank(texts("titles"))))
@@ -5032,9 +5084,10 @@ class CampaignCreator:
                 raw = raw.get("data")
             return sorted(str(x.get("name") or "") for x in raw if isinstance(x, dict)) if isinstance(raw, list) else []
 
-        if instant:
+        if labelled:
             # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
-            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            if instant:
+                check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
                     continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
@@ -5044,7 +5097,8 @@ class CampaignCreator:
                       sorted(str(x.get("text")) for x in got if main in names_of(x)))
                 check(aobj, kind + "_vertical_label", [base[0]],
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
-            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
+            main_pos, vert_pos = (self.instant_rule_positions(ad.placements) if instant
+                                  else self.rule_positions(ad.placements))
             media_key = "videos" if ad.kind == "video" else "images"
             # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
@@ -5067,12 +5121,14 @@ class CampaignCreator:
                 check(aobj, f"rule_{name}_placements",
                       {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")},
                       {k: sorted(cs.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")})
+        main_label, vert_label = _wpol.instant_labels(key) if labelled else (LABEL_MAIN, LABEL_VERTICAL)
         by_label = {label_of(r): str(r.get(id_key) or "") for r in rows}
-        bound = {"main": by_label.get(LABEL_MAIN) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
-        bound["vertical"] = by_label.get(LABEL_VERTICAL, "")
+        bound = {"main": by_label.get(main_label) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
+        bound["vertical"] = by_label.get(vert_label, "")
         check(aobj, "file_count", 2 if ad.vertical_path else 1, len(rows))
         if ad.vertical_path:
-            check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
+            # ACL-2611: each file carries exactly its own label (main file -> main rule, vertical file -> Stories/Reels rule).
+            check(aobj, "media_labels", [main_label, vert_label], [label_of(r) for r in rows])
         elif instant:
             check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), sorted(n for r in rows for n in names_of(r)))
         else:
@@ -5094,7 +5150,7 @@ class CampaignCreator:
                     check(aobj, name, str(made), got)
                 if data and got and got != _md5(data):
                     extra.append((aobj, path, got))
-        if ad.vertical_path:
+        if ad.vertical_path and not labelled:
             # Какие площадки получили какой файл: правило на метку должно нести ровно наши площадки.
             main_pos, vert_pos = self.rule_positions(ad.placements)
             label_key = "video_label" if ad.kind == "video" else "image_label"

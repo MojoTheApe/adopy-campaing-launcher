@@ -136,7 +136,9 @@ def test_accepted_path_aliases_do_not_block_multiple_texts_in_real_client_audit(
         window.cbAdLibraryEntry = name => ({body: name, headline: name, description: ''});
         cbTree.refreshEditor();
     }""", alias)
-    rule = page.locator('.cbd-pf-line[data-rule="texts_vertical"]')
+    # ACL-2611: several texts with a Stories / Reels file no longer have a rule of their own.
+    assert page.locator('.cbd-pf-line[data-rule="texts_vertical"]').count() == 0
+    rule = page.locator('.cbd-pf-line[data-rule="texts_dynamic"]')
     assert rule.count() == 1, 'Real exported rulebook must be present'
     assert 'cbd-pf-ok' in rule.get_attribute('class'), rule.inner_text()
 

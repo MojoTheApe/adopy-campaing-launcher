@@ -130,15 +130,6 @@ def test_a_sixth_text_is_refused_before_any_write(tmp_path):
     assert meta.posts == []
 
 
-def test_an_instant_form_ad_with_a_stories_reels_file_is_refused_not_guessed(tmp_path):
-    """ACL-2528: несколько текстов на форме разрешены (один файл); вертикальный файл на форме - по-прежнему нет."""
-    d = _ad_with(tmp_path, texts=0)
-    d.ad_sets[0].destination = "instant_form"
-    d.ad_sets[0].ads[0].lead_form_id = "123456"
-    with pytest.raises(cr.PlanError, match="Stories / Reels file works only with a Website ad set"):
-        cr.plan_from_draft(d)
-
-
 # ───────────────────────── вертикальный файл ─────────────────────────
 
 def test_a_vertical_file_goes_up_with_two_labelled_files_and_two_rules(tmp_path):
@@ -155,20 +146,6 @@ def test_a_vertical_file_goes_up_with_two_labelled_files_and_two_rules(tmp_path)
     assert "story" not in rules["acl_main"]["facebook_positions"] and "feed" in rules["acl_main"]["facebook_positions"]
     assert all(p["status"] == (cr.PAUSED if path.endswith("/campaigns") else cr.CHILD_STATUS)
                for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
-
-
-def test_texts_and_the_vertical_file_together_are_refused_before_any_write(tmp_path):
-    """Живой прогон 2026-10-14 (Doc120): Meta отказала 100/1885878 - правило берёт один текст."""
-    for texts in (1, 3):
-        meta = FakeMeta()
-        with pytest.raises(cr.PlanError) as e:
-            cr.plan_from_draft(_ad_with(tmp_path, texts=texts))
-        assert wp.MSG_TEXTS_VERTICAL in str(e.value)
-        try:
-            _run(meta, _ad_with(tmp_path, texts=texts))
-        except cr.PlanError:
-            pass
-        assert meta.posts == []
 
 
 def test_a_vertical_file_with_one_text_has_one_body_and_labelled_rules(tmp_path):
@@ -235,15 +212,10 @@ def test_the_check_plan_shows_the_vertical_file_and_refuses_the_combination_with
     ad = out.plan["ad_sets"][0]["ads"][0]
     assert ad["vertical_file"] and len(ad["creative"]["asset_feed_spec"]["bodies"]) == 1
     assert len(ad["creative"]["asset_feed_spec"]["asset_customization_rules"]) == 2
-    for texts, msg in ((1, wp.MSG_TEXTS_VERTICAL),):
-        meta = FakeMeta()
-        try:
-            out = _audit(meta, _ad_with(tmp_path, texts=texts))
-        except cr.PlanError as e:
-            assert msg in str(e)
-        else:
-            assert msg in json.dumps(out.__dict__, default=str)
-        assert meta.posts == []
+    # ACL-2611: several texts with the vertical file are planned too (labelled feed), still without writing.
+    meta = FakeMeta()
+    out = _audit(meta, _ad_with(tmp_path, texts=2))
+    assert meta.posts == [] and not out.error, out.error
 
 
 # ───────────────────────── сверка ─────────────────────────

@@ -7571,10 +7571,10 @@ window.cbPreflight = (function () {
       else if (id === 'texts_limit') out.push(perAd(id, inp, function (a) {
         return ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > (C.max_texts || 5); });
       }));
-      else if (id === 'texts_vertical' || id === 'texts_dynamic') out.push(perAd(id, inp, function (a, st) {
+      else if (id === 'texts_dynamic') out.push(perAd(id, inp, function (a, st) {
+        /* ACL-2611: несколько текстов с вертикальным файлом идут лентой с метками, не Dynamic Creative. */
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
-        return multi && (id === 'texts_vertical') === !!s(a.vertical_file)
-          && (id === 'texts_vertical' || ((st.ads || []).length > 1 && destOf(st) !== 'instant_form')); /* ACL-2584 */
+        return multi && !s(a.vertical_file) && (st.ads || []).length > 1 && destOf(st) !== 'instant_form'; /* ACL-2584 */
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }, 'warning'));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !a.shared_headline && !s(a.headline); }, 'warning'));

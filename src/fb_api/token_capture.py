@@ -366,6 +366,9 @@ _HELPER_JS = r"""
     const kind = hasImages ? 'images' : 'videos';
     const media = spec[kind];
     if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
+    // ACL-2611: Website, тексты с метками правил + два файла (зеркало write_policy._check_website_labelled_feed).
+    if (media.length > 1 && ['bodies', 'titles', 'descriptions'].some((k) => Array.isArray(spec[k])
+      && spec[k].some((x) => isObj(x) && 'adlabels' in x))) return websiteLabelledOk(spec, kind);
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
     // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
     if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
@@ -413,6 +416,47 @@ _HELPER_JS = r"""
     }
     return sameSet(used, names);
   }
+  function websiteLabelledOk(spec, mediaKind) {
+    const AF = WRITE.asset_feed, I = AF.instant;
+    if (!('titles' in spec)) return false;
+    const present = ['bodies', 'titles', 'descriptions'].filter((k) => k in spec).concat(['link_urls', mediaKind]);
+    for (const kind of ['bodies', 'titles', 'descriptions']) {
+      if (!(kind in spec)) continue;
+      const items = instantList(spec, kind, true);
+      if (!items) return false;
+      for (const it of items) {
+        const ks = Object.keys(it);
+        if (!(ks.length === 2 && ks.indexOf('text') >= 0 && ks.indexOf('adlabels') >= 0)) return false;
+        if (typeof it.text !== 'string' || it.text.trim() === '' || it.text.length > AF.text_max[kind]) return false;
+      }
+    }
+    const files = instantList(spec, mediaKind, false, true);
+    if (!files || files.length !== 2) return false;
+    const llist = instantList(spec, 'link_urls', false);
+    if (!llist) return false;
+    const l = llist[0];
+    if (!(Object.keys(l).length === 2 && typeof l.website_url === 'string' && l.website_url.indexOf('https://') === 0)) return false;
+    const ctas = spec.call_to_action_types;
+    if (!(Array.isArray(ctas) && ctas.length === 1 && WRITE.cta_website.indexOf(ctas[0]) >= 0)) return false;
+    const want = mediaKind === 'images' ? 'SINGLE_IMAGE' : 'SINGLE_VIDEO';
+    if (!(Array.isArray(spec.ad_formats) && spec.ad_formats.length === 1 && spec.ad_formats[0] === want)) return false;
+    const rules = spec.asset_customization_rules;
+    if (!(Array.isArray(rules) && rules.length === 2)) return false;
+    for (let n = 0; n < 2; n++) {
+      const rule = rules[n];
+      if (!isObj(rule)) return false;
+      const keys = {};
+      for (const k of present) keys[I.kinds[k].rule_key] = I.kinds[k].labels[n];
+      const rk = Object.keys(rule);
+      if (rk.length !== Object.keys(keys).length + 1 || rk.indexOf('customization_spec') < 0) return false;
+      for (const k of Object.keys(keys)) {
+        const lab = rule[k];
+        if (!(isObj(lab) && Object.keys(lab).length === 1 && lab.name === keys[k])) return false;
+      }
+      if (!csOk(rule.customization_spec)) return false;
+    }
+    return true;
+  }
   // Площадки одного правила (зеркало write_policy._check_customization_spec).
   function csOk(cs) {
     const AF = WRITE.asset_feed;
@@ -427,16 +471,17 @@ _HELPER_JS = r"""
     return true;
   }
   // ACL-2584: зеркало write_policy._instant_labelled_list.
-  function instantList(spec, kind, texts) {
+  function instantList(spec, kind, texts, files) {
     const AF = WRITE.asset_feed;
     const lab = AF.instant.kinds[kind].labels;
     const items = spec[kind];
-    const cap = texts ? AF.max_texts : 1;
+    const cap = texts ? AF.max_texts : (files ? AF.max_media : 1);
     if (!(Array.isArray(items) && items.length >= 1 && items.length <= cap)) return null;
     for (let n = 0; n < items.length; n++) {
       const it = items[n];
       if (!isObj(it)) return null;
-      const want = n === 0 ? lab : [lab[0]];
+      let want = n === 0 ? lab : [lab[0]];
+      if (files && items.length === 2) want = [lab[n]];  // ACL-2611: two files, one label each
       const got = it.adlabels;
       if (!(Array.isArray(got) && got.length === want.length
         && got.every((g, i) => isObj(g) && Object.keys(g).length === 1 && g.name === want[i]))) return null;
@@ -468,13 +513,15 @@ _HELPER_JS = r"""
         if (typeof it.text !== 'string' || (it.text.trim() === '' && !noHeadline) || it.text.length > AF.text_max[kind]) return false;
       }
     }
-    const mlist = instantList(spec, mediaKind, false);
+    const mlist = instantList(spec, mediaKind, false, true);
     if (!mlist) return false;
-    const m = mlist[0], mk = Object.keys(m);
-    if (mediaKind === 'images') {
-      if (!(mk.length === 2 && typeof m.hash === 'string' && new RegExp(AF.hash_re).test(m.hash))) return false;
-    } else if (!(mk.length === 3 && typeof m.video_id === 'string' && new RegExp(AF.video_id_re).test(m.video_id)
-      && typeof m.thumbnail_url === 'string' && m.thumbnail_url.indexOf('https://') === 0)) return false;
+    for (const m of mlist) {
+      const mk = Object.keys(m);
+      if (mediaKind === 'images') {
+        if (!(mk.length === 2 && typeof m.hash === 'string' && new RegExp(AF.hash_re).test(m.hash))) return false;
+      } else if (!(mk.length === 3 && typeof m.video_id === 'string' && new RegExp(AF.video_id_re).test(m.video_id)
+        && typeof m.thumbnail_url === 'string' && m.thumbnail_url.indexOf('https://') === 0)) return false;
+    }
     const llist = instantList(spec, 'link_urls', false);
     if (!llist) return false;
     const lk = Object.keys(llist[0]);
