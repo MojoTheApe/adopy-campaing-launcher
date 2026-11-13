@@ -43,7 +43,7 @@ from src.fb_api.creator import (
     preflight_account,
 )
 from src.web.api_build_progress import BuildCounter
-from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
+from src.fb_api.graph import AuthRequired, CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
 
@@ -514,6 +514,15 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        try:
+            # ACL-2595: pressing Publish after the owner finished the Meta check lifts that one hold; a pending
+            # check is answered by Meta once and the stop sets the hold again.
+            from src.analysis_agent import account_spend as _as_
+            from src.fb_api import account_blocks as _b_
+
+            _b_.lift_auth_hold(_as_._profile_key(account_label), "publish")
+        except Exception:  # noqa: BLE001 - never breaks the open
+            log.debug("auth hold lift failed", exc_info=True)
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
@@ -722,6 +731,9 @@ class ApiPublisher:
         name = str(getattr(draft, "name", "") or "")
         if self.stop is not None:
             # Only the stop kind is named here (no Meta text), so there is nothing raw to hide.
+            if isinstance(self.stop, AuthRequired):
+                # ACL-2595: the account waits for its security check; no write and no read for this campaign.
+                return result_dict(Outcome(campaign_name=name), not_started=True, error=_plain.AUTH_NOT_STARTED)
             return result_dict(Outcome(campaign_name=name), not_started=True,
                                error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
