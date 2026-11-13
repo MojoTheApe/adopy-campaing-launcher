@@ -1,7 +1,6 @@
 """The saved comparison uses the actual map/model/store without another read."""
 from __future__ import annotations
 
-from html.parser import HTMLParser
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,39 +13,6 @@ from tests.test_acl103_source_contract import history_frame, isolated_source  # 
 LABEL = "KLD_BFL_X84"
 ALIAS = "FacebookMKTOBFLX84"
 DAY = "2026-10-18"
-
-
-class SavedPanel(HTMLParser):
-    def __init__(self, html):
-        super().__init__()
-        self.stack, self.text, self.unsafe = [], [], []
-        self.attrs, self.parents, self.depth = None, [], None
-        self.entries = 0
-        self.feed(html)
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag == "details" and "data-source-check" in attrs:
-            self.attrs, self.parents, self.depth = attrs, self.stack[:], len(self.stack)
-        if self.depth is not None:
-            self.entries += "data-source-account" in attrs
-            if tag == "button" or any(k in attrs for k in ["onclick", "hx-get", "hx-post"]):
-                self.unsafe.append(tag)
-        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
-            self.stack.append(tag)
-
-    def handle_endtag(self, tag):
-        if tag == "details" and self.depth is not None and len(self.stack) == self.depth + 1:
-            self.depth = None
-        if tag in self.stack:
-            self.stack = self.stack[:len(self.stack) - 1 - self.stack[::-1].index(tag)]
-
-    def handle_data(self, text):
-        if self.depth is not None:
-            self.text.append(text)
-
-    def content(self):
-        return " ".join(" ".join(self.text).split())
 
 
 @pytest.fixture
@@ -100,51 +66,11 @@ def saved_comparison_context(monkeypatch, tmp_path):
     return {"render": render, "model": model, "save": save, "blocked": blocked}
 
 
-def test_real_map_exposes_both_saved_figures_for_one_alias_and_period(saved_comparison_context):
-    panel = SavedPanel(saved_comparison_context["render"]())
-    assert panel.attrs is not None, "the comparison API has no discoverable user flow"
-    assert "open" not in panel.attrs
-    assert panel.entries == 1, "an account linked to two countries is compared once"
-    text = panel.content()
-    for expected in [LABEL, ALIAS, "BI", "USD 12.50", "USD 14.00", "USD 1.50",
-                     DAY, "UTC", "calendar day", "2026-10-18 14:20:00"]:
-        assert expected in text
-    assert "999.00" not in text
-    assert not panel.unsafe and "tr" not in panel.parents
+def test_account_map_no_longer_renders_the_saved_source_check(saved_comparison_context):
+    # ACL-2603: the block was removed; Ctrl+F must not find a hidden diagnostic.
+    html = saved_comparison_context["render"]()
+    assert LABEL in html
+    for marker in ["Saved source/account check", "data-source-check", "data-source-account", "amap-source-check"]:
+        assert marker not in html
+    assert "saved_source_check" not in saved_comparison_context["model"]()[1]
     assert saved_comparison_context["blocked"] == []
-
-
-@pytest.mark.parametrize("currency,timezone,reason", [
-    ("", "UTC", "Currency is unknown"),
-    ("EUR", "UTC", "Currencies differ"),
-    ("USD", "America/New_York", "Day boundaries differ"),
-])
-def test_saved_ui_preserves_both_unlike_figures_without_a_false_gap(saved_comparison_context, currency, timezone, reason):
-    saved_comparison_context["save"](currency=currency, timezone=timezone)
-    panel = SavedPanel(saved_comparison_context["render"]())
-    assert panel.attrs is not None
-    text = panel.content()
-    assert "USD 12.50" in text and "14.00" in text and reason in text
-    assert "1.50" not in text
-    assert saved_comparison_context["blocked"] == []
-
-
-def test_saved_comparison_never_substitutes_another_period(saved_comparison_context):
-    panel = SavedPanel(saved_comparison_context["render"]("2026-01-05", "2026-01-05"))
-    assert panel.attrs is not None
-    text = panel.content()
-    assert "Stats workbook" in text and "USD 7.00" in text and "2026-01-05" in text
-    assert "No saved account figure for these dates" in text
-    assert "14.00" not in text and "999.00" not in text
-    assert saved_comparison_context["blocked"] == []
-
-
-def test_saved_day_label_is_human_readable_without_changing_metadata(saved_comparison_context):
-    _report, amap = saved_comparison_context["model"]()
-    row = amap["saved_source_check"]["rows"][0]
-    assert row["source"]["day_boundary"] == "calendar_day"
-    assert row["account_day_boundary"] == "calendar_day"
-    assert row["comparison_state"] == "comparable" and row["gap"] == 1.5
-    panel = SavedPanel(saved_comparison_context["render"]())
-    assert panel.content().count("day boundary: calendar day") == 2
-    assert "calendar_day" not in panel.content()
