@@ -403,10 +403,14 @@ class ApiPublisher:
         #: ACL-2593: why the lease left the light mode (telemetry `fallback_reason`); "" - it did not.
         self.light_fallback_reason = ""
 
-    def plan_form_photo(self, drafts: list[Any]) -> bool:
-        """ACL-2593: decide BEFORE the lease starts whether this job has to upload a form background."""
+    def plan_form_photo(self, drafts: list[Any], account_label: str = "") -> bool:
+        """ACL-2593: decide BEFORE the lease starts whether this job has to upload a form background.
+
+        ACL-2596: an "Automatic" Page is resolved from the Page list already stored on this computer (no reads).
+        """
         try:
-            self.needs_form_photo = drafts_need_form_photo(drafts)
+            label = account_label or self.account_label
+            self.needs_form_photo = drafts_need_form_photo(drafts, auto_page=lambda: _stored_automatic_page(label))
         except Exception:  # noqa: BLE001 - unknown = the safe side (Ads Manager mode)
             self.needs_form_photo = True
         return self.needs_form_photo
@@ -1046,22 +1050,39 @@ def _work_mode_of_graph(graph: Any) -> str:
     return "light" if getattr(graph, "light", False) is True else "ads_manager"
 
 
-def drafts_need_form_photo(drafts: list[Any], template_loader: Any = None) -> bool:
+def _stored_automatic_page(account_label: str) -> str:
+    """ACL-2596: the Page "Automatic" will pick (the first of the account's Page list, as `resolve_page` does),
+    read only from the list stored on this computer. "" - unknown (no fresh stored list): the caller stays safe."""
+    if not account_label:
+        return ""
+    from src.web import account_pages as _ap
+
+    hit = _ap.cached_pages(account_label)
+    rows = (hit or {}).get("pages") or []
+    first = rows[0] if rows and isinstance(rows[0], dict) else {}
+    pid = str(first.get("id") or "").strip()
+    return pid if pid.isdigit() else ""
+
+
+def drafts_need_form_photo(drafts: list[Any], template_loader: Any = None, auto_page: Any = None) -> bool:
     """ACL-2593: True when publishing `drafts` has to upload at least one form-background picture.
 
     Mirrors the creator: a template with a picture file on this computer (`cover_local_sha256`) needs an upload
     unless its photo id for the draft's Page is already stored (`form_cover_store.cached_photo`) or the template
-    carries its own `cover_photo_id` of that Page. A draft without a Page yet ("Automatic") cannot prove reuse:
-    it counts as needing the upload. A form that turns out to exist already costs only the heavier tab.
+    carries its own `cover_photo_id` of that Page. A draft without a Page yet ("Automatic") is judged by the Page
+    `auto_page()` names (ACL-2596, local data only); when that is unknown it cannot prove reuse and counts as
+    needing the upload. A form that turns out to exist already costs only the heavier tab.
     """
     from src.fb_api import form_cover_store as _store
     from src.fb_api import form_templates as _ft
 
     load = template_loader or _ft.get
+    auto: list[str] = []                      # the Automatic Page, looked up at most once and only when needed
     for draft in drafts:
         if getattr(draft, "errors", None):
             continue
         page = str(getattr(draft, "page_id", "") or "").strip()
+        resolved = False
         for ad_set in getattr(draft, "ad_sets", None) or []:
             for ad in getattr(ad_set, "ads", None) or []:
                 tid = str(getattr(ad, "lead_form_template", "") or "").strip()
@@ -1073,7 +1094,12 @@ def drafts_need_form_photo(drafts: list[Any], template_loader: Any = None) -> bo
                 sha = str(tpl.get("cover_local_sha256") or "")
                 if not sha or not _store.exists(tid, sha):
                     continue                  # no picture (or it is on another computer: made without it)
-                if tpl.get("cover_photo_id") and str(tpl.get("cover_page_id") or "") == page:
+                if not page and not resolved:
+                    resolved = True
+                    if not auto:
+                        auto.append(str(auto_page() or "").strip() if callable(auto_page) else "")
+                    page = auto[0]
+                if tpl.get("cover_photo_id") and page and str(tpl.get("cover_page_id") or "") == page:
                     continue
                 if page and _store.cached_photo(page, sha):
                     continue
