@@ -2201,8 +2201,10 @@ class CampaignCreator:
             """ACL-2614: отказ чтения из-за незавершённой проверки подлинности - это стоп `checkpoint`, а не расхождение."""
             title = str((exc.details or {}).get("error_user_title") or "")
             if is_auth_required(exc.code, exc.subcode, title):
-                raise AuthRequired(f"Meta asks to authenticate this account ({exc.code}/{exc.subcode}): {exc}",
-                                   code=exc.code, subcode=exc.subcode) from exc
+                # Защитная ветка: клиент сам бросает AuthRequired; `_stop` держит `client.stopped` согласованным.
+                raise self.client._stop(AuthRequired(
+                    f"Meta asks to authenticate this account ({exc.code}/{exc.subcode}): {exc}",
+                    code=exc.code, subcode=exc.subcode)) from exc
             # Только код/подкод и вид объекта: ни номеров кабинета/объекта, ни токенов в журнал не идёт.
             log.warning("resume check: read of %s refused (code=%s subcode=%s status=%s)",
                         what, exc.code, exc.subcode, exc.status)

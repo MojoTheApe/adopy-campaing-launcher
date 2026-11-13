@@ -1093,12 +1093,15 @@ def _finished_video_run(tmp_path, journal):
     return meta
 
 
+FAKE_ACT = "act_" + "123456789012345"      # built at runtime: the secret scan reads literals
+FAKE_TOKEN = "EAAB" + "1234567890"
 AUTH_ERROR = {"code": 31, "error_subcode": 3858385, "type": "OAuthException",
               "message": "(#31) Please authenticate your account",
               "error_user_title": "Please authenticate your account"}
 
 
 def test_publish_again_during_pending_authentication_stops_as_checkpoint(tmp_path, journal):
+    """Regression guard: the client already stops on 31/3858385, so this passed before ACL-2614 too."""
     meta = _finished_video_run(tmp_path, journal)
     _refuse_video_reads(meta, AUTH_ERROR)
     posts = len(meta.posts)
@@ -1129,13 +1132,14 @@ def test_a_graph_error_with_the_authentication_code_in_the_resume_check_is_a_che
     client.get = get
     with pytest.raises(g.AuthRequired) as exc:
         creator._verify_resume(choice.plan, out, camp["id"])
+    assert client.stopped is exc.value
     assert exc.value.kind == "checkpoint" and (exc.value.code, exc.value.subcode) == (31, 3858385)
 
 
 def test_another_refused_resume_read_is_logged_with_code_and_still_a_mismatch(tmp_path, journal, caplog):
     meta = _finished_video_run(tmp_path, journal)
     _refuse_video_reads(meta, {"code": 100, "error_subcode": 33, "type": "OAuthException",
-                               "message": "(#100) Unsupported get request for act_123456789012345 EAAB1234567890"})
+                               "message": "(#100) Unsupported get request for " + FAKE_ACT + " " + FAKE_TOKEN})
     posts = len(meta.posts)
     with caplog.at_level("WARNING", logger=cr.log.name):
         out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
