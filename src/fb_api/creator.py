@@ -56,6 +56,7 @@ from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
 from src.fb_api.telemetry import mask_id as _mask_id
 from src.fb_api.graph import FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, normalize_act
+from src.fb_api.telemetry import scrub
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
@@ -276,6 +277,10 @@ CREATIVE_LOOKUP_PAGES = 3
 STALE_WARNING = "An earlier creative with other media was found and not reused; a new creative was created."
 STALE_WARNING_REUSED = ("An earlier creative with other media was found and not reused; "
                         "a matching creative was used instead.")
+GONE_WARNING = ("A creative remembered from an earlier run no longer exists in Meta; "
+                "it was dropped and a new creative was created.")
+GONE_WARNING_REUSED = ("A creative remembered from an earlier run no longer exists in Meta; "
+                       "a matching creative was used instead.")
 ORDER_WARNING = "The creative carries the same files in another order; accepted."
 RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
@@ -2777,6 +2782,24 @@ class CampaignCreator:
             return None
         return full if isinstance(full, dict) and str(full.get("id") or "") == str(row["id"]) else None
 
+    @staticmethod
+    def _creative_gone(exc: Exception | None = None, row: Any = None) -> bool:
+        """ACL-2589: Meta says the creative does not exist (Graph 100 / subcode 33) or returns it as DELETED.
+
+        Only these two answers mean "stale receipt". Rate limits, 5xx, timeouts and every other code are not:
+        they keep the ordinary handling (the caller re-raises)."""
+        if exc is not None:
+            return (isinstance(exc, GraphError) and exc.code == 100 and exc.subcode == 33)
+        return isinstance(row, dict) and "DELETED" in (str(row.get("status") or "").upper(),
+                                                       str(row.get("effective_status") or "").upper())
+
+    def _log_creative_gone(self, creative_id: str, exc: Exception | None, row: Any = None) -> None:
+        code = getattr(exc, "code", None)
+        sub = getattr(exc, "subcode", None)
+        msg = scrub(str(exc)) if exc is not None else f"status={scrub(str((row or {}).get('status')))}"
+        log.warning("stale creative receipt: creative %s is gone in Meta (code=%s subcode=%s): %s",
+                    scrub(creative_id), code, sub, msg)
+
     def _recoverable_creative(self, out: Outcome, plan: CampaignPlan, ad: AdPlan,
                              ad_set: AdSetPlan, media: dict, name: str) -> tuple[str, bool]:
         """Persist intent before dispatch; verify all recovered IDs against actual content."""
@@ -2814,13 +2837,17 @@ class CampaignCreator:
                         receipt.save(creative_id)
                         created = True
                 replaced = False
+                gone = False
 
                 def finish(cid: str, verified: bool) -> tuple[str, bool]:
                     # ACL-2284: the warning is added only once a replacement has passed the full content check,
                     # and it says "new" only when the creative really is one written in this run.
                     if replaced:
-                        out.warnings.append(STALE_WARNING if cid in out.created.get("creatives", [])
-                                            else STALE_WARNING_REUSED)
+                        fresh = cid in out.created.get("creatives", [])
+                        if gone:
+                            out.warnings.append(GONE_WARNING if fresh else GONE_WARNING_REUSED)
+                        else:
+                            out.warnings.append(STALE_WARNING if fresh else STALE_WARNING_REUSED)
                     return cid, verified
 
                 while True:
@@ -2840,7 +2867,25 @@ class CampaignCreator:
                                 raise
                             label_failure = exc
                             self._missing_creative_tag = True
-                    row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
+                    gone_exc = None
+                    try:
+                        row = self.client.get(f"/{creative_id}", {"fields": _cr.FIELDS})
+                    except GraphError as exc:
+                        # ACL-2589: the receipt points at a creative that no longer exists in Meta. Not for a
+                        # creative written in this run, and only once; any other error keeps today's handling.
+                        if created or replaced or not self._creative_gone(exc):
+                            raise
+                        row, gone_exc = None, exc
+                    if gone_exc is not None or (not created and not replaced and self._creative_gone(row=row)):
+                        self._log_creative_gone(creative_id, gone_exc, row)
+                        replaced = gone = True
+                        self._step(out, "The creative remembered from an earlier run no longer exists in Meta; "
+                                        "creating a new one")
+                        creative_id, created = self._replace_stale_creative(
+                            out, plan, ad, ad_set, params, receipt, creative_id, candidates)
+                        if not created:
+                            return finish(creative_id, True)
+                        continue
                     kind = _cr.media_diff(plan.act, params, row)
                     content_ok = kind in ("same", "order")
                     if kind == "order" and ORDER_WARNING not in out.warnings:
