@@ -1,5 +1,31 @@
 # System history
 
+## ACL-2596 — An Automatic Page with a stored form photo keeps the light work tab — 2026-11-12
+
+When a draft's Page is "Automatic", the work-tab decision now resolves it the way the creator does (the first Page of
+the account's Page list) from the list already stored on this computer, with no new Graph reads. If that Page already
+has the stored photo id for the form picture, the job stays on the light tab. If the Page cannot be resolved locally
+(no fresh stored list, empty list), the safe Ads Manager tab (`fallback_reason: form_photo_upload`) is kept.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1596).
+
+## ACL-2595 — Meta "Please authenticate your account" (31/3858385) stops the account — 2026-11-12
+
+Graph error 31 / subcode 3858385 is now an account security check, not a generic step refusal: the client stops
+writing for that account (a checkpoint-kind stop, persisted like the other account blocks), the remaining campaigns of the
+account in the job are shown as "Not started: account needs authentication", and the result card and account panel say
+"Meta asks to confirm this account (security check). Open Ads Manager in this profile and complete the check, then publish
+again. Existing ads keep running." The raw Meta text stays in Recent runs. Other accounts are not affected.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1595).
+
+## ACL-2593 — Form background upload no longer fails on the light work tab — 2026-11-12
+
+A publish job that has to upload a form background picture (template with a picture and no stored photo id for the
+Page) now runs its work lease on the Ads Manager tab, decided before the lease starts from the planned forms
+(`fallback_reason: form_photo_upload`, not counted as a light failure). Jobs without an upload stay light. If an
+upload still reaches a light tab, the lease is switched to Ads Manager first and the upload is sent once there; the
+"Ads Manager did not show the session values" refusal can no longer come from a light tab.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1593).
+
 ## ACL-2591 — Light work tab on by default for every buyer — 2026-11-12
 
 Publishing no longer keeps a heavy Ads Manager tab open: the light work tab is now on for every buyer by default, with no setup step after an update. `ACL_LIGHT_WORK_TAB` stays only as an emergency off-switch (`0`, `false`, `no` or `off`); when it is turned off explicitly, leases use the Ads Manager tab and report `fallback_reason: flag_off`. The per-lease fallback to the Ads Manager tab on a failed hand-over is unchanged.
