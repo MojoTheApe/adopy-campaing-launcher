@@ -432,6 +432,13 @@ _HELPER_JS = r"""
     }
     const files = instantList(spec, mediaKind, false, true);
     if (!files || files.length !== 2) return false;
+    for (const m of files) {
+      const mk = Object.keys(m);
+      if (mediaKind === 'images') {
+        if (!(mk.length === 2 && typeof m.hash === 'string' && new RegExp(AF.hash_re).test(m.hash))) return false;
+      } else if (!(mk.length === 3 && typeof m.video_id === 'string' && new RegExp(AF.video_id_re).test(m.video_id)
+        && typeof m.thumbnail_url === 'string' && m.thumbnail_url.indexOf('https://') === 0)) return false;
+    }
     const llist = instantList(spec, 'link_urls', false);
     if (!llist) return false;
     const l = llist[0];

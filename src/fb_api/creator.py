@@ -636,6 +636,10 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         if warnings is not None:
             warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
                             "it will be used once as the main file.")
+    if vertical and plan_ad.multi_text and not plan_set.instant and not plan_ad.titles:
+        # Website без заголовка с лентой текстов не проверен (политика откажет при записи) - говорим сразу.
+        problems.append(f"Ad {i}: several texts with a Stories / Reels file need a headline on a Website ad; "
+                        "add a headline or switch the ad set to Instant Form")
     # ACL-2611: несколько текстов + вертикальный файл больше не отказ. Живой прогон 2026-10-14 (ACL-1774): Meta
     # отказала ленте с НЕразмеченными текстами и двумя правилами; ACL-2584 (12.11): тексты с метками правил принят.
     # Все тексты идут на основной файл, первый текст каждого вида - ещё и на Stories/Reels (`feed_spec`).

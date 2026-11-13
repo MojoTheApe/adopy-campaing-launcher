@@ -150,6 +150,15 @@ def test_the_plan_has_no_texts_vertical_refusal(tmp_path):
     assert not any(r["id"] == "texts_vertical" for r in pf.RULES)
 
 
+def test_a_website_pair_with_several_texts_and_no_headline_is_refused_at_plan_time(tmp_path):
+    d = website(tmp_path, extra=1)
+    ad = d.ad_sets[0].ads[0]
+    ad.ad_title = ""
+    ad.text_variants = [{"body": f"Body {i}", "headline": "", "description": ""} for i in (2, 3)]
+    with pytest.raises(cr.PlanError, match="need a headline"):
+        cr.plan_from_draft(d)
+
+
 def test_a_sixth_text_is_still_refused_with_a_vertical_file(tmp_path):
     with pytest.raises(cr.PlanError, match="up to 5 primary texts"):
         cr.plan_from_draft(website(tmp_path, extra=5))
@@ -279,6 +288,10 @@ def _mutations(cre):
         "link_unlabelled": mut(lambda s: s["link_urls"][0].pop("adlabels")),
         "sixth_text": mut(lambda s: s["bodies"].extend(
             {"text": f"x{i}", "adlabels": [{"name": "acl_body_main"}]} for i in range(4))),
+        "file_extra_key": mut(lambda s: s[media][1].__setitem__("url", "http://evil.example/x")),
+        "file_bad_id": mut(lambda s: s[media][1].__setitem__("video_id" if media == "videos" else "hash", "abc")),
+        "thumbnail_not_https": mut(lambda s: s[media][1].__setitem__("thumbnail_url", "http://x")
+                                   if media == "videos" else s[media][1].__setitem__("hash", "not-a-hash")),
         "empty_text": mut(lambda s: s["bodies"][1].__setitem__("text", "  ")),
     }
 

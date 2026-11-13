@@ -406,6 +406,17 @@ def _has_labelled_text(spec: dict, kind: str) -> bool:
     return isinstance(items, list) and any(isinstance(x, dict) and "adlabels" in x for x in items)
 
 
+def _check_labelled_file_item(media: Any, media_kind: str, refuse: Any) -> None:
+    """Один файл размеченной ленты: точный набор ключей, id по шаблону, https-миниатюра."""
+    if media_kind == "images":
+        ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str)             and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+    else:
+        thumb = media.get("thumbnail_url")
+        ok = set(media) == {"video_id", "thumbnail_url", "adlabels"}             and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"]))             and isinstance(thumb, str) and thumb.startswith("https://")
+    if not ok:
+        refuse(f"{media_kind} item is not allowed")
+
+
 def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> None:
     """ACL-2611: Website, несколько текстов + вертикальный файл - размеченная лента (форма Ads Manager, ACL-2584).
 
@@ -429,6 +440,8 @@ def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> No
     files = _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True)
     if len(files) != 2:
         refuse(f"{media_kind} must hold the main and the Stories/Reels file")
+    for item in files:
+        _check_labelled_file_item(item, media_kind, refuse)
     link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
     if set(link) != {"website_url", "adlabels"} or not (isinstance(link["website_url"], str)
                                                          and link["website_url"].startswith("https://")):
