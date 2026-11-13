@@ -2082,7 +2082,7 @@ def _no_data_message(exc: BaseException) -> str:
     """ACL-2607: why there is no stats data, in terms safe to show (no host, user or password)."""
     if not bi_stats.bi_enabled() and (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() != "excel":
         return ("BI is not connected on this computer, and there is no Stats workbook. "
-                "Sign in below to load the connection settings.")
+                "Sign in below to load the connection settings.\n\n" + bi_stats.redact(str(exc)))
     return bi_stats.redact(str(exc))
 
 
