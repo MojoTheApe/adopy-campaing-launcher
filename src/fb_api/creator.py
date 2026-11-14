@@ -182,13 +182,6 @@ def resumable_calls(size: int, segment: int | None = None) -> int:
     return -(-size // seg) + RESUMABLE_FIXED_CALLS
 
 
-def _object_gone(exc: GraphError) -> bool:
-    """ACL-2639: Meta says the object does not exist (code 100 / subcode 33, or that text) - not a transient error."""
-    text = str(exc).lower()
-    return getattr(exc, "code", None) == 100 and (getattr(exc, "subcode", None) == 33 or "does not exist" in text
-                                                  or "nonexisting" in text or "nonexistent" in text)
-
-
 class _ResumableRefused(Exception):
     """ACL-2639: the resumable upload could not be used; nothing of it was finished (the chunked path takes over)."""
 
@@ -6001,7 +5994,10 @@ def graph_problem(exc: BaseException) -> dict:
 
 
 def _object_gone(exc: GraphError) -> bool:
-    """ACL-2578: Meta says the object does not exist (deleted); any other failed read leaves the question open."""
+    """ACL-2578: Meta says the object does not exist (deleted); any other failed read leaves the question open.
+
+    ACL-2639 uses it too (a pending video upload is forgotten only then). Deliberately NOT "nonexisting": Meta's
+    "(#100) Tried accessing nonexisting field" is a wrong-field error on a live object, not a missing object."""
     return exc.code == 100 and (exc.subcode == 33 or "does not exist" in str(exc).lower())
 
 

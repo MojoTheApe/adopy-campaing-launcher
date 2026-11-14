@@ -650,3 +650,16 @@ def test_release_optional_stop_lifts_only_not_sent():
     assert c.optional_write_ok() is False
     assert c.release_optional_stop(other) is True and c.stopped is None
     assert c.optional_write_ok() is True
+
+
+@pytest.mark.parametrize("code,sub,msg,gone", [
+    (100, 33, "Unsupported get request.", True),
+    (100, None, "Object with ID '7700000001' does not exist", True),
+    (100, None, "(#100) Tried accessing nonexisting field (status) on node type (AdVideo)", False),  # live object
+    (None, None, "Object does not exist", False),                                  # not a Graph 100: stays open
+    (1, None, "An unknown error occurred", False),
+    (100, None, "(#100) Missing permission", False),
+])
+def test_only_a_missing_object_counts_as_gone(code, sub, msg, gone):
+    from src.fb_api.graph import GraphError
+    assert cr._object_gone(GraphError(msg, code=code, subcode=sub)) is gone
