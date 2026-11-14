@@ -22,6 +22,7 @@ import base64
 import hashlib
 import re
 import secrets
+import sys
 from typing import Any, Callable
 
 from src.fb_api import write_policy as _wp
@@ -60,6 +61,24 @@ class UploadServer:
         self.blocked = 0            # requests with our prefix that were refused
         self.errors = 0
         self.refused_workers = 0    # worker sessions left paused because the interception could not be enabled
+        # What the controller saw, for the probe's failure text (counts and short error names only: no URL, no token).
+        self.attach_events = 0      # Target.attachedToTarget events of any kind
+        self.workers_seen = 0       # ... of type worker
+        self.workers_ready = 0      # workers whose interception was on and which were resumed
+        self.piece_requests = 0     # requests with our prefix that reached the handler
+        self.last_error = ""
+
+    def _note(self, exc: BaseException) -> None:
+        self.errors += 1
+        self.last_error = f"{type(exc).__name__}: {str(exc)[:80]}"
+
+    def summary(self) -> str:
+        """One short line: where the controller side of a failed probe stopped."""
+        bits = [f"attach events {self.attach_events}", f"workers seen {self.workers_seen}",
+                f"workers ready {self.workers_ready}", f"refused {self.refused_workers}",
+                f"piece requests {self.piece_requests}", f"served {self.served}", f"errors {self.errors}"]
+        text = "controller: " + ", ".join(bits)
+        return text + (f" (last: {self.last_error})" if self.last_error else "")
 
     # -- window of one chunk
     def register(self, chunk: _wp.ServedChunk, *, piece: int = PIECE) -> tuple[str, list[dict]]:
@@ -86,6 +105,11 @@ class UploadServer:
         if getattr(tab, "light", None) is None:
             # An ordinary Ads Manager tab: pause only our prefix, nothing of the app's own traffic.
             tab.call("Fetch.enable", {"patterns": [{"urlPattern": PATTERN, "requestStage": "Request"}]}, timeout=10.0)
+            try:
+                # A service worker of the origin must not answer the inline mode's piece requests either.
+                tab.call("Network.setBypassServiceWorker", {"bypass": True}, timeout=10.0)
+            except Exception as exc:  # noqa: BLE001 - best effort
+                self._note(exc)
         # A light work tab intercepts its whole origin already (`light_tab`); enabling again would replace that.
         tab.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True},
                  timeout=10.0)
@@ -101,9 +125,11 @@ class UploadServer:
         params = msg.get("params") or {}
         if method == "Target.attachedToTarget":
             info = params.get("targetInfo") or {}
+            self.attach_events += 1
             session = str(params.get("sessionId") or "")
             waiting = bool(params.get("waitingForDebugger"))
             if str(info.get("type") or "") in ("worker", "dedicated_worker"):
+                self.workers_seen += 1
                 self._prepare_worker(session, waiting, str(info.get("targetId") or ""))
             else:
                 # Auto-attach is on for the whole tab: an iframe or a page's own worker that came up while it is on
@@ -115,6 +141,7 @@ class UploadServer:
         url = str((params.get("request") or {}).get("url") or "")
         if not url.startswith(URL_PREFIX):
             return False
+        self.piece_requests += 1
         self._answer(str(msg.get("sessionId") or ""), str(params.get("requestId") or ""), url)
         return True
 
@@ -131,8 +158,8 @@ class UploadServer:
                 self.errors += 1
         try:
             self._call("", "Target.detachFromTarget", {"sessionId": session})
-        except Exception:  # noqa: BLE001
-            self.errors += 1
+        except Exception as exc:  # noqa: BLE001
+            self._note(exc)
 
     def _prepare_worker(self, session: str, waiting: bool, target_id: str = "") -> None:
         """Turn the interception on for a worker's session BEFORE it runs. Fail closed: when that cannot be done the
@@ -141,21 +168,22 @@ class UploadServer:
             return
         try:
             self._call(session, "Fetch.enable", {"patterns": [{"urlPattern": PATTERN, "requestStage": "Request"}]})
-        except Exception:  # noqa: BLE001
-            self.errors += 1
+        except Exception as exc:  # noqa: BLE001
+            self._note(exc)
             self.refused_workers += 1
             if target_id:
                 try:
                     self._call("", "Target.closeTarget", {"targetId": target_id})
-                except Exception:  # noqa: BLE001 - it stays paused: it never runs
-                    self.errors += 1
+                except Exception as exc:  # noqa: BLE001 - it stays paused: it never runs
+                    self._note(exc)
             return
         self._workers[session] = target_id
+        self.workers_ready += 1
         try:
             # A service worker of the origin must not answer (or pass on) the worker's piece requests.
             self._call(session, "Network.setBypassServiceWorker", {"bypass": True})
-        except Exception:  # noqa: BLE001 - best effort: the live check keeps watching for it
-            self.errors += 1
+        except Exception as exc:  # noqa: BLE001 - best effort: the live check keeps watching for it
+            self._note(exc)
         if waiting:
             try:
                 self._call(session, "Runtime.runIfWaitingForDebugger", {})
@@ -176,15 +204,15 @@ class UploadServer:
                      timeout=10.0)
             if getattr(tab, "light", None) is None:
                 tab.call("Fetch.disable", {}, timeout=10.0)
-        except Exception:  # noqa: BLE001
-            self.errors += 1
+        except Exception as exc:  # noqa: BLE001
+            self._note(exc)
         self._session = ""
 
     def _fail(self, session: str, rid: str, reason: str = "BlockedByClient") -> None:
         try:
             self._call(session, "Fetch.failRequest", {"requestId": rid, "errorReason": reason})
-        except Exception:  # noqa: BLE001 - never let a paused request hang the event pump
-            self.errors += 1
+        except Exception as exc:  # noqa: BLE001 - never let a paused request hang the event pump
+            self._note(exc)
 
     def _answer(self, session: str, rid: str, url: str) -> None:
         m = _PATH_RE.fullmatch(url[len(URL_PREFIX) - 1:].split("?", 1)[0])
@@ -202,8 +230,8 @@ class UploadServer:
             return
         try:
             data = chunk.read(*span)
-        except Exception:  # noqa: BLE001 - the file vanished or cannot be read
-            self.errors += 1
+        except Exception as exc:  # noqa: BLE001 - the file vanished or cannot be read
+            self._note(exc)
             self._fail(session, rid, "Failed")
             return
         if len(data) != span[1] or hashlib.sha256(data).hexdigest() != want:

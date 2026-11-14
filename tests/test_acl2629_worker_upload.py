@@ -399,6 +399,34 @@ def test_a_probe_that_fails_says_why(reply, text):
     assert ok is False and why
 
 
+def test_an_inline_probe_is_ok_and_keeps_the_workers_failure_in_the_note():
+    tab = ServingTab(probe_reply={"ok": True, "bytes": 4096, "mode": "inline",
+                                  "worker_why": "worker: worker construct failed: SecurityError: blocked by CSP"})
+    t = _graph(tab)
+    ok, note = t.probe_worker()
+    assert ok is True and t.upload_mode == "inline"
+    assert "SecurityError" in note and note.startswith("worker not used:") and "controller: attach events 0" in note
+
+
+def test_a_failed_probe_carries_the_controller_side_trace():
+    tab = ServingTab(probe_reply={"error": "no_worker", "why": "worker: x; inline: y"})
+    ok, why = _graph(tab).probe_worker()
+    assert ok is False and "worker: x; inline: y" in why and "controller: attach events 0" in why
+    assert "workers ready 0" in why and "piece requests 0" in why
+
+
+def test_the_controller_summary_counts_what_it_saw():
+    tab = FakeCdpTab()
+    server = us.UploadServer(tab)
+    server.arm()
+    tab.fail.add("Fetch.enable")
+    tab.on_event({"method": "Target.attachedToTarget", "params": {
+        "sessionId": "W9", "targetInfo": {"type": "worker", "targetId": "T9"}, "waitingForDebugger": True}})
+    line = server.summary()
+    assert "attach events 1" in line and "workers seen 1" in line and "refused 1" in line
+    assert "workers ready 0" in line and "last: RuntimeError: boom" in line
+
+
 def test_the_probe_is_refused_for_a_read_only_page():
     t = tc.InPageGraph(ServingTab())
     assert t.probe_worker()[0] is False
@@ -572,7 +600,7 @@ const FakeWorker = function (url) {
   w.terminate = () => {};
   resolveObjectURL(url).text().then((src) => {
     if (SC.worker_silent) return;
-    new Function('self', 'fetch', 'crypto', 'FormData', 'Blob', 'AbortController', 'return ' + src)(
+    new Function('self', 'fetch', 'crypto', 'FormData', 'Blob', 'AbortController', src)(
       inner, fakeFetch, crypto.webcrypto, FormData, Blob, AbortController);
   });
 };
@@ -617,6 +645,12 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
   const out = { scenario: SC.name };
   const phase = (params) => h.call({ method: 'POST', path: PATHV, params: Object.assign({ waterfall_id: 'a'.repeat(32) }, params), files: {} });
   if (SC.name === 'upload') {
+    if (SC.probe_first) {
+      const token = 'probe' + '0'.repeat(20);
+      windows[token] = { offset: 0, length: 4096 };
+      const pcs = [0, 1, 2, 3].map((i) => ({ o: i * 1024, n: 1024, h: sha(SOURCE.subarray(i * 1024, (i + 1) * 1024)) }));
+      out.probe = await h.probeWorker({ source: { token: token, pieces: pcs } });
+    }
     const started = await phase({ upload_phase: 'start', file_size: String(SOURCE.length) });
     out.start = slim(started);
     let guard = 0;
@@ -779,28 +813,55 @@ def test_the_worker_post_carries_the_same_referrer_as_other_calls():
 
 def test_a_blocked_worker_is_reported_and_nothing_is_sent():
     out = _node({"name": "upload", "worker_blocked": True})
-    assert out["results"][0]["error"] == "no_file" and "worker blocked" in out["results"][0]["why"]
+    assert out["results"][0]["error"] == "no_file" and "worker construct failed" in out["results"][0]["why"]
     assert "SecurityError" in out["results"][0]["why"]
     assert [x["phase"] for x in out["log"]["graph"]] == ["start", "finish"]
 
 
-def test_a_worker_that_never_starts_is_reported():
+def test_a_worker_that_never_starts_falls_back_to_inline_and_says_why():
     # (the helper waits 8 s for the ready message)
     out = _node({"name": "probe", "worker_silent": True})
-    assert out["probe"] == {"error": "no_worker", "why": "worker did not start"}
+    assert out["probe"]["ok"] is True and out["probe"]["mode"] == "inline"
+    assert "worker created but sent no ready message" in out["probe"]["worker_why"]
     assert out["graph_calls"] == 0
+
+
+def test_when_neither_the_worker_nor_inline_works_the_probe_names_both_stages():
+    out = _node({"name": "probe", "worker_blocked": True, "block_pieces": True})
+    why = out["probe"]["why"]
+    assert out["probe"]["error"] == "no_worker"
+    assert "worker: worker construct failed: SecurityError" in why and "inline: worker piece request failed" in why
+
+
+def test_an_inline_upload_moves_the_same_bytes_with_no_worker_at_all():
+    out = _node({"name": "upload", "worker_blocked": True, "probe_first": True, "window": 1_000_000, "piece": 400_000})
+    assert out["probe"]["mode"] == "inline" and "SecurityError" in out["probe"]["worker_why"]
+    assert all(r["ok"] for r in out["results"]) and out["finish"]["ok"]
+    m = out["meta"]
+    assert m["md5"] == hashlib.md5(_SOURCE).hexdigest() and m["received"] == len(_SOURCE)
+    assert out["log"]["workers"] == 0
+    for post in out["log"]["graph"]:
+        assert post["token_in_body"] is True and post["token_in_url"] is False and post["redirect"] == "error"
+
+
+def test_an_inline_corrupted_piece_is_refused_before_any_post():
+    out = _node({"name": "upload", "worker_blocked": True, "probe_first": True, "window": 1_000_000,
+                 "piece": 400_000, "corrupt_piece": 6})        # pieces 1-4 belong to the probe
+    assert out["results"][0] == {"error": "no_file", "why": "worker piece does not match the file"}
+    assert [x["phase"] for x in out["log"]["graph"]] == ["start", "finish"]
 
 
 def test_the_probe_runs_the_whole_data_path_without_a_request_to_meta():
     out = _node({"name": "probe"})
-    assert out["probe"] == {"ok": True, "bytes": 4096}
+    assert out["probe"] == {"ok": True, "bytes": 4096, "mode": "worker"}
     assert out["bad"]["error"] == "no_worker" and out["bad"]["why"] == "source"
     assert out["graph_calls"] == 0 and out["log"]["pieces"] == 4 and out["log"]["workers"] == 1
 
 
 def test_the_probe_reports_a_blocked_worker():
     out = _node({"name": "probe", "worker_blocked": True})
-    assert out["probe"]["error"] == "no_worker" and "SecurityError" in out["probe"]["why"]
+    assert out["probe"]["ok"] is True and out["probe"]["mode"] == "inline"
+    assert "SecurityError" in out["probe"]["worker_why"]
 
 
 def test_a_lost_answer_is_unknown_and_the_chunk_is_not_sent_again_by_the_helper():

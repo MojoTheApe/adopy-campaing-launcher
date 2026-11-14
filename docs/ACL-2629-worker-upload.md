@@ -138,3 +138,34 @@ kill switch off.
 - Smaller Meta windows: the creator re-estimates whenever the offered window shrinks and stops cleanly, before sending
   more, when the calls planned for the file (estimate + 5 % slack) would run out; the message says so and names the
   kill switch. The unfinished Meta session is simply abandoned (nothing is duplicated).
+
+## 11. Live result and round 3 (probe diagnostics + inline mode)
+
+Live on TEST9095 (normal Ads Manager tab, light tab not used): the probe reported "worker did not start" and the old
+path refused a 2421 MB video (nothing created). "Did not start" means the helper got neither a synchronous exception
+(CSP `worker-src` blocking a blob worker throws `SecurityError`, reported as "worker construct failed") nor an error
+event: the worker was created but never posted `ready`. By Chrome semantics the candidates are, in order: (a) the
+controller closed or never resumed the worker - `Fetch.enable` failing on a dedicated worker's session fails closed
+(round 1, B2) and the worker is closed; (b) `Target.setAutoAttach` on the page session does not report the dedicated
+worker created from an isolated world; (c) the attach event is handled too late (events are only handled inside CDP
+calls and `pump`); (d) CSP reported through an error event. Meta's CSP cannot be read without a login (a plain request
+is redirected to the login page, no CSP header), so this could not be settled offline. The design therefore covers
+both outcomes:
+
+* **Diagnostics.** A failed probe now says which stage failed and why: `worker: <construct failed: Name: message |
+  error event before ready: ... | created but sent no ready message in 8 s>`, `inline: <reason>`, any
+  `securitypolicyviolation` the document reported meanwhile (`[CSP: worker-src blocked blob:]`), and the controller
+  side: `controller: attach events N, workers seen N, workers ready N, refused N, piece requests N, served N,
+  errors N (last: ...)`. No URL or token is in it. It goes into the run's warnings.
+* **Inline mode (no Worker needed).** When no worker can run, the same runner (one code, `makeRunner`, stringified into the
+  worker or called in the helper's world) fetches the pieces from the same intercepted URLs with `fetch()` from the
+  helper's world: still binary `Fetch.fulfillRequest` bodies, still one piece at a time hashed with WebCrypto, kept as
+  Blobs, the multipart POST sent by `fetch` with the same options (token in the body, `redirect: 'error'`, referrer).
+  Nothing is base64-decoded in the page. It uses the page session's narrow `Fetch` pattern, so it does not depend on
+  worker auto-attach. A service worker is bypassed (`Network.setBypassServiceWorker`) on an ordinary tab.
+  The probe tries the worker first and falls back to inline; the chosen mode is kept and the worker's failure reason is
+  logged as a warning ("Upload worker not used, continuing inline: ..."), so the next live run tells exactly why.
+* Safety rules unchanged: Python and page-helper policy per call, exact announced pieces only, hash re-check, fail
+  closed, deadlines, disarm on every exit. If both stages fail the run falls back to compression as before.
+* Live check addition: record `upload_mode` (worker or inline) and the failure text; for inline, check the main-thread
+  responsiveness (the SHA-256 of an 8 MB piece is async, but the Blob/FormData work is on the page thread).

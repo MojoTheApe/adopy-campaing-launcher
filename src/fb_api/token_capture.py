@@ -915,7 +915,9 @@ _HELPER_JS = r"""
   // them piece by piece from `<origin>/__acl_upload/<token>/<offset>/<length>` (answered by the controller through
   // CDP Fetch), checks each piece's SHA-256, builds the multipart body and sends the Graph POST itself.
   // The token of the session goes to the worker in a message of this world only (the page cannot reach it).
-  function workerMain() {
+  // The runner is self-contained (it is stringified into the worker): `fetch`, `crypto` and `emit` are parameters, so
+  // the very same code also runs INLINE in this world when no worker can be started (see `transport`).
+  function makeRunner(fetch, crypto, emit) {
     const jobs = {};
     const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
     const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
@@ -950,7 +952,7 @@ _HELPER_JS = r"""
         if (digest !== p.h) return { error: 'no_file', why: 'worker piece does not match the file' };
         parts.push(blob);
         got += p.n;
-        self.postMessage({ id: m.id, progress: got });
+        emit({ id: m.id, progress: got });
       }
       return { parts: parts, bytes: got };
     }
@@ -977,15 +979,19 @@ _HELPER_JS = r"""
         return { status: resp.status, text: text, headers: headers };
       } finally { delete jobs[m.id]; }
     }
-    self.onmessage = (e) => {
-      const m = e.data || {};
-      if (m.abort !== undefined) { const ac = jobs[m.abort]; if (ac) ac.abort(); return; }
-      if (m.quit) { self.close(); return; }
-      run(m).then((r) => self.postMessage(Object.assign({ id: m.id, done: true }, r)),
-                  () => self.postMessage({ id: m.id, done: true, error: 'network', sent: true }));
-    };
-    self.postMessage({ ready: true });
+    function abort(id) { const ac = jobs[id]; if (ac) ac.abort(); }
+    return { run: run, abort: abort };
   }
+  const WORKER_GLUE = 'const r = make(fetch, crypto, (d) => self.postMessage(d));'
+    + 'self.onmessage = (e) => { const m = e.data || {};'
+    + ' if (m.abort !== undefined) { r.abort(m.abort); return; }'
+    + ' if (m.quit) { self.close(); return; }'
+    + ' r.run(m).then((x) => self.postMessage(Object.assign({ id: m.id, done: true }, x)),'
+    + ' () => self.postMessage({ id: m.id, done: true, error: "network", sent: true })); };'
+    + 'self.postMessage({ ready: true });';
+  function workerSource() { return 'const make = ' + makeRunner.toString() + ';' + WORKER_GLUE; }
+  let transport = '';              // 'worker' | 'inline' | '' (not probed yet: a worker is tried)
+  let inlineRunner = null;
   let worker = null;
   const waiting = {};
   let waitSeq = 0;
@@ -1016,9 +1022,12 @@ _HELPER_JS = r"""
         resolve(why);
       };
       try {
-        url = URL.createObjectURL(new Blob(['(' + workerMain.toString() + ')()'], { type: 'text/javascript' }));
+        url = URL.createObjectURL(new Blob([workerSource()], { type: 'text/javascript' }));
         w = new Worker(url);
-      } catch (e) { finish('worker blocked: ' + String((e && e.name) || 'error')); return; }
+      } catch (e) {
+        finish('worker construct failed: ' + String((e && e.name) || 'error') + ': ' + String((e && e.message) || '').slice(0, 100));
+        return;
+      }
       w.onmessage = (ev) => {
         const d = ev.data || {};
         if (d.ready) { worker = w; finish(''); return; }
@@ -1026,11 +1035,26 @@ _HELPER_JS = r"""
         if (!f) return;
         if (d.done) { delete waiting[d.id]; f(d); } else if (typeof f.onprogress === 'function') f.onprogress(d.progress);
       };
-      w.onerror = () => { if (worker === w) dropWorker('worker crashed'); else finish('worker blocked (script error)'); };
-      timer = setTimeout(() => finish('worker did not start'), 8000);
+      w.onerror = (ev) => {
+        const msg = String((ev && ev.message) || '').slice(0, 100);
+        if (worker === w) dropWorker('worker crashed: ' + msg); else finish('worker error event before ready: ' + msg);
+      };
+      timer = setTimeout(() => finish('worker created but sent no ready message in 8 s (no error event)'), 8000);
     });
   }
+  // Inline mode: the same runner in this world. Bytes still never go through base64 or the main thread's decoder:
+  // each piece is a fetch() answered by the controller (CDP Fetch), kept as a Blob; only one piece at a time is hashed.
+  async function runInline(m, job) {
+    if (job && job.aborted) return { error: 'aborted' };
+    if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
+    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {});
+    const id = ++waitSeq;
+    if (job) job.wid = id;
+    const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
+    return inlineRunner.run(Object.assign({ id: id, base: base }, m));
+  }
   async function runInWorker(m, job) {
+    if (transport === 'inline') return runInline(m, job);
     const why = await ensureWorker();
     if (why) return { error: 'no_worker', why: why };
     if (job && job.aborted) return { error: 'aborted' };
@@ -1049,9 +1073,30 @@ _HELPER_JS = r"""
     if (retired || !WRITE || WRITE.form_photo_only) return { error: 'no_worker', why: 'read only' };
     const why = sourceOk(spec && spec.source);
     if (why) return { error: 'no_worker', why: why };
-    const got = await runInWorker({ src: spec.source }, null);
-    if (got.error) return { error: 'no_worker', why: String(got.why || got.error).slice(0, 120) };
-    return { ok: true, bytes: got.bytes };
+    // Stage 1: a Web Worker (CSP worker-src, creation, start, session interception, piece hash). Every reason is kept
+    // (and any CSP violation the document reports meanwhile), so a failed probe says exactly where it stopped.
+    const csp = [];
+    const onCsp = (ev) => { if (csp.length < 3) csp.push(String(ev.effectiveDirective || ev.violatedDirective || '?').slice(0, 30) + ' blocked ' + String(ev.blockedURI || '?').slice(0, 20)); };
+    try { if (document && typeof document.addEventListener === 'function') document.addEventListener('securitypolicyviolation', onCsp); } catch (e) {}
+    const notes = [];
+    let result = null;
+    try {
+      transport = '';
+      const got = await runInWorker({ src: spec.source }, null);
+      if (!got.error) { transport = 'worker'; result = { ok: true, bytes: got.bytes, mode: 'worker' }; }
+      else notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
+      if (!result) {
+        // Stage 2: the same runner in this world (no worker needed; pieces are still fetch() answers from the controller).
+        transport = 'inline';
+        const inl = await runInline({ src: spec.source }, null);
+        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
+        else { transport = ''; notes.push('inline: ' + String(inl.why || inl.error).slice(0, 140)); }
+      }
+    } finally {
+      try { if (document && typeof document.removeEventListener === 'function') document.removeEventListener('securitypolicyviolation', onCsp); } catch (e) {}
+    }
+    if (result) return result;
+    return { error: 'no_worker', why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
   }
 
   // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
@@ -1086,7 +1131,8 @@ _HELPER_JS = r"""
     if (!j) return { ok: false };
     j.aborted = true;
     try { if (j.xhr) j.xhr.abort(); } catch (e) {}
-    try { if (j.wid && worker) worker.postMessage({ abort: j.wid }); } catch (e) {}
+    try { if (j.wid && transport !== 'inline' && worker) worker.postMessage({ abort: j.wid }); } catch (e) {}
+    try { if (j.wid && inlineRunner) inlineRunner.abort(j.wid); } catch (e) {}
     return { ok: true };
   }
 
@@ -2152,6 +2198,9 @@ class InPageGraph:
     SERVE_MIN_BPS = 100 * 1024
     PROBE_CALL_S = 25.0
     _upload_server = None
+    #: Result of the last successful probe: 'worker' | 'inline' ('' - not probed) and why a worker was not used.
+    upload_mode = ""
+    upload_mode_note = ""
 
     def _server(self):
         from src.fb_api.upload_server import UploadServer
@@ -2186,18 +2235,28 @@ class InPageGraph:
         except GraphStop:
             raise
         except (CdpTimeout, TimeoutError):
-            return False, "the worker probe timed out"
+            return False, "the worker probe timed out | " + (server.summary() if server is not None else "")
         except (StaleContextError, PageError, CdpError) as exc:
-            return False, f"worker probe failed ({type(exc).__name__})"
+            return False, f"worker probe failed ({type(exc).__name__}: {str(exc)[:100]}) | " + (
+                server.summary() if server is not None else "")
         finally:
             if server is not None:
                 if token:
                     server.unregister(token)
                 server.disarm()
+        trace = server.summary() if server is not None else ""
         if isinstance(got, dict) and got.get("ok") and got.get("bytes") == 4096:
+            # `mode`: 'worker' (Web Worker) or 'inline' (same runner in the helper's world when no worker could start);
+            # for 'inline' the worker's failure is kept so the log tells why the worker was not used.
+            self.upload_mode = str(got.get("mode") or "worker")
+            note = str(got.get("worker_why") or "")
+            if self.upload_mode == "inline":
+                self.upload_mode_note = f"worker not used: {note[:300]}; {trace}"
+                return True, self.upload_mode_note
+            self.upload_mode_note = ""
             return True, ""
         why = str(got.get("why") or got.get("error")) if isinstance(got, dict) else "bad reply"
-        return False, why[:120]
+        return False, f"{why[:400]} | {trace}"[:700]
 
     def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled) -> dict:
         """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker."""

@@ -4099,7 +4099,11 @@ class CampaignCreator:
         except Exception as exc:  # noqa: BLE001 - a failed probe is a fallback, not a stop
             ok, why = False, f"{type(exc).__name__}"
         if ok:
-            self._step(out, "video upload: originals go up from a Web Worker in the profile (no compression)")
+            mode = getattr(getattr(self.client, "transport", None), "upload_mode", "") or "worker"
+            where = "a Web Worker" if mode == "worker" else "the page's helper (no worker could start)"
+            self._step(out, f"video upload: originals go up from {where} in the profile (no compression)")
+            if why:      # inline mode: say exactly why the worker was not used (telemetry for the next live run)
+                out.warnings.append(f"Upload worker not used, continuing inline: {why}")
             return True
         if str(why).startswith("not supported"):
             return False            # a transport without the worker path: the old path, nothing to tell the buyer
