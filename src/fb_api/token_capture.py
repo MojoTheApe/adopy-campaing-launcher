@@ -2204,27 +2204,28 @@ class InPageGraph:
         server = None
         token = ""
         try:
-            self._ready_for_call()
-            ctx = self._ensure()
-            server = self._server()
-            server.arm()
-            token, pieces = server.register(chunk, piece=self.SERVE_PIECE)
-        except GraphStop:
-            raise
-        except (PageError, CdpError, OSError, ValueError) as exc:
-            if server is not None and token:
-                server.unregister(token)
-            return {"error": "no_file", "why": f"worker setup failed: {str(exc)[:80]}"}      # nothing was sent
-        spec["files"] = {field_name: "served"}
-        spec["source"] = {"token": token, "pieces": pieces}
-        spec["expect"] = {"bytes": len(chunk)}
-        spec["piece_ms"] = int(self.SERVE_PIECE_S * 1000)
-        try:
+            try:
+                self._ready_for_call()
+                ctx = self._ensure()
+                server = self._server()
+                server.arm()
+                token, pieces = server.register(chunk, piece=self.SERVE_PIECE)
+            except GraphStop:
+                raise
+            except (PageError, CdpError, OSError, ValueError) as exc:
+                return {"error": "no_file", "why": f"worker setup failed: {str(exc)[:80]}"}      # nothing was sent
+            spec["files"] = {field_name: "served"}
+            spec["source"] = {"token": token, "pieces": pieces}
+            spec["expect"] = {"bytes": len(chunk)}
+            spec["piece_ms"] = int(self.SERVE_PIECE_S * 1000)
             return self._write_file_job(ctx, spec, progress, cancelled, serving=True,
                                         deadline_s=self.SERVE_BASE_S + len(chunk) / self.SERVE_MIN_BPS)
         finally:
-            server.unregister(token)
-            server.disarm()
+            # Every exit once the server exists (arm may have raised half-way): auto-attach and the pattern go off.
+            if server is not None:
+                if token:
+                    server.unregister(token)
+                server.disarm()
 
     #: ACL-2533: the in-page upload has its own 120 s deadline; the CDP wait is a little longer.
     FORM_PHOTO_CALL_S = 150.0

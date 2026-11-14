@@ -448,6 +448,58 @@ def test_a_served_chunk_is_checked_by_python_policy_first():
     assert tab.specs == [] and tab.cdp_calls == []
 
 
+def _auto_attach_off(tab):
+    return [p for m, p in tab.cdp_calls if m == "Target.setAutoAttach"][-1]["autoAttach"] is False
+
+
+def test_a_register_failure_still_turns_auto_attach_off():
+    class Broken:
+        def read_range(self, offset, n):
+            raise OSError("gone")
+
+    tab = ServingTab()
+    got = _graph(tab).write(PATH, {**TRANSFER}, files={"video_file_chunk": wp.ServedChunk(Broken(), 0, 10)},
+                            filename="chunk")
+    assert got["error"] == "no_file" and _auto_attach_off(tab)                    # B4
+
+
+def test_an_arm_failure_still_turns_auto_attach_off():
+    class ArmFails(ServingTab):
+        def call(self, method, params=None, *, timeout=0):
+            self.cdp_calls.append((method, params or {}))
+            if method == "Target.setAutoAttach" and params.get("autoAttach"):
+                raise tc.CdpError("boom")
+            return {}
+
+    tab = ArmFails()
+    chunk = wp.ServedChunk(_Mem(b"x" * 10), 0, 10)
+    got = _graph(tab).write(PATH, {**TRANSFER}, files={"video_file_chunk": chunk}, filename="chunk")
+    assert got["error"] == "no_file" and _auto_attach_off(tab)                    # B4: arm failed part-way
+
+
+def test_a_graph_stop_during_setup_still_turns_auto_attach_off():
+    tab = ServingTab()
+    t = _graph(tab)
+
+    def stop():
+        raise tc.GraphStop("tab not answering")
+
+    t._ready_for_call = lambda: None
+    t._ensure = lambda: 7
+    srv = t._server()
+    real_arm = srv.arm
+
+    def arm():
+        real_arm()
+        raise tc.GraphStop("tab not answering")
+
+    srv.arm = arm
+    with pytest.raises(tc.GraphStop):
+        t.write(PATH, {**TRANSFER}, files={"video_file_chunk": wp.ServedChunk(_Mem(b"x" * 10), 0, 10)},
+                filename="chunk")
+    assert _auto_attach_off(tab)
+
+
 def test_a_served_chunk_that_cannot_be_read_is_refused_before_anything_is_sent():
     class Broken:
         def read_range(self, offset, n):
