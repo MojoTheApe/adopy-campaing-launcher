@@ -178,7 +178,8 @@ def test_check_plan_warns_about_a_large_video_with_the_call_count(small, tmp_pat
     assert [w for w in out.warnings if w.startswith("Large video")] == [
         f"Large video: about {chunks} Meta calls to upload in {n} chunks of 1 MB, "
         f"{chunks + cr.estimate_create_calls(plan)} of {budget} calls planned for this run "
-        "(upper bound; the file may be compressed before upload)."]
+        "(upper bound; ACL compresses large videos before upload, "
+        "so the real upload is usually smaller)."]
 
 
 def test_mutation_dropping_chunks_from_the_budget_is_caught(tmp_path, monkeypatch):
@@ -230,3 +231,28 @@ def test_a_2_5_gb_video_without_a_compressor_is_refused_with_honest_wording(tmp_
     assert "more than ACL allows in one run (" in refusal and "not Meta's" in refusal
     assert "compress" in refusal and "shorter video" in refusal and "split the campaign" in refusal
     assert "Meta refused" not in refusal
+
+
+def _check_plan(plan, monkeypatch):
+    budget, refusal = publish_api.create_call_budget(plan)
+    creator, client = _creator(ChunkMeta(), writes=False, max_calls=budget)
+    creator.size_of = lambda p: 2500 * MiB
+    creator.read_file = lambda p: b"x" * 10
+    out = cr.Outcome(campaign_name=plan.name)
+    return refusal, creator, out
+
+
+def test_check_plan_prepare_accepts_a_2_5_gb_compressible_video(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    plan = _plan(tmp_path, [2500], monkeypatch)
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "ffmpeg")
+    refusal, creator, out = _check_plan(plan, monkeypatch)
+    assert refusal == ""
+    creator._prepare(plan, writing=False, out=out)              # no PlanError
+
+
+def test_check_plan_prepare_refuses_a_2_5_gb_video_without_a_compressor(tmp_path, monkeypatch):
+    plan = _plan(tmp_path, [2500], monkeypatch)                 # autouse fixture: no ffmpeg
+    _, creator, out = _check_plan(plan, monkeypatch)
+    with pytest.raises(cr.PlanError):
+        creator._prepare(plan, writing=False, out=out)
