@@ -194,7 +194,15 @@ def upload_calls(size: int, worker: bool | None = None) -> int:
     worker = worker_upload_enabled() if worker is None else worker
     if size <= single_request_max(worker):
         return 0
-    return -(-size // (VIDEO_CHUNK_MAX if worker else VIDEO_CHUNK_STAGED_MAX)) + CALLS_UPLOAD_FIXED
+    chunks = -(-size // (VIDEO_CHUNK_MAX if worker else VIDEO_CHUNK_STAGED_MAX))
+    # ACL-2637: on the worker path Meta's windows may start at 1 MB and grow; a doubling ramp to 64 MB costs about
+    # this many calls more than 64 MB windows from the first byte (only when the file has that many chunks at all).
+    ramp = min(CALLS_UPLOAD_WINDOW_RAMP, chunks) if worker and chunks > 1 else 0
+    return chunks + ramp + CALLS_UPLOAD_FIXED
+
+
+#: ACL-2637: calls reserved for a growing upload window (1, 2, 4 ... 64 MB) on the worker path.
+CALLS_UPLOAD_WINDOW_RAMP = 6
 
 #: Ожидание обработки видео — с потолком по времени и по числу вызовов.
 VIDEO_WAIT_S = 300.0
@@ -252,6 +260,37 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
 #: ACL-2370: запас на повторы кусков (ACL-2000, докачка со смещения): 5% кусков, не меньше двух вызовов.
 CHUNK_RETRY_SLACK_FRACTION = 0.05
 CHUNK_RETRY_SLACK_MIN = 2
+#: ACL-2637: Meta picks every upload window itself ("We send you new offsets for each chunk", Business Creative
+#: Asset Management guide) - a small first window (1 MB seen live 2026-11-14) may grow on later transfer answers.
+#: So a small window is judged only after this many transfer answers; until then only the hard cap stops.
+UPLOAD_WINDOW_PROBE_TRANSFERS = 3
+#: How fast a growing window is assumed to keep growing when the rest of the calls is projected (at most doubling).
+UPLOAD_WINDOW_GROWTH_MAX = 2.0
+
+
+def project_upload_calls(remaining: int, windows: list[int], cap: int, *, limit: int = 100_000) -> int:
+    """ACL-2637: transfer calls still needed for `remaining` bytes, from the windows Meta offered so far.
+
+    Steady or shrinking windows: remaining / last window. Growing windows: the last growth ratio (at most doubling)
+    is assumed to go on up to `cap`, the chunk ceiling of this path. Counting stops at `limit` (the caller compares).
+    """
+    if remaining <= 0:
+        return 0
+    last = max(1, min(windows[-1] if windows else 1, cap))
+    prev = max(1, min(windows[-2], cap)) if len(windows) >= 2 else last
+    growth = min(UPLOAD_WINDOW_GROWTH_MAX, last / prev)
+    if growth <= 1.0 or last >= cap:
+        return -(-remaining // last)
+    n, w = 0, float(last)
+    while remaining > 0 and n < limit:
+        remaining -= int(min(w, cap))
+        n += 1
+        w = min(float(cap), w * growth)
+    return n
+
+
+def _mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.0f} MB" if n >= 10 * 1024 * 1024 else f"{n / (1024 * 1024):.1f} MB"
 
 
 def video_files_of(plan: "CampaignPlan") -> list[str]:
@@ -3228,27 +3267,41 @@ class CampaignCreator:
                                   kind="video_error")
         offset, end = self._offsets(started, size, 0, what)
         self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
-        # ACL-2629 (N4): the plan assumed 64 MB windows. Meta decides the window; when it offers smaller ones, stop
-        # cleanly BEFORE sending more if the calls planned for this file would run out.
+        # ACL-2629 (N4) / ACL-2637: the plan assumed 64 MB windows, but Meta decides every window and may start small
+        # and grow. The calls planned for this file are a hard cap: never send a transfer without room for it AND the
+        # finish. A small window alone does not stop: after UPLOAD_WINDOW_PROBE_TRANSFERS answers the rest is projected
+        # from the windows seen (growth included) and the upload stops only when that projection exceeds the cap.
         calls_before = getattr(self.client, "calls", 0)
         planned = upload_calls(size, True)
         allowance = planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned))
-        window_seen = [0]
+        windows: list[int] = []
+        transfers = [0]
+        noted = [0]
+
+        def stop_for_windows(needed: int, left: int) -> None:
+            seen = ", ".join(_mb(w) for w in windows[:6]) + (", ..." if len(windows) > 6 else "")
+            self._step(out, f"{who}: upload windows offered by Meta: {seen}")
+            raise CreationStopped(
+                f"{what}: Meta accepts this video only in small pieces ({_mb(min(windows[-1], cap))} per call), so "
+                f"the rest of it needs about {needed} more calls but only {max(left, 0)} are planned for it. "
+                "Stopped before sending more; nothing was duplicated and the unfinished upload is not used. "
+                "Use a smaller video file (shorter, or exported at a lower bitrate).",
+                created=out.created, kind="video_error")
 
         def check_window(at: int, window: int) -> None:
-            if not self.worker_path or window <= 0 or window >= window_seen[0] > 0:
+            if not self.worker_path or window <= 0:
                 return
-            window_seen[0] = window
-            per = max(1, min(window, cap))
-            needed = -(-(size - at) // per) + 1                     # the remaining chunks and finish
+            windows.append(window)
+            if noted[0] < 6 and (len(windows) == 1 or window != windows[-2]):
+                noted[0] += 1                                       # telemetry: how Meta's windows move
+                self._step(out, f"{who}: Meta upload window {_mb(window)} at {at // (1024 * 1024)} MB")
             used = getattr(self.client, "calls", 0) - calls_before
-            if used + needed > allowance:
-                raise CreationStopped(
-                    f"{what}: Meta offers upload windows of {per // (1024 * 1024) or 1} MB, so the rest of this video "
-                    f"needs about {needed} more calls but only {max(allowance - used, 0)} were planned for it. "
-                    "Stopped before sending more; nothing was duplicated and the unfinished upload is not used. "
-                    "Use a smaller video, or set ACL_VIDEO_WORKER_UPLOAD=0 to compress it instead.",
-                    created=out.created, kind="video_error")
+            left = allowance - used
+            needed = project_upload_calls(size - at, windows, cap, limit=allowance + 1) + 1   # + finish
+            if needed <= left:
+                return
+            if left < 2 or transfers[0] >= UPLOAD_WINDOW_PROBE_TRANSFERS:
+                stop_for_windows(needed, left)
 
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
         # ACL-2629: путь воркера - куски до 64 МБ (байты в страницу не копируются); иначе прежние 8 МБ.
@@ -3318,6 +3371,7 @@ class CampaignCreator:
                 continue
             failures = 0
             stalls = 0
+            transfers[0] += 1
             self._beat()
             offset, end = self._offsets(body, size, offset, what)
             if offset < size:
@@ -3988,7 +4042,7 @@ class CampaignCreator:
             try:
                 self._run(plan, out)
             finally:
-                self._close_upload_context()        # ACL-2637: never leave the separate upload tab open
+                self._close_upload_context(out)     # ACL-2637: never leave the separate upload tab open
             self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
@@ -4109,8 +4163,15 @@ class CampaignCreator:
         if ok:
             transport = getattr(self.client, "transport", None)
             mode = getattr(transport, "upload_mode", "") or "worker"
-            where = "a Web Worker" if mode == "worker" else "the page's helper (no worker could start)"
-            if getattr(transport, "upload_context", "") == "clean_tab":
+            clean = getattr(transport, "upload_context", "") == "clean_tab"
+            if mode == "worker":
+                where = "a Web Worker"
+            elif clean and not why:
+                # ACL-2637: the clean tab runs no app, so its helper uploads directly - the intended mode there.
+                where = "the helper"
+            else:
+                where = "the page's helper (no worker could start)"
+            if clean:
                 where += " of a separate tab without a service worker"
             self._step(out, f"video upload: originals go up from {where} in the profile (no compression)")
             if why:      # inline mode: say exactly why the worker was not used (telemetry for the next live run)
@@ -4124,14 +4185,24 @@ class CampaignCreator:
         out.warnings.append(self._worker_warning)
         return False
 
-    def _close_upload_context(self) -> None:
-        """ACL-2637: the separate upload tab (if the transport opened one) is closed when the run ends."""
-        close = getattr(getattr(self.client, "transport", None), "close_upload_context", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:  # noqa: BLE001 - closing never fails the run
-                pass
+    def _close_upload_context(self, out: Outcome | None = None) -> None:
+        """ACL-2637: the separate upload tab (if the transport opened one) is closed when the run ends.
+
+        A close that cannot be confirmed is said (a step and a warning), never silent: the tab may still be open.
+        """
+        transport = getattr(self.client, "transport", None)
+        close = getattr(transport, "close_upload_context", None)
+        if not callable(close):
+            return
+        had = bool(getattr(transport, "upload_context", ""))
+        try:
+            ok = close()
+        except Exception:  # noqa: BLE001 - closing never fails the run
+            ok = False
+        if had and ok is False and out is not None:
+            self._step(out, "video upload: the separate upload tab could not be confirmed closed")
+            out.warnings.append("The separate upload tab of the profile may still be open; please close that tab in "
+                                "the profile browser.")
 
     def _too_big_for_fallback(self, out: Outcome, who: str, path: str, original_mb: float, why: str) -> None:
         """ACL-2637: the old path cannot take the file - ONE short buyer line instead of "uploading the original"

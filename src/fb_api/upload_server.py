@@ -92,8 +92,12 @@ class UploadServer:
         self._windows.pop(token, None)
 
     # -- the interception
-    def arm(self) -> None:
-        """Route the tab's events to `handle` and turn the interception on (again after a re-attach)."""
+    def arm(self, *, attach_workers: bool = True) -> None:
+        """Route the tab's events to `handle` and turn the interception on (again after a re-attach).
+
+        ACL-2637: `attach_workers=False` - the helper runs inline (a light document, no worker is started), so no
+        auto-attach: nothing new is paused, and there is no worker session that could be refused.
+        """
         tab = self.tab
         sid = str(getattr(tab, "session_id", "") or "")
         if tab.on_event is not self._handler:
@@ -105,8 +109,9 @@ class UploadServer:
             # An ordinary Ads Manager tab: pause only our prefix, nothing of the app's own traffic.
             tab.call("Fetch.enable", {"patterns": [{"urlPattern": PATTERN, "requestStage": "Request"}]}, timeout=10.0)
         # A light work tab intercepts its whole origin already (`light_tab`); enabling again would replace that.
-        tab.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True},
-                 timeout=10.0)
+        if attach_workers:
+            tab.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True},
+                     timeout=10.0)
         self._session = sid
 
     def _on_event(self, msg: dict) -> None:
@@ -165,11 +170,9 @@ class UploadServer:
         except Exception as exc:  # noqa: BLE001
             self._note(exc)
             self.refused_workers += 1
-            if target_id:
-                try:
-                    self._call("", "Target.closeTarget", {"targetId": target_id})
-                except Exception as exc:  # noqa: BLE001 - it stays paused: it never runs
-                    self._note(exc)
+            # ACL-2637: it is NOT resumed and NOT detached (a detach would let it run). `Target.closeTarget` does not
+            # apply to a dedicated worker ("Specified target doesn't support closing", live run 2026-11-14): the page
+            # helper ends it (the Web Worker API stop call) when no ready message arrives.
             return
         self._workers[session] = target_id
         self.workers_ready += 1

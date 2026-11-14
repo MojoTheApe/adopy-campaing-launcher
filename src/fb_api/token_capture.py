@@ -1019,6 +1019,7 @@ _HELPER_JS = r"""
     const w = worker;
     worker = null;
     try { if (w) { w.onmessage = null; w.postMessage({ quit: true }); } } catch (e) {}   // the worker closes itself
+    try { if (w) w.terminate(); } catch (e) {}                                             // ... or is ended here
     for (const k of Object.keys(waiting)) {
       const f = waiting[k];
       delete waiting[k];
@@ -1038,7 +1039,9 @@ _HELPER_JS = r"""
       const finish = (why) => {
         if (timer !== null) clearTimeout(timer);
         try { if (url) URL.revokeObjectURL(url); } catch (e) {}
-        if (why && w) { try { w.onmessage = null; w.postMessage({ quit: true }); } catch (e) {} if (worker === w) worker = null; }
+        // ACL-2637: a worker the controller left paused (its interception could not be turned on) never reads a
+        // message, so `quit` alone would leave it: the Web Worker API call below ends it from this side.
+        if (why && w) { try { w.onmessage = null; w.postMessage({ quit: true }); } catch (e) {} try { w.terminate(); } catch (e) {} if (worker === w) worker = null; }
         resolve(why);
       };
       try {
@@ -1118,14 +1121,18 @@ _HELPER_JS = r"""
     let result = null;
     try {
       transport = '';
-      const got = await runInWorker({ src: spec.source }, null);
+      // ACL-2637: a light document (the clean upload tab, `/__acl_work`) runs no app on its main thread, so the
+      // inline runner is the intended mode there: no worker is started (no worker session to intercept, no wait).
+      const inlineOnly = !!(spec && spec.inline_only);
+      const got = inlineOnly ? { error: 'skipped' } : await runInWorker({ src: spec.source }, null);
       if (!got.error) { transport = 'worker'; result = { ok: true, bytes: got.bytes, mode: 'worker' }; }
-      else notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
+      else if (!inlineOnly) notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
       if (!result) {
         // Stage 2: the same runner in this world (no worker needed; pieces are still fetch() answers from the controller).
         transport = 'inline';
         const inl = await runInline({ src: spec.source }, null);
-        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
+        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', intended: inlineOnly,
+                                   worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
         else { transport = ''; notes.push('inline: ' + String(inl.why || inl.error).slice(0, 140)); }
       }
     } finally {
@@ -2358,11 +2365,14 @@ class InPageGraph:
             self._ready_for_call()
             ctx = self._ensure()
             server = self._server()
-            server.arm()
+            inline_only = self.light
+            server.arm(attach_workers=not inline_only)
             probe = _wp.ServedChunk(MemorySource(secrets.token_bytes(4096)), 0, 4096)
             token, pieces = server.register(probe, piece=1024)
-            expr = (f"globalThis[{json.dumps(self.name)}].probeWorker("
-                    f"{json.dumps({'source': {'token': token, 'pieces': pieces}})})")
+            spec = {"source": {"token": token, "pieces": pieces}}
+            if inline_only:
+                spec["inline_only"] = True
+            expr = f"globalThis[{json.dumps(self.name)}].probeWorker({json.dumps(spec)})"
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.PROBE_CALL_S))
         except GraphStop:
             raise
@@ -2382,6 +2392,10 @@ class InPageGraph:
             # for 'inline' the worker's failure is kept so the log tells why the worker was not used.
             self.upload_mode = str(got.get("mode") or "worker")
             note = str(got.get("worker_why") or "")
+            if self.upload_mode == "inline" and got.get("intended"):
+                # ACL-2637: the light document has no app on its main thread - inline is the plan, not a fallback.
+                self.upload_mode_note = ""
+                return True, "", False
             if self.upload_mode == "inline":
                 self.upload_mode_note = f"worker not used: {note[:300]}; {trace}"
                 return True, self.upload_mode_note, False
@@ -2413,7 +2427,7 @@ class InPageGraph:
                 self._ready_for_call()
                 ctx = self._ensure()
                 server = self._server()
-                server.arm()
+                server.arm(attach_workers=not self.light)
                 token, pieces = server.register(chunk, piece=self.SERVE_PIECE)
             except GraphStop:
                 raise

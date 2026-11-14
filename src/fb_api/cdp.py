@@ -793,7 +793,7 @@ class PageTab:
             return False
 
     # -- закрытие
-    def close(self) -> None:
+    def close(self, *, verify: bool = False) -> None:
         """Закрыть СВОЮ вкладку. Сокет не ответил — через HTTP отладочного порта.
 
         Последнюю вкладку браузера не закрываем (Chrome и профиль ушли бы).
@@ -814,12 +814,47 @@ class PageTab:
             raise
         except Exception:
             ok = False
+        if ok and verify:
+            # ACL-2637 (`verify`): the close is CHECKED - the browser must no longer list this tab as a page.
+            ok = self._gone_over_socket()
         if not ok:
             try:
                 self._close_over_http()
+                ok = self._gone_over_http() if verify else True
             except Exception:
-                pass
+                ok = False
+        self.close_ok = ok if verify else None
         self._safe_cdp_close()
+
+    #: ACL-2637: result of `close()` - True: the tab is gone (or, as the last tab, shows about:blank);
+    #: False: it may still be open; None: not checked (closed without `verify`, or not closed yet).
+    close_ok: bool | None = None
+    #: How long `close()` waits for the browser to drop the closed tab from its list.
+    CLOSE_CHECK_S = 3.0
+
+    def _gone_over_socket(self) -> bool:
+        deadline = time.monotonic() + self.CLOSE_CHECK_S
+        while True:
+            try:
+                infos = (self._cdp.call("Target.getTargets", timeout=CALL_S) or {}).get("targetInfos") or []
+            except Exception:
+                return False
+            mine = [t for t in infos if t.get("targetId") == self.target_id and t.get("type") == "page"]
+            pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
+            if not mine or (len(pages) == 1 and str(mine[0].get("url") or "") == "about:blank"):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.1)
+
+    def _gone_over_http(self) -> bool:
+        host, port = self._http_host_port()
+        if not port:
+            return False
+        targets = self._http(host, port, "/json/list")
+        if not isinstance(targets, list):
+            return False
+        return not any(t.get("id") == self.target_id and t.get("type") == "page" for t in targets)
 
     def _close_over_socket(self) -> bool:
         """True — наша вкладка закрыта или (единственная) уведена на about:blank."""

@@ -396,7 +396,11 @@ def settle_and_close(tab: Any) -> bool:
     except Exception:  # noqa: BLE001
         pass
     try:
-        tab.close()
+        try:
+            tab.close(verify=True)
+        except TypeError:           # a tab object without the check
+            tab.close()
     except Exception:  # noqa: BLE001
         return False
-    return True
+    # ACL-2637: `PageTab.close` never raises; whether the tab is really gone is in `close_ok` (checked there).
+    return getattr(tab, "close_ok", None) is not False

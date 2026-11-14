@@ -115,8 +115,9 @@ def test_the_helper_gets_the_served_limits_from_the_same_policy():
 def test_the_estimate_counts_the_original_in_64_mb_chunks(tmp_path, monkeypatch):
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     assert cr.worker_upload_enabled()
-    assert cr.upload_calls(2500 * MB) == -(-2500 // 64) + cr.CALLS_UPLOAD_FIXED == 43       # a 2.5 GB file
-    assert cr.upload_calls(4096 * MB) == 64 + cr.CALLS_UPLOAD_FIXED
+    # ACL-2637: + the window ramp reserve (Meta may start with 1 MB windows and grow them)
+    assert cr.upload_calls(2500 * MB) == -(-2500 // 64) + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED == 49
+    assert cr.upload_calls(4096 * MB) == 64 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
     assert cr.upload_calls(16 * MB) == 0 and cr.upload_calls(16 * MB + 1) == 1 + cr.CALLS_UPLOAD_FIXED
     # nothing is compressed: the planned size is the original even where ffmpeg exists
     from src.fb_ads_rpa import creative_compress as cc
@@ -234,7 +235,10 @@ def test_a_worker_whose_interception_cannot_be_enabled_is_never_resumed():
     tab.on_event({"method": "Target.attachedToTarget", "params": {
         "sessionId": "W9", "targetInfo": {"type": "worker", "targetId": "T9"}, "waitingForDebugger": True}})
     assert tab.of("Runtime.runIfWaitingForDebugger") == []                              # B2: fail closed
-    assert ("", {"targetId": "T9"}) in tab.of("Target.closeTarget") and server.refused_workers == 1
+    # ACL-2637: a dedicated worker cannot be closed with Target.closeTarget (live: "doesn't support closing");
+    # it is left paused (never detached: that would resume it) and the page helper terminates it.
+    assert tab.of("Target.closeTarget") == [] and tab.of("Target.detachFromTarget") == []
+    assert server.refused_workers == 1
 
 
 def test_disarm_turns_auto_attach_off_and_detaches_worker_sessions():
@@ -527,8 +531,8 @@ def test_a_graph_stop_during_setup_still_turns_auto_attach_off():
     srv = t._server()
     real_arm = srv.arm
 
-    def arm():
-        real_arm()
+    def arm(**kw):
+        real_arm(**kw)
         raise tc.GraphStop("tab not answering")
 
     srv.arm = arm
@@ -560,7 +564,7 @@ const TOKENV = __TOKENV__;
 const ORIGIN = 'https://adsmanager.facebook.com';
 const PREFIX = '/__acl_upload/';
 const windows = {};
-const log = { graph: [], pieces: 0, workers: 0 };
+const log = { graph: [], pieces: 0, workers: 0, terminated: 0 };
 const meta = { size: 0, received: 0, md5: crypto.createHash('md5'), chunks: [], done: false };
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const reply = (status, obj) => ({ status: status, text: async () => JSON.stringify(obj), headers: { get: () => null } });
@@ -621,7 +625,7 @@ const FakeWorker = function (url) {
   const w = this;
   const inner = { onmessage: null, close: () => {}, postMessage: (d) => setTimeout(() => w.onmessage && w.onmessage({ data: d }), 0) };
   w.postMessage = (m) => setTimeout(() => inner.onmessage && inner.onmessage({ data: m }), 0);
-  w.terminate = () => {};
+  w.terminate = () => { log.terminated++; };
   resolveObjectURL(url).text().then((src) => {
     if (SC.worker_silent) return;
     new Function('self', 'fetch', 'crypto', 'FormData', 'Blob', 'AbortController', src)(
@@ -720,7 +724,8 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     const token = 'probe' + '0'.repeat(20);
     windows[token] = { offset: 0, length: 4096 };
     const pieces = [0, 1, 2, 3].map((i) => ({ o: i * 1024, n: 1024, h: sha(SOURCE.subarray(i * 1024, (i + 1) * 1024)) }));
-    out.probe = await h.probeWorker({ source: { token: token, pieces: pieces } });
+    out.probe = await h.probeWorker(Object.assign({ source: { token: token, pieces: pieces } },
+                                                  SC.inline_only ? { inline_only: true } : {}));
     out.bad = await h.probeWorker({ source: { token: 'AB', pieces: pieces } });
     out.graph_calls = log.graph.length;
   } else if (SC.name === 'abort') {
@@ -733,7 +738,7 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     while ((p = h.poll(s.job)).state === 'running') await sleep(1);
     out.result = slim(p.result);
   }
-  out.log = { graph: log.graph, pieces: log.pieces, workers: log.workers };
+  out.log = { graph: log.graph, pieces: log.pieces, workers: log.workers, terminated: log.terminated };
   out.meta = { received: meta.received, size: meta.size, md5: meta.md5.digest('hex'), chunks: meta.chunks, done: meta.done };
   process.stdout.write(JSON.stringify(out));
   process.exit(0);
@@ -848,6 +853,8 @@ def test_a_worker_that_never_starts_falls_back_to_inline_and_says_why():
     assert out["probe"]["ok"] is True and out["probe"]["mode"] == "inline"
     assert "worker created but sent no ready message" in out["probe"]["worker_why"]
     assert out["graph_calls"] == 0
+    # ACL-2637: the silent worker (left paused by the controller) is ended from the page, not left behind
+    assert out["log"]["terminated"] >= 1
 
 
 def test_a_page_controlled_by_a_service_worker_gets_neither_worker_nor_inline():
@@ -1031,9 +1038,12 @@ def test_windows_much_smaller_than_planned_stop_cleanly_before_more_is_sent(work
     d, f = _big_draft(tmp_path)
     meta = ServedMeta(meta_chunk=50_000)                 # the plan assumed MB-sized windows
     out, _ = _run(meta, d, max_calls=400)
-    assert out.stop_kind == "video_error" and "upload windows" in out.error and "more calls" in out.error
-    assert "ACL_VIDEO_WORKER_UPLOAD=0" in out.error
-    assert meta.served_sizes == [] and not any(p == "finish" for p, _ in meta.phases)       # nothing sent, no finish
+    assert out.stop_kind == "video_error" and "small pieces" in out.error and "more calls" in out.error
+    assert "ACL_VIDEO_WORKER_UPLOAD" not in out.error and "smaller video file" in out.error     # a buyer action
+    # ACL-2637: a small window alone does not stop - a few windows are tried (they may grow), then the projection
+    # with the windows seen decides; nothing more is sent and there is no finish.
+    assert meta.served_sizes == [50_000] * cr.UPLOAD_WINDOW_PROBE_TRANSFERS
+    assert not any(p == "finish" for p, _ in meta.phases)
 
 
 @pytest.mark.parametrize("fault", ["lost", "unsent", "refused_stored"])
@@ -1133,5 +1143,5 @@ def test_check_plan_counts_the_original_and_the_64_mb_chunks(tmp_path, monkeypat
     budget, refusal = T.publish_api.create_call_budget(plan)
     assert refusal == ""                                              # a 2.5 GB file fits one run
     chunks = cr.estimate_upload_calls(plan, size_of=lambda p: 2500 * MB)
-    assert 43 <= chunks <= 43 + 3
+    assert 49 <= chunks <= 49 + 3                                     # + the window ramp reserve (ACL-2637)
     assert budget >= chunks + cr.estimate_create_calls(plan)
