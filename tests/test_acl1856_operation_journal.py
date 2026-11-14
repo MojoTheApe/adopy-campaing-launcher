@@ -1067,5 +1067,48 @@ def test_resume_verify_calls_counts_each_kind():
         return ("k", {"kind": kind})
     assert cr.resume_verify_calls([]) == 0
     assert cr.resume_verify_calls([st("campaign")]) == 1
-    assert cr.resume_verify_calls([st("campaign"), st("creative"), st("video"), st("image")]) == 4
+    assert cr.resume_verify_calls([st("campaign"), st("creative"), st("video"), st("image")]) == 3 + cr.RESUME_VIDEO_LIST_PAGES + 1
     assert cr.resume_verify_calls([st("campaign"), st("adset"), st("adset"), st("ad")]) == 1 + 2 + 2 * 3
+
+
+# ---- ACL-2618: the resume check reads uploaded videos with fields the Video node has ----
+
+def _video_done(tmp_path, journal):
+    meta = FakeMeta(video_states=("ready",))
+    done, _ = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert done.error == ""
+    return meta
+
+
+def test_untouched_video_resume_continues_with_valid_fields_only(tmp_path, journal):
+    meta = _video_done(tmp_path, journal)          # the fake raises (#100) for account_id and any unknown field
+    out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.stop_kind != "resume_mismatch", out.error
+    vid_reads = [p for p, q in meta.gets if q.get("fields") == "id,title,status"]
+    assert vid_reads and not any("account_id" in str(q.get("fields")) for p, q in meta.gets
+                                 if _by_kind(meta, "video")["id"] in p)
+
+
+def test_deleted_video_stops_the_resume(tmp_path, journal):
+    meta = _video_done(tmp_path, journal)
+    vid = _by_kind(meta, "video")["id"]
+    del meta.objects[vid]
+    posts = len(meta.posts)
+    out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
+    assert out.error != cr.MSG_OTHER_ACCOUNT.format(name="x")
+
+
+def test_video_of_another_account_gives_the_other_account_message(tmp_path, journal):
+    meta = _video_done(tmp_path, journal)
+    _by_kind(meta, "video")["_other"] = True        # readable by id, but not in this account's advideos
+    posts = len(meta.posts)
+    out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
+    assert "belongs to a different ad account" in out.error
+
+
+def test_image_resume_is_unchanged(tmp_path, journal):
+    meta, _ = _partial(tmp_path, journal)
+    out, _c = _go(meta, _draft(tmp_path, ads=2), journal)
+    assert out.stop_kind != "resume_mismatch", out.error

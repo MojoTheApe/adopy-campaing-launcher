@@ -1645,10 +1645,16 @@ class NameChoice:
         return self.copy_number > 0
 
 
+#: Pages of `/act_X/advideos` the resume check reads to see that a video belongs to this ad account.
+RESUME_VIDEO_LIST_PAGES = 3
+
+
 def resume_verify_calls(stages: "list[tuple[str, dict]]") -> int:
     """Upper bound of the Graph reads `_verify_resume` makes for these confirmed stages."""
     kinds = [st["kind"] for _k, st in stages]
     reads = sum(1 for k in kinds if k in ("campaign", "creative", "image", "video"))
+    if "video" in kinds:
+        reads += RESUME_VIDEO_LIST_PAGES     # the ad account's video listing, read once (ACL-2618)
     sets, ads = kinds.count("adset"), kinds.count("ad")
     if sets or ads:
         reads += 2                           # the ad set listing (two pages at most)
@@ -2210,6 +2216,7 @@ class CampaignCreator:
 
         adset_names: dict[str, str] = {}
         ad_names: dict[str, str] = {}
+        video_ids: tuple[set[str], bool] | None = None
         for key, st in stages:
             oid, name, kind = st["object_id"], st["name"], st["kind"]
             if kind == "campaign":
@@ -2235,10 +2242,17 @@ class CampaignCreator:
                 if not any(str(r.get("hash")) == oid for r in rows):
                     raise mismatch(key)
             elif kind == "video":
-                row = read(oid, "id,title,status,account_id")
+                # ACL-2618: the Video/AdVideo node has no `account_id` (Meta answers (#100)), so ownership
+                # is read from the account's own video listing instead.
+                row = read(oid, "id,title,status")
                 if row is None or (name and row.get("title") is not None and str(row["title"]) != name):
                     raise mismatch(key)
-                if other_account(row):
+                if video_ids is None:
+                    cut = len(self.client.truncated)
+                    listed = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id", "limit": 100},
+                                                 max_pages=RESUME_VIDEO_LIST_PAGES)
+                    video_ids = ({str(r.get("id")) for r in listed}, len(self.client.truncated) == cut)
+                if oid not in video_ids[0] and video_ids[1]:     # complete listing and the video is not in it
                     raise mismatch(key, MSG_OTHER_ACCOUNT)
                 status = row.get("status") if isinstance(row.get("status"), dict) else {}
                 if str(status.get("video_status") or "").lower() != "ready":
