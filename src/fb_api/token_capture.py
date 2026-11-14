@@ -917,7 +917,7 @@ _HELPER_JS = r"""
   // The token of the session goes to the worker in a message of this world only (the page cannot reach it).
   // The runner is self-contained (it is stringified into the worker): `fetch`, `crypto` and `emit` are parameters, so
   // the very same code also runs INLINE in this world when no worker can be started (see `transport`).
-  function makeRunner(fetch, crypto, emit) {
+  function makeRunner(fetch, crypto, emit, guard) {
     const jobs = {};
     const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
     const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
@@ -925,6 +925,10 @@ _HELPER_JS = r"""
       const parts = [];
       let got = 0;
       for (const p of m.src.pieces) {
+        // ACL-2637: inline mode re-checks the controller before EVERY piece (a service worker may claim the page
+        // mid-upload via clients.claim()); the worker gets no guard - its page aborts it on 'controllerchange'.
+        if (guard && guard()) return { error: 'no_file', why: 'a service worker took control of the page during the upload' };
+        if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };
         // Every piece has a deadline: a request the controller never answers must not hang the upload.
         const pc = new AbortController();
         let late = false;
@@ -963,6 +967,7 @@ _HELPER_JS = r"""
         const made = await pieces(m, ac);
         if (made.error) return made;
         if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
+        if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };        // nothing posted yet
         const body = new FormData();
         for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
         body.append(m.field, new Blob(made.parts), m.filename);
@@ -1054,7 +1059,7 @@ _HELPER_JS = r"""
     if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
     if (job && job.aborted) return { error: 'aborted' };
     if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
-    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {});
+    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {}, swControlled);
     const id = ++waitSeq;
     if (job) job.wid = id;
     const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
@@ -1069,12 +1074,28 @@ _HELPER_JS = r"""
     const id = ++waitSeq;
     const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
     const msg = Object.assign({ id: id, base: base }, m);
-    return new Promise((resolve) => {
+    // ACL-2637: a service worker that takes control while pieces are still being fetched stops the job before any
+    // more pieces move (nothing was posted yet: no_file). Once every piece is in, the POST is left alone.
+    const total = m.src.pieces.reduce((a, p) => a + p.n, 0);
+    let got = 0;
+    let taken = false;
+    const onTake = () => {
+      if (got >= total) return;
+      taken = true;
+      try { if (worker) worker.postMessage({ abort: id }); } catch (e) {}
+    };
+    const sw = (typeof navigator !== 'undefined' && navigator.serviceWorker) || null;
+    try { if (sw && typeof sw.addEventListener === 'function') sw.addEventListener('controllerchange', onTake); } catch (e) {}
+    const r = await new Promise((resolve) => {
       const f = resolve;
+      f.onprogress = (n) => { got = Number(n) || 0; };
       waiting[id] = f;
       if (job) job.wid = id;
       try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
     });
+    try { if (sw && typeof sw.removeEventListener === 'function') sw.removeEventListener('controllerchange', onTake); } catch (e) {}
+    if (taken && r && r.error && !r.sent) return { error: 'no_file', why: 'a service worker took control of the page during the upload' };
+    return r;
   }
   // Local self-test of the worker data path (CSP, worker session interception, piece hash): no request to Meta.
   async function probeWorker(spec) {
@@ -1104,7 +1125,9 @@ _HELPER_JS = r"""
       try { if (document && typeof document.removeEventListener === 'function') document.removeEventListener('securitypolicyviolation', onCsp); } catch (e) {}
     }
     if (result) return result;
-    return { error: 'no_worker', why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
+    // ACL-2637: `controlled` tells Python that THIS page is controlled by a service worker (a clean tab may help).
+    return { error: 'no_worker', controlled: swControlled(),
+             why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
   }
 
   // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
@@ -2220,14 +2243,97 @@ class InPageGraph:
     #: The transport can serve a file to the worker (the creator checks `probe_worker` before it relies on it).
     serves_chunks = True
 
+    #: ACL-2637: where the upload runs - '' (this tab) or 'clean_tab' (a separate tab without a service worker).
+    upload_context = ""
+    #: ACL-2637: `callable() -> tab` opening a new own tab of the same profile (default: `PageTab.open` on the
+    #: browser of this tab). Tests inject a fake.
+    upload_tab_factory: Callable[[], Any] | None = None
+    _upload_graph: "InPageGraph | None" = None
+
     def probe_worker(self) -> tuple[bool, str]:
         """Local self-test of the worker data path: CSP lets the worker start, its requests are intercepted and
-        answered from here, and the bytes arrive intact. No request to Meta. Returns (ok, reason)."""
+        answered from here, and the bytes arrive intact. No request to Meta. Returns (ok, reason).
+
+        ACL-2637: when THIS page is controlled by a service worker (the Ads Manager tab always is), the upload
+        moves to a separate tab of the same profile whose document is checked to be uncontrolled
+        (`light_tab.open_upload_document`); the token goes there world-to-world. Both reasons are kept.
+        """
+        if not self.allow_writes or self.object_updates or self.form_photo:
+            return False, "writes are not enabled for this page"
+        self.close_upload_context()
+        ok, why, controlled = self._probe_here()
+        if ok or not controlled:
+            return ok, why
+        up, reason = self._open_upload_context()
+        if up is None:
+            return False, f"{why}; clean upload tab: {reason}"[:1000]
+        ok2, why2, _ = up._probe_here()
+        if not ok2:
+            self.close_upload_context()
+            return False, f"{why}; clean upload tab: {why2}"[:1000]
+        self.upload_context = "clean_tab"
+        self.upload_mode, self.upload_mode_note = up.upload_mode, up.upload_mode_note
+        return True, up.upload_mode_note
+
+    def _open_upload_context(self) -> tuple["InPageGraph | None", str]:
+        """A new tab of THIS profile (same browser, same proxy) with the uncontrolled light document, a helper
+        with the same write policy, and the token handed over. (graph, '') or (None, reason); closed on failure."""
+        from src.fb_api import light_tab
+
+        factory = self.upload_tab_factory
+        if factory is None:
+            cdp_url = str(getattr(self.tab, "_cdp_url", "") or "")
+            if not cdp_url:
+                return None, "no way to open a tab of this profile"
+            from src.fb_api.cdp import PageTab
+
+            def factory():          # the same browser = the same profile and its proxy
+                return PageTab.open(cdp_url)
+        tab = None
+        try:
+            tab = factory()
+            doc, reason = light_tab.open_upload_document(tab)
+            if doc is None:
+                light_tab.settle_and_close(tab)
+                return None, reason
+            up = InPageGraph(tab, graph_host=self.graph_host, credentials=self.credentials, allow_writes=True,
+                             write_act=self.write_act, write_page=self.write_page,
+                             sleep=self._sleep, clock=self._clock)
+            up._write_policy = self._write_policy           # exactly the policy of this session
+            up.install()
+            up.bind_act(self.light_act_id or self.write_act or "")
+            got = up.receive_from(self)
+            if got:
+                light_tab.settle_and_close(tab)
+                return None, f"token hand-over failed ({got})"
+        except GraphStop:
+            light_tab.settle_and_close(tab)
+            raise
+        except Exception as exc:  # noqa: BLE001 - a clean tab that cannot be prepared is a fallback, not a stop
+            light_tab.settle_and_close(tab)
+            return None, f"could not be opened ({type(exc).__name__}: {str(exc)[:80]})"
+        self._upload_graph = up
+        return up, ""
+
+    def close_upload_context(self) -> bool:
+        """ACL-2637: close the separate upload tab (if any). True when none is left open. Never raises."""
+        up, self._upload_graph = self._upload_graph, None
+        self.upload_context = ""
+        if up is None:
+            return True
+        from src.fb_api import light_tab
+
+        try:
+            up._eval_helper(".retire()", timeout=5.0)
+        except Exception:  # noqa: BLE001 - closing anyway
+            pass
+        return light_tab.settle_and_close(up.tab)
+
+    def _probe_here(self) -> tuple[bool, str, bool]:
+        """The probe in THIS tab. (ok, reason, page_is_controlled_by_a_service_worker)."""
         from src.fb_api import write_policy as _wp
         from src.fb_api.upload_server import MemorySource
 
-        if not self.allow_writes or self.object_updates or self.form_photo:
-            return False, "writes are not enabled for this page"
         server = None
         token = ""
         try:
@@ -2243,10 +2349,10 @@ class InPageGraph:
         except GraphStop:
             raise
         except (CdpTimeout, TimeoutError):
-            return False, "the worker probe timed out | " + (server.summary() if server is not None else "")
+            return False, "the worker probe timed out | " + (server.summary() if server is not None else ""), False
         except (StaleContextError, PageError, CdpError) as exc:
             return False, f"worker probe failed ({type(exc).__name__}: {str(exc)[:100]}) | " + (
-                server.summary() if server is not None else "")
+                server.summary() if server is not None else ""), False
         finally:
             if server is not None:
                 if token:
@@ -2260,14 +2366,28 @@ class InPageGraph:
             note = str(got.get("worker_why") or "")
             if self.upload_mode == "inline":
                 self.upload_mode_note = f"worker not used: {note[:300]}; {trace}"
-                return True, self.upload_mode_note
+                return True, self.upload_mode_note, False
             self.upload_mode_note = ""
-            return True, ""
+            return True, "", False
         why = str(got.get("why") or got.get("error")) if isinstance(got, dict) else "bad reply"
-        return False, f"{why[:400]} | {trace}"[:700]
+        controlled = isinstance(got, dict) and got.get("controlled") is True
+        return False, f"{why[:400]} | {trace}"[:700], controlled
 
     def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled) -> dict:
-        """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker."""
+        """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker.
+
+        ACL-2637: with a clean upload tab (see `probe_worker`) the call runs there; Python policy was checked in
+        `write` (one call, one check), the helper of that tab checks it again. A lost clean tab: `no_file`.
+        """
+        up = self._upload_graph
+        if up is not None:
+            try:
+                up._ready_for_call()
+            except Exception as exc:  # noqa: BLE001 - nothing was sent; the tab is not used again
+                self.close_upload_context()
+                return {"error": "no_file", "why": f"clean upload tab lost ({type(exc).__name__})"}
+            up._add_referrer(spec)
+            return up._write_served(spec, field_name, chunk, progress, cancelled)
         server = None
         token = ""
         try:

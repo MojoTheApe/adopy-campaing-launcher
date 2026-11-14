@@ -186,6 +186,61 @@ def open_light_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocume
         return None, "light_doc_failed"
 
 
+#: ACL-2637: is the document controlled by a service worker? true / false; anything else - unknown.
+_CONTROLLED_JS = ("(() => { try { const c = navigator.serviceWorker; return !!(c && c.controller); }"
+                  " catch (e) { return null; } })()")
+
+
+def _controlled(doc: LightDocument, *, timeout: float = 10.0) -> Any:
+    try:
+        return doc._read(_CONTROLLED_JS, timeout=timeout)
+    except (CdpError, TimeoutError):
+        return None
+
+
+def open_upload_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocument | None, str]:
+    """ACL-2637: the light document in a SEPARATE tab of the profile, provably not controlled by a service worker.
+
+    The Ads Manager origin has Facebook's service worker; a document in its scope is controlled, and the upload
+    path refuses a controlled page (a service worker could see or answer the piece requests outside CDP Fetch).
+    A reload that bypasses the cache (shift-reload, `Page.reload {ignoreCache}`) skips the service worker in
+    Chrome: the new document is uncontrolled (`navigator.serviceWorker.controller === null`). The reload is
+    answered by our own interception like the first load (nothing reaches Meta). The result is CHECKED, not
+    assumed: still controlled or unreadable -> (None, reason) and the caller closes the tab.
+    """
+    doc, reason = open_light_document(tab, timeout=timeout)
+    if doc is None:
+        return None, reason
+    state = _controlled(doc)
+    if state is False:
+        return doc, ""
+    if state is not True:
+        return None, "upload tab: the service-worker state could not be read"
+    old = doc.marker
+    try:
+        tab.call("Page.reload", {"ignoreCache": True}, timeout=timeout)
+        deadline = time.monotonic() + timeout
+        while True:
+            snap = doc.snapshot()
+            if (snap.get("href") == LIGHT_URL and snap.get("ready") == "complete" and doc.marker
+                    and doc.marker != old and snap.get("marker") == doc.marker):
+                doc.time_origin = snap.get("t")
+                break
+            if snap.get("href") and snap.get("href") not in ("about:blank", LIGHT_URL):
+                return None, "light_doc_wrong_origin"
+            if time.monotonic() >= deadline:
+                return None, "upload tab: the reload that bypasses the service worker did not finish"
+            tab.pump(0.2)
+    except (CdpError, TimeoutError):
+        return None, "upload tab: the reload that bypasses the service worker failed"
+    state = _controlled(doc)
+    if state is False:
+        return doc, ""
+    if state is True:
+        return None, "upload tab is controlled by a service worker even after a reload that bypasses it"
+    return None, "upload tab: the service-worker state could not be read"
+
+
 def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0) -> str:
     """Token from the helper of `src` to the helper of `dst` (two `InPageGraph`s). '' or a reason code.
 

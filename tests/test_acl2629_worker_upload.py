@@ -566,11 +566,17 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const reply = (status, obj) => ({ status: status, text: async () => JSON.stringify(obj), headers: { get: () => null } });
 const range = () => ({ start_offset: String(meta.received),
                        end_offset: String(Math.min(meta.received + (SC.window || 1048576), meta.size)) });
+// ACL-2637: a service-worker container whose controller can appear mid-upload (clients.claim()).
+const swListeners = [];
+const NAV = { serviceWorker: { controller: SC.sw ? {} : null,
+  addEventListener: (t, f) => { if (t === 'controllerchange') swListeners.push(f); },
+  removeEventListener: (t, f) => { const i = swListeners.indexOf(f); if (i >= 0) swListeners.splice(i, 1); } } };
 const fakeFetch = async (url, init) => {
   url = String(url);
   if (url.startsWith(ORIGIN + PREFIX)) {
     const [token, o, n] = url.slice((ORIGIN + PREFIX).length).split('/');
     log.pieces++;
+    if (SC.claim_at === log.pieces) { NAV.serviceWorker.controller = {}; for (const f of swListeners.slice()) f(); }
     const w = windows[token];
     if (SC.hang_pieces) return new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(new Error('abort'))));
     if (!w || SC.block_pieces) throw new TypeError('blocked');
@@ -621,7 +627,7 @@ const doc = { readyState: 'complete', querySelector: () => null, scripts: [],
 const G = {};
 new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
              'navigator', __HELPER__)(G, loc, doc, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
-                         crypto.webcrypto, FakeWorker, SC.sw ? { serviceWorker: { controller: {} } } : { serviceWorker: { controller: null } });
+                         crypto.webcrypto, FakeWorker, NAV);
 const h = G[__NAME__];
 const PATHV = __PATH__;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

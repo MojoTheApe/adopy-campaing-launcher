@@ -180,3 +180,33 @@ reports "page is controlled by a service worker" for the worker and the inline s
 compression; a served chunk in such a page returns `no_file` before any piece moves. It is not proven that CDP
 Fetch catches a fetch that a service worker passes on, so the path stays closed there. Live item 7 still watches for
 any `__acl_upload` request on the network.
+
+## 12. ACL-2637: a separate tab without a service worker
+
+Live (TEST9095, 2421 MB): the Ads Manager tab is **always** controlled by Facebook's service worker, so the round-4
+refusal fired on every real run. The refusal stays; the upload moves to a context where it does not apply:
+
+* `InPageGraph.probe_worker()` probes its own tab first. If the helper answers `controlled: true` (this page has a
+  `navigator.serviceWorker.controller`), the transport opens ONE more tab of the **same browser** (`PageTab.open` on
+  the tab's own CDP endpoint = same Multilogin profile, same proxy) and loads the light document there
+  (`light_tab.open_upload_document`): our own `Fetch.fulfillRequest`, origin-wide interception, nothing reaches Meta.
+* If that document is controlled, it is reloaded with `Page.reload {ignoreCache: true}` (shift-reload; Chrome skips
+  the service worker for it and the new document is uncontrolled). The state is then **checked**: still controlled
+  or unreadable -> the tab is closed and the probe fails with
+  `...; clean upload tab: upload tab is controlled by a service worker even after a reload that bypasses it`.
+* The token goes there world-to-world (`receive_from`, ACL-2344 hand-over); the helper there gets exactly the policy
+  of the session. Probe and served `transfer` chunks run there (`_write_served` delegates; Python policy is still
+  checked once in `write`, the helper of the clean tab checks it again; referrer = the act's campaigns URL).
+* A service worker claiming the clean page mid-upload (`clients.claim()`): inline mode re-checks the controller
+  before every piece; worker mode aborts on `controllerchange` while pieces are still moving. Both return `no_file`
+  ("a service worker took control of the page during the upload"), nothing posted.
+* Closed: on a new probe, on a lost clean tab (`no_file`, "clean upload tab lost"), and when the run ends
+  (`CampaignCreator.run` -> `transport.close_upload_context()`); at process exit by `light_tab._OPEN`.
+* Fallback message: when the old path cannot take the file (> 1536 MB after the compression attempt) the run stops
+  at plan with ONE line ("the in-profile upload is not available (<reason>) and the fallback upload accepts at most
+  1536 MB (<compression reason>). Nothing was uploaded.") instead of "uploading the original" + a size refusal.
+
+Assumed, checkable only live: (1) the light document on `adsmanager.facebook.com/__acl_work` is controlled after a
+plain navigation and uncontrolled after the hard reload; (2) a new tab of the profile does not disturb the work tab
+(it becomes the active tab of the window, like the ACL-2344 capture tab; focus emulation keeps both running);
+(3) Meta accepts the upload POST from that document like from the light work tab.

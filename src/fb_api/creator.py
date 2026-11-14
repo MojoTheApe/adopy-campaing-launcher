@@ -3985,7 +3985,10 @@ class CampaignCreator:
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         self._op = None
         try:
-            self._run(plan, out)
+            try:
+                self._run(plan, out)
+            finally:
+                self._close_upload_context()        # ACL-2637: never leave the separate upload tab open
             self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
@@ -4078,6 +4081,8 @@ class CampaignCreator:
 
     #: ACL-2629: the upload goes through the page's Web Worker (set by `_decide_worker_path` in `_prepare`).
     worker_path = False
+    #: ACL-2637: why the in-profile upload is not used ('' - used, switched off or not needed), for the buyer's line.
+    _worker_why = ""
 
     def _decide_worker_path(self, plan: CampaignPlan, out: Outcome) -> bool:
         """ACL-2629: probe the in-profile worker data path once before any file is read or compressed.
@@ -4085,7 +4090,9 @@ class CampaignCreator:
         On: the originals go up as they are (no compression). Off (switch, no big video, probe failed, a transport
         without the path): the old staged path with compression, exactly as before. The probe is local: no call to Meta.
         """
+        self._worker_why = ""
         if not worker_upload_enabled():
+            self._worker_why = "switched off"
             return False
         if not any((self.size_of(p) or 0) > VIDEO_SINGLE_MAX_BYTES_WORKER for p in video_files_of(plan)):
             return False
@@ -4099,17 +4106,41 @@ class CampaignCreator:
         except Exception as exc:  # noqa: BLE001 - a failed probe is a fallback, not a stop
             ok, why = False, f"{type(exc).__name__}"
         if ok:
-            mode = getattr(getattr(self.client, "transport", None), "upload_mode", "") or "worker"
+            transport = getattr(self.client, "transport", None)
+            mode = getattr(transport, "upload_mode", "") or "worker"
             where = "a Web Worker" if mode == "worker" else "the page's helper (no worker could start)"
+            if getattr(transport, "upload_context", "") == "clean_tab":
+                where += " of a separate tab without a service worker"
             self._step(out, f"video upload: originals go up from {where} in the profile (no compression)")
             if why:      # inline mode: say exactly why the worker was not used (telemetry for the next live run)
                 out.warnings.append(f"Upload worker not used, continuing inline: {why}")
             return True
         if str(why).startswith("not supported"):
             return False            # a transport without the worker path: the old path, nothing to tell the buyer
+        self._worker_why = str(why or "unknown reason")
         out.warnings.append(f"The in-profile upload worker is not available ({why or 'unknown reason'}); "
                             "large videos are compressed and uploaded the slower way.")
         return False
+
+    def _close_upload_context(self) -> None:
+        """ACL-2637: the separate upload tab (if the transport opened one) is closed when the run ends."""
+        close = getattr(getattr(self.client, "transport", None), "close_upload_context", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # noqa: BLE001 - closing never fails the run
+                pass
+
+    def _too_big_for_fallback(self, who: str, path: str, original_mb: float, why: str) -> None:
+        """ACL-2637: the old path cannot take the file - ONE clear line instead of "uploading the original"
+        followed by a size refusal. Nothing has been uploaded."""
+        size = self.size_of(path) or 0
+        if size <= VIDEO_MAX_BYTES_STAGED:
+            return
+        cap = VIDEO_MAX_BYTES_STAGED // (1024 * 1024)
+        raise PlanError(f"{who}: the video is {original_mb or size / (1024 * 1024):.0f} MB; the in-profile "
+                        f"upload is not available ({self._worker_why or 'not used'}) and the fallback upload "
+                        f"accepts at most {cap} MB ({why}). Nothing was uploaded.", key="creative_file")
 
     def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
         """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
@@ -4127,12 +4158,15 @@ class CampaignCreator:
         except Exception as exc:  # noqa: BLE001 - сжатие не должно останавливать задание
             if type(exc).__name__ == "JobCancelled":
                 raise
+            self._too_big_for_fallback(who, path, 0.0, f"compression failed: {type(exc).__name__}")
             out.warnings.append(f"{who}: video compression failed ({type(exc).__name__}); uploading the original")
             return path
         if getattr(prepared, "compressed", False):
             self._step(out, f"{who}: video compressed {prepared.original_mb:.0f} MB -> {prepared.sent_mb:.1f} MB")
             return prepared.path
         if prepared.original_mb > limit:
+            self._too_big_for_fallback(who, path, prepared.original_mb,
+                                       f"not compressed: {prepared.reason or 'unknown reason'}")
             out.warnings.append(f"{who}: the video is {prepared.original_mb:.0f} MB and was not compressed "
                                 f"({prepared.reason or 'unknown reason'}); uploading the original, "
                                 "which can take a long time")
