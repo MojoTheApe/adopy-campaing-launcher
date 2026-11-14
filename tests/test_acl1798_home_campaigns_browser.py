@@ -264,13 +264,13 @@ def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
     info = page.evaluate("""() => [...document.querySelectorAll('.hc-cmd, .hc-switch')].map(b => ({
         disabled: b.disabled, name: b.getAttribute('name'), title: b.title, id: b.dataset.objectId, level: b.dataset.level,
         account: b.dataset.account, action: b.dataset.action}))""")
-    assert len(info) > 20
+    assert len(info) > 5
     for b in info:
         assert b["disabled"] is True and b["name"] is None
         # без помощника команд (этот стенд его не отдаёт) команды выключены с причиной (ACL-1800)
         assert b["title"] in ("ACL-1773",) or b["title"].startswith("Commands unavailable"), b["title"]
         assert b["id"] and b["level"] and b["account"] and b["action"]
-    assert {b["title"] for b in info if b["action"] == "copy"} == {"ACL-1773"}
+    assert not [b for b in info if b["action"] in ("copy", "duplicate", "bid-down", "bid-up")]   # Duplicate и Bid control убраны
     posts_before = [r for r in site.requests if r[0] != 'GET' and r[1].startswith('/campaign-commands/')]
     page.locator(".hc-cmd").first.click(force=True)
     page.locator(".hc-switch").first.click(force=True)
