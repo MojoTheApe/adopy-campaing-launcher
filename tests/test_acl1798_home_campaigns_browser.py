@@ -288,7 +288,7 @@ def test_unread_account_queues_attention_once_without_a_manual_read_button(page,
     open_acc(page, "Fresh")
     page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.running.Fresh === true")
     text = page.inner_text(f'{row_of("Fresh")} + tr.hc-acct-child')
-    assert 'Reading campaigns for Fresh' in text and 'one profile at a time' in text
+    assert 'Reading campaigns for' not in text and 'one profile at a time' not in text   # строка про чтение убрана
     assert "IN THE ACCOUNT" not in text.upper()
     assert page.inner_text(f'{row_of("Fresh")} .hc-snap') == 'updating'
     assert page.locator(f'{row_of("Fresh")} button.hc-rc').is_hidden()
