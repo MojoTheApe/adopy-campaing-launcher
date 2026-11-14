@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.fb_api import creator as cr  # noqa: E402
+from src.fb_api import graph as g  # noqa: E402
 from src.fb_api import light_tab as lt  # noqa: E402
 from src.fb_api import token_capture as tc  # noqa: E402
 from src.fb_api import write_policy as wp  # noqa: E402
@@ -160,6 +161,40 @@ def test_a_new_probe_closes_the_previous_clean_tab(clean):
     assert clean["made"][1].closed
 
 
+def _light_with_clean_tab(clean):
+    light = _graph(CleanTab(probe_reply=CONTROLLED))                    # a light work tab, controlled by the SW
+    light.upload_tab_factory = clean["factory"]
+    assert light.probe_worker()[0] is True and light.light
+    return light
+
+
+def test_a_light_lease_switched_to_ads_manager_keeps_uploading_from_the_clean_tab(clean):
+    light = _light_with_clean_tab(clean)
+    up = clean["made"][0]
+    heavy = _graph(ServingTab(probe_reply=CONTROLLED))                   # the Ads Manager tab: controlled too
+    light.leave_light = lambda: heavy
+    client = g.GraphClient(light, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=10)
+    client._leave_light_tab()
+    assert client.transport is heavy and heavy.upload_context == "clean_tab" and light._upload_graph is None
+    assert not up.closed
+    data = os.urandom(1000)
+    got = heavy.write(PATH, {**TRANSFER}, files={"video_file_chunk": wp.ServedChunk(_Mem(data), 0, len(data))},
+                      filename="chunk")
+    assert got == {"status": 200, "body": {"success": True}}
+    assert [s for s in up.specs if "files" in s] and not [s for s in heavy.tab.specs if "files" in s]
+    heavy.close_upload_context()
+    assert up.closed
+
+
+def test_a_new_transport_that_cannot_take_the_clean_tab_gets_it_closed(clean):
+    light = _light_with_clean_tab(clean)
+    heavy = SimpleNamespace(light=False, pin_page=lambda p: None)
+    light.leave_light = lambda: heavy
+    client = g.GraphClient(light, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=10)
+    client._leave_light_tab()
+    assert client.transport is heavy and clean["made"][0].closed and light._upload_graph is None
+
+
 # ───────────────────────── open_upload_document: the controller is checked, not assumed ─────────────────────────
 
 class DocTab:
@@ -250,6 +285,13 @@ def test_a_service_worker_claiming_the_page_mid_upload_stops_inline_before_the_n
     assert [x["phase"] for x in out["log"]["graph"]] == ["start", "finish"]
 
 
+def test_a_service_worker_taking_control_during_the_post_never_cancels_it():
+    out = _node({"name": "upload", "window": 1_000_000, "piece": 200_000, "claim_on_post": True})
+    assert out["results"][0]["ok"] is True                              # the started POST went through
+    assert out["meta"]["chunks"] == [[0, 1_000_000]]
+    assert out["results"][1] == {"error": "no_file", "why": "page is controlled by a service worker"}
+
+
 # ───────────────────────── the creator: the clean tab is closed, the fallback says one clear thing ─────────────────
 
 class ClosingMeta(ServedMeta):
@@ -296,8 +338,9 @@ def test_a_file_the_fallback_cannot_take_gets_one_clear_line_and_no_upload(worke
     monkeypatch.setattr(cr, "video_compress_limit_mb", lambda: 1.0)
     out, _ = _run(meta, d, compress_video=compress)
     assert out.stop_kind == "plan" and not meta.sessions                  # nothing was uploaded
-    assert "the in-profile upload is not available (" + SW_WHY in out.error
-    assert "accepts at most 2 MB" in out.error and "ffmpeg not found" in out.error
-    assert "Nothing was uploaded." in out.error
-    assert not any("uploading the original" in w for w in out.warnings)
-    assert "empty or larger than" not in out.error
+    assert out.error == ("ad 1: the video is 4 MB; the in-profile upload is not available (" + SW_WHY + ") and "
+                         "the fallback upload accepts at most 2 MB (not compressed: ffmpeg not found). "
+                         "Nothing more was created.")
+    assert not any("uploading the original" in w or "compressed and uploaded the slower way" in w
+                   for w in out.warnings)
+    assert any("controller: attach events 0" in s for s in out.steps)    # the full probe text stays in the steps

@@ -4083,6 +4083,7 @@ class CampaignCreator:
     worker_path = False
     #: ACL-2637: why the in-profile upload is not used ('' - used, switched off or not needed), for the buyer's line.
     _worker_why = ""
+    _worker_warning = ""
 
     def _decide_worker_path(self, plan: CampaignPlan, out: Outcome) -> bool:
         """ACL-2629: probe the in-profile worker data path once before any file is read or compressed.
@@ -4090,7 +4091,7 @@ class CampaignCreator:
         On: the originals go up as they are (no compression). Off (switch, no big video, probe failed, a transport
         without the path): the old staged path with compression, exactly as before. The probe is local: no call to Meta.
         """
-        self._worker_why = ""
+        self._worker_why = self._worker_warning = ""
         if not worker_upload_enabled():
             self._worker_why = "switched off"
             return False
@@ -4118,8 +4119,9 @@ class CampaignCreator:
         if str(why).startswith("not supported"):
             return False            # a transport without the worker path: the old path, nothing to tell the buyer
         self._worker_why = str(why or "unknown reason")
-        out.warnings.append(f"The in-profile upload worker is not available ({why or 'unknown reason'}); "
-                            "large videos are compressed and uploaded the slower way.")
+        self._worker_warning = (f"The in-profile upload worker is not available ({why or 'unknown reason'}); "
+                                "large videos are compressed and uploaded the slower way.")
+        out.warnings.append(self._worker_warning)
         return False
 
     def _close_upload_context(self) -> None:
@@ -4131,16 +4133,24 @@ class CampaignCreator:
             except Exception:  # noqa: BLE001 - closing never fails the run
                 pass
 
-    def _too_big_for_fallback(self, who: str, path: str, original_mb: float, why: str) -> None:
-        """ACL-2637: the old path cannot take the file - ONE clear line instead of "uploading the original"
-        followed by a size refusal. Nothing has been uploaded."""
+    def _too_big_for_fallback(self, out: Outcome, who: str, path: str, original_mb: float, why: str) -> None:
+        """ACL-2637: the old path cannot take the file - ONE short buyer line instead of "uploading the original"
+        followed by a size refusal (and instead of the "compressed the slower way" warning). The full probe text
+        stays in the steps. Nothing has been uploaded (`run` adds "Nothing more was created.")."""
         size = self.size_of(path) or 0
         if size <= VIDEO_MAX_BYTES_STAGED:
             return
+        full = self._worker_why or "not used"
+        short = full.split(" | ", 1)[0].split("; clean upload tab:", 1)[0].strip()
+        if len(short) > 120:
+            short = short[:117].rstrip() + "..."
+        if self._worker_warning in out.warnings:
+            out.warnings.remove(self._worker_warning)
+        self._step(out, f"{who}: in-profile upload not available: {full}")
         cap = VIDEO_MAX_BYTES_STAGED // (1024 * 1024)
         raise PlanError(f"{who}: the video is {original_mb or size / (1024 * 1024):.0f} MB; the in-profile "
-                        f"upload is not available ({self._worker_why or 'not used'}) and the fallback upload "
-                        f"accepts at most {cap} MB ({why}). Nothing was uploaded.", key="creative_file")
+                        f"upload is not available ({short}) and the fallback upload accepts at most {cap} MB "
+                        f"({why}).", key="creative_file")
 
     def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
         """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
@@ -4158,14 +4168,14 @@ class CampaignCreator:
         except Exception as exc:  # noqa: BLE001 - сжатие не должно останавливать задание
             if type(exc).__name__ == "JobCancelled":
                 raise
-            self._too_big_for_fallback(who, path, 0.0, f"compression failed: {type(exc).__name__}")
+            self._too_big_for_fallback(out, who, path, 0.0, f"compression failed: {type(exc).__name__}")
             out.warnings.append(f"{who}: video compression failed ({type(exc).__name__}); uploading the original")
             return path
         if getattr(prepared, "compressed", False):
             self._step(out, f"{who}: video compressed {prepared.original_mb:.0f} MB -> {prepared.sent_mb:.1f} MB")
             return prepared.path
         if prepared.original_mb > limit:
-            self._too_big_for_fallback(who, path, prepared.original_mb,
+            self._too_big_for_fallback(out, who, path, prepared.original_mb,
                                        f"not compressed: {prepared.reason or 'unknown reason'}")
             out.warnings.append(f"{who}: the video is {prepared.original_mb:.0f} MB and was not compressed "
                                 f"({prepared.reason or 'unknown reason'}); uploading the original, "

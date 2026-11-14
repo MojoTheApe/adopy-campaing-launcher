@@ -596,6 +596,14 @@ const fakeFetch = async (url, init) => {
   if (phase === 'transfer') {
     const blob = body.get('video_file_chunk');
     const buf = Buffer.from(await blob.arrayBuffer());
+    if (SC.claim_on_post && !meta.claimed) {
+      // ACL-2637: a service worker takes control while the POST is in flight; a real fetch honours the abort signal
+      meta.claimed = true;
+      NAV.serviceWorker.controller = {};
+      for (const f of swListeners.slice()) f();
+      await new Promise((res, rej) => { const t = setTimeout(res, 50);
+        if (init.signal) init.signal.addEventListener('abort', () => { clearTimeout(t); rej(new TypeError('aborted')); }); });
+    }
     const off = Number(body.get('start_offset'));
     if (off !== meta.received) return reply(400, { error: { code: 100, message: 'wrong start offset', error_data: range() } });
     meta.received += buf.length;

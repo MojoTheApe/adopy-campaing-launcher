@@ -210,3 +210,9 @@ Assumed, checkable only live: (1) the light document on `adsmanager.facebook.com
 plain navigation and uncontrolled after the hard reload; (2) a new tab of the profile does not disturb the work tab
 (it becomes the active tab of the window, like the ACL-2344 capture tab; focus emulation keeps both running);
 (3) Meta accepts the upload POST from that document like from the light work tab.
+
+Review fixes (ACL-2637): a light lease switched to Ads Manager (ACL-2593) hands the clean upload tab to the new
+transport (`adopt_upload_context`; closed if the new transport cannot take it). A service worker taking control
+sends the worker `stopPieces` (not `abort`): ignored once the pieces are in, so a started POST is never cancelled.
+The buyer line for a file the fallback cannot take carries only the first part of the probe reason; the full text
+is a step, and the "compressed the slower way" warning is dropped in that case.

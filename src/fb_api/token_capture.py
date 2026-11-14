@@ -919,15 +919,17 @@ _HELPER_JS = r"""
   // the very same code also runs INLINE in this world when no worker can be started (see `transport`).
   function makeRunner(fetch, crypto, emit, guard) {
     const jobs = {};
+    const halts = {};
+    const TAKEN = 'a service worker took control of the page during the upload';
     const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
     const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
-    async function pieces(m, ac) {
+    async function pieces(m, ac, st) {
       const parts = [];
       let got = 0;
       for (const p of m.src.pieces) {
         // ACL-2637: inline mode re-checks the controller before EVERY piece (a service worker may claim the page
-        // mid-upload via clients.claim()); the worker gets no guard - its page aborts it on 'controllerchange'.
-        if (guard && guard()) return { error: 'no_file', why: 'a service worker took control of the page during the upload' };
+        // mid-upload via clients.claim()); in a worker the page sends `stopPieces` on 'controllerchange' instead.
+        if (st.stopped || (guard && guard())) return { error: 'no_file', why: TAKEN };
         if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };
         // Every piece has a deadline: a request the controller never answers must not hang the upload.
         const pc = new AbortController();
@@ -935,7 +937,8 @@ _HELPER_JS = r"""
         const onAbort = () => pc.abort();
         ac.signal.addEventListener('abort', onAbort);
         const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
-        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); };
+        st.pc = pc;
+        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); st.pc = null; };
         let r;
         let blob;
         let buf;
@@ -947,7 +950,7 @@ _HELPER_JS = r"""
           buf = await blob.arrayBuffer();
         } catch (e) {
           done();
-          return { error: 'no_file', why: ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
+          return { error: 'no_file', why: st.stopped ? TAKEN : ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
         }
         done();
         if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
@@ -962,11 +965,15 @@ _HELPER_JS = r"""
     }
     async function run(m) {
       const ac = new AbortController();
+      const st = { stopped: false, done: false, pc: null };
       jobs[m.id] = ac;
+      halts[m.id] = st;
       try {
-        const made = await pieces(m, ac);
+        const made = await pieces(m, ac, st);
+        st.done = true;               // from here on `stopPieces` is ignored: it never touches the POST
         if (made.error) return made;
         if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
+        if (st.stopped) return { error: 'no_file', why: TAKEN };                  // nothing posted yet
         if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };        // nothing posted yet
         const body = new FormData();
         for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
@@ -982,14 +989,22 @@ _HELPER_JS = r"""
         const headers = {};
         for (const n of HEADERS) { try { const v = resp.headers.get(n); if (v) headers[n] = v; } catch (e) {} }
         return { status: resp.status, text: text, headers: headers };
-      } finally { delete jobs[m.id]; }
+      } finally { delete jobs[m.id]; delete halts[m.id]; }
     }
     function abort(id) { const ac = jobs[id]; if (ac) ac.abort(); }
-    return { run: run, abort: abort };
+    // ACL-2637: a service worker took control - stop fetching pieces (no_file); a POST already started is left alone.
+    function stopPieces(id) {
+      const st = halts[id];
+      if (!st || st.done) return;
+      st.stopped = true;
+      try { if (st.pc) st.pc.abort(); } catch (e) {}
+    }
+    return { run: run, abort: abort, stopPieces: stopPieces };
   }
   const WORKER_GLUE = 'const r = make(fetch, crypto, (d) => self.postMessage(d));'
     + 'self.onmessage = (e) => { const m = e.data || {};'
     + ' if (m.abort !== undefined) { r.abort(m.abort); return; }'
+    + ' if (m.stopPieces !== undefined) { r.stopPieces(m.stopPieces); return; }'
     + ' if (m.quit) { self.close(); return; }'
     + ' r.run(m).then((x) => self.postMessage(Object.assign({ id: m.id, done: true }, x)),'
     + ' () => self.postMessage({ id: m.id, done: true, error: "network", sent: true })); };'
@@ -1075,26 +1090,18 @@ _HELPER_JS = r"""
     const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
     const msg = Object.assign({ id: id, base: base }, m);
     // ACL-2637: a service worker that takes control while pieces are still being fetched stops the job before any
-    // more pieces move (nothing was posted yet: no_file). Once every piece is in, the POST is left alone.
-    const total = m.src.pieces.reduce((a, p) => a + p.n, 0);
-    let got = 0;
-    let taken = false;
-    const onTake = () => {
-      if (got >= total) return;
-      taken = true;
-      try { if (worker) worker.postMessage({ abort: id }); } catch (e) {}
-    };
+    // more pieces move (nothing was posted yet: no_file). `stopPieces` is not `abort`: the worker ignores it once the
+    // pieces are in, so a POST that has started is never cancelled by it (no 'aborted, sent' -> no unknown result).
+    const onTake = () => { try { if (worker) worker.postMessage({ stopPieces: id }); } catch (e) {} };
     const sw = (typeof navigator !== 'undefined' && navigator.serviceWorker) || null;
     try { if (sw && typeof sw.addEventListener === 'function') sw.addEventListener('controllerchange', onTake); } catch (e) {}
     const r = await new Promise((resolve) => {
       const f = resolve;
-      f.onprogress = (n) => { got = Number(n) || 0; };
       waiting[id] = f;
       if (job) job.wid = id;
       try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
     });
     try { if (sw && typeof sw.removeEventListener === 'function') sw.removeEventListener('controllerchange', onTake); } catch (e) {}
-    if (taken && r && r.error && !r.sent) return { error: 'no_file', why: 'a service worker took control of the page during the upload' };
     return r;
   }
   // Local self-test of the worker data path (CSP, worker session interception, piece hash): no request to Meta.
@@ -2314,6 +2321,17 @@ class InPageGraph:
             return None, f"could not be opened ({type(exc).__name__}: {str(exc)[:80]})"
         self._upload_graph = up
         return up, ""
+
+    def adopt_upload_context(self, old: "InPageGraph") -> None:
+        """ACL-2637: take over the clean upload tab of `old` (a light lease switched to Ads Manager, ACL-2593).
+        The clean tab holds its own token and the same session policy; nothing is re-opened or sent."""
+        self.close_upload_context()
+        up = getattr(old, "_upload_graph", None)
+        if up is None:
+            return
+        self._upload_graph, old._upload_graph = up, None
+        self.upload_context, old.upload_context = getattr(old, "upload_context", "") or "clean_tab", ""
+        self.upload_mode, self.upload_mode_note = old.upload_mode, old.upload_mode_note
 
     def close_upload_context(self) -> bool:
         """ACL-2637: close the separate upload tab (if any). True when none is left open. Never raises."""
