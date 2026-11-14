@@ -1227,8 +1227,6 @@
     .cb-seg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .cb-lt-note { color: var(--muted); font-size: var(--adopy-text-sm); line-height: 1.3; overflow-wrap: anywhere; }
     .cb-lt-err { color: var(--bad); font-size: var(--adopy-text-sm); }
-    .cb-lt-preset { margin-top: 0.4rem; margin-right: 0.5rem; padding: 0.15rem 0.6rem; font: inherit; font-size: var(--adopy-text-sm); color: var(--text); background: var(--field-bg); border: 1px solid var(--field-border); border-radius: 4px; cursor: pointer; }
-    .cb-lt-preset:hover { color: var(--accent); }
     .cb-lt-err:empty { display: none; }
     .cb-lt-check { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--text); }
     .cb-sg { margin-top: 0.4rem; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -8190,7 +8188,6 @@ window.cbLifetime = (function () {
       }
       h += '</div>';
     });
-    h += '<button type="button" class="cb-lt-preset" onclick="cbLtPreset(this)">Don\'t run 01:00–05:00 every day</button>';
     h += '<div class="cb-lt-note" data-lt-acc-preview aria-live="polite"></div>';
     return h + '</div>';
   }
@@ -8366,17 +8363,6 @@ window.cbLifetime = (function () {
     sync(slot);
     var s = fld(slot, 'start_time');
     if (s) fire(s);
-  };
-  /* Пресет «не крутить 01:00-05:00 каждый день»: все часы, кроме 1-4, во все дни (по времени команды). */
-  window.cbLtPreset = function (btn) {
-    var slot = btn.closest('.cb-slot');
-    if (!slot) return;
-    slot.querySelectorAll('.cb-sg-cell').forEach(function (c) {
-      var on = !(+c.dataset.h >= 1 && +c.dataset.h <= 4);
-      c.classList.toggle('is-on', on);
-      c.setAttribute('aria-checked', String(on));
-    });
-    writeSchedule(slot);
   };
   window.cbLtSchedToggle = function (box) {
     var slot = box.closest('.cb-slot');
