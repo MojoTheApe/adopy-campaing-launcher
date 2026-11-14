@@ -239,15 +239,53 @@ def video_files_of(plan: "CampaignPlan") -> list[str]:
     return list(seen)
 
 
+def video_compress_limit_mb() -> float:
+    """Compression threshold in MB: `ACL_VIDEO_COMPRESS_ABOVE_MB` or the compressor's default."""
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    limit = _cc.DEFAULT_LIMIT_MB
+    raw = os.environ.get("ACL_VIDEO_COMPRESS_ABOVE_MB", "").strip()
+    try:
+        if raw and float(raw) > 0:
+            limit = float(raw)
+    except ValueError:
+        pass
+    return limit
+
+
+def planned_upload_size(path: str, original: int) -> int:
+    """ACL-2621: размер файла, который реально уйдёт в Meta (байты).
+
+    Видео выше порога `_video_for_upload` сжимает (ACL-2000). Уже есть детерминированная копия в кэше -
+    берём её размер; иначе, если сжиматель сработает (есть ffmpeg), берём сам порог (копия не больше него);
+    исходный размер - только когда сжимать нечем.
+    """
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    limit = video_compress_limit_mb()
+    if original <= limit * 1048576:
+        return original
+    try:
+        copy = _cc.cache_path(path, _cc.DEFAULT_TARGET_MB)
+        cached = _disk_size(str(copy)) if copy.is_file() else 0
+        if 0 < cached <= min(limit * 1048576, original):
+            return cached
+        if _cc.ffmpeg_exe():
+            return int(limit * 1048576)
+    except Exception:  # noqa: BLE001 - оценка не должна ронять проверку плана
+        pass
+    return original
+
+
 def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
     """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
 
     Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
-    `estimate_create_calls`). Верхняя оценка: проверка плана читает исходный файл, а запуск может
-    сжать его до загрузки.
+    `estimate_create_calls`). ACL-2621: считаем размер того, что реально уйдёт (`planned_upload_size`),
+    а не исходника: запуск сжимает тяжёлое видео до загрузки.
     """
     size_of = size_of or _disk_size
-    chunks = sum(upload_calls(size_of(path)) for path in video_files_of(plan))
+    chunks = sum(upload_calls(planned_upload_size(path, size_of(path))) for path in video_files_of(plan))
     if not chunks:
         return 0
     return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
@@ -1645,10 +1683,16 @@ class NameChoice:
         return self.copy_number > 0
 
 
+#: Pages of `/act_X/advideos` the resume check reads to see that a video belongs to this ad account.
+RESUME_VIDEO_LIST_PAGES = 3
+
+
 def resume_verify_calls(stages: "list[tuple[str, dict]]") -> int:
     """Upper bound of the Graph reads `_verify_resume` makes for these confirmed stages."""
     kinds = [st["kind"] for _k, st in stages]
     reads = sum(1 for k in kinds if k in ("campaign", "creative", "image", "video"))
+    if "video" in kinds:
+        reads += RESUME_VIDEO_LIST_PAGES     # the ad account's video listing, read once (ACL-2618)
     sets, ads = kinds.count("adset"), kinds.count("ad")
     if sets or ads:
         reads += 2                           # the ad set listing (two pages at most)
@@ -2223,6 +2267,7 @@ class CampaignCreator:
 
         adset_names: dict[str, str] = {}
         ad_names: dict[str, str] = {}
+        video_ids: tuple[set[str], bool] | None = None
         for key, st in stages:
             oid, name, kind = st["object_id"], st["name"], st["kind"]
             if kind == "campaign":
@@ -2252,10 +2297,21 @@ class CampaignCreator:
                 if not any(str(r.get("hash")) == oid for r in rows):
                     raise mismatch(key)
             elif kind == "video":
-                row = read(oid, "id,title,status,account_id", "video")
+                # ACL-2618: the Video/AdVideo node has no `account_id` (Meta answers (#100)), so ownership
+                # is read from the account's own video listing instead.
+                row = read(oid, "id,title,status", "video")
                 if row is None or (name and row.get("title") is not None and str(row["title"]) != name):
                     raise mismatch(key)
-                if other_account(row):
+                if video_ids is None:
+                    cut = len(self.client.truncated)
+                    try:
+                        listed = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id", "limit": 100},
+                                                     max_pages=RESUME_VIDEO_LIST_PAGES)
+                    except GraphError as exc:
+                        refused(exc, "video")
+                        raise
+                    video_ids = ({str(r.get("id")) for r in listed}, len(self.client.truncated) == cut)
+                if oid not in video_ids[0] and video_ids[1]:     # complete listing and the video is not in it
                     raise mismatch(key, MSG_OTHER_ACCOUNT)
                 status = row.get("status") if isinstance(row.get("status"), dict) else {}
                 if str(status.get("video_status") or "").lower() != "ready":
@@ -3960,13 +4016,7 @@ class CampaignCreator:
         """
         from src.fb_ads_rpa import creative_compress as _cc
 
-        limit = _cc.DEFAULT_LIMIT_MB
-        raw = os.environ.get("ACL_VIDEO_COMPRESS_ABOVE_MB", "").strip()
-        try:
-            if raw and float(raw) > 0:
-                limit = float(raw)
-        except ValueError:
-            pass
+        limit = video_compress_limit_mb()
         fn = self.compress_video or (lambda p: _cc.ensure_uploadable(p, limit_mb=limit))
         try:
             prepared = fn(path)
@@ -4074,6 +4124,13 @@ class CampaignCreator:
                 self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
                            else f"preflight: form found on the Page, will be reused: {step.form_name}")
         files: dict[str, bytes] = {}
+
+        def sent_len(path: str, data: Any) -> int:
+            # ACL-2621: Check plan does not compress; it measures what the run will upload (compressed size).
+            if not writing and isinstance(data, LargeFile):
+                return planned_upload_size(path, len(data))
+            return len(data)
+
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
@@ -4083,7 +4140,7 @@ class CampaignCreator:
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
-                if not data or len(data) > limit:
+                if not data or sent_len(ad.path, data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
                 if ad.kind != "video":
@@ -4097,7 +4154,7 @@ class CampaignCreator:
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
                     vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
-                    if not vdata or len(vdata) > vlimit:
+                    if not vdata or sent_len(ad.vertical_path, vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
                     if ad.vertical_kind != "video":
@@ -4118,7 +4175,7 @@ class CampaignCreator:
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
-        chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
+        chunk_calls = sum(upload_calls(sent_len(k, v)) for k, v in files.items() if isinstance(v, LargeFile))
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
@@ -4133,12 +4190,13 @@ class CampaignCreator:
                                 "Nothing was created.")
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
-                sizes = [len(v) for v in files.values() if isinstance(v, LargeFile)]
+                sizes = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
                 n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
                 out.warnings.append(
                     f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
                     f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
-                    "for this run (upper bound; the file may be compressed before upload).")
+                    "for this run (upper bound; ACL compresses large videos before upload, "
+                    "so the real upload is usually smaller).")
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")

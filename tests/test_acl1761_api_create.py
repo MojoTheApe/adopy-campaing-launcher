@@ -430,6 +430,24 @@ class FakeMeta:
         return [o for o in self.objects.values() if o["_kind"] == kind
                 and (parent_key is None or o.get(parent_key) == parent)]
 
+    #: Fields the AdVideo node has; like Meta, anything else (account_id, owner...) is a (#100) error.
+    VIDEO_FIELDS = {"id", "title", "name", "description", "length", "status", "created_time", "updated_time"}
+
+    def _check_video_fields(self, params):
+        asked = {f for f in str(params.get("fields") or "id").split(",") if f}
+        if not asked <= self.VIDEO_FIELDS:
+            raise AssertionError(f"(#100) Tried accessing nonexisting field {sorted(asked - self.VIDEO_FIELDS)}")
+
+    def _video_row(self, obj, params):
+        asked = [f for f in str(params.get("fields") or "id").split(",") if f]
+        row = {"id": obj["id"]}
+        if "title" in asked and obj.get("title") is not None:
+            row["title"] = obj["title"]
+        if "status" in asked:
+            state = self.video_states[min(max(obj["_polls"], 1) - 1, len(self.video_states) - 1)]
+            row["status"] = {"video_status": state}
+        return row
+
     # -- транспорт
     def state(self):
         return {"kind": "ads_manager", "has_token": True}
@@ -549,7 +567,8 @@ class FakeMeta:
                 return {"data": [{"hash": h, "name": self.images[h]}
                                  for h in params.get("hashes", []) if h in self.images]}
             if edge == "advideos":
-                return {"data": [self._out(o) for o in self._of("video")]}
+                self._check_video_fields(params)
+                return {"data": [self._video_row(o, params) for o in self._of("video") if not o.get("_other")]}
             if edge == "adcreatives":
                 # Как живой Meta (5414, job 2fb409d1): фильтр по имени здесь — ошибка #100.
                 if "filtering" in params:
@@ -595,12 +614,11 @@ class FakeMeta:
             return {"error": {"code": 100, "type": "OAuthException",
                               "message": f"(#100) Object with ID '{oid}' does not exist"}}
         obj = self.objects[oid]
-        if obj["_kind"] == "video" and params.get("fields") == "title":
-            return {"id": oid, "title": obj.get("title")}
         if obj["_kind"] == "video":
-            obj["_polls"] += 1
-            state = self.video_states[min(obj["_polls"] - 1, len(self.video_states) - 1)]
-            return {"id": oid, "status": {"video_status": state}}
+            self._check_video_fields(params)
+            if "status" in str(params.get("fields")):
+                obj["_polls"] += 1
+            return self._video_row(obj, params)
         out = json.loads(json.dumps(self._out(obj)))
         for (kind, key), value in self.mutate_on_read.items():
             if obj["_kind"] == kind:
