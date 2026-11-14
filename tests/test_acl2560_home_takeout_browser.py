@@ -113,23 +113,24 @@ def rows_of(pg):
     return pg.locator("tr.aov-row").count()
 
 
-def test_action_buttons_share_one_left_offset_whatever_the_name_length(rig):
+def test_open_stays_in_account_cell_and_the_x_shares_one_column(rig):
     _srv, make = rig
     for width in (1280, 1000):
         pg = make(width)
-        takes = pg.locator("[data-aov-takeout]")
-        assert takes.count() == 3
+        takes = pg.locator("tr.aov-row [data-aov-takeout]")
+        assert takes.count() == 3                             # крестик есть у каждой строки, с профилем и без
         lefts = [takes.nth(i).bounding_box()["x"] for i in range(3)]
-        assert max(lefts) - min(lefts) < 1, lefts
+        assert max(lefts) - min(lefts) < 1, lefts             # один столбец справа
         opens = pg.locator("[data-aov-open]:visible")
-        assert opens.count() == 2                             # у аккаунта без профиля Open profile нет
+        assert opens.count() == 2                             # у аккаунта без профиля Open нет
         olefts = [opens.nth(i).bounding_box()["x"] for i in range(2)]
         assert max(olefts) - min(olefts) < 1, olefts
-        assert abs(olefts[0] - lefts[0]) < 1                  # обе кнопки стопкой на одном x
-        for acc in (SHORT, LONG):                             # Open profile выше, Take out ниже
-            o = pg.locator(f'[data-aov-open="{acc}"]').bounding_box()
+        for acc in (SHORT, LONG):                             # крестик правее заметки, Open левее цифр
             t = pg.locator(f'[data-aov-takeout="{acc}"]').bounding_box()
-            assert o["y"] + o["height"] <= t["y"] + 1
+            o = pg.locator(f'[data-aov-open="{acc}"]').bounding_box()
+            n = pg.locator(f'tr.aov-row:has([data-aov-takeout="{acc}"]) td.aov-note').bounding_box()
+            assert t["x"] >= n["x"] + n["width"] - 1 and o["x"] < n["x"]
+            assert t["height"] <= 26 and o["height"] <= 26    # узкая строка: обе кнопки по 24px
         assert not pg.errors
 
 
@@ -137,7 +138,8 @@ def test_every_row_and_the_compact_popup_offer_take_out(rig):
     _srv, make = rig
     pg = make()
     assert pg.locator("tr.aov-row [data-aov-takeout]").count() == rows_of(pg) == 3
-    assert pg.locator("tr.aov-row [data-aov-takeout]").first.inner_text() == "Take out of Colombia"
+    first = pg.locator("tr.aov-row [data-aov-takeout]").first
+    assert first.inner_text() == "×" and "out of Colombia" in first.get_attribute("aria-label")
     pg.click("[data-aov-view=compact]")
     for acc in (SHORT, NOPROF):                               # с профилем и без
         pg.click(f'.aov-tile[data-name="{acc}"]')
