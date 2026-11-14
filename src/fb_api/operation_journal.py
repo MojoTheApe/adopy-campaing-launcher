@@ -223,6 +223,16 @@ class Operation:
             st["pending"] = dict(info or {})
         self._mutate(apply)
 
+    def clear_pending(self, key: str) -> None:
+        """ACL-2639: forget the pending object of a stage (gone at Meta, or the upload went another way)."""
+        def apply(d: dict) -> None:
+            st = d["stages"].get(key)
+            if st is not None and (st.get("pending_id") or st.get("pending")):
+                st["pending_id"] = ""
+                st["pending"] = {}
+        if (self.data["stages"].get(key) or {}).get("pending_id"):
+            self._mutate(apply)
+
     def mark(self, key: str, state: str, note: str = "") -> None:
         if state not in STAGE_STATES:
             raise ValueError(state)
