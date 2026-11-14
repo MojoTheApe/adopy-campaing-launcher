@@ -45,7 +45,7 @@ def test_button_is_rendered_only_for_accounts_with_a_profile(monkeypatch, tmp_pa
     assert html.count('data-aov-open="Facebook_DQ-214"') == 1
     assert 'data-aov-open="Facebook_DQ-217"' not in html
     assert html.count('data-profile="1"') == 1             # плитка Compact: только у аккаунта с профилем
-    assert "hidden>Open profile" in html                   # кнопка скрыта, пока страница не узнала про API
+    assert "hidden>Open</button>" in html                  # кнопка скрыта, пока страница не узнала про API
 
 
 def test_home_reuses_the_manage_open_path_without_a_new_route():

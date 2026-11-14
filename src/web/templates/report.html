@@ -2053,6 +2053,13 @@
     /* Колонки CPA / Campaigns / Note и дерево кампаний в таблице страны (ACL-2384). Дерево берёт те же классы, что в Manage. */
     .aov-btn.danger { color: var(--adopy-danger-text, var(--adopy-danger, #b42318)); border-color: currentColor; }
     .aov-table col.c10 { width: 210px; }
+    /* Home: Open — маленькая кнопка в ячейке аккаунта, «Take out» — крестик справа от заметки. */
+    .aov-table col.cx { width: 44px; }
+    .aov-table td.aov-x-cell { position: relative; overflow: visible; padding-left: 4px; padding-right: 10px; text-align: center; }
+    .aov-btn.aov-x { width: 24px; min-height: 24px; height: 24px; padding: 0; border-color: transparent; background: transparent; font-size: 18px; line-height: 1; }
+    .aov-btn.aov-x:hover { background: var(--adopy-danger-bg); border-color: currentColor; }
+    .aov-x-cell .acl-inline-err { position: absolute; right: 8px; top: 100%; z-index: 3; width: 13rem; white-space: normal; text-align: left; background: var(--adopy-surface); }
+    .aov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     /* Имя и номер кабинета читаются целиком: перенос вместо многоточия, номер мелкой второй строкой. */
     .aov-table td.acc { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
     .aov-table td.acc .aov-accrow { display: inline-flex; align-items: flex-start; gap: 8px; vertical-align: middle; }
