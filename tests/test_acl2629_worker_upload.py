@@ -760,6 +760,17 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     for (const k of Object.keys(bad)) out.refused[k] = slim(await job(seg(0, 800000, bad[k])));
     out.start = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
                                     params: { upload_phase: 'start' }, files: {} }));
+    // ACL-2639: naming - only a video this helper finished, only {name, title} = the ACL tag name.
+    const T = 'acl-tag1-0123456789ab';
+    const name = (id, p) => h.call({ method: 'POST', path: '/' + id, params: p || { name: T, title: T }, files: {} });
+    out.rename_before = slim(await name('7770001'));
+    out.finish = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
+                                     params: { upload_phase: 'finish', video_id: '7770001' }, files: {} }));
+    out.rename_after = slim(await name('7770001'));
+    out.rename_other = slim(await name('7770002'));
+    out.rename_bad = slim(await name('7770001', { name: 'Campaign X', title: 'Campaign X' }));
+    out.rename_extra = slim(await name('7770001', { name: T, title: T, status: 'ACTIVE' }));
+    out.proto = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/constructor'), params: {}, files: {} }));
   } else if (SC.name === 'abort') {
     await phase({ upload_phase: 'start', file_size: String(SOURCE.length) });
     const spec = announce(0, 800000, 100000);

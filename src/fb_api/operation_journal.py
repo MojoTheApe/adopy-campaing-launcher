@@ -210,6 +210,19 @@ class Operation:
                       owner=self.owner)
         self._mutate(apply)
 
+    def set_pending(self, key: str, object_id: str, info: dict | None = None) -> None:
+        """ACL-2639: the id an unfinished SENT stage already has at Meta (a resumable video upload after its start),
+        with what is needed to continue it. The next run continues that object instead of starting another one."""
+        def apply(d: dict) -> None:
+            st = d["stages"].get(key)
+            if st is None:
+                raise JournalError(f"stage {key!r} was never sent")
+            if st["state"] == CONFIRMED:
+                return
+            st["pending_id"] = str(object_id)
+            st["pending"] = dict(info or {})
+        self._mutate(apply)
+
     def mark(self, key: str, state: str, note: str = "") -> None:
         if state not in STAGE_STATES:
             raise ValueError(state)

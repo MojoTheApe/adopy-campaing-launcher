@@ -137,6 +137,27 @@ def rupload_version(upload_url: Any, video_id: str) -> str:
     return m.group(1) if m and m.group(2) == str(video_id) else ""
 
 
+#: ACL-2639: the tag name of an ad video (`creator.video_title`); the only text a video may be named with.
+VIDEO_TITLE_RE = re.compile(r"^acl-[A-Za-z0-9_-]{1,64}-[0-9a-f]{12}$", re.ASCII)
+VIDEO_TITLE_EDGE = "video_title"
+_OBJECT_PATH_RE = re.compile(r"^/([0-9]{5,25})$", re.ASCII)
+
+
+def check_video_title(path: str, params: dict | None, files: dict | None = None) -> str:
+    """ACL-2639: `POST /<video_id>` with exactly {name, title}, both the same ACL tag name. Nothing else on an object
+    path. (The helper allows it only for a video it finished itself in this session: `video_ads` finish.)"""
+    params = dict(params or {})
+    if not _OBJECT_PATH_RE.fullmatch(path or ""):
+        raise WriteRefused("write refused: path must be /act_<id>/<edge>")
+    if files:
+        raise WriteRefused("write refused: naming a video takes no file")
+    if set(params) != {"name", "title"} or params["name"] != params["title"]:
+        raise WriteRefused("write refused: a video may only be given its ACL name and title")
+    if not (isinstance(params["name"], str) and VIDEO_TITLE_RE.fullmatch(params["name"])):
+        raise WriteRefused("write refused: the video name must be its ACL tag name")
+    return VIDEO_TITLE_EDGE
+
+
 def rupload_url(version: str, video_id: str) -> str:
     return f"https://{RUPLOAD_HOST}{RUPLOAD_PREFIX}{version}/{video_id}"
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
@@ -290,6 +311,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
                    "serve_prefix": SERVE_PREFIX, "serve_token_re": SERVE_TOKEN_RE.pattern,
                    "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
                    "number_re": UPLOAD_NUMBER_RE.pattern},
+        "video_title_re": VIDEO_TITLE_RE.pattern,
         "video_ads": {"phases": list(VIDEO_ADS_PHASES), "keys": {k: sorted(v) for k, v in VIDEO_ADS_KEYS.items()},
                       "field": VIDEO_ADS_FIELD, "segment_max": VIDEO_ADS_SEGMENT_MAX,
                       "host": RUPLOAD_HOST, "prefix": RUPLOAD_PREFIX,
@@ -968,6 +990,8 @@ def check(act: str, method: str, path: str, params: dict | None,
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
     m = _PATH_RE.fullmatch(path or "")
+    if not m and _OBJECT_PATH_RE.fullmatch(path or ""):
+        return check_video_title(path, params, files)          # ACL-2639: the only object write of a creation
     if not m:
         raise WriteRefused("write refused: path must be /act_<id>/<edge>")
     if m.group(1) != act:
@@ -1406,10 +1430,6 @@ def policy_for_commands(act: str) -> dict:
         "edges": {},
         "paused_required": [],
         "files": {},
-        "video_ads": {"phases": list(VIDEO_ADS_PHASES), "keys": {k: sorted(v) for k, v in VIDEO_ADS_KEYS.items()},
-                      "field": VIDEO_ADS_FIELD, "segment_max": VIDEO_ADS_SEGMENT_MAX,
-                      "host": RUPLOAD_HOST, "prefix": RUPLOAD_PREFIX,
-                      "version_re": RUPLOAD_VERSION_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": [],
         "opt_out_keys": [],

@@ -21,7 +21,7 @@ from src.fb_api import creator as cr  # noqa: E402
 from src.fb_api import write_policy as wp  # noqa: E402
 from tests.test_acl1761_api_create import ACT  # noqa: E402
 from tests.test_acl1891_video_chunks import MB, _big_draft, _run, _sha  # noqa: E402
-from tests.test_acl2629_worker_upload import ServedMeta, _node, worker_small  # noqa: E402,F401 - fixture
+from tests.test_acl2629_worker_upload import ServedMeta, ServingTab, _node, worker_small  # noqa: E402,F401
 
 VA = f"/{ACT}/video_ads"
 
@@ -36,9 +36,11 @@ def resumable(worker_small, monkeypatch):
 class ResumableMeta(ServedMeta):
     """Meta with the video_ads start/finish, the rupload POST (phase 'transfer' of our policy) and the status read."""
 
-    def __init__(self, *, start="ok", faults=(), keep_partial=True, status_zero=False, **kw):
+    def __init__(self, *, start="ok", faults=(), keep_partial=True, status_zero=False, finish_faults=(), **kw):
         super().__init__(meta_chunk=MB, **kw)
         self.status_zero = status_zero
+        self.finish_faults = list(finish_faults)      # per finish: "", "lost" (finished, no answer)
+        self.renames: list[tuple[str, dict]] = []
         self.start_mode = start
         self.faults = list(faults)      # per rupload POST: "", "drop" (half kept, no answer), "lost" (all kept,
         #                                 no answer), "nothing" (no byte arrives, no answer), "refused" (Graph error)
@@ -47,6 +49,12 @@ class ResumableMeta(ServedMeta):
         self.va_posts: list[tuple[str, dict]] = []
 
     def write(self, path, params, files=None, filename="", **kw):
+        if path.strip("/").isdigit():
+            wp.check(ACT, "POST", path, params, files)          # the naming of a video (ACL-2639)
+            self.renames.append((path.strip("/"), dict(params)))
+            obj = self.objects[path.strip("/")]
+            obj["title"], obj["name"] = params["title"], params["name"]
+            return {"status": 200, "body": {"success": True}}
         if not path.endswith("/video_ads"):
             return super().write(path, params, files, filename, **kw)
         wp.check(ACT, "POST", path, params, files)
@@ -80,6 +88,9 @@ class ResumableMeta(ServedMeta):
                 return {"error": "network"}
             if fault == "refused":
                 return {"status": 400, "body": {"error": {"code": 6000, "message": "upload failed"}}}
+            if fault == "debug":
+                # how rupload answers a refusal: a 4xx JSON without a Graph `error` (no byte kept)
+                return {"status": 400, "body": {"debug_info": {"type": "OAuthException", "message": "header"}}}
             n = len(chunk) // 2 if fault == "drop" else len(chunk)
             data = chunk.read(0, n)
             sess["received"] += n
@@ -92,6 +103,8 @@ class ResumableMeta(ServedMeta):
         assert phase == "finish"
         assert sess["received"] == sess["size"], "finish before all bytes arrived"
         sess["done"] = True
+        if self.finish_faults and self.finish_faults.pop(0) == "lost":
+            return {"error": "network"}
         return {"status": 200, "body": {"success": True}}
 
     def _video_row(self, obj, params):
@@ -296,7 +309,8 @@ def test_the_helper_posts_the_raw_bytes_to_rupload_with_the_documented_headers()
         assert r["error"] == "write_refused", k
     # the start / finish phases are ordinary Graph calls (token in the body, Graph host)
     assert out["start"]["ok"] is True
-    assert out["log"]["graph"][-1]["url"].endswith(f"/{ACT}/video_ads") and out["log"]["graph"][-1]["token_in_body"]
+    starts = [x for x in out["log"]["graph"] if x["phase"] == "start"]
+    assert starts and starts[0]["url"].endswith(f"/{ACT}/video_ads") and starts[0]["token_in_body"]
 
 
 def test_a_status_with_no_bytes_after_all_posts_stops_instead_of_restarting(resumable, tmp_path):
@@ -306,3 +320,141 @@ def test_a_status_with_no_bytes_after_all_posts_stops_instead_of_restarting(resu
     assert out.stop_kind == "video_error" and "kept none" in out.error
     assert "finish" not in _phases(meta) and [int(p["offset"]) for ph, p in meta.va_posts if ph == "transfer"][0] == 0
     assert sum(1 for ph in _phases(meta) if ph == "transfer") == 4                     # no second pass from zero
+
+
+# ───────────────────────── review B1/B2/N1/N2 ─────────────────────────
+
+def _two_ads_one_file(tmp_path):
+    from dataclasses import replace
+    d, f = _big_draft(tmp_path)
+    ads = d.ad_sets[0].ads
+    ads.append(replace(ads[0], creative_id="1001", copy_name="Text1", ad_title="Head 1", ad_body="Body 1"))
+    return d, f
+
+
+def test_the_finished_video_gets_the_acl_tag_name(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta()
+    out, _ = _run(meta, d)
+    assert out.error == ""
+    (vid, sess), = meta.va.items()
+    assert meta.renames == [(vid, {"name": meta.objects[vid]["title"], "title": meta.objects[vid]["title"]})]
+    assert meta.objects[vid]["title"].startswith("acl-")
+    # named only after the finish (an unfinished video is never found by the tag)
+    assert _phases(meta)[-1] == "finish"
+
+
+def test_one_file_in_several_ads_goes_up_once(resumable, tmp_path):
+    d, f = _two_ads_one_file(tmp_path)
+    meta = ResumableMeta()
+    out, _ = _run(meta, d)
+    assert out.error == "", out.error
+    assert _phases(meta).count("start") == 1 and len(meta.va) == 1
+    assert any("video already in the ad account" in s for s in out.steps)
+
+
+def test_publish_again_reuses_the_named_video(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta()
+    first, _ = _run(meta, d)
+    assert first.error == ""
+    again, _ = _run(meta, d)
+    assert again.error == "" and _phases(meta).count("start") == 1
+
+
+def test_a_run_stopped_after_the_start_is_continued_not_repeated(resumable, tmp_path, monkeypatch):
+    from src.fb_api import operation_journal as oj
+    from tests.test_acl1856_operation_journal import _go
+    monkeypatch.setattr(cr, "upload_calls", lambda size, worker=None: 100)
+    d, f = _big_draft(tmp_path)
+    now = [1_000_000.0]
+    journal = oj.OperationJournal(tmp_path / "ops", clock=lambda: now[0])
+    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10)       # stops with 1.5 MB at Meta
+    first, _ = _go(meta, d, journal, request_key="r1#t")
+    assert first.stop_kind == "video_error" and "finish" not in _phases(meta)
+    (vid, sess), = meta.va.items()
+    held = sess["received"]
+    assert 0 < held < f.stat().st_size
+    meta.faults = []
+    now[0] += oj.BUSY_S + 60                                                  # "Publish again" a few minutes later
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert _phases(meta).count("start") == 1 and len(meta.va) == 1           # the same video, not a second one
+    later = [int(p["offset"]) for ph, p in meta.va_posts if ph == "transfer"][-3:]
+    assert later[0] == held                                                   # continued at Meta's offset
+    assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
+    assert any("continuing the upload of an earlier run" in s for s in again.steps)
+
+
+def test_a_4xx_without_a_graph_error_is_a_refusal_not_progress(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["", "debug"])
+    out, _ = _run(meta, d)
+    assert out.error == "", out.error
+    sess = next(iter(meta.va.values()))
+    assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
+    offsets = [int(p["offset"]) for ph, p in meta.va_posts if ph == "transfer"]
+    assert offsets[:3] == [0, MB, MB]                                         # the refused segment is sent again
+    assert any("did not confirm the bytes (debug_info)" in s for s in out.steps)
+
+
+def test_a_header_token_refused_on_the_first_post_falls_back_to_chunks(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["debug", "debug"])
+    out, client = _run(meta, d)
+    assert out.error == "", out.error
+    assert "finish" not in _phases(meta)
+    assert any("no byte reached Meta" in w and "debug_info" in w for w in out.warnings)
+    assert next(iter(meta.sessions.values()))["done"]                        # the chunked session finished
+
+
+def test_the_calls_of_a_failed_attempt_are_added_to_the_run_budget(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["debug", "debug"])
+    out, client = _run(meta, d, max_calls=200)
+    assert _phases(meta) == ["start", "transfer", "transfer"]
+    assert client.max_calls == 200 + 5                                        # start + 2 POSTs + 2 status reads
+
+
+def test_a_lost_finish_answer_is_sent_once_more(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(finish_faults=["lost"])
+    out, _ = _run(meta, d)
+    assert out.error == "", out.error
+    assert _phases(meta).count("finish") == 2
+    assert any("sending the finish once more" in s for s in out.steps)
+
+
+def test_the_helper_names_only_a_video_it_finished():
+    out = _node({"name": "rupload", "piece": 400_000})
+    assert out["rename_before"]["error"] == "write_refused"
+    assert out["finish"]["ok"] is True and out["rename_after"]["ok"] is True
+    for k in ("rename_other", "rename_bad", "rename_extra"):
+        assert out[k]["error"] == "write_refused", k
+    assert out["proto"] == {"error": "write_refused", "why": "edge"}          # N4: no prototype key is an edge
+
+
+def test_python_policy_names_a_video_only_with_its_tag():
+    t = "acl-tag1-0123456789ab"
+    assert wp.check(ACT, "POST", "/7770001", {"name": t, "title": t}) == wp.VIDEO_TITLE_EDGE
+    for params in ({"name": t}, {"name": t, "title": t + "x"}, {"name": "Campaign", "title": "Campaign"},
+                   {"name": t, "title": t, "status": "ACTIVE"}):
+        with pytest.raises(wp.WriteRefused):
+            wp.check(ACT, "POST", "/7770001", params)
+
+
+def test_an_unknown_in_page_result_aborts_the_request_first():
+    from src.fb_api import token_capture as tc
+    from tests.test_acl2629_worker_upload import _graph
+
+    class Tab(ServingTab):
+        def evaluate_in(self, ctx, expr, timeout=60.0):
+            if ".poll(" in expr:
+                raise tc.StaleContextError("gone")
+            return super().evaluate_in(ctx, expr, timeout)
+
+    tab = Tab()
+    t = _graph(tab)
+    got = t._write_file_job(7, {"method": "POST"}, None, None)
+    assert got == {"error": "call_unknown"}
+    assert any(".abort(" in e for e in tab.exprs)

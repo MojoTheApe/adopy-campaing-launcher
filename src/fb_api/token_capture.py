@@ -101,6 +101,7 @@ _HELPER_JS = r"""
   let version = '';
   let retired = false;
   let amRequest = null;
+  const finishedVideos = Object.create(null);
 
   // Разобрать адрес Graph: если в строке запроса есть access_token — это он.
   function consider(url) {
@@ -770,7 +771,17 @@ _HELPER_JS = r"""
     // создателя (без `object_update`) пути объекта не принимает; помощник правок
     // (без рёбер) пути создания не принимает.
     const objMatch = /^\/[1-9][0-9]{4,}$/.exec(path);
-    if (objMatch && !WRITE.object_update) return refused('path');
+    if (objMatch && !WRITE.object_update) {
+      // ACL-2639: the one object write of a creation - naming a video THIS helper finished with video_ads (exactly
+      // {name, title}, the same ACL tag name). Any other object path stays refused.
+      const vid = path.slice(1);
+      const p = spec.params || {};
+      const pk = Object.keys(p);
+      if (!finishedVideos[vid] || pk.length !== 2 || !('name' in p) || !('title' in p) || p.name !== p.title
+          || typeof p.name !== 'string' || !new RegExp(WRITE.video_title_re || '^$').test(p.name)
+          || (spec.files && Object.keys(spec.files).length) || spec.source !== undefined) return refused('path');
+      return post(path, p, null, null, spec, {}, null);
+    }
     if (!objMatch && WRITE.object_update) return refused('path');
     const params = spec.params || {};
     let want = null;
@@ -798,7 +809,7 @@ _HELPER_JS = r"""
     const m = /^\/(act_[0-9]{5,})\/([a-z_]+)$/.exec(path);
     if (!m || m[1] !== WRITE.act) return refused('path');
     const edge = m[2];
-    const keys = WRITE.edges[edge];
+    const keys = Object.keys(WRITE.edges).indexOf(edge) >= 0 ? WRITE.edges[edge] : null;   // own keys only (N4)
     if (!keys) return refused('edge');
     if (edge === 'advideos' && 'upload_phase' in params) {
       // ACL-1891: своя закрытая схема на каждую фазу; файл только у transfer.
@@ -1451,6 +1462,9 @@ _HELPER_JS = r"""
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
+    // ACL-2639: a video this helper finished (video_ads finish answered success) may be named once, here only.
+    if (/\/video_ads$/.test(path) && params.upload_phase === 'finish' && resp.status >= 200 && resp.status < 300
+        && parsed && parsed.success === true && typeof params.video_id === 'string') finishedVideos[params.video_id] = true;
     const headers = {};
     for (const name of HEADERS) {
       try { const v = resp.headers.get(name); if (v) headers[name] = clean(v); } catch (e) {}
@@ -2609,20 +2623,29 @@ class InPageGraph:
                     pass
                 # Результат неизвестен: дальше обычная сверка чтением, повторной загрузки нет.
                 return {"error": "call_unknown", "why": "cancelled"}
+            def unknown() -> dict:
+                # ACL-2639 (N3): the request may still be running in the page; abort it (best effort) so the caller's
+                # resume never runs a second POST of the same upload session next to it.
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                return {"error": "call_unknown"}
+
             try:
                 got = run("poll", json.dumps(job))
             except (CdpTimeout, TimeoutError):
                 # Один опрос не ответил - не конец загрузки: терпим подряд до MAX_POLL_TIMEOUTS.
                 poll_timeouts += 1
                 if poll_timeouts > self.MAX_POLL_TIMEOUTS:
-                    return {"error": "call_unknown"}
+                    return unknown()
                 self._wait(self.UPLOAD_POLL_S, serving)
                 continue
             except (StaleContextError, PageError, CdpError):
-                return {"error": "call_unknown"}
+                return unknown()
             poll_timeouts = 0
             if not isinstance(got, dict):
-                return {"error": "call_unknown"}
+                return unknown()
             state = got.get("state")
             if state == "running":
                 if progress is not None:
