@@ -173,13 +173,20 @@ def resumable_upload_enabled(env: dict | None = None) -> bool:
 #: ACL-2639: at most this many resumes of one resumable upload (each one = a status read + a POST from the offset).
 RESUMABLE_MAX_RESUMES = 5
 #: start + status before finish + finish.
-RESUMABLE_FIXED_CALLS = 3
+RESUMABLE_FIXED_CALLS = 4             # start, status before finish, finish, the name of the finished video
 
 
 def resumable_calls(size: int, segment: int | None = None) -> int:
     """Graph calls of a resumable upload without resumes: start, one POST per segment, status, finish."""
     seg = segment or _wpol.VIDEO_ADS_SEGMENT_MAX
     return -(-size // seg) + RESUMABLE_FIXED_CALLS
+
+
+def _object_gone(exc: GraphError) -> bool:
+    """ACL-2639: Meta says the object does not exist (code 100 / subcode 33, or that text) - not a transient error."""
+    text = str(exc).lower()
+    return getattr(exc, "code", None) == 100 and (getattr(exc, "subcode", None) == 33 or "does not exist" in text
+                                                  or "nonexisting" in text or "nonexistent" in text)
 
 
 class _ResumableRefused(Exception):
@@ -3383,8 +3390,8 @@ class CampaignCreator:
             video. Not fatal: the journal and the run's own memory still know the id."""
             if not title:
                 return
-            if getattr(self.client, "calls", 0) - calls_before + 1 > allowance:
-                self._step(out, f"{who}: the video was not named (no call left for it)")
+            if getattr(self.client, "calls", 0) - calls_before + 1 > allowance or not self._optional_write_ok():
+                self._step(out, f"{who}: the video was not named (no call left for it, or another write is pending)")
                 return
             try:
                 self.client.post(f"/{vid}", {"name": title, "title": title})
@@ -3395,8 +3402,8 @@ class CampaignCreator:
             except GraphError as exc:
                 self._step(out, f"{who}: Meta did not take the video name ({str(exc)[:100]})")
             except GraphStop as exc:
-                # N5: naming is optional - a refusal before sending (page reloaded, helper recreated) or the budget
-                # never stops the publish of an uploaded video. Any other stop (login, checkpoint) stays a stop.
+                # N5: naming is optional - a refusal before sending (page reloaded, helper recreated) never stops the
+                # publish of an uploaded video. Any other stop (login, checkpoint, limits) stays a stop.
                 if not self.client.release_optional_stop(exc):
                     raise
                 self._step(out, f"{who}: the video was not named ({str(exc)[:100]})")
@@ -3409,7 +3416,13 @@ class CampaignCreator:
             try:
                 st = status()
             except GraphError as exc:
-                # N7: the video of the earlier run is gone (deleted, unavailable): forget it and start a new upload.
+                if not _object_gone(exc):
+                    # Not "gone" (a transient or a permission error): the earlier upload may be finished already, so
+                    # a new start could duplicate it. Stop; the next run asks again.
+                    raise CreationStopped(f"{what}: the upload of an earlier run could not be read ({str(exc)[:120]}). "
+                                          "Publish again later: it is continued, not repeated.",
+                                          created=out.created, kind="unknown") from exc
+                # N7: the video of the earlier run no longer exists: forget it and start a new upload.
                 self._step(out, f"{who}: the upload of an earlier run is not available ({str(exc)[:80]}); "
                                 "starting a new one")
                 self._forget_pending_video(what)
@@ -3528,6 +3541,9 @@ class CampaignCreator:
         """N6: a video an earlier run uploaded and finished, but never named (it stopped in between). The page helper
         names only a video it finished itself, so the finish of THIS id (a journal-proven upload of this file, whole at
         Meta) is sent once more; only its explicit success lets the name follow. Anything else: not named, a step."""
+        if not self._optional_write_ok():
+            self._step(out, f"{who}: the video was not named (no call left for it, or another write is pending)")
+            return
         try:
             done = self.client.post(path, {"upload_phase": "finish", "video_id": vid})
         except WriteUnknown:
@@ -3546,6 +3562,10 @@ class CampaignCreator:
             name_it()
         else:
             self._step(out, f"{who}: the video was not named (the repeated finish was not confirmed)")
+
+    def _optional_write_ok(self) -> bool:
+        check = getattr(self.client, "optional_write_ok", None)
+        return bool(check()) if callable(check) else True
 
     def _forget_pending_video(self, what: str) -> None:
         op = self._op

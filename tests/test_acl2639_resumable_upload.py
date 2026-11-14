@@ -107,8 +107,15 @@ class ResumableMeta(ServedMeta):
         assert phase == "finish"
         assert sess["received"] == sess["size"], "finish before all bytes arrived"
         sess["done"] = True
-        if self.finish_faults and self.finish_faults.pop(0) == "lost":
+        fault = self.finish_faults.pop(0) if self.finish_faults else ""
+        if fault == "lost":
             return {"error": "network"}
+        if fault == "nosuccess":
+            return {"status": 200, "body": {"success": False}}
+        if fault == "error":
+            return {"status": 400, "body": {"error": {"code": 100, "message": "(#100) already published"}}}
+        if fault == "refused":
+            return {"error": "write_refused", "why": "upload_key"}
         return {"status": 200, "body": {"success": True}}
 
     def _video_row(self, obj, params):
@@ -221,7 +228,7 @@ def test_the_calls_stay_within_the_plan_and_single_digits_for_a_large_file(resum
     size = f.stat().st_size
     assert len(meta.va_posts) + 1 <= cr.resumable_calls(size, MB)               # + the one status read
     live = 512 * MB
-    assert cr.resumable_calls(2420 * MB, live) == 5 + cr.RESUMABLE_FIXED_CALLS == 8   # 2.4 GB live: 8 calls
+    assert cr.resumable_calls(2420 * MB, live) == 5 + cr.RESUMABLE_FIXED_CALLS == 9   # 2.4 GB live: 9 calls
     assert cr.resumable_calls(2420 * MB, live) < cr.upload_calls(2420 * MB, True)    # inside the run budget
 
 
@@ -478,20 +485,27 @@ def test_a_refused_naming_never_stops_the_publish(resumable, tmp_path):
     assert client.stopped is None
 
 
-def test_the_budget_on_the_naming_call_never_stops_the_publish(resumable, tmp_path, monkeypatch):
+def test_no_call_left_for_the_name_skips_it_without_a_stop(resumable, tmp_path):
+    # the real budget: the run's calls end right after the finish; the name is skipped, nothing raises for it
     from src.fb_api import graph as g
-    real = g.GraphClient.post
-
-    def post(self, path, params=None, **kw):
-        if path.strip("/").isdigit():
-            raise self._stop(g.CallBudget("call budget of 1 reached"))
-        return real(self, path, params, **kw)
-
-    monkeypatch.setattr(g.GraphClient, "post", post)
     d, f = _big_draft(tmp_path)
-    out, client = _run(ResumableMeta(), d)
-    assert out.error == "", out.error
-    assert any("the video was not named (call budget" in s for s in out.steps)
+    meta = ResumableMeta()
+    client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=400)
+    real_write = meta.write
+
+    def write(path, params, files=None, filename="", **kw):
+        got = real_write(path, params, files, filename, **kw)
+        if path.endswith("/video_ads") and params.get("upload_phase") == "finish":
+            client.max_calls = client.calls                               # nothing left after the finish
+        return got
+
+    meta.write = write
+    facts = cr.preflight_account(client, ACT)
+    creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=lambda s: None)
+    out = creator.run(cr.plan_from_draft(d))
+    assert meta.renames == []
+    assert any("the video was not named (no call left" in s for s in out.steps)
+    assert "name" not in (out.error or "").lower()
 
 
 def test_a_login_stop_on_naming_still_stops(resumable, tmp_path, monkeypatch):
@@ -562,3 +576,77 @@ def test_a_fallback_forgets_the_pending_upload(resumable, tmp_path):
     stages = [st for p in (tmp_path / "ops").rglob("*.json")
               for st in (json.loads(p.read_text(encoding="utf-8")).get("stages") or {}).values()]
     assert stages and not any(st.get("pending_id") for st in stages)
+
+
+# ───────────────────────── review of 187ddae16 ─────────────────────────
+
+def _stages(tmp_path):
+    import json
+    return [st for p in (tmp_path / "ops").rglob("*.json")
+            for st in (json.loads(p.read_text(encoding="utf-8")).get("stages") or {}).values()]
+
+
+def _stopped_after_start(tmp_path, monkeypatch):
+    from tests.test_acl1856_operation_journal import _go
+    monkeypatch.setattr(cr, "upload_calls", lambda size, worker=None: 100)
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10)
+    _go(meta, d, journal, request_key="r1#t")
+    (old, _sess), = meta.va.items()
+    meta.faults = []
+    now[0] += oj.BUSY_S + 60
+    return _go, oj, journal, d, meta, old
+
+
+def test_a_transient_status_error_keeps_the_pending_upload_and_stops(resumable, tmp_path, monkeypatch):
+    _go, oj, journal, d, meta, old = _stopped_after_start(tmp_path, monkeypatch)
+    real = meta._get
+    meta._get = lambda path, params: ({"error": {"code": 1, "message": "An unknown error occurred"}}
+                                      if path == f"/{old}" else real(path, params))
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error and _phases(meta).count("start") == 1                 # no second video
+    assert any(st.get("pending_id") == old for st in _stages(tmp_path))       # kept for the next run
+
+
+def test_a_status_error_100_33_starts_fresh(resumable, tmp_path, monkeypatch):
+    _go, oj, journal, d, meta, old = _stopped_after_start(tmp_path, monkeypatch)
+    real = meta._get
+    meta._get = lambda path, params: ({"error": {"code": 100, "error_subcode": 33, "message": "Unsupported get request."}}
+                                      if path == f"/{old}" else real(path, params))
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert _phases(meta).count("start") == 2
+
+
+@pytest.mark.parametrize("fault,expect", [
+    ("nosuccess", "was not confirmed"), ("error", "Meta:"), ("lost", "has no answer"), ("refused", "refused")])
+def test_a_failed_repeated_finish_of_an_adopted_video_leaves_it_unnamed(resumable, tmp_path, fault, expect):
+    from tests.test_acl1856_operation_journal import _go
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(finish_faults=["lost", "lost", fault])
+    meta.hide_published = True
+    _go(meta, d, journal, request_key="r1#t")
+    meta.hide_published = False
+    now[0] += oj.BUSY_S + 60
+    again, client = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error                                     # the publish continues
+    assert meta.renames == [] and _phases(meta).count("start") == 1 and len(meta.va) == 1
+    assert any("the video was not named" in s and expect in s for s in again.steps)
+    assert client.stopped is None
+
+
+def test_release_optional_stop_lifts_only_not_sent():
+    from src.fb_api import graph as g
+    c = g.GraphClient(object(), allow_writes=True, sleep=lambda s: None)
+    for exc in (g.AuthRequired("a"), g.Checkpoint("c"), g.RateLimited("r"), g.PolicyBlocked("p"),
+                g.LoggedOut("l"), g.CallBudget("b"), g.PageFailed("the page refused the write (fake)")):
+        c.stopped = exc
+        assert c.release_optional_stop(exc) is False and c.stopped is exc
+    other = g.NotSent("older")
+    c.stopped = other
+    assert c.release_optional_stop(g.NotSent("newer")) is False and c.stopped is other   # never an older stop
+    assert c.optional_write_ok() is False
+    assert c.release_optional_stop(other) is True and c.stopped is None
+    assert c.optional_write_ok() is True
