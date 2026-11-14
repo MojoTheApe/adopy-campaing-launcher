@@ -160,6 +160,32 @@ def worker_upload_enabled(env: dict | None = None) -> bool:
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
+#: ACL-2639: emergency switch of the resumable ad-video upload (`ACL_VIDEO_RESUMABLE_UPLOAD=0|false|no|off`); on by
+#: default. Off: the large original goes up with the chunked advideos protocol as before.
+RESUMABLE_UPLOAD_FLAG = "ACL_VIDEO_RESUMABLE_UPLOAD"
+
+
+def resumable_upload_enabled(env: dict | None = None) -> bool:
+    raw = (env if env is not None else os.environ).get(RESUMABLE_UPLOAD_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+#: ACL-2639: at most this many resumes of one resumable upload (each one = a status read + a POST from the offset).
+RESUMABLE_MAX_RESUMES = 5
+#: start + status before finish + finish.
+RESUMABLE_FIXED_CALLS = 3
+
+
+def resumable_calls(size: int, segment: int | None = None) -> int:
+    """Graph calls of a resumable upload without resumes: start, one POST per segment, status, finish."""
+    seg = segment or _wpol.VIDEO_ADS_SEGMENT_MAX
+    return -(-size // seg) + RESUMABLE_FIXED_CALLS
+
+
+class _ResumableRefused(Exception):
+    """ACL-2639: the resumable upload could not be used; nothing of it was finished (the chunked path takes over)."""
+
+
 def video_limit_bytes(worker: bool | None = None) -> int:
     """Largest video accepted: Meta's 4 GB on the worker path, 1536 MB on the old (compressing) path."""
     worker = worker_upload_enabled() if worker is None else worker
@@ -3208,7 +3234,7 @@ class CampaignCreator:
                 if mode == "chunked":
                     vid = self._journaled(
                         out, f"{who}: video upload", "video",
-                        lambda: self._video_chunked(out, plan, data, title, find, who), find,
+                        lambda: self._video_large(out, plan, data, title, find, who), find,
                         name=title, content_md5=_md5(data))
                 else:
                     vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
@@ -3250,6 +3276,175 @@ class CampaignCreator:
             raise CreationStopped(
                 f"{what}: the write result is unknown ({exc}). Publish again later: a finished video "
                 "is found by its tag and is not uploaded twice.", created=out.created, kind="unknown") from exc
+
+    def _video_large(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                     find: Callable[[], str | None], who: str) -> str:
+        """ACL-2639: a large original from the profile goes up with Meta's resumable protocol (a few calls); the
+        chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte."""
+        if self.worker_path and resumable_upload_enabled():
+            try:
+                return self._video_resumable(out, plan, big, who)
+            except _ResumableRefused as exc:
+                why = str(exc)
+                self._step(out, f"{who}: resumable upload not used ({why}); uploading in chunks instead")
+                out.warnings.append(f"Ad video: the resumable upload was not used ({why}); uploading in chunks instead.")
+        return self._video_chunked(out, plan, big, title, find, who)
+
+    def _video_resumable(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str) -> str:
+        """ACL-2639: Marketing API "FB Video Ads", the Resumable (non-chunking) protocol, from the profile tab.
+
+        start (`act_X/video_ads`) -> one rupload POST per segment of at most 512 MB with the `offset` Meta has
+        (served piece by piece from the file, never a copy in the page) -> status read (`bytes_transferred` must be the
+        whole file) -> finish. A dropped POST resumes from the offset Meta reports (at most RESUMABLE_MAX_RESUMES
+        times), never from zero and never as a second video. Every call counts in the run budget; the calls planned
+        for this file are a hard cap. `_ResumableRefused` - nothing was finished, the caller may use the chunked path.
+        """
+        path = f"/{plan.act}/video_ads"
+        size = len(big)
+        what = f"{who}: video upload"
+        segment = _wpol.VIDEO_ADS_SEGMENT_MAX
+        calls_before = getattr(self.client, "calls", 0)
+        planned = upload_calls(size, True)
+        allowance = max(planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned)),
+                        resumable_calls(size, segment))
+
+        def room(n: int) -> None:
+            used = getattr(self.client, "calls", 0) - calls_before
+            if used + n > allowance:
+                raise CreationStopped(
+                    f"{what}: the upload needs more Meta calls than planned for this video ({allowance}); stopped "
+                    "before sending more. Nothing was duplicated and the unfinished upload is not used.",
+                    created=out.created, kind="video_error")
+
+        # -- start
+        self._check_cancel(out)
+        try:
+            started = self.client.post(path, {"upload_phase": "start"})
+        except GraphError as exc:
+            raise _ResumableRefused(f"Meta refused the start: {str(exc)[:160]}") from exc
+        except WriteUnknown as exc:
+            self.client.reconciled(path)     # an unfinished session without its id is never used
+            raise _ResumableRefused(f"the start answer was lost ({str(exc)[:80]})") from exc
+        except PageFailed as exc:
+            if not self.client.resume_after_unsent(exc):
+                raise
+            raise _ResumableRefused(f"the page did not send the start ({str(exc)[:120]})") from exc
+        vid = str(started.get("video_id") or "")
+        version = _wpol.rupload_version(started.get("upload_url"), vid) if vid.isdigit() else ""
+        if not version:
+            raise _ResumableRefused("Meta's start answer has no usable video id and upload address")
+        self._step(out, f"{who}: resumable upload started ({size // (1024 * 1024)} MB)")
+
+        offset = 0
+        resumes = 0
+        moved = False                       # Meta has confirmed at least one byte of this upload
+        mb_total = max(size // (1024 * 1024), 1)
+
+        def status() -> dict:
+            room(1)
+            self._check_cancel(out)
+            row = self.client.get(f"/{vid}", {"fields": "status"})
+            st = row.get("status") if isinstance(row, dict) else None
+            return st if isinstance(st, dict) else {}
+
+        def transferred(st: dict, floor: int) -> int:
+            phase = st.get("uploading_phase") if isinstance(st.get("uploading_phase"), dict) else {}
+            raw = phase.get("bytes_transferred")
+            got = raw if isinstance(raw, int) and not isinstance(raw, bool) else (
+                int(raw) if isinstance(raw, str) and raw.isdigit() and len(raw) <= 13 else None)
+            if got is None or got < floor or got > size:
+                raise CreationStopped(f"{what}: Meta reported no usable upload offset ({raw!r}); stopped before "
+                                      "sending more", created=out.created, kind="video_error")
+            return got
+
+        def resume(why: str) -> None:
+            nonlocal offset, resumes, moved
+            resumes += 1
+            if resumes > RESUMABLE_MAX_RESUMES:
+                raise CreationStopped(f"{what}: the upload kept breaking ({why}); stopped after "
+                                      f"{RESUMABLE_MAX_RESUMES} resumes. Nothing was duplicated and the unfinished "
+                                      "upload is not used.", created=out.created, kind="video_error")
+            got = transferred(status(), 0)
+            if got < offset and moved:
+                raise CreationStopped(f"{what}: Meta reported fewer bytes than it had confirmed ({got} < {offset}); "
+                                      "stopped before sending more", created=out.created, kind="video_error")
+            if got > 0:
+                moved = True
+            elif not moved and resumes >= 2:
+                # Not a single byte arrived twice in a row: the address is not reachable from this profile (CORS,
+                # proxy). The session is never finished, so the chunked path is safe.
+                raise _ResumableRefused(f"no byte reached Meta ({why})")
+            self._step(out, f"{who}: resuming the upload at {got // (1024 * 1024)}/{mb_total} MB ({why})")
+            offset = got
+
+        while True:
+            while offset < size:
+                n = min(segment, size - offset)
+                room(2)                                        # this POST and the finish
+                if self.size_of(big.path) != size:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
+                params = {"upload_phase": "transfer", "video_id": vid, "offset": str(offset),
+                          "file_size": str(size), "upload_version": version}
+                self._check_cancel(out)
+                try:
+                    body = self.client.post(path, params, files={_wpol.VIDEO_ADS_FIELD: _wpol.ServedChunk(big, offset, n)},
+                                            filename="video", progress=lambda _s: self._beat(),
+                                            cancelled=self.cancelled)
+                except WriteUnknown as exc:
+                    self.client.reconciled(path)
+                    resume(f"the answer was lost: {getattr(exc, 'reason', '') or 'network'}")
+                    continue
+                except PageFailed as exc:
+                    if not self.client.resume_after_unsent(exc):
+                        raise
+                    resume("the page did not send the bytes")
+                    continue
+                except GraphError as exc:
+                    resume(f"Meta refused: {str(exc)[:80]}")
+                    continue
+                if body.get("success") is False:
+                    resume("Meta did not accept the bytes")
+                    continue
+                moved = True
+                offset += n
+                self._beat()
+                if offset < size:
+                    self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
+            # Before finish: Meta must hold the whole file (a segment it kept only partly is resumed, not restarted).
+            got = transferred(status(), 0)
+            if got >= size:
+                break
+            if got == 0:
+                raise CreationStopped(f"{what}: Meta kept none of the uploaded bytes; stopped. Nothing was "
+                                      "duplicated and the unfinished upload is not used.",
+                                      created=out.created, kind="video_error")
+            offset = got
+            resumes += 1
+            if resumes > RESUMABLE_MAX_RESUMES:
+                raise CreationStopped(f"{what}: Meta holds {got} of {size} bytes after the upload; stopped. Nothing "
+                                      "was duplicated and the unfinished upload is not used.",
+                                      created=out.created, kind="video_error")
+            self._step(out, f"{who}: Meta holds {got // (1024 * 1024)}/{mb_total} MB; sending the rest")
+        # -- finish
+        room(1)
+        self._check_cancel(out)
+        try:
+            done = self.client.post(path, {"upload_phase": "finish", "video_id": vid})
+        except WriteUnknown:
+            self.client.reconciled(path)
+            st = status()
+            video = str(st.get("video_status") or "")
+            publishing = st.get("publishing_phase") if isinstance(st.get("publishing_phase"), dict) else {}
+            if video in ("processing", "ready") or publishing.get("status") == "complete":
+                self._step(out, f"{what}: finish reconciled by a status read")
+                return vid
+            raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
+                                  "published yet. Publish again later.", created=out.created, kind="unknown")
+        if done.get("success") is False:
+            raise CreationStopped(f"{what}: Meta did not finish the upload", created=out.created, kind="video_error")
+        self._step(out, f"{who}: resumable upload finished ({resumes} resumes)")
+        return vid
 
     def _video_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
                        find: Callable[[], str | None], who: str) -> str:

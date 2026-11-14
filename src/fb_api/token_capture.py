@@ -278,10 +278,34 @@ _HELPER_JS = r"""
     if (spec.source !== undefined && phase !== 'transfer') return 'source';
     return null;
   }
+  // ACL-2639: the resumable ad-video upload (mirror of write_policy._check_video_ads). Phase 'transfer' is the rupload
+  // POST; its body is always served piece by piece (never staged), it starts at `offset` and ends inside the file.
+  function videoAdsOk(params, spec) {
+    const V = WRITE.video_ads;
+    if (!V) return 'video_ads';
+    const phase = params.upload_phase;
+    if (typeof phase !== 'string' || V.phases.indexOf(phase) < 0) return 'upload_phase';
+    const allowed = V.keys[phase];
+    const pk = Object.keys(params);
+    for (const k of pk) if (allowed.indexOf(k) < 0) return 'upload_key';
+    for (const k of allowed) if (pk.indexOf(k) < 0) return 'upload_key';
+    if (phase !== 'start' && !(typeof params.video_id === 'string' && /^[0-9]{5,25}$/.test(params.video_id))) return 'video_id';
+    const fk = Object.keys(spec.files || {});
+    if (phase !== 'transfer') return (fk.length || spec.source !== undefined) ? 'file' : null;
+    const size = digitsOf(params.file_size);
+    const off = digitsOf(params.offset);
+    if (!size || size > WRITE.upload.file_max) return 'upload_size';
+    if (off === null || off >= size) return 'upload_offset';
+    if (typeof params.upload_version !== 'string' || !new RegExp(V.version_re).test(params.upload_version)) return 'upload_version';
+    if (fk.length !== 1 || fk[0] !== V.field || spec.source === undefined) return 'source';
+    const n = (spec.expect || {}).bytes;
+    if (typeof n !== 'number' || n < 1 || n > V.segment_max || off + n > size) return 'chunk_size';
+    return null;
+  }
   // ACL-2629: a chunk served to the page's Web Worker piece by piece (instead of staged as base64). Same limits as
   // write_policy.ServedChunk: the chunk is 1..served_chunk_max bytes, the pieces are contiguous, each 1..piece_max
   // bytes with its SHA-256, and the token is the controller's random one. `bytes` (when given) must equal the sum.
-  function sourceOk(src, bytes) {
+  function sourceOk(src, bytes, cap) {
     const U = WRITE && WRITE.upload;
     if (!U || typeof U.served_chunk_max !== 'number' || typeof U.piece_max !== 'number') return 'source';
     if (!src || typeof src !== 'object' || Array.isArray(src)) return 'source';
@@ -298,7 +322,7 @@ _HELPER_JS = r"""
       if (typeof x.h !== 'string' || !/^[0-9a-f]{64}$/.test(x.h)) return 'source';
       at += x.n;
     }
-    if (at < 1 || at > U.served_chunk_max) return 'chunk_size';
+    if (at < 1 || at > (typeof cap === 'number' ? cap : U.served_chunk_max)) return 'chunk_size';
     if (typeof bytes === 'number' && bytes !== at) return 'file_size';
     return null;
   }
@@ -735,7 +759,7 @@ _HELPER_JS = r"""
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
     // ACL-2629: a served chunk exists only for a video upload chunk (act_X/advideos, transfer, video_file_chunk).
-    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/advideos$/.test(path)) return refused('source');
+    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/(?:advideos|video_ads)$/.test(path)) return refused('source');
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
@@ -771,7 +795,7 @@ _HELPER_JS = r"""
         if (!okNum && !okStr) return refused('amount');
       }
     } else {
-    const m = /^\/(act_[0-9]{5,})\/([a-z]+)$/.exec(path);
+    const m = /^\/(act_[0-9]{5,})\/([a-z_]+)$/.exec(path);
     if (!m || m[1] !== WRITE.act) return refused('path');
     const edge = m[2];
     const keys = WRITE.edges[edge];
@@ -782,6 +806,12 @@ _HELPER_JS = r"""
       if (why) return refused(why);
       files = spec.files || {};
       want = params.upload_phase === 'transfer' ? WRITE.upload.chunk_field : null;
+    } else if (edge === 'video_ads') {
+      // ACL-2639: only through its phases; the body of 'transfer' is served.
+      const why = videoAdsOk(params, spec);
+      if (why) return refused(why);
+      files = spec.files || {};
+      want = params.upload_phase === 'transfer' ? WRITE.video_ads.field : null;
     } else {
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
@@ -842,11 +872,14 @@ _HELPER_JS = r"""
     }
     }
     let blob = null;
-    if (spec.source !== undefined && want !== (WRITE.upload || {}).chunk_field) return refused('source');
+    const vaField = (WRITE.video_ads || {}).field;
+    const served = want === (WRITE.upload || {}).chunk_field || (!!vaField && want === vaField);
+    if (spec.source !== undefined && !served) return refused('source');
+    if (want && vaField && want === vaField && spec.source === undefined) return refused('source');   // never staged
     if (want && spec.source !== undefined) {
       // ACL-2629: nothing is staged here; the worker pulls the bytes. Only a job (startCall) may do it.
-      if (!job || want !== (WRITE.upload || {}).chunk_field) return refused('source');
-      const why = sourceOk(spec.source, (spec.expect || {}).bytes);
+      if (!job || !served) return refused('source');
+      const why = sourceOk(spec.source, (spec.expect || {}).bytes, want === vaField ? WRITE.video_ads.segment_max : undefined);
       if (why) return refused(why);
     } else if (want) {
       const parts = staged[String(files[want])];
@@ -975,14 +1008,21 @@ _HELPER_JS = r"""
         if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
         if (st.stopped) return { error: 'no_file', why: TAKEN };                  // nothing posted yet
         if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };        // nothing posted yet
-        const body = new FormData();
-        for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
-        body.append(m.field, new Blob(made.parts), m.filename);
+        let body;
+        if (m.raw) {
+          // ACL-2639: the rupload POST - the bytes are the body (a Blob of the checked pieces), headers as documented.
+          body = new Blob(made.parts, { type: 'application/octet-stream' });
+        } else {
+          body = new FormData();
+          for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
+          body.append(m.field, new Blob(made.parts), m.filename);
+        }
         let resp;
         let text;
         try {
           resp = await fetch(m.url, Object.assign({ method: 'POST', body: body, credentials: m.cred, mode: 'cors',
                                       cache: 'no-store', redirect: 'error', signal: ac.signal },
+                                      m.raw ? { headers: m.raw } : {},
                                       m.ref ? { referrer: m.ref } : {}));
           text = await resp.text();
         } catch (e) { return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true }; }
@@ -1321,7 +1361,12 @@ _HELPER_JS = r"""
       body.set('access_token', token);
     }
     // Токен — в теле, не в адресе. Один запрос, без повтора и перенаправлений.
-    const url = 'https://' + useHost + (version ? '/' + version : '') + path;
+    // ACL-2639: the rupload POST goes to the fixed documented address of THIS video (host and prefix from the policy,
+    // the version and the numeric id checked in `videoAdsOk`); the token goes in the Authorization header there.
+    const V = WRITE.video_ads || {};
+    const rupload = /\/video_ads$/.test(path) && params.upload_phase === 'transfer';
+    const url = rupload ? 'https://' + V.host + V.prefix + params.upload_version + '/' + params.video_id
+                        : 'https://' + useHost + (version ? '/' + version : '') + path;
     const endpoint = { host: useHost, version: version, credentials: cred };
     let resp = null;
     let text = '';
@@ -1329,12 +1374,18 @@ _HELPER_JS = r"""
       // ACL-2629: the Web Worker fetches the pieces from the controller, checks them and sends the POST itself.
       if (job.aborted) return { error: 'aborted' };
       const fields = {};
-      for (const k of Object.keys(params)) {
-        const v = params[k];
-        fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      let raw = null;
+      if (rupload) {
+        // ACL-2639: the documented headers; the body is the bytes themselves (no form); no cookies with the header token.
+        raw = { 'Authorization': 'OAuth ' + token, 'offset': String(params.offset), 'file_size': String(params.file_size) };
+      } else {
+        for (const k of Object.keys(params)) {
+          const v = params[k];
+          fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
+        }
+        fields.access_token = token;
       }
-      fields.access_token = token;
-      const got = await runInWorker({ url: url, cred: cred, fields: fields, field: want,
+      const got = await runInWorker({ url: url, cred: rupload ? 'omit' : cred, fields: fields, field: want, raw: raw,
                                       pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
                                       ref: refOpt(spec).referrer || '',
                                       filename: String(spec.filename || 'chunk').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80),

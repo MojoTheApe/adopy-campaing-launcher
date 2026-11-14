@@ -52,6 +52,8 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
     "adimages": frozenset(),
     "advideos": frozenset({"name", "title"}),
+    # ACL-2639: the documented resumable ("non-chunking") upload of ad videos; only through `upload_phase`.
+    "video_ads": frozenset(),
 }
 #: Рёбра, где статус обязателен и равен PAUSED.
 PAUSED_REQUIRED = frozenset({"campaigns", "adsets", "ads"})
@@ -101,6 +103,42 @@ SERVE_PREFIX = "/__acl_upload/"
 SERVE_TOKEN_RE = re.compile(r"[a-z0-9]{16,40}", re.ASCII)
 UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
 UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
+
+#: ACL-2639: Marketing API guide "FB Video Ads" (https://developers.facebook.com/docs/marketing-api/guides/videoads/
+#: fbvideoads/): "Publishing video ads involves the Resumable (non-chunking) protocol".
+#:   1. POST /act_<id>/video_ads upload_phase=start -> video_id, upload_url
+#:      ("https://rupload.facebook.com/video-ads-upload/<version>/<VIDEO_ID>");
+#:   2. POST upload_url, headers `Authorization: OAuth <token>`, `offset`, `file_size`, body = the file bytes from
+#:      `offset` (resume: `GET /<VIDEO_ID>?fields=status` -> uploading_phase.bytes_transferred);
+#:   3. POST /act_<id>/video_ads upload_phase=finish, video_id.
+#: Step 2 is described to our policy as the phase "transfer" of the same edge; the helper sends it to the rupload
+#: address it builds itself from the fixed host and prefix, the version and the numeric video id - nothing else.
+VIDEO_ADS_EDGE = "video_ads"
+VIDEO_ADS_PHASES = ("start", "transfer", "finish")
+VIDEO_ADS_KEYS = {
+    "start": frozenset({"upload_phase"}),
+    "transfer": frozenset({"upload_phase", "video_id", "offset", "file_size", "upload_version"}),
+    "finish": frozenset({"upload_phase", "video_id"}),
+}
+VIDEO_ADS_FIELD = "video_ads_body"
+#: One rupload POST carries at most this many bytes (the next one continues from the offset Meta reports).
+VIDEO_ADS_SEGMENT_MAX = 512 * 1024 * 1024
+RUPLOAD_HOST = "rupload.facebook.com"
+RUPLOAD_PREFIX = "/video-ads-upload/"
+RUPLOAD_VERSION_RE = re.compile(r"^v[0-9]{1,3}\.[0-9]{1,3}$", re.ASCII)
+RUPLOAD_URL_RE = re.compile(r"^https://rupload\.facebook\.com/video-ads-upload/(v[0-9]{1,3}\.[0-9]{1,3})/([0-9]{5,25})$",
+                            re.ASCII)
+
+
+def rupload_version(upload_url: Any, video_id: str) -> str:
+    """ACL-2639: the version of an `upload_url` from the start answer, '' unless it is exactly the documented
+    `https://rupload.facebook.com/video-ads-upload/<version>/<video_id>` of THIS video."""
+    m = RUPLOAD_URL_RE.fullmatch(upload_url) if isinstance(upload_url, str) else None
+    return m.group(1) if m and m.group(2) == str(video_id) else ""
+
+
+def rupload_url(version: str, video_id: str) -> str:
+    return f"https://{RUPLOAD_HOST}{RUPLOAD_PREFIX}{version}/{video_id}"
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
@@ -231,7 +269,7 @@ def os_version_ok(os_name: str, ver: str) -> bool:
 
 USER_OS_RE = re.compile(r"^(iOS|Android)(_ver_[0-9]{1,2}(\.[0-9]{1,2})?_and_above)?$")
 
-_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
+_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z_]+)\Z")
 
 
 class WriteRefused(ValueError):
@@ -252,6 +290,10 @@ def policy_for_page(act: str, page: str = "") -> dict:
                    "serve_prefix": SERVE_PREFIX, "serve_token_re": SERVE_TOKEN_RE.pattern,
                    "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
                    "number_re": UPLOAD_NUMBER_RE.pattern},
+        "video_ads": {"phases": list(VIDEO_ADS_PHASES), "keys": {k: sorted(v) for k, v in VIDEO_ADS_KEYS.items()},
+                      "field": VIDEO_ADS_FIELD, "segment_max": VIDEO_ADS_SEGMENT_MAX,
+                      "host": RUPLOAD_HOST, "prefix": RUPLOAD_PREFIX,
+                      "version_re": RUPLOAD_VERSION_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
@@ -799,6 +841,41 @@ def _check_upload(params: dict, files: dict) -> None:
         raise WriteRefused(f"write refused: upload phase {phase} takes no file")
 
 
+def _check_video_ads(params: dict, files: dict) -> None:
+    """ACL-2639: the phases of the resumable ad-video upload: closed keys per phase, numbers, the served body."""
+    phase = params.get("upload_phase")
+    if not (isinstance(phase, str) and phase in VIDEO_ADS_PHASES):
+        raise WriteRefused("write refused: video_ads upload_phase must be start, transfer or finish")
+    extra = sorted(set(params) - VIDEO_ADS_KEYS[phase])
+    missing = sorted(VIDEO_ADS_KEYS[phase] - set(params))
+    if extra or missing:
+        raise WriteRefused(f"write refused: key {(extra or missing)[0]!r} is "
+                           f"{'not allowed' if extra else 'required'} in video_ads phase {phase}")
+    if phase != "start":
+        vid = params.get("video_id")
+        if not (isinstance(vid, str) and VIDEO_ID_RE.fullmatch(vid)):
+            raise WriteRefused("write refused: video_id must be the numeric id Meta returned")
+    if phase != "transfer":
+        if files:
+            raise WriteRefused(f"write refused: video_ads phase {phase} takes no file")
+        return
+    off, size = _digits(params.get("offset")), _digits(params.get("file_size"))
+    if not size or size > UPLOAD_FILE_MAX:
+        raise WriteRefused("write refused: file_size must be a positive size within the video limit")
+    if off is None or off >= size:
+        raise WriteRefused("write refused: offset must be a number inside the file")
+    ver = params.get("upload_version")
+    if not (isinstance(ver, str) and RUPLOAD_VERSION_RE.fullmatch(ver)):
+        raise WriteRefused("write refused: upload_version must look like v22.0")
+    if set(files) != {VIDEO_ADS_FIELD} or not isinstance(files[VIDEO_ADS_FIELD], ServedChunk):
+        raise WriteRefused(f"write refused: the upload needs exactly the served body {VIDEO_ADS_FIELD!r}")
+    body = files[VIDEO_ADS_FIELD]
+    if not 0 < len(body) <= VIDEO_ADS_SEGMENT_MAX:
+        raise WriteRefused(f"write refused: one upload request carries 1..{VIDEO_ADS_SEGMENT_MAX} bytes")
+    if body.offset != off or off + len(body) > size:
+        raise WriteRefused("write refused: the served body must start at offset and end inside the file")
+
+
 # ───────────────────────── lifetime-бюджет и расписание (ACL-1443) ─────────────────────────
 
 #: `pacing_type` кампании: обычный показ или показ по расписанию (живое чтение Meta, 07.11.2026).
@@ -901,6 +978,9 @@ def check(act: str, method: str, path: str, params: dict | None,
     params = dict(params or {})
     if edge == "advideos" and "upload_phase" in params:
         _check_upload(params, dict(files or {}))
+        return edge
+    if edge == VIDEO_ADS_EDGE:
+        _check_video_ads(params, dict(files or {}))
         return edge
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:
@@ -1326,6 +1406,10 @@ def policy_for_commands(act: str) -> dict:
         "edges": {},
         "paused_required": [],
         "files": {},
+        "video_ads": {"phases": list(VIDEO_ADS_PHASES), "keys": {k: sorted(v) for k, v in VIDEO_ADS_KEYS.items()},
+                      "field": VIDEO_ADS_FIELD, "segment_max": VIDEO_ADS_SEGMENT_MAX,
+                      "host": RUPLOAD_HOST, "prefix": RUPLOAD_PREFIX,
+                      "version_re": RUPLOAD_VERSION_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": [],
         "opt_out_keys": [],

@@ -564,7 +564,7 @@ const TOKENV = __TOKENV__;
 const ORIGIN = 'https://adsmanager.facebook.com';
 const PREFIX = '/__acl_upload/';
 const windows = {};
-const log = { graph: [], pieces: 0, workers: 0, terminated: 0 };
+const log = { graph: [], pieces: 0, workers: 0, terminated: 0, rupload: [] };
 const meta = { size: 0, received: 0, md5: crypto.createHash('md5'), chunks: [], done: false };
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const reply = (status, obj) => ({ status: status, text: async () => JSON.stringify(obj), headers: { get: () => null } });
@@ -577,6 +577,16 @@ const NAV = { serviceWorker: { controller: SC.sw ? {} : null,
   removeEventListener: (t, f) => { const i = swListeners.indexOf(f); if (i >= 0) swListeners.splice(i, 1); } } };
 const fakeFetch = async (url, init) => {
   url = String(url);
+  if (url.startsWith('https://rupload.facebook.com/')) {
+    // ACL-2639: the resumable POST - headers and the raw body as Meta's guide describes.
+    const buf = Buffer.from(await init.body.arrayBuffer());
+    const h = init.headers || {};
+    log.rupload.push({ url: url, auth: String(h['Authorization'] || '').replace(TOKENV, 'TOKEN'), offset: h['offset'],
+                       file_size: h['file_size'], cred: init.credentials, redirect: init.redirect, bytes: buf.length,
+                       md5: crypto.createHash('md5').update(buf).digest('hex'), form: typeof init.body.get === 'function',
+                       token_in_url: url.indexOf(TOKENV) >= 0 });
+    return reply(200, { success: true });
+  }
   if (url.startsWith(ORIGIN + PREFIX)) {
     const [token, o, n] = url.slice((ORIGIN + PREFIX).length).split('/');
     log.pieces++;
@@ -728,6 +738,28 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
                                                   SC.inline_only ? { inline_only: true } : {}));
     out.bad = await h.probeWorker({ source: { token: 'AB', pieces: pieces } });
     out.graph_calls = log.graph.length;
+  } else if (SC.name === 'rupload') {
+    // ACL-2639: one served segment to the rupload address, then the refusals of the policy.
+    const seg = (off, len, mutate) => announce(off, len, SC.piece || 400000, (s) => {
+      s.path = PATHV.replace('/advideos', '/video_ads');
+      s.files = { video_ads_body: 'served' };
+      s.params = { upload_phase: 'transfer', video_id: '7770001', offset: String(off), file_size: String(SOURCE.length),
+                   upload_version: 'v22.0' };
+      if (mutate) mutate(s);
+    });
+    out.ok = slim(await job(seg(0, SOURCE.length)));
+    out.refused = {};
+    const bad = {
+      version: (s) => { s.params.upload_version = 'v22.0/../x'; },
+      video_id: (s) => { s.params.video_id = '../graph'; },
+      extra_key: (s) => { s.params.host = 'evil.example'; },
+      past_end: (s) => { s.params.offset = String(SOURCE.length - 10); },
+      staged: (s) => { delete s.source; s.files = { video_ads_body: 'stage1' }; },
+      wrong_field: (s) => { s.files = { video_file_chunk: 'served' }; },
+    };
+    for (const k of Object.keys(bad)) out.refused[k] = slim(await job(seg(0, 800000, bad[k])));
+    out.start = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
+                                    params: { upload_phase: 'start' }, files: {} }));
   } else if (SC.name === 'abort') {
     await phase({ upload_phase: 'start', file_size: String(SOURCE.length) });
     const spec = announce(0, 800000, 100000);
@@ -738,7 +770,7 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     while ((p = h.poll(s.job)).state === 'running') await sleep(1);
     out.result = slim(p.result);
   }
-  out.log = { graph: log.graph, pieces: log.pieces, workers: log.workers, terminated: log.terminated };
+  out.log = { graph: log.graph, pieces: log.pieces, workers: log.workers, terminated: log.terminated, rupload: log.rupload };
   out.meta = { received: meta.received, size: meta.size, md5: meta.md5.digest('hex'), chunks: meta.chunks, done: meta.done };
   process.stdout.write(JSON.stringify(out));
   process.exit(0);
@@ -986,8 +1018,10 @@ class ServedMeta(ChunkMeta):
 
 @pytest.fixture
 def worker_small(monkeypatch):
-    """The worker path with small numbers: single-request limit 1 MB, chunk cap 1 MB (production 16 MB and 64 MB)."""
+    """The worker path with small numbers: single-request limit 1 MB, chunk cap 1 MB (production 16 MB and 64 MB).
+    The chunked advideos protocol is tested here, so the resumable one (ACL-2639) is switched off."""
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "0")
     monkeypatch.setattr(cr, "VIDEO_SINGLE_MAX_BYTES_WORKER", MB)
     monkeypatch.setattr(cr, "VIDEO_CHUNK_MAX", MB)
     monkeypatch.setattr(wp, "UPLOAD_CHUNK_MAX", MB)
