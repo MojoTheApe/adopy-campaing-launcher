@@ -279,8 +279,9 @@ def test_column_groups_and_order_follow_the_prototype():
     acc = _acc_table()["acc"]
     names = [re.sub(r"<[^>]+>", "", h) for h in re.findall(r"<th[^>]*>(.*?)</th>", acc)]
     at = names.index("Delivery")
-    assert names[at: at + 6] == ["Delivery", "Budget", "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]   # Duplicate и Bid control убраны
-    assert names[at + 6: at + 9] == ["Spend", "Leads", "FTDs"]
+    assert names[at: at + 12] == ["Delivery", "Budget", "Spend", "Leads", "FTDs", "CPL", "CPA (FTD)", "CR lead→FTD",
+                                  "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]   # цифры BI сразу после Budget, блок решений в конце
+    assert "Match" not in names and "Duplicate" not in names and "Bid control" not in names
     assert "MANAGEMENT" not in acc and "Account / campaign hierarchy" not in acc      # верхняя полоса групп убрана
     assert "Campaign / Ad set / Ad" in acc
 

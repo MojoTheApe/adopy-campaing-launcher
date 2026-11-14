@@ -528,14 +528,17 @@
   var CTRL = ['delivery', 'budgetcmd'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
   var DECIDE = ['hint', 'alerts', 'goal', 'bench'];
   var PRESETS = {
-    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpl', 'b_cpa', 'b_cr', 'b_match']),
+    optimization: CTRL.concat(['b_spend', 'b_leads', 'b_ftds', 'b_cpl', 'b_cpa', 'b_cr'], DECIDE),      // Delivery, Budget, цифры BI, затем подсказка, алерты, цели; без Match
     meta: CTRL.concat(['synced', 'x_obj', 'x_bid']),
     bi: CTRL.concat(DECIDE, BI_ALL),
     all: COLS.map(function (c) { return c.k; })
   };
   /* Выбор колонок убран (04.11): всегда пресет Optimization; сохранённый `acl.hc.cols.v2` не читается. */
   var colState = {preset: 'optimization', visible: PRESETS.optimization.slice()};
-  function visibleCols() { return COLS.filter(function (c) { return colState.visible.indexOf(c.k) >= 0; }); }
+  /* Порядок колонок — порядок пресета (не порядок в COLS), чтобы блок решений можно было ставить в конец. */
+  function visibleCols() {
+    return colState.visible.map(function (k) { return COLS.filter(function (c) { return c.k === k; })[0]; }).filter(Boolean);
+  }
 
   /* ── выборка строк под фильтры ── */
   function scopeAccounts() {
