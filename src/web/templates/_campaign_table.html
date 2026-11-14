@@ -95,7 +95,7 @@
   .hc-table thead th { position: sticky; z-index: var(--adopy-z-table-header); background: var(--adopy-surface-subtle);
     font-weight: 600; font-size: 0.75rem; color: var(--adopy-text-muted); height: 34px; }
   .hc-table thead tr.hc-groups th { top: 0; height: 30px; border-bottom: 1px solid var(--adopy-border-strong); text-transform: none; }
-  .hc-table thead tr.hc-heads th { top: 30px; }
+  .hc-table thead tr.hc-heads th { top: 0; }
   .hc-table th.hc-grp { border-left: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
   .hc-table th.hc-grp small { font-weight: 400; color: var(--adopy-text-muted); margin-left: 0.375rem; }
   .hc-table .num { text-align: right; }
@@ -557,18 +557,9 @@
     return (p.length ? p.join(' / ') : 'not read') + ' · ' + (c.length ? (c.length > 1 ? 'mixed currencies' : c[0]) : 'currency unknown');
   }
   function headHtml(cols) {
-    var groups = [];
-    cols.forEach(function (c) {
-      var last = groups[groups.length - 1];
-      if (last && last.g === c.g) last.n++; else groups.push({g: c.g, n: 1});
-    });
-    var top = '<tr class="hc-groups"><th class="hc-pin-top" colspan="1">Account / campaign hierarchy</th>' + groups.map(function (g) {
-      var note = g.g === 'meta' ? metaGroupNote() : g.g === 'bi' ? biPeriodNote() + ' · $' : '';
-      return '<th class="hc-grp" data-g="' + esc(g.g) + '" colspan="' + g.n + '">' + esc(GROUPS[g.g]) + (note ? '<small>' + esc(note) + '</small>' : '') + '</th>';
-    }).join('') + '</tr>';
     var heads = '<tr class="hc-heads"><th class="p1" title="' + esc(STATUS_NOTE) + '">Status · Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
       cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>'; }).join('') + '</tr>';
-    return '<thead>' + top + heads + '</thead>';
+    return '<thead>' + heads + '</thead>';
   }
   /* Предел: не шире 60% видимой ширины таблицы и так, чтобы справа оставалось 160px прокручиваемых колонок. */
   function viewWidth() {
@@ -764,7 +755,7 @@
       var line = head + (ex.text ? ' — ' + ex.text : '') + (tail || '');
       return rowMsg(id, {text: line, raw: ex.raw || (cause && ex.text !== cause ? cause : null), tone: tone}, span);
     }
-    if (S.running[a.account]) return msg('', 'Reading campaigns for ' + esc(a.account) + '… (one profile at a time)', span);
+    if (S.running[a.account]) return '';                                        // ход чтения виден по «updating» в строке аккаунта
     if (S.treeErr[a.account]) return one('acct:' + a.account + ':tree', 'bad', 'Could not load the saved inventory', S.treeErr[a.account], '');
     var closedA0 = window.acmCommands, closedNote = att && att.state === 'failed' && closedA0 && closedA0.FRIENDLY
       && noteFrom(att.error || '', 'bad', att.code).text === closedA0.FRIENDLY.profileClosed;
