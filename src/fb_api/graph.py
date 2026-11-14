@@ -202,6 +202,10 @@ class PageFailed(GraphStop):
     kind = "page_failed"
 
 
+class NotSent(PageFailed):
+    """ACL-2639: a write refused BEFORE sending (the Python policy or the page helper): nothing reached Meta."""
+
+
 class PageUnresponsive(GraphStop):
     """Вкладка Ads Manager перестала отвечать (ACL-1761): не логин и не checkpoint.
 
@@ -400,15 +404,19 @@ class GraphClient:
         return exc
 
     def release_optional_stop(self, exc: GraphStop) -> bool:
-        """ACL-2639: lift the stop of an OPTIONAL write (naming a video) that never reached Meta: a refusal before
-        sending (Python policy or the page helper) or the call budget. Login, checkpoint, limits stay. True - lifted."""
-        text = str(exc)
-        optional = isinstance(exc, CallBudget) or (
-            isinstance(exc, PageFailed) and ("refused" in text or "(no_file" in text))
-        if self.stopped is exc and optional:
+        """ACL-2639: lift the stop of an OPTIONAL write (naming a video) that never reached Meta - only `NotSent`
+        (refused by the Python policy or the page helper before sending), and only when it is the current stop.
+        Login, checkpoint, limits, the budget, policy blocks stay stops. True - lifted. The caller makes the optional
+        write only while nothing is stopped (`optional_write_ok`), so an older stop is never lifted here."""
+        if self.stopped is exc and isinstance(exc, NotSent):
             self.stopped = None
             return True
         return False
+
+    def optional_write_ok(self) -> bool:
+        """ACL-2639: an optional write may be made now: no stop, no unreconciled write, a call left in the budget."""
+        return (self.stopped is None and self.unreconciled is None and self.allow_writes
+                and self.calls < self.max_calls)
 
     def resume_after_unsent(self, exc: GraphStop) -> bool:
         """ACL-2000: снять стоп, поставленный отказом ДО отправки (`no_file`: файл не лёг в страницу).
@@ -656,7 +664,7 @@ class GraphClient:
             reply = self.transport.write(path, params or {}, files=files, filename=filename, **extra)
         except ValueError as exc:
             # Политика Python: ничего не отправлено.
-            raise self._stop(PageFailed(f"write refused before sending: {exc}")) from exc
+            raise self._stop(NotSent(f"write refused before sending: {exc}")) from exc
         except GraphStop as exc:
             # Вкладка не отвечала ДО отправки (мир готовится до самого POST).
             raise self._stop(exc) from exc
@@ -666,7 +674,7 @@ class GraphClient:
         if isinstance(err, str):
             if err in _NOT_SENT:
                 why = reply.get("why") if isinstance(reply, dict) else ""
-                raise self._stop(PageFailed(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
+                raise self._stop(NotSent(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
             if err == "no_token":
                 self._check_page()
                 raise self._stop(LoggedOut("no session token in the page; the write was not sent"))
