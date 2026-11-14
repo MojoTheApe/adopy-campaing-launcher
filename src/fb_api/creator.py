@@ -3228,11 +3228,34 @@ class CampaignCreator:
                                   kind="video_error")
         offset, end = self._offsets(started, size, 0, what)
         self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
+        # ACL-2629 (N4): the plan assumed 64 MB windows. Meta decides the window; when it offers smaller ones, stop
+        # cleanly BEFORE sending more if the calls planned for this file would run out.
+        calls_before = getattr(self.client, "calls", 0)
+        planned = upload_calls(size, True)
+        allowance = planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned))
+        window_seen = [0]
+
+        def check_window(at: int, window: int) -> None:
+            if not self.worker_path or window <= 0 or window >= window_seen[0] > 0:
+                return
+            window_seen[0] = window
+            per = max(1, min(window, cap))
+            needed = -(-(size - at) // per) + 1                     # the remaining chunks and finish
+            used = getattr(self.client, "calls", 0) - calls_before
+            if used + needed > allowance:
+                raise CreationStopped(
+                    f"{what}: Meta offers upload windows of {per // (1024 * 1024) or 1} MB, so the rest of this video "
+                    f"needs about {needed} more calls but only {max(allowance - used, 0)} were planned for it. "
+                    "Stopped before sending more; nothing was duplicated and the unfinished upload is not used. "
+                    "Use a smaller video, or set ACL_VIDEO_WORKER_UPLOAD=0 to compress it instead.",
+                    created=out.created, kind="video_error")
+
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
         # ACL-2629: путь воркера - куски до 64 МБ (байты в страницу не копируются); иначе прежние 8 МБ.
         served = bool(self.worker_path)
         cap = VIDEO_CHUNK_MAX if served else VIDEO_CHUNK_STAGED_MAX
         guard = 2 * (-(-size // cap)) + 4 + 3 * (-(-size // cap))
+        check_window(offset, end - offset)
         failures = 0
         stalls = 0
         # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
@@ -3297,6 +3320,8 @@ class CampaignCreator:
             stalls = 0
             self._beat()
             offset, end = self._offsets(body, size, offset, what)
+            if offset < size:
+                check_window(offset, end - offset)
             now = self.clock()
             if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
                                   or (offset - last_step_off) * 10 >= size):

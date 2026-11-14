@@ -78,6 +78,13 @@ def test_a_served_chunk_follows_every_other_upload_rule():
         wp.check(ACT, "POST", PATH, TRANSFER, {"source": _served(10)})
 
 
+def test_a_served_chunk_must_start_at_start_offset():
+    chunk = wp.ServedChunk(_Mem(b"x" * 16), 5, 10)
+    with pytest.raises(wp.WriteRefused, match="start_offset"):
+        wp.check(ACT, "POST", PATH, {**TRANSFER, "start_offset": "0"}, {"video_file_chunk": chunk})
+    assert wp.check(ACT, "POST", PATH, {**TRANSFER, "start_offset": "5"}, {"video_file_chunk": chunk}) == "advideos"
+
+
 def test_files_up_to_4_gb_may_start_and_more_may_not():
     assert wp.UPLOAD_FILE_MAX == 4096 * MB
     assert wp.check(ACT, "POST", PATH, {**START, "file_size": str(wp.UPLOAD_FILE_MAX)}) == "advideos"
@@ -194,11 +201,52 @@ def test_a_worker_session_gets_the_interception_and_is_resumed():
         "sessionId": "W9", "targetInfo": {"type": "worker"}, "waitingForDebugger": True}})
     assert tab.of("Fetch.enable")[-1][0] == "W9"
     assert ("W9", {}) in tab.of("Runtime.runIfWaitingForDebugger")
-    # an attached iframe or service worker target is not ours
-    before = len(tab.calls)
-    handled = server.handle({"method": "Target.attachedToTarget", "params": {
-        "sessionId": "X", "targetInfo": {"type": "iframe"}}})
-    assert handled is False and len(tab.calls) == before
+    assert ("W9", {"bypass": True}) in tab.of("Network.setBypassServiceWorker")       # N5
+
+
+def test_an_iframe_or_a_pages_own_worker_that_attaches_is_resumed_and_let_go():
+    tab = FakeCdpTab()
+    server = us.UploadServer(tab)
+    server.arm()
+    for kind, sid in (("iframe", "X"), ("service_worker", "Y")):
+        tab.on_event({"method": "Target.attachedToTarget", "params": {
+            "sessionId": sid, "targetInfo": {"type": kind}, "waitingForDebugger": True}})
+        assert (sid, {}) in tab.of("Runtime.runIfWaitingForDebugger")                  # never left paused
+        assert ("", {"sessionId": sid}) in tab.of("Target.detachFromTarget")
+        assert not [1 for s_, p in tab.of("Fetch.enable") if s_ == sid]
+
+
+def test_a_worker_whose_interception_cannot_be_enabled_is_never_resumed():
+    tab = FakeCdpTab()
+    server = us.UploadServer(tab)
+    server.arm()
+    tab.fail.add("Fetch.enable")
+    tab.on_event({"method": "Target.attachedToTarget", "params": {
+        "sessionId": "W9", "targetInfo": {"type": "worker", "targetId": "T9"}, "waitingForDebugger": True}})
+    assert tab.of("Runtime.runIfWaitingForDebugger") == []                              # B2: fail closed
+    assert ("", {"targetId": "T9"}) in tab.of("Target.closeTarget") and server.refused_workers == 1
+
+
+def test_disarm_turns_auto_attach_off_and_detaches_worker_sessions():
+    tab = FakeCdpTab()
+    server = us.UploadServer(tab)
+    server.arm()
+    tab.on_event({"method": "Target.attachedToTarget", "params": {
+        "sessionId": "W9", "targetInfo": {"type": "worker"}, "waitingForDebugger": True}})
+    server.disarm()
+    assert ("", {"sessionId": "W9"}) in tab.of("Target.detachFromTarget")             # N6
+    assert tab.of("Target.setAutoAttach")[-1][1]["autoAttach"] is False
+    assert tab.of("Fetch.disable")
+    server.arm()                                                                         # arms again for the next chunk
+    assert tab.of("Target.setAutoAttach")[-1][1]["autoAttach"] is True
+
+
+def test_a_light_tab_is_not_given_fetch_disable_on_disarm():
+    tab = FakeCdpTab(light=object())
+    server = us.UploadServer(tab)
+    server.arm()
+    server.disarm()
+    assert tab.of("Fetch.disable") == []
 
 
 def test_exactly_the_announced_pieces_are_served_from_the_file():
@@ -261,6 +309,7 @@ def test_a_failing_answer_never_raises_out_of_the_event_pump():
     tab.fail.add("Fetch.fulfillRequest")
     tab.on_event(_paused(f"{us.URL_PREFIX}{token}/0/1000"))      # must not raise
     assert server.errors == 1
+    assert tab.of("Fetch.failRequest")[-1][1]["errorReason"] == "Failed"      # B3: the request is not left paused
 
 
 # ───────────────────────── websocket masking ─────────────────────────
@@ -307,6 +356,9 @@ class ServingTab(StubTab):
             self.exprs.append(expr)
             self.specs.append(json.loads(expr.split(".probeWorker(", 1)[1].rsplit(")", 1)[0]))
             return self.probe_reply
+        if ".abort(" in expr:
+            self.exprs.append(expr)
+            return {"ok": True}
         if ".startCall(" in expr:
             self.exprs.append(expr)
             self.specs.append(json.loads(expr.split(".startCall(", 1)[1].rsplit(")", 1)[0]))
@@ -334,6 +386,7 @@ def test_the_probe_announces_a_small_hashed_chunk_and_stages_nothing():
     assert sum(p["n"] for p in spec["source"]["pieces"]) == 4096 and len(spec["source"]["pieces"]) == 4
     assert not [e for e in tab.exprs if ".stage(" in e]
     assert any(m == "Fetch.enable" for m, _ in tab.cdp_calls)
+    assert tab.cdp_calls[-1][0] in ("Fetch.disable", "Target.setAutoAttach")      # disarmed afterwards
 
 
 @pytest.mark.parametrize("reply, text", [
@@ -366,6 +419,24 @@ def test_a_served_chunk_goes_to_the_helper_as_a_window_not_as_bytes():
     assert not [e for e in tab.exprs if ".stage(" in e]              # nothing copied into the page
     assert tab.pumped, "the events of the tab are handled while the job runs"
     assert not t._server()._windows                                  # the window is closed after the call
+
+
+def test_a_served_job_that_never_finishes_ends_at_its_deadline_as_unknown():
+    class Stuck(ServingTab):
+        def evaluate_in(self, ctx, expr, timeout=60.0):
+            if ".poll(" in expr:
+                return {"state": "running"}
+            return super().evaluate_in(ctx, expr, timeout)
+
+    tab = Stuck()
+    t = _graph(tab)
+    now = [0.0]
+    t._clock = lambda: now[0]
+    t._wait = lambda s_, serving: now.__setitem__(0, now[0] + 30)
+    chunk = wp.ServedChunk(_Mem(b"x" * 100), 0, 100)
+    got = t.write(PATH, {**TRANSFER}, files={"video_file_chunk": chunk}, filename="chunk")
+    assert got == {"error": "call_unknown", "reason": "cdp_timeout"}
+    assert tab.specs[0]["piece_ms"] == 60000
 
 
 def test_a_served_chunk_is_checked_by_python_policy_first():
@@ -411,6 +482,7 @@ const fakeFetch = async (url, init) => {
     const [token, o, n] = url.slice((ORIGIN + PREFIX).length).split('/');
     log.pieces++;
     const w = windows[token];
+    if (SC.hang_pieces) return new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(new Error('abort'))));
     if (!w || SC.block_pieces) throw new TypeError('blocked');
     let bytes = Buffer.from(SOURCE.subarray(w.offset + Number(o), w.offset + Number(o) + Number(n)));
     if (SC.corrupt_piece === log.pieces) bytes[0] ^= 1;
@@ -419,7 +491,7 @@ const fakeFetch = async (url, init) => {
   }
   const body = init.body;
   const phase = body.get('upload_phase');
-  log.graph.push({ phase: phase, cred: init.credentials, redirect: init.redirect, token_in_body: body.get('access_token') === TOKENV,
+  log.graph.push({ phase: phase, referrer: init.referrer, cred: init.credentials, redirect: init.redirect, token_in_body: body.get('access_token') === TOKENV,
                    token_in_url: url.indexOf('access_token') >= 0, url: url.split('?')[0] });
   if (phase === 'start') {
     meta.size = Number(body.get('file_size'));
@@ -476,6 +548,8 @@ function announce(off, len, pieceSize, mutate) {
                  source: { token: token, pieces: pieces }, expect: { bytes: len },
                  params: { upload_phase: 'transfer', upload_session_id: '900001', start_offset: String(off),
                            waterfall_id: 'a'.repeat(32) } };
+  if (SC.piece_ms) spec.piece_ms = SC.piece_ms;
+  spec.referrer = ORIGIN + '/adsmanager/manage/campaigns?act=1';
   if (mutate) mutate(spec);
   return spec;
 }
@@ -523,6 +597,7 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
       finish_phase: (s) => { s.params = { upload_phase: 'finish', upload_session_id: '900001', title: 'x' }; s.files = {}; },
       start_phase: (s) => { s.params = { upload_phase: 'start', file_size: '5' }; s.files = {}; },
       other_edge: (s) => { s.path = '/act_999999/advideos'; },
+      forms: (s) => { s.path = '/123456789/leadgen_forms'; s.params = {}; },
       adimages: (s) => { s.path = '/' + PATHV.split('/')[1] + '/adimages'; s.params = {}; s.files = { filename: 'served' }; },
     };
     out.refused = {};
@@ -637,6 +712,19 @@ def test_pieces_that_the_controller_does_not_answer_are_refused_before_any_post(
     assert [x["phase"] for x in out["log"]["graph"]] == ["start", "finish"]
 
 
+def test_a_piece_the_controller_never_answers_times_out_as_no_file_and_nothing_is_posted():
+    out = _node({"name": "upload", "window": 1_000_000, "piece": 400_000, "hang_pieces": True, "piece_ms": 1000})
+    assert out["results"][0] == {"error": "no_file", "why": "worker piece request timed out"}   # B3
+    assert [x["phase"] for x in out["log"]["graph"]] == ["start", "finish"]
+
+
+def test_the_worker_post_carries_the_same_referrer_as_other_calls():
+    out = _node({"name": "upload", "window": 2_500_000, "piece": 700_000})
+    posts = [x for x in out["log"]["graph"] if x["phase"] == "transfer"]
+    assert posts and all(x["referrer"] == "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1"
+                         for x in posts)                                                    # N3
+
+
 def test_a_blocked_worker_is_reported_and_nothing_is_sent():
     out = _node({"name": "upload", "worker_blocked": True})
     assert out["results"][0]["error"] == "no_file" and "worker blocked" in out["results"][0]["why"]
@@ -679,6 +767,7 @@ def test_every_malformed_served_chunk_is_refused_by_the_page_helper_before_anyth
     for k in ("gap", "bad_token", "extra_key", "bad_hash", "piece_over", "too_many", "empty", "no_job"):
         assert why[k] == "source", (k, why[k])
     assert out["refused"]["start_phase"] == out["refused"]["finish_phase"] == {"error": "bad_option"}
+    assert why["forms"] == "source" and why["adimages"] == "source"                    # N1
     assert why["wrong_field"] == "file" and why["two_sources"] == "file" and why["other_edge"] == "path"
     assert out["untouched"] == {"graph": True, "pieces": True}      # no Graph request, no piece request
     assert out["log"]["workers"] == 0                               # not even a worker was started
@@ -781,10 +870,19 @@ def test_a_chunk_never_exceeds_the_cap_even_when_meta_offers_more(worker_small, 
 
 def test_a_smaller_meta_window_is_obeyed(worker_small, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ServedMeta(meta_chunk=300_000)
+    meta = ServedMeta(meta_chunk=600_000)
     out, _ = _run(meta, d, max_calls=300)
-    assert out.error == "" and max(meta.served_sizes) == 300_000
+    assert out.error == "" and max(meta.served_sizes) == 600_000
     assert next(iter(meta.sessions.values()))["sha"].hexdigest() == _sha(f)
+
+
+def test_windows_much_smaller_than_planned_stop_cleanly_before_more_is_sent(worker_small, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ServedMeta(meta_chunk=50_000)                 # the plan assumed MB-sized windows
+    out, _ = _run(meta, d, max_calls=400)
+    assert out.stop_kind == "video_error" and "upload windows" in out.error and "more calls" in out.error
+    assert "ACL_VIDEO_WORKER_UPLOAD=0" in out.error
+    assert meta.served_sizes == [] and not any(p == "finish" for p, _ in meta.phases)       # nothing sent, no finish
 
 
 @pytest.mark.parametrize("fault", ["lost", "unsent", "refused_stored"])

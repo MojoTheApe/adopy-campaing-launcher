@@ -734,6 +734,8 @@ _HELPER_JS = r"""
     if (WRITE.form_photo_only) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-2629: a served chunk exists only for a video upload chunk (act_X/advideos, transfer, video_file_chunk).
+    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/advideos$/.test(path)) return refused('source');
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
@@ -840,6 +842,7 @@ _HELPER_JS = r"""
     }
     }
     let blob = null;
+    if (spec.source !== undefined && want !== (WRITE.upload || {}).chunk_field) return refused('source');
     if (want && spec.source !== undefined) {
       // ACL-2629: nothing is staged here; the worker pulls the bytes. Only a job (startCall) may do it.
       if (!job || want !== (WRITE.upload || {}).chunk_field) return refused('source');
@@ -920,15 +923,27 @@ _HELPER_JS = r"""
       const parts = [];
       let got = 0;
       for (const p of m.src.pieces) {
+        // Every piece has a deadline: a request the controller never answers must not hang the upload.
+        const pc = new AbortController();
+        let late = false;
+        const onAbort = () => pc.abort();
+        ac.signal.addEventListener('abort', onAbort);
+        const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
+        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); };
         let r;
-        try {
-          r = await fetch(m.base + p.o + '/' + p.n, { method: 'GET', cache: 'no-store', credentials: 'omit',
-                                                      redirect: 'error', signal: ac.signal });
-        } catch (e) { return { error: 'no_file', why: ac.signal.aborted ? 'aborted' : 'worker piece request failed' }; }
-        if (r.status !== 200) return { error: 'no_file', why: 'worker piece refused ' + r.status };
         let blob;
         let buf;
-        try { blob = await r.blob(); buf = await blob.arrayBuffer(); } catch (e) { return { error: 'no_file', why: 'worker piece read failed' }; }
+        try {
+          r = await fetch(m.base + p.o + '/' + p.n, { method: 'GET', cache: 'no-store', credentials: 'omit',
+                                                      redirect: 'error', signal: pc.signal });
+          if (r.status !== 200) { done(); return { error: 'no_file', why: 'worker piece refused ' + r.status }; }
+          blob = await r.blob();
+          buf = await blob.arrayBuffer();
+        } catch (e) {
+          done();
+          return { error: 'no_file', why: ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
+        }
+        done();
         if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
         let digest;
         try { digest = hex(await crypto.subtle.digest('SHA-256', buf)); } catch (e) { return { error: 'no_file', why: 'worker cannot hash' }; }
@@ -952,8 +967,9 @@ _HELPER_JS = r"""
         let resp;
         let text;
         try {
-          resp = await fetch(m.url, { method: 'POST', body: body, credentials: m.cred, mode: 'cors', cache: 'no-store',
-                                      redirect: 'error', signal: ac.signal });
+          resp = await fetch(m.url, Object.assign({ method: 'POST', body: body, credentials: m.cred, mode: 'cors',
+                                      cache: 'no-store', redirect: 'error', signal: ac.signal },
+                                      m.ref ? { referrer: m.ref } : {}));
           text = await resp.text();
         } catch (e) { return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true }; }
         const headers = {};
@@ -1228,6 +1244,8 @@ _HELPER_JS = r"""
       }
       fields.access_token = token;
       const got = await runInWorker({ url: url, cred: cred, fields: fields, field: want,
+                                      pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
+                                      ref: refOpt(spec).referrer || '',
                                       filename: String(spec.filename || 'chunk').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80),
                                       src: spec.source }, job);
       if (got.error) {
@@ -2127,6 +2145,11 @@ class InPageGraph:
     # -- ACL-2629: file bytes through the page's Web Worker
     #: One request of the worker is at most this many bytes (it holds the piece in memory while it checks it).
     SERVE_PIECE = 8 * 1024 * 1024
+    #: One piece request of the worker gets this long (then `no_file`: nothing sent, the retry/back-off takes over).
+    SERVE_PIECE_S = 60.0
+    #: Overall deadline of one served chunk: base + length at the slowest rate still accepted (100 KiB/s).
+    SERVE_BASE_S = 120.0
+    SERVE_MIN_BPS = 100 * 1024
     PROBE_CALL_S = 25.0
     _upload_server = None
 
@@ -2167,8 +2190,10 @@ class InPageGraph:
         except (StaleContextError, PageError, CdpError) as exc:
             return False, f"worker probe failed ({type(exc).__name__})"
         finally:
-            if server is not None and token:
-                server.unregister(token)
+            if server is not None:
+                if token:
+                    server.unregister(token)
+                server.disarm()
         if isinstance(got, dict) and got.get("ok") and got.get("bytes") == 4096:
             return True, ""
         why = str(got.get("why") or got.get("error")) if isinstance(got, dict) else "bad reply"
@@ -2193,10 +2218,13 @@ class InPageGraph:
         spec["files"] = {field_name: "served"}
         spec["source"] = {"token": token, "pieces": pieces}
         spec["expect"] = {"bytes": len(chunk)}
+        spec["piece_ms"] = int(self.SERVE_PIECE_S * 1000)
         try:
-            return self._write_file_job(ctx, spec, progress, cancelled, serving=True)
+            return self._write_file_job(ctx, spec, progress, cancelled, serving=True,
+                                        deadline_s=self.SERVE_BASE_S + len(chunk) / self.SERVE_MIN_BPS)
         finally:
             server.unregister(token)
+            server.disarm()
 
     #: ACL-2533: the in-page upload has its own 120 s deadline; the CDP wait is a little longer.
     FORM_PHOTO_CALL_S = 150.0
@@ -2275,7 +2303,8 @@ class InPageGraph:
         else:
             self._sleep(seconds)
 
-    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled, serving: bool = False) -> dict:
+    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled, serving: bool = False,
+                        deadline_s: float = 0.0) -> dict:
         """Запись с файлом без общего срока: старт, опрос раз в секунду, обрыв по Stop."""
         def run(method: str, arg: str = "") -> Any:
             expr = f"globalThis[{json.dumps(self.name)}].{method}({arg})"
@@ -2295,6 +2324,13 @@ class InPageGraph:
         poll_timeouts = 0
         began = self._clock()
         while True:
+            if deadline_s and self._clock() - began > deadline_s:
+                # Overall deadline: the request may or may not have been sent -> unknown, reconciled by readback.
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                return {"error": "call_unknown", "reason": "cdp_timeout"}
             if cancelled is not None and cancelled():
                 try:
                     run("abort", json.dumps(job))

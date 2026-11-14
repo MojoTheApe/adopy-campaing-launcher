@@ -791,6 +791,8 @@ def _check_upload(params: dict, files: dict) -> None:
             # ACL-2629: the bytes are read from the file by the controller and served to the worker piece by piece.
             if not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
                 raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+            if chunk.offset != _digits(params.get("start_offset")):
+                raise WriteRefused("write refused: the served chunk must start at start_offset")
         elif not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_STAGED_CHUNK_MAX:
             raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_STAGED_CHUNK_MAX} bytes")
     elif files:

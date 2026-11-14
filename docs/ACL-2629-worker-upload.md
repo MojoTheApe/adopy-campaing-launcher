@@ -123,3 +123,18 @@ kill switch off.
 5. Per chunk time and CDP message size (an 8 MB piece is an ~11 MB websocket message); no browser memory blow-up.
 6. Interrupt (kill the tab / the controller) mid-upload and publish again: no duplicate video, upload resumes.
 7. No request with the `__acl_upload` prefix is visible to Meta (network log), and no Graph call leaves the profile.
+
+## 10. Review round 1 (fixes)
+
+- Auto-attach: every target that attaches while it is on is resumed; non-workers are also detached; after each chunk or
+  probe `disarm()` turns auto-attach off, detaches worker sessions and removes the narrow `Fetch` pattern.
+- Fail closed: if `Fetch.enable` fails on a worker session the worker is NOT resumed and its target is closed.
+- No hung request: a failed `Fetch.fulfillRequest` is followed by `Fetch.failRequest`; every worker piece fetch has a
+  60 s deadline (`no_file`, "timed out", so the existing retry/back-off runs); a served chunk has an overall deadline
+  (120 s + length at 100 KiB/s) that aborts the job and reports an unknown result (reconciled by readback).
+- `source` is refused unless the path is `act_X/advideos` and the field is `video_file_chunk`; `ServedChunk.offset`
+  must equal `start_offset`; the worker POST carries the same referrer as other calls; `Network.setBypassServiceWorker`
+  is set on worker sessions (best effort; live item 7 still watches for it).
+- Smaller Meta windows: the creator re-estimates whenever the offered window shrinks and stops cleanly, before sending
+  more, when the calls planned for the file (estimate + 5 % slack) would run out; the message says so and names the
+  kill switch. The unfinished Meta session is simply abandoned (nothing is duplicated).

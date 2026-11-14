@@ -52,12 +52,14 @@ class UploadServer:
         #: token -> (chunk, {(rel_offset, length): sha256})
         self._windows: dict[str, tuple[_wp.ServedChunk, dict[tuple[int, int], str]]] = {}
         self._session = ""          # the CDP session the interception was last armed for
+        self._workers: dict[str, str] = {}    # worker session -> target id, for detaching after the upload
         self._chain: Callable[[dict], None] | None = None
         self._handler = self._on_event      # one bound method: identity checks against `tab.on_event` need it
         self.served = 0             # pieces answered
         self.served_bytes = 0
         self.blocked = 0            # requests with our prefix that were refused
         self.errors = 0
+        self.refused_workers = 0    # worker sessions left paused because the interception could not be enabled
 
     # -- window of one chunk
     def register(self, chunk: _wp.ServedChunk, *, piece: int = PIECE) -> tuple[str, list[dict]]:
@@ -99,10 +101,15 @@ class UploadServer:
         params = msg.get("params") or {}
         if method == "Target.attachedToTarget":
             info = params.get("targetInfo") or {}
+            session = str(params.get("sessionId") or "")
+            waiting = bool(params.get("waitingForDebugger"))
             if str(info.get("type") or "") in ("worker", "dedicated_worker"):
-                self._prepare_worker(str(params.get("sessionId") or ""), bool(params.get("waitingForDebugger")))
-                return True
-            return False
+                self._prepare_worker(session, waiting, str(info.get("targetId") or ""))
+            else:
+                # Auto-attach is on for the whole tab: an iframe or a page's own worker that came up while it is on
+                # must not stay paused. Resume it and let go of it - it is none of our business.
+                self._release_other(session, waiting)
+            return True
         if method != "Fetch.requestPaused":
             return False
         url = str((params.get("request") or {}).get("url") or "")
@@ -114,18 +121,64 @@ class UploadServer:
     def _call(self, session: str, method: str, args: dict) -> None:
         self.tab.call_session(session, method, args, timeout=30.0)
 
-    def _prepare_worker(self, session: str, waiting: bool) -> None:
+    def _release_other(self, session: str, waiting: bool) -> None:
+        if not session:
+            return
+        if waiting:
+            try:
+                self._call(session, "Runtime.runIfWaitingForDebugger", {})
+            except Exception:  # noqa: BLE001
+                self.errors += 1
+        try:
+            self._call("", "Target.detachFromTarget", {"sessionId": session})
+        except Exception:  # noqa: BLE001
+            self.errors += 1
+
+    def _prepare_worker(self, session: str, waiting: bool, target_id: str = "") -> None:
+        """Turn the interception on for a worker's session BEFORE it runs. Fail closed: when that cannot be done the
+        worker is not resumed (and is closed), so none of its `__acl_upload` requests can leave the browser."""
         if not session:
             return
         try:
             self._call(session, "Fetch.enable", {"patterns": [{"urlPattern": PATTERN, "requestStage": "Request"}]})
-        except Exception:  # noqa: BLE001 - the probe / the chunk then fail with a clear reason
+        except Exception:  # noqa: BLE001
+            self.errors += 1
+            self.refused_workers += 1
+            if target_id:
+                try:
+                    self._call("", "Target.closeTarget", {"targetId": target_id})
+                except Exception:  # noqa: BLE001 - it stays paused: it never runs
+                    self.errors += 1
+            return
+        self._workers[session] = target_id
+        try:
+            # A service worker of the origin must not answer (or pass on) the worker's piece requests.
+            self._call(session, "Network.setBypassServiceWorker", {"bypass": True})
+        except Exception:  # noqa: BLE001 - best effort: the live check keeps watching for it
             self.errors += 1
         if waiting:
             try:
                 self._call(session, "Runtime.runIfWaitingForDebugger", {})
             except Exception:  # noqa: BLE001
                 self.errors += 1
+
+    def disarm(self) -> None:
+        """After a chunk (or the probe): auto-attach off, worker sessions detached, the narrow pattern removed."""
+        tab = self.tab
+        for session in list(self._workers):
+            try:
+                self._call("", "Target.detachFromTarget", {"sessionId": session})
+            except Exception:  # noqa: BLE001
+                self.errors += 1
+        self._workers.clear()
+        try:
+            tab.call("Target.setAutoAttach", {"autoAttach": False, "waitForDebuggerOnStart": False, "flatten": True},
+                     timeout=10.0)
+            if getattr(tab, "light", None) is None:
+                tab.call("Fetch.disable", {}, timeout=10.0)
+        except Exception:  # noqa: BLE001
+            self.errors += 1
+        self._session = ""
 
     def _fail(self, session: str, rid: str, reason: str = "BlockedByClient") -> None:
         try:
@@ -166,5 +219,6 @@ class UploadServer:
                 "body": base64.b64encode(data).decode("ascii")})
             self.served += 1
             self.served_bytes += len(data)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - never leave the request paused: the worker would wait on it forever
             self.errors += 1
+            self._fail(session, rid, "Failed")
