@@ -23,6 +23,14 @@ MiB = 1024 * 1024
 CEILING = publish_api.DEFAULT_CREATE_MAX_CALLS + 90
 
 
+@pytest.fixture(autouse=True)
+def _no_compressor(monkeypatch):
+    """Default: no ffmpeg and no cached copy, so the original size is counted (pre-ACL-2621 behaviour)."""
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "")
+    monkeypatch.delenv("ACL_VIDEO_COMPRESS_ABOVE_MB", raising=False)
+
+
 def _slack(chunks: int) -> int:
     return chunks + max(2, -(-chunks * 5 // 100))
 
@@ -94,8 +102,9 @@ def test_two_largest_videos_are_refused_with_exact_numbers(tmp_path, monkeypatch
     rest = cr.estimate_create_calls(plan) + cr.estimate_targeting_reads(plan)
     assert budget == CEILING
     assert refusal == (f"This campaign needs about {chunks + rest} Meta calls ({chunks} to upload large videos in "
-                       f"chunks, {rest} for the rest), more than one run allows ({CEILING}). "
-                       "Use a smaller or shorter video, or split the campaign. Nothing was created.")
+                       f"chunks, {rest} for the rest), more than ACL allows in one run ({CEILING}). "
+                       "This is ACL's own per-run limit, not Meta's. Let ACL compress the video "
+                       "(needs ffmpeg), use a shorter video, or split the campaign. Nothing was created.")
 
 
 def test_a_lowered_env_ceiling_refuses_a_big_video(tmp_path, monkeypatch):
@@ -177,3 +186,47 @@ def test_mutation_dropping_chunks_from_the_budget_is_caught(tmp_path, monkeypatc
     good = publish_api.create_call_budget(plan)[0]
     monkeypatch.setattr(cr, "estimate_upload_calls", lambda *a, **k: 0)
     assert publish_api.create_call_budget(plan)[0] < good
+
+
+# ---- ACL-2621: the estimate counts the size that will actually be uploaded ----
+
+def test_a_2_5_gb_compressible_video_passes_and_is_counted_compressed(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    plan = _plan(tmp_path, [2500], monkeypatch)
+    assert cr.upload_calls(2500 * MiB) > 300                    # the original alone would be refused
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "ffmpeg")
+    limit = int(cc.DEFAULT_LIMIT_MB * MiB)
+    assert cr.planned_upload_size(plan.ad_sets[0].ads[0].path, 2500 * MiB) == limit
+    assert cr.estimate_upload_calls(plan) == 0                  # 45 MB goes in one request
+    budget, refusal = publish_api.create_call_budget(plan)
+    assert refusal == "" and budget <= CEILING
+
+
+def test_an_existing_cached_copy_is_counted_by_its_own_size(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    plan = _plan(tmp_path, [2500], monkeypatch)
+    path = plan.ad_sets[0].ads[0].path
+    copy = tmp_path / "cached.mp4"
+    copy.write_bytes(b"x")
+    monkeypatch.setattr(cc, "cache_path", lambda src, target: copy)
+    real = cr._disk_size
+    monkeypatch.setattr(cr, "_disk_size", lambda p: 30 * MiB if p == str(copy) else real(p))
+    assert cr.planned_upload_size(path, 2500 * MiB) == 30 * MiB
+
+
+def test_the_compression_threshold_follows_the_env(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "ffmpeg")
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_ABOVE_MB", "100")
+    assert cr.planned_upload_size(str(tmp_path / "x.mp4"), 2500 * MiB) == 100 * MiB
+    assert cr.planned_upload_size(str(tmp_path / "x.mp4"), 90 * MiB) == 90 * MiB
+
+
+def test_a_2_5_gb_video_without_a_compressor_is_refused_with_honest_wording(tmp_path, monkeypatch):
+    plan = _plan(tmp_path, [2500], monkeypatch)                 # autouse fixture: no ffmpeg
+    assert cr.planned_upload_size(plan.ad_sets[0].ads[0].path, 2500 * MiB) == 2500 * MiB
+    budget, refusal = publish_api.create_call_budget(plan)
+    assert budget == CEILING
+    assert "more than ACL allows in one run (" in refusal and "not Meta's" in refusal
+    assert "compress" in refusal and "shorter video" in refusal and "split the campaign" in refusal
+    assert "Meta refused" not in refusal

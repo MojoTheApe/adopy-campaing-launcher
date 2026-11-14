@@ -239,15 +239,45 @@ def video_files_of(plan: "CampaignPlan") -> list[str]:
     return list(seen)
 
 
+def planned_upload_size(path: str, original: int) -> int:
+    """ACL-2621: размер файла, который реально уйдёт в Meta (байты).
+
+    Видео выше порога `_video_for_upload` сжимает (ACL-2000). Уже есть детерминированная копия в кэше -
+    берём её размер; иначе, если сжиматель сработает (есть ffmpeg), берём сам порог (копия не больше него);
+    исходный размер - только когда сжимать нечем.
+    """
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    limit = _cc.DEFAULT_LIMIT_MB
+    raw = os.environ.get("ACL_VIDEO_COMPRESS_ABOVE_MB", "").strip()
+    try:
+        if raw and float(raw) > 0:
+            limit = float(raw)
+    except ValueError:
+        pass
+    if original <= limit * 1048576:
+        return original
+    try:
+        copy = _cc.cache_path(path, _cc.DEFAULT_TARGET_MB)
+        cached = _disk_size(str(copy)) if copy.is_file() else 0
+        if 0 < cached <= min(limit * 1048576, original):
+            return cached
+        if _cc.ffmpeg_exe():
+            return int(limit * 1048576)
+    except Exception:  # noqa: BLE001 - оценка не должна ронять проверку плана
+        pass
+    return original
+
+
 def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
     """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
 
     Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
-    `estimate_create_calls`). Верхняя оценка: проверка плана читает исходный файл, а запуск может
-    сжать его до загрузки.
+    `estimate_create_calls`). ACL-2621: считаем размер того, что реально уйдёт (`planned_upload_size`),
+    а не исходника: запуск сжимает тяжёлое видео до загрузки.
     """
     size_of = size_of or _disk_size
-    chunks = sum(upload_calls(size_of(path)) for path in video_files_of(plan))
+    chunks = sum(upload_calls(planned_upload_size(path, size_of(path))) for path in video_files_of(plan))
     if not chunks:
         return 0
     return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
