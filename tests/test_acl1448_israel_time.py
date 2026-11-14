@@ -434,8 +434,8 @@ def test_the_page_has_no_time_zone_field(lt):
 
 
 @pytest.mark.parametrize("lt", _PERIOD_CLOCKS, indirect=True)
-def test_the_preset_clears_01_to_05_on_every_day_and_the_preview_shows_account_time(lt):
-    lt.click(".cb-lt-preset")
+def test_a_grid_without_01_to_05_on_every_day_shows_account_time(lt):
+    _set_no_01_05(lt)
     cells = lt.evaluate("[...document.querySelectorAll('.cb-sg-cell')].map(c => [+c.dataset.d, +c.dataset.h, c.classList.contains('is-on')])")
     assert len(cells) == 168
     assert all(on == (h not in (1, 2, 3, 4)) for _d, h, on in cells)
@@ -448,8 +448,16 @@ def test_the_preset_clears_01_to_05_on_every_day_and_the_preview_shows_account_t
 
 def test_the_preview_asks_to_wait_for_check_plan_when_the_account_zone_is_unknown(lt):
     lt.evaluate("document.querySelector('.cb-acc-row').dataset.accLabel = 'unknown-account'")
-    lt.click(".cb-lt-preset")
+    _set_no_01_05(lt)
     assert lt.inner_text("[data-lt-acc-preview]") == "Account time zone is read on Check plan; hours are converted then."
+
+
+def _set_no_01_05(lt):
+    lt.evaluate("""(wins) => { const hid = document.querySelector('[name$="_schedule"]');
+        hid.disabled = false;
+        document.querySelector('.cb-sched-on').checked = true;
+        hid.value = JSON.stringify(wins);
+        cbLifetime.sync(document.getElementById('slot')); }""", NO_01_05)
 
 
 def _random_grids():
@@ -509,7 +517,7 @@ def test_the_account_preview_reads_the_start_date_difference(lt):
 
 def test_a_half_hour_account_zone_is_flagged_in_the_preview(lt):
     lt.evaluate("document.querySelector('.cb-acc-row').dataset.accLabel = 'KO'")
-    lt.click(".cb-lt-preset")
+    _set_no_01_05(lt)
     assert "not a whole number of hours" in lt.inner_text("[data-lt-acc-preview]")
 
 
