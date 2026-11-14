@@ -269,27 +269,14 @@ def test_budget_editor_appears_only_on_budget_owners(open_page, world):
     shot(page, "07-budget-confirmed")
 
 
-def test_bid_editor_is_refused_on_automatic_bidding(open_page, world):
+def test_bid_control_is_not_rendered_in_home_table(open_page, world):
+    """ACL-2632: колонка Bid скрыта; хендлер bid-up/bid-down остаётся, но кнопок в таблице нет (отказ на автоставке недостижим отсюда)."""
     page, site = open_page()
     expand(page, f"campaign:{CAMP_A}")
     page.wait_for_selector(f'tr[data-key="adset:{SET_AUTO}"]')
-    auto = page.locator(f'button[data-action="bid-up"][data-object-id="{SET_AUTO}"]')
-    assert auto.is_disabled() and auto.get_attribute("title") == "Automatic · no manual bid"
-    assert page.locator(f'button[data-action="bid-down"][data-object-id="{SET_AUTO}"]').is_disabled()
-    camp_bid = page.locator(f'button[data-action="bid-up"][data-object-id="{CAMP_A}"]')
-    assert camp_bid.is_disabled()
-    ok = page.locator(f'button[data-action="bid-up"][data-object-id="{SET_BID}"]')
-    assert not ok.is_disabled()
-    ok.click()
-    page.wait_for_selector("dialog.acm-edit[open]")
-    assert page.input_value('dialog.acm-edit [data-acm="value"]') == "1.58"      # 1.50 + 5%
-    shot(page, "08-bid-editor")
-    page.click('dialog.acm-edit [data-acm="review"]')
-    page.wait_for_selector("dialog.acm-confirm[open]")
-    assert "Bid cap: 1.50 USD → 1.58 USD" in page.inner_text("dialog.acm-confirm")
-    page.click('dialog.acm-confirm [data-acm="confirm"]')
-    page.wait_for_selector('.hc-mk.ok[title="Confirmed by Meta"]', timeout=15000)
-    assert world.meta.posts == [(f"/{SET_BID}", {"bid_amount": "158"})]
+    assert page.locator('button[data-action="bid-up"], button[data-action="bid-down"]').count() == 0
+    assert page.locator("th:has-text('Bid control')").count() == 0
+    assert world.meta.posts == []
 
 
 def test_commands_are_disabled_with_a_reason_when_not_on_loopback(open_page, world):
@@ -303,12 +290,12 @@ def test_commands_are_disabled_with_a_reason_when_not_on_loopback(open_page, wor
     assert [r for r in site.requests if r[1].endswith("/preview")] == []
 
 
-def test_duplicate_and_copy_stay_disabled(open_page, world):
+def test_duplicate_and_copy_are_not_rendered_in_home_table(open_page, world):
+    """ACL-2632: колонка Duplicate скрыта — ни duplicate, ни copy в таблице Home."""
     page, site = open_page()
-    info = page.evaluate("""() => [...document.querySelectorAll('.hc-cmd[data-action=duplicate], .hc-cmd[data-action=copy], .hc-cmd[data-action=more]')]
-        .map(b => ({a: b.dataset.action, d: b.disabled, t: b.title}))""")
-    assert info and all(i["d"] for i in info)
-    assert {i["t"] for i in info if i["a"] in ("duplicate", "copy")} == {"ACL-1773"}
+    n = page.evaluate("""() => document.querySelectorAll('.hc-cmd[data-action=duplicate], .hc-cmd[data-action=copy]').length""")
+    assert n == 0
+    assert page.locator("th:has-text('Duplicate')").count() == 0
 
 
 @pytest.mark.skipif(not SHOTS, reason="снимки экрана пишутся только при заданном ACL_SHOTS_DIR")

@@ -6,7 +6,7 @@ SRC = (Path(__file__).resolve().parents[1] / "src" / "web" / "templates" / "_cam
 
 
 def test_optimization_preset_shows_cpl_before_cpa():
-    m = re.search(r"optimization: CTRL\.concat\(DECIDE, \[([^\]]*)\]", SRC)
+    m = re.search(r"optimization: CTRL\.concat\(\[([^\]]*)\], DECIDE\)", SRC)
     assert m, "optimization preset not found"
     cols = re.findall(r"'([a-z_]+)'", m.group(1))
     assert "b_cpl" in cols
