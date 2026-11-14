@@ -279,8 +279,9 @@ def test_column_groups_and_order_follow_the_prototype():
     acc = _acc_table()["acc"]
     names = [re.sub(r"<[^>]+>", "", h) for h in re.findall(r"<th[^>]*>(.*?)</th>", acc)]
     at = names.index("Delivery")
-    assert names[at: at + 8] == ["Delivery", "Duplicate", "Bid control", "Budget", "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]
-    assert names[at + 8: at + 11] == ["Spend", "Leads", "FTDs"]
+    assert names[at: at + 12] == ["Delivery", "Budget", "Spend", "Leads", "FTDs", "CPL", "CPA (FTD)", "CR lead→FTD",
+                                  "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]   # цифры BI сразу после Budget, блок решений в конце
+    assert "Match" not in names and "Duplicate" not in names and "Bid control" not in names
     assert "MANAGEMENT" not in acc and "Account / campaign hierarchy" not in acc      # верхняя полоса групп убрана
     assert "Campaign / Ad set / Ad" in acc
 
@@ -305,7 +306,8 @@ def test_goal_benchmark_and_hint_use_real_inputs_or_say_why_not():
 
 def test_every_command_is_disabled_with_a_reason_without_the_helper():
     t = _node(OPEN_ALL + " out.t = H.Acc.table.innerHTML;", acm=False)["t"]
-    assert 'class="hc-cmd hc-cmd-txt" disabled aria-disabled="true"' in t and 'title="ACL-1773"' in t
+    assert 'class="hc-cmd hc-cmd-txt"' not in t                     # колонки Duplicate и Bid control убраны
+    assert 'disabled aria-disabled="true"' in t
     assert re.search(r'class="hc-switch"[^>]*disabled aria-disabled="true"', t)
     assert "Commands unavailable: the command helper did not load" in t and "Coming in ACL-1800" not in t
 
@@ -318,8 +320,8 @@ def test_budget_and_bid_columns_show_the_value_and_the_owner_note():
     """)["t"]
     text = _text(t)
     assert "$150.00 / day" in text and "$75.00 / day" in text and "Ad set budget" in text and "Campaign budget" in text
-    assert "Ad set bids" in text and "$1.50" in text
-    assert "Ads have no budget" in t and "Managed by ad set" in t
+    assert "Ad set bids" not in text                                 # колонка Bid control убрана
+    assert "Ads have no budget" in t                                 # «Managed by ad set» жил в убранной колонке Bid control
 
 
 def test_expanding_rows_reads_children_from_the_local_snapshot_only():
