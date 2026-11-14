@@ -399,6 +399,17 @@ class GraphClient:
         self.stopped = exc
         return exc
 
+    def release_optional_stop(self, exc: GraphStop) -> bool:
+        """ACL-2639: lift the stop of an OPTIONAL write (naming a video) that never reached Meta: a refusal before
+        sending (Python policy or the page helper) or the call budget. Login, checkpoint, limits stay. True - lifted."""
+        text = str(exc)
+        optional = isinstance(exc, CallBudget) or (
+            isinstance(exc, PageFailed) and ("refused" in text or "(no_file" in text))
+        if self.stopped is exc and optional:
+            self.stopped = None
+            return True
+        return False
+
     def resume_after_unsent(self, exc: GraphStop) -> bool:
         """ACL-2000: снять стоп, поставленный отказом ДО отправки (`no_file`: файл не лёг в страницу).
 
