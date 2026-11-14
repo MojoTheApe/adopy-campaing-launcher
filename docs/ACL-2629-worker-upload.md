@@ -162,10 +162,21 @@ both outcomes:
   helper's world: still binary `Fetch.fulfillRequest` bodies, still one piece at a time hashed with WebCrypto, kept as
   Blobs, the multipart POST sent by `fetch` with the same options (token in the body, `redirect: 'error'`, referrer).
   Nothing is base64-decoded in the page. It uses the page session's narrow `Fetch` pattern, so it does not depend on
-  worker auto-attach. A service worker is bypassed (`Network.setBypassServiceWorker`) on an ordinary tab.
+  worker auto-attach.
   The probe tries the worker first and falls back to inline; the chosen mode is kept and the worker's failure reason is
   logged as a warning ("Upload worker not used, continuing inline: ..."), so the next live run tells exactly why.
 * Safety rules unchanged: Python and page-helper policy per call, exact announced pieces only, hash re-check, fail
   closed, deadlines, disarm on every exit. If both stages fail the run falls back to compression as before.
 * Live check addition: record `upload_mode` (worker or inline) and the failure text; for inline, check the main-thread
   responsiveness (the SHA-256 of an 8 MB piece is async, but the Blob/FormData work is on the page thread).
+
+### Round 4 correction: service workers
+
+`Network.setBypassServiceWorker` is a no-op without `Network.enable`, which this package never turns on (a test bans
+it), so it is **not used** (removed from both the page session and worker sessions; nothing is left to revert in
+`disarm()`). Earlier statements here and in section 2 (N5) that a service worker is bypassed are withdrawn. Instead
+the page helper **refuses both modes when `navigator.serviceWorker.controller` is set** (`swControlled()`): the probe
+reports "page is controlled by a service worker" for the worker and the inline stage, and the run falls back to
+compression; a served chunk in such a page returns `no_file` before any piece moves. It is not proven that CDP
+Fetch catches a fetch that a service worker passes on, so the path stays closed there. Live item 7 still watches for
+any `__acl_upload` request on the network.

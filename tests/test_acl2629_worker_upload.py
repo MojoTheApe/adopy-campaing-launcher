@@ -201,7 +201,17 @@ def test_a_worker_session_gets_the_interception_and_is_resumed():
         "sessionId": "W9", "targetInfo": {"type": "worker"}, "waitingForDebugger": True}})
     assert tab.of("Fetch.enable")[-1][0] == "W9"
     assert ("W9", {}) in tab.of("Runtime.runIfWaitingForDebugger")
-    assert ("W9", {"bypass": True}) in tab.of("Network.setBypassServiceWorker")       # N5
+    # `Network.setBypassServiceWorker` is a no-op without `Network.enable` (never turned on here): not used at all
+    assert not [m for _, m, _ in tab.calls if m.startswith("Network.")]
+
+
+def test_nothing_of_the_network_domain_is_touched_by_arm_or_disarm():
+    for light in (None, object()):
+        tab = FakeCdpTab(light=light)
+        server = us.UploadServer(tab)
+        server.arm()
+        server.disarm()
+        assert not [m for _, m, _ in tab.calls if m.startswith("Network.")]
 
 
 def test_an_iframe_or_a_pages_own_worker_that_attaches_is_resumed_and_let_go():
@@ -610,8 +620,8 @@ const doc = { readyState: 'complete', querySelector: () => null, scripts: [],
               documentElement: { innerHTML: '"accessToken":"' + TOKENV + '"' } };
 const G = {};
 new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
-             __HELPER__)(G, loc, doc, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams, crypto.webcrypto,
-                         FakeWorker);
+             'navigator', __HELPER__)(G, loc, doc, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
+                         crypto.webcrypto, FakeWorker, SC.sw ? { serviceWorker: { controller: {} } } : { serviceWorker: { controller: null } });
 const h = G[__NAME__];
 const PATHV = __PATH__;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -824,6 +834,20 @@ def test_a_worker_that_never_starts_falls_back_to_inline_and_says_why():
     assert out["probe"]["ok"] is True and out["probe"]["mode"] == "inline"
     assert "worker created but sent no ready message" in out["probe"]["worker_why"]
     assert out["graph_calls"] == 0
+
+
+def test_a_page_controlled_by_a_service_worker_gets_neither_worker_nor_inline():
+    out = _node({"name": "probe", "sw": True})
+    assert out["probe"]["error"] == "no_worker"
+    assert out["probe"]["why"].count("page is controlled by a service worker") == 2        # worker stage and inline stage
+    assert out["log"]["workers"] == 0 and out["log"]["pieces"] == 0 and out["graph_calls"] == 0
+
+
+def test_a_served_chunk_is_refused_by_a_service_worker_controlled_page_before_anything_moves():
+    out = _node({"name": "upload", "sw": True, "window": 1_000_000, "piece": 400_000})
+    assert out["results"][0] == {"error": "no_file", "why": "page is controlled by a service worker"}
+    assert out["log"]["pieces"] == 0 and out["log"]["workers"] == 0
+    assert [x["phase"] for x in out["log"]["graph"]] == ["start", "finish"]
 
 
 def test_when_neither_the_worker_nor_inline_works_the_probe_names_both_stages():

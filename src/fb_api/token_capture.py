@@ -1042,9 +1042,16 @@ _HELPER_JS = r"""
       timer = setTimeout(() => finish('worker created but sent no ready message in 8 s (no error event)'), 8000);
     });
   }
+  // A page controlled by a service worker may have our same-origin piece requests answered (or passed on) by it, outside
+  // the CDP Fetch interception: neither the worker nor the inline mode may run then (the run compresses instead).
+  function swControlled() {
+    try { return typeof navigator !== 'undefined' && !!(navigator.serviceWorker && navigator.serviceWorker.controller); }
+    catch (e) { return false; }
+  }
   // Inline mode: the same runner in this world. Bytes still never go through base64 or the main thread's decoder:
   // each piece is a fetch() answered by the controller (CDP Fetch), kept as a Blob; only one piece at a time is hashed.
   async function runInline(m, job) {
+    if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
     if (job && job.aborted) return { error: 'aborted' };
     if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
     if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {});
@@ -1054,6 +1061,7 @@ _HELPER_JS = r"""
     return inlineRunner.run(Object.assign({ id: id, base: base }, m));
   }
   async function runInWorker(m, job) {
+    if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
     if (transport === 'inline') return runInline(m, job);
     const why = await ensureWorker();
     if (why) return { error: 'no_worker', why: why };

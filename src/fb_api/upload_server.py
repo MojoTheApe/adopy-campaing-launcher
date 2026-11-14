@@ -22,7 +22,6 @@ import base64
 import hashlib
 import re
 import secrets
-import sys
 from typing import Any, Callable
 
 from src.fb_api import write_policy as _wp
@@ -105,11 +104,6 @@ class UploadServer:
         if getattr(tab, "light", None) is None:
             # An ordinary Ads Manager tab: pause only our prefix, nothing of the app's own traffic.
             tab.call("Fetch.enable", {"patterns": [{"urlPattern": PATTERN, "requestStage": "Request"}]}, timeout=10.0)
-            try:
-                # A service worker of the origin must not answer the inline mode's piece requests either.
-                tab.call("Network.setBypassServiceWorker", {"bypass": True}, timeout=10.0)
-            except Exception as exc:  # noqa: BLE001 - best effort
-                self._note(exc)
         # A light work tab intercepts its whole origin already (`light_tab`); enabling again would replace that.
         tab.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True},
                  timeout=10.0)
@@ -179,11 +173,8 @@ class UploadServer:
             return
         self._workers[session] = target_id
         self.workers_ready += 1
-        try:
-            # A service worker of the origin must not answer (or pass on) the worker's piece requests.
-            self._call(session, "Network.setBypassServiceWorker", {"bypass": True})
-        except Exception as exc:  # noqa: BLE001 - best effort: the live check keeps watching for it
-            self._note(exc)
+        # No service-worker bypass here: `Network.setBypassServiceWorker` needs the Network domain switched on, which this
+        # package never does. A page controlled by a service worker is refused by the helper instead (see `swControlled`).
         if waiting:
             try:
                 self._call(session, "Runtime.runIfWaitingForDebugger", {})
@@ -196,8 +187,8 @@ class UploadServer:
         for session in list(self._workers):
             try:
                 self._call("", "Target.detachFromTarget", {"sessionId": session})
-            except Exception:  # noqa: BLE001
-                self.errors += 1
+            except Exception as exc:  # noqa: BLE001
+                self._note(exc)
         self._workers.clear()
         try:
             tab.call("Target.setAutoAttach", {"autoAttach": False, "waitForDebuggerOnStart": False, "flatten": True},
