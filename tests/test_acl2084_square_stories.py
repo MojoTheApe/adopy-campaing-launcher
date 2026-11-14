@@ -144,9 +144,12 @@ def test_a_copy_of_a_large_video_is_not_counted_in_the_chunk_budget(tmp_path, mo
     assert "stories_reels_file" not in row
 
 
-def test_a_copy_under_another_name_with_several_texts_keeps_the_existing_error(tmp_path):
-    with pytest.raises(cr.PlanError, match="can't be combined"):
-        cr.plan_from_draft(_same_file(tmp_path, copy=True, texts=1))
+def test_a_copy_under_another_name_with_several_texts_is_refused_before_any_write(tmp_path):
+    """ACL-2611: an identical copy next to several texts cannot be a pair: refused before any write, not guessed."""
+    meta = UniqueAssetsMeta()
+    out, _ = _run(meta, _same_file(tmp_path, copy=True, texts=1))
+    assert "same picture or video as the main file" in out.error, out.error
+    assert meta.posts == []
 
 
 def test_two_different_square_files_pass_the_unique_assets_rule(tmp_path):

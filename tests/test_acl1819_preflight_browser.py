@@ -210,9 +210,9 @@ def test_errors_block_publish_and_clicking_a_line_focuses_the_field(browser, the
         assert _badge(p) == "no errors", p.locator(".cbd-pf").inner_text()
         assert btn.is_enabled() and p.locator(".cbd-gate-reason").count() == 0
         # Исправлено — раздел свернулся сам; щелчок по нему раскрывает и сворачивает.
-        assert _topic(p, "creative") == {"status": "ok", "open": False, "summary": "11 checks ok"}
+        assert _topic(p, "creative") == {"status": "ok", "open": False, "summary": "10 checks ok"}
         assert _topic_rule_ids(p, "creative") == [
-            "media_chosen", "vertical_needs_main", "texts_limit", "texts_vertical", "texts_dynamic",
+            "media_chosen", "vertical_needs_main", "texts_limit", "texts_dynamic",
             "primary_text", "headline", "headline_len", "feed_texts", "primary_len", "cta_allowed"]
         p.locator(".cbd-pf-tbtn[data-topic='creative']").click()
         assert _topic(p, "creative")["open"] and p.locator(".cbd-pf-line[data-rule='headline']").is_visible()
