@@ -854,7 +854,10 @@ class PageTab:
         targets = self._http(host, port, "/json/list")
         if not isinstance(targets, list):
             return False
-        return not any(t.get("id") == self.target_id and t.get("type") == "page" for t in targets)
+        pages = [t for t in targets if t.get("type") == "page"]
+        mine = [t for t in pages if t.get("id") == self.target_id]
+        # the last tab is not closed but sent to about:blank (see `_close_over_socket`): that is a success too
+        return not mine or (len(pages) == 1 and str(mine[0].get("url") or "") == "about:blank")
 
     def _close_over_socket(self) -> bool:
         """True — наша вкладка закрыта или (единственная) уведена на about:blank."""
