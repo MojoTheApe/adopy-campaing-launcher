@@ -141,9 +141,35 @@ VIDEO_EXT = frozenset({".mp4", ".mov", ".m4v", ".avi", ".wmv", ".mkv", ".webm"})
 IMAGE_MAX_BYTES = 30 * 1024 * 1024
 #: Видео до этого размера уходит одним запросом (как раньше); больше - кусками (ACL-1891).
 VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
-#: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
+#: ACL-2629: путь воркера - исходный файл до лимита Meta (4 ГБ), куски до 64 МБ.
 VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
 VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Старый путь (base64 через CDP, сжатие ffmpeg - запасной): прежние потолки.
+VIDEO_MAX_BYTES_STAGED = _wpol.UPLOAD_FILE_STAGED_MAX
+VIDEO_CHUNK_STAGED_MAX = _wpol.UPLOAD_STAGED_CHUNK_MAX
+#: На пути воркера в один запрос идёт только небольшое видео: файл целиком кладётся в страницу как раньше
+#: (atob на главном потоке), а это замораживало вкладку на сотнях МБ (ACL-2000).
+VIDEO_SINGLE_MAX_BYTES_WORKER = 16 * 1024 * 1024
+#: Выключатель пути воркера: `ACL_VIDEO_WORKER_UPLOAD=0|false|no|off` (по умолчанию включён).
+WORKER_UPLOAD_FLAG = "ACL_VIDEO_WORKER_UPLOAD"
+
+
+def worker_upload_enabled(env: dict | None = None) -> bool:
+    """ACL-2629: видео грузится из Web Worker вкладки без сжатия. Выключается только явным `0/false/no/off`."""
+    raw = (env if env is not None else os.environ).get(WORKER_UPLOAD_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def video_limit_bytes(worker: bool | None = None) -> int:
+    """Largest video accepted: Meta's 4 GB on the worker path, 1536 MB on the old (compressing) path."""
+    worker = worker_upload_enabled() if worker is None else worker
+    return VIDEO_MAX_BYTES if worker else VIDEO_MAX_BYTES_STAGED
+
+
+def single_request_max(worker: bool | None = None) -> int:
+    """Видео не больше этого уходит одним запросом; больше - кусками."""
+    worker = worker_upload_enabled() if worker is None else worker
+    return VIDEO_SINGLE_MAX_BYTES_WORKER if worker else VIDEO_SINGLE_MAX_BYTES
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
@@ -159,11 +185,16 @@ def _disk_size(path: str) -> int:
         return 0
 
 
-def upload_calls(size: int) -> int:
-    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом."""
-    if size <= VIDEO_SINGLE_MAX_BYTES:
+def upload_calls(size: int, worker: bool | None = None) -> int:
+    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом.
+
+    ACL-2629: путь воркера (по умолчанию) считает исходный размер и куски по 64 МБ; запасной путь -
+    куски по 8 МБ (`worker=False`).
+    """
+    worker = worker_upload_enabled() if worker is None else worker
+    if size <= single_request_max(worker):
         return 0
-    return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
+    return -(-size // (VIDEO_CHUNK_MAX if worker else VIDEO_CHUNK_STAGED_MAX)) + CALLS_UPLOAD_FIXED
 
 #: Ожидание обработки видео — с потолком по времени и по числу вызовов.
 VIDEO_WAIT_S = 300.0
@@ -262,6 +293,8 @@ def planned_upload_size(path: str, original: int) -> int:
     """
     from src.fb_ads_rpa import creative_compress as _cc
 
+    if worker_upload_enabled():
+        return original       # ACL-2629: the original goes up from the worker, nothing is compressed
     limit = video_compress_limit_mb()
     if original <= limit * 1048576:
         return original
@@ -1935,7 +1968,7 @@ class CampaignCreator:
     def _page_timeout(exc: BaseException) -> bool:
         """Страница не приняла кусок вовремя: файл не лёг в неё, к Meta ничего не ушло."""
         text = str(exc)
-        return "(no_file" in text and ("did not answer" in text or "timed out" in text)
+        return "(no_file" in text and ("did not answer" in text or "timed out" in text or "worker" in text)
 
     def _check_cancel(self, out: Outcome) -> None:
         if self.cancelled():
@@ -3196,7 +3229,10 @@ class CampaignCreator:
         offset, end = self._offsets(started, size, 0, what)
         self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
-        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4 + 3 * (-(-size // VIDEO_CHUNK_MAX))
+        # ACL-2629: путь воркера - куски до 64 МБ (байты в страницу не копируются); иначе прежние 8 МБ.
+        served = bool(self.worker_path)
+        cap = VIDEO_CHUNK_MAX if served else VIDEO_CHUNK_STAGED_MAX
+        guard = 2 * (-(-size // cap)) + 4 + 3 * (-(-size // cap))
         failures = 0
         stalls = 0
         # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
@@ -3207,11 +3243,19 @@ class CampaignCreator:
             guard -= 1
             if guard < 0:
                 raise CreationStopped(f"{what}: upload does not progress", created=out.created, kind="video_error")
-            n = min(max(end - offset, 1), VIDEO_CHUNK_MAX, size - offset)
-            chunk = big.read_range(offset, n)
-            if len(chunk) != n:
-                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
-                                      kind="video_error")
+            n = min(max(end - offset, 1), cap, size - offset)
+            if served:
+                # The bytes are read piece by piece while the worker asks for them; a changed file is caught there
+                # (piece hash) and here (size) before the chunk is posted.
+                if self.size_of(big.path) != size:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
+                chunk = _wpol.ServedChunk(big, offset, n)
+            else:
+                chunk = big.read_range(offset, n)
+                if len(chunk) != n:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
             params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset),
                       "waterfall_id": waterfall}
             try:
@@ -4007,6 +4051,37 @@ class CampaignCreator:
             text += " Not created: " + ", ".join(f"ad {ad.index}" for ad in todo) + "."
         return text
 
+    #: ACL-2629: the upload goes through the page's Web Worker (set by `_decide_worker_path` in `_prepare`).
+    worker_path = False
+
+    def _decide_worker_path(self, plan: CampaignPlan, out: Outcome) -> bool:
+        """ACL-2629: probe the in-profile worker data path once before any file is read or compressed.
+
+        On: the originals go up as they are (no compression). Off (switch, no big video, probe failed, a transport
+        without the path): the old staged path with compression, exactly as before. The probe is local: no call to Meta.
+        """
+        if not worker_upload_enabled():
+            return False
+        if not any((self.size_of(p) or 0) > VIDEO_SINGLE_MAX_BYTES_WORKER for p in video_files_of(plan)):
+            return False
+        probe = getattr(self.client, "probe_worker", None)
+        if not callable(probe):
+            return False
+        try:
+            ok, why = probe()
+        except GraphStop:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a failed probe is a fallback, not a stop
+            ok, why = False, f"{type(exc).__name__}"
+        if ok:
+            self._step(out, "video upload: originals go up from a Web Worker in the profile (no compression)")
+            return True
+        if str(why).startswith("not supported"):
+            return False            # a transport without the worker path: the old path, nothing to tell the buyer
+        out.warnings.append(f"The in-profile upload worker is not available ({why or 'unknown reason'}); "
+                            "large videos are compressed and uploaded the slower way.")
+        return False
+
     def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
         """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
 
@@ -4038,7 +4113,7 @@ class CampaignCreator:
         """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
         if kind == "video":
             size = self.size_of(path)
-            if size and size > VIDEO_SINGLE_MAX_BYTES:
+            if size and size > single_request_max(self.worker_path):
                 return LargeFile(path, size, self.read_range)
         return self.read_file(path)
 
@@ -4124,6 +4199,10 @@ class CampaignCreator:
                 self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
                            else f"preflight: form found on the Page, will be reused: {step.form_name}")
         files: dict[str, bytes] = {}
+        self.worker_path = self._decide_worker_path(plan, out) if writing else False
+        # Check plan does not probe: it counts the original when the worker path is switched on.
+        worker_plan = self.worker_path if writing else worker_upload_enabled()
+        video_limit = VIDEO_MAX_BYTES if worker_plan else VIDEO_MAX_BYTES_STAGED
 
         def sent_len(path: str, data: Any) -> int:
             # ACL-2621: Check plan does not compress; it measures what the run will upload (compressed size).
@@ -4135,11 +4214,11 @@ class CampaignCreator:
             for ad in s.ads:
                 try:
                     src = (self._video_for_upload(out, ad.path, f"ad {ad.index}")
-                           if writing and ad.kind == "video" else ad.path)
+                           if writing and ad.kind == "video" and not self.worker_path else ad.path)
                     data = self.load_media(src, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
-                limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
+                limit = video_limit if ad.kind == "video" else IMAGE_MAX_BYTES
                 if not data or sent_len(ad.path, data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
@@ -4149,11 +4228,12 @@ class CampaignCreator:
                 if ad.vertical_path:
                     try:
                         vsrc = (self._video_for_upload(out, ad.vertical_path, f"ad {ad.index} Stories / Reels")
-                                if writing and ad.vertical_kind == "video" else ad.vertical_path)
+                                if writing and ad.vertical_kind == "video" and not self.worker_path
+                                else ad.vertical_path)
                         vdata = self.load_media(vsrc, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
-                    vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
+                    vlimit = video_limit if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
                     if not vdata or sent_len(ad.vertical_path, vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
@@ -4175,7 +4255,8 @@ class CampaignCreator:
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
-        chunk_calls = sum(upload_calls(sent_len(k, v)) for k, v in files.items() if isinstance(v, LargeFile))
+        chunk_calls = sum(upload_calls(sent_len(k, v), worker_plan) for k, v in files.items()
+                          if isinstance(v, LargeFile))
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
@@ -4191,12 +4272,15 @@ class CampaignCreator:
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
                 sizes = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
-                n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
+                chunk_size = VIDEO_CHUNK_MAX if worker_plan else VIDEO_CHUNK_STAGED_MAX
+                n_chunks = sum(-(-n // chunk_size) for n in sizes)
                 out.warnings.append(
                     f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
-                    f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
-                    "for this run (upper bound; ACL compresses large videos before upload, "
-                    "so the real upload is usually smaller).")
+                    f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                    + ("for this run (upper bound: the original file is uploaded without compression; "
+                       "Meta may ask for smaller chunks)." if worker_plan else
+                       "for this run (upper bound; ACL compresses large videos before upload, "
+                       "so the real upload is usually smaller)."))
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")

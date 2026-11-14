@@ -272,7 +272,7 @@ FILE_REFUSAL_SUBCODES = frozenset({1487411})
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
 _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", "retired",
-             "bad_path", "forbidden_param", "no_session"}
+             "bad_path", "forbidden_param", "no_session", "no_worker"}
 
 
 AUTH_REQUIRED_TITLE = "please authenticate your account"
@@ -710,6 +710,14 @@ class GraphClient:
             raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path,
                                status=status if isinstance(status, int) else None)
         return body
+
+    def probe_worker(self) -> tuple[bool, str]:
+        """ACL-2629: can the page's Web Worker be fed the file bytes (CSP, interception, hash)? Local: no Meta call,
+        not counted in the budget. A transport without the worker path answers (False, "not supported")."""
+        probe = getattr(self.transport, "probe_worker", None)
+        if not callable(probe):
+            return False, "not supported by this transport"
+        return probe()
 
     #: ACL-2533: the address of the form-background upload (a web-session request, not a Graph path).
     FORM_PHOTO_PATH = "/ads/leadgen/upload/photo/"

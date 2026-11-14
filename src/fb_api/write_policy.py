@@ -85,10 +85,20 @@ UPLOAD_KEYS = {
 }
 #: Файл фазы transfer (multipart); у start и finish файла нет.
 UPLOAD_CHUNK_FIELD = "video_file_chunk"
-#: Потолок одного куска, который мы отправляем (память профиля и одного запроса).
-UPLOAD_CHUNK_MAX = 8 * 1024 * 1024
-#: Потолок файла на пути кусками: безопасный для профиля и для бюджета вызовов (Meta сама - 4 ГБ).
-UPLOAD_FILE_MAX = 1536 * 1024 * 1024
+#: ACL-2629: потолок куска на пути воркера (байты идут бинарно через CDP Fetch в Web Worker профиля,
+#: страница их не декодирует): 64 МБ. Сам размер куска всё равно задаёт Meta (start/end_offset).
+UPLOAD_CHUNK_MAX = 64 * 1024 * 1024
+#: Потолок куска на СТАРОМ пути (base64 через Runtime.evaluate, atob в странице): прежние 8 МБ.
+UPLOAD_STAGED_CHUNK_MAX = 8 * 1024 * 1024
+#: Один запрос воркера к Python за частью куска: часть лежит в памяти воркера целиком, поэтому небольшая.
+UPLOAD_PIECE_MAX = 8 * 1024 * 1024
+#: Потолок файла на пути воркера: лимит Meta (4 ГБ).
+UPLOAD_FILE_MAX = 4 * 1024 * 1024 * 1024
+#: Потолок файла на старом пути (с ffmpeg-сжатием, ACL-2000): безопасный для профиля и бюджета вызовов.
+UPLOAD_FILE_STAGED_MAX = 1536 * 1024 * 1024
+#: Токен выдачи частей воркеру и путь, который перехватывает Python (CDP Fetch); тот же в помощнике страницы.
+SERVE_PREFIX = "/__acl_upload/"
+SERVE_TOKEN_RE = re.compile(r"[a-z0-9]{16,40}", re.ASCII)
 UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
 UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
@@ -237,7 +247,9 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "child_edges": sorted(CHILD_EDGES),
         "files": dict(FILE_FIELDS),
         "upload": {"phases": list(UPLOAD_PHASES), "keys": {k: sorted(v) for k, v in UPLOAD_KEYS.items()},
-                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_CHUNK_MAX,
+                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_STAGED_CHUNK_MAX,
+                   "served_chunk_max": UPLOAD_CHUNK_MAX, "piece_max": UPLOAD_PIECE_MAX,
+                   "serve_prefix": SERVE_PREFIX, "serve_token_re": SERVE_TOKEN_RE.pattern,
                    "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
                    "number_re": UPLOAD_NUMBER_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
@@ -698,6 +710,41 @@ def _check_instagram(edge: str, checked: dict) -> None:
     if not (isinstance(value, str) and INSTAGRAM_ID_RE.fullmatch(value)):
         raise WriteRefused(f"write refused: {INSTAGRAM_KEY} must be the numeric id of an Instagram account")
 
+class ServedChunk:
+    """ACL-2629: a window [offset, offset+length) of a file on disk, handed to the page's Web Worker piece by
+    piece instead of being copied into the page (the old staged path). Holds no bytes itself.
+
+    `source` must offer `read_range(offset, n)` (`creator.LargeFile`). `len()` is the chunk length, so the
+    chunk-size checks apply to it exactly as to bytes.
+    """
+
+    def __init__(self, source: Any, offset: int, length: int):
+        if not (isinstance(offset, int) and isinstance(length, int)) or offset < 0 or length < 1:
+            raise ValueError("a served chunk needs a non-negative offset and a positive length")
+        self.source = source
+        self.offset = offset
+        self.length = length
+
+    def __len__(self) -> int:
+        return self.length
+
+    def read(self, rel: int, n: int) -> bytes:
+        """Bytes [rel, rel+n) of the chunk; never outside the window."""
+        if rel < 0 or n < 0 or rel + n > self.length:
+            raise ValueError("read outside the served chunk")
+        return self.source.read_range(self.offset + rel, n) if n else b""
+
+    def pieces(self, piece: int) -> list[tuple[int, int]]:
+        """[(rel_offset, length)] covering the chunk in pieces of at most `piece` bytes."""
+        piece = max(1, min(int(piece), UPLOAD_PIECE_MAX))
+        return [(o, min(piece, self.length - o)) for o in range(0, self.length, piece)]
+
+    def piece_hashes(self, piece: int) -> list[str]:
+        import hashlib
+
+        return [hashlib.sha256(self.read(o, n)).hexdigest() for o, n in self.pieces(piece)]
+
+
 def _digits(value: Any) -> int | None:
     """Целое из int или строки цифр (не bool, не float); иначе None."""
     if isinstance(value, bool):
@@ -740,8 +787,12 @@ def _check_upload(params: dict, files: dict) -> None:
         if set(files) != {UPLOAD_CHUNK_FIELD}:
             raise WriteRefused(f"write refused: transfer needs exactly the file field {UPLOAD_CHUNK_FIELD!r}")
         chunk = files[UPLOAD_CHUNK_FIELD]
-        if not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
-            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+        if isinstance(chunk, ServedChunk):
+            # ACL-2629: the bytes are read from the file by the controller and served to the worker piece by piece.
+            if not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
+                raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+        elif not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_STAGED_CHUNK_MAX:
+            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_STAGED_CHUNK_MAX} bytes")
     elif files:
         raise WriteRefused(f"write refused: upload phase {phase} takes no file")
 
