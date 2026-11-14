@@ -92,7 +92,10 @@ def test_rules_status_reports_missing_and_broken(monkeypatch, tmp_path):
 
 def test_missing_file_warns_and_does_not_crash(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(account_names, "_RULES_PATH", tmp_path / "none.json")
-    monkeypatch.setitem(account_names._CACHE, "stamp", None)
+    # Весь кэш под откат: раньше возвращался только stamp, а пустые rules из none.json оставались
+    # вместе с настоящим stamp, и следующие тесты в этом воркере видели «правил нет».
+    for key, value in (("stamp", None), ("rules", []), ("checked", 0.0)):
+        monkeypatch.setitem(account_names._CACHE, key, value)
     with caplog.at_level("WARNING"):
         assert account_names._snapshot() == []
     assert any("not found" in r.getMessage() and "reinstall or update ACL" in r.getMessage() for r in caplog.records)

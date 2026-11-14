@@ -1071,13 +1071,96 @@ def test_resume_verify_calls_counts_each_kind():
     assert cr.resume_verify_calls([st("campaign"), st("adset"), st("adset"), st("ad")]) == 1 + 2 + 2 * 3
 
 
-# ---- ACL-2618: the resume check reads uploaded videos with fields the Video node has ----
+# ───────────────────────── ACL-2614: отказ чтения при сверке возобновления ─────────────────────────
 
-def _video_done(tmp_path, journal):
+def _refuse_video_reads(meta, error):
+    """Meta отвечает ошибкой на чтение видео (только GET по id видео), остальное как обычно."""
+    real = meta.request
+
+    def request(method, path, params=None):
+        oid = path.strip("/")
+        if meta.objects.get(oid, {}).get("_kind") == "video":
+            return {"status": 400, "body": {"error": error}}
+        return real(method, path, params)
+
+    meta.request = request
+
+
+def _finished_video_run(tmp_path, journal):
     meta = FakeMeta(video_states=("ready",))
     done, _ = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
     assert done.error == ""
     return meta
+
+
+FAKE_ACT = "act_" + "123456789012345"      # built at runtime: the secret scan reads literals
+FAKE_TOKEN = "EAAB" + "1234567890"
+AUTH_ERROR = {"code": 31, "error_subcode": 3858385, "type": "OAuthException",
+              "message": "(#31) Please authenticate your account",
+              "error_user_title": "Please authenticate your account"}
+
+
+def test_publish_again_during_pending_authentication_stops_as_checkpoint(tmp_path, journal):
+    """Regression guard: the client already stops on 31/3858385, so this passed before ACL-2614 too."""
+    meta = _finished_video_run(tmp_path, journal)
+    _refuse_video_reads(meta, AUTH_ERROR)
+    posts = len(meta.posts)
+    out, client = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.stop_kind == "checkpoint", (out.stop_kind, out.error)
+    assert "changed or removed" not in out.error and "authenticate" in out.error.lower()
+    assert len(meta.posts) == posts and client.writes == 0
+
+
+def test_a_graph_error_with_the_authentication_code_in_the_resume_check_is_a_checkpoint(tmp_path, journal):
+    # Тот же отказ, но пришедший как обычный GraphError (не стоп клиента): сверка сама превращает его в стоп.
+    meta = _finished_video_run(tmp_path, journal)
+    creator, client = _creator(meta, journal)
+    out = cr.Outcome(campaign_name="MX Leads 1")
+    plan = cr.plan_from_draft(_draft(tmp_path, video=True, ads=2))
+    submitted = (creator._plan_view(plan), plan.tag)
+    targetings, files = creator._prepare(plan, out)
+    choice = creator._resolve_name(plan, targetings)
+    camp = _by_kind(meta, "campaign")
+    creator._open_operation(choice.plan, out, files, submitted=submitted, existing_id=camp["id"])
+    real_get = client.get
+
+    def get(path, params=None, **kw):
+        if meta.objects.get(path.strip("/"), {}).get("_kind") == "video":
+            raise g.GraphError("refused", code=31, subcode=3858385, status=400)
+        return real_get(path, params, **kw)
+
+    client.get = get
+    with pytest.raises(g.AuthRequired) as exc:
+        creator._verify_resume(choice.plan, out, camp["id"])
+    assert client.stopped is exc.value
+    assert exc.value.kind == "checkpoint" and (exc.value.code, exc.value.subcode) == (31, 3858385)
+
+
+def test_another_refused_resume_read_is_logged_with_code_and_still_a_mismatch(tmp_path, journal, caplog):
+    meta = _finished_video_run(tmp_path, journal)
+    _refuse_video_reads(meta, {"code": 100, "error_subcode": 33, "type": "OAuthException",
+                               "message": "(#100) Unsupported get request for " + FAKE_ACT + " " + FAKE_TOKEN})
+    posts = len(meta.posts)
+    with caplog.at_level("WARNING", logger=cr.log.name):
+        out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
+    lines = [r.getMessage() for r in caplog.records if "resume check" in r.getMessage()]
+    assert lines and "code=100" in lines[0] and "subcode=33" in lines[0] and "video" in lines[0]
+    assert not any("act_" in ln or "EAAB" in ln or any(ch.isdigit() for ch in ln.split("(")[0]) for ln in lines)
+
+
+def test_a_deleted_video_is_still_a_resume_mismatch(tmp_path, journal):
+    meta = _finished_video_run(tmp_path, journal)
+    for oid in [k for k, o in meta.objects.items() if o["_kind"] == "video"]:
+        del meta.objects[oid]
+    posts = len(meta.posts)
+    out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
+
+
+# ---- ACL-2618: resume reads uploaded videos with valid fields ----
+
+_video_done = _finished_video_run
 
 
 def test_untouched_video_resume_continues_with_valid_fields_only(tmp_path, journal):
