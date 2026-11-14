@@ -275,6 +275,31 @@ _HELPER_JS = r"""
     const fk = Object.keys(spec.files || {});
     if (phase === 'transfer') { if (fk.length !== 1 || fk[0] !== U.chunk_field) return 'file'; }
     else if (fk.length) return 'file';
+    if (spec.source !== undefined && phase !== 'transfer') return 'source';
+    return null;
+  }
+  // ACL-2629: a chunk served to the page's Web Worker piece by piece (instead of staged as base64). Same limits as
+  // write_policy.ServedChunk: the chunk is 1..served_chunk_max bytes, the pieces are contiguous, each 1..piece_max
+  // bytes with its SHA-256, and the token is the controller's random one. `bytes` (when given) must equal the sum.
+  function sourceOk(src, bytes) {
+    const U = WRITE && WRITE.upload;
+    if (!U || typeof U.served_chunk_max !== 'number' || typeof U.piece_max !== 'number') return 'source';
+    if (!src || typeof src !== 'object' || Array.isArray(src)) return 'source';
+    const sk = Object.keys(src);
+    if (sk.length !== 2 || sk.indexOf('token') < 0 || sk.indexOf('pieces') < 0) return 'source';
+    if (typeof src.token !== 'string' || !new RegExp('^(?:' + U.serve_token_re + ')$').test(src.token)) return 'source';
+    const ps = src.pieces;
+    if (!Array.isArray(ps) || !ps.length || ps.length > 512) return 'source';
+    let at = 0;
+    for (const x of ps) {
+      if (!x || typeof x !== 'object' || Object.keys(x).length !== 3) return 'source';
+      if (!Number.isSafeInteger(x.o) || x.o !== at) return 'source';
+      if (!Number.isSafeInteger(x.n) || x.n < 1 || x.n > U.piece_max) return 'source';
+      if (typeof x.h !== 'string' || !/^[0-9a-f]{64}$/.test(x.h)) return 'source';
+      at += x.n;
+    }
+    if (at < 1 || at > U.served_chunk_max) return 'chunk_size';
+    if (typeof bytes === 'number' && bytes !== at) return 'file_size';
     return null;
   }
   // ACL-1775, ACL-2528: места, где разрешён lead_gen_form_id (зеркало
@@ -709,6 +734,8 @@ _HELPER_JS = r"""
     if (WRITE.form_photo_only) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-2629: a served chunk exists only for a video upload chunk (act_X/advideos, transfer, video_file_chunk).
+    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/advideos$/.test(path)) return refused('source');
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
@@ -815,7 +842,13 @@ _HELPER_JS = r"""
     }
     }
     let blob = null;
-    if (want) {
+    if (spec.source !== undefined && want !== (WRITE.upload || {}).chunk_field) return refused('source');
+    if (want && spec.source !== undefined) {
+      // ACL-2629: nothing is staged here; the worker pulls the bytes. Only a job (startCall) may do it.
+      if (!job || want !== (WRITE.upload || {}).chunk_field) return refused('source');
+      const why = sourceOk(spec.source, (spec.expect || {}).bytes);
+      if (why) return refused(why);
+    } else if (want) {
       const parts = staged[String(files[want])];
       if (!parts || !parts.length) return { error: 'no_file' };
       blob = new Blob(parts);
@@ -878,6 +911,202 @@ _HELPER_JS = r"""
     });
   }
 
+  // ── ACL-2629: Web Worker of this world. The page's main thread never sees the file bytes: the worker fetches
+  // them piece by piece from `<origin>/__acl_upload/<token>/<offset>/<length>` (answered by the controller through
+  // CDP Fetch), checks each piece's SHA-256, builds the multipart body and sends the Graph POST itself.
+  // The token of the session goes to the worker in a message of this world only (the page cannot reach it).
+  // The runner is self-contained (it is stringified into the worker): `fetch`, `crypto` and `emit` are parameters, so
+  // the very same code also runs INLINE in this world when no worker can be started (see `transport`).
+  function makeRunner(fetch, crypto, emit) {
+    const jobs = {};
+    const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
+    async function pieces(m, ac) {
+      const parts = [];
+      let got = 0;
+      for (const p of m.src.pieces) {
+        // Every piece has a deadline: a request the controller never answers must not hang the upload.
+        const pc = new AbortController();
+        let late = false;
+        const onAbort = () => pc.abort();
+        ac.signal.addEventListener('abort', onAbort);
+        const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
+        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); };
+        let r;
+        let blob;
+        let buf;
+        try {
+          r = await fetch(m.base + p.o + '/' + p.n, { method: 'GET', cache: 'no-store', credentials: 'omit',
+                                                      redirect: 'error', signal: pc.signal });
+          if (r.status !== 200) { done(); return { error: 'no_file', why: 'worker piece refused ' + r.status }; }
+          blob = await r.blob();
+          buf = await blob.arrayBuffer();
+        } catch (e) {
+          done();
+          return { error: 'no_file', why: ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
+        }
+        done();
+        if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
+        let digest;
+        try { digest = hex(await crypto.subtle.digest('SHA-256', buf)); } catch (e) { return { error: 'no_file', why: 'worker cannot hash' }; }
+        if (digest !== p.h) return { error: 'no_file', why: 'worker piece does not match the file' };
+        parts.push(blob);
+        got += p.n;
+        emit({ id: m.id, progress: got });
+      }
+      return { parts: parts, bytes: got };
+    }
+    async function run(m) {
+      const ac = new AbortController();
+      jobs[m.id] = ac;
+      try {
+        const made = await pieces(m, ac);
+        if (made.error) return made;
+        if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
+        const body = new FormData();
+        for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
+        body.append(m.field, new Blob(made.parts), m.filename);
+        let resp;
+        let text;
+        try {
+          resp = await fetch(m.url, Object.assign({ method: 'POST', body: body, credentials: m.cred, mode: 'cors',
+                                      cache: 'no-store', redirect: 'error', signal: ac.signal },
+                                      m.ref ? { referrer: m.ref } : {}));
+          text = await resp.text();
+        } catch (e) { return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true }; }
+        const headers = {};
+        for (const n of HEADERS) { try { const v = resp.headers.get(n); if (v) headers[n] = v; } catch (e) {} }
+        return { status: resp.status, text: text, headers: headers };
+      } finally { delete jobs[m.id]; }
+    }
+    function abort(id) { const ac = jobs[id]; if (ac) ac.abort(); }
+    return { run: run, abort: abort };
+  }
+  const WORKER_GLUE = 'const r = make(fetch, crypto, (d) => self.postMessage(d));'
+    + 'self.onmessage = (e) => { const m = e.data || {};'
+    + ' if (m.abort !== undefined) { r.abort(m.abort); return; }'
+    + ' if (m.quit) { self.close(); return; }'
+    + ' r.run(m).then((x) => self.postMessage(Object.assign({ id: m.id, done: true }, x)),'
+    + ' () => self.postMessage({ id: m.id, done: true, error: "network", sent: true })); };'
+    + 'self.postMessage({ ready: true });';
+  function workerSource() { return 'const make = ' + makeRunner.toString() + ';' + WORKER_GLUE; }
+  let transport = '';              // 'worker' | 'inline' | '' (not probed yet: a worker is tried)
+  let inlineRunner = null;
+  let worker = null;
+  const waiting = {};
+  let waitSeq = 0;
+  function dropWorker(why) {
+    const w = worker;
+    worker = null;
+    try { if (w) { w.onmessage = null; w.postMessage({ quit: true }); } } catch (e) {}   // the worker closes itself
+    for (const k of Object.keys(waiting)) {
+      const f = waiting[k];
+      delete waiting[k];
+      f({ id: Number(k), done: true, error: 'no_worker', why: why, sent: false });
+    }
+  }
+  // Returns '' when a worker is running, otherwise the reason (CSP, missing API, no answer): the caller decides.
+  function ensureWorker() {
+    if (worker) return Promise.resolve('');
+    if (typeof Worker !== 'function' || typeof Blob !== 'function' || !URL || typeof URL.createObjectURL !== 'function') {
+      return Promise.resolve('no worker API');
+    }
+    return new Promise((resolve) => {
+      let url = null;
+      let w = null;
+      let timer = null;
+      const finish = (why) => {
+        if (timer !== null) clearTimeout(timer);
+        try { if (url) URL.revokeObjectURL(url); } catch (e) {}
+        if (why && w) { try { w.onmessage = null; w.postMessage({ quit: true }); } catch (e) {} if (worker === w) worker = null; }
+        resolve(why);
+      };
+      try {
+        url = URL.createObjectURL(new Blob([workerSource()], { type: 'text/javascript' }));
+        w = new Worker(url);
+      } catch (e) {
+        finish('worker construct failed: ' + String((e && e.name) || 'error') + ': ' + String((e && e.message) || '').slice(0, 100));
+        return;
+      }
+      w.onmessage = (ev) => {
+        const d = ev.data || {};
+        if (d.ready) { worker = w; finish(''); return; }
+        const f = waiting[d.id];
+        if (!f) return;
+        if (d.done) { delete waiting[d.id]; f(d); } else if (typeof f.onprogress === 'function') f.onprogress(d.progress);
+      };
+      w.onerror = (ev) => {
+        const msg = String((ev && ev.message) || '').slice(0, 100);
+        if (worker === w) dropWorker('worker crashed: ' + msg); else finish('worker error event before ready: ' + msg);
+      };
+      timer = setTimeout(() => finish('worker created but sent no ready message in 8 s (no error event)'), 8000);
+    });
+  }
+  // A page controlled by a service worker may have our same-origin piece requests answered (or passed on) by it, outside
+  // the CDP Fetch interception: neither the worker nor the inline mode may run then (the run compresses instead).
+  function swControlled() {
+    try { return typeof navigator !== 'undefined' && !!(navigator.serviceWorker && navigator.serviceWorker.controller); }
+    catch (e) { return false; }
+  }
+  // Inline mode: the same runner in this world. Bytes still never go through base64 or the main thread's decoder:
+  // each piece is a fetch() answered by the controller (CDP Fetch), kept as a Blob; only one piece at a time is hashed.
+  async function runInline(m, job) {
+    if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
+    if (job && job.aborted) return { error: 'aborted' };
+    if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
+    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {});
+    const id = ++waitSeq;
+    if (job) job.wid = id;
+    const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
+    return inlineRunner.run(Object.assign({ id: id, base: base }, m));
+  }
+  async function runInWorker(m, job) {
+    if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
+    if (transport === 'inline') return runInline(m, job);
+    const why = await ensureWorker();
+    if (why) return { error: 'no_worker', why: why };
+    if (job && job.aborted) return { error: 'aborted' };
+    const id = ++waitSeq;
+    const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
+    const msg = Object.assign({ id: id, base: base }, m);
+    return new Promise((resolve) => {
+      const f = resolve;
+      waiting[id] = f;
+      if (job) job.wid = id;
+      try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
+    });
+  }
+  // Local self-test of the worker data path (CSP, worker session interception, piece hash): no request to Meta.
+  async function probeWorker(spec) {
+    if (retired || !WRITE || WRITE.form_photo_only) return { error: 'no_worker', why: 'read only' };
+    const why = sourceOk(spec && spec.source);
+    if (why) return { error: 'no_worker', why: why };
+    // Stage 1: a Web Worker (CSP worker-src, creation, start, session interception, piece hash). Every reason is kept
+    // (and any CSP violation the document reports meanwhile), so a failed probe says exactly where it stopped.
+    const csp = [];
+    const onCsp = (ev) => { if (csp.length < 3) csp.push(String(ev.effectiveDirective || ev.violatedDirective || '?').slice(0, 30) + ' blocked ' + String(ev.blockedURI || '?').slice(0, 20)); };
+    try { if (document && typeof document.addEventListener === 'function') document.addEventListener('securitypolicyviolation', onCsp); } catch (e) {}
+    const notes = [];
+    let result = null;
+    try {
+      transport = '';
+      const got = await runInWorker({ src: spec.source }, null);
+      if (!got.error) { transport = 'worker'; result = { ok: true, bytes: got.bytes, mode: 'worker' }; }
+      else notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
+      if (!result) {
+        // Stage 2: the same runner in this world (no worker needed; pieces are still fetch() answers from the controller).
+        transport = 'inline';
+        const inl = await runInline({ src: spec.source }, null);
+        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
+        else { transport = ''; notes.push('inline: ' + String(inl.why || inl.error).slice(0, 140)); }
+      }
+    } finally {
+      try { if (document && typeof document.removeEventListener === 'function') document.removeEventListener('securitypolicyviolation', onCsp); } catch (e) {}
+    }
+    if (result) return result;
+    return { error: 'no_worker', why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
+  }
+
   // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
   // (локально, к Meta не ходит), `abort` рвёт отправку. Проверки политики — те же
   // (`write(spec, job)`), здесь ничего не ослаблено.
@@ -910,6 +1139,8 @@ _HELPER_JS = r"""
     if (!j) return { ok: false };
     j.aborted = true;
     try { if (j.xhr) j.xhr.abort(); } catch (e) {}
+    try { if (j.wid && transport !== 'inline' && worker) worker.postMessage({ abort: j.wid }); } catch (e) {}
+    try { if (j.wid && inlineRunner) inlineRunner.abort(j.wid); } catch (e) {}
     return { ok: true };
   }
 
@@ -1034,7 +1265,9 @@ _HELPER_JS = r"""
     const useHost = hostMode === 'public' ? 'graph.facebook.com' : host;
     const cred = credentialsFor(credMode);
     let body;
-    if (blob) {
+    if (spec.source !== undefined && !blob) {
+      body = null;                       // the worker builds the multipart body from the pieces it fetched
+    } else if (blob) {
       body = new FormData();
       for (const k of Object.keys(params)) {
         const v = params[k];
@@ -1055,7 +1288,28 @@ _HELPER_JS = r"""
     const endpoint = { host: useHost, version: version, credentials: cred };
     let resp = null;
     let text = '';
-    if (job && blob) {
+    if (job && spec.source !== undefined && !blob) {
+      // ACL-2629: the Web Worker fetches the pieces from the controller, checks them and sends the POST itself.
+      if (job.aborted) return { error: 'aborted' };
+      const fields = {};
+      for (const k of Object.keys(params)) {
+        const v = params[k];
+        fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      }
+      fields.access_token = token;
+      const got = await runInWorker({ url: url, cred: cred, fields: fields, field: want,
+                                      pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
+                                      ref: refOpt(spec).referrer || '',
+                                      filename: String(spec.filename || 'chunk').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80),
+                                      src: spec.source }, job);
+      if (got.error) {
+        if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120), endpoint: endpoint };
+        const why = job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network');
+        return { error: why, state: state(), endpoint: endpoint };
+      }
+      resp = { status: got.status, headers: { get: (n) => (got.headers || {})[String(n).toLowerCase()] || null } };
+      text = got.text;
+    } else if (job && blob) {
       // ACL-1899: файл уходит через XMLHttpRequest — он отдаёт `upload.onprogress`.
       // Те же правила, что у fetch: один запрос, без повтора, без перенаправлений.
       if (typeof XMLHttpRequest !== 'function') { unstage(files[want]); return { error: 'no_fetch' }; }
@@ -1269,7 +1523,7 @@ _HELPER_JS = r"""
                           listen: listen, listenStatus: listenStatus, stopListen: stopListen,
                           handOver: handOver,
                           validatePage: validatePage, uploadFormPhoto: uploadFormPhoto,
-                          stage: stage, unstage: unstage,
+                          stage: stage, unstage: unstage, probeWorker: probeWorker,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
@@ -1911,6 +2165,9 @@ class InPageGraph:
             spec["children_active"] = True
         if files:
             (field_name, data), = files.items()
+            if isinstance(data, _wp.ServedChunk):
+                # ACL-2629: the Web Worker of the page pulls the bytes; nothing is copied into the page.
+                return self._write_served(spec, field_name, data, progress, cancelled)
             if not isinstance(data, (bytes, bytearray)):
                 raise ValueError("file content must be bytes")
             try:
@@ -1938,6 +2195,104 @@ class InPageGraph:
         except (PageError, CdpError):
             return {"error": "call_unknown", "reason": "page_closed"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    # -- ACL-2629: file bytes through the page's Web Worker
+    #: One request of the worker is at most this many bytes (it holds the piece in memory while it checks it).
+    SERVE_PIECE = 8 * 1024 * 1024
+    #: One piece request of the worker gets this long (then `no_file`: nothing sent, the retry/back-off takes over).
+    SERVE_PIECE_S = 60.0
+    #: Overall deadline of one served chunk: base + length at the slowest rate still accepted (100 KiB/s).
+    SERVE_BASE_S = 120.0
+    SERVE_MIN_BPS = 100 * 1024
+    PROBE_CALL_S = 25.0
+    _upload_server = None
+    #: Result of the last successful probe: 'worker' | 'inline' ('' - not probed) and why a worker was not used.
+    upload_mode = ""
+    upload_mode_note = ""
+
+    def _server(self):
+        from src.fb_api.upload_server import UploadServer
+
+        if self._upload_server is None or self._upload_server.tab is not self.tab:
+            self._upload_server = UploadServer(self.tab)
+        return self._upload_server
+
+    #: The transport can serve a file to the worker (the creator checks `probe_worker` before it relies on it).
+    serves_chunks = True
+
+    def probe_worker(self) -> tuple[bool, str]:
+        """Local self-test of the worker data path: CSP lets the worker start, its requests are intercepted and
+        answered from here, and the bytes arrive intact. No request to Meta. Returns (ok, reason)."""
+        from src.fb_api import write_policy as _wp
+        from src.fb_api.upload_server import MemorySource
+
+        if not self.allow_writes or self.object_updates or self.form_photo:
+            return False, "writes are not enabled for this page"
+        server = None
+        token = ""
+        try:
+            self._ready_for_call()
+            ctx = self._ensure()
+            server = self._server()
+            server.arm()
+            probe = _wp.ServedChunk(MemorySource(secrets.token_bytes(4096)), 0, 4096)
+            token, pieces = server.register(probe, piece=1024)
+            expr = (f"globalThis[{json.dumps(self.name)}].probeWorker("
+                    f"{json.dumps({'source': {'token': token, 'pieces': pieces}})})")
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.PROBE_CALL_S))
+        except GraphStop:
+            raise
+        except (CdpTimeout, TimeoutError):
+            return False, "the worker probe timed out | " + (server.summary() if server is not None else "")
+        except (StaleContextError, PageError, CdpError) as exc:
+            return False, f"worker probe failed ({type(exc).__name__}: {str(exc)[:100]}) | " + (
+                server.summary() if server is not None else "")
+        finally:
+            if server is not None:
+                if token:
+                    server.unregister(token)
+                server.disarm()
+        trace = server.summary() if server is not None else ""
+        if isinstance(got, dict) and got.get("ok") and got.get("bytes") == 4096:
+            # `mode`: 'worker' (Web Worker) or 'inline' (same runner in the helper's world when no worker could start);
+            # for 'inline' the worker's failure is kept so the log tells why the worker was not used.
+            self.upload_mode = str(got.get("mode") or "worker")
+            note = str(got.get("worker_why") or "")
+            if self.upload_mode == "inline":
+                self.upload_mode_note = f"worker not used: {note[:300]}; {trace}"
+                return True, self.upload_mode_note
+            self.upload_mode_note = ""
+            return True, ""
+        why = str(got.get("why") or got.get("error")) if isinstance(got, dict) else "bad reply"
+        return False, f"{why[:400]} | {trace}"[:700]
+
+    def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled) -> dict:
+        """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker."""
+        server = None
+        token = ""
+        try:
+            try:
+                self._ready_for_call()
+                ctx = self._ensure()
+                server = self._server()
+                server.arm()
+                token, pieces = server.register(chunk, piece=self.SERVE_PIECE)
+            except GraphStop:
+                raise
+            except (PageError, CdpError, OSError, ValueError) as exc:
+                return {"error": "no_file", "why": f"worker setup failed: {str(exc)[:80]}"}      # nothing was sent
+            spec["files"] = {field_name: "served"}
+            spec["source"] = {"token": token, "pieces": pieces}
+            spec["expect"] = {"bytes": len(chunk)}
+            spec["piece_ms"] = int(self.SERVE_PIECE_S * 1000)
+            return self._write_file_job(ctx, spec, progress, cancelled, serving=True,
+                                        deadline_s=self.SERVE_BASE_S + len(chunk) / self.SERVE_MIN_BPS)
+        finally:
+            # Every exit once the server exists (arm may have raised half-way): auto-attach and the pattern go off.
+            if server is not None:
+                if token:
+                    server.unregister(token)
+                server.disarm()
 
     #: ACL-2533: the in-page upload has its own 120 s deadline; the CDP wait is a little longer.
     FORM_PHOTO_CALL_S = 150.0
@@ -2008,7 +2363,16 @@ class InPageGraph:
     #: Сколько таймаутов ОПРОСА подряд терпим (повторно файл не шлём никогда).
     MAX_POLL_TIMEOUTS = 3
 
-    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled) -> dict:
+    def _wait(self, seconds: float, serving: bool) -> None:
+        """Pause between two polls. While a worker is being served the events of the tab (its piece requests)
+        are handled during the pause, so a request waits milliseconds, not a whole poll interval."""
+        if serving and hasattr(self.tab, "pump"):
+            self.tab.pump(seconds)
+        else:
+            self._sleep(seconds)
+
+    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled, serving: bool = False,
+                        deadline_s: float = 0.0) -> dict:
         """Запись с файлом без общего срока: старт, опрос раз в секунду, обрыв по Stop."""
         def run(method: str, arg: str = "") -> Any:
             expr = f"globalThis[{json.dumps(self.name)}].{method}({arg})"
@@ -2028,6 +2392,13 @@ class InPageGraph:
         poll_timeouts = 0
         began = self._clock()
         while True:
+            if deadline_s and self._clock() - began > deadline_s:
+                # Overall deadline: the request may or may not have been sent -> unknown, reconciled by readback.
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                return {"error": "call_unknown", "reason": "cdp_timeout"}
             if cancelled is not None and cancelled():
                 try:
                     run("abort", json.dumps(job))
@@ -2042,7 +2413,7 @@ class InPageGraph:
                 poll_timeouts += 1
                 if poll_timeouts > self.MAX_POLL_TIMEOUTS:
                     return {"error": "call_unknown"}
-                self._sleep(self.UPLOAD_POLL_S)
+                self._wait(self.UPLOAD_POLL_S, serving)
                 continue
             except (StaleContextError, PageError, CdpError):
                 return {"error": "call_unknown"}
@@ -2056,7 +2427,7 @@ class InPageGraph:
                         progress(max(0.0, self._clock() - began))
                     except Exception:                    # noqa: BLE001 — показ не должен ронять запись
                         pass
-                self._sleep(self.UPLOAD_POLL_S)
+                self._wait(self.UPLOAD_POLL_S, serving)
                 continue
             result = got.get("result")
             if state in ("done", "error") and isinstance(result, dict):

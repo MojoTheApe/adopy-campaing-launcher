@@ -33,9 +33,11 @@ from src.fb_api.cdp import CdpError, PageTab
 LIGHT_ORIGIN = "https://adsmanager.facebook.com"
 LIGHT_PATH = "/__acl_work"
 LIGHT_URL = LIGHT_ORIGIN + LIGHT_PATH
-#: The document is inert: no script, worker, frame, object, form or base; the icon is inline (no request).
+#: The document is inert: no script, frame, object, form or base; the icon is inline (no request).
+#: ACL-2629: `worker-src blob:` - the helper's Web Worker (video upload from the profile) is a blob worker of this
+#: document; the page itself still has no script (`script-src 'none'`), so nothing else can start one.
 #: `connect-src` is deliberately not restricted - the helper's Graph fetch must reach the network.
-CSP = ("script-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; "
+CSP = ("script-src 'none'; worker-src blob:; frame-src 'none'; object-src 'none'; "
        "base-uri 'none'; form-action 'none'; img-src data:")
 FLAG = "ACL_LIGHT_WORK_TAB"
 

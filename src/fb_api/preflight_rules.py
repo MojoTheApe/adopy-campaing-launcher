@@ -200,7 +200,7 @@ RULES: list[dict[str, Any]] = [
        "the file is missing, empty or unreadable: choose another file",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_limits", "Media within Meta limits", ERROR, "server",
-       "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
+       "file type, size (image 30 MB, video 4096 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 or square Stories / Reels file: without one Facebook crops the picture itself",
@@ -904,7 +904,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             if not data:
                 problems["media_readable"].append((ad.index, f"Ad {ad.index}: creative file is empty"))
                 continue
-            limit = cr.VIDEO_MAX_BYTES if ad.kind == "video" else cr.IMAGE_MAX_BYTES
+            limit = cr.video_limit_bytes() if ad.kind == "video" else cr.IMAGE_MAX_BYTES
             if len(data) > limit:
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
@@ -918,7 +918,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 except OSError as exc:
                     problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
                     vdata = b""
-                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                vlimit = cr.video_limit_bytes() if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
                 if vdata and len(vdata) > vlimit:
                     problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
                 if vdata and ad.vertical_kind != ad.kind:

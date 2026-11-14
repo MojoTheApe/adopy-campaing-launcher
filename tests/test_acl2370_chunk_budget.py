@@ -29,6 +29,9 @@ def _no_compressor(monkeypatch):
     from src.fb_ads_rpa import creative_compress as cc
     monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "")
     monkeypatch.delenv("ACL_VIDEO_COMPRESS_ABOVE_MB", raising=False)
+    # ACL-2629: these tests describe the compressing path (the kill switch is off); the worker path is
+    # covered in tests/test_acl2629_worker_upload.py.
+    monkeypatch.setenv("ACL_VIDEO_WORKER_UPLOAD", "0")
 
 
 def _slack(chunks: int) -> int:
