@@ -28,7 +28,7 @@
   {% set bk = mc.book or {} %}
   <section class="aov-block{% if mc.virtual %} aov-virtual{% endif %}" data-aov-country="{{ (mc.key or mc.country) | e }}" data-aov-slug="{{ slug | e }}">
     <div class="aov-bh">
-      <b>{{ mc.country }}</b>
+      <b>{% set fc = mc.country | flag_code %}{% if fc %}<img class="cflag" src="/static/flags/{{ fc }}.svg" alt="">{% endif %}{{ mc.country }}</b>
       {% for k in ['active', 'issue', 'dead', 'new', 'unknown'] %}{% if k != 'unknown' or sc.get(k) %}
       <span class="aov-cnt {{ k }}{% if not sc.get(k) %} zero{% endif %}"><b>{{ sc.get(k, 0) }}</b>{{ labels[k] }}</span>{% endif %}{% endfor %}
       <span class="aov-sp"></span>
@@ -101,7 +101,7 @@
   {% set tv = metric_values(mc.spend, mc.leads, mc.deposits) %}
   <div class="aov-crow{% if mc.virtual %} aov-virtual{% endif %}" data-aov-country="{{ (mc.key or mc.country) | e }}">
     <div class="aov-who">
-      <b>{{ mc.country }}</b>
+      <b>{% set fc = mc.country | flag_code %}{% if fc %}<img class="cflag" src="/static/flags/{{ fc }}.svg" alt="">{% endif %}{{ mc.country }}</b>
       {% if rows %}<small>{{ sc.get('active', 0) }} of {{ rows | length }} active</small>
       <small class="num">{{ tv[0] }} · {{ tv[1] }} leads · {{ tv[2] }} FTD</small>
       {% elif mc.virtual %}<small>not covered by the map</small>{% else %}<small>no accounts yet</small>{% endif %}
