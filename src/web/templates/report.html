@@ -50,6 +50,7 @@
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
   <script>{% include "_acl_dialog.js" %}</script>
+  <script type="application/json" id="acl-flag-codes">{{ flag_codes | tojson }}</script>
   <script>
     // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
     // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
@@ -69,7 +70,7 @@
     // ACL-2622: флаг страны. Карта «имя → iso2» приходит с сервера и уже отфильтрована
     // по наличию файла в static/flags, поэтому битой картинки не бывает.
     var ACL_FLAG_CODES = {};
-    try { ACL_FLAG_CODES = {{ flag_codes | tojson }}; } catch(e) {}
+    try { ACL_FLAG_CODES = JSON.parse(document.getElementById('acl-flag-codes').textContent) || {}; } catch(e) { ACL_FLAG_CODES = {}; }
     function aclFlagCode(name) { return ACL_FLAG_CODES[String(name == null ? '' : name).trim().toLowerCase()] || ''; }
     function aclFlagHtml(name) {
       var c = aclFlagCode(name);
