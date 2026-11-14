@@ -41,6 +41,8 @@ class ResumableMeta(ServedMeta):
         self.status_zero = status_zero
         self.finish_faults = list(finish_faults)      # per finish: "", "lost" (finished, no answer)
         self.renames: list[tuple[str, dict]] = []
+        self.rename_reply: dict | None = None             # e.g. the helper's refusal
+        self.hide_published = False                        # status shows the video not yet published
         self.start_mode = start
         self.faults = list(faults)      # per rupload POST: "", "drop" (half kept, no answer), "lost" (all kept,
         #                                 no answer), "nothing" (no byte arrives, no answer), "refused" (Graph error)
@@ -52,6 +54,8 @@ class ResumableMeta(ServedMeta):
         if path.strip("/").isdigit():
             wp.check(ACT, "POST", path, params, files)          # the naming of a video (ACL-2639)
             self.renames.append((path.strip("/"), dict(params)))
+            if self.rename_reply is not None:
+                return self.rename_reply
             obj = self.objects[path.strip("/")]
             obj["title"], obj["name"] = params["title"], params["name"]
             return {"status": 200, "body": {"success": True}}
@@ -110,6 +114,8 @@ class ResumableMeta(ServedMeta):
     def _video_row(self, obj, params):
         row = super()._video_row(obj, params)
         sess = self.va.get(obj["id"])
+        if sess is not None and "status" in row and self.hide_published:
+            row["status"]["video_status"] = "uploading"
         if sess is not None and "status" in row:
             row["status"]["uploading_phase"] = {
                 "status": "complete" if sess["size"] and sess["received"] == sess["size"] else "in_progress",
@@ -458,3 +464,101 @@ def test_an_unknown_in_page_result_aborts_the_request_first():
     got = t._write_file_job(7, {"method": "POST"}, None, None)
     assert got == {"error": "call_unknown"}
     assert any(".abort(" in e for e in tab.exprs)
+
+
+# ───────────────────────── re-review N5/N6/N7 ─────────────────────────
+
+def test_a_refused_naming_never_stops_the_publish(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta()
+    meta.rename_reply = {"error": "write_refused", "why": "path"}         # e.g. the helper was recreated meanwhile
+    out, client = _run(meta, d)
+    assert out.error == "", out.error
+    assert any("the video was not named" in s and "refused" in s for s in out.steps)
+    assert client.stopped is None
+
+
+def test_the_budget_on_the_naming_call_never_stops_the_publish(resumable, tmp_path, monkeypatch):
+    from src.fb_api import graph as g
+    real = g.GraphClient.post
+
+    def post(self, path, params=None, **kw):
+        if path.strip("/").isdigit():
+            raise self._stop(g.CallBudget("call budget of 1 reached"))
+        return real(self, path, params, **kw)
+
+    monkeypatch.setattr(g.GraphClient, "post", post)
+    d, f = _big_draft(tmp_path)
+    out, client = _run(ResumableMeta(), d)
+    assert out.error == "", out.error
+    assert any("the video was not named (call budget" in s for s in out.steps)
+
+
+def test_a_login_stop_on_naming_still_stops(resumable, tmp_path, monkeypatch):
+    from src.fb_api import graph as g
+    real = g.GraphClient.post
+
+    def post(self, path, params=None, **kw):
+        if path.strip("/").isdigit():
+            raise self._stop(g.LoggedOut("the session token is no longer valid"))
+        return real(self, path, params, **kw)
+
+    monkeypatch.setattr(g.GraphClient, "post", post)
+    d, f = _big_draft(tmp_path)
+    out, _ = _run(ResumableMeta(), d)
+    assert out.error
+
+
+def _journal(tmp_path):
+    from src.fb_api import operation_journal as oj
+    now = [1_000_000.0]
+    return oj, now, oj.OperationJournal(tmp_path / "ops", clock=lambda: now[0])
+
+
+def test_a_video_finished_by_an_earlier_run_is_named_when_adopted(resumable, tmp_path):
+    from tests.test_acl1856_operation_journal import _go
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(finish_faults=["lost", "lost"])
+    meta.hide_published = True                                             # run 1: finish result stays unknown
+    first, _ = _go(meta, d, journal, request_key="r1#t")
+    assert first.stop_kind == "unknown" and meta.renames == []
+    meta.hide_published = False
+    now[0] += oj.BUSY_S + 60
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    (vid, _sess), = meta.va.items()
+    assert _phases(meta).count("start") == 1 and "transfer" not in _phases(meta)[-2:]
+    assert [r[0] for r in meta.renames] == [vid]                            # named this time
+    assert any("the video uploaded by an earlier run is used" in s for s in again.steps)
+
+
+def test_a_pending_video_that_is_gone_starts_a_new_upload(resumable, tmp_path, monkeypatch):
+    from tests.test_acl1856_operation_journal import _go
+    monkeypatch.setattr(cr, "upload_calls", lambda size, worker=None: 100)
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10)
+    first, _ = _go(meta, d, journal, request_key="r1#t")
+    assert first.stop_kind == "video_error"
+    (old, _sess), = meta.va.items()
+    del meta.objects[old]                                                    # deleted at Meta meanwhile
+    meta.faults = []
+    now[0] += oj.BUSY_S + 60
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert _phases(meta).count("start") == 2
+    assert any("is not available" in s for s in again.steps)
+
+
+def test_a_fallback_forgets_the_pending_upload(resumable, tmp_path):
+    import json
+    from tests.test_acl1856_operation_journal import _go
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["debug", "debug"])
+    out, _ = _go(meta, d, journal, request_key="r1#t")
+    assert out.error == "", out.error
+    stages = [st for p in (tmp_path / "ops").rglob("*.json")
+              for st in (json.loads(p.read_text(encoding="utf-8")).get("stages") or {}).values()]
+    assert stages and not any(st.get("pending_id") for st in stages)

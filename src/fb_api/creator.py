@@ -3293,6 +3293,8 @@ class CampaignCreator:
                 return self._video_resumable(out, plan, big, who, title)
             except _ResumableRefused as exc:
                 why = str(exc)
+                # The next run must not repeat attempts that moved nothing: the unfinished session is forgotten.
+                self._forget_pending_video(f"{who}: video upload")
                 # N1: the calls the failed attempt spent come on top of the run budget (the chunked plan is unchanged).
                 if isinstance(getattr(self.client, "max_calls", None), int):
                     self.client.max_calls += max(0, getattr(self.client, "calls", 0) - before)
@@ -3392,20 +3394,36 @@ class CampaignCreator:
                 self._step(out, f"{who}: the answer to naming the video was lost (a later search may miss it)")
             except GraphError as exc:
                 self._step(out, f"{who}: Meta did not take the video name ({str(exc)[:100]})")
+            except GraphStop as exc:
+                # N5: naming is optional - a refusal before sending (page reloaded, helper recreated) or the budget
+                # never stops the publish of an uploaded video. Any other stop (login, checkpoint) stays a stop.
+                if not self.client.release_optional_stop(exc):
+                    raise
+                self._step(out, f"{who}: the video was not named ({str(exc)[:100]})")
 
         # -- an upload this operation started earlier (stopped or crashed before its finish) is continued
         pending = self._pending_video(what, size)
         version = ""
         if pending:
             vid, version = pending
-            st = status()
-            got = transferred(st)
-            if got >= size and published(st):
-                self._step(out, f"{who}: the video uploaded by an earlier run is used")
-                return vid
-            self._step(out, f"{who}: continuing the upload of an earlier run at {got // (1024 * 1024)}/{mb_total} MB")
-            offset, moved = got, got > 0
-        else:
+            try:
+                st = status()
+            except GraphError as exc:
+                # N7: the video of the earlier run is gone (deleted, unavailable): forget it and start a new upload.
+                self._step(out, f"{who}: the upload of an earlier run is not available ({str(exc)[:80]}); "
+                                "starting a new one")
+                self._forget_pending_video(what)
+                pending, vid, version = None, "", ""
+            else:
+                got = transferred(st)
+                if got >= size and published(st):
+                    self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                    self._name_adopted(out, path, vid, who, name_it)
+                    return vid
+                self._step(out, f"{who}: continuing the upload of an earlier run at "
+                                f"{got // (1024 * 1024)}/{mb_total} MB")
+                offset, moved = got, got > 0
+        if not pending:
             self._check_cancel(out)
             try:
                 started = self.client.post(path, {"upload_phase": "start"})
@@ -3505,6 +3523,38 @@ class CampaignCreator:
         if answered:
             name_it()
         return vid
+
+    def _name_adopted(self, out: Outcome, path: str, vid: str, who: str, name_it: Callable[[], None]) -> None:
+        """N6: a video an earlier run uploaded and finished, but never named (it stopped in between). The page helper
+        names only a video it finished itself, so the finish of THIS id (a journal-proven upload of this file, whole at
+        Meta) is sent once more; only its explicit success lets the name follow. Anything else: not named, a step."""
+        try:
+            done = self.client.post(path, {"upload_phase": "finish", "video_id": vid})
+        except WriteUnknown:
+            self.client.reconciled(path)
+            self._step(out, f"{who}: the video was not named (the repeated finish has no answer)")
+            return
+        except GraphError as exc:
+            self._step(out, f"{who}: the video was not named (Meta: {str(exc)[:100]})")
+            return
+        except GraphStop as exc:
+            if not self.client.release_optional_stop(exc):
+                raise
+            self._step(out, f"{who}: the video was not named ({str(exc)[:100]})")
+            return
+        if done.get("success") is True:
+            name_it()
+        else:
+            self._step(out, f"{who}: the video was not named (the repeated finish was not confirmed)")
+
+    def _forget_pending_video(self, what: str) -> None:
+        op = self._op
+        if op is None:
+            return
+        try:
+            op.clear_pending(what)
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what=what, phase="pending_clear", error="JournalError")
 
     def _pending_video(self, what: str, size: int) -> tuple[str, str] | None:
         """ACL-2639: (video_id, version) of a resumable upload this operation started for the same file, if any."""
