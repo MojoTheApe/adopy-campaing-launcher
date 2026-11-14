@@ -222,7 +222,7 @@ def test_the_unread_account_says_so_inside_its_section_and_has_no_header():
       H.Acc.row.listeners.click[0]({target: T({})}); await tick(10); out.acc = H.Acc.table.innerHTML;
     """)
     assert "No saved list yet. Expand this account" in out["fresh"] and "hc-heads" not in out["fresh"]
-    assert "hc-heads" in out["acc"] and 'class="hc-groups"' in out["acc"]             # заголовок кампаний — первая строка раскрытого аккаунта
+    assert "hc-heads" in out["acc"] and 'class="hc-groups"' not in out["acc"]         # только строка заголовков колонок, без верхней полосы групп
 
 
 # ───────────────────────── строка аккаунта несёт своё ─────────────────────────
@@ -281,8 +281,8 @@ def test_column_groups_and_order_follow_the_prototype():
     at = names.index("Delivery")
     assert names[at: at + 8] == ["Delivery", "Duplicate", "Bid control", "Budget", "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]
     assert names[at + 8: at + 11] == ["Spend", "Leads", "FTDs"]
-    assert "MANAGEMENT &amp; DECISIONS" in acc or "MANAGEMENT & DECISIONS" in acc
-    assert "BI · business outcomes" in acc and "Account / campaign hierarchy" in acc and "Campaign / Ad set / Ad" in acc
+    assert "MANAGEMENT" not in acc and "Account / campaign hierarchy" not in acc      # верхняя полоса групп убрана
+    assert "Campaign / Ad set / Ad" in acc
 
 
 def test_rows_pin_identity_and_show_level_country_account():
@@ -601,7 +601,7 @@ def test_the_account_bands_and_the_separate_table_are_gone():
     script = TABLE[TABLE.index("<script>"):]
     assert "bandAccount" not in script and "'<tr class=\"hc-band " not in script and "data-read-country" not in script
     tpl = _render_table()
-    assert 'data-hc="table"' not in tpl and 'data-hc="frame"' not in tpl and "Account / campaign hierarchy" in TABLE   # шапка кампаний — внутри раскрытой строки
+    assert 'data-hc="table"' not in tpl and 'data-hc="frame"' not in tpl and "Status · Campaign / Ad set / Ad" in TABLE   # шапка кампаний — внутри раскрытой строки
     out = _node(OPEN_ALL + " out.html = Object.keys(H).map(a => H[a].table.innerHTML).join('');")["html"]
     assert 'class="hc-band ' not in out and "data-read=" not in out and "Read campaigns" not in _text(out).replace("press Read campaigns", "")
 
