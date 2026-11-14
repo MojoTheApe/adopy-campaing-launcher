@@ -3368,6 +3368,8 @@ class CampaignCreator:
                 failures += 1
                 offset, end = self._offsets(d, size, offset, what)
                 self._step(out, f"{who}: resuming the upload from offset {offset}")
+                if offset < size:
+                    check_window(offset, end - offset)      # ACL-2637: a window learned here counts as well
                 continue
             failures = 0
             stalls = 0

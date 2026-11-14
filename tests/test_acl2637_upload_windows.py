@@ -222,3 +222,36 @@ def test_a_clean_tab_that_could_not_be_closed_is_said_to_the_buyer():
     creator.client = SimpleNamespace(transport=SimpleNamespace(upload_context="", close_upload_context=lambda: True))
     creator._close_upload_context(out2)
     assert out2.warnings == []
+
+
+def test_the_http_check_accepts_the_last_tab_left_on_about_blank(monkeypatch):
+    tab = _tab(_BrowserCdp())
+    tab._cdp_url = "127.0.0.1:9222"
+    lists = {"only": [{"id": "T1", "type": "page", "url": "about:blank"}],
+             "two": [{"id": "T1", "type": "page", "url": "about:blank"}, {"id": "T0", "type": "page", "url": "x"}]}
+    which = ["only"]
+    monkeypatch.setattr(cdp.PageTab, "_http", staticmethod(lambda host, port, path, **kw: lists[which[0]]))
+    assert tab._gone_over_http() is True
+    which[0] = "two"
+    assert tab._gone_over_http() is False
+
+
+class RefusingMeta(ServedMeta):
+    """Every transfer is refused with the offset Meta wants and a 1 KB window: a window learned on the error path."""
+
+    def write(self, path, params, files=None, filename="", **kw):
+        if params.get("upload_phase") == "transfer":
+            self.phases.append(("transfer", int(params["start_offset"])))
+            return {"status": 400, "body": {"error": {"code": 100, "type": "OAuthException", "message": "(#100) x",
+                    "error_data": {"start_offset": params["start_offset"],
+                                   "end_offset": str(int(params["start_offset"]) + 1024)}}}}
+        return super().write(path, params, files, filename, **kw)
+
+
+def test_a_window_learned_from_a_refusal_is_checked_too(worker_small, tmp_path, monkeypatch):
+    monkeypatch.setattr(cr, "UPLOAD_WINDOW_PROBE_TRANSFERS", 0)      # judge every window at once
+    d, f = _big_draft(tmp_path)
+    meta = RefusingMeta(meta_chunk=MB)
+    out, _ = _run(meta, d, max_calls=400)
+    assert out.stop_kind == "video_error" and "small pieces" in out.error
+    assert sum(1 for p, _ in meta.phases if p == "transfer") == 1    # stopped on the refusal's 1 KB window
