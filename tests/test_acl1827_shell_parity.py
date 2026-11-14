@@ -214,7 +214,8 @@ def test_countries_carry_you_over_all_ftd_counters_next_to_the_button():
     assert re.search(r'class="sb-ftd sb-ftd-country"[^>]*>5 / 20<', block(side, "colombia"))
     assert re.search(r'class="sb-ftd sb-ftd-country"[^>]*>1 / 4<', block(side, "chile"))
     # имя страны для билдера читается из текста кнопки: счётчик не должен в неё попасть
-    names = re.findall(r'<button type="button" class="sidebar-country-btn[^>]*>([^<]*)</button>', side)
+    # ACL-2622: слева от имени может стоять флаг — картинка без текста, на textContent не влияет
+    names = re.findall(r'<button type="button" class="sidebar-country-btn[^>]*>(?:<img[^>]*>)?([^<]*)</button>', side)
     assert sorted(names) == ["Chile", "Colombia"]
 
 

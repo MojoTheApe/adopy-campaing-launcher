@@ -1463,6 +1463,31 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+
+
+# Флаги стран (ACL-2622). Файлы лежат в static/flags/<iso2>.svg (flag-icons, MIT);
+# строка без файла просто остаётся без флага — страница от этого не ломается.
+_FLAGS_DIR = Path(__file__).parent / "static" / "flags"
+
+
+def _flag_code_map() -> dict[str, str]:
+    """{имя страны в нижнем регистре: iso2} только для стран, у которых есть файл флага."""
+    have = {p.stem for p in _FLAGS_DIR.glob("*.svg")} if _FLAGS_DIR.is_dir() else set()
+    out = {name: code.lower() for name, code in _COUNTRY_CODES.items() if code.lower() in have}
+    out.update({code: code for code in have if len(code) == 2})
+    return out
+
+
+_FLAG_CODES = _flag_code_map()
+
+
+def _flag_code(name: object) -> str:
+    """'Kuwait' / 'KW' / 'kw' -> 'kw'; неизвестное или без файла -> ''."""
+    return _FLAG_CODES.get(str(name or "").strip().lower(), "")
+
+
+templates.env.filters["flag_code"] = _flag_code
+templates.env.globals["flag_codes"] = _FLAG_CODES
 from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
 templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 

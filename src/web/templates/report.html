@@ -66,6 +66,15 @@
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
       });
     }
+    // ACL-2622: флаг страны. Карта «имя → iso2» приходит с сервера и уже отфильтрована
+    // по наличию файла в static/flags, поэтому битой картинки не бывает.
+    var ACL_FLAG_CODES = {};
+    try { ACL_FLAG_CODES = {{ flag_codes | tojson }}; } catch(e) {}
+    function aclFlagCode(name) { return ACL_FLAG_CODES[String(name == null ? '' : name).trim().toLowerCase()] || ''; }
+    function aclFlagHtml(name) {
+      var c = aclFlagCode(name);
+      return c ? '<img class="cflag" src="/static/flags/' + c + '.svg" alt="">' : '';
+    }
   </script>
     <style>
     /* ── ACL-1797: токены Adopy ────────────────────────────────────────────
@@ -274,6 +283,14 @@
       cursor: pointer;
     }
     .sidebar-country-btn:hover { background: var(--bg-hover); color: var(--accent); }
+    /* ACL-2622: флаг страны слева от названия. Только картинка, текста нет —
+       имя страны билдер читает из textContent кнопки. */
+    .cflag { width: 18px; height: 13px; object-fit: cover; border-radius: 2px; vertical-align: -2px; margin-right: 7px; box-shadow: 0 0 0 0.5px rgba(0,0,0,.25); flex: none; }
+    .cbd-country > .cflag { width: 15px; height: 11px; margin-right: 5px; }
+    .cbd-pick-wrap { position: relative; }
+    .cbd-pick-wrap > .cflag { position: absolute; left: 9px; top: 50%; margin: -6.5px 0 0; pointer-events: none; }
+    .cbd-pick-wrap > .cflag[hidden] { display: none; }
+    .cbd-pick-wrap.has-flag > select { padding-left: 32px; }
     /* Живая страна: на ней либо идут деньги, либо её открыли руками в карте
        аккаунтов. Второе важно само по себе — страну заводят до первого
        доллара, и до него она выглядела бы как закрытая полгода назад. */
@@ -4852,7 +4869,7 @@ async function dashRefresh(ev) {
     {#- Имя страны читает билдер из textContent кнопки — счётчик поэтому лежит
         рядом, а не внутри, и не ловит клики (pointer-events: none). -#}
     <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
-            {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
+            {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{% set fc = c.country | flag_code %}{% if fc %}<img class="cflag" src="/static/flags/{{ fc }}.svg" alt="">{% endif %}{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
     {% if compare and s.ftds %}<div style="margin:0 var(--space-sm) var(--space-sm);text-align:right">{{ mx.ftd_pair(compare.asset_counts(c.country, {'name':'', 'you_ftds':s.ftds.you, 'ftds':s.ftds.all})) }}</div>{% endif %}
     <div class="sidebar-sections">
@@ -9079,7 +9096,7 @@ window.cbTree = (function () {
       body.innerHTML = '<div class="cbd-treebar">' + (countTotal(tree) ? '<div class="cbd-ticks"></div>' : '')
         + '<button type="button" class="cbd-names-only" data-act="names-only" aria-pressed="' + (namesOnly ? 'true' : 'false') + '"'
         + ' title="Show campaign names only">Names only</button></div>' + busy.map(function (g) {
-        return '<div class="cbd-country">' + aclEscHtml(g.countryName || g.country)
+        return '<div class="cbd-country">' + (typeof aclFlagHtml === 'function' ? aclFlagHtml(g.countryName || g.country) : '') + aclEscHtml(g.countryName || g.country)
           + '<button type="button" class="cbd-country-add" data-act="connect"'
           + ' data-country="' + aclEscHtml(g.country) + '"'
           + ' data-country-name="' + aclEscHtml(g.countryName || g.country) + '"'
@@ -9221,13 +9238,14 @@ window.cbTree = (function () {
           + '<div class="cbd-queue" hidden></div>'
         : '')
       + '<div class="cbd-foot-add"><div class="cbd-pick">'
+      + '<div class="cbd-pick-wrap"><img class="cflag" alt="" hidden>'
       + '<select class="cbd-pick-country" aria-label="Country">'
       + list.map(function (p) {
           return '<option value="' + aclEscHtml(p.country) + '"'
             + (p.country === keep ? ' selected' : '') + '>'
             + aclEscHtml(p.name) + '</option>';
         }).join('')
-      + '</select>'
+      + '</select></div>'
       + '<select class="cbd-pick-account" aria-label="Account"></select>'
       + '<button type="button" class="cbd-add" data-act="add-picked">+ Campaign</button>'
       + '</div>'
@@ -9263,6 +9281,15 @@ window.cbTree = (function () {
     if (!countrySel || !accountSel) return;
     var found = null;
     places().forEach(function (p) { if (p.country === countrySel.value) found = p; });
+    /* ACL-2622: флаг выбранной страны рядом с полем; в раскрытом списке только текст
+       (обычный select не умеет картинок). */
+    var flagImg = countrySel.parentNode && countrySel.parentNode.querySelector('.cflag');
+    if (flagImg && typeof aclFlagCode === 'function') {
+      var opt = countrySel.options[countrySel.selectedIndex];
+      var fc = aclFlagCode(opt ? opt.textContent : '') || aclFlagCode(countrySel.value);
+      if (fc) { flagImg.src = '/static/flags/' + fc + '.svg'; flagImg.hidden = false; } else { flagImg.hidden = true; }
+      countrySel.parentNode.classList.toggle('has-flag', !!fc);
+    }
     accountSel.innerHTML = (found ? found.accounts : []).map(function (a) {
       return '<option value="' + aclEscHtml(a) + '">' + aclEscHtml(a) + '</option>';
     }).join('');
