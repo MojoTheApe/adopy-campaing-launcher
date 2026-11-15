@@ -416,12 +416,18 @@ def planned_upload_size(path: str, original: int) -> int:
     return original
 
 
-def _chunked_cost(size: int, compressed: bool = False) -> int:
-    """Chunked calls of one video at Meta's real windows, with the retry slack (a compressed copy is always uploaded in
-    chunks, so at least start + transfer + finish)."""
-    calls = upload_calls(size, True, chunked=True)
+def video_upload_calls(size: int, compressed: bool = False, worker: bool | None = None) -> int:
+    """THE count of Graph calls for uploading one video of `size` bytes (no retry slack): the plan (`publish_api`, via
+    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is always
+    uploaded in chunks, so at least start + transfer + finish."""
     if compressed:
-        calls = max(calls, CALLS_UPLOAD_FIXED + 1)
+        return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+    return upload_calls(size, worker)
+
+
+def _chunked_cost(size: int, compressed: bool = False) -> int:
+    """`video_upload_calls` of the chunked path with the retry slack (the compress planning compares this with a spare)."""
+    calls = video_upload_calls(size, True, True) if compressed else upload_calls(size, True, chunked=True)
     return calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) if calls else 0
 
 
@@ -443,6 +449,10 @@ def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None
     large = [p for p, s in sizes.items() if upload_calls(s, True, chunked=True)]
     if not large or sum(_chunked_cost(sizes[p]) for p in large) <= spare:
         return result
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    if not _cc.ffmpeg_exe():
+        return result                                      # nothing to compress with: the originals are planned (and refused)
     best = 0
     for cap in range(1, COMPRESS_FALLBACK_CAP_MB + 1):
         total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576
@@ -470,8 +480,7 @@ def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | 
     planned = plan_upload_sizes(plan, size_of, spare)
     chunks = 0
     for _path, (size, compressed) in planned.items():
-        chunks += (max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1) if compressed
-                   else upload_calls(size))
+        chunks += video_upload_calls(size, compressed)
     if not chunks:
         return 0
     return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
@@ -3429,6 +3438,7 @@ class CampaignCreator:
         upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
         finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
         chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
+        self._compress_note = ""
         if not compress_fallback_enabled():
             return big
         spare = self._chunk_spare(plan)
@@ -3449,9 +3459,14 @@ class CampaignCreator:
                 return big
             target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
         original_mb = size / (1024 * 1024)
-        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run "
-                        "(this can take several minutes)")
         from src.fb_ads_rpa import creative_compress as _cc
+
+        try:
+            eta = _cc.eta_text(_cc.duration_s(big.path))
+        except Exception:  # noqa: BLE001 - the estimate is a courtesy
+            eta = ""
+        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run"
+                        f" ({eta or 'this can take several minutes'})")
 
         fn = self.compress_to_fit or (lambda p, limit, tgt: _cc.ensure_uploadable(p, limit_mb=limit, target_mb=tgt))
         shown = [-100]
@@ -3468,10 +3483,13 @@ class CampaignCreator:
         except Exception as exc:  # noqa: BLE001 - a failed compression is a fallback to the clear stop, not a crash
             if type(exc).__name__ == "JobCancelled":
                 raise
+            self._compress_note = f"compression failed ({type(exc).__name__})"
             self._step(out, f"{who}: compression failed ({type(exc).__name__}); the original goes on")
             return big
         if not getattr(prepared, "compressed", False):
-            self._step(out, f"{who}: not compressed ({getattr(prepared, 'reason', '') or 'unknown reason'})")
+            why = getattr(prepared, "reason", "") or "unknown reason"
+            self._compress_note = f"compression was not possible: {why}"
+            self._step(out, f"{who}: not compressed ({why})")
             return big
         new_size = self.size_of(prepared.path) or 0
         if not new_size or new_size >= size:
@@ -3910,8 +3928,10 @@ class CampaignCreator:
                 raise CreationStopped(
                     f"{what}: {'the fast upload was refused and ' if resumable_upload_enabled() else ''}uploading in "
                     f"{min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) // (1024 * 1024)} MB pieces needs about {chunk_plan} "
-                    f"Meta calls; this run can spare {spare}. Nothing was uploaded. Use a smaller video file or "
-                    "publish fewer ads in this run.", created=out.created, kind="video_error",
+                    f"Meta calls; this run can spare {spare}. Nothing was uploaded."
+                    + (f" ({getattr(self, '_compress_note', '')})" if getattr(self, "_compress_note", "") else "")
+                    + " Use a smaller video file or publish fewer ads in this run.", created=out.created,
+                    kind="video_error",
                     failure=_plain.Failure(
                         "plan_text", f"{who[:1].upper()}{who[1:]}: the video is too large for this run's Meta call budget "
                                      "(the file itself is fine)",
@@ -5081,9 +5101,7 @@ class CampaignCreator:
 
         def video_calls(k: str, v: Any) -> int:
             size, squeezed = self._video_plan.get(k, (sent_len(k, v), False))
-            if squeezed:
-                return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
-            return upload_calls(size, worker_plan)
+            return video_upload_calls(size, squeezed, worker_plan)
 
         chunk_calls = sum(video_calls(k, v) for k, v in files.items() if isinstance(v, LargeFile))
         self._large_pending = [(sent_len(k, v), video_calls(k, v)) for k, v in files.items() if isinstance(v, LargeFile)]
@@ -5096,9 +5114,14 @@ class CampaignCreator:
         if isinstance(budget, int) and chunk_calls:
             rest = estimate_create_calls(plan)
             if chunk_calls + rest > budget:
+                from src.fb_ads_rpa import creative_compress as _cc
+
+                hint = (" ACL needs ffmpeg to compress the video (it was not found), or use a smaller file."
+                        if worker_plan and not resumable_upload_enabled() and compress_fallback_enabled()
+                        and not _cc.ffmpeg_exe() else "")
                 raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
                                 f"and the rest of the campaign about {rest}, more than "
-                                f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                                f"one run allows ({budget}). Use a smaller video or split the campaign.{hint} "
                                 "Nothing was created.")
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
@@ -5144,12 +5167,19 @@ class CampaignCreator:
                             names[a.path] = f"Ad {a.index}"
                             if a.vertical_path:
                                 names[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+                    from src.fb_ads_rpa import creative_compress as _cc
+
                     for k, v in files.items():
                         pl = self._video_plan.get(k)
                         if isinstance(v, LargeFile) and pl and pl[1]:
+                            try:
+                                eta = _cc.eta_text(_cc.duration_s(k))
+                            except Exception:  # noqa: BLE001
+                                eta = ""
                             out.warnings.append(
                                 f"{names.get(k, 'A')} video ({sent_len(k, v) / 1048576:.0f} MB) will be compressed to "
-                                f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same).")
+                                f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same"
+                                + (f"; {eta}" if eta else "") + ").")
                     out.warnings.append(
                         f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
                         f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "

@@ -189,3 +189,143 @@ def test_without_the_fallback_the_same_campaign_stops_cleanly_before_any_chunk(w
     meta = ServedMeta(meta_chunk=MB)
     out, client = _run(meta, d, max_calls=cr.estimate_create_calls(plan) + 40)
     assert out.stop_kind in ("video_error", "plan") and client.calls <= client.max_calls
+
+
+# ───────────────────────── ffmpeg gate, ETA, cache, reasons, shared helper ─────────────────────────
+
+@pytest.fixture
+def ffmpeg_present(monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(cc, "duration_s", lambda path, **kw: 0.0)
+
+
+@pytest.fixture
+def ffmpeg_missing(monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "")
+
+
+def test_compression_is_planned_only_when_ffmpeg_is_there(tmp_path, monkeypatch, ffmpeg_present):
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
+    plan = B._plan(tmp_path, [2000, 2000], monkeypatch)
+    assert all(q for _s, q in cr.plan_upload_sizes(plan, spare=100).values())
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "")
+    assert not any(q for _s, q in cr.plan_upload_sizes(plan, spare=100).values())      # originals: refused later, clearly
+
+
+def test_without_ffmpeg_a_run_that_would_not_fit_is_refused_before_the_first_write(worker_small, tmp_path, monkeypatch,
+                                                                                   ffmpeg_missing):
+    with pytest.raises(cr.PlanError) as err:
+        _check_plan(tmp_path, monkeypatch, extra_calls=8)
+    assert "needs ffmpeg" in str(err.value) and "smaller file" in str(err.value) and "Nothing was created" in str(err.value)
+
+
+def test_check_plan_shows_the_expected_compression_time(worker_small, tmp_path, monkeypatch, ffmpeg_present):
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setattr(cc, "duration_s", lambda path, **kw: 600.0)
+    out = _check_plan(tmp_path, monkeypatch, extra_calls=16)
+    note = next(w for w in out.warnings if w.startswith("Ad 1 video ("))
+    assert "about 10 min, can take up to" in note
+
+
+def test_the_compression_timeout_scales_with_the_duration():
+    from src.fb_ads_rpa import creative_compress as cc
+    assert cc.pass_timeout(0) == 600 and cc.pass_timeout(60) == 600
+    assert cc.pass_timeout(3600) == 3 * 3600 + 300 and cc.pass_timeout(7200) > cc.pass_timeout(3600)
+    assert cc.eta_text(0) == "" and cc.eta_text(600).startswith("about 10 min, can take up to ")
+
+
+def test_the_encoder_gets_the_scaled_timeout(tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    src = tmp_path / "in.mp4"
+    src.write_bytes(bytes(60_000_000))
+    monkeypatch.setattr(cc, "cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "ffmpeg")
+    seen = []
+
+    def run(args, timeout, tick=None):
+        seen.append(timeout)
+        if "Duration" not in " ".join(args) and "-pass" in args and args[args.index("-pass") + 1] == "2":
+            Path(args[-1]).write_bytes(b"y" * 100)
+        return 0, "Duration: 00:10:00.00, start"
+
+    prep = cc.ensure_uploadable(str(src), limit_mb=45.0, target_mb=40.0, run=run)
+    assert prep.compressed and 3 * 600 + 300 in seen                                    # a 10 min video: 2100 s per pass
+
+
+def test_the_cache_drops_old_copies_and_keeps_the_total_under_the_cap(tmp_path, monkeypatch):
+    import os
+    import time
+    from src.fb_ads_rpa import creative_compress as cc
+    root = tmp_path / "cache"
+    root.mkdir()
+    monkeypatch.setattr(cc, "cache_dir", lambda: root)
+    now = time.time()
+    day = 86400
+
+    def make(name, age_days, size=1000):
+        f = root / name
+        f.write_bytes(b"x" * size)
+        os.utime(f, (now - age_days * day, now - age_days * day))
+        return f
+
+    old, fresh, keep_old = make("old.mp4", 10), make("fresh.mp4", 1), make("keep.mp4", 30)
+    other = make("note.txt", 90)
+    stale = root / "encode-abc"
+    stale.mkdir()
+    (stale / "creative.mp4").write_bytes(b"z")
+    os.utime(stale, (now - 3 * day, now - 3 * day))
+    removed = cc.cleanup_cache(keep=str(keep_old), now=now)
+    assert not old.exists() and fresh.exists() and keep_old.exists() and other.exists() and not stale.exists()
+    assert removed == 2
+    # the total cap: the oldest go first, the one in use never
+    a, b, c = make("a.mp4", 3, 400), make("b.mp4", 2, 400), make("c.mp4", 1, 400)
+    cc.cleanup_cache(keep=str(c), max_total_gb=900 / 1024 ** 3, now=now)
+    assert not a.exists() and c.exists()
+    assert sum(f.stat().st_size for f in root.glob("*.mp4")) <= 900 + 1000                  # fresh/keep sizes included
+
+
+def test_a_failed_compression_logs_a_short_scrubbed_reason(tmp_path, monkeypatch, caplog):
+    import logging
+    from src.fb_ads_rpa import creative_compress as cc
+    src = tmp_path / "secret_name.mp4"
+    src.write_bytes(bytes(60_000_000))
+    monkeypatch.setattr(cc, "cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "ffmpeg")
+
+    def run(args, timeout, tick=None):
+        if "-i" in args and "-pass" not in args:
+            return 0, "Duration: 00:10:00.00"
+        return 1, f"error {src}: Invalid data found when processing input\nC:\\Users\\bob\\x.mp4: Conversion failed!"
+
+    caplog.set_level(logging.WARNING)
+    prep = cc.ensure_uploadable(str(src), limit_mb=45.0, target_mb=40.0, run=run)
+    assert not prep.compressed and prep.reason.startswith("compression failed (ffmpeg pass 1 failed (")
+    assert "secret_name" not in prep.reason and "bob" not in prep.reason and len(prep.reason) < 220
+    assert "video compression failed" in caplog.text and "secret_name" not in caplog.text
+
+
+def test_the_stop_message_carries_the_reason_compression_was_not_possible(worker_small, tmp_path, monkeypatch):
+    from tests.test_acl2639_resumable_upload import ResumableMeta, _fake_compressor
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "1")
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+    why = "compression would not help: it needs under 400 kbps"
+    out, _ = _run(ResumableMeta(start="denied"), d, max_calls=300,
+                  compress_to_fit=_fake_compressor(tmp_path, [], compressed=False, reason=why))
+    assert out.stop_kind == "video_error" and f"compression was not possible: {why}" in out.error
+
+
+def test_one_helper_counts_a_video_for_the_plan_the_budget_and_the_run(tmp_path, monkeypatch, ffmpeg_present):
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
+    assert cr.video_upload_calls(100 * MB) == cr.upload_calls(100 * MB)
+    assert cr.video_upload_calls(1 * MB, True) == cr.CALLS_UPLOAD_FIXED + 1                 # a squeezed copy is never free
+    assert cr.video_upload_calls(400 * MB, True) == cr.upload_calls(400 * MB, True, chunked=True)
+    plan = B._plan(tmp_path, [100, 100], monkeypatch)
+    sizes = cr.plan_upload_sizes(plan, spare=1000)
+    chunks = sum(cr.video_upload_calls(s, q) for s, q in sizes.values())
+    assert cr.estimate_upload_calls(plan, spare=1000) == chunks + max(cr.CHUNK_RETRY_SLACK_MIN, -(-chunks * 5 // 100))

@@ -382,3 +382,17 @@ whole run allows and every video above C is planned at 0.9 C; the budget counts 
 (X MB) will be compressed to about Y MB before upload", and `_fit_for_chunks` makes the copy before the chunked upload
 (the plan's size is the target). Check plan now reads a video as large under the worker plan, so a 70-160 MB video is
 counted and named there too. `ACL_VIDEO_COMPRESS_FALLBACK=0` restores the plain refusal.
+
+### 13.7 Follow-ups to the compress fallback
+
+* Compression is planned only when `ffmpeg_exe()` exists; without it the originals are planned and `_prepare` refuses before the
+  first write with "... ACL needs ffmpeg to compress the video (it was not found), or use a smaller file." A compressor that
+  answers "not compressible" puts its reason into the chunked stop message ("compression was not possible: <reason>").
+* One encoding pass may take `max(600 s, 3 x duration + 300 s)`; Check plan and the "compressing ..." step show "about N min, can
+  take up to M min" when the duration can be read.
+* The persistent cache `creative_cache` is trimmed before every compression: `*.mp4` copies older than 7 days go, then the oldest
+  until the total is under 5 GB (the copy in use is kept and its mtime refreshed); stale `encode-*` folders (older than a day) go too.
+* A failed compression writes a short scrubbed reason (last ffmpeg line, paths replaced, at most 120 characters) into
+  `Prepared.reason` and the log.
+* `creator.video_upload_calls(size, compressed)` is the one cost of a video used by the plan (`estimate_upload_calls`, hence
+  `publish_api.create_call_budget`), `_prepare` and the compress planning.

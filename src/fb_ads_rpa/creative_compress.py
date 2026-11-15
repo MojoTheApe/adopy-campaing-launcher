@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -294,6 +295,100 @@ def _progress_percent(path: str, duration: float) -> int | None:
     return min(99, int(last / 1_000_000 / duration * 100))
 
 
+def pass_timeout(duration: float) -> float:
+    """ACL-2639: time one encoding pass may take: 3x the video's duration + 300 s, never under 600 s (a long video on a
+    slow machine is not killed at a fixed hour; a short one is not left waiting for ever)."""
+    return max(600.0, 3.0 * max(duration, 0.0) + 300.0)
+
+
+def eta_text(duration: float) -> str:
+    """\"about N min (can take up to M min)\" for a video of `duration` seconds; '' when the duration is unknown.
+    Two passes at roughly twice the playback speed is the expectation; the limit is the two passes' timeouts."""
+    if duration <= 0:
+        return ""
+    expected = max(1, round(duration / 60.0))
+    limit = max(expected, round(2 * pass_timeout(duration) / 60.0))
+    return f"about {expected} min, can take up to {limit} min"
+
+
+_last_error = [""]
+
+
+def _short_reason(text: str) -> str:
+    """The last line of an ffmpeg answer, with paths removed and cut short: safe for a step line or a log."""
+    lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
+    line = lines[-1] if lines else ""
+    line = re.sub(r"[A-Za-z]:[\\/][^\s'\"]*|(?:/[^\s'\"/]+){2,}", "<path>", line)
+    return line[:120]
+
+
+def last_error() -> str:
+    """Short scrubbed reason of the last failed `compress` ('' if none)."""
+    return _last_error[0]
+
+
+#: ACL-2639: the persistent cache of compressed copies is trimmed: nothing older than this, and in total at most this much.
+CACHE_MAX_AGE_DAYS = 7
+CACHE_MAX_TOTAL_GB = 5.0
+
+
+def cleanup_cache(keep: str = "", *, max_age_days: float = CACHE_MAX_AGE_DAYS,
+                  max_total_gb: float = CACHE_MAX_TOTAL_GB, now: float | None = None) -> int:
+    """Drop compressed copies (`*.mp4`) of the cache older than `max_age_days`, then the oldest ones until the total is
+    under `max_total_gb`; stale half-written `encode-*` folders (older than a day) too. `keep` (the copy needed right now)
+    is never removed. Never raises. Returns how many files were removed."""
+    removed = 0
+    try:
+        root = cache_dir()
+        if not root.is_dir():
+            return 0
+        t = time.time() if now is None else now
+        keep_p = os.path.abspath(keep) if keep else ""
+        for d in root.glob("encode-*"):
+            try:
+                if d.is_dir() and t - d.stat().st_mtime > 86400:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed += 1
+            except OSError:
+                pass
+        files = []
+        for f in root.glob("*.mp4"):
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            if os.path.abspath(str(f)) != keep_p:
+                files.append((st.st_mtime, st.st_size, f))
+        for mtime, _size, f in sorted(files):
+            if t - mtime > max_age_days * 86400:
+                try:
+                    f.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+        left = []
+        for f in root.glob("*.mp4"):
+            try:
+                left.append((f.stat().st_mtime, f.stat().st_size, f))
+            except OSError:
+                continue
+        total = sum(sz for _m, sz, _f in left)
+        for _mtime, sz, f in sorted(left):
+            if total <= max_total_gb * 1024 ** 3:
+                break
+            if os.path.abspath(str(f)) == keep_p:
+                continue
+            try:
+                f.unlink()
+                total -= sz
+                removed += 1
+            except OSError:
+                pass
+    except Exception:
+        return removed
+    return removed
+
+
 def compress(src: str, dst: str, video_kbps: int, *, run=_run,
              exe: str = "", timeout: float = 3600, duration: float = 0.0) -> bool:
     """Два прохода x264 в заданный битрейт. Разрешение и длительность не трогаем.
@@ -312,8 +407,9 @@ def compress(src: str, dst: str, video_kbps: int, *, run=_run,
                   "-c:v", "libx264", "-b:v", f"{video_kbps}k", "-preset", "medium",
                   "-passlogfile", log]
         try:
-            code, _ = run(common + ["-pass", "1", "-an", "-f", "null", os.devnull], timeout)
+            code, text1 = run(common + ["-pass", "1", "-an", "-f", "null", os.devnull], timeout)
             if code != 0:
+                _last_error[0] = f"ffmpeg pass 1 failed ({_short_reason(text1)})"
                 return False
             args2 = common + ["-pass", "2", "-c:a", "aac", "-b:a", f"{AUDIO_KBPS}k",
                               "-movflags", "+faststart", dst]
@@ -329,11 +425,14 @@ def compress(src: str, dst: str, video_kbps: int, *, run=_run,
                         shown[0] = pct
                         report_progress(pct)
 
-                code, _ = run(args2, timeout, tick=tick)
+                code, text2 = run(args2, timeout, tick=tick)
             else:
-                code, _ = run(args2, timeout)
-        except Exception:
+                code, text2 = run(args2, timeout)
+        except Exception as exc:
+            _last_error[0] = f"{type(exc).__name__}: {_short_reason(str(exc))}"
             return False
+    if code != 0:
+        _last_error[0] = f"ffmpeg pass 2 failed ({_short_reason(text2)})"
     return code == 0 and os.path.isfile(dst) and os.path.getsize(dst) > 0
 
 
@@ -356,8 +455,13 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
                         reason="cannot compress: ffmpeg not found")
 
     dst = cache_path(path, target_mb)
+    cleanup_cache(keep=str(dst))                    # ACL-2639: trim the persistent cache (age and total size)
     if dst.is_file() and 0 < size_mb(dst) <= min(limit_mb, original):
         got = size_mb(dst)
+        try:
+            os.utime(dst, None)                     # a copy in use is not "old"
+        except OSError:
+            pass
         return Prepared(path=str(dst), original_mb=original, sent_mb=got,
                         compressed=True, reason="from cache")
 
@@ -374,7 +478,9 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
         dst.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="encode-", dir=dst.parent) as tmp:
             pending = Path(tmp) / "creative.mp4"
-            ok = compress(path, str(pending), kbps, run=run, exe=exe, duration=seconds_long)
+            _last_error[0] = ""
+            ok = compress(path, str(pending), kbps, run=run, exe=exe, duration=seconds_long,
+                          timeout=pass_timeout(seconds_long))
             job_cancel.check()    # ACL-1614: Stop во время сжатия — дальше не идём
             got = size_mb(pending)
             if not ok or not (0 < got <= min(limit_mb, original)):
@@ -382,9 +488,12 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
             if cache_path(path, target_mb) != dst:
                 raise ValueError("source changed during encoding")
             os.replace(pending, dst)
-    except Exception:
+    except Exception as exc:
+        # ACL-2639: a short scrubbed reason (no paths) in the reason and the log
+        why = _last_error[0] or f"{type(exc).__name__}: {_short_reason(str(exc))}"
+        logging.getLogger(__name__).warning("video compression failed: %s", why)
         return Prepared(path=path, original_mb=original, sent_mb=original,
                         seconds=time.monotonic() - started,
-                        reason="compression failed — sending the original")
+                        reason=f"compression failed ({why}) — sending the original")
     return Prepared(path=str(dst), original_mb=original, sent_mb=got,
                     compressed=True, seconds=time.monotonic() - started)
