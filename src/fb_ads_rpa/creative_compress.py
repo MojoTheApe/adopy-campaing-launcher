@@ -297,8 +297,9 @@ def _progress_percent(path: str, duration: float) -> int | None:
 
 def pass_timeout(duration: float) -> float:
     """ACL-2639: time one encoding pass may take: 3x the video's duration + 300 s, never under 600 s (a long video on a
-    slow machine is not killed at a fixed hour; a short one is not left waiting for ever)."""
-    return max(600.0, 3.0 * max(duration, 0.0) + 300.0)
+    slow machine is not killed at a fixed hour); never under the 3600 s the live-tested build allowed, because a short
+    high-bitrate source can encode slower than real time."""
+    return max(3600.0, 3.0 * max(duration, 0.0) + 300.0)
 
 
 def eta_text(duration: float) -> str:
@@ -330,6 +331,10 @@ def last_error() -> str:
 #: ACL-2639: the persistent cache of compressed copies is trimmed: nothing older than this, and in total at most this much.
 CACHE_MAX_AGE_DAYS = 7
 CACHE_MAX_TOTAL_GB = 5.0
+
+
+#: ACL-2639: a copy touched within this many seconds may be uploading in a parallel run; the size cap never drops it.
+CACHE_IN_USE_S = 6 * 3600
 
 
 def cleanup_cache(keep: str = "", *, max_age_days: float = CACHE_MAX_AGE_DAYS,
@@ -376,8 +381,8 @@ def cleanup_cache(keep: str = "", *, max_age_days: float = CACHE_MAX_AGE_DAYS,
         for _mtime, sz, f in sorted(left):
             if total <= max_total_gb * 1024 ** 3:
                 break
-            if os.path.abspath(str(f)) == keep_p:
-                continue
+            if os.path.abspath(str(f)) == keep_p or t - _mtime < CACHE_IN_USE_S:
+                continue                # копия, нужная сейчас, или недавняя — её может грузить параллельный прогон
             try:
                 f.unlink()
                 total -= sz

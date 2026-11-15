@@ -233,7 +233,7 @@ def test_check_plan_shows_the_expected_compression_time(worker_small, tmp_path, 
 
 def test_the_compression_timeout_scales_with_the_duration():
     from src.fb_ads_rpa import creative_compress as cc
-    assert cc.pass_timeout(0) == 600 and cc.pass_timeout(60) == 600
+    assert cc.pass_timeout(0) == 3600 and cc.pass_timeout(60) == 3600
     assert cc.pass_timeout(3600) == 3 * 3600 + 300 and cc.pass_timeout(7200) > cc.pass_timeout(3600)
     assert cc.eta_text(0) == "" and cc.eta_text(600).startswith("about 10 min, can take up to ")
 
@@ -253,7 +253,7 @@ def test_the_encoder_gets_the_scaled_timeout(tmp_path, monkeypatch):
         return 0, "Duration: 00:10:00.00, start"
 
     prep = cc.ensure_uploadable(str(src), limit_mb=45.0, target_mb=40.0, run=run)
-    assert prep.compressed and 3 * 600 + 300 in seen                                    # a 10 min video: 2100 s per pass
+    assert prep.compressed and cc.pass_timeout(600) == 3600 and 3600 in seen                 # a 10 min video: the 3600 s floor per pass
 
 
 def test_the_cache_drops_old_copies_and_keeps_the_total_under_the_cap(tmp_path, monkeypatch):
