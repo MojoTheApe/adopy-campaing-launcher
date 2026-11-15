@@ -517,7 +517,7 @@ def _node(mode, main):
 def test_the_page_helper_reports_progress_and_the_result():
     out = _node("ok", _MAIN_OK)
     assert out["start"]["job"].startswith("j")
-    assert out["mid"] == {"state": "running"}                  # байтов нет: прогресс - время на стороне Python
+    assert out["mid"] == {"state": "running", "progress": 0, "stream": False, "drained": False}                  # байтов нет: прогресс - время на стороне Python
     assert out["upload_listeners"] == []                        # ни одного слушателя на xhr.upload (CORS-preflight)
     assert out["with_credentials"] is True                      # куки как прежде
     assert out["end"]["state"] == "done" and out["end"]["result"]["body"] == {"id": "9"}

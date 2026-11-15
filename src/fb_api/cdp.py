@@ -496,6 +496,16 @@ class PageTab:
                 raise SessionLostError("the owned tab's browser session was detached") from exc
             raise
 
+    def call_session(self, session_id: str, method: str, params: dict | None = None, *,
+                     timeout: float = CALL_S) -> dict:
+        """A command for ANOTHER session of this connection (a dedicated worker of the tab, ACL-2629).
+
+        No `on_event`: called from an event handler, the nested call defers everything it reads (see `RawCdp.call`).
+        """
+        if self.closed:
+            raise CdpError("the tab is closed")
+        return _call(self._cdp, method, params, session_id=session_id or self.session_id, timeout=timeout)
+
     #: Optional handler for CDP events of this tab (the light work tab's interception, ACL-2344).
     on_event: Callable[[dict], None] | None = None
     #: ACL-2344: the `light_tab.LightDocument` of a light work tab (None - an ordinary tab).
@@ -607,6 +617,15 @@ class PageTab:
         if not isinstance(ctx, int):
             raise CdpError("the browser did not return an isolated world context")
         return ctx
+
+    def evaluate_main(self, expression: str, *, timeout: float = 10.0) -> Any:
+        """ACL-2639: a tiny READ-ONLY expression in the page's MAIN world (where its module registry lives), by value.
+        Only for values the isolated helper cannot see; the caller passes a fixed expression, never page data."""
+        got = self.call("Runtime.evaluate", {"expression": expression, "awaitPromise": False, "returnByValue": True},
+                        timeout=timeout + 5.0)
+        if got.get("exceptionDetails"):
+            return None
+        return (got.get("result") or {}).get("value")
 
     def evaluate_in(self, context_id: int, expression: str, *, timeout: float = 60.0) -> Any:
         """Выполнить JS в отдельном мире (`contextId`); промис дожидается."""
@@ -783,7 +802,7 @@ class PageTab:
             return False
 
     # -- закрытие
-    def close(self) -> None:
+    def close(self, *, verify: bool = False) -> None:
         """Закрыть СВОЮ вкладку. Сокет не ответил — через HTTP отладочного порта.
 
         Последнюю вкладку браузера не закрываем (Chrome и профиль ушли бы).
@@ -804,12 +823,50 @@ class PageTab:
             raise
         except Exception:
             ok = False
+        if ok and verify:
+            # ACL-2637 (`verify`): the close is CHECKED - the browser must no longer list this tab as a page.
+            ok = self._gone_over_socket()
         if not ok:
             try:
                 self._close_over_http()
+                ok = self._gone_over_http() if verify else True
             except Exception:
-                pass
+                ok = False
+        self.close_ok = ok if verify else None
         self._safe_cdp_close()
+
+    #: ACL-2637: result of `close()` - True: the tab is gone (or, as the last tab, shows about:blank);
+    #: False: it may still be open; None: not checked (closed without `verify`, or not closed yet).
+    close_ok: bool | None = None
+    #: How long `close()` waits for the browser to drop the closed tab from its list.
+    CLOSE_CHECK_S = 3.0
+
+    def _gone_over_socket(self) -> bool:
+        deadline = time.monotonic() + self.CLOSE_CHECK_S
+        while True:
+            try:
+                infos = (self._cdp.call("Target.getTargets", timeout=CALL_S) or {}).get("targetInfos") or []
+            except Exception:
+                return False
+            mine = [t for t in infos if t.get("targetId") == self.target_id and t.get("type") == "page"]
+            pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
+            if not mine or (len(pages) == 1 and str(mine[0].get("url") or "") == "about:blank"):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.1)
+
+    def _gone_over_http(self) -> bool:
+        host, port = self._http_host_port()
+        if not port:
+            return False
+        targets = self._http(host, port, "/json/list")
+        if not isinstance(targets, list):
+            return False
+        pages = [t for t in targets if t.get("type") == "page"]
+        mine = [t for t in pages if t.get("id") == self.target_id]
+        # the last tab is not closed but sent to about:blank (see `_close_over_socket`): that is a success too
+        return not mine or (len(pages) == 1 and str(mine[0].get("url") or "") == "about:blank")
 
     def _close_over_socket(self) -> bool:
         """True — наша вкладка закрыта или (единственная) уведена на about:blank."""

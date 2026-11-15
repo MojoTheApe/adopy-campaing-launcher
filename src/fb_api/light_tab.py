@@ -33,9 +33,11 @@ from src.fb_api.cdp import CdpError, PageTab
 LIGHT_ORIGIN = "https://adsmanager.facebook.com"
 LIGHT_PATH = "/__acl_work"
 LIGHT_URL = LIGHT_ORIGIN + LIGHT_PATH
-#: The document is inert: no script, worker, frame, object, form or base; the icon is inline (no request).
+#: The document is inert: no script, frame, object, form or base; the icon is inline (no request).
+#: ACL-2629: `worker-src blob:` - the helper's Web Worker (video upload from the profile) is a blob worker of this
+#: document; the page itself still has no script (`script-src 'none'`), so nothing else can start one.
 #: `connect-src` is deliberately not restricted - the helper's Graph fetch must reach the network.
-CSP = ("script-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; "
+CSP = ("script-src 'none'; worker-src blob:; frame-src 'none'; object-src 'none'; "
        "base-uri 'none'; form-action 'none'; img-src data:")
 FLAG = "ACL_LIGHT_WORK_TAB"
 
@@ -184,17 +186,92 @@ def open_light_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocume
         return None, "light_doc_failed"
 
 
-def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0) -> str:
+#: ACL-2637: is the document controlled by a service worker? true / false; anything else - unknown.
+_CONTROLLED_JS = ("(() => { try { const c = navigator.serviceWorker; return !!(c && c.controller); }"
+                  " catch (e) { return null; } })()")
+
+
+def _controlled(doc: LightDocument, *, timeout: float = 10.0) -> Any:
+    try:
+        return doc._read(_CONTROLLED_JS, timeout=timeout)
+    except (CdpError, TimeoutError):
+        return None
+
+
+def open_upload_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocument | None, str]:
+    """ACL-2637: the light document in a SEPARATE tab of the profile, provably not controlled by a service worker.
+
+    The Ads Manager origin has Facebook's service worker; a document in its scope is controlled, and the upload
+    path refuses a controlled page (a service worker could see or answer the piece requests outside CDP Fetch).
+    A reload that bypasses the cache (shift-reload, `Page.reload {ignoreCache}`) skips the service worker in
+    Chrome: the new document is uncontrolled (`navigator.serviceWorker.controller === null`). The reload is
+    answered by our own interception like the first load (nothing reaches Meta). The result is CHECKED, not
+    assumed: still controlled or unreadable -> (None, reason) and the caller closes the tab.
+    """
+    doc, reason = open_light_document(tab, timeout=timeout)
+    if doc is None:
+        return None, reason
+    state = _controlled(doc)
+    if state is False:
+        return doc, ""
+    if state is not True:
+        return None, "upload tab: the service-worker state could not be read"
+    old = doc.marker
+    try:
+        tab.call("Page.reload", {"ignoreCache": True}, timeout=timeout)
+        deadline = time.monotonic() + timeout
+        while True:
+            snap = doc.snapshot()
+            if (snap.get("href") == LIGHT_URL and snap.get("ready") == "complete" and doc.marker
+                    and doc.marker != old and snap.get("marker") == doc.marker):
+                doc.time_origin = snap.get("t")
+                break
+            if snap.get("href") and snap.get("href") not in ("about:blank", LIGHT_URL):
+                return None, "light_doc_wrong_origin"
+            if time.monotonic() >= deadline:
+                return None, "upload tab: the reload that bypasses the service worker did not finish"
+            tab.pump(0.2)
+    except (CdpError, TimeoutError):
+        return None, "upload tab: the reload that bypasses the service worker failed"
+    state = _controlled(doc)
+    if state is False:
+        return doc, ""
+    if state is True:
+        return None, "upload tab is controlled by a service worker even after a reload that bypasses it"
+    return None, "upload tab: the service-worker state could not be read"
+
+
+def _note_upload_parts(hop: str, helper: Any, **extra: Any) -> None:
+    """ACL-2639 telemetry: which upload pieces a helper holds at one hop - booleans only, never a value. Never raises."""
+    try:
+        getter = getattr(helper, "_upload_parts", None)
+        parts = getter() if callable(getter) else None
+        svc, tok = bool((parts or {}).get("service")), bool((parts or {}).get("token"))
+        _record({"event": "fb_api_upload_service", "hop": hop, "service": svc, "token": tok,
+                 "generic_host": tok and not svc,
+                 **{k: v for k, v in extra.items() if isinstance(v, (bool, str)) and len(str(v)) < 30}})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0, upload_only: bool = False) -> str:
     """Token from the helper of `src` to the helper of `dst` (two `InPageGraph`s). '' or a reason code.
 
     The channel name, nonce and ack name are random, live only for this call and are never logged.
     `dst` accepts exactly one message with the right nonce; whatever happens, its channel is closed.
     """
+    fill = getattr(src, "fill_upload_from_page", None)     # ACL-2639: the sender's page modules first (main world)
+    if callable(fill):
+        try:
+            fill()
+        except Exception:  # noqa: BLE001 - the hand-over goes on without them
+            pass
+    _note_upload_parts("after_fill" if not upload_only else "refresh_fill", src)
     name, nonce, ack = (secrets.token_urlsafe(18) for _ in range(3))
     args = ",".join(json.dumps(v) for v in (name, nonce, ack))
     ttl_ms = int((wait_s + 5.0) * 1000)
     try:
-        got = dst._eval_helper(f".listen({args},{ttl_ms})", timeout=10.0)
+        got = dst._eval_helper(f".listen({args},{ttl_ms}{',true' if upload_only else ''})", timeout=10.0)
     except (CdpError, TimeoutError):
         return "work_tab_dead"
     if got != "listening":
@@ -212,6 +289,7 @@ def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0) -> str:
         return "work_tab_dead"
     # the receiver decides: it validated and stored the token. The sender's ack (`sent`) may be lost on a
     # busy machine (its evaluate timed out) although the token arrived - that is not a failure.
+    _note_upload_parts("after_handover", dst, upload_only=upload_only, status=status)
     if status == "received":
         return ""
     if status == "rejected":
@@ -339,7 +417,11 @@ def settle_and_close(tab: Any) -> bool:
     except Exception:  # noqa: BLE001
         pass
     try:
-        tab.close()
+        try:
+            tab.close(verify=True)
+        except TypeError:           # a tab object without the check
+            tab.close()
     except Exception:  # noqa: BLE001
         return False
-    return True
+    # ACL-2637: `PageTab.close` never raises; whether the tab is really gone is in `close_ok` (checked there).
+    return getattr(tab, "close_ok", None) is not False

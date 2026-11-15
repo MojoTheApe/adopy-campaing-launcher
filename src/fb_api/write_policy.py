@@ -85,12 +85,143 @@ UPLOAD_KEYS = {
 }
 #: Файл фазы transfer (multipart); у start и finish файла нет.
 UPLOAD_CHUNK_FIELD = "video_file_chunk"
-#: Потолок одного куска, который мы отправляем (память профиля и одного запроса).
-UPLOAD_CHUNK_MAX = 8 * 1024 * 1024
-#: Потолок файла на пути кусками: безопасный для профиля и для бюджета вызовов (Meta сама - 4 ГБ).
-UPLOAD_FILE_MAX = 1536 * 1024 * 1024
+#: ACL-2629: потолок куска на пути воркера (байты идут бинарно через CDP Fetch в Web Worker профиля,
+#: страница их не декодирует): 64 МБ. Сам размер куска всё равно задаёт Meta (start/end_offset).
+UPLOAD_CHUNK_MAX = 64 * 1024 * 1024
+#: Потолок куска на СТАРОМ пути (base64 через Runtime.evaluate, atob в странице): прежние 8 МБ.
+UPLOAD_STAGED_CHUNK_MAX = 8 * 1024 * 1024
+#: Один запрос воркера к Python за частью куска: часть лежит в памяти воркера целиком, поэтому небольшая.
+UPLOAD_PIECE_MAX = 8 * 1024 * 1024
+#: Потолок файла на пути воркера: лимит Meta (4 ГБ).
+UPLOAD_FILE_MAX = 4 * 1024 * 1024 * 1024
+#: Потолок файла на старом пути (с ffmpeg-сжатием, ACL-2000): безопасный для профиля и бюджета вызовов.
+UPLOAD_FILE_STAGED_MAX = 1536 * 1024 * 1024
+#: Токен выдачи частей воркеру и путь, который перехватывает Python (CDP Fetch); тот же в помощнике страницы.
+SERVE_PREFIX = "/__acl_upload/"
+SERVE_TOKEN_RE = re.compile(r"[a-z0-9]{16,40}", re.ASCII)
 UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
 UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
+
+#: ACL-2639: the upload protocol of Ads Manager itself ("file API", recorded live 15.11 on a profile). The documented
+#: `video_ads` protocol is refused for the Ads Manager token ((#10) Permission Denied), so it is not used.
+#:   1. POST /act_<id>/advideos upload_phase=start, file_size, file_extension, waterfall_id, supports_chunking,
+#:      supports_file_api, partition offsets (0 .. file_size) -> video_id, upload_session_id;
+#:   2. the bytes go to the resumable service of the page (NOT Graph): GET/POST
+#:      https://<rupload-...up>.facebook.com/fb_video/<waterfall_id>-0-<file_size>?fb_dtsg_ag=...&__a=1 with the session
+#:      cookies (`credentials: include`), headers `offset`, `X-Entity-Length`, `X-Entity-Type`; the answer to the last
+#:      POST carries the file handle; GET answers {offset} (how many bytes Meta holds - the resume point);
+#:   3. POST advideos upload_phase=transfer ... fbuploader_video_file_chunk=<handle> (both offsets == file_size);
+#:   4. POST advideos upload_phase=finish, upload_session_id, video_id, title (the ACL tag name).
+#: The advideos shapes of this protocol are told from the chunked ones by their marker keys.
+FILE_API_MARKERS = ("supports_file_api", "fbuploader_video_file_chunk", "video_id")
+FILE_API_KEYS = {
+    "start": frozenset({"upload_phase", "file_size", "file_extension", "waterfall_id", "supports_chunking",
+                        "supports_file_api", "partition_start_offset", "partition_end_offset"}),
+    "transfer": frozenset({"upload_phase", "upload_session_id", "video_id", "start_offset", "end_offset",
+                           "partition_start_offset", "partition_end_offset", "fbuploader_video_file_chunk"}),
+    "finish": frozenset({"upload_phase", "upload_session_id", "video_id", "title"}),
+}
+#: Opaque file handle from the answer to the last rupload POST: `N:<base64 name>:<mime>:<id>:e:<expiry>:<signature>`.
+FILE_HANDLE_RE = re.compile(r"^[0-9]{1,3}:[A-Za-z0-9+/=_-]*:[^:\s]{1,100}:[A-Za-z0-9_.-]{1,100}:e:[0-9]{1,20}"
+                            r"(?::[A-Za-z0-9_.+/=-]{1,300}){1,6}$", re.ASCII)
+FILE_HANDLE_MAX = 1000
+
+
+def file_handle(body: Any) -> str:
+    """The file handle in the answer of the last rupload POST, '' if none. Prefers the string field `h`; otherwise any
+    string value (of the answer or of one nested object) that has exactly the handle shape."""
+    if not isinstance(body, dict):
+        return ""
+    h = body.get("h")
+    if isinstance(h, str) and len(h) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(h):
+        return h
+    for v in body.values():
+        for x in (list(v.values()) if isinstance(v, dict) else [v]):
+            if isinstance(x, str) and len(x) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(x):
+                return x
+    return ""
+
+
+#: One rupload POST carries the whole remainder of the file (Ads Manager sends a partition in one POST), so the cap is
+#: the file limit; a resume sends the rest from the offset the service reports.
+RUPLOAD_SEGMENT_MAX = UPLOAD_FILE_MAX
+#: The resumable service of the page (`AdsVideoUploadConfig`): `rupload-<place>.up` + facebook.com, nothing else.
+RUPLOAD_NAME_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up$", re.ASCII)
+RUPLOAD_DOMAIN = "facebook.com"
+#: The generic upload host (live 15.11: answers GET/POST like the regional one): used when the page's regional service is
+#: not known (its config module loads a few seconds after the page). `rupload.up.facebook.com` does not exist.
+RUPLOAD_GENERIC_HOST = "rupload.facebook.com"
+_RUPLOAD_REGIONAL_HOST_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up\.facebook\.com$", re.ASCII)
+
+
+def rupload_host_ok(host: Any) -> bool:
+    """The only hosts a service request may go to: the page's regional `rupload-<x>.up.facebook.com` or exactly the
+    generic `rupload.facebook.com`."""
+    return isinstance(host, str) and (host == RUPLOAD_GENERIC_HOST or bool(_RUPLOAD_REGIONAL_HOST_RE.fullmatch(host)))
+RUPLOAD_PATH_RE = re.compile(r"^/fb_video/[0-9a-f]{32}-0-[0-9]{1,13}$", re.ASCII)
+RUPLOAD_METHODS = ("GET", "POST")
+RUPLOAD_QUERY_KEYS = ("fb_dtsg_ag", "__a")
+RUPLOAD_HEADERS = ("offset", "X-Entity-Length", "X-Entity-Type")
+RUPLOAD_TYPE = "application/octet-stream"
+RUPLOAD_BODY_FIELD = "rupload_body"
+#: Without a streaming request body the page builds one Blob of the checked pieces: only up to this size.
+RUPLOAD_BLOB_SAFE = 256 * 1024 * 1024
+#: The session token of the upload page (`DTSGInitData.async_get_token`): a secret, never logged or sent to Python.
+RUPLOAD_DTSG_RE = re.compile(r"^[A-Za-z0-9_:-]{20,100}$", re.ASCII)
+
+#: ACL-2639: the tag name of an ad video (`creator.video_title`); the only title an upload may finish with.
+VIDEO_TITLE_RE = re.compile(r"^acl-[A-Za-z0-9_-]{1,64}-[0-9a-f]{12}$", re.ASCII)
+
+
+def rupload_service_ok(name: Any, domain: Any) -> bool:
+    return isinstance(name, str) and bool(RUPLOAD_NAME_RE.fullmatch(name)) and domain == RUPLOAD_DOMAIN
+
+
+def rupload_path(waterfall: str, size: int) -> str:
+    return f"/fb_video/{waterfall}-0-{size}"
+
+
+RUPLOAD_HOST_KINDS = ("generic", "regional")
+
+
+def check_rupload(method: str, path: str, *, query: dict | None = None, headers: dict | None = None,
+                  files: dict | None = None, host_kind: str | None = None) -> None:
+    """ACL-2639: one request to the resumable service: GET (offset) or POST (bytes of one segment) of THIS upload's
+    path, only the known query keys and headers, the body only a served window of the file."""
+    if host_kind is not None and host_kind not in RUPLOAD_HOST_KINDS:
+        raise WriteRefused("write refused: host_kind must be generic or regional")
+    if method not in RUPLOAD_METHODS:
+        raise WriteRefused(f"write refused: upload service method {method!r} (only GET and POST)")
+    if not RUPLOAD_PATH_RE.fullmatch(path or ""):
+        raise WriteRefused("write refused: path must be /fb_video/<waterfall>-0-<size>")
+    extra = sorted(set(query or {}) - set(RUPLOAD_QUERY_KEYS))
+    if extra:
+        raise WriteRefused(f"write refused: query key {extra[0]!r} is not allowed on the upload service")
+    headers = dict(headers or {})
+    files = dict(files or {})
+    if method == "GET":
+        if headers or files:
+            raise WriteRefused("write refused: an upload service read takes no headers and no body")
+        return
+    if set(headers) != set(RUPLOAD_HEADERS):
+        raise WriteRefused("write refused: the upload needs exactly the headers offset, X-Entity-Length, X-Entity-Type")
+    total = int(path.rsplit("-", 1)[1])
+    off, length = _digits(headers["offset"]), _digits(headers["X-Entity-Length"])
+    if not total or total > UPLOAD_FILE_MAX or length != total:
+        raise WriteRefused("write refused: X-Entity-Length must be the size in the path, within the video limit")
+    if off is None or off >= total:
+        raise WriteRefused("write refused: offset must be a number inside the file")
+    if headers["X-Entity-Type"] != RUPLOAD_TYPE:
+        raise WriteRefused("write refused: X-Entity-Type must be application/octet-stream")
+    if set(files) != {RUPLOAD_BODY_FIELD} or not isinstance(files[RUPLOAD_BODY_FIELD], ServedChunk):
+        raise WriteRefused(f"write refused: the upload needs exactly the served body {RUPLOAD_BODY_FIELD!r}")
+    body = files[RUPLOAD_BODY_FIELD]
+    if not 0 < len(body) <= RUPLOAD_SEGMENT_MAX:
+        raise WriteRefused(f"write refused: one upload request carries 1..{RUPLOAD_SEGMENT_MAX} bytes")
+    if body.offset != off or off + len(body) > total:
+        raise WriteRefused("write refused: the served body must start at offset and end inside the file")
+
+
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
@@ -154,8 +285,6 @@ ASSET_FEED_TEXTS_WITH_RULES = 1
 #: Ключ набора, включающий Dynamic Creative: только значение True.
 DYNAMIC_KEY = "is_dynamic_creative"
 #: Тексты отказов (один источник для плана, предпроверки и страницы).
-MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be combined: Meta applies one "
-                      "text per placement group. Use several texts without the vertical file, or one text with it.")
 MSG_TEXTS_DYNAMIC_SET = ("An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an "
                          "ad set: move the other ads of this ad set to a separate ad set")
 #: ACL-2584: лента Instant Form с несколькими текстами - форма Ads Manager (HAR владельца 2026-11-11, вариант A2):
@@ -221,7 +350,7 @@ def os_version_ok(os_name: str, ver: str) -> bool:
 
 USER_OS_RE = re.compile(r"^(iOS|Android)(_ver_[0-9]{1,2}(\.[0-9]{1,2})?_and_above)?$")
 
-_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
+_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z_]+)\Z")
 
 
 class WriteRefused(ValueError):
@@ -237,9 +366,18 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "child_edges": sorted(CHILD_EDGES),
         "files": dict(FILE_FIELDS),
         "upload": {"phases": list(UPLOAD_PHASES), "keys": {k: sorted(v) for k, v in UPLOAD_KEYS.items()},
-                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_CHUNK_MAX,
+                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_STAGED_CHUNK_MAX,
+                   "served_chunk_max": UPLOAD_CHUNK_MAX, "piece_max": UPLOAD_PIECE_MAX,
+                   "serve_prefix": SERVE_PREFIX, "serve_token_re": SERVE_TOKEN_RE.pattern,
                    "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
                    "number_re": UPLOAD_NUMBER_RE.pattern},
+        "video_title_re": VIDEO_TITLE_RE.pattern,
+        "file_api": {"markers": list(FILE_API_MARKERS), "keys": {k: sorted(v) for k, v in FILE_API_KEYS.items()},
+                     "handle_re": FILE_HANDLE_RE.pattern, "handle_max": FILE_HANDLE_MAX},
+        "rupload": {"name_re": RUPLOAD_NAME_RE.pattern, "domain": RUPLOAD_DOMAIN, "generic_host": RUPLOAD_GENERIC_HOST, "path_re": RUPLOAD_PATH_RE.pattern,
+                    "methods": list(RUPLOAD_METHODS), "query_keys": list(RUPLOAD_QUERY_KEYS),
+                    "headers": list(RUPLOAD_HEADERS), "type": RUPLOAD_TYPE, "field": RUPLOAD_BODY_FIELD,
+                    "segment_max": RUPLOAD_SEGMENT_MAX, "blob_safe": RUPLOAD_BLOB_SAFE, "dtsg_re": RUPLOAD_DTSG_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
@@ -380,21 +518,91 @@ def _check_customization_spec(cs: Any, refuse: Any) -> None:
             refuse(f"{key} value is not allowed")
 
 
-def _instant_labelled_list(spec: dict, kind: str, refuse: Any, *, texts: bool) -> list:
-    """Список ассетов ленты Instant Form: у каждого ровно наши метки (первый - обе, остальные - основную)."""
+def _instant_labelled_list(spec: dict, kind: str, refuse: Any, *, texts: bool, files: bool = False) -> list:
+    """Список ассетов размеченной ленты: у каждого ровно наши метки (первый - обе, остальные - основную).
+
+    ACL-2611: `files` - список файлов (1-2): один файл несёт обе метки, два - основной метку основного правила,
+    вертикальный метку вертикального.
+    """
     items = spec.get(kind)
     main, vertical = instant_labels(kind)
-    cap = ASSET_FEED_MAX_TEXTS if texts else 1
+    cap = ASSET_FEED_MAX_TEXTS if texts else (ASSET_FEED_MAX_MEDIA if files else 1)
     if not (isinstance(items, list) and 1 <= len(items) <= cap):
         refuse(f"{kind} must hold 1-{cap} items")
     for n, item in enumerate(items):
         want = [main, vertical] if n == 0 else [main]
+        if files and len(items) == 2:
+            want = [main] if n == 0 else [vertical]
         if not isinstance(item, dict):
             refuse(f"{kind} item must be an object")
         labels = item.get("adlabels")
         if not (isinstance(labels, list) and labels == [{"name": x} for x in want]):
             refuse(f"{kind} item {n + 1} must carry exactly the labels {want}")
     return items
+
+
+def _has_labelled_text(spec: dict, kind: str) -> bool:
+    items = spec.get(kind)
+    return isinstance(items, list) and any(isinstance(x, dict) and "adlabels" in x for x in items)
+
+
+def _check_labelled_file_item(media: Any, media_kind: str, refuse: Any) -> None:
+    """Один файл размеченной ленты: точный набор ключей, id по шаблону, https-миниатюра."""
+    if media_kind == "images":
+        ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str)             and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+    else:
+        thumb = media.get("thumbnail_url")
+        ok = set(media) == {"video_id", "thumbnail_url", "adlabels"}             and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"]))             and isinstance(thumb, str) and thumb.startswith("https://")
+    if not ok:
+        refuse(f"{media_kind} item is not allowed")
+
+
+def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> None:
+    """ACL-2611: Website, несколько текстов + вертикальный файл - размеченная лента (форма Ads Manager, ACL-2584).
+
+    Ровно два файла (основной и вертикальный) с метками, тексты 1-5 непустых: все с основной меткой, первый ещё с
+    вертикальной; ссылка https с обеими метками; два правила, каждое называет метки всех видов ассета. Без заголовка
+    такая лента не проверена (как у Website с одним текстом).
+    """
+    present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_kind]
+    if "titles" not in spec:
+        refuse("titles must hold 1-5 non-empty texts (a Website ad with several texts and no headline is not verified yet)")
+    for kind in ("bodies", "titles", "descriptions"):
+        if kind not in spec:
+            continue
+        limit = ASSET_FEED_TEXT_MAX[kind]
+        for item in _instant_labelled_list(spec, kind, refuse, texts=True):
+            text = item.get("text")
+            if set(item) != {"text", "adlabels"} or not isinstance(text, str) or not text.strip():
+                refuse(f"{kind} must hold non-empty texts with labels only")
+            if len(text) > limit:
+                refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
+    files = _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True)
+    if len(files) != 2:
+        refuse(f"{media_kind} must hold the main and the Stories/Reels file")
+    for item in files:
+        _check_labelled_file_item(item, media_kind, refuse)
+    link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
+    if set(link) != {"website_url", "adlabels"} or not (isinstance(link["website_url"], str)
+                                                         and link["website_url"].startswith("https://")):
+        refuse("link_urls must hold one https website_url")
+    ctas = spec.get("call_to_action_types")
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_WEBSITE):
+        refuse("call_to_action_types must hold one allowed button")
+    want = "SINGLE_IMAGE" if media_kind == "images" else "SINGLE_VIDEO"
+    if spec.get("ad_formats") != [want]:
+        refuse(f"ad_formats must be exactly [{want!r}]")
+    rules = spec.get("asset_customization_rules")
+    if not (isinstance(rules, list) and len(rules) == 2):
+        refuse("two files need exactly two rules")
+    for n, rule in enumerate(rules):
+        label_keys = {INSTANT_ASSET_KINDS[k][1]: instant_labels(k)[n] for k in present}
+        if not (isinstance(rule, dict) and set(rule) == {"customization_spec"} | set(label_keys)):
+            refuse("rule keys are not allowed")
+        for key, name in label_keys.items():
+            if rule[key] != {"name": name}:
+                refuse(f"rule {key} must name {name!r}")
+        _check_customization_spec(rule["customization_spec"], refuse)
 
 
 def _check_instant_feed(spec: dict, refuse: Any) -> None:
@@ -432,17 +640,17 @@ def _check_instant_feed(spec: dict, refuse: Any) -> None:
                 refuse(f"{kind} must hold non-empty texts with labels only")
             if len(text) > limit:
                 refuse(f"{kind} text is {len(text)} characters long, the limit is {limit}")
-    media = _instant_labelled_list(spec, media_kind, refuse, texts=False)[0]
-    if media_kind == "images":
-        ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str) \
-            and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
-    else:
-        thumb = media.get("thumbnail_url")
-        ok = set(media) == {"video_id", "thumbnail_url", "adlabels"} \
-            and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"])) \
-            and isinstance(thumb, str) and thumb.startswith("https://")
-    if not ok:
-        refuse(f"{media_kind} item is not allowed")
+    for media in _instant_labelled_list(spec, media_kind, refuse, texts=False, files=True):
+        if media_kind == "images":
+            ok = set(media) == {"hash", "adlabels"} and isinstance(media["hash"], str) \
+                and bool(IMAGE_HASH_RE.fullmatch(media["hash"]))
+        else:
+            thumb = media.get("thumbnail_url")
+            ok = set(media) == {"video_id", "thumbnail_url", "adlabels"} \
+                and isinstance(media["video_id"], str) and bool(VIDEO_ID_RE.fullmatch(media["video_id"])) \
+                and isinstance(thumb, str) and thumb.startswith("https://")
+        if not ok:
+            refuse(f"{media_kind} item is not allowed")
     link = _instant_labelled_list(spec, "link_urls", refuse, texts=False)[0]
     if set(link) != {"website_url", "adlabels"} or link["website_url"] != LEAD_FEED_LINK:
         refuse("link_urls must hold the Instant Form placeholder link")
@@ -516,6 +724,9 @@ def _check_asset_feed(spec: Any, creative: dict, on_ad: bool = False) -> None:
     media = spec[kind]
     if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
         refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
+    if len(media) > 1 and any(_has_labelled_text(spec, k) for k in ("bodies", "titles", "descriptions")):
+        _check_website_labelled_feed(spec, kind, refuse)  # ACL-2611: тексты с метками правил + два файла
+        return
     cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
     for kind_name in ("bodies", "titles", "descriptions"):
         # Длина - отдельная причина: «1-N текстов» скрыла бы её (ACL-1774).
@@ -698,6 +909,41 @@ def _check_instagram(edge: str, checked: dict) -> None:
     if not (isinstance(value, str) and INSTAGRAM_ID_RE.fullmatch(value)):
         raise WriteRefused(f"write refused: {INSTAGRAM_KEY} must be the numeric id of an Instagram account")
 
+class ServedChunk:
+    """ACL-2629: a window [offset, offset+length) of a file on disk, handed to the page's Web Worker piece by
+    piece instead of being copied into the page (the old staged path). Holds no bytes itself.
+
+    `source` must offer `read_range(offset, n)` (`creator.LargeFile`). `len()` is the chunk length, so the
+    chunk-size checks apply to it exactly as to bytes.
+    """
+
+    def __init__(self, source: Any, offset: int, length: int):
+        if not (isinstance(offset, int) and isinstance(length, int)) or offset < 0 or length < 1:
+            raise ValueError("a served chunk needs a non-negative offset and a positive length")
+        self.source = source
+        self.offset = offset
+        self.length = length
+
+    def __len__(self) -> int:
+        return self.length
+
+    def read(self, rel: int, n: int) -> bytes:
+        """Bytes [rel, rel+n) of the chunk; never outside the window."""
+        if rel < 0 or n < 0 or rel + n > self.length:
+            raise ValueError("read outside the served chunk")
+        return self.source.read_range(self.offset + rel, n) if n else b""
+
+    def pieces(self, piece: int) -> list[tuple[int, int]]:
+        """[(rel_offset, length)] covering the chunk in pieces of at most `piece` bytes."""
+        piece = max(1, min(int(piece), UPLOAD_PIECE_MAX))
+        return [(o, min(piece, self.length - o)) for o in range(0, self.length, piece)]
+
+    def piece_hashes(self, piece: int) -> list[str]:
+        import hashlib
+
+        return [hashlib.sha256(self.read(o, n)).hexdigest() for o, n in self.pieces(piece)]
+
+
 def _digits(value: Any) -> int | None:
     """Целое из int или строки цифр (не bool, не float); иначе None."""
     if isinstance(value, bool):
@@ -740,10 +986,62 @@ def _check_upload(params: dict, files: dict) -> None:
         if set(files) != {UPLOAD_CHUNK_FIELD}:
             raise WriteRefused(f"write refused: transfer needs exactly the file field {UPLOAD_CHUNK_FIELD!r}")
         chunk = files[UPLOAD_CHUNK_FIELD]
-        if not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
-            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+        if isinstance(chunk, ServedChunk):
+            # ACL-2629: the bytes are read from the file by the controller and served to the worker piece by piece.
+            if not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
+                raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+            if chunk.offset != _digits(params.get("start_offset")):
+                raise WriteRefused("write refused: the served chunk must start at start_offset")
+        elif not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_STAGED_CHUNK_MAX:
+            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_STAGED_CHUNK_MAX} bytes")
     elif files:
         raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+
+
+def _is_file_api(params: dict) -> bool:
+    return any(k in params for k in FILE_API_MARKERS)
+
+
+def _check_file_api(params: dict, files: dict) -> None:
+    """ACL-2639: the advideos phases of the Ads Manager file-API upload: closed keys per phase, exact values."""
+    phase = params.get("upload_phase")
+    if not (isinstance(phase, str) and phase in FILE_API_KEYS):
+        raise WriteRefused("write refused: upload_phase must be start, transfer or finish")
+    extra = sorted(set(params) - FILE_API_KEYS[phase])
+    missing = sorted(FILE_API_KEYS[phase] - set(params))
+    if extra or missing:
+        raise WriteRefused(f"write refused: key {(extra or missing)[0]!r} is "
+                           f"{'not allowed' if extra else 'required'} in upload phase {phase}")
+    if files:
+        raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+    if phase == "start":
+        size = _digits(params["file_size"])
+        if not size or size > UPLOAD_FILE_MAX or not isinstance(params["file_size"], str):
+            raise WriteRefused("write refused: file_size must be a positive size within the video limit")
+        if not (isinstance(params["waterfall_id"], str) and UPLOAD_WATERFALL_RE.fullmatch(params["waterfall_id"])):
+            raise WriteRefused("write refused: waterfall_id must be 32 lowercase hex characters")
+        if (params["file_extension"] != "mp4" or params["supports_chunking"] != "true"
+                or params["supports_file_api"] != "true" or params["partition_start_offset"] != "0"
+                or params["partition_end_offset"] != params["file_size"]):
+            raise WriteRefused("write refused: the start of an upload must be one whole-file mp4 partition")
+        return
+    for key in ("upload_session_id", "video_id"):
+        v = params[key]
+        if not (isinstance(v, str) and UPLOAD_ID_RE.fullmatch(v)):
+            raise WriteRefused(f"write refused: {key} must be the numeric id Meta returned")
+    if phase == "transfer":
+        end = _digits(params["end_offset"])
+        if (params["start_offset"] != "0" or params["partition_start_offset"] != "0" or not end
+                or end > UPLOAD_FILE_MAX or not isinstance(params["end_offset"], str)
+                or params["partition_end_offset"] != params["end_offset"]):
+            raise WriteRefused("write refused: the transfer must cover one whole-file partition from 0")
+        h = params["fbuploader_video_file_chunk"]
+        if not (isinstance(h, str) and len(h) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(h)):
+            raise WriteRefused("write refused: fbuploader_video_file_chunk must be the file handle of the upload")
+    else:
+        t = params["title"]
+        if not (isinstance(t, str) and VIDEO_TITLE_RE.fullmatch(t)):
+            raise WriteRefused("write refused: the video title must be its ACL tag name")
 
 
 # ───────────────────────── lifetime-бюджет и расписание (ACL-1443) ─────────────────────────
@@ -847,7 +1145,10 @@ def check(act: str, method: str, path: str, params: dict | None,
         raise WriteRefused(f"write refused: edge {edge!r} is not on the allowlist")
     params = dict(params or {})
     if edge == "advideos" and "upload_phase" in params:
-        _check_upload(params, dict(files or {}))
+        if _is_file_api(params):
+            _check_file_api(params, dict(files or {}))             # ACL-2639: the Ads Manager file-API upload
+        else:
+            _check_upload(params, dict(files or {}))
         return edge
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:

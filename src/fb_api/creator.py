@@ -55,7 +55,7 @@ from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
 from src.fb_api.telemetry import mask_id as _mask_id, scrub
-from src.fb_api.graph import AuthRequired, FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, WritesBlocked, WriteUnknown, is_auth_required, normalize_act
+from src.fb_api.graph import AuthRequired, FormPhotoRefused, GraphClient, GraphError, GraphStop, NotSent, PageFailed, RuploadLost, WritesBlocked, WriteUnknown, is_auth_required, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
@@ -141,9 +141,68 @@ VIDEO_EXT = frozenset({".mp4", ".mov", ".m4v", ".avi", ".wmv", ".mkv", ".webm"})
 IMAGE_MAX_BYTES = 30 * 1024 * 1024
 #: Видео до этого размера уходит одним запросом (как раньше); больше - кусками (ACL-1891).
 VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
-#: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
+#: ACL-2629: путь воркера - исходный файл до лимита Meta (4 ГБ), куски до 64 МБ.
 VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
 VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Старый путь (base64 через CDP, сжатие ffmpeg - запасной): прежние потолки.
+VIDEO_MAX_BYTES_STAGED = _wpol.UPLOAD_FILE_STAGED_MAX
+VIDEO_CHUNK_STAGED_MAX = _wpol.UPLOAD_STAGED_CHUNK_MAX
+#: На пути воркера в один запрос идёт только небольшое видео: файл целиком кладётся в страницу как раньше
+#: (atob на главном потоке), а это замораживало вкладку на сотнях МБ (ACL-2000).
+VIDEO_SINGLE_MAX_BYTES_WORKER = 16 * 1024 * 1024
+#: Выключатель пути воркера: `ACL_VIDEO_WORKER_UPLOAD=0|false|no|off` (по умолчанию включён).
+WORKER_UPLOAD_FLAG = "ACL_VIDEO_WORKER_UPLOAD"
+
+
+def worker_upload_enabled(env: dict | None = None) -> bool:
+    """ACL-2629: видео грузится из Web Worker вкладки без сжатия. Выключается только явным `0/false/no/off`."""
+    raw = (env if env is not None else os.environ).get(WORKER_UPLOAD_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+#: ACL-2639: the Ads Manager "file API" upload of large videos. OFF by default (live: the service refuses the whole-file
+#: POST with HTTP 400); on only when explicitly set (`ACL_VIDEO_RESUMABLE_UPLOAD=1|true|yes|on`). The code is kept.
+#: Off: large videos go up with the chunked advideos protocol (compressed first when they would not fit the run).
+RESUMABLE_UPLOAD_FLAG = "ACL_VIDEO_RESUMABLE_UPLOAD"
+
+
+def resumable_upload_enabled(env: dict | None = None) -> bool:
+    raw = (env if env is not None else os.environ).get(RESUMABLE_UPLOAD_FLAG, "")
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+#: ACL-2639: at most this many resumes of one resumable upload (each one = an offset read of the service + a POST).
+RESUMABLE_MAX_RESUMES = 5
+#: Graph calls of one resumable upload: start, transfer, finish, one status read (an earlier run continued, or a lost
+#: finish answer). The bytes go to the page's resumable service, which is not Graph and not counted.
+RESUMABLE_FIXED_CALLS = 4
+
+
+def resumable_calls() -> int:
+    """Graph calls of a resumable upload without resumes: constant (the size only changes the service POSTs)."""
+    return RESUMABLE_FIXED_CALLS
+
+
+def _already_finished(exc: Exception) -> bool:
+    """A definite "this video is already finished/published" answer to a repeated finish."""
+    msg = str(exc).lower()
+    return isinstance(exc, GraphError) and "already" in msg and ("finish" in msg or "publish" in msg)
+
+
+class _ResumableRefused(Exception):
+    """ACL-2639: the resumable upload could not be used; nothing of it was finished (the chunked path takes over)."""
+
+
+def video_limit_bytes(worker: bool | None = None) -> int:
+    """Largest video accepted: Meta's 4 GB on the worker path, 1536 MB on the old (compressing) path."""
+    worker = worker_upload_enabled() if worker is None else worker
+    return VIDEO_MAX_BYTES if worker else VIDEO_MAX_BYTES_STAGED
+
+
+def single_request_max(worker: bool | None = None) -> int:
+    """Видео не больше этого уходит одним запросом; больше - кусками."""
+    worker = worker_upload_enabled() if worker is None else worker
+    return VIDEO_SINGLE_MAX_BYTES_WORKER if worker else VIDEO_SINGLE_MAX_BYTES
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
@@ -159,11 +218,58 @@ def _disk_size(path: str) -> int:
         return 0
 
 
-def upload_calls(size: int) -> int:
-    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом."""
-    if size <= VIDEO_SINGLE_MAX_BYTES:
+#: ACL-2639: the upload window Meta really offers on the chunked path (1 MB, then a steady 5 MB in every live run so
+#: far); the plan assumes this, not the 64 MB ceiling, whenever the chunked path may be used.
+CHUNK_WINDOW_LIVE = 5 * 1024 * 1024
+
+
+#: ACL-2639: emergency switch of the compress-to-fit fallback (`ACL_VIDEO_COMPRESS_FALLBACK=0|false|no|off`); on by default.
+COMPRESS_FALLBACK_FLAG = "ACL_VIDEO_COMPRESS_FALLBACK"
+#: The compressed copy is never aimed above this many MB, and at this share of what fits (x264 2-pass lands within a few %).
+COMPRESS_FALLBACK_CAP_MB = 500
+COMPRESS_FALLBACK_SHARE = 0.9
+
+
+def compress_fallback_enabled(env: dict | None = None) -> bool:
+    raw = (env if env is not None else os.environ).get(COMPRESS_FALLBACK_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def chunked_fit_mb(spare: int, cap_mb: int = COMPRESS_FALLBACK_CAP_MB) -> int:
+    """The largest size in whole MB (up to `cap_mb`) whose chunked upload, at Meta's real 5 MB windows and with the retry
+    slack, fits into `spare` Graph calls. 0: nothing fits."""
+    best = 0
+    for mb in range(1, int(cap_mb) + 1):
+        # (a small file still goes through the chunked path here: start, transfer and finish are calls too)
+        calls = max(upload_calls(mb * 1024 * 1024, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+        if calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) <= spare:
+            best = mb
+        else:
+            break
+    return best
+
+
+def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False) -> int:
+    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом.
+
+    ACL-2629: путь воркера (по умолчанию) считает исходный размер и куски по 64 МБ; запасной путь -
+    куски по 8 МБ (`worker=False`).
+    """
+    worker = worker_upload_enabled() if worker is None else worker
+    if size <= single_request_max(worker):
         return 0
-    return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
+    if worker and not chunked and resumable_upload_enabled():
+        return resumable_calls()          # ACL-2639: the file-API upload is the primary path (a few Graph calls)
+    # Chunked path: Meta's windows are about 5 MB in practice, not the 64 MB ceiling (ACL-2639, live 15.11).
+    chunks = -(-size // (min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker else VIDEO_CHUNK_STAGED_MAX))
+    # ACL-2637: on the worker path Meta's windows may start at 1 MB and grow; a doubling ramp to 64 MB costs about
+    # this many calls more than 64 MB windows from the first byte (only when the file has that many chunks at all).
+    ramp = min(CALLS_UPLOAD_WINDOW_RAMP, chunks) if worker and chunks > 1 else 0
+    return chunks + ramp + CALLS_UPLOAD_FIXED
+
+
+#: ACL-2637: calls reserved for a growing upload window (1, 2, 4 ... 64 MB) on the worker path.
+CALLS_UPLOAD_WINDOW_RAMP = 6
 
 #: Ожидание обработки видео — с потолком по времени и по числу вызовов.
 VIDEO_WAIT_S = 300.0
@@ -221,6 +327,37 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
 #: ACL-2370: запас на повторы кусков (ACL-2000, докачка со смещения): 5% кусков, не меньше двух вызовов.
 CHUNK_RETRY_SLACK_FRACTION = 0.05
 CHUNK_RETRY_SLACK_MIN = 2
+#: ACL-2637: Meta picks every upload window itself ("We send you new offsets for each chunk", Business Creative
+#: Asset Management guide) - a small first window (1 MB seen live 2026-11-14) may grow on later transfer answers.
+#: So a small window is judged only after this many transfer answers; until then only the hard cap stops.
+UPLOAD_WINDOW_PROBE_TRANSFERS = 3
+#: How fast a growing window is assumed to keep growing when the rest of the calls is projected (at most doubling).
+UPLOAD_WINDOW_GROWTH_MAX = 2.0
+
+
+def project_upload_calls(remaining: int, windows: list[int], cap: int, *, limit: int = 100_000) -> int:
+    """ACL-2637: transfer calls still needed for `remaining` bytes, from the windows Meta offered so far.
+
+    Steady or shrinking windows: remaining / last window. Growing windows: the last growth ratio (at most doubling)
+    is assumed to go on up to `cap`, the chunk ceiling of this path. Counting stops at `limit` (the caller compares).
+    """
+    if remaining <= 0:
+        return 0
+    last = max(1, min(windows[-1] if windows else 1, cap))
+    prev = max(1, min(windows[-2], cap)) if len(windows) >= 2 else last
+    growth = min(UPLOAD_WINDOW_GROWTH_MAX, last / prev)
+    if growth <= 1.0 or last >= cap:
+        return -(-remaining // last)
+    n, w = 0, float(last)
+    while remaining > 0 and n < limit:
+        remaining -= int(min(w, cap))
+        n += 1
+        w = min(float(cap), w * growth)
+    return n
+
+
+def _mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.0f} MB" if n >= 10 * 1024 * 1024 else f"{n / (1024 * 1024):.1f} MB"
 
 
 def video_files_of(plan: "CampaignPlan") -> list[str]:
@@ -262,6 +399,8 @@ def planned_upload_size(path: str, original: int) -> int:
     """
     from src.fb_ads_rpa import creative_compress as _cc
 
+    if worker_upload_enabled():
+        return original       # ACL-2629: the original goes up from the worker, nothing is compressed
     limit = video_compress_limit_mb()
     if original <= limit * 1048576:
         return original
@@ -277,15 +416,71 @@ def planned_upload_size(path: str, original: int) -> int:
     return original
 
 
-def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
+def video_upload_calls(size: int, compressed: bool = False, worker: bool | None = None) -> int:
+    """THE count of Graph calls for uploading one video of `size` bytes (no retry slack): the plan (`publish_api`, via
+    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is always
+    uploaded in chunks, so at least start + transfer + finish."""
+    if compressed:
+        return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+    return upload_calls(size, worker)
+
+
+def _chunked_cost(size: int, compressed: bool = False) -> int:
+    """`video_upload_calls` of the chunked path with the retry slack (the compress planning compares this with a spare)."""
+    calls = video_upload_calls(size, True, True) if compressed else upload_calls(size, True, chunked=True)
+    return calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) if calls else 0
+
+
+def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None,
+                      spare: int | None = None) -> dict[str, tuple[int, bool]]:
+    """ACL-2639: path -> (planned upload bytes, will be compressed) of every video of the plan.
+
+    The planned size is the original unless the chunked upload (5 MB windows) of all large videos together would not fit
+    `spare` Graph calls and the compress fallback is on: then ONE size cap C (MB, at most COMPRESS_FALLBACK_CAP_MB) is
+    chosen - the largest for which everything fits - and every video above C is planned at C * 0.9 (the size
+    `_fit_for_chunks` aims at). Only on the chunked primary path (the fast upload off), the worker path, and a known
+    spare; otherwise the originals are planned, as before."""
+    size_of = size_of or _disk_size
+    sizes = {p: planned_upload_size(p, size_of(p)) for p in video_files_of(plan)}
+    result = {p: (s, False) for p, s in sizes.items()}
+    if (spare is None or not worker_upload_enabled() or resumable_upload_enabled()
+            or not compress_fallback_enabled()):
+        return result
+    large = [p for p, s in sizes.items() if upload_calls(s, True, chunked=True)]
+    if not large or sum(_chunked_cost(sizes[p]) for p in large) <= spare:
+        return result
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    if not _cc.ffmpeg_exe():
+        return result                                      # nothing to compress with: the originals are planned (and refused)
+    best = 0
+    for cap in range(1, COMPRESS_FALLBACK_CAP_MB + 1):
+        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576
+                    else _chunked_cost(int(cap * COMPRESS_FALLBACK_SHARE * 1048576), True) for p in large)
+        if total > spare:
+            break
+        best = cap
+    if best:
+        for p in large:
+            if sizes[p] > best * 1048576:
+                result[p] = (int(best * COMPRESS_FALLBACK_SHARE * 1048576), True)
+    return result
+
+
+def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None,
+                          spare: int | None = None) -> int:
     """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
 
     Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
     `estimate_create_calls`). ACL-2621: считаем размер того, что реально уйдёт (`planned_upload_size`),
-    а не исходника: запуск сжимает тяжёлое видео до загрузки.
+    а не исходника: запуск сжимает тяжёлое видео до загрузки. ACL-2639: с известным `spare` (вызовов, которые
+    потолок прогона оставляет загрузкам) видео, не влезающие кусками, считаются по размеру сжатой копии.
     """
     size_of = size_of or _disk_size
-    chunks = sum(upload_calls(planned_upload_size(path, size_of(path))) for path in video_files_of(plan))
+    planned = plan_upload_sizes(plan, size_of, spare)
+    chunks = 0
+    for _path, (size, compressed) in planned.items():
+        chunks += video_upload_calls(size, compressed)
     if not chunks:
         return 0
     return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
@@ -506,7 +701,9 @@ class AdSetPlan:
         ACL-2584: Instant Form не Dynamic Creative: несколько текстов идут лентой с правилами площадок (форма
         Ads Manager), набор обычный и берёт объявлений сколько позволит Meta.
         """
-        return not self.instant and any(a.multi_text for a in self.ads)
+        # ACL-2611: несколько текстов + вертикальный файл - лента с метками и правилами (форма Ads Manager),
+        # не Dynamic Creative: набор обычный.
+        return not self.instant and any(a.multi_text and not a.vertical_path for a in self.ads)
 
 
 @dataclass
@@ -672,10 +869,13 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         if warnings is not None:
             warnings.append(f"Ad {i}: the same file was selected as main and Stories / Reels; "
                             "it will be used once as the main file.")
-    if plan_ad.multi_text and vertical:
-        # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
-        # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
-        problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
+    if vertical and plan_ad.multi_text and not plan_set.instant and not plan_ad.titles:
+        # Website без заголовка с лентой текстов не проверен (политика откажет при записи) - говорим сразу.
+        problems.append(f"Ad {i}: several texts with a Stories / Reels file need a headline on a Website ad; "
+                        "add a headline or switch the ad set to Instant Form")
+    # ACL-2611: несколько текстов + вертикальный файл больше не отказ. Живой прогон 2026-10-14 (ACL-1774): Meta
+    # отказала ленте с НЕразмеченными текстами и двумя правилами; ACL-2584 (12.11): тексты с метками правил принят.
+    # Все тексты идут на основной файл, первый текст каждого вида - ещё и на Stories/Reels (`feed_spec`).
     # ACL-2528 (owner decision 2026-11-12): an empty or title-only Primary text 1 never blocks. `bodies` already
     # holds only the non-empty texts in order; with none, the ad goes without a primary text (warning only).
     if not vertical and not same_file and str(getattr(src, "vertical_filename", "") or "").strip():
@@ -688,12 +888,6 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
         elif plan_ad.vertical_kind != plan_ad.kind:
             problems.append(f"Ad {i}: the main file is {plan_ad.kind} and the Stories / Reels file is "
                             f"{plan_ad.vertical_kind}; use two images or two videos")
-    if plan_ad.uses_feed and plan_set.instant and plan_ad.vertical_path:
-        # ACL-2528: several texts + ONE file work on an Instant Form (asset feed with the form in its button);
-        # a Stories / Reels file next to it still needs placement rules, which are not verified on a form yet.
-        problems.append(f"Ad {i}: a Stories / Reels file works only with a Website ad set for now "
-                        "(Instant Form with placement rules is not verified on Meta yet); "
-                        "use one file for this ad, or switch the ad set to Website")
 
 
 def placement_targeting(placements: dict | None) -> dict:
@@ -1795,6 +1989,7 @@ class CampaignCreator:
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None,
                  compress_video: Callable[[str], Any] | None = None,
+                 compress_to_fit: Callable[[str, float, float], Any] | None = None,
                  journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0):
         self.client = client
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
@@ -1806,6 +2001,8 @@ class CampaignCreator:
         self._op: "_oj.Operation | None" = None
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
+        #: ACL-2639: `fn(path, limit_mb, target_mb) -> Prepared` for the compress-to-fit fallback; None - the real compressor.
+        self.compress_to_fit = compress_to_fit
         #: ACL-2353: снимок ревью задания (имя кампании -> fp, Page, пиксель); None - без ревью.
         self.reviewed: dict | None = None
         self.facts = facts
@@ -1935,7 +2132,7 @@ class CampaignCreator:
     def _page_timeout(exc: BaseException) -> bool:
         """Страница не приняла кусок вовремя: файл не лёг в неё, к Meta ничего не ушло."""
         text = str(exc)
-        return "(no_file" in text and ("did not answer" in text or "timed out" in text)
+        return "(no_file" in text and ("did not answer" in text or "timed out" in text or "worker" in text)
 
     def _check_cancel(self, out: Outcome) -> None:
         if self.cancelled():
@@ -3124,7 +3321,12 @@ class CampaignCreator:
             return str(hit["id"]) if hit else None
 
         began = self.clock()
-        vid = find()
+        # ACL-2639: the same file in several ads of this run goes up once (a resumable upload is named only after its
+        # finish, and Meta's list may lag behind the name).
+        seen = getattr(self, "_videos_this_run", None)
+        if seen is None:
+            seen = self._videos_this_run = {}
+        vid = seen.get(title) or find()
         if vid:
             self._step(out, f"{who}: video already in the ad account")
             self._video_row(plan, who, data, "found", began)
@@ -3136,7 +3338,7 @@ class CampaignCreator:
                 if mode == "chunked":
                     vid = self._journaled(
                         out, f"{who}: video upload", "video",
-                        lambda: self._video_chunked(out, plan, data, title, find, who), find,
+                        lambda: self._video_large(out, plan, data, title, find, who), find,
                         name=title, content_md5=_md5(data))
                 else:
                     vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
@@ -3149,6 +3351,7 @@ class CampaignCreator:
             finally:
                 self._waiting("")
             out.created.setdefault("videos", []).append(vid)
+            seen[title] = vid
             self._step(out, f"{who}: video uploaded")
             self._video_row(plan, who, data, mode, began)
         return vid, self._wait_video(out, ad, vid, who=who)
@@ -3179,12 +3382,560 @@ class CampaignCreator:
                 f"{what}: the write result is unknown ({exc}). Publish again later: a finished video "
                 "is found by its tag and is not uploaded twice.", created=out.created, kind="unknown") from exc
 
+    def _video_large(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                     find: Callable[[], str | None], who: str) -> str:
+        """Upload-phase writes are counted apart from the campaign's own writes (the fallback's reserve needs that)."""
+        client = self.client
+        w0 = getattr(client, "writes", 0)
+        pend = getattr(self, "_large_pending", None)
+        if pend:                                   # this video leaves the list of those still to come
+            sizes_ = [o for o, _c in pend]
+            pend.pop(sizes_.index(len(big)) if len(big) in sizes_ else 0)
+        self._video_w0 = w0
+        try:
+            return self._video_large_inner(out, plan, big, title, find, who)
+        finally:
+            self._upload_writes = getattr(self, "_upload_writes", 0) + max(0, getattr(client, "writes", 0) - w0)
+
+    def _video_large_inner(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                           find: Callable[[], str | None], who: str) -> str:
+        """ACL-2639: a large original from the profile goes up with Meta's resumable protocol (a few calls); the
+        chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte."""
+        if self.worker_path and resumable_upload_enabled():
+            before = getattr(self.client, "calls", 0)
+            try:
+                return self._video_resumable(out, plan, big, who, title)
+            except _ResumableRefused as exc:
+                why = str(exc)
+                # The next run must not repeat attempts that moved nothing: the unfinished session is forgotten.
+                self._forget_pending_video(f"{who}: video upload")
+                # N1: the calls the failed attempt spent come on top of the run budget (the chunked plan is unchanged).
+                if isinstance(getattr(self.client, "max_calls", None), int):
+                    self.client.max_calls += max(0, getattr(self.client, "calls", 0) - before)
+                self._step(out, f"{who}: resumable upload not used ({why}); uploading in chunks instead")
+                out.warnings.append(f"Ad video: the resumable upload was not used ({why}); uploading in chunks instead.")
+        big = self._fit_for_chunks(out, plan, big, who)
+        return self._video_chunked(out, plan, big, title, find, who)
+
+    def _chunk_spare(self, plan: CampaignPlan) -> int | None:
+        """ACL-2639: the Graph calls a chunked upload of THIS video may use: the run budget left, minus what the rest of
+        the campaign still needs (campaign-object writes only, plus the fast-path uploads of the large videos still to
+        come). None: no run budget to compare with (or not the worker path)."""
+        budget = getattr(self.client, "max_calls", None)
+        if not (self.worker_path and isinstance(budget, int)):
+            return None
+        camp_done = max(0, getattr(self, "_video_w0", getattr(self.client, "writes", 0))
+                        - getattr(self, "_writes_base", 0) - getattr(self, "_upload_writes", 0))
+        later = sum(c for _o, c in (getattr(self, "_large_pending", None) or []))
+        reserve = max(0, estimate_create_calls(plan) - camp_done) + later
+        return max(0, budget - getattr(self.client, "calls", 0) - reserve)
+
+    def _fit_for_chunks(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str) -> "LargeFile":
+        """ACL-2639 (owner's fallback): the fast upload is not available/refused and the original would not fit the run's
+        spare chunked budget -> compress it locally (the ACL-2000 ffmpeg 2-pass x264 compressor: resolution, aspect
+        ratio and duration untouched) to a size that fits at 5 MB windows (never above COMPRESS_FALLBACK_CAP_MB) and
+        upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
+        finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
+        chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
+        self._compress_note = ""
+        if not compress_fallback_enabled():
+            return big
+        spare = self._chunk_spare(plan)
+        if spare is None:
+            return big
+        size = len(big)
+        label = f"{who[:1].upper()}{who[1:]}"
+        planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
+        if planned and planned[1] and planned[0] < size:
+            target = max(1.0, planned[0] / (1024 * 1024))   # the plan already decided (and budgeted) this compression
+        else:
+            need = upload_calls(size, True, chunked=True)
+            if need + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * need)) <= spare:
+                return big                                 # the original fits: nothing to do
+            fit_mb = chunked_fit_mb(spare)
+            if fit_mb < 1:
+                self._step(out, f"{who}: no spare Meta calls to upload even a compressed copy ({spare} left)")
+                return big
+            target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
+        original_mb = size / (1024 * 1024)
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        try:
+            eta = _cc.eta_text(_cc.duration_s(big.path))
+        except Exception:  # noqa: BLE001 - the estimate is a courtesy
+            eta = ""
+        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run"
+                        f" ({eta or 'this can take several minutes'})")
+
+        fn = self.compress_to_fit or (lambda p, limit, tgt: _cc.ensure_uploadable(p, limit_mb=limit, target_mb=tgt))
+        shown = [-100]
+
+        def on_progress(pct: int) -> None:
+            # a step line every 10 points (and the run's heartbeat is beaten by the compressor's wait loop itself)
+            if pct - shown[0] >= 10:
+                shown[0] = pct
+                self._step(out, f"compressing {who} video: {pct}%")
+
+        try:
+            with _cc.observe_progress(on_progress):
+                prepared = fn(big.path, target, target * 0.95)
+        except Exception as exc:  # noqa: BLE001 - a failed compression is a fallback to the clear stop, not a crash
+            if type(exc).__name__ == "JobCancelled":
+                raise
+            self._compress_note = f"compression failed ({type(exc).__name__})"
+            self._step(out, f"{who}: compression failed ({type(exc).__name__}); the original goes on")
+            return big
+        if not getattr(prepared, "compressed", False):
+            why = getattr(prepared, "reason", "") or "unknown reason"
+            self._compress_note = f"compression was not possible: {why}"
+            self._step(out, f"{who}: not compressed ({why})")
+            return big
+        new_size = self.size_of(prepared.path) or 0
+        if not new_size or new_size >= size:
+            self._step(out, f"{who}: the compressed copy is not smaller; the original goes on")
+            return big
+        self._step(out, f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to fit this run")
+        out.warnings.append(f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to "
+                            "fit this run's Meta call budget (resolution and aspect ratio are unchanged).")
+        return LargeFile(prepared.path, new_size, self.read_range)
+
+    def _video_resumable(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str, title: str = "") -> str:
+        """ACL-2639: the upload protocol of Ads Manager itself ("file API"), from the profile tab.
+
+        advideos start (waterfall_id, one whole-file partition) -> the bytes go to the resumable service of the page
+        (`rupload-...up` or the generic host, session cookies; NOT Graph, not counted in the call budget): ONE POST with
+        the whole remainder from the `offset` the service holds (streamed piece by piece from the file, never a copy
+        in the page); the answer carries the file handle -> advideos transfer by that handle (Meta must answer that it
+        holds the whole file) -> advideos finish with the ACL tag as the title (a later search by the title finds it
+        like a chunked upload). A dropped POST resumes from the offset the service reports (GET), never from zero and
+        never as a second video; a resume that made progress is free, one without progress counts against
+        RESUMABLE_MAX_RESUMES; a service that keeps no byte of a broken POST twice in a row is refused (nothing finished,
+        the chunked path is safe). The ids are kept in the journal right
+        after the start (and `transferred` after the transfer): a run that stopped (or crashed) before the finish is
+        continued by the next one. Graph calls per video: start, transfer, finish (+ one status read when an earlier run
+        is continued or a finish answer is lost). `_ResumableRefused` - nothing was finished, the caller may use the
+        chunked path (an unfinished video of this upload stays at Meta, never published).
+        """
+        path = f"/{plan.act}/advideos"
+        size = len(big)
+        what = f"{who}: video upload"
+        if not title:
+            raise _ResumableRefused("the video has no ACL tag title")
+        ready, why_not = self.client.upload_service_ready()
+        if not ready:
+            raise _ResumableRefused(why_not or "upload service address not available on this page")
+        if why_not:
+            self._step(out, f"{who}: resumable upload via the generic upload host")
+        calls_before = getattr(self.client, "calls", 0)
+        planned = upload_calls(size, True)
+        # start, transfer, finish + the status reads of a continuation (worst case ~8); once the transfer is confirmed
+        # the finish and its status read are never refused by this cap.
+        allowance = RESUMABLE_FIXED_CALLS + 4
+        vid = sid = waterfall = ""
+        offset = 0
+        resumes = 0
+        moved = False                       # the service has confirmed at least one byte of this upload
+        transferred = False                 # Meta took the file by its handle (journal: a continuation only finishes)
+        last_title = ""                     # the title of the video at the last status read
+        get_handle = ""                     # a file handle the service returned to a GET (once the upload is complete)
+        streak = 0                          # consecutive 4xx answers of the service
+        refreshed = False
+        host_kind = ""                      # "generic" | "regional": the host kind of this upload (pinned, journaled)
+        mb_total = max(size // (1024 * 1024), 1)
+
+        def room(n: int) -> None:
+            if transferred:
+                return                       # Meta holds the file: the finish (and its status read) must not be cut off
+            used = getattr(self.client, "calls", 0) - calls_before
+            if used + n > allowance:
+                raise CreationStopped(
+                    f"{what}: the upload needs more Meta calls than planned for this video ({allowance}); stopped "
+                    "before sending more. Nothing was duplicated and the unfinished upload is not used.",
+                    created=out.created, kind="video_error")
+
+        def status() -> dict:
+            nonlocal last_title
+            room(1)
+            self._check_cancel(out)
+            row = self.client.get(f"/{vid}", {"fields": "status,title"})
+            last_title = str(row.get("title") or "") if isinstance(row, dict) else ""
+            st = row.get("status") if isinstance(row, dict) else None
+            return st if isinstance(st, dict) else {}
+
+        def published(st: dict) -> bool:
+            pub = st.get("publishing_phase") if isinstance(st.get("publishing_phase"), dict) else {}
+            return str(st.get("video_status") or "") in ("processing", "ready") or pub.get("status") == "complete"
+
+        def service_path() -> str:
+            return _wpol.rupload_path(waterfall, size)
+
+        def svc(method: str, **kw) -> dict:
+            """One request to the resumable service. A request the Python policy or the page refused BEFORE sending:
+            while nothing moved it is a refusal of this path (the chunked path takes over), afterwards a stop."""
+            nonlocal host_kind
+            if host_kind:
+                kw["host_kind"] = host_kind
+            try:
+                got = self.client.rupload(method, service_path(), **kw)
+                hk = got.get("host_kind")
+                if hk in ("generic", "regional") and hk != host_kind:
+                    host_kind = hk                         # kept, so a continuation uses the same host kind
+                    self._remember_pending_video(what, vid, sid, waterfall, size, transferred=transferred,
+                                                 host_kind=hk)
+                return got
+            except NotSent as exc:
+                self.client.release_optional_stop(exc)
+                if "(no_file" in str(exc):
+                    raise RuploadLost("the file piece did not reach the page", reason="no_file") from exc
+                if "(retired" in str(exc):
+                    raise CreationStopped(f"{what}: the page helper was retired ({str(exc)[:120]}); stopped before "
+                                          "sending more. Nothing was duplicated and the unfinished upload is not used.",
+                                          created=out.created, kind="video_error") from exc
+                if not moved:
+                    raise _ResumableRefused(f"the page refused the upload service request ({str(exc)[:120]})") from exc
+                raise CreationStopped(f"{what}: the page refused an upload service request ({str(exc)[:120]}); "
+                                      "stopped before sending more. Nothing was duplicated and the unfinished upload "
+                                      "is not used.", created=out.created, kind="video_error") from exc
+
+        def held() -> int | None:
+            """How many bytes the service holds of THIS upload (one GET of the service; not a Graph call). None: no
+            usable answer. A file handle in the answer (the service may give it once complete) is kept."""
+            nonlocal get_handle
+            self._check_cancel(out)
+            try:
+                got = svc("GET")
+            except RuploadLost:
+                return None
+            h = _wpol.file_handle(got["body"])
+            if h:
+                get_handle = h
+            raw = got["body"].get("offset")
+            n = raw if isinstance(raw, int) and not isinstance(raw, bool) else (
+                int(raw) if isinstance(raw, str) and raw.isdigit() and len(raw) <= 13 else None)
+            if not 200 <= got["status"] < 300 or n is None or n < 0 or n > size:
+                return None
+            return n
+
+        def shape(body: dict) -> str:
+            """Key names and value lengths only (never values) of an answer."""
+            parts = []
+            for k, v in list(body.items())[:12]:
+                ln = len(v) if isinstance(v, (str, list, dict)) else type(v).__name__
+                parts.append(f"{re.sub(r'[^A-Za-z0-9_]', '_', str(k))[:30]}:{ln}")
+            return ", ".join(parts) or "empty answer"
+
+        def resume(why: str, known: int | None = None) -> None:
+            nonlocal offset, resumes, moved
+            got = known if known is not None else held()
+            if got is None or got <= offset:
+                # Only a resume without progress counts: a GET that shows more bytes than we had is free.
+                resumes += 1
+                if resumes > RESUMABLE_MAX_RESUMES:
+                    raise CreationStopped(f"{what}: the upload kept breaking ({why}); stopped after "
+                                          f"{RESUMABLE_MAX_RESUMES} resumes without progress. Nothing was duplicated "
+                                          "and the unfinished upload is not used.", created=out.created,
+                                          kind="video_error")
+            if got is None:
+                if not moved:
+                    raise _ResumableRefused(f"the upload service did not tell its offset ({why})")
+                raise CreationStopped(f"{what}: the upload service did not tell how much of the video it holds "
+                                      f"({why}); stopped before sending more. Nothing was duplicated and the "
+                                      "unfinished upload is not used.", created=out.created, kind="video_error")
+            if got < offset and moved:
+                raise CreationStopped(f"{what}: Meta reported fewer bytes than it had confirmed ({got} < {offset}); "
+                                      "stopped before sending more", created=out.created, kind="video_error")
+            if got > 0:
+                moved = True
+            elif not moved and resumes >= 2:
+                # Not a single byte arrived twice in a row: the service is not usable from this profile (CORS, proxy,
+                # the session refused). Nothing is finished, so the chunked path is safe.
+                raise _ResumableRefused(f"no byte reached Meta ({why})")
+            self._step(out, f"{who}: resuming the upload at {got // (1024 * 1024)}/{mb_total} MB ({why})")
+            offset = got
+
+        def finish_params() -> dict:
+            return {"upload_phase": "finish", "upload_session_id": sid, "video_id": vid, "title": title}
+
+        def adopt_finish() -> str:
+            """A pending video of an earlier run: `processing/ready` alone never counts as finished. The finish with
+            the title is sent ONCE. "ok": success (or, as a secondary signal, an "already finished" answer);
+            "refused": Meta definitely refused; "unclear": anything else."""
+            room(1)
+            self._check_cancel(out)
+            try:
+                done = self.client.post(path, finish_params())
+            except GraphError as exc:
+                if _already_finished(exc):
+                    return "ok"
+                self._step(out, f"{who}: Meta did not take the finish of an earlier run's video ({str(exc)[:100]})")
+                return "refused"
+            except WriteUnknown:
+                self.client.reconciled(path)
+                status()
+                if last_title == title:
+                    self._step(out, f"{what}: finish reconciled by the title")
+                    return "ok"
+                raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
+                                      "published yet. Publish again later: the upload is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                return "unclear"
+            return "ok" if done.get("success") is True else "unclear"
+
+        # -- an upload this operation started earlier (stopped or crashed before its finish) is continued
+        pending = self._pending_video(what, size)
+        if pending:
+            vid, sid, waterfall, transferred, host_kind = pending
+            try:
+                st = status()
+            except GraphError as exc:
+                if not _object_gone(exc):
+                    # Not "gone" (a transient or a permission error): the earlier upload may be finished already, so
+                    # a new start could duplicate it. Stop; the next run asks again.
+                    raise CreationStopped(f"{what}: the upload of an earlier run could not be read ({str(exc)[:120]}). "
+                                          "Publish again later: it is continued, not repeated.",
+                                          created=out.created, kind="unknown") from exc
+                # N7: the video of the earlier run no longer exists: forget it and start a new upload.
+                self._step(out, f"{who}: the upload of an earlier run is not available ({str(exc)[:80]}); "
+                                "starting a new one")
+                self._forget_pending_video(what)
+                pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
+            else:
+                if last_title == title:
+                    # The finish of an earlier run took: the video carries our tag. Adopted without any write.
+                    self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                    return vid
+                if transferred or published(st):
+                    # `processing/ready` alone is not proof (and the title is absent): the finish is sent once.
+                    verdict = adopt_finish()
+                    if verdict == "ok":
+                        self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                        return vid
+                    if verdict == "refused":
+                        # Meta definitely refused: forget this entry; the title search that runs first on every
+                        # publish protects from a duplicate, so it is not a stop forever.
+                        self._step(out, f"{who}: Meta refused to finish the upload of an earlier run; "
+                                        "starting a new one")
+                        self._forget_pending_video(what)
+                        pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
+                    else:
+                        raise CreationStopped(f"{what}: the result of finishing the upload of an earlier run is "
+                                              "unknown. Publish again later: it is continued, not repeated.",
+                                              created=out.created, kind="unknown")
+                if pending:
+                    got = held()
+                    if got is not None and got >= size and get_handle:
+                        # Every byte is in and the service gave the handle again: straight to the transfer.
+                        self._step(out, f"{who}: continuing the upload of an earlier run: all bytes are in")
+                        offset, moved = size, True
+                    elif got is None or got >= size:
+                        # Nothing to continue from: the service lost it, or every byte is in and the file handle (the
+                        # answer to the last POST) is gone. The unfinished video is left; a new one is found by its title.
+                        self._step(out, f"{who}: the upload of an earlier run cannot be continued; starting a new one")
+                        self._forget_pending_video(what)
+                        pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
+                    else:
+                        self._step(out, f"{who}: continuing the upload of an earlier run at "
+                                        f"{got // (1024 * 1024)}/{mb_total} MB")
+                        offset, moved = got, got > 0
+        if not pending:
+            self._check_cancel(out)
+            waterfall = uuid.uuid4().hex
+            params = {"upload_phase": "start", "file_size": str(size), "file_extension": "mp4",
+                      "waterfall_id": waterfall, "supports_chunking": "true", "supports_file_api": "true",
+                      "partition_start_offset": "0", "partition_end_offset": str(size)}
+            try:
+                started = self.client.post(path, params)
+            except GraphError as exc:
+                raise _ResumableRefused(f"Meta refused the start: {str(exc)[:160]}") from exc
+            except WriteUnknown as exc:
+                self.client.reconciled(path)     # an unfinished session without its id is never used
+                raise _ResumableRefused(f"the start answer was lost ({str(exc)[:80]})") from exc
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                raise _ResumableRefused(f"the page did not send the start ({str(exc)[:120]})") from exc
+            vid, sid = str(started.get("video_id") or ""), str(started.get("upload_session_id") or "")
+            if not (vid.isdigit() and sid.isdigit()) or str(started.get("start_offset", "0")) != "0":
+                raise _ResumableRefused("Meta's start answer has no usable video id and upload session")
+            self._remember_pending_video(what, vid, sid, waterfall, size)
+            self._step(out, f"{who}: resumable upload started ({size // (1024 * 1024)} MB)")
+
+        # -- the bytes, to the service of the page; the answer to the POST carries the file handle
+        handle = ""
+        while not handle:
+            if offset >= size:
+                if get_handle:
+                    handle = get_handle
+                    break
+                raise _ResumableRefused("the upload service has every byte but no file handle")
+            n = size - offset                  # the whole remainder in ONE POST (Ads Manager sends a partition so)
+            if self.size_of(big.path) != size:
+                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                      kind="video_error")
+            headers = {"offset": str(offset), "X-Entity-Length": str(size), "X-Entity-Type": _wpol.RUPLOAD_TYPE}
+            self._check_cancel(out)
+            self._step(out, f"{who}: uploading {n // (1024 * 1024)} MB in one request")
+            try:
+                got = svc("POST", headers=headers, chunk=_wpol.ServedChunk(big, offset, n),
+                          progress=lambda _s: self._beat(), cancelled=self.cancelled)
+            except RuploadLost as exc:
+                if exc.reason == "stream_rejected":
+                    self._step(out, f"{who}: the streamed upload was rejected before any byte (not HTTP/2, CORS or network)")
+                # No answer: ask what the service holds (all of it with a handle: transfer; part: send the rest from
+                # there; nothing: send again from the offset, bounded by the resume cap).
+                resume(f"the answer was lost: {exc.reason or 'network'}")
+                continue
+            if not 200 <= got["status"] < 300:
+                # B2: only an explicit success counts: the service answers a refusal with a 4xx/5xx.
+                if 400 <= got["status"] < 500:
+                    streak += 1
+                    if streak >= 2 and not refreshed:
+                        refreshed = True                       # once: take the service address and token again
+                        self._step(out, f"{who}: reading the upload service address again")
+                        self.client.refresh_upload_service()
+                resume(f"the upload service refused (HTTP {got['status']})")
+                continue
+            streak = 0
+            moved = True
+            self._beat()
+            handle = _wpol.file_handle(got["body"])
+            if handle:
+                offset = size
+                break
+            now = held()                                   # no handle: ask once what the service holds
+            if get_handle:
+                handle, offset = get_handle, size
+                break
+            self._step(out, f"{who}: the upload service answered without a file handle ({shape(got['body'])})")
+            if now is not None and now < size:
+                resume("the service holds only part of the bytes", known=now)
+                continue
+            raise _ResumableRefused("the upload service took the bytes but gave no file handle")
+
+        # -- transfer: Meta takes the file by its handle and must hold the whole of it (a lost answer: asked once more).
+        # Nothing is finished yet, so a failure here is a refusal (the chunked path runs; the unfinished video stays).
+        tparams = {"upload_phase": "transfer", "upload_session_id": sid, "video_id": vid, "start_offset": "0",
+                   "end_offset": str(size), "partition_start_offset": "0", "partition_end_offset": str(size),
+                   "fbuploader_video_file_chunk": handle}
+        body: dict = {}
+        for attempt in (1, 2):
+            room(2)                                         # the transfer and the finish
+            self._check_cancel(out)
+            try:
+                body = self.client.post(path, tparams)
+                break
+            except WriteUnknown as exc:
+                self.client.reconciled(path)
+                if attempt == 1:
+                    self._step(out, f"{who}: the answer to the transfer was lost; asking once more")
+                    continue
+                raise _ResumableRefused(f"the transfer answer was lost twice ({str(exc)[:80]})") from exc
+            except GraphError as exc:
+                raise _ResumableRefused(f"Meta refused the transfer: {str(exc)[:160]}") from exc
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                raise _ResumableRefused(f"the page did not send the transfer ({str(exc)[:120]})") from exc
+        s_raw, e_raw = str(body.get("start_offset", "")), str(body.get("end_offset", ""))
+        if not (s_raw == str(size) and e_raw == str(size)):
+            raise _ResumableRefused(f"Meta did not take all the bytes ({s_raw or '?'}-{e_raw or '?'} of {size})")
+        transferred = True
+        self._remember_pending_video(what, vid, sid, waterfall, size, transferred=True, host_kind=host_kind)
+
+        # -- finish with the ACL tag as the title (a lost answer: sent once more, then the status decides)
+        fparams = finish_params()
+        for attempt in (1, 2):
+            room(1)
+            self._check_cancel(out)
+            try:
+                done = self.client.post(path, fparams)
+            except WriteUnknown:
+                self.client.reconciled(path)
+                if attempt == 1:
+                    self._step(out, f"{what}: the answer to the finish was lost; sending the finish once more")
+                    continue
+                if published(status()):
+                    self._step(out, f"{what}: finish reconciled by a status read")
+                    break
+                raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
+                                      "published yet. Publish again later: the upload is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            if done.get("success") is not True:
+                # The file is at Meta (transfer confirmed): the result of the finish is unknown, not "not used".
+                raise CreationStopped(f"{what}: Meta did not confirm the finish of the upload, so the video may be "
+                                      "finished. Publish again later: it is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            break
+        self._step(out, f"{who}: resumable upload finished ({resumes} resumes)")
+        return vid
+
+    def _forget_pending_video(self, what: str) -> None:
+        op = self._op
+        if op is None:
+            return
+        try:
+            op.clear_pending(what)
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what=what, phase="pending_clear", error="JournalError")
+
+    def _pending_video(self, what: str, size: int) -> tuple[str, str, str, bool, str] | None:
+        """ACL-2639: (video_id, upload_session_id, waterfall_id, transferred) of a resumable upload this operation
+        started for the same file, if any. A continuation needs the three ids and the same file; otherwise it is
+        forgotten (a new start). `transferred`: Meta already took the file by its handle - only the finish is left."""
+        op = self._op
+        st = op.stage(what) if op is not None else None
+        if not st or st.get("state") == _oj.CONFIRMED:
+            return None
+        vid, info = str(st.get("pending_id") or ""), st.get("pending") or {}
+        sid, waterfall = str(info.get("upload_session_id") or ""), str(info.get("waterfall_id") or "")
+        if (vid.isdigit() and sid.isdigit() and _wpol.UPLOAD_WATERFALL_RE.fullmatch(waterfall)
+                and info.get("size") == size and info.get("md5") == st.get("content_md5")):
+            kind = info.get("host_kind")
+            return vid, sid, waterfall, info.get("transferred") is True, kind if kind in ("generic", "regional") else ""
+        return None
+
+    def _remember_pending_video(self, what: str, vid: str, sid: str, waterfall: str, size: int,
+                                transferred: bool = False, host_kind: str = "") -> None:
+        op = self._op
+        if op is None:
+            return
+        st = op.stage(what) or {}
+        try:
+            op.set_pending(what, vid, {"upload_session_id": sid, "waterfall_id": waterfall, "size": size,
+                                       "md5": st.get("content_md5"), "transferred": transferred,
+                                       "host_kind": host_kind})
+        except _oj.JournalError:
+            self._journal_event("journal_save_failed", what=what, phase="pending", error="JournalError")
+
     def _video_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
                        find: Callable[[], str | None], who: str) -> str:
         """start -> transfer (куски от смещения Meta) -> finish. В памяти один кусок."""
         path = f"/{plan.act}/advideos"
         size = len(big)
         what = f"{who}: video upload"
+        # ACL-2639: the chunked upload is funded only from the run's SURPLUS: what is left of the run budget minus the
+        # calls the rest of the campaign still needs. No surplus for this file: stop BEFORE the start (nothing is
+        # uploaded, the campaign is never stranded half-built for lack of calls).
+        chunk_plan = upload_calls(size, True, chunked=True)
+        chunk_allowance = chunk_plan + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunk_plan))
+        spare = self._chunk_spare(plan)
+        if spare is not None:
+            if spare < chunk_plan:
+                raise CreationStopped(
+                    f"{what}: {'the fast upload was refused and ' if resumable_upload_enabled() else ''}uploading in "
+                    f"{min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) // (1024 * 1024)} MB pieces needs about {chunk_plan} "
+                    f"Meta calls; this run can spare {spare}. Nothing was uploaded."
+                    + (f" ({getattr(self, '_compress_note', '')})" if getattr(self, "_compress_note", "") else "")
+                    + " Use a smaller video file or publish fewer ads in this run.", created=out.created,
+                    kind="video_error",
+                    failure=_plain.Failure(
+                        "plan_text", f"{who[:1].upper()}{who[1:]}: the video is too large for this run's Meta call budget "
+                                     "(the file itself is fine)",
+                        "use a smaller or shorter video, or publish fewer ads in this run, then republish"))
+            chunk_allowance = min(chunk_allowance, spare)
         # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
         waterfall = uuid.uuid4().hex
         started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size),
@@ -3195,8 +3946,48 @@ class CampaignCreator:
                                   kind="video_error")
         offset, end = self._offsets(started, size, 0, what)
         self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
+        # ACL-2629 (N4) / ACL-2637: the plan assumed 64 MB windows, but Meta decides every window and may start small
+        # and grow. The calls planned for this file are a hard cap: never send a transfer without room for it AND the
+        # finish. A small window alone does not stop: after UPLOAD_WINDOW_PROBE_TRANSFERS answers the rest is projected
+        # from the windows seen (growth included) and the upload stops only when that projection exceeds the cap.
+        calls_before = getattr(self.client, "calls", 0)
+        allowance = chunk_allowance
+        windows: list[int] = []
+        transfers = [0]
+        noted = [0]
+
+        def stop_for_windows(needed: int, left: int) -> None:
+            seen = ", ".join(_mb(w) for w in windows[:6]) + (", ..." if len(windows) > 6 else "")
+            self._step(out, f"{who}: upload windows offered by Meta: {seen}")
+            raise CreationStopped(
+                f"{what}: Meta accepts this video only in small pieces ({_mb(min(windows[-1], cap))} per call), so "
+                f"the rest of it needs about {needed} more calls but only {max(left, 0)} are planned for it. "
+                "Stopped before sending more; nothing was duplicated and the unfinished upload is not used. "
+                "Use a smaller video file (shorter, or exported at a lower bitrate).",
+                created=out.created, kind="video_error")
+
+        def check_window(at: int, window: int) -> None:
+            if not self.worker_path or window <= 0:
+                return
+            windows.append(window)
+            if noted[0] < 6 and (len(windows) == 1 or window != windows[-2]):
+                noted[0] += 1                                       # telemetry: how Meta's windows move
+                self._step(out, f"{who}: Meta upload window {_mb(window)} at {at // (1024 * 1024)} MB")
+            used = getattr(self.client, "calls", 0) - calls_before
+            left = allowance - used
+            needed = project_upload_calls(size - at, windows, cap, limit=allowance + 1) + 1   # + finish
+            if needed <= left:
+                return
+            if left < 2 or transfers[0] >= UPLOAD_WINDOW_PROBE_TRANSFERS:
+                stop_for_windows(needed, left)
+
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
-        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4 + 3 * (-(-size // VIDEO_CHUNK_MAX))
+        # ACL-2629: путь воркера - куски до 64 МБ (байты в страницу не копируются); иначе прежние 8 МБ.
+        served = bool(self.worker_path)
+        cap = VIDEO_CHUNK_MAX if served else VIDEO_CHUNK_STAGED_MAX
+        gcap = min(cap, CHUNK_WINDOW_LIVE) if served else cap        # Meta's real windows are ~5 MB, not the ceiling
+        guard = 2 * (-(-size // gcap)) + 4 + 3 * (-(-size // gcap))
+        check_window(offset, end - offset)
         failures = 0
         stalls = 0
         # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
@@ -3207,11 +3998,19 @@ class CampaignCreator:
             guard -= 1
             if guard < 0:
                 raise CreationStopped(f"{what}: upload does not progress", created=out.created, kind="video_error")
-            n = min(max(end - offset, 1), VIDEO_CHUNK_MAX, size - offset)
-            chunk = big.read_range(offset, n)
-            if len(chunk) != n:
-                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
-                                      kind="video_error")
+            n = min(max(end - offset, 1), cap, size - offset)
+            if served:
+                # The bytes are read piece by piece while the worker asks for them; a changed file is caught there
+                # (piece hash) and here (size) before the chunk is posted.
+                if self.size_of(big.path) != size:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
+                chunk = _wpol.ServedChunk(big, offset, n)
+            else:
+                chunk = big.read_range(offset, n)
+                if len(chunk) != n:
+                    raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                          kind="video_error")
             params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset),
                       "waterfall_id": waterfall}
             try:
@@ -3248,11 +4047,16 @@ class CampaignCreator:
                 failures += 1
                 offset, end = self._offsets(d, size, offset, what)
                 self._step(out, f"{who}: resuming the upload from offset {offset}")
+                if offset < size:
+                    check_window(offset, end - offset)      # ACL-2637: a window learned here counts as well
                 continue
             failures = 0
             stalls = 0
+            transfers[0] += 1
             self._beat()
             offset, end = self._offsets(body, size, offset, what)
+            if offset < size:
+                check_window(offset, end - offset)
             now = self.clock()
             if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
                                   or (offset - last_step_off) * 10 >= size):
@@ -3585,6 +4389,8 @@ class CampaignCreator:
         """
         if instant:
             return CampaignCreator.instant_feed_spec(ad, media)
+        if ad.vertical_path and ad.multi_text:
+            return CampaignCreator.website_labelled_feed_spec(plan, ad, media)  # ACL-2611
         key = "videos" if ad.kind == "video" else "images"
 
         def item(m: dict, label: str | None) -> dict:
@@ -3625,34 +4431,79 @@ class CampaignCreator:
         return {}, CampaignCreator.rule_positions(placements if manual else None)[1]
 
     @staticmethod
-    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
-        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+    def _labelled_texts_and_files(ad: AdPlan, media: dict, spec: dict) -> str:
+        """Тексты, файлы и их метки ленты (ACL-2584, ACL-2611); возвращает ключ файлов (`images`/`videos`).
 
-        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
-        Файл один с обеими метками; набор не Dynamic Creative. Форма Страницы - в кнопке ленты.
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый
+        текст). Один файл несёт обе метки; два файла (ACL-2611) - основной метку основного правила, вертикальный -
+        метку вертикального.
         """
         def labelled(key: str, row: dict, first: bool) -> dict:
             main, vertical = _wpol.instant_labels(key)
             return {**row, "adlabels": [{"name": main}] + ([{"name": vertical}] if first else [])}
 
+        def file_row(m: dict) -> dict:
+            return ({"video_id": m["video_id"], "thumbnail_url": m["thumb"]} if ad.kind == "video"
+                    else {"hash": m["image_hash"]})
+
         media_key = "videos" if ad.kind == "video" else "images"
-        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
         for key, texts in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
             if texts:  # ACL-2474: пустой вид текста ключ не отправляет
                 spec[key] = [labelled(key, {"text": t}, n == 0) for n, t in enumerate(texts)]
         if "titles" not in spec:
             # ACL-2584: без заголовка уходит ровно один пустой, как у Ads Manager (HAR владельца): Meta его сохранила.
             spec["titles"] = [labelled("titles", {"text": ""}, True)]
-        file_row = ({"video_id": media["video_id"], "thumbnail_url": media["thumb"]} if ad.kind == "video"
-                    else {"hash": media["image_hash"]})
-        spec[media_key] = [labelled(media_key, file_row, True)]
-        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK}, True)]
+        if ad.vertical_path:
+            main_l, vert_l = _wpol.instant_labels(media_key)
+            spec[media_key] = [{**file_row(media), "adlabels": [{"name": main_l}]},
+                               {**file_row(media["vertical"]), "adlabels": [{"name": vert_l}]}]
+        else:
+            spec[media_key] = [labelled(media_key, file_row(media), True)]
+        return media_key
+
+    @staticmethod
+    def instant_feed_spec(ad: AdPlan, media: dict) -> dict:
+        """`asset_feed_spec` Instant Form с несколькими текстами: форма из HAR Ads Manager (ACL-2584, вариант A2).
+
+        Все тексты несут метку основного правила, первый ещё и метку вертикального (Stories/Reels берут первый текст).
+        Файл один с обеими метками (ACL-2611: с вертикальным файлом - два, по метке на файл); набор не Dynamic
+        Creative. Форма Страницы - в кнопке ленты.
+        """
+        def labelled(key: str, row: dict) -> dict:
+            main, vertical = _wpol.instant_labels(key)
+            return {**row, "adlabels": [{"name": main}, {"name": vertical}]}
+
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
+        media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
+        spec["link_urls"] = [labelled("link_urls", {"website_url": INSTANT_FORM_LINK})]
         spec["call_to_action_types"] = [ad.cta]
         spec["call_to_actions"] = [{"type": ad.cta, "value": {"link": INSTANT_FORM_LINK,
                                                               "lead_gen_form_id": ad.form_id}}]
         spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
         present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
         main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
+        spec["asset_customization_rules"] = [
+            {"customization_spec": positions,
+             **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
+            for n, positions in enumerate((main_pos, vert_pos))]
+        return spec
+
+    @staticmethod
+    def website_labelled_feed_spec(plan: CampaignPlan, ad: AdPlan, media: dict) -> dict:
+        """ACL-2611: Website, несколько текстов + вертикальный файл - та же размеченная лента, что у Instant Form.
+
+        Основной файл - метка основного правила, вертикальный - метка вертикального; все тексты - основная метка,
+        первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
+        двумя файлами (`rule_positions`). Набор не Dynamic Creative.
+        """
+        spec: dict[str, Any] = {}
+        media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
+        main_l, vert_l = _wpol.instant_labels("link_urls")
+        spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
+        spec["call_to_action_types"] = [ad.cta]
+        spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
+        present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
+        main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
         spec["asset_customization_rules"] = [
             {"customization_spec": positions,
              **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
@@ -3910,13 +4761,17 @@ class CampaignCreator:
 
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
+        self._videos_this_run = {}
         self._recovery_rows = None
         self._missing_creative_tag = False
         self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         self._op = None
         try:
-            self._run(plan, out)
+            try:
+                self._run(plan, out)
+            finally:
+                self._close_upload_context(out)     # ACL-2637: never leave the separate upload tab open
             self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
@@ -4007,6 +4862,96 @@ class CampaignCreator:
             text += " Not created: " + ", ".join(f"ad {ad.index}" for ad in todo) + "."
         return text
 
+    #: ACL-2629: the upload goes through the page's Web Worker (set by `_decide_worker_path` in `_prepare`).
+    worker_path = False
+    #: ACL-2637: why the in-profile upload is not used ('' - used, switched off or not needed), for the buyer's line.
+    _worker_why = ""
+    _worker_warning = ""
+
+    def _decide_worker_path(self, plan: CampaignPlan, out: Outcome) -> bool:
+        """ACL-2629: probe the in-profile worker data path once before any file is read or compressed.
+
+        On: the originals go up as they are (no compression). Off (switch, no big video, probe failed, a transport
+        without the path): the old staged path with compression, exactly as before. The probe is local: no call to Meta.
+        """
+        self._worker_why = self._worker_warning = ""
+        if not worker_upload_enabled():
+            self._worker_why = "switched off"
+            return False
+        if not any((self.size_of(p) or 0) > VIDEO_SINGLE_MAX_BYTES_WORKER for p in video_files_of(plan)):
+            return False
+        probe = getattr(self.client, "probe_worker", None)
+        if not callable(probe):
+            return False
+        try:
+            ok, why = probe()
+        except GraphStop:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a failed probe is a fallback, not a stop
+            ok, why = False, f"{type(exc).__name__}"
+        if ok:
+            transport = getattr(self.client, "transport", None)
+            mode = getattr(transport, "upload_mode", "") or "worker"
+            clean = getattr(transport, "upload_context", "") == "clean_tab"
+            if mode == "worker":
+                where = "a Web Worker"
+            elif clean and not why:
+                # ACL-2637: the clean tab runs no app, so its helper uploads directly - the intended mode there.
+                where = "the helper"
+            else:
+                where = "the page's helper (no worker could start)"
+            if clean:
+                where += " of a separate tab without a service worker"
+            self._step(out, f"video upload: originals go up from {where} in the profile (no compression)")
+            if why:      # inline mode: say exactly why the worker was not used (telemetry for the next live run)
+                out.warnings.append(f"Upload worker not used, continuing inline: {why}")
+            return True
+        if str(why).startswith("not supported"):
+            return False            # a transport without the worker path: the old path, nothing to tell the buyer
+        self._worker_why = str(why or "unknown reason")
+        self._worker_warning = (f"The in-profile upload worker is not available ({why or 'unknown reason'}); "
+                                "large videos are compressed and uploaded the slower way.")
+        out.warnings.append(self._worker_warning)
+        return False
+
+    def _close_upload_context(self, out: Outcome | None = None) -> None:
+        """ACL-2637: the separate upload tab (if the transport opened one) is closed when the run ends.
+
+        A close that cannot be confirmed is said (a step and a warning), never silent: the tab may still be open.
+        """
+        transport = getattr(self.client, "transport", None)
+        close = getattr(transport, "close_upload_context", None)
+        if not callable(close):
+            return
+        had = bool(getattr(transport, "upload_context", ""))
+        try:
+            ok = close()
+        except Exception:  # noqa: BLE001 - closing never fails the run
+            ok = False
+        if had and ok is False and out is not None:
+            self._step(out, "video upload: the separate upload tab could not be confirmed closed")
+            out.warnings.append("The separate upload tab of the profile may still be open; please close that tab in "
+                                "the profile browser.")
+
+    def _too_big_for_fallback(self, out: Outcome, who: str, path: str, original_mb: float, why: str) -> None:
+        """ACL-2637: the old path cannot take the file - ONE short buyer line instead of "uploading the original"
+        followed by a size refusal (and instead of the "compressed the slower way" warning). The full probe text
+        stays in the steps. Nothing has been uploaded (`run` adds "Nothing more was created.")."""
+        size = self.size_of(path) or 0
+        if size <= VIDEO_MAX_BYTES_STAGED:
+            return
+        full = self._worker_why or "not used"
+        short = full.split(" | ", 1)[0].split("; clean upload tab:", 1)[0].strip()
+        if len(short) > 120:
+            short = short[:117].rstrip() + "..."
+        if self._worker_warning in out.warnings:
+            out.warnings.remove(self._worker_warning)
+        self._step(out, f"{who}: in-profile upload not available: {full}")
+        cap = VIDEO_MAX_BYTES_STAGED // (1024 * 1024)
+        raise PlanError(f"{who}: the video is {original_mb or size / (1024 * 1024):.0f} MB; the in-profile "
+                        f"upload is not available ({short}) and the fallback upload accepts at most {cap} MB "
+                        f"({why}).", key="creative_file")
+
     def _video_for_upload(self, out: Outcome, path: str, who: str) -> str:
         """ACL-2000: тяжёлое видео сжимается тем же ffmpeg-сжимателем, что и в RPA-пути (кэш на исходник).
 
@@ -4023,12 +4968,15 @@ class CampaignCreator:
         except Exception as exc:  # noqa: BLE001 - сжатие не должно останавливать задание
             if type(exc).__name__ == "JobCancelled":
                 raise
+            self._too_big_for_fallback(out, who, path, 0.0, f"compression failed: {type(exc).__name__}")
             out.warnings.append(f"{who}: video compression failed ({type(exc).__name__}); uploading the original")
             return path
         if getattr(prepared, "compressed", False):
             self._step(out, f"{who}: video compressed {prepared.original_mb:.0f} MB -> {prepared.sent_mb:.1f} MB")
             return prepared.path
         if prepared.original_mb > limit:
+            self._too_big_for_fallback(out, who, path, prepared.original_mb,
+                                       f"not compressed: {prepared.reason or 'unknown reason'}")
             out.warnings.append(f"{who}: the video is {prepared.original_mb:.0f} MB and was not compressed "
                                 f"({prepared.reason or 'unknown reason'}); uploading the original, "
                                 "which can take a long time")
@@ -4038,7 +4986,7 @@ class CampaignCreator:
         """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
         if kind == "video":
             size = self.size_of(path)
-            if size and size > VIDEO_SINGLE_MAX_BYTES:
+            if size and size > single_request_max(self.worker_path):
                 return LargeFile(path, size, self.read_range)
         return self.read_file(path)
 
@@ -4093,6 +5041,7 @@ class CampaignCreator:
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
         calls_at_start = getattr(self.client, "calls", 0)
+        self._writes_base = getattr(self.client, "writes", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
@@ -4124,6 +5073,10 @@ class CampaignCreator:
                 self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
                            else f"preflight: form found on the Page, will be reused: {step.form_name}")
         files: dict[str, bytes] = {}
+        self.worker_path = self._decide_worker_path(plan, out) if writing else False
+        # Check plan does not probe: it counts the original when the worker path is switched on.
+        worker_plan = self.worker_path if writing else worker_upload_enabled()
+        video_limit = VIDEO_MAX_BYTES if worker_plan else VIDEO_MAX_BYTES_STAGED
 
         def sent_len(path: str, data: Any) -> int:
             # ACL-2621: Check plan does not compress; it measures what the run will upload (compressed size).
@@ -4131,15 +5084,24 @@ class CampaignCreator:
                 return planned_upload_size(path, len(data))
             return len(data)
 
+        def load(path: str, kind: str):
+            # Check plan does not probe the worker path, but it plans for it: a video the worker would upload in chunks
+            # is read as a large file here, so the plan can name it and count its calls.
+            if not writing and worker_plan and kind == "video":
+                size = self.size_of(path)
+                if size and size > single_request_max(True):
+                    return LargeFile(path, size, self.read_range)
+            return self.load_media(path, kind)
+
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
                     src = (self._video_for_upload(out, ad.path, f"ad {ad.index}")
-                           if writing and ad.kind == "video" else ad.path)
-                    data = self.load_media(src, ad.kind)
+                           if writing and ad.kind == "video" and not self.worker_path else ad.path)
+                    data = load(src, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
-                limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
+                limit = video_limit if ad.kind == "video" else IMAGE_MAX_BYTES
                 if not data or sent_len(ad.path, data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
@@ -4149,11 +5111,12 @@ class CampaignCreator:
                 if ad.vertical_path:
                     try:
                         vsrc = (self._video_for_upload(out, ad.vertical_path, f"ad {ad.index} Stories / Reels")
-                                if writing and ad.vertical_kind == "video" else ad.vertical_path)
-                        vdata = self.load_media(vsrc, ad.vertical_kind)
+                                if writing and ad.vertical_kind == "video" and not self.worker_path
+                                else ad.vertical_path)
+                        vdata = load(vsrc, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
-                    vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
+                    vlimit = video_limit if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
                     if not vdata or sent_len(ad.vertical_path, vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
@@ -4164,6 +5127,12 @@ class CampaignCreator:
                         # хэшем под двумя метками («All ad asset values must be unique», живой прогон
                         # 2026-11-04), поэтому файл идёт один раз - как тот же путь (ACL-2211).
                         # md5 только при равной длине: обычная пара хэширование не оплачивает.
+                        if ad.multi_text and not s.instant:
+                            # ACL-2611: с одним файлом несколько текстов Website - Dynamic Creative, а набор уже
+                            # построен как обычный (вертикальный файл был): не угадываем, отказ до записи.
+                            raise PlanError(f"ad {ad.index}: the Stories / Reels file is the same picture or video as "
+                                            "the main file; remove it (several texts then run as Dynamic Creative) "
+                                            "or choose a different Stories / Reels file", key="creative_file")
                         ad.vertical_path = ad.vertical_kind = ""
                         out.warnings.append(f"Ad {ad.index}: the same file was selected as main and Stories / Reels; "
                                             "it will be used once as the main file.")
@@ -4175,7 +5144,21 @@ class CampaignCreator:
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
-        chunk_calls = sum(upload_calls(sent_len(k, v)) for k, v in files.items() if isinstance(v, LargeFile))
+        # ACL-2639: videos that would not fit the run chunked are planned (and budgeted) at the size of their compressed copy
+        self._video_plan = {}
+        if isinstance(budget, int) and worker_plan:
+            spare_total = budget - getattr(self.client, "calls", 0) - estimate_create_calls(plan)
+            self._video_plan = plan_upload_sizes(plan, lambda p: sent_len(p, files[p]) if p in files else _disk_size(p),
+                                              spare_total)
+
+        def video_calls(k: str, v: Any) -> int:
+            size, squeezed = self._video_plan.get(k, (sent_len(k, v), False))
+            return video_upload_calls(size, squeezed, worker_plan)
+
+        large = [(sent_len(k, v), video_calls(k, v)) for k, v in files.items() if isinstance(v, LargeFile)]
+        chunk_calls = sum(c for _s, c in large)        # одна оценка на файл: и для плана, и для резерва
+        self._large_pending = large
+        self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что
@@ -4184,19 +5167,79 @@ class CampaignCreator:
         if isinstance(budget, int) and chunk_calls:
             rest = estimate_create_calls(plan)
             if chunk_calls + rest > budget:
+                from src.fb_ads_rpa import creative_compress as _cc
+
+                hint = (" ACL needs ffmpeg to compress the video (it was not found), or use a smaller file."
+                        if worker_plan and not resumable_upload_enabled() and compress_fallback_enabled()
+                        and not _cc.ffmpeg_exe() else "")
                 raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks "
                                 f"and the rest of the campaign about {rest}, more than "
-                                f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                                f"one run allows ({budget}). Use a smaller video or split the campaign.{hint} "
                                 "Nothing was created.")
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
-                sizes = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
-                n_chunks = sum(-(-n // VIDEO_CHUNK_MAX) for n in sizes)
-                out.warnings.append(
-                    f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
-                    f"{VIDEO_CHUNK_MAX // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
-                    "for this run (upper bound; ACL compresses large videos before upload, "
-                    "so the real upload is usually smaller).")
+                sizes = [self._video_plan.get(k, (sent_len(k, v), False))[0] for k, v in files.items()
+                         if isinstance(v, LargeFile)]
+                chunk_size = min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker_plan else VIDEO_CHUNK_STAGED_MAX
+                n_chunks = sum(-(-n // chunk_size) for n in sizes)
+                fast = bool(worker_plan and resumable_upload_enabled())
+                if fast:
+                    out.warnings.append(
+                        f"Large video: the fast upload takes about {chunk_calls} Meta calls, {chunk_calls + rest} of "
+                        f"{budget} calls planned for this run (the original file is uploaded without compression).")
+                    fallback = sum(upload_calls(sent_len(k, v), True, chunked=True) for k, v in files.items()
+                                   if isinstance(v, LargeFile))
+                    if fallback + rest > budget:
+                        if compress_fallback_enabled():
+                            # ACL-2639: which videos would be compressed (and to what) if the fast upload is refused
+                            spare_chk = max(budget - rest - chunk_calls, 0)
+                            fit = chunked_fit_mb(spare_chk)
+                            target_chk = max(1.0, fit * COMPRESS_FALLBACK_SHARE)
+                            labels = {a.path: a.index for s_ in plan.ad_sets for a in s_.ads}
+                            for k, v in files.items():
+                                if not isinstance(v, LargeFile):
+                                    continue
+                                mb = sent_len(k, v) / (1024 * 1024)
+                                if mb > target_chk:
+                                    out.warnings.append(
+                                        f"Ad {labels.get(k, '?')} video ({mb:.0f} MB) would be compressed to about "
+                                        f"{target_chk:.0f} MB if the fast upload is refused"
+                                        + ("" if fit >= 1 else " (this run has no spare Meta calls even for that)")
+                                        + " (resolution and aspect ratio stay the same).")
+                        else:
+                            out.warnings.append(
+                                f"If the fast upload is refused, uploading in {chunk_size // (1024 * 1024)} MB pieces "
+                                f"needs about {fallback} Meta calls and this run can give {max(budget - rest, 0)}: "
+                                "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
+                                "file or publish fewer ads in this run.")
+                else:
+                    # ACL-2639: videos planned at the size of a compressed copy are named, with the size they shrink to
+                    names = {}
+                    for s_ in plan.ad_sets:
+                        for a in s_.ads:
+                            names[a.path] = f"Ad {a.index}"
+                            if a.vertical_path:
+                                names[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+                    from src.fb_ads_rpa import creative_compress as _cc
+
+                    for k, v in files.items():
+                        pl = self._video_plan.get(k)
+                        if isinstance(v, LargeFile) and pl and pl[1]:
+                            try:
+                                eta = _cc.eta_text(_cc.duration_s(k))
+                            except Exception:  # noqa: BLE001
+                                eta = ""
+                            out.warnings.append(
+                                f"{names.get(k, 'A')} video ({sent_len(k, v) / 1048576:.0f} MB) will be compressed to "
+                                f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same"
+                                + (f"; {eta}" if eta else "") + ").")
+                    out.warnings.append(
+                        f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
+                        f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                        + ("for this run (upper bound: the original file is uploaded without compression; "
+                           "Meta may ask for smaller chunks)." if worker_plan else
+                           "for this run (upper bound; ACL compresses large videos before upload, "
+                           "so the real upload is usually smaller)."))
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")
@@ -4739,7 +5782,8 @@ class CampaignCreator:
             self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.dynamic:
                 sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
-            elif ad_set.instant and any(a.uses_feed for a in ad_set.ads):
+            elif any((ad_set.instant and a.uses_feed) or (a.multi_text and a.vertical_path) for a in ad_set.ads):
+                # ACL-2611: Website with a Stories / Reels file takes the same labelled shape as an Instant Form.
                 sets[-1]["creative_mode"] = ("Several texts with placement rules (Stories / Reels show the first "
                                              "text; any number of ads in this ad set)")
             if ad_set.instant:
@@ -5062,9 +6106,12 @@ class CampaignCreator:
             # ACL-2290: Meta returns [' '] for "none"; whitespace-only values count as empty on both sides.
             return [v for v in values if str(v).strip()]
 
+        # ACL-2611: a Website ad with several texts and a vertical file uses the same labelled shape as an Instant Form.
+        labelled = instant or (bool(ad.vertical_path) and ad.multi_text)
+
         def listed(values: list[str]) -> list[str]:
-            # ACL-2584: on an Instant Form feed the texts are compared as a set (Meta may reorder them).
-            return sorted(values) if instant else values
+            # ACL-2584: on a labelled feed the texts are compared as a set (Meta may reorder them).
+            return sorted(values) if labelled else values
 
         check(aobj, "primary_texts", listed(nonblank(list(ad.bodies))), listed(nonblank(texts("bodies"))))
         check(aobj, "headlines", listed(nonblank(list(ad.titles))), listed(nonblank(texts("titles"))))
@@ -5114,9 +6161,10 @@ class CampaignCreator:
                 raw = raw.get("data")
             return sorted(str(x.get("name") or "") for x in raw if isinstance(x, dict)) if isinstance(raw, list) else []
 
-        if instant:
+        if labelled:
             # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
-            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            if instant:
+                check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
                     continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
@@ -5126,7 +6174,8 @@ class CampaignCreator:
                       sorted(str(x.get("text")) for x in got if main in names_of(x)))
                 check(aobj, kind + "_vertical_label", [base[0]],
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
-            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
+            main_pos, vert_pos = (self.instant_rule_positions(ad.placements) if instant
+                                  else self.rule_positions(ad.placements))
             media_key = "videos" if ad.kind == "video" else "images"
             # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
@@ -5149,12 +6198,14 @@ class CampaignCreator:
                 check(aobj, f"rule_{name}_placements",
                       {k: sorted(want.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")},
                       {k: sorted(cs.get(k) or []) for k in ("publisher_platforms", "facebook_positions", "instagram_positions")})
+        main_label, vert_label = _wpol.instant_labels(key) if labelled else (LABEL_MAIN, LABEL_VERTICAL)
         by_label = {label_of(r): str(r.get(id_key) or "") for r in rows}
-        bound = {"main": by_label.get(LABEL_MAIN) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
-        bound["vertical"] = by_label.get(LABEL_VERTICAL, "")
+        bound = {"main": by_label.get(main_label) if ad.vertical_path else (str(rows[0].get(id_key) or "") if rows else "")}
+        bound["vertical"] = by_label.get(vert_label, "")
         check(aobj, "file_count", 2 if ad.vertical_path else 1, len(rows))
         if ad.vertical_path:
-            check(aobj, "media_labels", [LABEL_MAIN, LABEL_VERTICAL], [label_of(r) for r in rows])
+            # ACL-2611: each file carries exactly its own label (main file -> main rule, vertical file -> Stories/Reels rule).
+            check(aobj, "media_labels", [main_label, vert_label], [label_of(r) for r in rows])
         elif instant:
             check(aobj, "media_labels", sorted(_wpol.instant_labels(key)), sorted(n for r in rows for n in names_of(r)))
         else:
@@ -5176,7 +6227,7 @@ class CampaignCreator:
                     check(aobj, name, str(made), got)
                 if data and got and got != _md5(data):
                     extra.append((aobj, path, got))
-        if ad.vertical_path:
+        if ad.vertical_path and not labelled:
             # Какие площадки получили какой файл: правило на метку должно нести ровно наши площадки.
             main_pos, vert_pos = self.rule_positions(ad.placements)
             label_key = "video_label" if ad.kind == "video" else "image_label"
@@ -5422,7 +6473,10 @@ def graph_problem(exc: BaseException) -> dict:
 
 
 def _object_gone(exc: GraphError) -> bool:
-    """ACL-2578: Meta says the object does not exist (deleted); any other failed read leaves the question open."""
+    """ACL-2578: Meta says the object does not exist (deleted); any other failed read leaves the question open.
+
+    ACL-2639 uses it too (a pending video upload is forgotten only then). Deliberately NOT "nonexisting": Meta's
+    "(#100) Tried accessing nonexisting field" is a wrong-field error on a live object, not a missing object."""
     return exc.code == 100 and (exc.subcode == 33 or "does not exist" in str(exc).lower())
 
 
