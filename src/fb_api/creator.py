@@ -3299,6 +3299,20 @@ class CampaignCreator:
 
     def _video_large(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
                      find: Callable[[], str | None], who: str) -> str:
+        """Upload-phase writes are counted apart from the campaign's own writes (the fallback's reserve needs that)."""
+        client = self.client
+        w0 = getattr(client, "writes", 0)
+        pend = getattr(self, "_large_pending", None)
+        if pend:                                   # this video leaves the list of those still to come
+            pend.pop(pend.index(len(big)) if len(big) in pend else 0)
+        self._video_w0 = w0
+        try:
+            return self._video_large_inner(out, plan, big, title, find, who)
+        finally:
+            self._upload_writes = getattr(self, "_upload_writes", 0) + max(0, getattr(client, "writes", 0) - w0)
+
+    def _video_large_inner(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                           find: Callable[[], str | None], who: str) -> str:
         """ACL-2639: a large original from the profile goes up with Meta's resumable protocol (a few calls); the
         chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte."""
         if self.worker_path and resumable_upload_enabled():
@@ -3744,8 +3758,12 @@ class CampaignCreator:
         chunk_allowance = chunk_plan + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunk_plan))
         budget0 = getattr(self.client, "max_calls", None)
         if self.worker_path and isinstance(budget0, int):
-            done_writes = getattr(self.client, "writes", 0) - getattr(self, "_writes_base", 0)
-            reserve = max(0, estimate_create_calls(plan) - done_writes)
+            # Campaign-object writes done so far = all writes before THIS video started, minus the upload-phase writes
+            # of earlier videos; plus the (fast-path) uploads of the large videos still to come in this run.
+            camp_done = max(0, getattr(self, "_video_w0", getattr(self.client, "writes", 0))
+                            - getattr(self, "_writes_base", 0) - getattr(self, "_upload_writes", 0))
+            later = sum(upload_calls(s, True) for s in (getattr(self, "_large_pending", None) or []))
+            reserve = max(0, estimate_create_calls(plan) - camp_done) + later
             spare = max(0, budget0 - getattr(self.client, "calls", 0) - reserve)
             if spare < chunk_plan:
                 raise CreationStopped(
@@ -4902,6 +4920,8 @@ class CampaignCreator:
         budget = getattr(self.client, "max_calls", None)
         chunk_calls = sum(upload_calls(sent_len(k, v), worker_plan) for k, v in files.items()
                           if isinstance(v, LargeFile))
+        self._large_pending = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
+        self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
         # Не хватает - отказ ДО первой записи. ACL-2370: Check plan считает остаток той же формулой, что

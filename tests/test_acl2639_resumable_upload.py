@@ -1272,3 +1272,43 @@ def test_check_plan_warns_when_the_fallback_would_not_fit(resumable, tmp_path, m
     warns = [w for w in out.warnings if w.startswith(("Large video", "If the fast upload"))]
     assert any("the fast upload takes about" in w and "chunks of" not in w for w in warns), warns
     assert any(w.startswith("If the fast upload is refused") and "this run can give" in w for w in warns), warns
+
+
+def _two_videos(tmp_path):
+    from dataclasses import replace
+    d, f = _big_draft(tmp_path)
+    ad = d.ad_sets[0].ads[0]
+    f2 = Path(str(ad.creative_path) + ".second.mp4")
+    f2.write_bytes(b"second-video-" * 300_000)                       # a different large file (3.9 MB)
+    d.ad_sets[0].ads.append(replace(ad, creative_id="1002", creative_filename=f2.name, creative_path=str(f2),
+                                    copy_name="Text2", ad_title="Head 2", ad_body="Body 2"))
+    return d, f
+
+
+@pytest.mark.parametrize("extra", [8, 14, 20, 40, 400])
+def test_two_large_videos_on_a_tight_budget_never_strand_later_objects(resumable, tmp_path, extra):
+    d, f = _two_videos(tmp_path)
+    plan = cr.plan_from_draft(d)
+    budget = cr.estimate_create_calls(plan) + 2 * cr.resumable_calls() + extra
+    meta = ResumableMeta(start="denied")                              # the fast upload is refused for every video
+    out, client = _run(meta, d, max_calls=budget)
+    if out.error:
+        # stopped BEFORE the first chunk of the first video: nothing was uploaded, no object of a later ad is missing
+        assert "this run can spare" in out.error or "plan" in str(out.stop_kind), out.error
+        assert meta.sessions == {} and len(out.created.get("ads", [])) == 0
+    else:
+        assert len(out.created["ads"]) == 2 and len(out.created["videos"]) == 2
+    assert client.calls <= client.max_calls and client.stopped is None or out.error
+
+
+def test_the_reserve_counts_the_videos_still_to_come_and_not_the_upload_writes(resumable, tmp_path):
+    d, f = _two_videos(tmp_path)
+    plan = cr.plan_from_draft(d)
+    # just enough for ONE chunked upload but not for the second video's fast upload on top of the campaign
+    fb = cr.upload_calls(f.stat().st_size, True, chunked=True)
+    meta = ResumableMeta(start="denied")
+    out, client = _run(meta, d, max_calls=cr.estimate_create_calls(plan) + cr.resumable_calls() + fb + 14)
+    # the first video fits (chunked), the second would eat what the campaign still needs: a clean stop BEFORE its chunks
+    assert out.stop_kind == "video_error" and "this run can spare" in out.error
+    assert len(meta.sessions) == 1 and next(iter(meta.sessions.values()))["done"]
+    assert client.calls < client.max_calls and "Nothing was uploaded" in out.error

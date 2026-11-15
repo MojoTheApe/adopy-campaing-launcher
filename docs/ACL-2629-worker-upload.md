@@ -327,8 +327,9 @@ The chunked fallback is funded **only from the run's surplus**: the run budget l
 campaign still needs (`estimate_create_calls(plan)` minus the writes already made in this run). Before the chunked start
 the creator compares that surplus with the chunked plan for the file (5 MB windows); if it does not cover it, the run stops
 BEFORE sending anything ("the fast upload was refused and uploading in 5 MB pieces needs about N calls; this run can
-spare M. Nothing was uploaded. Use a smaller video file or publish fewer ads in this run."). So the campaign is never
-stranded half-built for lack of calls. Otherwise the chunked allowance is the chunked plan + slack, and the projection stop
+spare M. Nothing was uploaded. Use a smaller video file or publish fewer ads in this run."). So the campaign is not left
+half-built for lack of calls because of this upload (objects of EARLIER ads may already exist, paused). The reserve counts
+campaign-object writes only (upload-phase writes are subtracted) plus the fast-path upload of every large video still to come. Otherwise the chunked allowance is the chunked plan + slack, and the projection stop
 compares with it. Check plan warns when the fallback would not fit ("If the fast upload is refused, ... can give M");
 the run budget itself is still sized for the fast upload only. The file-API cap is `RESUMABLE_FIXED_CALLS + 4` Graph calls;
 once the transfer is confirmed the finish and its status read are exempt from it, and a stop after the transfer says the
