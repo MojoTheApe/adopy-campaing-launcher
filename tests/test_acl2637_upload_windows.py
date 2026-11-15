@@ -53,8 +53,11 @@ def test_shrinking_windows_are_projected_with_the_last_one():
 BUDGET_TIGHT = 60
 
 
-def test_the_plan_reserves_the_window_ramp_on_the_worker_path_only():
-    # ACL-2639: the file-API upload is the primary plan; the chunked plan assumes Meta's real 5 MB windows
+def test_the_plan_reserves_the_window_ramp_on_the_worker_path_only(monkeypatch):
+    # ACL-2639: the chunked upload is the primary plan (the file API is off by default) at Meta's real 5 MB windows
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    assert cr.upload_calls(2420 * MB, True) == 484 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "1")                          # switched on: the file API is the plan
     assert cr.upload_calls(2420 * MB, True) == cr.resumable_calls()
     assert cr.upload_calls(2420 * MB, True, chunked=True) == 484 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
     big = cr.single_request_max(False) + 1

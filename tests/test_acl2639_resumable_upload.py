@@ -32,7 +32,7 @@ HANDLE = "1:YWJj:application/octet-stream:{vid}:e:1800000000:sig_-1"
 @pytest.fixture
 def resumable(worker_small, monkeypatch):
     """The worker path with small numbers and the resumable protocol on, 1 MB segments."""
-    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "1")
 
 
 def _read_all(chunk, n):
@@ -1245,7 +1245,7 @@ class LiveWindows(ResumableMeta):
 
 def test_a_70_mb_video_whose_file_api_is_refused_completes_in_chunks_within_the_run_budget(tmp_path, monkeypatch):
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
-    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "1")
     d, f = _big_draft(tmp_path, size=70 * MB)
     meta = LiveWindows(start="denied")
     out, client = _run(meta, d, max_calls=200)
@@ -1270,7 +1270,7 @@ def test_a_huge_video_with_small_windows_stops_with_the_clear_message_on_a_tight
 
 def test_the_plan_with_the_flag_off_assumes_5_mb_windows_and_with_it_on_the_file_api(monkeypatch):
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
-    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "1")
     assert cr.upload_calls(70 * MB, True) == cr.resumable_calls()
     monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "0")
     assert cr.upload_calls(70 * MB, True) == 14 + 6 + cr.CALLS_UPLOAD_FIXED

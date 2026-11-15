@@ -160,14 +160,15 @@ def worker_upload_enabled(env: dict | None = None) -> bool:
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
-#: ACL-2639: emergency switch of the resumable ad-video upload (`ACL_VIDEO_RESUMABLE_UPLOAD=0|false|no|off`); on by
-#: default. Off: the large original goes up with the chunked advideos protocol as before.
+#: ACL-2639: the Ads Manager "file API" upload of large videos. OFF by default (live: the service refuses the whole-file
+#: POST with HTTP 400); on only when explicitly set (`ACL_VIDEO_RESUMABLE_UPLOAD=1|true|yes|on`). The code is kept.
+#: Off: large videos go up with the chunked advideos protocol (compressed first when they would not fit the run).
 RESUMABLE_UPLOAD_FLAG = "ACL_VIDEO_RESUMABLE_UPLOAD"
 
 
 def resumable_upload_enabled(env: dict | None = None) -> bool:
     raw = (env if env is not None else os.environ).get(RESUMABLE_UPLOAD_FLAG, "")
-    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
 
 #: ACL-2639: at most this many resumes of one resumable upload (each one = an offset read of the service + a POST).
@@ -415,15 +416,62 @@ def planned_upload_size(path: str, original: int) -> int:
     return original
 
 
-def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
+def _chunked_cost(size: int, compressed: bool = False) -> int:
+    """Chunked calls of one video at Meta's real windows, with the retry slack (a compressed copy is always uploaded in
+    chunks, so at least start + transfer + finish)."""
+    calls = upload_calls(size, True, chunked=True)
+    if compressed:
+        calls = max(calls, CALLS_UPLOAD_FIXED + 1)
+    return calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) if calls else 0
+
+
+def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None,
+                      spare: int | None = None) -> dict[str, tuple[int, bool]]:
+    """ACL-2639: path -> (planned upload bytes, will be compressed) of every video of the plan.
+
+    The planned size is the original unless the chunked upload (5 MB windows) of all large videos together would not fit
+    `spare` Graph calls and the compress fallback is on: then ONE size cap C (MB, at most COMPRESS_FALLBACK_CAP_MB) is
+    chosen - the largest for which everything fits - and every video above C is planned at C * 0.9 (the size
+    `_fit_for_chunks` aims at). Only on the chunked primary path (the fast upload off), the worker path, and a known
+    spare; otherwise the originals are planned, as before."""
+    size_of = size_of or _disk_size
+    sizes = {p: planned_upload_size(p, size_of(p)) for p in video_files_of(plan)}
+    result = {p: (s, False) for p, s in sizes.items()}
+    if (spare is None or not worker_upload_enabled() or resumable_upload_enabled()
+            or not compress_fallback_enabled()):
+        return result
+    large = [p for p, s in sizes.items() if upload_calls(s, True, chunked=True)]
+    if not large or sum(_chunked_cost(sizes[p]) for p in large) <= spare:
+        return result
+    best = 0
+    for cap in range(1, COMPRESS_FALLBACK_CAP_MB + 1):
+        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576
+                    else _chunked_cost(int(cap * COMPRESS_FALLBACK_SHARE * 1048576), True) for p in large)
+        if total > spare:
+            break
+        best = cap
+    if best:
+        for p in large:
+            if sizes[p] > best * 1048576:
+                result[p] = (int(best * COMPRESS_FALLBACK_SHARE * 1048576), True)
+    return result
+
+
+def estimate_upload_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None,
+                          spare: int | None = None) -> int:
     """Сколько вызовов Graph уйдёт на загрузку больших видео кусками (ACL-2370), с запасом на повторы.
 
     Файлы до 200 МБ уходят одним запросом и сюда не входят (их несут 8 опросов обработки в
     `estimate_create_calls`). ACL-2621: считаем размер того, что реально уйдёт (`planned_upload_size`),
-    а не исходника: запуск сжимает тяжёлое видео до загрузки.
+    а не исходника: запуск сжимает тяжёлое видео до загрузки. ACL-2639: с известным `spare` (вызовов, которые
+    потолок прогона оставляет загрузкам) видео, не влезающие кусками, считаются по размеру сжатой копии.
     """
     size_of = size_of or _disk_size
-    chunks = sum(upload_calls(planned_upload_size(path, size_of(path))) for path in video_files_of(plan))
+    planned = plan_upload_sizes(plan, size_of, spare)
+    chunks = 0
+    for _path, (size, compressed) in planned.items():
+        chunks += (max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1) if compressed
+                   else upload_calls(size))
     if not chunks:
         return 0
     return chunks + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunks))
@@ -3333,7 +3381,8 @@ class CampaignCreator:
         w0 = getattr(client, "writes", 0)
         pend = getattr(self, "_large_pending", None)
         if pend:                                   # this video leaves the list of those still to come
-            pend.pop(pend.index(len(big)) if len(big) in pend else 0)
+            sizes_ = [o for o, _c in pend]
+            pend.pop(sizes_.index(len(big)) if len(big) in sizes_ else 0)
         self._video_w0 = w0
         try:
             return self._video_large_inner(out, plan, big, title, find, who)
@@ -3369,7 +3418,7 @@ class CampaignCreator:
             return None
         camp_done = max(0, getattr(self, "_video_w0", getattr(self.client, "writes", 0))
                         - getattr(self, "_writes_base", 0) - getattr(self, "_upload_writes", 0))
-        later = sum(upload_calls(s, True) for s in (getattr(self, "_large_pending", None) or []))
+        later = sum(c for _o, c in (getattr(self, "_large_pending", None) or []))
         reserve = max(0, estimate_create_calls(plan) - camp_done) + later
         return max(0, budget - getattr(self.client, "calls", 0) - reserve)
 
@@ -3386,15 +3435,19 @@ class CampaignCreator:
         if spare is None:
             return big
         size = len(big)
-        need = upload_calls(size, True, chunked=True)
-        if need + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * need)) <= spare:
-            return big                                     # the original fits: nothing to do
-        fit_mb = chunked_fit_mb(spare)
         label = f"{who[:1].upper()}{who[1:]}"
-        if fit_mb < 1:
-            self._step(out, f"{who}: no spare Meta calls to upload even a compressed copy ({spare} left)")
-            return big
-        target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
+        planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
+        if planned and planned[1] and planned[0] < size:
+            target = max(1.0, planned[0] / (1024 * 1024))   # the plan already decided (and budgeted) this compression
+        else:
+            need = upload_calls(size, True, chunked=True)
+            if need + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * need)) <= spare:
+                return big                                 # the original fits: nothing to do
+            fit_mb = chunked_fit_mb(spare)
+            if fit_mb < 1:
+                self._step(out, f"{who}: no spare Meta calls to upload even a compressed copy ({spare} left)")
+                return big
+            target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
         original_mb = size / (1024 * 1024)
         self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run "
                         "(this can take several minutes)")
@@ -3855,7 +3908,7 @@ class CampaignCreator:
         if spare is not None:
             if spare < chunk_plan:
                 raise CreationStopped(
-                    f"{what}: the fast upload was refused and uploading in "
+                    f"{what}: {'the fast upload was refused and ' if resumable_upload_enabled() else ''}uploading in "
                     f"{min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) // (1024 * 1024)} MB pieces needs about {chunk_plan} "
                     f"Meta calls; this run can spare {spare}. Nothing was uploaded. Use a smaller video file or "
                     "publish fewer ads in this run.", created=out.created, kind="video_error",
@@ -4965,12 +5018,21 @@ class CampaignCreator:
                 return planned_upload_size(path, len(data))
             return len(data)
 
+        def load(path: str, kind: str):
+            # Check plan does not probe the worker path, but it plans for it: a video the worker would upload in chunks
+            # is read as a large file here, so the plan can name it and count its calls.
+            if not writing and worker_plan and kind == "video":
+                size = self.size_of(path)
+                if size and size > single_request_max(True):
+                    return LargeFile(path, size, self.read_range)
+            return self.load_media(path, kind)
+
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
                     src = (self._video_for_upload(out, ad.path, f"ad {ad.index}")
                            if writing and ad.kind == "video" and not self.worker_path else ad.path)
-                    data = self.load_media(src, ad.kind)
+                    data = load(src, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
                 limit = video_limit if ad.kind == "video" else IMAGE_MAX_BYTES
@@ -4985,7 +5047,7 @@ class CampaignCreator:
                         vsrc = (self._video_for_upload(out, ad.vertical_path, f"ad {ad.index} Stories / Reels")
                                 if writing and ad.vertical_kind == "video" and not self.worker_path
                                 else ad.vertical_path)
-                        vdata = self.load_media(vsrc, ad.vertical_kind)
+                        vdata = load(vsrc, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
                     vlimit = video_limit if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
@@ -5010,9 +5072,21 @@ class CampaignCreator:
         self._step(out, "preflight: creatives read")
         # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
-        chunk_calls = sum(upload_calls(sent_len(k, v), worker_plan) for k, v in files.items()
-                          if isinstance(v, LargeFile))
-        self._large_pending = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
+        # ACL-2639: videos that would not fit the run chunked are planned (and budgeted) at the size of their compressed copy
+        self._video_plan = {}
+        if isinstance(budget, int) and worker_plan:
+            spare_total = budget - getattr(self.client, "calls", 0) - estimate_create_calls(plan)
+            self._video_plan = plan_upload_sizes(plan, lambda p: sent_len(p, files[p]) if p in files else _disk_size(p),
+                                              spare_total)
+
+        def video_calls(k: str, v: Any) -> int:
+            size, squeezed = self._video_plan.get(k, (sent_len(k, v), False))
+            if squeezed:
+                return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+            return upload_calls(size, worker_plan)
+
+        chunk_calls = sum(video_calls(k, v) for k, v in files.items() if isinstance(v, LargeFile))
+        self._large_pending = [(sent_len(k, v), video_calls(k, v)) for k, v in files.items() if isinstance(v, LargeFile)]
         self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).
@@ -5028,7 +5102,8 @@ class CampaignCreator:
                                 "Nothing was created.")
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
-                sizes = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
+                sizes = [self._video_plan.get(k, (sent_len(k, v), False))[0] for k, v in files.items()
+                         if isinstance(v, LargeFile)]
                 chunk_size = min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker_plan else VIDEO_CHUNK_STAGED_MAX
                 n_chunks = sum(-(-n // chunk_size) for n in sizes)
                 fast = bool(worker_plan and resumable_upload_enabled())
@@ -5062,6 +5137,19 @@ class CampaignCreator:
                                 "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
                                 "file or publish fewer ads in this run.")
                 else:
+                    # ACL-2639: videos planned at the size of a compressed copy are named, with the size they shrink to
+                    names = {}
+                    for s_ in plan.ad_sets:
+                        for a in s_.ads:
+                            names[a.path] = f"Ad {a.index}"
+                            if a.vertical_path:
+                                names[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+                    for k, v in files.items():
+                        pl = self._video_plan.get(k)
+                        if isinstance(v, LargeFile) and pl and pl[1]:
+                            out.warnings.append(
+                                f"{names.get(k, 'A')} video ({sent_len(k, v) / 1048576:.0f} MB) will be compressed to "
+                                f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same).")
                     out.warnings.append(
                         f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
                         f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "

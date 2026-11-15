@@ -371,3 +371,14 @@ The compressor's wait loop beats the job every 0.5 s (`job_cancel.heartbeat` = `
 When a progress observer is set, the 2nd pass writes ffmpeg's `-progress` file; the loop reads it and the creator logs
 "compressing ad N video: X%" every 10 points. Check plan names the videos that would be compressed
 ("Ad N video (X MB) would be compressed to about Y MB if the fast upload is refused").
+
+### 13.6 The fast upload is OFF by default (live: Doc349)
+
+The whole-file rupload POST is refused with HTTP 400 on every live profile tried, so `ACL_VIDEO_RESUMABLE_UPLOAD` now defaults
+to OFF (on only for `1/true/yes/on`); the code is kept. Large worker-path videos are planned, budgeted and uploaded
+chunked at Meta's real 5 MB windows. `plan_upload_sizes` (used by `publish_api.create_call_budget` and by `_prepare`) plans
+the compressed size for the videos that would not fit the run cap: one size cap C (<= 500 MB) is chosen as large as the
+whole run allows and every video above C is planned at 0.9 C; the budget counts those sizes, Check plan says "Ad N video
+(X MB) will be compressed to about Y MB before upload", and `_fit_for_chunks` makes the copy before the chunked upload
+(the plan's size is the target). Check plan now reads a video as large under the worker plan, so a 70-160 MB video is
+counted and named there too. `ACL_VIDEO_COMPRESS_FALLBACK=0` restores the plain refusal.
