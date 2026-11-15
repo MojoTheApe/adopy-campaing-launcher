@@ -1192,7 +1192,7 @@ def test_a_smaller_meta_window_is_obeyed(worker_small, tmp_path):
 def test_windows_much_smaller_than_planned_stop_cleanly_before_more_is_sent(worker_small, tmp_path):
     d, f = _big_draft(tmp_path)
     meta = ServedMeta(meta_chunk=50_000)                 # the plan assumed MB-sized windows
-    out, _ = _run(meta, d, max_calls=60)                 # a tight run budget: nothing beyond the plan to borrow
+    out, _ = _run(meta, d, max_calls=75)                 # a tight run budget: nothing beyond the plan to borrow
     assert out.stop_kind == "video_error" and "small pieces" in out.error and "more calls" in out.error
     assert "ACL_VIDEO_WORKER_UPLOAD" not in out.error and "smaller video file" in out.error     # a buyer action
     # ACL-2637: a small window alone does not stop - a few windows are tried (they may grow), then the projection

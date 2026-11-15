@@ -320,3 +320,16 @@ the CORS preflight of the custom headers from the clean `__acl_work` origin like
   off or after a refusal the chunked plan assumes Meta's real windows (`CHUNK_WINDOW_LIVE` = 5 MB, not the 64 MB ceiling).
   The chunked allowance of a worker-path upload is the run's remaining budget minus the estimate of the rest of the
   campaign (never above the hard `max_calls`); the projection stop (`small pieces`) compares against that allowance.
+
+### 13.3 Fallback funding (supersedes the "remaining budget" wording of 13.2)
+
+The chunked fallback is funded **only from the run's surplus**: the run budget left, minus the calls the rest of the
+campaign still needs (`estimate_create_calls(plan)` minus the writes already made in this run). Before the chunked start
+the creator compares that surplus with the chunked plan for the file (5 MB windows); if it does not cover it, the run stops
+BEFORE sending anything ("the fast upload was refused and uploading in 5 MB pieces needs about N calls; this run can
+spare M. Nothing was uploaded. Use a smaller video file or publish fewer ads in this run."). So the campaign is never
+stranded half-built for lack of calls. Otherwise the chunked allowance is the chunked plan + slack, and the projection stop
+compares with it. Check plan warns when the fallback would not fit ("If the fast upload is refused, ... can give M");
+the run budget itself is still sized for the fast upload only. The file-API cap is `RESUMABLE_FIXED_CALLS + 4` Graph calls;
+once the transfer is confirmed the finish and its status read are exempt from it, and a stop after the transfer says the
+result is unknown ("Publish again later").

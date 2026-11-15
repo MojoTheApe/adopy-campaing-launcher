@@ -3344,8 +3344,9 @@ class CampaignCreator:
             raise _ResumableRefused("upload service address not available on this page")
         calls_before = getattr(self.client, "calls", 0)
         planned = upload_calls(size, True)
-        allowance = max(planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned)),
-                        resumable_calls())
+        # start, transfer, finish + the status reads of a continuation (worst case ~8); once the transfer is confirmed
+        # the finish and its status read are never refused by this cap.
+        allowance = RESUMABLE_FIXED_CALLS + 4
         vid = sid = waterfall = ""
         offset = 0
         resumes = 0
@@ -3359,6 +3360,8 @@ class CampaignCreator:
         mb_total = max(size // (1024 * 1024), 1)
 
         def room(n: int) -> None:
+            if transferred:
+                return                       # Meta holds the file: the finish (and its status read) must not be cut off
             used = getattr(self.client, "calls", 0) - calls_before
             if used + n > allowance:
                 raise CreationStopped(
@@ -3684,8 +3687,10 @@ class CampaignCreator:
                                       "published yet. Publish again later: the upload is continued, not repeated.",
                                       created=out.created, kind="unknown")
             if done.get("success") is not True:
-                raise CreationStopped(f"{what}: Meta did not finish the upload", created=out.created,
-                                      kind="video_error")
+                # The file is at Meta (transfer confirmed): the result of the finish is unknown, not "not used".
+                raise CreationStopped(f"{what}: Meta did not confirm the finish of the upload, so the video may be "
+                                      "finished. Publish again later: it is continued, not repeated.",
+                                      created=out.created, kind="unknown")
             break
         self._step(out, f"{who}: resumable upload finished ({resumes} resumes)")
         return vid
@@ -3732,6 +3737,23 @@ class CampaignCreator:
         path = f"/{plan.act}/advideos"
         size = len(big)
         what = f"{who}: video upload"
+        # ACL-2639: the chunked upload is funded only from the run's SURPLUS: what is left of the run budget minus the
+        # calls the rest of the campaign still needs. No surplus for this file: stop BEFORE the start (nothing is
+        # uploaded, the campaign is never stranded half-built for lack of calls).
+        chunk_plan = upload_calls(size, True, chunked=True)
+        chunk_allowance = chunk_plan + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunk_plan))
+        budget0 = getattr(self.client, "max_calls", None)
+        if self.worker_path and isinstance(budget0, int):
+            done_writes = getattr(self.client, "writes", 0) - getattr(self, "_writes_base", 0)
+            reserve = max(0, estimate_create_calls(plan) - done_writes)
+            spare = max(0, budget0 - getattr(self.client, "calls", 0) - reserve)
+            if spare < chunk_plan:
+                raise CreationStopped(
+                    f"{what}: the fast upload was refused and uploading in "
+                    f"{min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) // (1024 * 1024)} MB pieces needs about {chunk_plan} "
+                    f"Meta calls; this run can spare {spare}. Nothing was uploaded. Use a smaller video file or "
+                    "publish fewer ads in this run.", created=out.created, kind="video_error")
+            chunk_allowance = min(chunk_allowance, spare)
         # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
         waterfall = uuid.uuid4().hex
         started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size),
@@ -3747,14 +3769,7 @@ class CampaignCreator:
         # finish. A small window alone does not stop: after UPLOAD_WINDOW_PROBE_TRANSFERS answers the rest is projected
         # from the windows seen (growth included) and the upload stops only when that projection exceeds the cap.
         calls_before = getattr(self.client, "calls", 0)
-        planned = upload_calls(size, True, chunked=True)
-        allowance = planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned))
-        budget = getattr(self.client, "max_calls", None)
-        if self.worker_path and isinstance(budget, int):
-            # ACL-2639: after the file-API upload was refused the chunked upload may use what the run still has, minus
-            # a reserve for the rest of the campaign - never more than the run's hard budget.
-            left_now = budget - calls_before
-            allowance = min(max(allowance, left_now - estimate_create_calls(plan)), max(left_now, 0))
+        allowance = chunk_allowance
         windows: list[int] = []
         transfers = [0]
         noted = [0]
@@ -4797,6 +4812,7 @@ class CampaignCreator:
         `writing=False` - пробный запуск (Check plan): записей не будет, и бюджет на них не сверяется.
         """
         calls_at_start = getattr(self.client, "calls", 0)
+        self._writes_base = getattr(self.client, "writes", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
@@ -4903,13 +4919,27 @@ class CampaignCreator:
                 sizes = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
                 chunk_size = min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker_plan else VIDEO_CHUNK_STAGED_MAX
                 n_chunks = sum(-(-n // chunk_size) for n in sizes)
-                out.warnings.append(
-                    f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
-                    f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
-                    + ("for this run (upper bound: the original file is uploaded without compression; "
-                       "Meta may ask for smaller chunks)." if worker_plan else
-                       "for this run (upper bound; ACL compresses large videos before upload, "
-                       "so the real upload is usually smaller)."))
+                fast = bool(worker_plan and resumable_upload_enabled())
+                if fast:
+                    out.warnings.append(
+                        f"Large video: the fast upload takes about {chunk_calls} Meta calls, {chunk_calls + rest} of "
+                        f"{budget} calls planned for this run (the original file is uploaded without compression).")
+                    fallback = sum(upload_calls(sent_len(k, v), True, chunked=True) for k, v in files.items()
+                                   if isinstance(v, LargeFile))
+                    if fallback + rest > budget:
+                        out.warnings.append(
+                            f"If the fast upload is refused, uploading in {chunk_size // (1024 * 1024)} MB pieces "
+                            f"needs about {fallback} Meta calls and this run can give {max(budget - rest, 0)}: "
+                            "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
+                            "file or publish fewer ads in this run.")
+                else:
+                    out.warnings.append(
+                        f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "
+                        f"{chunk_size // (1024 * 1024)} MB, {chunk_calls + rest} of {budget} calls planned "
+                        + ("for this run (upper bound: the original file is uploaded without compression; "
+                           "Meta may ask for smaller chunks)." if worker_plan else
+                           "for this run (upper bound; ACL compresses large videos before upload, "
+                           "so the real upload is usually smaller)."))
         self._check_planned(plan, targetings, early=True)
         self._check_meta_rules(plan, targetings)
         self._step(out, "preflight: Meta rules registry")

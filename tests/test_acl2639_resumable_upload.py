@@ -522,7 +522,7 @@ def test_a_finish_without_success_stops(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
     meta = ResumableMeta(finish_faults=["nosuccess"])
     out, _ = _run(meta, d)
-    assert out.stop_kind == "video_error" and "did not finish" in out.error
+    assert out.stop_kind == "unknown" and "Publish again later" in out.error and "may be finished" in out.error
 
 
 # ───────────────────────── budget ─────────────────────────
@@ -539,10 +539,7 @@ def test_the_graph_calls_are_constant_and_the_service_is_not_counted(resumable, 
 
 def test_the_hard_cap_stops_before_the_transfer(resumable, tmp_path, monkeypatch):
     d, f = _big_draft(tmp_path)
-    monkeypatch.setattr(cr, "upload_calls", lambda size, worker=None: 1)
-    monkeypatch.setattr(cr, "resumable_calls", lambda: 2)
-    monkeypatch.setattr(cr, "CHUNK_RETRY_SLACK_MIN", 0)
-    monkeypatch.setattr(cr, "CHUNK_RETRY_SLACK_FRACTION", 0)
+    monkeypatch.setattr(cr, "RESUMABLE_FIXED_CALLS", -2)            # the file-API cap is RESUMABLE_FIXED_CALLS + 4 = 2
     meta = ResumableMeta()
     out, _ = _run(meta, d, max_calls=400)
     assert out.stop_kind == "video_error" and "more Meta calls than planned" in out.error
@@ -1227,3 +1224,51 @@ def test_the_plan_with_the_flag_off_assumes_5_mb_windows_and_with_it_on_the_file
     assert cr.upload_calls(70 * MB, True) == cr.resumable_calls()
     monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "0")
     assert cr.upload_calls(70 * MB, True) == 14 + 6 + cr.CALLS_UPLOAD_FIXED
+
+
+# ───────────────────────── the fallback never strands a campaign ─────────────────────────
+
+def _two_ads_video_first(tmp_path):
+    from dataclasses import replace
+    d, f = _big_draft(tmp_path)
+    ads = d.ad_sets[0].ads
+    ads.append(replace(ads[0], creative_id="1002", copy_name="Text2", ad_title="Head 2", ad_body="Body 2"))
+    return d, f
+
+
+def test_a_refused_fast_upload_on_a_tight_budget_stops_before_the_first_chunk(resumable, tmp_path):
+    d, f = _two_ads_video_first(tmp_path)
+    plan = cr.plan_from_draft(d)
+    budget = cr.estimate_create_calls(plan) + cr.resumable_calls() + 12          # the file-API plan fits, the chunks do not
+    meta = ResumableMeta(start="denied")
+    out, client = _run(meta, d, max_calls=budget)
+    assert out.stop_kind == "video_error"
+    assert "the fast upload was refused" in out.error and "this run can spare" in out.error
+    assert "Nothing was uploaded" in out.error and meta.sessions == {} and meta.rup == []      # not even a chunked start
+    assert client.calls <= client.max_calls
+
+
+def test_a_refused_fast_upload_with_room_completes_every_object(resumable, tmp_path):
+    d, f = _two_ads_video_first(tmp_path)
+    meta = ResumableMeta(start="denied")
+    out, client = _run(meta, d, max_calls=300)
+    assert out.error == "", out.error
+    assert len(out.created["ads"]) == 2 and client.calls <= client.max_calls
+    assert next(iter(meta.sessions.values()))["done"]
+
+
+def test_check_plan_warns_when_the_fallback_would_not_fit(resumable, tmp_path, monkeypatch):
+    monkeypatch.setattr(cr, "VIDEO_SINGLE_MAX_BYTES", MB)                 # Check plan reads the file as a large one
+    d, f = _big_draft(tmp_path)
+    plan = cr.plan_from_draft(d)
+    from src.fb_api import graph as g
+    meta = ResumableMeta()
+    client = g.GraphClient(meta, allow_writes=False, sleep=lambda s: None, min_interval_s=0.0,
+                           max_calls=cr.estimate_create_calls(plan) + cr.resumable_calls() + 5)
+    creator = cr.CampaignCreator(client, cr.preflight_account(client, ACT), cr.TargetingResolver(client),
+                                 sleep=lambda s: None)
+    out = cr.Outcome(campaign_name=plan.name)
+    creator._prepare(plan, writing=False, out=out)
+    warns = [w for w in out.warnings if w.startswith(("Large video", "If the fast upload"))]
+    assert any("the fast upload takes about" in w and "chunks of" not in w for w in warns), warns
+    assert any(w.startswith("If the fast upload is refused") and "this run can give" in w for w in warns), warns
