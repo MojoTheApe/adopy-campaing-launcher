@@ -496,6 +496,16 @@ class PageTab:
                 raise SessionLostError("the owned tab's browser session was detached") from exc
             raise
 
+    def call_session(self, session_id: str, method: str, params: dict | None = None, *,
+                     timeout: float = CALL_S) -> dict:
+        """A command for ANOTHER session of this connection (a dedicated worker of the tab, ACL-2629).
+
+        No `on_event`: called from an event handler, the nested call defers everything it reads (see `RawCdp.call`).
+        """
+        if self.closed:
+            raise CdpError("the tab is closed")
+        return _call(self._cdp, method, params, session_id=session_id or self.session_id, timeout=timeout)
+
     #: Optional handler for CDP events of this tab (the light work tab's interception, ACL-2344).
     on_event: Callable[[dict], None] | None = None
     #: ACL-2344: the `light_tab.LightDocument` of a light work tab (None - an ordinary tab).

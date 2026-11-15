@@ -486,6 +486,16 @@ class CdpError(RuntimeError):
     pass
 
 
+def _xor_mask(data: bytes, mask: bytes) -> bytes:
+    """WebSocket masking of `data` with the 4-byte `mask`, fast for megabytes (ACL-2629: a 8 MB piece used to take
+    seconds in a per-byte Python loop). Big-integer XOR; the result is the same bytes."""
+    n = len(data)
+    if n == 0:
+        return b""
+    key = (mask * (n // 4 + 1))[:n]
+    return (int.from_bytes(data, "little") ^ int.from_bytes(key, "little")).to_bytes(n, "little")
+
+
 class RawCdp:
     """Минимальный websocket-клиент CDP браузера: одно соединение, синхронно.
 
@@ -643,7 +653,7 @@ class RawCdp:
         else:
             head += bytes([0x80 | 127]) + struct.pack(">Q", n)
         mask = os.urandom(4)
-        body = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        body = _xor_mask(payload, mask)
         self._sock.settimeout(max(0.05, timeout))
         self._sock.sendall(head + mask + body)
 
@@ -676,7 +686,7 @@ class RawCdp:
             mask = self._read(4, deadline) if b1 & 0x80 else b""
             payload = self._read(n, deadline) if n else b""
             if mask:
-                payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+                payload = _xor_mask(payload, mask)
             if opcode == 0x8:
                 raise CdpError("CDP connection closed by the browser")
             if opcode == 0x9:

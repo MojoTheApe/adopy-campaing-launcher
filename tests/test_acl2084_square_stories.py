@@ -129,6 +129,7 @@ def test_the_same_video_in_both_slots_is_uploaded_once_as_a_plain_ad(tmp_path, m
 def test_a_copy_of_a_large_video_is_not_counted_in_the_chunk_budget(tmp_path, monkeypatch):
     from tests.test_acl1819_preflight import _audit, _mp4
     monkeypatch.setattr(cr, "VIDEO_SINGLE_MAX_BYTES", 512)
+    monkeypatch.setenv("ACL_VIDEO_WORKER_UPLOAD", "0")      # ACL-2629: this test counts the old (8 MB chunk) path
     draft = _draft(tmp_path, video=True, ads=1)
     ad = draft.ad_sets[0].ads[0]
     Path(ad.creative_path).write_bytes(_mp4(15, 1080, 1080) + b"m" * 4096)
@@ -137,7 +138,7 @@ def test_a_copy_of_a_large_video_is_not_counted_in_the_chunk_budget(tmp_path, mo
     ad.vertical_path, ad.vertical_filename = str(other), other.name
     seen = []
     original = cr.upload_calls
-    monkeypatch.setattr(cr, "upload_calls", lambda n: seen.append(n) or original(n))
+    monkeypatch.setattr(cr, "upload_calls", lambda n, *a: seen.append(n) or original(n, *a))
     out = _audit(FakeMeta(), draft)
     assert len(seen) == 1
     row = out.plan["summary"]["ad_sets"][0]["ads"][0]
