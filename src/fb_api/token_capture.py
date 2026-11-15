@@ -89,7 +89,7 @@ _HELPER_JS = r"""
   // (adsmanager-graph); якорь на начале нормализованного адреса, сразу за
   // хостом — `/` (ни порта, ни userinfo, ни поддоменов, ни http:). Ревью r5.
   const GRAPH_RE = /^https:\/\/((?:[a-z0-9]+-)?graph\.facebook\.com)(?:\/(v\d+\.\d+))?(?:\/|$)/i;
-  const PARAM_RE = /(access_token(?:=|%3D|\\u003d))[^&"'\s\\]+/gi;
+  const PARAM_RE = /((?:access_token|fb_dtsg(?:_ag)?)(?:=|%3D|\\u003d))[^&"'\s\\]+/gi;
   const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage',
                    'x-fb-ads-insights-throttle'];
   const FORBIDDEN = ['method', '_method', 'batch', 'suppress_http_code', 'access_token'];
@@ -207,7 +207,10 @@ _HELPER_JS = r"""
   function clean(text) {
     let out = String(text);
     if (token) out = out.split(token).join('<token>');
-    if (dtsgAg) out = out.split(dtsgAg).join('<hidden>');
+    if (dtsgAg) {
+      out = out.split(dtsgAg).join('<hidden>');
+      try { out = out.split(encodeURIComponent(dtsgAg)).join('<hidden>'); } catch (e) {}
+    }
     return out.replace(PARAM_RE, '$1<hidden>').replace(TOKEN_ANY, '<token>');
   }
 
@@ -1536,6 +1539,17 @@ _HELPER_JS = r"""
     scanUpload();
     return { ok: !!(rsvc && dtsgAg) };
   }
+  // Read the page's upload values again (the old ones stay if the page shows none: a light or clean tab).
+  function refreshUpload() {
+    const keepD = dtsgAg;
+    const keepR = rsvc;
+    dtsgAg = '';
+    rsvc = null;
+    scanUpload();
+    if (!dtsgAg) dtsgAg = keepD;
+    if (!rsvc) rsvc = keepR;
+    return { ok: !!(rsvc && dtsgAg) };
+  }
   async function ruploadReply(resp, text) {
     text = clean(text);
     let parsed;
@@ -1691,9 +1705,10 @@ _HELPER_JS = r"""
     listening = null;
     listenResult = result;
   }
-  function listen(name, nonce, ack, ttlMs) {
+  function listen(name, nonce, ack, ttlMs, uploadOnly) {
     if (retired) return 'retired';
-    if (token) return 'has_token';
+    if (token && uploadOnly !== true) return 'has_token';
+    if (!token && uploadOnly === true) return 'no_token';
     if (listening) return 'busy';
     if (typeof BroadcastChannel !== 'function') return 'no_channel';
     if (![name, nonce, ack].every((v) => typeof v === 'string' && SECRET_RE.test(v))) return 'bad_args';
@@ -1705,6 +1720,14 @@ _HELPER_JS = r"""
     ch.onmessage = (e) => {
       const d = e.data;
       if (!d || typeof d !== 'object' || d.n !== nonce) return;      // not this hand-over: ignore
+      // upload-only: the SAME session token comes again with fresh upload values; nothing else is replaced
+      if (uploadOnly === true && !retired && token && d.t === token) {
+        if (dtsgOk(d.d)) dtsgAg = d.d;
+        if (d.r && typeof d.r === 'object' && rsvcOk(d.r.name, d.r.domain)) rsvc = { name: d.r.name, domain: d.r.domain };
+        stopListening('received');
+        try { const a = new BroadcastChannel(ack); a.postMessage({ ack: nonce }); a.close(); } catch (x) {}
+        return;
+      }
       const ok = !token && !retired && typeof d.t === 'string' && TOKEN_RE.test(d.t)
         && typeof d.h === 'string' && HOST_RE.test(d.h) && typeof d.v === 'string' && VER_RE.test(d.v);
       if (ok) {
@@ -1750,7 +1773,7 @@ _HELPER_JS = r"""
                           listen: listen, listenStatus: listenStatus, stopListen: stopListen,
                           handOver: handOver,
                           validatePage: validatePage, uploadFormPhoto: uploadFormPhoto,
-                          stage: stage, unstage: unstage, probeWorker: probeWorker, uploadService: uploadService,
+                          stage: stage, unstage: unstage, probeWorker: probeWorker, uploadService: uploadService, refreshUpload: refreshUpload,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
@@ -2648,6 +2671,22 @@ class InPageGraph:
         if isinstance(got, dict) and got.get("ok") is True:
             return True, ""
         return False, "no upload service address or session token on this page"
+
+    def refresh_upload_service(self) -> bool:
+        """ACL-2639: read the upload service address and token again: this page re-scans its scripts, and the clean
+        upload tab (if any) gets them again by an upload-only hand-over. Local only. True if the sender has them."""
+        from src.fb_api import light_tab
+
+        try:
+            got = self._eval_helper(".refreshUpload()", timeout=10.0)
+        except (PageError, CdpError, TimeoutError):
+            return False
+        if not (isinstance(got, dict) and got.get("ok") is True):
+            return False
+        up = self._upload_graph
+        if up is None:
+            return True
+        return light_tab.hand_over(self, up, upload_only=True) == ""
 
     #: One GET of the resumable service (the resume offset) has this long.
     RUPLOAD_READ_S = 15.0

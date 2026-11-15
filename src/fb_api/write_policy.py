@@ -122,8 +122,8 @@ FILE_API_KEYS = {
     "finish": frozenset({"upload_phase", "upload_session_id", "video_id", "title"}),
 }
 #: Opaque file handle from the answer to the last rupload POST: `N:<base64 name>:<mime>:<id>:e:<expiry>:<signature>`.
-FILE_HANDLE_RE = re.compile(r"^[0-9]{1,3}:[A-Za-z0-9+/=_-]*:[^:\s]{1,100}:[A-Za-z0-9_.-]{1,100}:e:[0-9]{1,20}:"
-                            r"[A-Za-z0-9_.-]{1,300}$", re.ASCII)
+FILE_HANDLE_RE = re.compile(r"^[0-9]{1,3}:[A-Za-z0-9+/=_-]*:[^:\s]{1,100}:[A-Za-z0-9_.-]{1,100}:e:[0-9]{1,20}"
+                            r"(?::[A-Za-z0-9_.+/=-]{1,300}){1,6}$", re.ASCII)
 FILE_HANDLE_MAX = 1000
 
 
@@ -162,13 +162,6 @@ VIDEO_TITLE_RE = re.compile(r"^acl-[A-Za-z0-9_-]{1,64}-[0-9a-f]{12}$", re.ASCII)
 
 def rupload_service_ok(name: Any, domain: Any) -> bool:
     return isinstance(name, str) and bool(RUPLOAD_NAME_RE.fullmatch(name)) and domain == RUPLOAD_DOMAIN
-
-
-def rupload_url(name: str, domain: str, path: str, dtsg: str) -> str:
-    """The address of one rupload request (the page helper builds the same; the token stays in the page)."""
-    if not (rupload_service_ok(name, domain) and RUPLOAD_PATH_RE.fullmatch(path) and RUPLOAD_DTSG_RE.fullmatch(dtsg)):
-        raise ValueError("not a usable upload service address")
-    return f"https://{name}.{domain}{path}?fb_dtsg_ag={dtsg}&__a=1"
 
 
 def rupload_path(waterfall: str, size: int) -> str:

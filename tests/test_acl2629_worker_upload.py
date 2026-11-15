@@ -567,7 +567,7 @@ const windows = {};
 const log = { graph: [], pieces: 0, workers: 0, terminated: 0, rupload: [] };
 const meta = { size: 0, received: 0, md5: crypto.createHash('md5'), chunks: [], done: false };
 const rup = { received: 0, md5: crypto.createHash('md5') };
-const DTSG = 'D'.repeat(20) + 'Tg_AG' + 'x'.repeat(37);
+const DTSG = SC.colon_token ? 'D'.repeat(12) + ':Tg:AG:' + 'x'.repeat(30) : 'D'.repeat(20) + 'Tg_AG' + 'x'.repeat(37);
 const HANDLE = '1:YWJj:application/octet-stream:7777777:e:1800000000:sig_-1';
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const reply = (status, obj) => ({ status: status, text: async () => JSON.stringify(obj), headers: { get: () => null } });
@@ -588,6 +588,7 @@ const fakeFetch = async (url, init) => {
                      token_in_url: url.indexOf(TOKENV) >= 0 };
     if (init.method === 'GET') {
       log.rupload.push(Object.assign(common, { offset_read: true }));
+      if (SC.echo) return reply(400, { error: { message: 'bad fb_dtsg_ag=' + encodeURIComponent(DTSG) + '&x=1 raw ' + DTSG } });
       return reply(200, { dc: 'fra3', offset: String(rup.received) });
     }
     const buf = Buffer.from(await init.body.arrayBuffer());
@@ -595,6 +596,7 @@ const fakeFetch = async (url, init) => {
     log.rupload.push(Object.assign(common, { headers: Object.keys(h).sort(), offset: h['offset'], length: h['X-Entity-Length'],
                        type: h['X-Entity-Type'], auth: h['Authorization'], bytes: buf.length,
                        md5: crypto.createHash('md5').update(buf).digest('hex'), form: typeof init.body.get === 'function' }));
+    if (SC.echo) return { status: 502, text: async () => '<html><body>Bad gateway for ?fb_dtsg_ag=' + encodeURIComponent(DTSG) + ' and ' + DTSG + ' and fb_dtsg%3D' + encodeURIComponent(DTSG) + '</body></html>', headers: { get: () => null } };
     if (Number(h['offset']) !== rup.received) return reply(400, { error: 'bad offset' });
     rup.received += buf.length;
     rup.md5.update(buf);
@@ -773,7 +775,8 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     });
     out.service = h.uploadService();
     out.get = slim(await h.call({ kind: 'rupload', method: 'GET', path: RP }));
-    if (!SC.no_service && !SC.service_name && !SC.service_domain) {
+    if (SC.echo) out.post = slim(await job(seg(0, 800000)));
+    if (!SC.echo && !SC.no_service && !SC.service_name && !SC.service_domain) {
       out.ok = slim(await job(seg(0, SOURCE.length)));
       out.refused = {};
       const bad = {
@@ -845,6 +848,18 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     out.status = h2.listenStatus();
     out.after = h2.uploadService();
     out.state = h2.state();
+    const ch2 = 'chan2_' + 'a'.repeat(20), nonce2 = 'nonce2_' + 'b'.repeat(20), ack2 = 'ack2_' + 'c'.repeat(20);
+    out.listen2 = h2.listen(ch2, nonce2, ack2, 5000, true);            // upload-only: the token is already there
+    out.sent2 = await h.handOver(ch2, nonce2, ack2, 3000);
+    out.status2 = h2.listenStatus();
+    out.refresh = h2.refreshUpload();
+    // a helper without a token never takes an upload-only message
+    const doc3 = { readyState: 'complete', querySelector: () => null, scripts: [], documentElement: { innerHTML: '' } };
+    const G3 = {};
+    new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
+                 'navigator', __HELPER2__.replace('__acl_second', '__acl_third'))(G3, loc, doc3, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
+                             crypto.webcrypto, FakeWorker, NAV);
+    out.listen3 = G3['__acl_third'].listen('chan3_' + 'a'.repeat(20), 'nonce3_' + 'b'.repeat(20), 'ack3_' + 'c'.repeat(20), 5000, true);
     out.leak = JSON.stringify(out).indexOf(DTSG) >= 0;
   } else if (SC.name === 'abort') {
     await phase({ upload_phase: 'start', file_size: String(SOURCE.length) });

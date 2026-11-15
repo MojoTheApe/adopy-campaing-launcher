@@ -743,11 +743,24 @@ class GraphClient:
 
     def upload_service_ready(self) -> tuple[bool, str]:
         """ACL-2639: does the page that sends the video bytes know the resumable service and its session token?
-        Local: no Meta call, not counted. A transport without the check answers (True, "") (the call decides)."""
+        Local: no Meta call, not counted. A transport without the check answers (False, ...): no service."""
         check = getattr(self.transport, "upload_service_ready", None)
         if not callable(check):
-            return True, ""
+            return False, "upload service not supported here"
         return check()
+
+    def refresh_upload_service(self) -> bool:
+        """ACL-2639: read the upload service address and session token again (local, no Meta call). True if the
+        page has them afterwards; a transport without the hook answers False."""
+        hook = getattr(self.transport, "refresh_upload_service", None)
+        if not callable(hook):
+            return False
+        try:
+            return bool(hook())
+        except GraphStop:
+            raise
+        except Exception:  # noqa: BLE001 - a refresh that fails changes nothing
+            return False
 
     def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk: Any = None,
                 progress: Callable[[float], None] | None = None,

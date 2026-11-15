@@ -241,7 +241,7 @@ def open_upload_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocum
     return None, "upload tab: the service-worker state could not be read"
 
 
-def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0) -> str:
+def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0, upload_only: bool = False) -> str:
     """Token from the helper of `src` to the helper of `dst` (two `InPageGraph`s). '' or a reason code.
 
     The channel name, nonce and ack name are random, live only for this call and are never logged.
@@ -251,7 +251,7 @@ def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0) -> str:
     args = ",".join(json.dumps(v) for v in (name, nonce, ack))
     ttl_ms = int((wait_s + 5.0) * 1000)
     try:
-        got = dst._eval_helper(f".listen({args},{ttl_ms})", timeout=10.0)
+        got = dst._eval_helper(f".listen({args},{ttl_ms}{',true' if upload_only else ''})", timeout=10.0)
     except (CdpError, TimeoutError):
         return "work_tab_dead"
     if got != "listening":

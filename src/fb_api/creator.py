@@ -55,7 +55,7 @@ from src.fb_api import name_receipt as _nr
 from src.fb_api import operation_journal as _oj
 from src.fb_api import pages as _pg
 from src.fb_api.telemetry import mask_id as _mask_id, scrub
-from src.fb_api.graph import AuthRequired, FormPhotoRefused, GraphClient, GraphError, GraphStop, PageFailed, RuploadLost, WritesBlocked, WriteUnknown, is_auth_required, normalize_act
+from src.fb_api.graph import AuthRequired, FormPhotoRefused, GraphClient, GraphError, GraphStop, NotSent, PageFailed, RuploadLost, WritesBlocked, WriteUnknown, is_auth_required, normalize_act
 from src.fb_api.graph import REJECTION_SUBCODES as _REJECTION_SUBCODES
 from src.fb_api.graph import FILE_REFUSAL_SUBCODES as _FILE_REFUSAL_SUBCODES
 
@@ -177,9 +177,15 @@ RESUMABLE_MAX_RESUMES = 5
 RESUMABLE_FIXED_CALLS = 4
 
 
-def resumable_calls(size: int, segment: int | None = None) -> int:
+def resumable_calls() -> int:
     """Graph calls of a resumable upload without resumes: constant (the size only changes the service POSTs)."""
     return RESUMABLE_FIXED_CALLS
+
+
+def _already_finished(exc: Exception) -> bool:
+    """A definite "this video is already finished/published" answer to a repeated finish."""
+    msg = str(exc).lower()
+    return isinstance(exc, GraphError) and "already" in msg and ("finish" in msg or "publish" in msg)
 
 
 class _ResumableRefused(Exception):
@@ -3310,11 +3316,14 @@ class CampaignCreator:
         512 MB with the `offset` the service holds (served piece by piece from the file, never a copy in the page); the
         answer to the last one carries the file handle -> advideos transfer by that handle (Meta must answer that it
         holds the whole file) -> advideos finish with the ACL tag as the title (a later search by the title finds it
-        like a chunked upload). A dropped POST resumes from the offset the service reports (GET, at most
-        RESUMABLE_MAX_RESUMES times), never from zero and never as a second video. The ids are kept in the journal
-        right after the start: a run that stopped (or crashed) before the finish is continued by the next one. Graph
-        calls per video: start, transfer, finish (+ one status read when an earlier run is continued or a finish
-        answer is lost). `_ResumableRefused` - nothing was finished, the caller may use the chunked path.
+        like a chunked upload). A dropped POST resumes from the offset the service reports (GET), never from zero and
+        never as a second video; a resume that made progress is free, one without progress counts against
+        RESUMABLE_MAX_RESUMES. After the FIRST partial segment the service is asked once whether it kept a partial piece:
+        if not, the upload is refused (nothing finished, the chunked path is safe). The ids are kept in the journal right
+        after the start (and `transferred` after the transfer): a run that stopped (or crashed) before the finish is
+        continued by the next one. Graph calls per video: start, transfer, finish (+ one status read when an earlier run
+        is continued or a finish answer is lost). `_ResumableRefused` - nothing was finished, the caller may use the
+        chunked path (an unfinished video of this upload stays at Meta, never published).
         """
         path = f"/{plan.act}/advideos"
         size = len(big)
@@ -3328,11 +3337,16 @@ class CampaignCreator:
         calls_before = getattr(self.client, "calls", 0)
         planned = upload_calls(size, True)
         allowance = max(planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned)),
-                        resumable_calls(size, segment))
+                        resumable_calls())
         vid = sid = waterfall = ""
         offset = 0
         resumes = 0
         moved = False                       # the service has confirmed at least one byte of this upload
+        transferred = False                 # Meta took the file by its handle (journal: a continuation only finishes)
+        partial_checked = False             # the first partial segment was verified with a GET
+        get_handle = ""                     # a file handle the service returned to a GET (once the upload is complete)
+        streak = 0                          # consecutive 4xx answers of the service
+        refreshed = False
         mb_total = max(size // (1024 * 1024), 1)
 
         def room(n: int) -> None:
@@ -3357,14 +3371,33 @@ class CampaignCreator:
         def service_path() -> str:
             return _wpol.rupload_path(waterfall, size)
 
+        def svc(method: str, **kw) -> dict:
+            """One request to the resumable service. A request the Python policy or the page refused BEFORE sending:
+            while nothing moved it is a refusal of this path (the chunked path takes over), afterwards a stop."""
+            try:
+                return self.client.rupload(method, service_path(), **kw)
+            except NotSent as exc:
+                self.client.release_optional_stop(exc)
+                if "(no_file" in str(exc):
+                    raise RuploadLost("the file piece did not reach the page", reason="no_file") from exc
+                if not moved:
+                    raise _ResumableRefused(f"the page refused the upload service request ({str(exc)[:120]})") from exc
+                raise CreationStopped(f"{what}: the page refused an upload service request ({str(exc)[:120]}); "
+                                      "stopped before sending more. Nothing was duplicated and the unfinished upload "
+                                      "is not used.", created=out.created, kind="video_error") from exc
+
         def held() -> int | None:
             """How many bytes the service holds of THIS upload (one GET of the service; not a Graph call). None: no
-            usable answer."""
+            usable answer. A file handle in the answer (the service may give it once complete) is kept."""
+            nonlocal get_handle
             self._check_cancel(out)
             try:
-                got = self.client.rupload("GET", service_path())
+                got = svc("GET")
             except RuploadLost:
                 return None
+            h = _wpol.file_handle(got["body"])
+            if h:
+                get_handle = h
             raw = got["body"].get("offset")
             n = raw if isinstance(raw, int) and not isinstance(raw, bool) else (
                 int(raw) if isinstance(raw, str) and raw.isdigit() and len(raw) <= 13 else None)
@@ -3372,14 +3405,25 @@ class CampaignCreator:
                 return None
             return n
 
+        def shape(body: dict) -> str:
+            """Key names and value lengths only (never values) of an answer."""
+            parts = []
+            for k, v in list(body.items())[:12]:
+                ln = len(v) if isinstance(v, (str, list, dict)) else type(v).__name__
+                parts.append(f"{re.sub(r'[^A-Za-z0-9_]', '_', str(k))[:30]}:{ln}")
+            return ", ".join(parts) or "empty answer"
+
         def resume(why: str, known: int | None = None) -> None:
             nonlocal offset, resumes, moved
-            resumes += 1
-            if resumes > RESUMABLE_MAX_RESUMES:
-                raise CreationStopped(f"{what}: the upload kept breaking ({why}); stopped after "
-                                      f"{RESUMABLE_MAX_RESUMES} resumes. Nothing was duplicated and the unfinished "
-                                      "upload is not used.", created=out.created, kind="video_error")
             got = known if known is not None else held()
+            if got is None or got <= offset:
+                # Only a resume without progress counts: a GET that shows more bytes than we had is free.
+                resumes += 1
+                if resumes > RESUMABLE_MAX_RESUMES:
+                    raise CreationStopped(f"{what}: the upload kept breaking ({why}); stopped after "
+                                          f"{RESUMABLE_MAX_RESUMES} resumes without progress. Nothing was duplicated "
+                                          "and the unfinished upload is not used.", created=out.created,
+                                          kind="video_error")
             if got is None:
                 if not moved:
                     raise _ResumableRefused(f"the upload service did not tell its offset ({why})")
@@ -3398,10 +3442,39 @@ class CampaignCreator:
             self._step(out, f"{who}: resuming the upload at {got // (1024 * 1024)}/{mb_total} MB ({why})")
             offset = got
 
+        def finish_params() -> dict:
+            return {"upload_phase": "finish", "upload_session_id": sid, "video_id": vid, "title": title}
+
+        def adopt_finish() -> bool:
+            """A pending video of an earlier run: `processing/ready` alone never counts as finished. The finish with
+            the title is sent ONCE; success or a definite "already finished" answer is success."""
+            room(1)
+            self._check_cancel(out)
+            try:
+                done = self.client.post(path, finish_params())
+            except GraphError as exc:
+                if _already_finished(exc):
+                    return True
+                self._step(out, f"{who}: Meta did not take the finish of an earlier run's video ({str(exc)[:100]})")
+                return False
+            except WriteUnknown:
+                self.client.reconciled(path)
+                if published(status()):
+                    self._step(out, f"{what}: finish reconciled by a status read")
+                    return True
+                raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
+                                      "published yet. Publish again later: the upload is continued, not repeated.",
+                                      created=out.created, kind="unknown")
+            except PageFailed as exc:
+                if not self.client.resume_after_unsent(exc):
+                    raise
+                return False
+            return done.get("success") is True
+
         # -- an upload this operation started earlier (stopped or crashed before its finish) is continued
         pending = self._pending_video(what, size)
         if pending:
-            vid, sid, waterfall = pending
+            vid, sid, waterfall, transferred = pending
             try:
                 st = status()
             except GraphError as exc:
@@ -3415,18 +3488,23 @@ class CampaignCreator:
                 self._step(out, f"{who}: the upload of an earlier run is not available ({str(exc)[:80]}); "
                                 "starting a new one")
                 self._forget_pending_video(what)
-                pending, vid, sid, waterfall = None, "", "", ""
+                pending, vid, sid, waterfall, transferred = None, "", "", "", False
             else:
-                if published(st):
-                    self._step(out, f"{who}: the video uploaded by an earlier run is used")
-                    return vid
+                if transferred or published(st):
+                    if adopt_finish():
+                        self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                        return vid
+                    if transferred:
+                        raise CreationStopped(f"{what}: Meta did not finish the upload of an earlier run. Publish "
+                                              "again later: it is continued, not repeated.", created=out.created,
+                                              kind="video_error")
                 got = held()
                 if got is None or got >= size:
                     # Nothing to continue from: the service lost it, or every byte is in and the file handle (the answer
                     # to the last POST) is gone. The unfinished video is left; the new one is found by its title later.
                     self._step(out, f"{who}: the upload of an earlier run cannot be continued; starting a new one")
                     self._forget_pending_video(what)
-                    pending, vid, sid, waterfall = None, "", "", ""
+                    pending, vid, sid, waterfall, transferred = None, "", "", "", False
                 else:
                     self._step(out, f"{who}: continuing the upload of an earlier run at "
                                     f"{got // (1024 * 1024)}/{mb_total} MB")
@@ -3458,6 +3536,9 @@ class CampaignCreator:
         handle = ""
         while not handle:
             if offset >= size:
+                if get_handle:
+                    handle = get_handle
+                    break
                 raise _ResumableRefused("the upload service has every byte but no file handle")
             n = min(segment, size - offset)
             last = offset + n >= size
@@ -3467,21 +3548,38 @@ class CampaignCreator:
             headers = {"offset": str(offset), "X-Entity-Length": str(size), "X-Entity-Type": _wpol.RUPLOAD_TYPE}
             self._check_cancel(out)
             try:
-                got = self.client.rupload("POST", service_path(), headers=headers,
-                                          chunk=_wpol.ServedChunk(big, offset, n), progress=lambda _s: self._beat(),
-                                          cancelled=self.cancelled)
+                got = svc("POST", headers=headers, chunk=_wpol.ServedChunk(big, offset, n),
+                          progress=lambda _s: self._beat(), cancelled=self.cancelled)
             except RuploadLost as exc:
                 resume(f"the answer was lost: {exc.reason or 'network'}")
                 continue
-            except PageFailed as exc:
-                if not self.client.resume_after_unsent(exc):
-                    raise
-                resume("the page did not send the bytes")
+            ok = 200 <= got["status"] < 300
+            if not last and not partial_checked:
+                # Whether a service keeps a PARTIAL piece is unverified for files over one segment: ask once, whatever
+                # the status was. Nothing is finished yet, so a "no" is a safe fallback.
+                partial_checked = True
+                now = held()
+                if now != offset + n:
+                    raise _ResumableRefused("the upload service did not keep a partial piece (it holds "
+                                            f"{'an unknown amount' if now is None else str(now) + ' of ' + str(offset + n)} "
+                                            "bytes after the first segment)")
+                moved, streak, offset = True, 0, now
+                self._beat()
+                if not ok:
+                    self._step(out, f"{who}: the upload service answered HTTP {got['status']} but kept the bytes")
+                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
                 continue
-            if not 200 <= got["status"] < 300:
+            if not ok:
                 # B2: only an explicit success counts: the service answers a refusal with a 4xx/5xx.
+                if 400 <= got["status"] < 500:
+                    streak += 1
+                    if streak >= 2 and not refreshed:
+                        refreshed = True                       # once: take the service address and token again
+                        self._step(out, f"{who}: reading the upload service address again")
+                        self.client.refresh_upload_service()
                 resume(f"the upload service refused (HTTP {got['status']})")
                 continue
+            streak = 0
             moved = True
             self._beat()
             if not last:
@@ -3493,12 +3591,17 @@ class CampaignCreator:
                 offset = size
                 break
             now = held()                                   # no handle: ask once what the service holds
+            if get_handle:
+                handle, offset = get_handle, size
+                break
+            self._step(out, f"{who}: the upload service answered without a file handle ({shape(got['body'])})")
             if now is not None and now < size:
                 resume("the service holds only part of the bytes", known=now)
                 continue
             raise _ResumableRefused("the upload service took the bytes but gave no file handle")
 
-        # -- transfer: Meta takes the file by its handle and must hold the whole of it (a lost answer: asked once more)
+        # -- transfer: Meta takes the file by its handle and must hold the whole of it (a lost answer: asked once more).
+        # Nothing is finished yet, so a failure here is a refusal (the chunked path runs; the unfinished video stays).
         tparams = {"upload_phase": "transfer", "upload_session_id": sid, "video_id": vid, "start_offset": "0",
                    "end_offset": str(size), "partition_start_offset": "0", "partition_end_offset": str(size),
                    "fbuploader_video_file_chunk": handle}
@@ -3524,9 +3627,11 @@ class CampaignCreator:
         s_raw, e_raw = str(body.get("start_offset", "")), str(body.get("end_offset", ""))
         if not (s_raw == str(size) and e_raw == str(size)):
             raise _ResumableRefused(f"Meta did not take all the bytes ({s_raw or '?'}-{e_raw or '?'} of {size})")
+        transferred = True
+        self._remember_pending_video(what, vid, sid, waterfall, size, transferred=True)
 
         # -- finish with the ACL tag as the title (a lost answer: sent once more, then the status decides)
-        fparams = {"upload_phase": "finish", "upload_session_id": sid, "video_id": vid, "title": title}
+        fparams = finish_params()
         for attempt in (1, 2):
             room(1)
             self._check_cancel(out)
@@ -3559,9 +3664,10 @@ class CampaignCreator:
         except _oj.JournalError:
             self._journal_event("journal_save_failed", what=what, phase="pending_clear", error="JournalError")
 
-    def _pending_video(self, what: str, size: int) -> tuple[str, str, str] | None:
-        """ACL-2639: (video_id, upload_session_id, waterfall_id) of a resumable upload this operation started for the
-        same file, if any. A continuation needs all three and the same file; otherwise it is forgotten (a new start)."""
+    def _pending_video(self, what: str, size: int) -> tuple[str, str, str, bool] | None:
+        """ACL-2639: (video_id, upload_session_id, waterfall_id, transferred) of a resumable upload this operation
+        started for the same file, if any. A continuation needs the three ids and the same file; otherwise it is
+        forgotten (a new start). `transferred`: Meta already took the file by its handle - only the finish is left."""
         op = self._op
         st = op.stage(what) if op is not None else None
         if not st or st.get("state") == _oj.CONFIRMED:
@@ -3570,17 +3676,18 @@ class CampaignCreator:
         sid, waterfall = str(info.get("upload_session_id") or ""), str(info.get("waterfall_id") or "")
         if (vid.isdigit() and sid.isdigit() and _wpol.UPLOAD_WATERFALL_RE.fullmatch(waterfall)
                 and info.get("size") == size and info.get("md5") == st.get("content_md5")):
-            return vid, sid, waterfall
+            return vid, sid, waterfall, info.get("transferred") is True
         return None
 
-    def _remember_pending_video(self, what: str, vid: str, sid: str, waterfall: str, size: int) -> None:
+    def _remember_pending_video(self, what: str, vid: str, sid: str, waterfall: str, size: int,
+                                transferred: bool = False) -> None:
         op = self._op
         if op is None:
             return
         st = op.stage(what) or {}
         try:
             op.set_pending(what, vid, {"upload_session_id": sid, "waterfall_id": waterfall, "size": size,
-                                       "md5": st.get("content_md5")})
+                                       "md5": st.get("content_md5"), "transferred": transferred})
         except _oj.JournalError:
             self._journal_event("journal_save_failed", what=what, phase="pending", error="JournalError")
 

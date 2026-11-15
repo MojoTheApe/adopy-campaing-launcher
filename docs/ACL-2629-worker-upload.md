@@ -279,3 +279,26 @@ the old session is forgotten and a new one starts (a finished video is found by 
 
 Assumptions checkable only live: the answer body of the last rupload POST (handle field), and that the service accepts
 the CORS preflight of the custom headers from the clean `__acl_work` origin like it does from Ads Manager itself.
+
+### 13.1 Review fixes (files over one segment, adoption, masking)
+
+* **Multi-POST is unverified live.** After the FIRST partial (non-final) segment POST, whatever its status, ONE offset GET
+  must show `offset + length`; otherwise the upload is refused (`the upload service did not keep a partial piece`): nothing
+  is finished yet, so the chunked fallback is safe. A 4xx/5xx whose GET shows the bytes kept is continued normally.
+* **Resumes.** A resume counts against `RESUMABLE_MAX_RESUMES` only when it made no progress (the reported offset is not
+  above the one we had); a GET showing progress is free. Two 4xx answers in a row: the upload service address and the
+  session token are read again once (the page re-scans its scripts; a clean upload tab gets them by an upload-only
+  hand-over of the same session) before more resumes are spent.
+* **Handle.** The tail after `:e:<digits>` may be 1-6 `:`-separated parts. The GET answer is parsed too (the service may
+  give `h` once the upload is complete). A 2xx answer without a handle logs a step with key names and value lengths only.
+* **Adoption of a pending video.** `processing/ready` alone is never trusted: the finish with the title is sent once;
+  success or a definite "already finished" answer counts. The journal keeps `transferred=true` after a confirmed transfer;
+  a continuation of such a video sends only the finish and never starts a second video.
+* **Before bytes moved,** a request refused before sending (Python policy, page helper, empty service after a world reset)
+  or an unusable offset read is a refusal (fallback), not a run stop; afterwards it is a stop with the reason.
+* **Transfer failures are a fallback, honestly.** "Meta did not take all the bytes" and "the transfer answer was lost
+  twice" happen BEFORE the finish, so nothing was published: the chunked path runs and the unfinished video of this
+  session stays at Meta (never published, no finished duplicate). Only failures after the transfer was accepted are
+  real stops.
+* **Masking.** The helper masks the session token raw and URL-encoded and the `fb_dtsg`/`fb_dtsg_ag` parameters in every
+  answer (error JSON and non-JSON/HTML bodies). `GraphClient.upload_service_ready()` defaults to "not supported here".
