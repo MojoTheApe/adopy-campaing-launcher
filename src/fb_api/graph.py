@@ -415,10 +415,10 @@ class GraphClient:
         return exc
 
     def release_optional_stop(self, exc: GraphStop) -> bool:
-        """ACL-2639: lift the stop of an OPTIONAL write (naming a video) that never reached Meta - only `NotSent`
-        (refused by the Python policy or the page helper before sending), and only when it is the current stop.
-        Login, checkpoint, limits, the budget, policy blocks stay stops. True - lifted. The caller makes the optional
-        write only while nothing is stopped (`optional_write_ok`), so an older stop is never lifted here."""
+        """ACL-2639: lift the stop of a request that never reached Meta - only `NotSent` (refused by the Python
+        policy or the page helper before sending; used for the resumable upload service requests), and only when it
+        is the current stop. Login, checkpoint, limits, the budget, policy blocks stay stops. True - lifted. An older
+        stop is never lifted here."""
         if self.stopped is exc and isinstance(exc, NotSent):
             self.stopped = None
             return True

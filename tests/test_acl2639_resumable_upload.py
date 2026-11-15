@@ -56,6 +56,7 @@ class ResumableMeta(ServedMeta):
         self.get_faults = list(get_faults)              # per offset GET: "lost" | "bad"
         self.refuse_calls = refuse_calls                # the first N service requests are refused before sending
         self.refuse_style = refuse_style                # "page" (helper) | "policy" (Python)
+        self.lag_titles = False                         # a list read (no status field) does not show titles yet
         self.get_returns_handle = get_returns_handle    # a GET of the finished upload also returns the file handle
         self.refreshes = 0
         self.va: dict[str, dict] = {}
@@ -117,6 +118,8 @@ class ResumableMeta(ServedMeta):
             return {"error": "network"}
         if fault == "nosuccess":
             return {"status": 200, "body": {"success": False}}
+        if fault == "denied":
+            return {"status": 400, "body": {"error": {"code": 100, "message": "(#100) Invalid parameter"}}}
         if fault == "already":
             return {"status": 400, "body": {"error": {"code": 100, "message": "(#100) Video already finished"}}}
         return {"status": 200, "body": {"success": True}}
@@ -126,6 +129,8 @@ class ResumableMeta(ServedMeta):
         sess = self.va.get(obj["id"])
         if sess is not None and "status" in row and (not sess["done"] or self.hide_published):
             row["status"]["video_status"] = "uploading"
+        if self.lag_titles and "status" not in row:
+            row.pop("title", None)
         return row
 
     # -- the transport of the resumable service
@@ -163,6 +168,8 @@ class ResumableMeta(ServedMeta):
         fault = self.faults.pop(0) if self.faults else ""
         if fault == "nothing":
             return {"error": "network"}
+        if fault == "retired":
+            return {"error": "retired"}
         if fault == "page_refused":
             return {"error": "write_refused", "why": "upload_service"}
         if fault == "kept400":                       # a short POST: all bytes kept, yet answered 4xx
@@ -527,7 +534,7 @@ def test_the_graph_calls_are_constant_and_the_service_is_not_counted(resumable, 
     assert out.error == ""
     assert len(meta.va_posts) == 3 and len(_posts(meta)) == 4                    # 3 Graph writes, 4 segments
     assert cr.resumable_calls() == 4
-    assert cr.resumable_calls() < cr.upload_calls(2420 * MB, True)      # inside the run budget
+    assert cr.resumable_calls() < cr.upload_calls(2420 * MB, True, chunked=True)      # inside the run budget
 
 
 def test_the_hard_cap_stops_before_the_transfer(resumable, tmp_path, monkeypatch):
@@ -689,6 +696,71 @@ def test_processing_or_ready_alone_is_not_trusted_for_an_adopted_video(resumable
     assert again.error == "", again.error
     assert _phases(meta).count("start") == 1 and _phases(meta).count("finish") == 1   # the finish with the title was sent
     assert meta.objects[old]["title"].startswith("acl-")
+
+
+def test_a_pending_upload_with_every_byte_in_and_the_handle_from_the_service_goes_to_the_transfer(resumable, tmp_path):
+    _go, oj, journal, d, f, meta, old = _stopped_after_start(tmp_path)
+    sess = meta.va[old]
+    sess["received"] = sess["size"]                      # the rest of the bytes arrived, the handle answer was lost
+    meta.get_returns_handle = True
+    posts = len(_posts(meta))
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert len(_posts(meta)) == posts and _phases(meta) == ["start", "transfer", "finish"]   # no new POST, no new start
+    assert any("all bytes are in" in s for s in again.steps)
+
+
+def test_a_published_pending_video_whose_finish_is_unclear_stops_as_unknown(resumable, tmp_path):
+    _go, oj, journal, d, f, meta, old = _stopped_after_start(tmp_path)
+    sess = meta.va[old]
+    sess["received"], sess["transferred"], sess["done"] = sess["size"], True, True
+    meta.finish_faults = ["nosuccess"]
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.stop_kind == "unknown" and "Publish again later" in again.error
+    assert _phases(meta).count("start") == 1
+    assert any(st.get("pending_id") == old for st in _stages(tmp_path))      # kept for the next run
+
+
+def test_a_pending_video_with_our_title_is_adopted_without_a_write(resumable, tmp_path):
+    from tests.test_acl1856_operation_journal import _go
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(finish_faults=["lost", "lost"])
+    meta.hide_published = True
+    first, _ = _go(meta, d, journal, request_key="r1#t")
+    assert first.stop_kind == "unknown"
+    meta.hide_published, meta.lag_titles = False, True      # the list does not show the title yet; the status read does
+    before = list(meta.va_posts)
+    now[0] += oj.BUSY_S + 60
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert list(meta.va_posts) == before                     # not a single write: adopted by its title
+    assert any("the video uploaded by an earlier run is used" in s for s in again.steps)
+
+
+def test_a_refused_repeated_finish_without_the_title_forgets_the_entry_and_starts_again(resumable, tmp_path):
+    from tests.test_acl1856_operation_journal import _go
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(finish_faults=["lost", "lost", "denied"])
+    meta.hide_published = True
+    _go(meta, d, journal, request_key="r1#t")
+    (vid, _s), = meta.va.items()
+    meta.objects[vid]["title"] = None
+    meta.hide_published = False
+    now[0] += oj.BUSY_S + 60
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert _phases(meta).count("start") == 2
+    assert any("Meta refused to finish the upload of an earlier run" in s for s in again.steps)
+
+
+def test_a_retired_helper_is_a_stop_even_before_any_byte_moved(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["retired"])
+    out, _ = _run(meta, d)
+    assert out.stop_kind == "video_error" and "retired" in out.error
+    assert "transfer" not in _phases(meta) and not any("chunks instead" in w for w in out.warnings)
 
 
 def test_a_pending_video_that_is_gone_starts_a_new_upload(resumable, tmp_path):
@@ -1088,6 +1160,8 @@ def test_the_upload_values_come_with_the_token_by_the_hand_over_and_never_leave_
     assert out["upload_only"] if False else True
     assert out["listen2"] == "listening" and out["sent2"] == "acked" and out["status2"] == "received"
     assert out["refresh"] == {"ok": True} and out["listen3"] == "no_token"          # upload-only never gives a token
+    assert out["has4"] is True and out["listen4"] == "listening" and out["status4"] == "rejected"   # another token
+    assert out["after4"] == {"ok": False}                                            # ... took nothing
     assert out["before"] == {"ok": False} and out["listen"] == "listening" and out["status"] == "received"
     assert out["after"] == {"ok": True} and out["state"]["has_token"] is True
     assert out["leak"] is False and "async_get_token" not in json.dumps(out["state"])
@@ -1110,3 +1184,46 @@ def test_an_unknown_in_page_result_aborts_the_request_first():
     got = t._write_file_job(7, {"method": "POST"}, None, None)
     assert got == {"error": "call_unknown"}
     assert any(".abort(" in e for e in tab.exprs)
+
+
+# ───────────────────────── the chunked fallback uses the run's budget, not the 64 MB plan ─────────────────────────
+
+class LiveWindows(ResumableMeta):
+    """Meta as in every live run so far: a 1 MB first window, then a steady 5 MB."""
+
+    def _range(self, sess):
+        got = sess["received"]
+        return {"start_offset": str(got), "end_offset": str(min(got + (MB if got == 0 else 5 * MB), sess["size"]))}
+
+
+def test_a_70_mb_video_whose_file_api_is_refused_completes_in_chunks_within_the_run_budget(tmp_path, monkeypatch):
+    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    d, f = _big_draft(tmp_path, size=70 * MB)
+    meta = LiveWindows(start="denied")
+    out, client = _run(meta, d, max_calls=200)
+    assert out.error == "", out.error
+    assert any("resumable upload was not used" in w for w in out.warnings)
+    sess = next(iter(meta.sessions.values()))
+    assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
+    assert 14 <= len(meta.served_sizes) <= 16 and client.calls <= client.max_calls        # 1 MB + 5 MB windows
+
+
+def test_a_huge_video_with_small_windows_stops_with_the_clear_message_on_a_tight_budget(worker_small, tmp_path, monkeypatch):
+    # (scaled down: 3.5 MB file, 5 KB windows ~ a 2.4 GB file with 5 MB windows and a 340-call run budget)
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "0")
+    d, f = _big_draft(tmp_path)
+    meta = ServedMeta(meta_chunk=5_000)
+    out, client = _run(meta, d, max_calls=340)
+    assert out.stop_kind == "video_error" and "small pieces" in out.error and "smaller video file" in out.error
+    assert not any(p == "finish" for p, _ in meta.phases)
+    assert len(meta.served_sizes) == cr.UPLOAD_WINDOW_PROBE_TRANSFERS and client.calls < client.max_calls
+    assert cr.upload_calls(2420 * MB, True, chunked=True) > 340 - cr.estimate_create_calls(cr.plan_from_draft(d))
+
+
+def test_the_plan_with_the_flag_off_assumes_5_mb_windows_and_with_it_on_the_file_api(monkeypatch):
+    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    assert cr.upload_calls(70 * MB, True) == cr.resumable_calls()
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "0")
+    assert cr.upload_calls(70 * MB, True) == 14 + 6 + cr.CALLS_UPLOAD_FIXED

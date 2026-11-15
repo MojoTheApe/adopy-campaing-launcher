@@ -302,3 +302,21 @@ the CORS preflight of the custom headers from the clean `__acl_work` origin like
   real stops.
 * **Masking.** The helper masks the session token raw and URL-encoded and the `fb_dtsg`/`fb_dtsg_ag` parameters in every
   answer (error JSON and non-JSON/HTML bodies). `GraphClient.upload_service_ready()` defaults to "not supported here".
+
+### 13.2 Follow-ups
+
+* **Refresh (honest).** `refreshUpload()` first asks the page's own module registry (`require('DTSGInitData')`,
+  `require('AdsVideoUploadConfig')`) where `require` is visible, validates with the same policy patterns, then re-scans the
+  inline scripts for what is missing; a tab without the Ads Manager page (clean `__acl_work` tab) keeps its current values.
+  The helper runs in an isolated world, where `require` is normally NOT visible, so in practice the re-scan of the page's
+  inline scripts is what updates the values; the clean tab then receives them by an upload-only hand-over (same session
+  token accepted, another token rejected, no token -> `no_token`).
+* **Continuing an earlier upload.** All bytes in and the service returns the handle to a GET: straight to the transfer.
+  The status read asks `status,title`: a title equal to our ACL tag is adopted with no write. Published but the repeated
+  finish not confirmed: stop as "unknown" (Publish again later); a definite refusal of the repeated finish while the title is
+  absent: the entry is forgotten (the title lookup that runs first on every publish protects from a duplicate).
+  A `retired` helper is a stop even before bytes moved.
+* **Budget of the chunked fallback.** The plan counts the file-API upload as primary (`resumable_calls()`); with the flag
+  off or after a refusal the chunked plan assumes Meta's real windows (`CHUNK_WINDOW_LIVE` = 5 MB, not the 64 MB ceiling).
+  The chunked allowance of a worker-path upload is the run's remaining budget minus the estimate of the rest of the
+  campaign (never above the hard `max_calls`); the projection stop (`small pieces`) compares against that allowance.

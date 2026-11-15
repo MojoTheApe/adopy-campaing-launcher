@@ -116,9 +116,13 @@ def test_the_estimate_counts_the_original_in_64_mb_chunks(tmp_path, monkeypatch)
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     assert cr.worker_upload_enabled()
     # ACL-2637: + the window ramp reserve (Meta may start with 1 MB windows and grow them)
-    assert cr.upload_calls(2500 * MB) == -(-2500 // 64) + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED == 49
-    assert cr.upload_calls(4096 * MB) == 64 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
-    assert cr.upload_calls(16 * MB) == 0 and cr.upload_calls(16 * MB + 1) == 1 + cr.CALLS_UPLOAD_FIXED
+    # ACL-2639: the file-API upload is primary (a constant few calls); the chunked plan assumes Meta's real 5 MB windows
+    assert cr.upload_calls(2500 * MB) == cr.resumable_calls()
+    assert cr.upload_calls(2500 * MB, chunked=True) == 500 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "0")                         # flag off: the chunked plan is the plan
+    assert cr.upload_calls(4096 * MB) == -(-4096 // 5) + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
+    assert cr.upload_calls(16 * MB) == 0 and cr.upload_calls(16 * MB + 1) == 4 + 4 + cr.CALLS_UPLOAD_FIXED
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD")
     # nothing is compressed: the planned size is the original even where ffmpeg exists
     from src.fb_ads_rpa import creative_compress as cc
     monkeypatch.setattr(cc, "ffmpeg_exe", lambda: "/usr/bin/ffmpeg")
@@ -860,6 +864,19 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
                  'navigator', __HELPER2__.replace('__acl_second', '__acl_third'))(G3, loc, doc3, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
                              crypto.webcrypto, FakeWorker, NAV);
     out.listen3 = G3['__acl_third'].listen('chan3_' + 'a'.repeat(20), 'nonce3_' + 'b'.repeat(20), 'ack3_' + 'c'.repeat(20), 5000, true);
+    // another session's token: an upload-only message with a different token is rejected
+    const doc4 = { readyState: 'complete', querySelector: () => null, scripts: [],
+                   documentElement: { innerHTML: '"accessToken":"EAAB' + 'Qq7'.repeat(20) + '"' } };
+    const G4 = {};
+    new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
+                 'navigator', __HELPER2__.replace('__acl_second', '__acl_fourth'))(G4, loc, doc4, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
+                             crypto.webcrypto, FakeWorker, NAV);
+    const h4 = G4['__acl_fourth'];
+    out.has4 = h4.probe().has_token;
+    out.listen4 = h4.listen('chan4_' + 'a'.repeat(20), 'nonce4_' + 'b'.repeat(20), 'ack4_' + 'c'.repeat(20), 5000, true);
+    out.sent4 = await h.handOver('chan4_' + 'a'.repeat(20), 'nonce4_' + 'b'.repeat(20), 'ack4_' + 'c'.repeat(20), 800);
+    out.status4 = h4.listenStatus();
+    out.after4 = h4.uploadService();
     out.leak = JSON.stringify(out).indexOf(DTSG) >= 0;
   } else if (SC.name === 'abort') {
     await phase({ upload_phase: 'start', file_size: String(SOURCE.length) });
@@ -1175,7 +1192,7 @@ def test_a_smaller_meta_window_is_obeyed(worker_small, tmp_path):
 def test_windows_much_smaller_than_planned_stop_cleanly_before_more_is_sent(worker_small, tmp_path):
     d, f = _big_draft(tmp_path)
     meta = ServedMeta(meta_chunk=50_000)                 # the plan assumed MB-sized windows
-    out, _ = _run(meta, d, max_calls=400)
+    out, _ = _run(meta, d, max_calls=60)                 # a tight run budget: nothing beyond the plan to borrow
     assert out.stop_kind == "video_error" and "small pieces" in out.error and "more calls" in out.error
     assert "ACL_VIDEO_WORKER_UPLOAD" not in out.error and "smaller video file" in out.error     # a buyer action
     # ACL-2637: a small window alone does not stop - a few windows are tried (they may grow), then the projection
@@ -1281,5 +1298,5 @@ def test_check_plan_counts_the_original_and_the_64_mb_chunks(tmp_path, monkeypat
     budget, refusal = T.publish_api.create_call_budget(plan)
     assert refusal == ""                                              # a 2.5 GB file fits one run
     chunks = cr.estimate_upload_calls(plan, size_of=lambda p: 2500 * MB)
-    assert 49 <= chunks <= 49 + 3                                     # + the window ramp reserve (ACL-2637)
+    assert chunks == cr.resumable_calls() + 2                         # ACL-2639: the file-API upload is primary
     assert budget >= chunks + cr.estimate_create_calls(plan)

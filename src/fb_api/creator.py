@@ -217,7 +217,12 @@ def _disk_size(path: str) -> int:
         return 0
 
 
-def upload_calls(size: int, worker: bool | None = None) -> int:
+#: ACL-2639: the upload window Meta really offers on the chunked path (1 MB, then a steady 5 MB in every live run so
+#: far); the plan assumes this, not the 64 MB ceiling, whenever the chunked path may be used.
+CHUNK_WINDOW_LIVE = 5 * 1024 * 1024
+
+
+def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False) -> int:
     """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом.
 
     ACL-2629: путь воркера (по умолчанию) считает исходный размер и куски по 64 МБ; запасной путь -
@@ -226,7 +231,10 @@ def upload_calls(size: int, worker: bool | None = None) -> int:
     worker = worker_upload_enabled() if worker is None else worker
     if size <= single_request_max(worker):
         return 0
-    chunks = -(-size // (VIDEO_CHUNK_MAX if worker else VIDEO_CHUNK_STAGED_MAX))
+    if worker and not chunked and resumable_upload_enabled():
+        return resumable_calls()          # ACL-2639: the file-API upload is the primary path (a few Graph calls)
+    # Chunked path: Meta's windows are about 5 MB in practice, not the 64 MB ceiling (ACL-2639, live 15.11).
+    chunks = -(-size // (min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker else VIDEO_CHUNK_STAGED_MAX))
     # ACL-2637: on the worker path Meta's windows may start at 1 MB and grow; a doubling ramp to 64 MB costs about
     # this many calls more than 64 MB windows from the first byte (only when the file has that many chunks at all).
     ramp = min(CALLS_UPLOAD_WINDOW_RAMP, chunks) if worker and chunks > 1 else 0
@@ -3344,6 +3352,7 @@ class CampaignCreator:
         moved = False                       # the service has confirmed at least one byte of this upload
         transferred = False                 # Meta took the file by its handle (journal: a continuation only finishes)
         partial_checked = False             # the first partial segment was verified with a GET
+        last_title = ""                     # the title of the video at the last status read
         get_handle = ""                     # a file handle the service returned to a GET (once the upload is complete)
         streak = 0                          # consecutive 4xx answers of the service
         refreshed = False
@@ -3358,9 +3367,11 @@ class CampaignCreator:
                     created=out.created, kind="video_error")
 
         def status() -> dict:
+            nonlocal last_title
             room(1)
             self._check_cancel(out)
-            row = self.client.get(f"/{vid}", {"fields": "status"})
+            row = self.client.get(f"/{vid}", {"fields": "status,title"})
+            last_title = str(row.get("title") or "") if isinstance(row, dict) else ""
             st = row.get("status") if isinstance(row, dict) else None
             return st if isinstance(st, dict) else {}
 
@@ -3380,6 +3391,10 @@ class CampaignCreator:
                 self.client.release_optional_stop(exc)
                 if "(no_file" in str(exc):
                     raise RuploadLost("the file piece did not reach the page", reason="no_file") from exc
+                if "(retired" in str(exc):
+                    raise CreationStopped(f"{what}: the page helper was retired ({str(exc)[:120]}); stopped before "
+                                          "sending more. Nothing was duplicated and the unfinished upload is not used.",
+                                          created=out.created, kind="video_error") from exc
                 if not moved:
                     raise _ResumableRefused(f"the page refused the upload service request ({str(exc)[:120]})") from exc
                 raise CreationStopped(f"{what}: the page refused an upload service request ({str(exc)[:120]}); "
@@ -3445,31 +3460,33 @@ class CampaignCreator:
         def finish_params() -> dict:
             return {"upload_phase": "finish", "upload_session_id": sid, "video_id": vid, "title": title}
 
-        def adopt_finish() -> bool:
+        def adopt_finish() -> str:
             """A pending video of an earlier run: `processing/ready` alone never counts as finished. The finish with
-            the title is sent ONCE; success or a definite "already finished" answer is success."""
+            the title is sent ONCE. "ok": success (or, as a secondary signal, an "already finished" answer);
+            "refused": Meta definitely refused; "unclear": anything else."""
             room(1)
             self._check_cancel(out)
             try:
                 done = self.client.post(path, finish_params())
             except GraphError as exc:
                 if _already_finished(exc):
-                    return True
+                    return "ok"
                 self._step(out, f"{who}: Meta did not take the finish of an earlier run's video ({str(exc)[:100]})")
-                return False
+                return "refused"
             except WriteUnknown:
                 self.client.reconciled(path)
-                if published(status()):
-                    self._step(out, f"{what}: finish reconciled by a status read")
-                    return True
+                status()
+                if last_title == title:
+                    self._step(out, f"{what}: finish reconciled by the title")
+                    return "ok"
                 raise CreationStopped(f"{what}: the result of finishing the upload is unknown and the video is not "
                                       "published yet. Publish again later: the upload is continued, not repeated.",
                                       created=out.created, kind="unknown")
             except PageFailed as exc:
                 if not self.client.resume_after_unsent(exc):
                     raise
-                return False
-            return done.get("success") is True
+                return "unclear"
+            return "ok" if done.get("success") is True else "unclear"
 
         # -- an upload this operation started earlier (stopped or crashed before its finish) is continued
         pending = self._pending_video(what, size)
@@ -3490,25 +3507,43 @@ class CampaignCreator:
                 self._forget_pending_video(what)
                 pending, vid, sid, waterfall, transferred = None, "", "", "", False
             else:
+                if last_title == title:
+                    # The finish of an earlier run took: the video carries our tag. Adopted without any write.
+                    self._step(out, f"{who}: the video uploaded by an earlier run is used")
+                    return vid
                 if transferred or published(st):
-                    if adopt_finish():
+                    # `processing/ready` alone is not proof (and the title is absent): the finish is sent once.
+                    verdict = adopt_finish()
+                    if verdict == "ok":
                         self._step(out, f"{who}: the video uploaded by an earlier run is used")
                         return vid
-                    if transferred:
-                        raise CreationStopped(f"{what}: Meta did not finish the upload of an earlier run. Publish "
-                                              "again later: it is continued, not repeated.", created=out.created,
-                                              kind="video_error")
-                got = held()
-                if got is None or got >= size:
-                    # Nothing to continue from: the service lost it, or every byte is in and the file handle (the answer
-                    # to the last POST) is gone. The unfinished video is left; the new one is found by its title later.
-                    self._step(out, f"{who}: the upload of an earlier run cannot be continued; starting a new one")
-                    self._forget_pending_video(what)
-                    pending, vid, sid, waterfall, transferred = None, "", "", "", False
-                else:
-                    self._step(out, f"{who}: continuing the upload of an earlier run at "
-                                    f"{got // (1024 * 1024)}/{mb_total} MB")
-                    offset, moved = got, got > 0
+                    if verdict == "refused":
+                        # Meta definitely refused: forget this entry; the title search that runs first on every
+                        # publish protects from a duplicate, so it is not a stop forever.
+                        self._step(out, f"{who}: Meta refused to finish the upload of an earlier run; "
+                                        "starting a new one")
+                        self._forget_pending_video(what)
+                        pending, vid, sid, waterfall, transferred = None, "", "", "", False
+                    else:
+                        raise CreationStopped(f"{what}: the result of finishing the upload of an earlier run is "
+                                              "unknown. Publish again later: it is continued, not repeated.",
+                                              created=out.created, kind="unknown")
+                if pending:
+                    got = held()
+                    if got is not None and got >= size and get_handle:
+                        # Every byte is in and the service gave the handle again: straight to the transfer.
+                        self._step(out, f"{who}: continuing the upload of an earlier run: all bytes are in")
+                        offset, moved = size, True
+                    elif got is None or got >= size:
+                        # Nothing to continue from: the service lost it, or every byte is in and the file handle (the
+                        # answer to the last POST) is gone. The unfinished video is left; a new one is found by its title.
+                        self._step(out, f"{who}: the upload of an earlier run cannot be continued; starting a new one")
+                        self._forget_pending_video(what)
+                        pending, vid, sid, waterfall, transferred = None, "", "", "", False
+                    else:
+                        self._step(out, f"{who}: continuing the upload of an earlier run at "
+                                        f"{got // (1024 * 1024)}/{mb_total} MB")
+                        offset, moved = got, got > 0
         if not pending:
             self._check_cancel(out)
             waterfall = uuid.uuid4().hex
@@ -3712,8 +3747,14 @@ class CampaignCreator:
         # finish. A small window alone does not stop: after UPLOAD_WINDOW_PROBE_TRANSFERS answers the rest is projected
         # from the windows seen (growth included) and the upload stops only when that projection exceeds the cap.
         calls_before = getattr(self.client, "calls", 0)
-        planned = upload_calls(size, True)
+        planned = upload_calls(size, True, chunked=True)
         allowance = planned + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * planned))
+        budget = getattr(self.client, "max_calls", None)
+        if self.worker_path and isinstance(budget, int):
+            # ACL-2639: after the file-API upload was refused the chunked upload may use what the run still has, minus
+            # a reserve for the rest of the campaign - never more than the run's hard budget.
+            left_now = budget - calls_before
+            allowance = min(max(allowance, left_now - estimate_create_calls(plan)), max(left_now, 0))
         windows: list[int] = []
         transfers = [0]
         noted = [0]
@@ -3747,7 +3788,8 @@ class CampaignCreator:
         # ACL-2629: путь воркера - куски до 64 МБ (байты в страницу не копируются); иначе прежние 8 МБ.
         served = bool(self.worker_path)
         cap = VIDEO_CHUNK_MAX if served else VIDEO_CHUNK_STAGED_MAX
-        guard = 2 * (-(-size // cap)) + 4 + 3 * (-(-size // cap))
+        gcap = min(cap, CHUNK_WINDOW_LIVE) if served else cap        # Meta's real windows are ~5 MB, not the ceiling
+        guard = 2 * (-(-size // gcap)) + 4 + 3 * (-(-size // gcap))
         check_window(offset, end - offset)
         failures = 0
         stalls = 0
@@ -4859,7 +4901,7 @@ class CampaignCreator:
             if not writing:
                 # ACL-2370: Check plan показывает, сколько вызовов съест большое видео (верхняя оценка).
                 sizes = [sent_len(k, v) for k, v in files.items() if isinstance(v, LargeFile)]
-                chunk_size = VIDEO_CHUNK_MAX if worker_plan else VIDEO_CHUNK_STAGED_MAX
+                chunk_size = min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) if worker_plan else VIDEO_CHUNK_STAGED_MAX
                 n_chunks = sum(-(-n // chunk_size) for n in sizes)
                 out.warnings.append(
                     f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "

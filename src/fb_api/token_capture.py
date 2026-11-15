@@ -1543,10 +1543,21 @@ _HELPER_JS = r"""
   function refreshUpload() {
     const keepD = dtsgAg;
     const keepR = rsvc;
-    dtsgAg = '';
-    rsvc = null;
-    scanUpload();
-    if (!dtsgAg) dtsgAg = keepD;
+    let d = '';
+    let r = null;
+    // The page's live module values (only where `require` is visible: the page's own world); validated like a scan.
+    try {
+      if (typeof require === 'function') {
+        const t = require('DTSGInitData');
+        if (t && dtsgOk(t.async_get_token)) d = t.async_get_token;
+        const c = require('AdsVideoUploadConfig');
+        if (c && rsvcOk(c.resumable_service_name, c.resumable_service_domain)) r = { name: c.resumable_service_name, domain: c.resumable_service_domain };
+      }
+    } catch (e) {}
+    dtsgAg = d;
+    rsvc = r;
+    scanUpload();                          // inline scripts of the page for what the modules did not give
+    if (!dtsgAg) dtsgAg = keepD;           // a tab without the Ads Manager page keeps its current values
     if (!rsvc) rsvc = keepR;
     return { ok: !!(rsvc && dtsgAg) };
   }
