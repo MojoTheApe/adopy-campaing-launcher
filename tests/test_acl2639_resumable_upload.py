@@ -1319,9 +1319,15 @@ def test_check_plan_warns_when_the_fallback_would_not_fit(resumable, tmp_path, m
                                  sleep=lambda s: None)
     out = cr.Outcome(campaign_name=plan.name)
     creator._prepare(plan, writing=False, out=out)
-    warns = [w for w in out.warnings if w.startswith(("Large video", "If the fast upload"))]
+    warns = [w for w in out.warnings if w.startswith(("Large video", "If the fast upload", "Ad 1 video"))]
     assert any("the fast upload takes about" in w and "chunks of" not in w for w in warns), warns
-    assert any(w.startswith("If the fast upload is refused") and "this run can give" in w for w in warns), warns
+    # the compress fallback is on: the note says WHICH video would be compressed and to about what size
+    assert any(w.startswith("Ad 1 video (3 MB) would be compressed to about ") and "if the fast upload is refused" in w
+               for w in warns), warns
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_FALLBACK", "0")                  # off: the plain "stops before it starts" note
+    out2 = cr.Outcome(campaign_name=plan.name)
+    creator._prepare(plan, writing=False, out=out2)
+    assert any(w.startswith("If the fast upload is refused") and "this run can give" in w for w in out2.warnings)
 
 
 def _two_videos(tmp_path):
@@ -1912,3 +1918,78 @@ def test_the_real_compressor_is_asked_for_the_target_size(resumable, tmp_path, m
     monkeypatch.setattr(cc, "ensure_uploadable", fake)
     _run(ResumableMeta(start="denied"), d, max_calls=300)
     assert seen["path"] == str(f) and 1.0 <= seen["limit"] <= 500 and seen["target"] == pytest.approx(seen["limit"] * 0.95)
+
+
+# ───────────────────────── ffmpeg: progress, heartbeat, Stop ─────────────────────────
+
+def test_the_compress_pass_reports_percent_from_the_progress_file(tmp_path):
+    from src.fb_ads_rpa import creative_compress as cc
+    seen = []
+
+    def run(args, timeout, tick=None):
+        if "-pass" in args and args[args.index("-pass") + 1] == "2":
+            prog = Path(args[args.index("-progress") + 1])
+            assert args[-1].endswith("out.mp4") and "-nostats" in args           # options before the output file
+            for us in (10_000_000, 50_000_000, 50_000_000, 120_000_000):
+                prog.write_text("frame=1\nout_time_us=%d\nprogress=continue\n" % us, encoding="utf-8")
+                tick()
+            Path(args[-1]).write_bytes(b"x" * 10)
+        return 0, ""
+
+    with cc.observe_progress(seen.append):
+        assert cc.compress("in.mp4", str(tmp_path / "out.mp4"), 1000, run=run, exe="ffmpeg", duration=100.0)
+    assert seen == [10, 50, 99]                                                 # only changes; never above 99 before the end
+
+
+def test_without_a_progress_observer_the_encoder_command_is_unchanged(tmp_path):
+    from src.fb_ads_rpa import creative_compress as cc
+    cmds = []
+
+    def run(args, timeout):                     # the old two-argument runner still works
+        cmds.append(args)
+        if "-pass" in args and args[args.index("-pass") + 1] == "2":
+            Path(args[-1]).write_bytes(b"x")
+        return 0, ""
+
+    assert cc.compress("in.mp4", str(tmp_path / "o.mp4"), 1000, run=run, exe="ffmpeg", duration=100.0)
+    assert not any("-progress" in c for c in cmds)
+
+
+def test_the_creator_writes_a_progress_step_every_ten_points(resumable, tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+
+    def fn(path, limit, target):
+        for pct in (3, 8, 12, 25, 31, 55, 99):
+            cc.report_progress(pct)
+        out = tmp_path / "compressed.mp4"
+        out.write_bytes(b"c" * 1_000_000)
+        return _Prep(str(out), 3.5, 0.95)
+
+    out, _ = _run(ResumableMeta(start="denied"), d, max_calls=300, compress_to_fit=fn)
+    lines = [s for s in out.steps if s.startswith("compressing ad 1 video:")]
+    assert lines == ["compressing ad 1 video: 3%", "compressing ad 1 video: 25%",
+                     "compressing ad 1 video: 55%", "compressing ad 1 video: 99%"]
+
+
+def test_the_wait_loop_beats_the_job_and_stop_kills_ffmpeg(monkeypatch):
+    import sys
+    import time
+    from src.fb_ads_rpa import creative_compress as cc
+    beats = []
+    monkeypatch.setattr(cc.job_cancel, "heartbeat", lambda: beats.append(1))
+    ticks = []
+    code, _ = cc._run([sys.executable, "-c", "import time; time.sleep(1.3)"], 30, tick=lambda: ticks.append(1))
+    assert code == 0 and len(beats) >= 2 and len(ticks) >= 2                     # alive the whole time (every 0.5 s)
+
+    monkeypatch.setattr(cc.job_cancel, "requested", lambda: True)
+
+    def check():
+        raise RuntimeError("cancelled")
+
+    monkeypatch.setattr(cc.job_cancel, "check", check)
+    began = time.monotonic()
+    with pytest.raises(RuntimeError, match="cancelled"):
+        cc._run([sys.executable, "-c", "import time; time.sleep(60)"], 120)
+    assert time.monotonic() - began < 10                                          # the child was killed, not waited for

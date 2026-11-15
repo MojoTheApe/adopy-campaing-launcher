@@ -3401,8 +3401,17 @@ class CampaignCreator:
         from src.fb_ads_rpa import creative_compress as _cc
 
         fn = self.compress_to_fit or (lambda p, limit, tgt: _cc.ensure_uploadable(p, limit_mb=limit, target_mb=tgt))
+        shown = [-100]
+
+        def on_progress(pct: int) -> None:
+            # a step line every 10 points (and the run's heartbeat is beaten by the compressor's wait loop itself)
+            if pct - shown[0] >= 10:
+                shown[0] = pct
+                self._step(out, f"compressing {who} video: {pct}%")
+
         try:
-            prepared = fn(big.path, target, target * 0.95)
+            with _cc.observe_progress(on_progress):
+                prepared = fn(big.path, target, target * 0.95)
         except Exception as exc:  # noqa: BLE001 - a failed compression is a fallback to the clear stop, not a crash
             if type(exc).__name__ == "JobCancelled":
                 raise
@@ -5030,11 +5039,28 @@ class CampaignCreator:
                     fallback = sum(upload_calls(sent_len(k, v), True, chunked=True) for k, v in files.items()
                                    if isinstance(v, LargeFile))
                     if fallback + rest > budget:
-                        out.warnings.append(
-                            f"If the fast upload is refused, uploading in {chunk_size // (1024 * 1024)} MB pieces "
-                            f"needs about {fallback} Meta calls and this run can give {max(budget - rest, 0)}: "
-                            "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
-                            "file or publish fewer ads in this run.")
+                        if compress_fallback_enabled():
+                            # ACL-2639: which videos would be compressed (and to what) if the fast upload is refused
+                            spare_chk = max(budget - rest - chunk_calls, 0)
+                            fit = chunked_fit_mb(spare_chk)
+                            target_chk = max(1.0, fit * COMPRESS_FALLBACK_SHARE)
+                            labels = {a.path: a.index for s_ in plan.ad_sets for a in s_.ads}
+                            for k, v in files.items():
+                                if not isinstance(v, LargeFile):
+                                    continue
+                                mb = sent_len(k, v) / (1024 * 1024)
+                                if mb > target_chk:
+                                    out.warnings.append(
+                                        f"Ad {labels.get(k, '?')} video ({mb:.0f} MB) would be compressed to about "
+                                        f"{target_chk:.0f} MB if the fast upload is refused"
+                                        + ("" if fit >= 1 else " (this run has no spare Meta calls even for that)")
+                                        + " (resolution and aspect ratio stay the same).")
+                        else:
+                            out.warnings.append(
+                                f"If the fast upload is refused, uploading in {chunk_size // (1024 * 1024)} MB pieces "
+                                f"needs about {fallback} Meta calls and this run can give {max(budget - rest, 0)}: "
+                                "the upload would stop before it starts (nothing is uploaded). Use a smaller video "
+                                "file or publish fewer ads in this run.")
                 else:
                     out.warnings.append(
                         f"Large video: about {chunk_calls} Meta calls to upload in {n_chunks} chunks of "

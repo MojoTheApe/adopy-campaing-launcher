@@ -105,6 +105,25 @@ def observe_preparation(callback: Callable[[str], None]):
         _notice_sink.reset(token)
 
 
+_progress_sink: ContextVar[Callable[[int], None] | None] = ContextVar("creative_progress", default=None)
+
+
+@contextmanager
+def observe_progress(callback: Callable[[int], None]):
+    """ACL-2639: percent (0-100) of the encoding pass that is running, for a progress line in the job panel."""
+    token = _progress_sink.set(callback)
+    try:
+        yield
+    finally:
+        _progress_sink.reset(token)
+
+
+def report_progress(percent: int) -> None:
+    callback = _progress_sink.get()
+    if callback:
+        callback(max(0, min(100, int(percent))))
+
+
 def report_notice(text: str) -> None:
     """Строка для человека в панели задания (ACL-1388: робот сам закрыл окно
     профиля). Тот же канал, что у сжатия креативов; вне задания — ничего."""
@@ -144,7 +163,7 @@ def ffmpeg_exe() -> str:
     return shutil.which("ffmpeg") or ""
 
 
-def _run(args: list[str], timeout: float) -> tuple[int, str]:
+def _run(args: list[str], timeout: float, tick: Callable[[], None] | None = None) -> tuple[int, str]:
     """Запустить ffmpeg и дождаться; Stop задания его обрывает (ACL-1614).
 
     Ждём опросом, а не одним вызовом: сжатие идёт минуты, и всё это время Stop
@@ -172,6 +191,11 @@ def _run(args: list[str], timeout: float) -> tuple[int, str]:
             proc.communicate()
             raise subprocess.TimeoutExpired(args, timeout)
         job_cancel.heartbeat()
+        if tick is not None:
+            try:
+                tick()
+            except Exception:
+                pass
     return proc.returncode, (err or "") + (out or "")
 
 
@@ -250,8 +274,28 @@ def cached_copy_name(src: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
     return ""
 
 
+def _progress_percent(path: str, duration: float) -> int | None:
+    """Percent done from ffmpeg's `-progress` file (the last `out_time_us`/`out_time_ms` line), None if unknown."""
+    if duration <= 0:
+        return None
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    last = None
+    for line in text.splitlines():
+        if line.startswith(("out_time_us=", "out_time_ms=")):
+            try:
+                last = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+    if last is None or last < 0:
+        return None
+    return min(99, int(last / 1_000_000 / duration * 100))
+
+
 def compress(src: str, dst: str, video_kbps: int, *, run=_run,
-             exe: str = "", timeout: float = 3600) -> bool:
+             exe: str = "", timeout: float = 3600, duration: float = 0.0) -> bool:
     """Два прохода x264 в заданный битрейт. Разрешение и длительность не трогаем.
 
     Два прохода, а не постоянное качество (CRF): нам нужен предсказуемый
@@ -271,11 +315,23 @@ def compress(src: str, dst: str, video_kbps: int, *, run=_run,
             code, _ = run(common + ["-pass", "1", "-an", "-f", "null", os.devnull], timeout)
             if code != 0:
                 return False
-            code, _ = run(
-                common + ["-pass", "2", "-c:a", "aac", "-b:a", f"{AUDIO_KBPS}k",
-                          "-movflags", "+faststart", dst],
-                timeout,
-            )
+            args2 = common + ["-pass", "2", "-c:a", "aac", "-b:a", f"{AUDIO_KBPS}k",
+                              "-movflags", "+faststart", dst]
+            if _progress_sink.get() is not None and duration > 0:
+                # ACL-2639: ffmpeg writes its progress to a file; the wait loop reads it (no threads, no pipes)
+                prog = str(Path(tmp) / "progress.txt")
+                args2 = args2[:-1] + ["-progress", prog, "-nostats", dst]
+                shown = [-1]
+
+                def tick() -> None:
+                    pct = _progress_percent(prog, duration)
+                    if pct is not None and pct != shown[0]:
+                        shown[0] = pct
+                        report_progress(pct)
+
+                code, _ = run(args2, timeout, tick=tick)
+            else:
+                code, _ = run(args2, timeout)
         except Exception:
             return False
     return code == 0 and os.path.isfile(dst) and os.path.getsize(dst) > 0
@@ -318,7 +374,7 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
         dst.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="encode-", dir=dst.parent) as tmp:
             pending = Path(tmp) / "creative.mp4"
-            ok = compress(path, str(pending), kbps, run=run, exe=exe)
+            ok = compress(path, str(pending), kbps, run=run, exe=exe, duration=seconds_long)
             job_cancel.check()    # ACL-1614: Stop во время сжатия — дальше не идём
             got = size_mb(pending)
             if not ok or not (0 < got <= min(limit_mb, original)):

@@ -366,3 +366,8 @@ up through the chunked path under the ACL tag title of the ORIGINAL, so a republ
 unusable, the copy is not smaller, any failure) the original goes on and the chunked pre-check stops with its clear
 "this run can spare M" message. Emergency flag: `ACL_VIDEO_COMPRESS_FALLBACK=0`. The compression runs in the run's own
 thread (like the ACL-2000 path), so a multi-GB file can take several minutes; Stop is honoured between ffmpeg passes.
+
+The compressor's wait loop beats the job every 0.5 s (`job_cancel.heartbeat` = `run_telemetry.beat`) and kills its ffmpeg child on Stop.
+When a progress observer is set, the 2nd pass writes ffmpeg's `-progress` file; the loop reads it and the creator logs
+"compressing ad N video: X%" every 10 points. Check plan names the videos that would be compressed
+("Ad N video (X MB) would be compressed to about Y MB if the fast upload is refused").
