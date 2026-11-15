@@ -353,3 +353,16 @@ The controller still reads the file once to hash it before the POST (about the t
 **Deadline.** The whole POST gets 60 s + size at 0.5 MB/s, at most 2 hours (`InPageGraph.rupload_deadline_s`). After a lost
 answer the offset is asked: all bytes in and a handle obtainable -> transfer; a part -> the rest is sent from there; nothing
 twice in a row -> the chunked fallback. The host kind pin keeps the very host string per upload path.
+
+### 13.5 Compress-to-fit fallback (owner's decision)
+
+The fast upload is tried first and is not changed. If it is unavailable or refused and the original would not fit the run's
+SPARE chunked budget (`_chunk_spare`: run budget left minus what the rest of the campaign still needs), the original is
+compressed locally before the chunked upload: the same ffmpeg 2-pass x264 compressor as the ACL-2000 path
+(`creative_compress.ensure_uploadable`; resolution, aspect ratio and duration untouched), aimed at 90 % of the largest size
+whose chunked upload (5 MB windows, with the retry slack) fits the spare calls, never above 500 MB. The compressed copy goes
+up through the chunked path under the ACL tag title of the ORIGINAL, so a republish finds it. Steps and a warning say
+"Ad N video compressed from X MB to Y MB to fit this run". If it cannot be compressed (no ffmpeg, the bitrate would be
+unusable, the copy is not smaller, any failure) the original goes on and the chunked pre-check stops with its clear
+"this run can spare M" message. Emergency flag: `ACL_VIDEO_COMPRESS_FALLBACK=0`. The compression runs in the run's own
+thread (like the ACL-2000 path), so a multi-GB file can take several minutes; Stop is honoured between ffmpeg passes.

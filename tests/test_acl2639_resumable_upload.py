@@ -1782,3 +1782,133 @@ def test_the_helper_reports_drained_once_every_piece_is_in_the_request():
     assert drained and all(x[1] for x in drained)                       # drained is only ever reported by a stream
     from tests.test_acl2629_worker_upload import _SOURCE
     assert all(x[0] == len(_SOURCE) for x in drained)                   # ... after the last byte was pulled
+
+
+# ───────────────────────── compress-to-fit fallback (owner's decision) ─────────────────────────
+
+class _Prep:
+    def __init__(self, path, original_mb, sent_mb, compressed=True, reason=""):
+        self.path, self.original_mb, self.sent_mb, self.compressed, self.reason = path, original_mb, sent_mb, compressed, reason
+
+
+def _fake_compressor(tmp_path, calls, *, size=1_500_000, compressed=True, reason=""):
+    def fn(path, limit_mb, target_mb):
+        calls.append((path, limit_mb, target_mb))
+        if not compressed:
+            return _Prep(path, 3.5, 3.5, False, reason)
+        out = tmp_path / "compressed.mp4"
+        out.write_bytes(hashlib.sha256(b"c").digest() * (size // 32))
+        return _Prep(str(out), 3.5, len(out.read_bytes()) / MB)
+    return fn
+
+
+def test_chunked_fit_mb_is_monotone_capped_and_zero_without_spare():
+    fits = [cr.chunked_fit_mb(n) for n in (0, 3, 6, 12, 40, 120, 10_000)]
+    assert fits[0] == 0 and fits == sorted(fits) and fits[-1] == cr.COMPRESS_FALLBACK_CAP_MB
+    for n in (12, 40, 120):
+        mb = cr.chunked_fit_mb(n)
+        calls = cr.upload_calls(mb * MB, True, chunked=True)
+        assert calls + max(cr.CHUNK_RETRY_SLACK_MIN, -(-calls * cr.CHUNK_RETRY_SLACK_FRACTION // 1)) <= n
+
+
+def test_a_refused_fast_upload_that_would_not_fit_is_compressed_and_uploaded_in_chunks(resumable, tmp_path, monkeypatch):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+    calls = []
+    meta = ResumableMeta(start="denied")
+    out, _ = _run(meta, d, max_calls=300, compress_to_fit=_fake_compressor(tmp_path, calls))
+    assert out.error == "", out.error
+    (path, limit, target), = calls
+    assert path == str(f) and 1.0 <= target <= limit and limit <= cr.COMPRESS_FALLBACK_CAP_MB
+    sess = next(iter(meta.sessions.values()))
+    assert sess["done"] and sess["size"] == 1_500_000 // 32 * 32                       # the COMPRESSED copy went up
+    assert sess["sha"].hexdigest() == hashlib.sha256((tmp_path / "compressed.mp4").read_bytes()).hexdigest()
+    assert any(w.startswith("Ad 1 video compressed from 4 MB to 1 MB to fit this run") for w in out.warnings)
+    assert any("video compressed from" in s for s in out.steps)
+    assert [o for o in meta.objects.values() if o["_kind"] == "video"][0]["title"].startswith("acl-")
+
+
+def test_the_compressed_video_keeps_the_tag_of_the_original_so_a_republish_finds_it(resumable, tmp_path, monkeypatch):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+    meta = ResumableMeta(start="denied")
+    first, _ = _run(meta, d, max_calls=300, compress_to_fit=_fake_compressor(tmp_path, []))
+    assert first.error == ""
+    again_calls = []
+    again, _ = _run(meta, d, max_calls=300, compress_to_fit=_fake_compressor(tmp_path, again_calls))
+    assert again.error == "" and again_calls == [] and len(meta.sessions) == 1        # found by its title: nothing re-uploaded
+
+
+def test_nothing_is_compressed_when_the_original_fits(resumable, tmp_path, monkeypatch):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 400)
+    calls = []
+    meta = ResumableMeta(start="denied")
+    out, _ = _run(meta, d, max_calls=600, compress_to_fit=_fake_compressor(tmp_path, calls))
+    assert out.error == "" and calls == []
+    assert next(iter(meta.sessions.values()))["sha"].hexdigest() == _sha(f)
+
+
+def test_the_emergency_flag_turns_the_compress_fallback_off(resumable, tmp_path, monkeypatch):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_FALLBACK", "0")
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+    calls = []
+    meta = ResumableMeta(start="denied")
+    out, _ = _run(meta, d, max_calls=300, compress_to_fit=_fake_compressor(tmp_path, calls))
+    assert calls == [] and out.stop_kind == "video_error" and "this run can spare" in out.error
+    assert meta.sessions == {}
+
+
+@pytest.mark.parametrize("why", ["cannot compress: ffmpeg not found", "compression would not help: it needs under 400 kbps"])
+def test_a_video_that_cannot_be_compressed_stops_with_the_clear_message(resumable, tmp_path, monkeypatch, why):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+    calls = []
+    meta = ResumableMeta(start="denied")
+    out, _ = _run(meta, d, max_calls=300, compress_to_fit=_fake_compressor(tmp_path, calls, compressed=False, reason=why))
+    assert len(calls) == 1 and out.stop_kind == "video_error" and "this run can spare" in out.error
+    assert any(why in s for s in out.steps) and meta.sessions == {}
+
+
+def test_a_failing_compressor_never_crashes_the_run(resumable, tmp_path, monkeypatch):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+
+    def boom(path, limit, target):
+        raise OSError("disk full")
+
+    out, _ = _run(ResumableMeta(start="denied"), d, max_calls=300, compress_to_fit=boom)
+    assert out.stop_kind == "video_error" and "this run can spare" in out.error
+    assert any("compression failed (OSError)" in s for s in out.steps)
+
+
+def test_stop_during_compression_is_not_swallowed(resumable, tmp_path, monkeypatch):
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+
+    class JobCancelled(Exception):
+        pass
+
+    def stop(path, limit, target):
+        raise JobCancelled()
+
+    meta = ResumableMeta(start="denied")
+    out, _ = _run(meta, d, max_calls=300, compress_to_fit=stop)           # the run ends (as for the ACL-2000 path)
+    assert out.error and meta.sessions == {}                              # nothing was uploaded, no "compression failed" step
+    assert not any("compression failed" in s for s in out.steps)
+
+
+def test_the_real_compressor_is_asked_for_the_target_size(resumable, tmp_path, monkeypatch):
+    from src.fb_ads_rpa import creative_compress as cc
+    d, f = _big_draft(tmp_path)
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: 9)
+    seen = {}
+
+    def fake(path, *, limit_mb, target_mb, run=None):
+        seen.update(path=path, limit=limit_mb, target=target_mb)
+        return cc.Prepared(path=path, original_mb=3.5, sent_mb=3.5, reason="cannot compress: ffmpeg not found")
+
+    monkeypatch.setattr(cc, "ensure_uploadable", fake)
+    _run(ResumableMeta(start="denied"), d, max_calls=300)
+    assert seen["path"] == str(f) and 1.0 <= seen["limit"] <= 500 and seen["target"] == pytest.approx(seen["limit"] * 0.95)

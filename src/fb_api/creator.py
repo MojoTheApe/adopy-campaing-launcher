@@ -222,6 +222,32 @@ def _disk_size(path: str) -> int:
 CHUNK_WINDOW_LIVE = 5 * 1024 * 1024
 
 
+#: ACL-2639: emergency switch of the compress-to-fit fallback (`ACL_VIDEO_COMPRESS_FALLBACK=0|false|no|off`); on by default.
+COMPRESS_FALLBACK_FLAG = "ACL_VIDEO_COMPRESS_FALLBACK"
+#: The compressed copy is never aimed above this many MB, and at this share of what fits (x264 2-pass lands within a few %).
+COMPRESS_FALLBACK_CAP_MB = 500
+COMPRESS_FALLBACK_SHARE = 0.9
+
+
+def compress_fallback_enabled(env: dict | None = None) -> bool:
+    raw = (env if env is not None else os.environ).get(COMPRESS_FALLBACK_FLAG, "")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def chunked_fit_mb(spare: int, cap_mb: int = COMPRESS_FALLBACK_CAP_MB) -> int:
+    """The largest size in whole MB (up to `cap_mb`) whose chunked upload, at Meta's real 5 MB windows and with the retry
+    slack, fits into `spare` Graph calls. 0: nothing fits."""
+    best = 0
+    for mb in range(1, int(cap_mb) + 1):
+        # (a small file still goes through the chunked path here: start, transfer and finish are calls too)
+        calls = max(upload_calls(mb * 1024 * 1024, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
+        if calls + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * calls)) <= spare:
+            best = mb
+        else:
+            break
+    return best
+
+
 def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False) -> int:
     """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом.
 
@@ -1907,6 +1933,7 @@ class CampaignCreator:
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None,
                  compress_video: Callable[[str], Any] | None = None,
+                 compress_to_fit: Callable[[str, float, float], Any] | None = None,
                  journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0):
         self.client = client
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
@@ -1918,6 +1945,8 @@ class CampaignCreator:
         self._op: "_oj.Operation | None" = None
         #: ACL-2000: сжатие тяжёлого видео перед загрузкой (тот же сжиматель, что у RPA-пути); None - общий.
         self.compress_video = compress_video
+        #: ACL-2639: `fn(path, limit_mb, target_mb) -> Prepared` for the compress-to-fit fallback; None - the real compressor.
+        self.compress_to_fit = compress_to_fit
         #: ACL-2353: снимок ревью задания (имя кампании -> fp, Page, пиксель); None - без ревью.
         self.reviewed: dict | None = None
         self.facts = facts
@@ -3328,7 +3357,68 @@ class CampaignCreator:
                     self.client.max_calls += max(0, getattr(self.client, "calls", 0) - before)
                 self._step(out, f"{who}: resumable upload not used ({why}); uploading in chunks instead")
                 out.warnings.append(f"Ad video: the resumable upload was not used ({why}); uploading in chunks instead.")
+        big = self._fit_for_chunks(out, plan, big, who)
         return self._video_chunked(out, plan, big, title, find, who)
+
+    def _chunk_spare(self, plan: CampaignPlan) -> int | None:
+        """ACL-2639: the Graph calls a chunked upload of THIS video may use: the run budget left, minus what the rest of
+        the campaign still needs (campaign-object writes only, plus the fast-path uploads of the large videos still to
+        come). None: no run budget to compare with (or not the worker path)."""
+        budget = getattr(self.client, "max_calls", None)
+        if not (self.worker_path and isinstance(budget, int)):
+            return None
+        camp_done = max(0, getattr(self, "_video_w0", getattr(self.client, "writes", 0))
+                        - getattr(self, "_writes_base", 0) - getattr(self, "_upload_writes", 0))
+        later = sum(upload_calls(s, True) for s in (getattr(self, "_large_pending", None) or []))
+        reserve = max(0, estimate_create_calls(plan) - camp_done) + later
+        return max(0, budget - getattr(self.client, "calls", 0) - reserve)
+
+    def _fit_for_chunks(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str) -> "LargeFile":
+        """ACL-2639 (owner's fallback): the fast upload is not available/refused and the original would not fit the run's
+        spare chunked budget -> compress it locally (the ACL-2000 ffmpeg 2-pass x264 compressor: resolution, aspect
+        ratio and duration untouched) to a size that fits at 5 MB windows (never above COMPRESS_FALLBACK_CAP_MB) and
+        upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
+        finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
+        chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
+        if not compress_fallback_enabled():
+            return big
+        spare = self._chunk_spare(plan)
+        if spare is None:
+            return big
+        size = len(big)
+        need = upload_calls(size, True, chunked=True)
+        if need + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * need)) <= spare:
+            return big                                     # the original fits: nothing to do
+        fit_mb = chunked_fit_mb(spare)
+        label = f"{who[:1].upper()}{who[1:]}"
+        if fit_mb < 1:
+            self._step(out, f"{who}: no spare Meta calls to upload even a compressed copy ({spare} left)")
+            return big
+        target = max(1.0, fit_mb * COMPRESS_FALLBACK_SHARE)
+        original_mb = size / (1024 * 1024)
+        self._step(out, f"{label} video: compressing {original_mb:.0f} MB to about {target:.0f} MB to fit this run "
+                        "(this can take several minutes)")
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        fn = self.compress_to_fit or (lambda p, limit, tgt: _cc.ensure_uploadable(p, limit_mb=limit, target_mb=tgt))
+        try:
+            prepared = fn(big.path, target, target * 0.95)
+        except Exception as exc:  # noqa: BLE001 - a failed compression is a fallback to the clear stop, not a crash
+            if type(exc).__name__ == "JobCancelled":
+                raise
+            self._step(out, f"{who}: compression failed ({type(exc).__name__}); the original goes on")
+            return big
+        if not getattr(prepared, "compressed", False):
+            self._step(out, f"{who}: not compressed ({getattr(prepared, 'reason', '') or 'unknown reason'})")
+            return big
+        new_size = self.size_of(prepared.path) or 0
+        if not new_size or new_size >= size:
+            self._step(out, f"{who}: the compressed copy is not smaller; the original goes on")
+            return big
+        self._step(out, f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to fit this run")
+        out.warnings.append(f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB to "
+                            "fit this run's Meta call budget (resolution and aspect ratio are unchanged).")
+        return LargeFile(prepared.path, new_size, self.read_range)
 
     def _video_resumable(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str, title: str = "") -> str:
         """ACL-2639: the upload protocol of Ads Manager itself ("file API"), from the profile tab.
@@ -3752,15 +3842,8 @@ class CampaignCreator:
         # uploaded, the campaign is never stranded half-built for lack of calls).
         chunk_plan = upload_calls(size, True, chunked=True)
         chunk_allowance = chunk_plan + max(CHUNK_RETRY_SLACK_MIN, math.ceil(CHUNK_RETRY_SLACK_FRACTION * chunk_plan))
-        budget0 = getattr(self.client, "max_calls", None)
-        if self.worker_path and isinstance(budget0, int):
-            # Campaign-object writes done so far = all writes before THIS video started, minus the upload-phase writes
-            # of earlier videos; plus the (fast-path) uploads of the large videos still to come in this run.
-            camp_done = max(0, getattr(self, "_video_w0", getattr(self.client, "writes", 0))
-                            - getattr(self, "_writes_base", 0) - getattr(self, "_upload_writes", 0))
-            later = sum(upload_calls(s, True) for s in (getattr(self, "_large_pending", None) or []))
-            reserve = max(0, estimate_create_calls(plan) - camp_done) + later
-            spare = max(0, budget0 - getattr(self.client, "calls", 0) - reserve)
+        spare = self._chunk_spare(plan)
+        if spare is not None:
             if spare < chunk_plan:
                 raise CreationStopped(
                     f"{what}: the fast upload was refused and uploading in "
