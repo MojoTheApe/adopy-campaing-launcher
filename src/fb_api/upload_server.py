@@ -80,10 +80,18 @@ class UploadServer:
         return text + (f" (last: {self.last_error})" if self.last_error else "")
 
     # -- window of one chunk
-    def register(self, chunk: _wp.ServedChunk, *, piece: int = PIECE) -> tuple[str, list[dict]]:
-        """Announce a chunk: returns (token, [{o, n, h}]) for the page helper. Reads the chunk once to hash it."""
+    def register(self, chunk: _wp.ServedChunk, *, piece: int = PIECE,
+                 tick: Callable[[], None] | None = None) -> tuple[str, list[dict]]:
+        """Announce a chunk: returns (token, [{o, n, h}]) for the page helper. Reads the chunk once to hash it.
+
+        `tick` (optional) is called after every piece: a heartbeat and a cancel check while a multi-GB file is read
+        (it may raise to stop; nothing is registered then)."""
         spans = chunk.pieces(piece)
-        hashes = {span: hashlib.sha256(chunk.read(*span)).hexdigest() for span in spans}
+        hashes = {}
+        for span in spans:
+            hashes[span] = hashlib.sha256(chunk.read(*span)).hexdigest()
+            if tick is not None:
+                tick()
         token = secrets.token_hex(12)
         self._windows[token] = (chunk, hashes)
         return token, [{"o": o, "n": n, "h": hashes[(o, n)]} for o, n in spans]

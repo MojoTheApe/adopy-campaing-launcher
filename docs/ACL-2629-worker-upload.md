@@ -216,3 +216,183 @@ transport (`adopt_upload_context`; closed if the new transport cannot take it). 
 sends the worker `stopPieces` (not `abort`): ignored once the pieces are in, so a started POST is never cancelled.
 The buyer line for a file the fallback cannot take carries only the first part of the probe reason; the full text
 is a step, and the "compressed the slower way" warning is dropped in that case.
+
+## 13. ACL-2639: large videos with the upload protocol of Ads Manager ("file API")
+
+The first ACL-2639 version used Meta's documented "FB Video Ads" protocol (`POST act_X/video_ads` +
+`rupload.facebook.com/video-ads-upload/...` with `Authorization: OAuth`). Live run 15.11: the start is refused for the
+Ads Manager page token (`(#10) Permission Denied`), so the creator fell back to ~485 chunked calls and stopped on the
+call budget. That protocol is **removed** (edge, keys, version/URL checks, the object-path naming write); the creator
+now sends what Ads Manager itself sends (recorded live 15.11, values masked):
+
+1. `POST /act_X/advideos` (Graph, the page access token as before): `upload_phase=start, file_size, file_extension=mp4,
+   waterfall_id=<32 lowercase hex, random per upload>, supports_chunking=true, supports_file_api=true,
+   partition_start_offset=0, partition_end_offset=<file_size>`. No composer/source fields. Answer: `video_id`,
+   `upload_session_id`, `start_offset`, `end_offset`.
+2. The bytes go to the **resumable service of the page**, not Graph (not counted in the Graph call budget):
+   `https://<rupload-<place>.up>.facebook.com/fb_video/<waterfall_id>-0-<file_size>?fb_dtsg_ag=<token>&__a=1`,
+   `credentials: include` (the session cookies of the Ads Manager origin), no access token, no `Authorization`.
+   `GET` -> `{dc, offset}` (bytes already held = the resume point). `POST`, headers `offset`, `X-Entity-Length`
+   (= file size), `X-Entity-Type: application/octet-stream`, body = the file bytes from `offset`, at most 512 MB per POST
+   (served piece by piece from the file to the worker/inline runner, each piece hashed, as in section 2).
+   Only one partition (0 .. size).
+3. `POST /act_X/advideos`: `upload_phase=transfer, upload_session_id, video_id, start_offset=0, end_offset=<size>,
+   partition offsets, fbuploader_video_file_chunk=<file handle>`. `start_offset == end_offset == size` in the answer
+   means Meta holds every byte.
+4. `POST /act_X/advideos`: `upload_phase=finish, upload_session_id, video_id, title=<ACL tag>`. The title is what the
+   later search by tag finds, so the separate naming call (`POST /<id>`) and its policy/JS allowance are gone.
+
+**Where the values come from.** The service host is `AdsVideoUploadConfig.resumable_service_name` /
+`resumable_service_domain` of the Ads Manager page (observed `rupload-fra3-1.up` / `rupload-ber1-1.up` +
+`facebook.com`), the query token is `DTSGInitData.async_get_token` (62 characters). The helper reads both from the
+inline scripts next to the existing `DTSGInitialData` scan, validates them (name `^rupload-[a-z0-9-]{1,30}\.up$`,
+domain exactly `facebook.com`, token pattern) and carries them with the access token in the world-to-world hand-over
+(`handOver` / `listen`: fields `d` and `r`, optional) - so a light work tab, a clean `__acl_work` upload tab and an
+adopted upload context (`adopt_upload_context`) have them too. They are session secrets: they never leave the helper
+(the helper builds the address itself; Python sends only the path `/fb_video/<waterfall>-0-<size>`, the three headers
+and the served body), `clean()` masks the token in every answer, nothing is logged, put in telemetry, steps or
+exceptions. `InPageGraph.upload_service_ready()` asks the helper (local, no Meta call) before the start: no service or
+token -> `_ResumableRefused("upload service address not available on this page")` and the chunked path runs.
+
+**The file handle** is in the answer to the last POST (that answer was not captured live; parsed defensively): the
+string field `h`, otherwise any string value of the answer (or of one nested object) with the observed shape
+`N:<base64 name>:<mime>:<id>:e:<expiry>:<signature>` (`write_policy.FILE_HANDLE_RE`). An HTTP 4xx/5xx is a refusal
+(resume from the offset read by GET); a 2xx answer without a handle: one GET, and if the service holds every byte but
+there is no handle, the upload stops as refused-before-finish (`_ResumableRefused`, nothing finished) and the chunked
+fallback runs. Failures after a transfer was accepted are real stops, never a fallback.
+
+**Policy (Python `write_policy`, mirrored in the page helper).** advideos phases of this protocol are told from the
+chunked ones by their marker keys (`supports_file_api`, `fbuploader_video_file_chunk`, `video_id`) and checked with a
+closed key set and exact values per phase (`_check_file_api`; title must be the ACL tag name). The service request is
+`check_rupload`: only GET and POST, path `^/fb_video/[0-9a-f]{32}-0-[0-9]{1,13}$`, query keys only `fb_dtsg_ag` and
+`__a`, headers only `offset` / `X-Entity-Length` / `X-Entity-Type`, the POST body only a served window of the file
+starting at `offset` and ending inside it. The helper refuses any request that carries its own address, host, query or
+credentials (closed spec keys).
+
+**Budget and resume.** Graph calls per video: start, transfer, finish (+ one status read when an earlier run is
+continued or a finish answer is lost): `RESUMABLE_FIXED_CALLS = 4`, independent of the size (2.4 GB = 5 service POSTs
+of 512 MB). A dropped POST: GET the offset, continue from it (never from zero), at most `RESUMABLE_MAX_RESUMES`. The
+journal keeps `video_id`, `upload_session_id`, `waterfall_id`, file size and md5 after the start; a stopped run is
+continued from the offset the service reports. If the offset is unreadable, or every byte is in but the handle is gone,
+the old session is forgotten and a new one starts (a finished video is found by its title first). The emergency flag
+`ACL_VIDEO_RESUMABLE_UPLOAD=0` still sends everything through the chunked path.
+
+Assumptions checkable only live: the answer body of the last rupload POST (handle field), and that the service accepts
+the CORS preflight of the custom headers from the clean `__acl_work` origin like it does from Ads Manager itself.
+
+### 13.1 Review fixes (files over one segment, adoption, masking)
+
+* **Multi-POST is unverified live.** After the FIRST partial (non-final) segment POST, whatever its status, ONE offset GET
+  must show `offset + length`; otherwise the upload is refused (`the upload service did not keep a partial piece`): nothing
+  is finished yet, so the chunked fallback is safe. A 4xx/5xx whose GET shows the bytes kept is continued normally.
+* **Resumes.** A resume counts against `RESUMABLE_MAX_RESUMES` only when it made no progress (the reported offset is not
+  above the one we had); a GET showing progress is free. Two 4xx answers in a row: the upload service address and the
+  session token are read again once (the page re-scans its scripts; a clean upload tab gets them by an upload-only
+  hand-over of the same session) before more resumes are spent.
+* **Handle.** The tail after `:e:<digits>` may be 1-6 `:`-separated parts. The GET answer is parsed too (the service may
+  give `h` once the upload is complete). A 2xx answer without a handle logs a step with key names and value lengths only.
+* **Adoption of a pending video.** `processing/ready` alone is never trusted: the finish with the title is sent once;
+  success or a definite "already finished" answer counts. The journal keeps `transferred=true` after a confirmed transfer;
+  a continuation of such a video sends only the finish and never starts a second video.
+* **Before bytes moved,** a request refused before sending (Python policy, page helper, empty service after a world reset)
+  or an unusable offset read is a refusal (fallback), not a run stop; afterwards it is a stop with the reason.
+* **Transfer failures are a fallback, honestly.** "Meta did not take all the bytes" and "the transfer answer was lost
+  twice" happen BEFORE the finish, so nothing was published: the chunked path runs and the unfinished video of this
+  session stays at Meta (never published, no finished duplicate). Only failures after the transfer was accepted are
+  real stops.
+* **Masking.** The helper masks the session token raw and URL-encoded and the `fb_dtsg`/`fb_dtsg_ag` parameters in every
+  answer (error JSON and non-JSON/HTML bodies). `GraphClient.upload_service_ready()` defaults to "not supported here".
+
+### 13.2 Follow-ups
+
+* **Refresh (honest).** `refreshUpload()` first asks the page's own module registry (`require('DTSGInitData')`,
+  `require('AdsVideoUploadConfig')`) where `require` is visible, validates with the same policy patterns, then re-scans the
+  inline scripts for what is missing; a tab without the Ads Manager page (clean `__acl_work` tab) keeps its current values.
+  The helper runs in an isolated world, where `require` is normally NOT visible, so in practice the re-scan of the page's
+  inline scripts is what updates the values; the clean tab then receives them by an upload-only hand-over (same session
+  token accepted, another token rejected, no token -> `no_token`).
+* **Continuing an earlier upload.** All bytes in and the service returns the handle to a GET: straight to the transfer.
+  The status read asks `status,title`: a title equal to our ACL tag is adopted with no write. Published but the repeated
+  finish not confirmed: stop as "unknown" (Publish again later); a definite refusal of the repeated finish while the title is
+  absent: the entry is forgotten (the title lookup that runs first on every publish protects from a duplicate).
+  A `retired` helper is a stop even before bytes moved.
+* **Budget of the chunked fallback.** The plan counts the file-API upload as primary (`resumable_calls()`); with the flag
+  off or after a refusal the chunked plan assumes Meta's real windows (`CHUNK_WINDOW_LIVE` = 5 MB, not the 64 MB ceiling).
+  The chunked allowance of a worker-path upload is the run's remaining budget minus the estimate of the rest of the
+  campaign (never above the hard `max_calls`); the projection stop (`small pieces`) compares against that allowance.
+
+### 13.3 Fallback funding (supersedes the "remaining budget" wording of 13.2)
+
+The chunked fallback is funded **only from the run's surplus**: the run budget left, minus the calls the rest of the
+campaign still needs (`estimate_create_calls(plan)` minus the writes already made in this run). Before the chunked start
+the creator compares that surplus with the chunked plan for the file (5 MB windows); if it does not cover it, the run stops
+BEFORE sending anything ("the fast upload was refused and uploading in 5 MB pieces needs about N calls; this run can
+spare M. Nothing was uploaded. Use a smaller video file or publish fewer ads in this run."). So the campaign is not left
+half-built for lack of calls because of this upload (objects of EARLIER ads may already exist, paused). The reserve counts
+campaign-object writes only (upload-phase writes are subtracted) plus the fast-path upload of every large video still to come. Otherwise the chunked allowance is the chunked plan + slack, and the projection stop
+compares with it. Check plan warns when the fallback would not fit ("If the fast upload is refused, ... can give M");
+the run budget itself is still sized for the fast upload only. The file-API cap is `RESUMABLE_FIXED_CALLS + 4` Graph calls;
+once the transfer is confirmed the finish and its status read are exempt from it, and a stop after the transfer says the
+result is unknown ("Publish again later").
+
+### 13.4 One POST with the whole remainder (live finding on the generic host)
+
+The service neither kept nor answered a short body (X-Entity-Length = whole file, body = 512 MB): Ads Manager sends a
+partition in ONE POST with the whole remainder, so the 512 MB segmenting is gone. `RUPLOAD_SEGMENT_MAX` is the file limit
+(4 GB). A resume sends the rest from the offset the service reports (GET), never from zero.
+
+**Body mechanism.** The page's worker (or the inline runner of a clean tab) sends a `ReadableStream` request body
+(`duplex: 'half'`, `redirect: 'error'`) that pulls the served pieces one at a time (8 MB each, SHA-256 checked when
+pulled, `highWaterMark: 0`), so memory stays flat at about one piece whatever the file size: it supports files up to the
+4 GB limit (the policy allows at most 512 pieces of 8 MB). A piece that fails its hash errors the stream; the request
+fails and the caller asks the offset. Streaming needs Chrome 105+ and HTTP/2 or 3 to the service (feature-tested with a
+`Request` probe). Where the context cannot stream, a single Blob of the checked pieces is used only up to
+`RUPLOAD_BLOB_SAFE` (256 MB); a larger body is refused BEFORE any byte (`stream_unsupported`), which falls back to chunks.
+The controller still reads the file once to hash it before the POST (about the time of a disk read of the file).
+
+**Deadline.** The whole POST gets 60 s + size at 0.5 MB/s, at most 2 hours (`InPageGraph.rupload_deadline_s`). After a lost
+answer the offset is asked: all bytes in and a handle obtainable -> transfer; a part -> the rest is sent from there; nothing
+twice in a row -> the chunked fallback. The host kind pin keeps the very host string per upload path.
+
+### 13.5 Compress-to-fit fallback (owner's decision)
+
+The fast upload is tried first and is not changed. If it is unavailable or refused and the original would not fit the run's
+SPARE chunked budget (`_chunk_spare`: run budget left minus what the rest of the campaign still needs), the original is
+compressed locally before the chunked upload: the same ffmpeg 2-pass x264 compressor as the ACL-2000 path
+(`creative_compress.ensure_uploadable`; resolution, aspect ratio and duration untouched), aimed at 90 % of the largest size
+whose chunked upload (5 MB windows, with the retry slack) fits the spare calls, never above 500 MB. The compressed copy goes
+up through the chunked path under the ACL tag title of the ORIGINAL, so a republish finds it. Steps and a warning say
+"Ad N video compressed from X MB to Y MB to fit this run". If it cannot be compressed (no ffmpeg, the bitrate would be
+unusable, the copy is not smaller, any failure) the original goes on and the chunked pre-check stops with its clear
+"this run can spare M" message. Emergency flag: `ACL_VIDEO_COMPRESS_FALLBACK=0`. The compression runs in the run's own
+thread (like the ACL-2000 path), so a multi-GB file can take several minutes; Stop is honoured between ffmpeg passes.
+
+The compressor's wait loop beats the job every 0.5 s (`job_cancel.heartbeat` = `run_telemetry.beat`) and kills its ffmpeg child on Stop.
+When a progress observer is set, the 2nd pass writes ffmpeg's `-progress` file; the loop reads it and the creator logs
+"compressing ad N video: X%" every 10 points. Check plan names the videos that would be compressed
+("Ad N video (X MB) would be compressed to about Y MB if the fast upload is refused").
+
+### 13.6 The fast upload is OFF by default (live: Doc349)
+
+The whole-file rupload POST is refused with HTTP 400 on every live profile tried, so `ACL_VIDEO_RESUMABLE_UPLOAD` now defaults
+to OFF (on only for `1/true/yes/on`); the code is kept. Large worker-path videos are planned, budgeted and uploaded
+chunked at Meta's real 5 MB windows. `plan_upload_sizes` (used by `publish_api.create_call_budget` and by `_prepare`) plans
+the compressed size for the videos that would not fit the run cap: one size cap C (<= 500 MB) is chosen as large as the
+whole run allows and every video above C is planned at 0.9 C; the budget counts those sizes, Check plan says "Ad N video
+(X MB) will be compressed to about Y MB before upload", and `_fit_for_chunks` makes the copy before the chunked upload
+(the plan's size is the target). Check plan now reads a video as large under the worker plan, so a 70-160 MB video is
+counted and named there too. `ACL_VIDEO_COMPRESS_FALLBACK=0` restores the plain refusal.
+
+### 13.7 Follow-ups to the compress fallback
+
+* Compression is planned only when `ffmpeg_exe()` exists; without it the originals are planned and `_prepare` refuses before the
+  first write with "... ACL needs ffmpeg to compress the video (it was not found), or use a smaller file." A compressor that
+  answers "not compressible" puts its reason into the chunked stop message ("compression was not possible: <reason>").
+* One encoding pass may take `max(600 s, 3 x duration + 300 s)`; Check plan and the "compressing ..." step show "about N min, can
+  take up to M min" when the duration can be read.
+* The persistent cache `creative_cache` is trimmed before every compression: `*.mp4` copies older than 7 days go, then the oldest
+  until the total is under 5 GB (the copy in use is kept and its mtime refreshed); stale `encode-*` folders (older than a day) go too.
+* A failed compression writes a short scrubbed reason (last ffmpeg line, paths replaced, at most 120 characters) into
+  `Prepared.reason` and the log.
+* `creator.video_upload_calls(size, compressed)` is the one cost of a video used by the plan (`estimate_upload_calls`, hence
+  `publish_api.create_call_budget`), `_prepare` and the compress planning.

@@ -48,8 +48,18 @@ def test_shrinking_windows_are_projected_with_the_last_one():
     assert cr.project_upload_calls(8 * MB, [4 * MB, MB], 64 * MB) == 8
 
 
-def test_the_plan_reserves_the_window_ramp_on_the_worker_path_only():
-    assert cr.upload_calls(2420 * MB, True) == 38 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
+#: ACL-2639: a chunked upload may use the run's remaining budget minus a reserve; a tight run budget makes the
+#: planned calls the cap again.
+BUDGET_TIGHT = 60
+
+
+def test_the_plan_reserves_the_window_ramp_on_the_worker_path_only(monkeypatch):
+    # ACL-2639: the chunked upload is the primary plan (the file API is off by default) at Meta's real 5 MB windows
+    monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
+    assert cr.upload_calls(2420 * MB, True) == 484 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
+    monkeypatch.setenv("ACL_VIDEO_RESUMABLE_UPLOAD", "1")                          # switched on: the file API is the plan
+    assert cr.upload_calls(2420 * MB, True) == cr.resumable_calls()
+    assert cr.upload_calls(2420 * MB, True, chunked=True) == 484 + cr.CALLS_UPLOAD_WINDOW_RAMP + cr.CALLS_UPLOAD_FIXED
     big = cr.single_request_max(False) + 1
     assert cr.upload_calls(big, False) == -(-big // cr.VIDEO_CHUNK_STAGED_MAX) + cr.CALLS_UPLOAD_FIXED   # unchanged
 
@@ -94,7 +104,7 @@ def test_a_small_first_window_that_grows_uploads_the_whole_file(worker_small, tm
 def test_windows_that_grow_too_slowly_stop_once_the_projection_exceeds_the_cap(worker_small, tmp_path):
     d, f = _big_draft(tmp_path, size=12 * MB)
     meta = GrowingMeta(first=64 * 1024, top=MB, growth=1.05)
-    out, _ = _run(meta, d, max_calls=400)
+    out, _ = _run(meta, d, max_calls=80)
     assert out.stop_kind == "video_error" and "small pieces" in out.error
     assert "ACL_VIDEO_WORKER_UPLOAD" not in out.error
     assert not any(p == "finish" for p, _ in meta.phases)
@@ -107,9 +117,9 @@ def test_the_planned_calls_are_a_hard_cap_even_while_windows_are_tried(worker_sm
     monkeypatch.setattr(cr, "UPLOAD_WINDOW_PROBE_TRANSFERS", 100)
     d, f = _big_draft(tmp_path)
     meta = ServedMeta(meta_chunk=50_000)
-    out, _ = _run(meta, d, max_calls=400)
+    out, _ = _run(meta, d, max_calls=BUDGET_TIGHT)
     assert out.stop_kind == "video_error"
-    planned = cr.upload_calls(f.stat().st_size, True)
+    planned = cr.upload_calls(f.stat().st_size, True, chunked=True)
     allowance = planned + max(cr.CHUNK_RETRY_SLACK_MIN, -(-planned * cr.CHUNK_RETRY_SLACK_FRACTION // 1))
     assert len(_upload_posts(meta)) <= allowance and not any(p == "finish" for p, _ in meta.phases)
 
