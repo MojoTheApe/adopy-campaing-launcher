@@ -52,6 +52,9 @@ def next_step(status: str, status_text: str = "") -> str:
     base = _BY_STATUS.get(status)
     if base is None:
         return ""
+    if status == "restricted" and "start authentication" in (status_text or "").lower():
+        return ("Meta stopped this account's ads until it is authenticated. Open the profile and complete "
+                "Start authentication in Ads Manager.")
     if status != "disabled":
         return base
     reason = reason_of(status_text)

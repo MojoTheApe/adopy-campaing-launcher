@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -166,6 +167,82 @@ def status_from_account(acc: dict) -> tuple[str, str, int | None, str]:
     status, text = map_status(code, acc.get("disable_reason"))
     reason = _as_int(acc.get("disable_reason")) if status != "clear" else None
     return status, text, code, (_DISABLE_REASONS.get(reason, "") if reason else "")
+
+
+# ───────────────────── ACL-2610: ограничение при account_status = 1 ─────────────────────
+
+AUTH_RESTRICTED_TEXT = ("Ad account is restricted: Meta asks to authenticate the account "
+                        "(Start authentication in Ads Manager)")
+
+_ACT_RE = re.compile(r"act_\d+", re.IGNORECASE)
+_LONG_NUM_RE = re.compile(r"\d{6,}")
+_TOKEN_RE = re.compile(r"EAA[A-Za-z0-9]{10,}")
+#: Фразы баннера Meta. НЕПРОВЕРЕНО на живом образце (кабинет уже прошёл проверку):
+#: подобраны по тексту баннера и по старому списку RPA («we restricted your ad account»).
+#: Образец с ошибки записи (publish 13.11, код 31 / подкод 3858385) добавил две последние фразы.
+_AUTH_PHRASES = ("restricted your ad account", "authenticate your account", "authenticate your ad account",
+                 "start authentication", "confirm your identity to keep running ads",
+                 "please authenticate your account", "authenticate your account in ads manager")
+#: Graph-код «Please authenticate your account»: чтение и запись отвечают им, а `account_status` остаётся 1.
+AUTH_CODE, AUTH_SUBCODE = 31, 3858385
+MAX_ISSUES = 20
+
+
+def _redact(text: Any, limit: int = 200) -> str:
+    out = _TOKEN_RE.sub("[token]", str(text or ""))
+    out = _ACT_RE.sub("[act]", out)
+    out = _LONG_NUM_RE.sub("[id]", out)
+    return " ".join(out.split())[:limit]
+
+
+def compact_issues(rows: Any, level: str = "") -> list[dict]:
+    """`issues_info` строк Graph → короткие записи без id (код, уровень, текст). Пусто — пусто."""
+    out: list[dict] = []
+    for row in rows or []:
+        info = (row or {}).get("issues_info") if isinstance(row, dict) else None
+        if not isinstance(info, list):
+            continue
+        for item in info:
+            if not isinstance(item, dict):
+                continue
+            rec = {"level": _redact(item.get("level") or level, 30),
+                   "code": _as_int(item.get("error_code")),
+                   "summary": _redact(item.get("error_summary")),
+                   "message": _redact(item.get("error_message") or item.get("mid_level_message"))}
+            if rec["code"] is None and not rec["summary"] and not rec["message"]:
+                continue
+            if rec not in out:
+                out.append(rec)
+    return out[:MAX_ISSUES]
+
+
+def is_auth_restriction(issue: dict) -> bool:
+    """Это проблема «кабинет ограничен, пройдите аутентификацию»? Только по тексту Meta."""
+    text = f"{issue.get('summary', '')} {issue.get('message', '')}".lower()
+    return any(p in text for p in _AUTH_PHRASES)
+
+
+def is_auth_stop(stop: Any) -> bool:
+    """Стоп Graph «authenticate your account»: класс `AuthRequired` или пара 31/3858385."""
+    return (getattr(stop, "code", None) == AUTH_CODE and getattr(stop, "subcode", None) == AUTH_SUBCODE)         or type(stop).__name__ == "AuthRequired"
+
+
+def note_auth_stop(stop: Any, account: str) -> bool:
+    """Стоп 31/3858385 по кабинету → его статус `restricted` с шагом аутентификации (ACL-2610).
+
+    Ни одного запроса: стоп уже получен чтением или записью. Идёт через `put_status` (правила ACL-2419).
+    """
+    if not account or not is_auth_stop(stop):
+        return False
+    try:
+        return _as.put_status(account, "restricted", AUTH_RESTRICTED_TEXT, source="api", at=_as._now())  # noqa: SLF001
+    except Exception:  # noqa: BLE001 — статус вторичен, стоп важнее
+        log.exception("Could not store the authentication status of %s", account)
+        return False
+
+
+def has_auth_restriction(issues: Any) -> bool:
+    return any(is_auth_restriction(i) for i in issues or [] if isinstance(i, dict))
 
 
 # ───────────────────────── дерево ─────────────────────────
@@ -370,6 +447,7 @@ def _start_cooldown(key: str, stop: GraphStop, label: str = "") -> None:
     secs = COOLDOWN_S.get(stop.kind)
     if secs is None:
         return
+    note_auth_stop(stop, label)
     # ACL-2091: checkpoint, a login page, a policy block and a frozen tab whose replacement is spent are
     # holds: persisted, no timer, lifted only by a person (Retry). Everything else stays a timed pause.
     if _blocks.note_stop(key, label, stop, replacement_spent=_replacement_spent(key)):

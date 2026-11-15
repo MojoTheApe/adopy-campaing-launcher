@@ -54,10 +54,10 @@ NEEDS_API_CODE = "needs_api_backend"
 # («менялся после нашей записи») читаются теми же запросами, что и раньше:
 # новых вызовов к Meta нет, потолок вызовов не затронут.
 CAMPAIGN_FIELDS = ("id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,"
-                   "adlabels{name},updated_time")
+                   "adlabels{name},updated_time,issues_info")
 ADSET_FIELDS = ("id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,"
-                "bid_strategy,bid_amount,adlabels{name},updated_time")
-AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id,updated_time"
+                "bid_strategy,bid_amount,adlabels{name},updated_time,issues_info")
+AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id,updated_time,issues_info"
 #: Префикс метки, которой ACL помечает созданное им (`creator.py`).
 ACL_LABEL_PREFIX = "acl-"
 #: Insights на каждом уровне — отдельным запросом: Reach и Frequency
@@ -142,6 +142,9 @@ class Snapshot:
     #: Новых запросов ради них нет; старые снимки без полей читаются как «не знаем».
     account_status: int | None = None
     disable_reason: int | None = None
+    #: ACL-2610: `issues_info` кампаний/ad set/объявлений (код, уровень, текст; без id). Те же
+    #: запросы, что и раньше: поле добавлено в списки полей, новых вызовов нет.
+    issues: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -789,6 +792,9 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
             snap.steps[step] = "failed"
             snap.problems.append(f"{step} were not read: {exc}")
             return None
+        for rec in _api.compact_issues(rows, level.upper()):
+            if rec not in snap.issues and len(snap.issues) < _api.MAX_ISSUES:
+                snap.issues.append(rec)
         objs, dropped = parse_inventory(rows, level)
         snap.steps[step] = "truncated" if _truncated_since(client, before) else "ok"
         if snap.steps[step] == "truncated":
@@ -867,6 +873,19 @@ def record_status(snap: Snapshot) -> bool:
 
         status, text, code, reason = _api.status_from_account(
             {"account_status": snap.account_status, "disable_reason": snap.disable_reason})
+        if snap.issues:
+            # Не телеметрия-ради-телеметрии: образец текста Meta нужен, чтобы подтвердить фразы.
+            log.info("issues_info on %s: %s", snap.account, snap.issues)
+            _api._tm.record({"event": "fb_issues_info", "source": "api", "issues": snap.issues})  # noqa: SLF001
+        if status == "clear" and _api.has_auth_restriction(snap.issues):
+            # account_status остаётся 1, но Meta остановила показ до аутентификации (ACL-2610).
+            status, text = "restricted", _api.AUTH_RESTRICTED_TEXT
+        elif status == "clear" and getattr(snap, "_status_only", False):
+            # Чтение одного кабинета issues_info не видит: его «clear» не снимает ограничение,
+            # найденное чтением кампаний. Снимет его следующее чтение кампаний без такой проблемы.
+            kept = _as.get_status(snap.account)
+            if kept.get("status") == "restricted" and kept.get("status_text") == _api.AUTH_RESTRICTED_TEXT:
+                return False
         return _as.put_status(snap.account, status, text, source="api", at=_as._now(),  # noqa: SLF001
                               disable_reason=reason, account_status=code)
     except Exception:  # noqa: BLE001 — статус вторичен, список важнее

@@ -228,7 +228,7 @@ def test_expanded_table_has_cpa_notes_and_campaign_cells(open_page, amap):
     amap["notes"] = {"Facebook_DQ-214": "call back on Monday"}
     pg = open_page()
     heads = pg.eval_on_selector_all('[data-aov-country="Colombia"] thead th', "els => els.map(e => e.textContent)")
-    assert heads == ["State", "Account", "Spend", "Leads", "CPL", "FTDs", "CPA", "Notes"]
+    assert heads == ["State", "Account", "Spend", "Leads", "CPL", "FTDs", "CPA", "Notes", "Take out of Colombia"]
     cells = pg.eval_on_selector_all('[data-aov-country="Colombia"] tr.aov-row:first-child td', "els => els.map(e => e.textContent.trim())")
     assert "Facebook_DQ-214" in cells[1] and cells[2] == "$117" and cells[5] == "1" and cells[6] == "$117"
     assert pg.inner_text('[data-note-kind=account][data-account="Facebook_DQ-214"]') == "call back on Monday"

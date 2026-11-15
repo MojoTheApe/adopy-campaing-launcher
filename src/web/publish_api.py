@@ -111,8 +111,9 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     if chunks and need + reads + chunks > ceiling:
         total = need + reads + chunks
         return ceiling, (f"This campaign needs about {total} Meta calls ({chunks} to upload large videos in "
-                         f"chunks, {need + reads} for the rest), more than one run allows ({ceiling}). "
-                         "Use a smaller or shorter video, or split the campaign. Nothing was created.")
+                         f"chunks, {need + reads} for the rest), more than ACL allows in one run ({ceiling}). "
+                         "This is ACL's own per-run limit, not Meta's. Let ACL compress the video "
+                         "(needs ffmpeg), use a shorter video, or split the campaign. Nothing was created.")
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
