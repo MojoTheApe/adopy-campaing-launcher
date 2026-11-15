@@ -143,11 +143,9 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
                               "vertical_needs_main", "error", [2]),
     # Живой 2026-10-14: несколько текстов вместе с вертикальным файлом - отказ Meta; без него - отдельный набор.
-    "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
-    "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
-                             "texts_vertical", "error", [1]),
-    "texts_vertical_titles": (_with(ads=_ad(0, vertical_file="v.png", headlines=["a", "b"])),
-                              "texts_vertical", "error", [1]),
+    # ACL-2611: several texts with a Stories / Reels file are allowed (labelled feed); the Dynamic Creative rule skips them.
+    "texts_vertical_combo_not_dynamic": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
+                                         "texts_dynamic", "ok", []),
     "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
     "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
     "texts_dynamic_descriptions": (_with(ads=_ad(0, descriptions=["a", "b"])), "texts_dynamic", "error", [1]),

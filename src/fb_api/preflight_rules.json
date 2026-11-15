@@ -417,20 +417,6 @@
       "applies": "always",
       "field": {
         "level": "ad",
-        "sel": ".cb-vertical-search"
-      },
-      "hint": "Several primary texts and a Stories/Reels file can't be combined: Meta applies one text per placement group. Use several texts without the vertical file, or one text with it.",
-      "id": "texts_vertical",
-      "label": "Several texts and a Stories / Reels file",
-      "severity": "error",
-      "side": "client",
-      "topic": "creative",
-      "unit": "ad"
-    },
-    {
-      "applies": "always",
-      "field": {
-        "level": "ad",
         "sel": ".cb-adtitle-search"
       },
       "hint": "An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an ad set: move the other ads of this ad set to a separate ad set",
