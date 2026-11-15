@@ -595,11 +595,14 @@ const fakeFetch = async (url, init) => {
       if (SC.echo) return reply(400, { error: { message: 'bad fb_dtsg_ag=' + encodeURIComponent(DTSG) + '&x=1 raw ' + DTSG } });
       return reply(200, { dc: 'fra3', offset: String(rup.received) });
     }
-    const buf = Buffer.from(await init.body.arrayBuffer());
+    let buf;
+    const streamed = !!(init.body && typeof init.body.getReader === 'function');
+    if (streamed) { const parts = []; for await (const c of init.body) parts.push(Buffer.from(c)); buf = Buffer.concat(parts); }
+    else buf = Buffer.from(await init.body.arrayBuffer());
     const h = init.headers || {};
-    log.rupload.push(Object.assign(common, { headers: Object.keys(h).sort(), offset: h['offset'], length: h['X-Entity-Length'],
+    log.rupload.push(Object.assign(common, { streamed: streamed, duplex: init.duplex, headers: Object.keys(h).sort(), offset: h['offset'], length: h['X-Entity-Length'],
                        type: h['X-Entity-Type'], auth: h['Authorization'], bytes: buf.length,
-                       md5: crypto.createHash('md5').update(buf).digest('hex'), form: typeof init.body.get === 'function' }));
+                       md5: crypto.createHash('md5').update(buf).digest('hex'), form: !streamed && typeof init.body.get === 'function' }));
     if (SC.echo) return { status: 502, text: async () => '<html><body>Bad gateway for ?fb_dtsg_ag=' + encodeURIComponent(DTSG) + ' and ' + DTSG + ' and fb_dtsg%3D' + encodeURIComponent(DTSG) + '</body></html>', headers: { get: () => null } };
     if (Number(h['offset']) !== rup.received) return reply(400, { error: 'bad offset' });
     rup.received += buf.length;
@@ -662,8 +665,8 @@ const FakeWorker = function (url) {
   w.terminate = () => { log.terminated++; };
   resolveObjectURL(url).text().then((src) => {
     if (SC.worker_silent) return;
-    new Function('self', 'fetch', 'crypto', 'FormData', 'Blob', 'AbortController', src)(
-      inner, fakeFetch, crypto.webcrypto, FormData, Blob, AbortController);
+    new Function('self', 'fetch', 'crypto', 'FormData', 'Blob', 'AbortController', 'ReadableStream', src)(
+      inner, fakeFetch, crypto.webcrypto, FormData, Blob, AbortController, SC.no_stream ? undefined : ReadableStream);
   });
 };
 const loc = { href: ORIGIN + '/adsmanager/manage/campaigns', origin: ORIGIN, hostname: 'adsmanager.facebook.com',

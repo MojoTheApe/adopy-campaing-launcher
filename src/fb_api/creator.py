@@ -3334,14 +3334,14 @@ class CampaignCreator:
         """ACL-2639: the upload protocol of Ads Manager itself ("file API"), from the profile tab.
 
         advideos start (waterfall_id, one whole-file partition) -> the bytes go to the resumable service of the page
-        (`rupload-...up`, session cookies; NOT Graph, not counted in the call budget): one POST per segment of at most
-        512 MB with the `offset` the service holds (served piece by piece from the file, never a copy in the page); the
-        answer to the last one carries the file handle -> advideos transfer by that handle (Meta must answer that it
+        (`rupload-...up` or the generic host, session cookies; NOT Graph, not counted in the call budget): ONE POST with
+        the whole remainder from the `offset` the service holds (streamed piece by piece from the file, never a copy
+        in the page); the answer carries the file handle -> advideos transfer by that handle (Meta must answer that it
         holds the whole file) -> advideos finish with the ACL tag as the title (a later search by the title finds it
         like a chunked upload). A dropped POST resumes from the offset the service reports (GET), never from zero and
         never as a second video; a resume that made progress is free, one without progress counts against
-        RESUMABLE_MAX_RESUMES. After the FIRST partial segment the service is asked once whether it kept a partial piece:
-        if not, the upload is refused (nothing finished, the chunked path is safe). The ids are kept in the journal right
+        RESUMABLE_MAX_RESUMES; a service that keeps no byte of a broken POST twice in a row is refused (nothing finished,
+        the chunked path is safe). The ids are kept in the journal right
         after the start (and `transferred` after the transfer): a run that stopped (or crashed) before the finish is
         continued by the next one. Graph calls per video: start, transfer, finish (+ one status read when an earlier run
         is continued or a finish answer is lost). `_ResumableRefused` - nothing was finished, the caller may use the
@@ -3350,7 +3350,6 @@ class CampaignCreator:
         path = f"/{plan.act}/advideos"
         size = len(big)
         what = f"{who}: video upload"
-        segment = _wpol.RUPLOAD_SEGMENT_MAX
         if not title:
             raise _ResumableRefused("the video has no ACL tag title")
         ready, why_not = self.client.upload_service_ready()
@@ -3368,7 +3367,6 @@ class CampaignCreator:
         resumes = 0
         moved = False                       # the service has confirmed at least one byte of this upload
         transferred = False                 # Meta took the file by its handle (journal: a continuation only finishes)
-        partial_checked = False             # the first partial segment was verified with a GET
         last_title = ""                     # the title of the video at the last status read
         get_handle = ""                     # a file handle the service returned to a GET (once the upload is complete)
         streak = 0                          # consecutive 4xx answers of the service
@@ -3596,7 +3594,7 @@ class CampaignCreator:
             self._remember_pending_video(what, vid, sid, waterfall, size)
             self._step(out, f"{who}: resumable upload started ({size // (1024 * 1024)} MB)")
 
-        # -- the bytes, to the service of the page; the answer to the LAST segment carries the file handle
+        # -- the bytes, to the service of the page; the answer to the POST carries the file handle
         handle = ""
         while not handle:
             if offset >= size:
@@ -3604,36 +3602,22 @@ class CampaignCreator:
                     handle = get_handle
                     break
                 raise _ResumableRefused("the upload service has every byte but no file handle")
-            n = min(segment, size - offset)
-            last = offset + n >= size
+            n = size - offset                  # the whole remainder in ONE POST (Ads Manager sends a partition so)
             if self.size_of(big.path) != size:
                 raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
                                       kind="video_error")
             headers = {"offset": str(offset), "X-Entity-Length": str(size), "X-Entity-Type": _wpol.RUPLOAD_TYPE}
             self._check_cancel(out)
+            self._step(out, f"{who}: uploading {n // (1024 * 1024)} MB in one request")
             try:
                 got = svc("POST", headers=headers, chunk=_wpol.ServedChunk(big, offset, n),
                           progress=lambda _s: self._beat(), cancelled=self.cancelled)
             except RuploadLost as exc:
+                # No answer: ask what the service holds (all of it with a handle: transfer; part: send the rest from
+                # there; nothing: send again from the offset, bounded by the resume cap).
                 resume(f"the answer was lost: {exc.reason or 'network'}")
                 continue
-            ok = 200 <= got["status"] < 300
-            if not last and not partial_checked:
-                # Whether a service keeps a PARTIAL piece is unverified for files over one segment: ask once, whatever
-                # the status was. Nothing is finished yet, so a "no" is a safe fallback.
-                partial_checked = True
-                now = held()
-                if now != offset + n:
-                    raise _ResumableRefused("the upload service did not keep a partial piece (it holds "
-                                            f"{'an unknown amount' if now is None else str(now) + ' of ' + str(offset + n)} "
-                                            "bytes after the first segment)")
-                moved, streak, offset = True, 0, now
-                self._beat()
-                if not ok:
-                    self._step(out, f"{who}: the upload service answered HTTP {got['status']} but kept the bytes")
-                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
-                continue
-            if not ok:
+            if not 200 <= got["status"] < 300:
                 # B2: only an explicit success counts: the service answers a refusal with a 4xx/5xx.
                 if 400 <= got["status"] < 500:
                     streak += 1
@@ -3646,10 +3630,6 @@ class CampaignCreator:
             streak = 0
             moved = True
             self._beat()
-            if not last:
-                offset += n
-                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
-                continue
             handle = _wpol.file_handle(got["body"])
             if handle:
                 offset = size

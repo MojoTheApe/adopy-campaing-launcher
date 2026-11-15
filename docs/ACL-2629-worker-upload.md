@@ -334,3 +334,22 @@ compares with it. Check plan warns when the fallback would not fit ("If the fast
 the run budget itself is still sized for the fast upload only. The file-API cap is `RESUMABLE_FIXED_CALLS + 4` Graph calls;
 once the transfer is confirmed the finish and its status read are exempt from it, and a stop after the transfer says the
 result is unknown ("Publish again later").
+
+### 13.4 One POST with the whole remainder (live finding on the generic host)
+
+The service neither kept nor answered a short body (X-Entity-Length = whole file, body = 512 MB): Ads Manager sends a
+partition in ONE POST with the whole remainder, so the 512 MB segmenting is gone. `RUPLOAD_SEGMENT_MAX` is the file limit
+(4 GB). A resume sends the rest from the offset the service reports (GET), never from zero.
+
+**Body mechanism.** The page's worker (or the inline runner of a clean tab) sends a `ReadableStream` request body
+(`duplex: 'half'`, `redirect: 'error'`) that pulls the served pieces one at a time (8 MB each, SHA-256 checked when
+pulled, `highWaterMark: 0`), so memory stays flat at about one piece whatever the file size: it supports files up to the
+4 GB limit (the policy allows at most 512 pieces of 8 MB). A piece that fails its hash errors the stream; the request
+fails and the caller asks the offset. Streaming needs Chrome 105+ and HTTP/2 or 3 to the service (feature-tested with a
+`Request` probe). Where the context cannot stream, a single Blob of the checked pieces is used only up to
+`RUPLOAD_BLOB_SAFE` (256 MB); a larger body is refused BEFORE any byte (`stream_unsupported`), which falls back to chunks.
+The controller still reads the file once to hash it before the POST (about the time of a disk read of the file).
+
+**Deadline.** The whole POST gets 60 s + size at 0.5 MB/s, at most 2 hours (`InPageGraph.rupload_deadline_s`). After a lost
+answer the offset is asked: all bytes in and a handle obtainable -> transfer; a part -> the rest is sent from there; nothing
+twice in a row -> the chunked fallback. The host kind pin keeps the very host string per upload path.

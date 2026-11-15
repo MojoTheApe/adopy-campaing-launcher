@@ -366,7 +366,7 @@ _HELPER_JS = r"""
     const R = WRITE.rupload;
     if (!R) return 'rupload';
     // The request carries no address, host, query or credentials of its own: only what the policy lists.
-    const SPEC_KEYS = ['kind', 'method', 'path', 'headers', 'files', 'source', 'expect', 'filename', 'referrer', 'piece_ms', 'timeout_ms', 'host_kind'];
+    const SPEC_KEYS = ['kind', 'method', 'path', 'headers', 'files', 'source', 'expect', 'filename', 'referrer', 'piece_ms', 'timeout_ms', 'host_kind', 'stream'];
     for (const k of Object.keys(spec)) if (SPEC_KEYS.indexOf(k) < 0) return 'key';
     const method = spec.method;
     if ('host_kind' in spec && spec.host_kind !== 'generic' && spec.host_kind !== 'regional') return 'host_kind';
@@ -1042,62 +1042,108 @@ _HELPER_JS = r"""
     const TAKEN = 'a service worker took control of the page during the upload';
     const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
     const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
+    // One piece: fetched from the controller, size and SHA-256 checked. { blob, buf } or { error, why }.
+    async function onePiece(m, ac, st, p) {
+      // ACL-2637: inline mode re-checks the controller before EVERY piece (a service worker may claim the page
+      // mid-upload via clients.claim()); in a worker the page sends `stopPieces` on 'controllerchange' instead.
+      if (st.stopped || (guard && guard())) return { error: 'no_file', why: TAKEN };
+      if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };
+      // Every piece has a deadline: a request the controller never answers must not hang the upload.
+      const pc = new AbortController();
+      let late = false;
+      const onAbort = () => pc.abort();
+      ac.signal.addEventListener('abort', onAbort);
+      const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
+      st.pc = pc;
+      const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); st.pc = null; };
+      let r;
+      let blob;
+      let buf;
+      try {
+        r = await fetch(m.base + p.o + '/' + p.n, { method: 'GET', cache: 'no-store', credentials: 'omit',
+                                                    redirect: 'error', signal: pc.signal });
+        if (r.status !== 200) { done(); return { error: 'no_file', why: 'worker piece refused ' + r.status }; }
+        blob = await r.blob();
+        buf = await blob.arrayBuffer();
+      } catch (e) {
+        done();
+        return { error: 'no_file', why: st.stopped ? TAKEN : ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
+      }
+      done();
+      if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
+      let digest;
+      try { digest = hex(await crypto.subtle.digest('SHA-256', buf)); } catch (e) { return { error: 'no_file', why: 'worker cannot hash' }; }
+      if (digest !== p.h) return { error: 'no_file', why: 'worker piece does not match the file' };
+      return { blob: blob, buf: buf };
+    }
     async function pieces(m, ac, st) {
       const parts = [];
       let got = 0;
       for (const p of m.src.pieces) {
-        // ACL-2637: inline mode re-checks the controller before EVERY piece (a service worker may claim the page
-        // mid-upload via clients.claim()); in a worker the page sends `stopPieces` on 'controllerchange' instead.
-        if (st.stopped || (guard && guard())) return { error: 'no_file', why: TAKEN };
-        if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };
-        // Every piece has a deadline: a request the controller never answers must not hang the upload.
-        const pc = new AbortController();
-        let late = false;
-        const onAbort = () => pc.abort();
-        ac.signal.addEventListener('abort', onAbort);
-        const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
-        st.pc = pc;
-        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); st.pc = null; };
-        let r;
-        let blob;
-        let buf;
-        try {
-          r = await fetch(m.base + p.o + '/' + p.n, { method: 'GET', cache: 'no-store', credentials: 'omit',
-                                                      redirect: 'error', signal: pc.signal });
-          if (r.status !== 200) { done(); return { error: 'no_file', why: 'worker piece refused ' + r.status }; }
-          blob = await r.blob();
-          buf = await blob.arrayBuffer();
-        } catch (e) {
-          done();
-          return { error: 'no_file', why: st.stopped ? TAKEN : ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
-        }
-        done();
-        if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
-        let digest;
-        try { digest = hex(await crypto.subtle.digest('SHA-256', buf)); } catch (e) { return { error: 'no_file', why: 'worker cannot hash' }; }
-        if (digest !== p.h) return { error: 'no_file', why: 'worker piece does not match the file' };
-        parts.push(blob);
+        const r = await onePiece(m, ac, st, p);
+        if (r.error) return r;
+        parts.push(r.blob);
         got += p.n;
         emit({ id: m.id, progress: got });
       }
       return { parts: parts, bytes: got };
     }
+    // ACL-2639: can this context send a ReadableStream as a request body (Chrome 105+, HTTP/2 or 3)?
+    function streamSupported() {
+      try {
+        if (typeof ReadableStream !== 'function' || typeof Request !== 'function') return false;
+        let dup = false;
+        const hasType = new Request('https://stream-check.invalid/', { method: 'POST', body: new ReadableStream(),
+                                    get duplex() { dup = true; return 'half'; } }).headers.has('Content-Type');
+        return dup && !hasType;
+      } catch (e) { return false; }
+    }
+    // The whole remainder of the file as ONE request body, pulled piece by piece (never more than a piece or two in
+    // memory): each piece is checked when it is pulled; a bad piece errors the stream (the request fails, the caller
+    // asks the offset and resumes).
+    function streamBody(m, ac, st) {
+      const ps = m.src.pieces;
+      let i = 0;
+      let got = 0;
+      return new ReadableStream({
+        async pull(ctrl) {
+          if (i >= ps.length) { ctrl.close(); return; }
+          const p = ps[i++];
+          const r = await onePiece(m, ac, st, p);
+          if (r.error) { ctrl.error(new Error(String(r.why || r.error))); return; }
+          ctrl.enqueue(new Uint8Array(r.buf));
+          got += p.n;
+          emit({ id: m.id, progress: got });
+        },
+      }, { highWaterMark: 0 });
+    }
+    // A body this large may be built as one Blob of the checked pieces only below this size (Chrome backs blobs by memory
+    // up to a limit, then by disk; beyond this the streaming body is required).
+    const BLOB_SAFE = 256 * 1024 * 1024;
     async function run(m) {
       const ac = new AbortController();
       const st = { stopped: false, done: false, pc: null };
       jobs[m.id] = ac;
       halts[m.id] = st;
       try {
-        const made = await pieces(m, ac, st);
-        st.done = true;               // from here on `stopPieces` is ignored: it never touches the POST
+        // ACL-2639: the rupload POST sends the whole remainder as ONE request. A streaming body keeps memory flat; where
+        // the context cannot stream, a Blob is used only up to BLOB_SAFE, and a larger body is refused before any byte.
+        let streaming = false;
+        if (m.url && m.raw && m.stream) {
+          const total = m.src.pieces.reduce((a, p) => a + p.n, 0);
+          if (streamSupported()) streaming = true;
+          else if (total > Math.min(BLOB_SAFE, Number(m.blobMax) || BLOB_SAFE)) return { error: 'stream_unsupported' };
+        }
+        const made = streaming ? { parts: [], bytes: 0 } : await pieces(m, ac, st);
+        if (!streaming) st.done = true;     // from here on `stopPieces` is ignored: it never touches the POST
         if (made.error) return made;
         if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
         if (st.stopped) return { error: 'no_file', why: TAKEN };                  // nothing posted yet
         if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };        // nothing posted yet
         let body;
         if (m.raw) {
-          // ACL-2639: the rupload POST - the bytes are the body (a Blob of the checked pieces), headers as documented.
-          body = new Blob(made.parts, { type: 'application/octet-stream' });
+          // ACL-2639: the rupload POST - the bytes are the body (a stream, or a Blob of the checked pieces), headers as documented.
+          body = streaming ? streamBody(m, ac, st) : new Blob(made.parts, { type: 'application/octet-stream' });
         } else {
           body = new FormData();
           for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
@@ -1109,6 +1155,7 @@ _HELPER_JS = r"""
           resp = await fetch(m.url, Object.assign({ method: 'POST', body: body, credentials: m.cred, mode: 'cors',
                                       cache: 'no-store', redirect: 'error', signal: ac.signal },
                                       m.raw ? { headers: m.raw } : {},
+                                      streaming ? { duplex: 'half' } : {},
                                       m.ref ? { referrer: m.ref } : {}));
           text = await resp.text();
         } catch (e) { return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true }; }
@@ -1542,10 +1589,12 @@ _HELPER_JS = r"""
     scanUpload();
     if (!dtsgAg || !dtsgOk(dtsgAg) || !UPLOAD) return null;
     const regional = (rsvc && rsvcOk(rsvc.name, rsvc.domain)) ? rsvc.name + '.' + rsvc.domain : '';
-    const kind = hostPin[path] || ((want === 'regional' || want === 'generic') ? want : (regional ? 'regional' : 'generic'));
-    const host = kind === 'regional' ? regional : UPLOAD.generic_host;
+    const pin = hostPin[path];
+    const kind = pin ? pin.kind : ((want === 'regional' || want === 'generic') ? want : (regional ? 'regional' : 'generic'));
+    // a pinned upload keeps the very host STRING it started on, whatever the page announces later
+    const host = pin ? pin.host : (kind === 'regional' ? regional : UPLOAD.generic_host);
     if (typeof host !== 'string' || !/^rupload(?:-[a-z0-9-]{1,30}\.up)?\.facebook\.com$/.test(host)) return null;
-    hostPin[path] = kind;
+    if (!pin) hostPin[path] = { kind: kind, host: host };
     return { url: 'https://' + host + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1', kind: kind, host: host };
   }
   function uploadService() {
@@ -1636,11 +1685,12 @@ _HELPER_JS = r"""
     const raw = { 'offset': String(spec.headers.offset), 'X-Entity-Length': String(spec.headers['X-Entity-Length']),
                   'X-Entity-Type': R.type };
     if (job.aborted) return { error: 'aborted' };
-    const got = await runInWorker({ url: url, cred: 'include', fields: {}, field: R.field, raw: raw,
+    const got = await runInWorker({ url: url, cred: 'include', fields: {}, field: R.field, raw: raw, stream: true, blobMax: R.blob_safe,
                                     pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
                                     ref: refOpt(spec).referrer || '', filename: '', src: spec.source }, job);
     if (got.error) {
       if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120) };
+      if (got.error === 'stream_unsupported') return refused('stream_unsupported');
       return { error: job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network'), state: state() };
     }
     return ruploadReply({ status: got.status }, got.text, u);
@@ -2667,7 +2717,7 @@ class InPageGraph:
         controlled = isinstance(got, dict) and got.get("controlled") is True
         return False, f"{why[:400]} | {trace}"[:700], controlled
 
-    def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled) -> dict:
+    def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled, deadline_s: float | None = None) -> dict:
         """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker.
 
         ACL-2637: with a clean upload tab (see `probe_worker`) the call runs there; Python policy was checked in
@@ -2681,7 +2731,7 @@ class InPageGraph:
                 self.close_upload_context()
                 return {"error": "no_file", "why": f"clean upload tab lost ({type(exc).__name__})"}
             up._add_referrer(spec)
-            return up._write_served(spec, field_name, chunk, progress, cancelled)
+            return up._write_served(spec, field_name, chunk, progress, cancelled, deadline_s)
         server = None
         token = ""
         try:
@@ -2700,7 +2750,7 @@ class InPageGraph:
             spec["expect"] = {"bytes": len(chunk)}
             spec["piece_ms"] = int(self.SERVE_PIECE_S * 1000)
             return self._write_file_job(ctx, spec, progress, cancelled, serving=True,
-                                        deadline_s=self.SERVE_BASE_S + len(chunk) / self.SERVE_MIN_BPS)
+                                        deadline_s=deadline_s or self.SERVE_BASE_S + len(chunk) / self.SERVE_MIN_BPS)
         finally:
             # Every exit once the server exists (arm may have raised half-way): auto-attach and the pattern go off.
             if server is not None:
@@ -2804,6 +2854,15 @@ class InPageGraph:
             return True
         return light_tab.hand_over(self, up, upload_only=True) == ""
 
+    #: ACL-2639: the whole remainder goes in ONE POST: 60 s + size at 0.5 MB/s, never more than 2 hours.
+    RUPLOAD_BASE_S = 60.0
+    RUPLOAD_MIN_BPS = 512 * 1024
+    RUPLOAD_MAX_S = 7200.0
+
+    @classmethod
+    def rupload_deadline_s(cls, size: int) -> float:
+        return min(cls.RUPLOAD_MAX_S, cls.RUPLOAD_BASE_S + size / cls.RUPLOAD_MIN_BPS)
+
     #: One GET of the resumable service (the resume offset) has this long.
     RUPLOAD_READ_S = 15.0
 
@@ -2822,7 +2881,9 @@ class InPageGraph:
             spec["host_kind"] = host_kind              # a continuation keeps the host kind of the first request
         if method == "POST":
             spec["headers"] = dict(headers or {})
-            return self._write_served(spec, _wp.RUPLOAD_BODY_FIELD, chunk, progress, cancelled)
+            spec["stream"] = True                        # the whole remainder in ONE request, streamed from the pieces
+            return self._write_served(spec, _wp.RUPLOAD_BODY_FIELD, chunk, progress, cancelled,
+                                      self.rupload_deadline_s(len(chunk)))
         target = self._upload_graph or self
         target._add_referrer(spec)
         spec["timeout_ms"] = int(self.RUPLOAD_READ_S * 1000)

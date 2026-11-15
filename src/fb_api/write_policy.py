@@ -142,8 +142,9 @@ def file_handle(body: Any) -> str:
     return ""
 
 
-#: One rupload POST carries at most this many bytes (the next one continues from the offset Meta reports).
-RUPLOAD_SEGMENT_MAX = 512 * 1024 * 1024
+#: One rupload POST carries the whole remainder of the file (Ads Manager sends a partition in one POST), so the cap is
+#: the file limit; a resume sends the rest from the offset the service reports.
+RUPLOAD_SEGMENT_MAX = UPLOAD_FILE_MAX
 #: The resumable service of the page (`AdsVideoUploadConfig`): `rupload-<place>.up` + facebook.com, nothing else.
 RUPLOAD_NAME_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up$", re.ASCII)
 RUPLOAD_DOMAIN = "facebook.com"
@@ -163,6 +164,8 @@ RUPLOAD_QUERY_KEYS = ("fb_dtsg_ag", "__a")
 RUPLOAD_HEADERS = ("offset", "X-Entity-Length", "X-Entity-Type")
 RUPLOAD_TYPE = "application/octet-stream"
 RUPLOAD_BODY_FIELD = "rupload_body"
+#: Without a streaming request body the page builds one Blob of the checked pieces: only up to this size.
+RUPLOAD_BLOB_SAFE = 256 * 1024 * 1024
 #: The session token of the upload page (`DTSGInitData.async_get_token`): a secret, never logged or sent to Python.
 RUPLOAD_DTSG_RE = re.compile(r"^[A-Za-z0-9_:-]{20,100}$", re.ASCII)
 
@@ -376,7 +379,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "rupload": {"name_re": RUPLOAD_NAME_RE.pattern, "domain": RUPLOAD_DOMAIN, "generic_host": RUPLOAD_GENERIC_HOST, "path_re": RUPLOAD_PATH_RE.pattern,
                     "methods": list(RUPLOAD_METHODS), "query_keys": list(RUPLOAD_QUERY_KEYS),
                     "headers": list(RUPLOAD_HEADERS), "type": RUPLOAD_TYPE, "field": RUPLOAD_BODY_FIELD,
-                    "segment_max": RUPLOAD_SEGMENT_MAX, "dtsg_re": RUPLOAD_DTSG_RE.pattern},
+                    "segment_max": RUPLOAD_SEGMENT_MAX, "blob_safe": RUPLOAD_BLOB_SAFE, "dtsg_re": RUPLOAD_DTSG_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),

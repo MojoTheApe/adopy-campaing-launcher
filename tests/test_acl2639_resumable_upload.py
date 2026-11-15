@@ -33,7 +33,16 @@ HANDLE = "1:YWJj:application/octet-stream:{vid}:e:1800000000:sig_-1"
 def resumable(worker_small, monkeypatch):
     """The worker path with small numbers and the resumable protocol on, 1 MB segments."""
     monkeypatch.delenv("ACL_VIDEO_RESUMABLE_UPLOAD", raising=False)
-    monkeypatch.setattr(wp, "RUPLOAD_SEGMENT_MAX", MB)
+
+
+def _read_all(chunk, n):
+    """The first n bytes of a served chunk, piece by piece (as the page's worker pulls them)."""
+    out = bytearray()
+    for o, k in chunk.pieces(500_000):
+        if o >= n:
+            break
+        out += chunk.read(o, min(k, n - o))
+    return bytes(out)
 
 
 class ResumableMeta(ServedMeta):
@@ -177,13 +186,15 @@ class ResumableMeta(ServedMeta):
         fault = self.faults.pop(0) if self.faults else ""
         if fault == "nothing":
             return {"error": "network"}
+        if fault == "stream_refused":
+            return {"error": "write_refused", "why": "stream_unsupported"}
         if fault == "retired":
             return {"error": "retired"}
         if fault == "page_refused":
             return {"error": "write_refused", "why": "upload_service"}
         if fault == "kept400":                       # a short POST: all bytes kept, yet answered 4xx
             sess["received"] += len(chunk)
-            sess["sha"].update(chunk.read(0, len(chunk)))
+            sess["sha"].update(_read_all(chunk, len(chunk)))
             return {"status": 400, "body": {}}
         if fault == "discard200":                    # a short POST: answered 200, nothing kept
             return {"status": 200, "body": {}}
@@ -192,10 +203,12 @@ class ResumableMeta(ServedMeta):
         if fault == "http500":
             return {"status": 500, "body": {}}
         n = len(chunk) // 2 if fault == "drop" else len(chunk)
-        data = chunk.read(0, n)
+        data = _read_all(chunk, n)
         sess["received"] += n
         sess["sha"].update(data)
         if fault in ("drop", "lost"):
+            if not self.keep_partial and sess["received"] < sess["size"]:
+                sess["received"] = 0                     # the service keeps nothing of a broken POST
             return {"error": "network"}
         if not self.keep_partial and sess["received"] < sess["size"]:
             sess["received"] = 0
@@ -241,7 +254,7 @@ def test_the_original_goes_up_in_three_graph_calls_and_meta_gets_the_same_bytes(
     assert not any(k.startswith("composer") for k in start)
     # the service: one partition path, the bytes in segments with the offset the service holds
     assert {p for _, p, _ in meta.rup} == {f"/fb_video/{sess['wf']}-0-{size}"}
-    assert _offsets(meta) == [0, MB, 2 * MB, 3 * MB] and meta.served_sizes == [MB, MB, MB, 500_000]
+    assert _offsets(meta) == [0] and meta.served_sizes == [size]                  # the whole file in ONE POST
     assert all(h == {"offset": str(o), "X-Entity-Length": str(size), "X-Entity-Type": "application/octet-stream"}
                for (_, _, h), o in zip(_posts(meta), _offsets(meta)))
     assert not [1 for p, _ in meta.phases if p in ("start", "transfer", "finish")]     # no chunked advideos session
@@ -252,46 +265,47 @@ def test_the_original_goes_up_in_three_graph_calls_and_meta_gets_the_same_bytes(
 
 def test_a_dropped_post_resumes_from_the_offset_the_service_reports(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "drop"])                     # the 2nd POST breaks after half a segment
+    meta = ResumableMeta(faults=["drop"])                         # the POST breaks after half of the body
     out, _ = _run(meta, d)
     assert out.error == "", out.error
     sess = next(iter(meta.va.values()))
     assert sess["done"] and sess["sha"].hexdigest() == _sha(f)    # every byte once, in order
-    assert _offsets(meta)[:3] == [0, MB, MB + MB // 2]            # resumed at the service's offset, not from zero
+    half = f.stat().st_size // 2
+    assert _offsets(meta) == [0, half] and meta.served_sizes == [f.stat().st_size, f.stat().st_size - half]
     assert _phases(meta).count("start") == 1 and len(meta.va) == 1  # never a second video
     assert _phases(meta) == ["start", "transfer", "finish"]
     assert any("resuming the upload" in s for s in out.steps)
-    assert [m for m, _, _ in meta.rup].count("GET") == 2                # the partial-piece check + the resume read
+    assert [m for m, _, _ in meta.rup].count("GET") == 1                # the resume read
 
 
 def test_a_lost_answer_is_settled_by_the_offset_read_without_resending(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["lost"])
+    meta = ResumableMeta(faults=["lost"], get_returns_handle=True)
     out, _ = _run(meta, d)
     assert out.error == "", out.error
-    assert _offsets(meta) == [0, MB, 2 * MB, 3 * MB]             # the first segment was not sent twice
+    assert _offsets(meta) == [0]                                  # everything arrived: not sent twice
     assert next(iter(meta.va.values()))["sha"].hexdigest() == _sha(f)
 
 
 @pytest.mark.parametrize("fault", ["refused", "http500"])
 def test_a_4xx_or_5xx_is_a_refusal_not_progress(resumable, tmp_path, fault):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", fault])
+    meta = ResumableMeta(faults=[fault])
     out, _ = _run(meta, d)
     assert out.error == "", out.error
     sess = next(iter(meta.va.values()))
     assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
-    assert _offsets(meta)[:3] == [0, MB, MB]                      # the refused segment is sent again
+    assert _offsets(meta) == [0, 0]                               # the refused POST is sent again from the offset
     assert any("the upload service refused (HTTP" in s for s in out.steps)
 
 
 def test_resumes_are_bounded(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10)
+    meta = ResumableMeta(faults=["drop"] + ["refused"] * 10)
     out, _ = _run(meta, d, max_calls=400)
     assert out.stop_kind == "video_error" and "resumes" in out.error
     assert "finish" not in _phases(meta) and "transfer" not in _phases(meta)
-    assert len(_posts(meta)) == 2 + cr.RESUMABLE_MAX_RESUMES + 1        # progress is free, the 6th refusal without progress stops
+    assert len(_posts(meta)) == 1 + cr.RESUMABLE_MAX_RESUMES + 1        # progress is free, the 6th refusal without progress stops
 
 
 def test_a_refused_start_falls_back_to_chunks_with_the_exact_reason(resumable, tmp_path):
@@ -358,40 +372,40 @@ def test_an_unreadable_offset_before_any_byte_falls_back(resumable, tmp_path):
     assert any("did not tell its offset" in w for w in out.warnings)
 
 
-def test_a_service_that_keeps_no_partial_piece_falls_back_after_the_first_segment(resumable, tmp_path):
+def test_a_service_that_keeps_nothing_of_a_broken_post_falls_back(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(keep_partial=False)
+    meta = ResumableMeta(keep_partial=False, faults=["drop", "drop"])
     out, _ = _run(meta, d, max_calls=400)
     assert out.error == "", out.error
     assert "transfer" not in _phases(meta) and "finish" not in _phases(meta)       # nothing finished
-    assert any("did not keep a partial piece" in w for w in out.warnings)
-    assert len(_posts(meta)) == 1                                                    # not a byte more was sent
+    assert any("no byte reached Meta" in w for w in out.warnings)
+    assert len(_posts(meta)) == 2                                                    # not a byte more was sent
     assert next(iter(meta.sessions.values()))["done"]
 
 
-def test_a_short_post_answered_4xx_but_kept_is_continued_normally(resumable, tmp_path):
+def test_a_post_answered_4xx_that_kept_every_byte_goes_straight_to_the_transfer(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["kept400"])
+    meta = ResumableMeta(faults=["kept400"], get_returns_handle=True)
     out, _ = _run(meta, d)
     assert out.error == "", out.error
     sess = next(iter(meta.va.values()))
     assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
-    assert _offsets(meta) == [0, MB, 2 * MB, 3 * MB] and not any("resumable" in w for w in out.warnings)
-    assert any("answered HTTP 400 but kept the bytes" in s for s in out.steps)
-    assert not any("resuming the upload" in s for s in out.steps)                    # not a resume
+    assert _offsets(meta) == [0] and _phases(meta) == ["start", "transfer", "finish"]      # not sent twice
+    assert any("resuming the upload" in s for s in out.steps)
 
 
-def test_a_short_post_answered_2xx_but_discarded_falls_back(resumable, tmp_path):
+def test_a_post_answered_2xx_that_discarded_the_bytes_is_sent_again(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
     meta = ResumableMeta(faults=["discard200"])
     out, _ = _run(meta, d)
-    assert out.error == "" and "transfer" not in _phases(meta)
-    assert any("did not keep a partial piece" in w for w in out.warnings)
+    assert out.error == "", out.error
+    assert _offsets(meta) == [0, 0] and next(iter(meta.va.values()))["sha"].hexdigest() == _sha(f)
+    assert any("the service holds only part of the bytes" in s for s in out.steps)
 
 
 def test_resumes_that_make_progress_are_free(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "drop"] * 1 + ["drop"] * 7)                     # 8 broken answers, each with progress
+    meta = ResumableMeta(faults=["drop"] * 8)                                        # 8 broken answers, each with progress
     out, _ = _run(meta, d, max_calls=400)
     assert out.error == "", out.error
     sess = next(iter(meta.va.values()))
@@ -400,9 +414,9 @@ def test_resumes_that_make_progress_are_free(resumable, tmp_path):
 
 def test_two_4xx_answers_in_a_row_read_the_service_address_again_once(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "refused", "refused", "refused", "refused", "refused", "refused"])
+    meta = ResumableMeta(faults=["refused"] * 7)
     out, _ = _run(meta, d, max_calls=400)
-    assert out.stop_kind == "video_error"
+    assert out.error == "" and any("no byte reached Meta" in w for w in out.warnings)   # nothing ever kept: fallback
     assert meta.refreshes == 1
 
 
@@ -421,7 +435,7 @@ def test_a_refusal_before_sending_while_nothing_moved_falls_back(resumable, tmp_
 
 def test_a_refusal_before_sending_after_bytes_moved_is_a_stop_with_the_reason(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "page_refused"])
+    meta = ResumableMeta(faults=["drop", "page_refused"])                           # bytes moved, then the page refuses
     out, _ = _run(meta, d)
     assert out.stop_kind == "video_error" and "the page refused an upload service request" in out.error
     assert "transfer" not in _phases(meta)
@@ -431,19 +445,19 @@ def test_a_refusal_before_sending_after_bytes_moved_is_a_stop_with_the_reason(re
 
 def test_a_lost_answer_to_the_last_post_takes_the_handle_from_the_offset_read(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "", "", "lost"], get_returns_handle=True)
+    meta = ResumableMeta(faults=["lost"], get_returns_handle=True)
     out, _ = _run(meta, d)
     assert out.error == "", out.error
-    assert _phases(meta) == ["start", "transfer", "finish"] and len(_posts(meta)) == 4       # the last POST not resent
+    assert _phases(meta) == ["start", "transfer", "finish"] and len(_posts(meta)) == 1       # the POST is not resent
     assert next(iter(meta.va.values()))["sha"].hexdigest() == _sha(f)
 
 
 def test_a_lost_answer_to_the_last_post_without_a_handle_anywhere_falls_back(resumable, tmp_path):
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "", "", "lost"])
+    meta = ResumableMeta(faults=["lost"])
     out, _ = _run(meta, d)
     assert out.error == "", out.error
-    assert "transfer" not in _phases(meta) and len(_posts(meta)) == 4
+    assert "transfer" not in _phases(meta) and len(_posts(meta)) == 1
     assert any("every byte but no file handle" in w for w in out.warnings)
 
 
@@ -465,7 +479,7 @@ def test_an_answer_without_a_handle_is_refused_before_the_finish(resumable, tmp_
     assert out.error == "", out.error                                          # the chunked path took over
     assert "transfer" not in _phases(meta) and "finish" not in _phases(meta)
     assert any("took the bytes but gave no file handle" in w for w in out.warnings)
-    assert [m for m, _, _ in meta.rup].count("GET") == 2                       # the partial-piece check + one offset read
+    assert [m for m, _, _ in meta.rup].count("GET") == 1                       # one offset read
     assert any("without a file handle (ok:bool)" in s for s in out.steps)      # key names and value types only
     assert next(iter(meta.sessions.values()))["done"]
 
@@ -541,7 +555,7 @@ def test_the_graph_calls_are_constant_and_the_service_is_not_counted(resumable, 
     meta = ResumableMeta()
     out, client = _run(meta, d)
     assert out.error == ""
-    assert len(meta.va_posts) == 3 and len(_posts(meta)) == 4                    # 3 Graph writes, 4 segments
+    assert len(meta.va_posts) == 3 and len(_posts(meta)) == 1                    # 3 Graph writes, ONE service POST
     assert cr.resumable_calls() == 4
     assert cr.resumable_calls() < cr.upload_calls(2420 * MB, True, chunked=True)      # inside the run budget
 
@@ -601,7 +615,7 @@ def _stopped_after_start(tmp_path):
     from tests.test_acl1856_operation_journal import _go
     oj, now, journal = _journal(tmp_path)
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10)       # stops with 1.5 MB at the service
+    meta = ResumableMeta(faults=["drop"] + ["refused"] * 10)       # stops with 1.5 MB at the service
     first, _ = _go(meta, d, journal, request_key="r1#t")
     assert first.stop_kind == "video_error" and "finish" not in _phases(meta)
     (old, _sess), = meta.va.items()
@@ -620,7 +634,7 @@ def test_a_run_stopped_after_the_start_is_continued_not_repeated(resumable, tmp_
     again, _ = _go(meta, d, journal, request_key="r1#t")
     assert again.error == "", again.error
     assert _phases(meta).count("start") == 1 and len(meta.va) == 1           # the same video, not a second one
-    assert _offsets(meta)[-2] == held                                     # continued at the service's offset
+    assert _offsets(meta)[-1] == held and meta.served_sizes[-1] == f.stat().st_size - held                                     # continued at the service's offset
     assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
     assert any("continuing the upload of an earlier run" in s for s in again.steps)
 
@@ -673,7 +687,7 @@ def test_a_transferred_but_unfinished_video_is_only_finished_with_its_title(resu
     again, _ = _go(meta, d, journal, request_key="r1#t")
     assert again.error == "", again.error
     assert _phases(meta) == ["start", "transfer", "finish", "finish", "finish"]       # ONE finish, no new transfer
-    assert meta.objects[vid]["title"].startswith("acl-") and len(_posts(meta)) == 4
+    assert meta.objects[vid]["title"].startswith("acl-") and len(_posts(meta)) == 1
     assert any("the video uploaded by an earlier run is used" in s for s in again.steps)
 
 
@@ -1582,7 +1596,7 @@ def test_the_journal_keeps_the_host_kind_and_a_continuation_reuses_it(resumable,
     from tests.test_acl1856_operation_journal import _go
     oj, now, journal = _journal(tmp_path)
     d, f = _big_draft(tmp_path)
-    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10, host_kind_reply="generic")
+    meta = ResumableMeta(faults=["drop"] + ["refused"] * 10, host_kind_reply="generic")
     first, _ = _go(meta, d, journal, request_key="r1#t")
     assert first.stop_kind == "video_error"
     st, = [s for s in _stages(tmp_path) if s.get("pending_id")]
@@ -1595,3 +1609,52 @@ def test_the_journal_keeps_the_host_kind_and_a_continuation_reuses_it(resumable,
     again, _ = _go(meta, d, journal, request_key="r1#t")
     assert again.error == "", again.error
     assert meta.host_kinds_asked and set(meta.host_kinds_asked) == {"generic"}       # the continuation asks the same kind
+
+
+# ───────────────────────── one POST with the whole remainder, streamed ─────────────────────────
+
+def test_the_post_body_is_streamed_with_a_half_duplex_request():
+    out = _node({"name": "rupload", "piece": 400_000})
+    post = out["log"]["rupload"][1]
+    assert post["streamed"] is True and post["duplex"] == "half" and post["form"] is False
+    from tests.test_acl2629_worker_upload import _SOURCE
+    assert post["bytes"] == len(_SOURCE) == int(post["length"]) and post["md5"] == hashlib.md5(_SOURCE).hexdigest()
+    assert post["headers"] == ["X-Entity-Length", "X-Entity-Type", "offset"]             # redirect stays 'error'
+    assert post["redirect"] == "error"
+
+
+def test_without_a_streaming_body_a_small_file_goes_as_one_blob():
+    out = _node({"name": "rupload", "no_stream": True, "piece": 400_000})
+    post = out["log"]["rupload"][1]
+    assert out["ok"]["ok"] is True and post["streamed"] is False and post["form"] is False
+    from tests.test_acl2629_worker_upload import _SOURCE
+    assert post["md5"] == hashlib.md5(_SOURCE).hexdigest()
+
+
+def test_without_a_streaming_body_a_large_file_is_refused_before_any_byte():
+    from tests.test_acl2629_worker_upload import POLICY
+    policy = json.loads(json.dumps(POLICY))
+    policy["rupload"]["blob_safe"] = 1_000_000                 # 2.5 MB test file > the (test) in-memory limit
+    out = _node({"name": "rupload", "no_stream": True, "piece": 400_000}, policy)
+    assert out["ok"] == {"error": "write_refused", "why": "stream_unsupported"}
+    assert [x["method"] for x in out["log"]["rupload"]] == ["GET"]                        # no POST at all
+
+
+def test_a_page_that_cannot_stream_a_big_body_falls_back_to_chunks_before_any_byte(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(refuse_calls=0, faults=["stream_refused"])
+    out, client = _run(meta, d)
+    assert out.error == "", out.error
+    assert any("the page refused the upload service request" in w for w in out.warnings)
+    assert "transfer" not in _phases(meta) and client.stopped is None
+    assert next(iter(meta.sessions.values()))["done"]
+
+
+def test_the_body_cap_is_the_file_limit_and_the_deadline_scales_with_the_size():
+    from src.fb_api import token_capture as tc
+    assert wp.RUPLOAD_SEGMENT_MAX == wp.UPLOAD_FILE_MAX == 4 * 1024 ** 3
+    wp.check_rupload("POST", f"/fb_video/{WF}-0-{wp.UPLOAD_FILE_MAX}",
+                     headers=_hdr(0, wp.UPLOAD_FILE_MAX), files={wp.RUPLOAD_BODY_FIELD: _chunk(0, wp.UPLOAD_FILE_MAX)})
+    assert tc.InPageGraph.rupload_deadline_s(10 * MB) == 60 + 20 == 80
+    assert tc.InPageGraph.rupload_deadline_s(2420 * MB) == 60 + 4840
+    assert tc.InPageGraph.rupload_deadline_s(10 ** 12) == 7200                              # capped
