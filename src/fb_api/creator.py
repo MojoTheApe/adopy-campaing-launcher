@@ -5103,8 +5103,9 @@ class CampaignCreator:
             size, squeezed = self._video_plan.get(k, (sent_len(k, v), False))
             return video_upload_calls(size, squeezed, worker_plan)
 
-        chunk_calls = sum(video_calls(k, v) for k, v in files.items() if isinstance(v, LargeFile))
-        self._large_pending = [(sent_len(k, v), video_calls(k, v)) for k, v in files.items() if isinstance(v, LargeFile)]
+        large = [(sent_len(k, v), video_calls(k, v)) for k, v in files.items() if isinstance(v, LargeFile)]
+        chunk_calls = sum(c for _s, c in large)        # одна оценка на файл: и для плана, и для резерва
+        self._large_pending = large
         self._upload_writes = 0
         # ACL-1768: куски большого видео и записи ВСЕХ наборов берутся из одного бюджета (его размер
         # считается по плану, `publish_api.create_call_budget`; чтения таргетинга в него заложены).

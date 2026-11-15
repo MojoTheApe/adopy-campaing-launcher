@@ -299,7 +299,7 @@ def test_a_failed_compression_logs_a_short_scrubbed_reason(tmp_path, monkeypatch
     def run(args, timeout, tick=None):
         if "-i" in args and "-pass" not in args:
             return 0, "Duration: 00:10:00.00"
-        return 1, f"error {src}: Invalid data found when processing input\nC:\\Users\\bob\\x.mp4: Conversion failed!"
+        return 1, f"error {src}: Invalid data found when processing input\n/home/bob/x.mp4: Conversion failed!"
 
     caplog.set_level(logging.WARNING)
     prep = cc.ensure_uploadable(str(src), limit_mb=45.0, target_mb=40.0, run=run)
