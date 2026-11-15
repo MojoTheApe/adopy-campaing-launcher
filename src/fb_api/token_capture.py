@@ -1105,12 +1105,14 @@ _HELPER_JS = r"""
       const ps = m.src.pieces;
       let i = 0;
       let got = 0;
+      const sb = m.sb || {};
       return new ReadableStream({
         async pull(ctrl) {
           if (i >= ps.length) { ctrl.close(); return; }
           const p = ps[i++];
           const r = await onePiece(m, ac, st, p);
           if (r.error) { ctrl.error(new Error(String(r.why || r.error))); return; }
+          sb.pulled = true;
           ctrl.enqueue(new Uint8Array(r.buf));
           got += p.n;
           emit({ id: m.id, progress: got });
@@ -1129,13 +1131,18 @@ _HELPER_JS = r"""
         // ACL-2639: the rupload POST sends the whole remainder as ONE request. A streaming body keeps memory flat; where
         // the context cannot stream, a Blob is used only up to BLOB_SAFE, and a larger body is refused before any byte.
         let streaming = false;
+        const sb = { pulled: false };
+        m.sb = sb;
         if (m.url && m.raw && m.stream) {
           const total = m.src.pieces.reduce((a, p) => a + p.n, 0);
           if (streamSupported()) streaming = true;
           else if (total > Math.min(BLOB_SAFE, Number(m.blobMax) || BLOB_SAFE)) return { error: 'stream_unsupported' };
         }
         const made = streaming ? { parts: [], bytes: 0 } : await pieces(m, ac, st);
-        if (!streaming) st.done = true;     // from here on `stopPieces` is ignored: it never touches the POST
+        // Non-streaming: from here on `stopPieces` is ignored (all pieces are in), it never touches the POST.
+        // Streaming: pieces are pulled DURING the POST, so a service worker taking control (`stopPieces`) errors the
+        // stream and the request fails; the caller then asks the service for its offset and resumes.
+        if (!streaming) st.done = true;
         if (made.error) return made;
         if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
         if (st.stopped) return { error: 'no_file', why: TAKEN };                  // nothing posted yet
@@ -1143,6 +1150,7 @@ _HELPER_JS = r"""
         let body;
         if (m.raw) {
           // ACL-2639: the rupload POST - the bytes are the body (a stream, or a Blob of the checked pieces), headers as documented.
+          if (streaming) emit({ id: m.id, progress: 0, streaming: true });
           body = streaming ? streamBody(m, ac, st) : new Blob(made.parts, { type: 'application/octet-stream' });
         } else {
           body = new FormData();
@@ -1158,7 +1166,10 @@ _HELPER_JS = r"""
                                       streaming ? { duplex: 'half' } : {},
                                       m.ref ? { referrer: m.ref } : {}));
           text = await resp.text();
-        } catch (e) { return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true }; }
+        } catch (e) {
+          // a streamed POST that fails before ONE piece was pulled was rejected at once (typically: not HTTP/2)
+          return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true, ...(streaming && !sb.pulled ? { stream_rejected: true } : {}) };
+        }
         const headers = {};
         for (const n of HEADERS) { try { const v = resp.headers.get(n); if (v) headers[n] = v; } catch (e) {} }
         return { status: resp.status, text: text, headers: headers };
@@ -1229,7 +1240,7 @@ _HELPER_JS = r"""
         if (d.ready) { worker = w; finish(''); return; }
         const f = waiting[d.id];
         if (!f) return;
-        if (d.done) { delete waiting[d.id]; f(d); } else if (typeof f.onprogress === 'function') f.onprogress(d.progress);
+        if (d.done) { delete waiting[d.id]; f(d); } else if (typeof f.onprogress === 'function') f.onprogress(d.progress, d);
       };
       w.onerror = (ev) => {
         const msg = String((ev && ev.message) || '').slice(0, 100);
@@ -1246,15 +1257,21 @@ _HELPER_JS = r"""
   }
   // Inline mode: the same runner in this world. Bytes still never go through base64 or the main thread's decoder:
   // each piece is a fetch() answered by the controller (CDP Fetch), kept as a Blob; only one piece at a time is hashed.
+  const inlineJobs = Object.create(null);
   async function runInline(m, job) {
     if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
     if (job && job.aborted) return { error: 'aborted' };
     if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
-    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {}, swControlled);
+    if (!inlineRunner) {
+      inlineRunner = makeRunner(fetch, crypto, (d) => {
+        const j = inlineJobs[d.id];
+        if (j) { if (typeof d.progress === 'number') j.progress = d.progress; if (d.streaming) j.streaming = true; }
+      }, swControlled);
+    }
     const id = ++waitSeq;
-    if (job) job.wid = id;
+    if (job) { job.wid = id; inlineJobs[id] = job; }
     const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
-    return inlineRunner.run(Object.assign({ id: id, base: base }, m));
+    try { return await inlineRunner.run(Object.assign({ id: id, base: base }, m)); } finally { delete inlineJobs[id]; }
   }
   async function runInWorker(m, job) {
     if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
@@ -1273,6 +1290,7 @@ _HELPER_JS = r"""
     try { if (sw && typeof sw.addEventListener === 'function') sw.addEventListener('controllerchange', onTake); } catch (e) {}
     const r = await new Promise((resolve) => {
       const f = resolve;
+      if (job) f.onprogress = (n, d) => { if (typeof n === 'number') job.progress = n; if (d && d.streaming) job.streaming = true; };
       waiting[id] = f;
       if (job) job.wid = id;
       try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
@@ -1341,7 +1359,7 @@ _HELPER_JS = r"""
   function poll(id) {
     const j = jobs[String(id)];
     if (!j) return { state: 'error', result: { error: 'no_job' } };
-    if (j.state === 'running') return { state: 'running' };
+    if (j.state === 'running') return { state: 'running', progress: j.progress || 0, stream: j.streaming === true };
     return { state: j.state, result: j.result };
   }
   function abort(id) {
@@ -1691,7 +1709,8 @@ _HELPER_JS = r"""
     if (got.error) {
       if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120) };
       if (got.error === 'stream_unsupported') return refused('stream_unsupported');
-      return { error: job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network'), state: state() };
+      return { error: job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network'), state: state(),
+               ...(got.stream_rejected ? { stream_rejected: true } : {}) };
     }
     return ruploadReply({ status: got.status }, got.text, u);
   }
@@ -2717,6 +2736,21 @@ class InPageGraph:
         controlled = isinstance(got, dict) and got.get("controlled") is True
         return False, f"{why[:400]} | {trace}"[:700], controlled
 
+    @staticmethod
+    def _hash_tick(cancelled: Callable[[], bool] | None) -> Callable[[], None]:
+        """ACL-2639: called after every piece the controller hashes before a big upload: a heartbeat for the run's
+        silence watchdog, and the Stop button works while a multi-GB file is read."""
+        def tick() -> None:
+            try:
+                from src.fb_ads_rpa import run_telemetry
+
+                run_telemetry.beat()
+            except Exception:  # noqa: BLE001
+                pass
+            if cancelled is not None and cancelled():
+                raise ValueError("cancelled")
+        return tick
+
     def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled, deadline_s: float | None = None) -> dict:
         """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker.
 
@@ -2740,7 +2774,7 @@ class InPageGraph:
                 ctx = self._ensure()
                 server = self._server()
                 server.arm(attach_workers=not self.light)
-                token, pieces = server.register(chunk, piece=self.SERVE_PIECE)
+                token, pieces = server.register(chunk, piece=self.SERVE_PIECE, tick=self._hash_tick(cancelled))
             except GraphStop:
                 raise
             except (PageError, CdpError, OSError, ValueError) as exc:
@@ -2961,6 +2995,8 @@ class InPageGraph:
     UPLOAD_CDP_TIMEOUT_S = 15.0
     #: Сколько таймаутов ОПРОСА подряд терпим (повторно файл не шлём никогда).
     MAX_POLL_TIMEOUTS = 3
+    #: ACL-2639: a streamed upload whose byte count does not grow for this long is aborted (then resumed).
+    UPLOAD_STALL_S = 180.0
 
     def _wait(self, seconds: float, serving: bool) -> None:
         """Pause between two polls. While a worker is being served the events of the tab (its piece requests)
@@ -2990,6 +3026,7 @@ class InPageGraph:
             return {"error": "call_unknown"}
         poll_timeouts = 0
         began = self._clock()
+        last_count, last_change = -1, began
         while True:
             if deadline_s and self._clock() - began > deadline_s:
                 # Overall deadline: the request may or may not have been sent -> unknown, reconciled by readback.
@@ -3005,14 +3042,14 @@ class InPageGraph:
                     pass
                 # Результат неизвестен: дальше обычная сверка чтением, повторной загрузки нет.
                 return {"error": "call_unknown", "why": "cancelled"}
-            def unknown() -> dict:
+            def unknown(reason: str = "") -> dict:
                 # ACL-2639 (N3): the request may still be running in the page; abort it (best effort) so the caller's
                 # resume never runs a second POST of the same upload session next to it.
                 try:
                     run("abort", json.dumps(job))
                 except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
                     pass
-                return {"error": "call_unknown"}
+                return {"error": "call_unknown", **({"reason": reason} if reason else {})}
 
             try:
                 got = run("poll", json.dumps(job))
@@ -3030,6 +3067,14 @@ class InPageGraph:
                 return unknown()
             state = got.get("state")
             if state == "running":
+                # ACL-2639: a streamed POST whose byte count has not grown for STALL_S is stuck: abort it (the caller
+                # asks the service for its offset and resumes).
+                count = got.get("progress")
+                if got.get("stream") is True and isinstance(count, int) and not isinstance(count, bool):
+                    if count > last_count:
+                        last_count, last_change = count, self._clock()
+                    elif self._clock() - last_change > self.UPLOAD_STALL_S:
+                        return unknown("stalled")
                 if progress is not None:
                     try:
                         progress(max(0.0, self._clock() - began))

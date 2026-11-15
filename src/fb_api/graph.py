@@ -797,7 +797,8 @@ class GraphClient:
             if err == "no_token":
                 self._check_page()
                 raise self._stop(LoggedOut("no session token in the page; the request was not sent"))
-            raise RuploadLost(f"no answer from the upload service ({err})", reason=err)
+            raise RuploadLost(f"no answer from the upload service ({err})",
+                              reason="stream_rejected" if reply.get("stream_rejected") is True else err)
         status = reply.get("status")
         body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
         if not isinstance(status, int):

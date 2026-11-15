@@ -186,6 +186,8 @@ class ResumableMeta(ServedMeta):
         fault = self.faults.pop(0) if self.faults else ""
         if fault == "nothing":
             return {"error": "network"}
+        if fault == "stream_rejected_net":
+            return {"error": "network", "stream_rejected": True}
         if fault == "stream_refused":
             return {"error": "write_refused", "why": "stream_unsupported"}
         if fault == "retired":
@@ -1658,3 +1660,97 @@ def test_the_body_cap_is_the_file_limit_and_the_deadline_scales_with_the_size():
     assert tc.InPageGraph.rupload_deadline_s(10 * MB) == 60 + 20 == 80
     assert tc.InPageGraph.rupload_deadline_s(2420 * MB) == 60 + 4840
     assert tc.InPageGraph.rupload_deadline_s(10 ** 12) == 7200                              # capped
+
+
+# ───────────────────────── watchdog, rejected stream, hashing ticks ─────────────────────────
+
+def test_the_job_reports_the_streamed_byte_progress():
+    out = _node({"name": "progress", "piece": 400_000})
+    from tests.test_acl2629_worker_upload import _SOURCE
+    counts = [c for c, _ in out["seen"]]
+    assert out["final"]["ok"] is True and counts == sorted(counts)                      # never goes backwards
+    assert any(streams for _, streams in out["seen"]) and max(counts) <= len(_SOURCE)
+    assert any(0 < c < len(_SOURCE) for c in counts)                                    # grows while the POST runs
+
+
+def test_a_stream_rejected_at_once_is_marked():
+    out = _node({"name": "progress", "reject_stream": True, "piece": 400_000})
+    assert out["final"] == {"error": "network", "stream_rejected": True}
+
+
+def test_the_creator_says_a_streamed_upload_was_rejected_immediately(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["stream_rejected_net"])
+    out, _ = _run(meta, d)
+    assert out.error == "", out.error
+    assert any("rejected immediately (probably not HTTP/2)" in s for s in out.steps)
+    assert next(iter(meta.va.values()))["sha"].hexdigest() == _sha(f)
+
+
+class _StallTab(ServingTab):
+    def __init__(self, replies, **kw):
+        super().__init__(**kw)
+        self.replies = list(replies)
+
+    def evaluate_in(self, ctx, expr, timeout=60.0):
+        if ".poll(" in expr:
+            self.exprs.append(expr)
+            return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        return super().evaluate_in(ctx, expr, timeout)
+
+
+def _clocked(tab, step):
+    t = _service_graph(tab)
+    now = [1000.0]
+
+    def clock():
+        now[0] += step
+        return now[0]
+
+    t._clock = clock
+    return t
+
+
+def test_a_streamed_upload_whose_byte_count_does_not_grow_is_aborted_and_resumed():
+    tab = _StallTab([{"state": "running", "progress": 5_000_000, "stream": True}])
+    t = _clocked(tab, 60.0)
+    got = t._write_file_job(7, {"method": "POST"}, None, None)
+    assert got == {"error": "call_unknown", "reason": "stalled"}
+    assert any(".abort(" in e for e in tab.exprs)
+
+
+def test_a_streamed_upload_that_keeps_growing_is_never_stalled():
+    replies = [{"state": "running", "progress": 1000 * i, "stream": True} for i in range(1, 30)]
+    replies.append({"state": "done", "result": {"status": 200, "body": {"h": "x"}}})
+    tab = _StallTab(replies)
+    t = _clocked(tab, 60.0)
+    assert t._write_file_job(7, {"method": "POST"}, None, None)["status"] == 200
+    assert not any(".abort(" in e for e in tab.exprs)
+
+
+def test_a_non_streamed_post_is_never_judged_by_its_byte_count():
+    replies = [{"state": "running", "progress": 5, "stream": False}] * 20 + [{"state": "done", "result": {"status": 200, "body": {}}}]
+    tab = _StallTab(replies)
+    t = _clocked(tab, 60.0)
+    assert t._write_file_job(7, {"method": "POST"}, None, None)["status"] == 200
+
+
+def test_hashing_a_big_chunk_beats_and_can_be_cancelled():
+    from src.fb_api import upload_server as us
+    server = us.UploadServer(None)
+    ticks = []
+    token, pieces = server.register(_chunk(0, 3 * MB), piece=MB, tick=lambda: ticks.append(1))
+    assert len(pieces) == 3 and len(ticks) == 3
+
+    def stop():
+        raise ValueError("cancelled")
+
+    server2 = us.UploadServer(None)
+    with pytest.raises(ValueError):
+        server2.register(_chunk(0, 3 * MB), piece=MB, tick=stop)
+    assert server2._windows == {}                                    # nothing registered
+    from src.fb_api import token_capture as tc
+    tick = tc.InPageGraph._hash_tick(lambda: True)
+    with pytest.raises(ValueError):
+        tick()
+    tc.InPageGraph._hash_tick(lambda: False)()

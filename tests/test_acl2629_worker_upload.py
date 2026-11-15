@@ -595,9 +595,10 @@ const fakeFetch = async (url, init) => {
       if (SC.echo) return reply(400, { error: { message: 'bad fb_dtsg_ag=' + encodeURIComponent(DTSG) + '&x=1 raw ' + DTSG } });
       return reply(200, { dc: 'fra3', offset: String(rup.received) });
     }
+    if (init.method === 'POST' && SC.reject_stream) throw new TypeError('streaming upload needs HTTP/2');
     let buf;
     const streamed = !!(init.body && typeof init.body.getReader === 'function');
-    if (streamed) { const parts = []; for await (const c of init.body) parts.push(Buffer.from(c)); buf = Buffer.concat(parts); }
+    if (streamed) { const parts = []; for await (const c of init.body) { parts.push(Buffer.from(c)); await new Promise((r) => setTimeout(r, 3)); } buf = Buffer.concat(parts); }
     else buf = Buffer.from(await init.body.arrayBuffer());
     const h = init.headers || {};
     log.rupload.push(Object.assign(common, { streamed: streamed, duplex: init.duplex, headers: Object.keys(h).sort(), offset: h['offset'], length: h['X-Entity-Length'],
@@ -840,6 +841,19 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
       out.video_ads = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
                                            params: { upload_phase: 'start' }, files: {} }));
     }
+  } else if (SC.name === 'progress') {
+    // ACL-2639: the job reports the runner's byte progress (and that it streams); a rejected stream is marked.
+    const RP = '/fb_video/' + 'a'.repeat(32) + '-0-' + SOURCE.length;
+    const spec = announce(0, SOURCE.length, SC.piece || 400000, (s) => {
+      s.kind = 'rupload'; s.path = RP; s.files = { rupload_body: 'served' }; delete s.params;
+      s.headers = { 'offset': '0', 'X-Entity-Length': String(SOURCE.length), 'X-Entity-Type': 'application/octet-stream' };
+    });
+    const st0 = h.startCall(spec);
+    const seen = [];
+    let p;
+    while ((p = h.poll(st0.job)).state === 'running') { seen.push([p.progress, p.stream]); await sleep(1); }
+    out.seen = seen;
+    out.final = p.result.error ? { error: p.result.error, stream_rejected: p.result.stream_rejected === true } : { ok: true, status: p.result.status };
   } else if (SC.name === 'pin') {
     // ACL-2639: the host of one upload is pinned by its path on the first request.
     const pth = (c) => '/fb_video/' + c.repeat(32) + '-0-2500000';
