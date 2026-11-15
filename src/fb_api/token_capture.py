@@ -78,6 +78,9 @@ _HELPER_JS = r"""
   // ACL-1761: политика записи (null — только чтение). Вшита при установке,
   // страница её не видит и не меняет.
   const WRITE = __WRITE__;
+  // ACL-2639: the patterns that validate the upload page's values. Separate from the write policy ON PURPOSE: the
+  // read-only helper of a capture tab (light mode) has no write policy, yet it must find and pass the values on.
+  const UPLOAD = __UPLOAD__;
   // ACL-2105: separate no-creation capability, pinned to the navigated account.
   const VALIDATE_ACT = __VALIDATE_ACT__;
   const g = (typeof globalThis !== 'undefined') ? globalThis : self;
@@ -158,15 +161,15 @@ _HELPER_JS = r"""
   // ACL-2639: the Ads Manager upload values from the page's inline scripts (only on the full Ads Manager page; a light
   // or clean tab gets them by the hand-over). Validated here with the policy's own patterns.
   function rsvcOk(name, domain) {
-    const U = WRITE && WRITE.rupload;
+    const U = UPLOAD;
     return !!U && typeof name === 'string' && new RegExp(U.name_re).test(name) && domain === U.domain;
   }
   function dtsgOk(v) {
-    const U = WRITE && WRITE.rupload;
+    const U = UPLOAD;
     return !!U && typeof v === 'string' && new RegExp(U.dtsg_re).test(v);
   }
   function scanUpload() {
-    if ((dtsgAg && rsvc) || retired || !WRITE || !WRITE.rupload) return;
+    if ((dtsgAg && rsvc) || retired || !UPLOAD) return;
     try {
       for (const sc of document.scripts) {
         if (sc.src) continue;
@@ -1547,7 +1550,7 @@ _HELPER_JS = r"""
   // ACL-2639: the page's module registry is invisible to this isolated world; Python reads two fixed values in the main
   // world and hands them in here. Only values that pass the policy's own patterns are kept; anything else is ignored.
   function setUploadService(name, domain, dtsg) {
-    if (retired || !WRITE || !WRITE.rupload) return uploadParts();
+    if (retired || !UPLOAD) return uploadParts();
     if (!rsvc && rsvcOk(name, domain)) rsvc = { name: name, domain: domain };
     if (!dtsgAg && dtsgOk(dtsg)) dtsgAg = dtsg;
     return uploadParts();
@@ -1804,10 +1807,18 @@ _HELPER_JS = r"""
 """
 
 
+def _upload_value_policy() -> dict:
+    """ACL-2639: only the patterns that validate the upload service name/domain and the session token."""
+    from src.fb_api import write_policy as _wp
+
+    return {"name_re": _wp.RUPLOAD_NAME_RE.pattern, "domain": _wp.RUPLOAD_DOMAIN, "dtsg_re": _wp.RUPLOAD_DTSG_RE.pattern}
+
+
 def helper_source(name: str, write_policy: dict | None = None, validation_act: str | None = None) -> str:
     """Исходник помощника. `write_policy` — только у создателя кампаний (ACL-1761)."""
     return (_HELPER_JS.replace("__NAME__", json.dumps(name))
             .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null")
+            .replace("__UPLOAD__", json.dumps(_upload_value_policy()))
             .replace("__VALIDATE_ACT__", json.dumps(validation_act)))
 
 
@@ -2746,13 +2757,17 @@ class InPageGraph:
     def upload_service_ready(self) -> tuple[bool, str]:
         """The page that will send the bytes (the clean upload tab, else this one) knows the resumable service and
         its session token. Local only: no request to Meta. (ok, reason); the reason names the missing piece."""
+        from src.fb_api import light_tab
+
         target = self._upload_graph or self
         parts = target._upload_parts()
         if parts is None:
             return False, "the page did not answer"
+        light_tab._note_upload_parts("ready_check", target, clean_tab=target is not self)
         if not (parts.get("service") and parts.get("token")):
             target.fill_upload_from_page(wait_s=0.0)
             parts = target._upload_parts() or {}
+            light_tab._note_upload_parts("ready_after_fill", target)
         if parts.get("service") and parts.get("token"):
             return True, ""
         if not parts.get("service") and not parts.get("token"):

@@ -1447,3 +1447,49 @@ def test_the_call_budget_stop_is_not_reported_as_a_bad_creative_file(resumable, 
     failure = out.failure if out.failure is not None else pe.classify(out.error)
     assert "too large for this run's Meta call budget" in failure.short
     assert "creative file" not in failure.short.lower() and "replace the file" not in failure.next_step
+
+
+# ───────────────────────── light mode end to end (live bug, G87) ─────────────────────────
+
+@pytest.mark.parametrize("variant", [{}, {"token_only": True, "main_world": True}, {"token_only": True}])
+def test_the_upload_values_survive_capture_light_and_clean_tab(variant):
+    """The capture tab's helper is READ-ONLY (no write policy). It used to ignore the upload values altogether, so
+    nothing reached the light tab and the clean upload tab (live: 'address and session token not available')."""
+    out = _node(dict({"name": "chain"}, **variant))
+    if variant == {"token_only": True}:                       # no main-world read: only the token can be there
+        assert out["a_after"] == {"service": False, "token": True} and out["c_ready"] == {"ok": False}
+        return
+    assert out["a_after"] == {"service": True, "token": True}                       # the capture helper holds both
+    assert out["ab"]["status"] == "received" and out["b"] == {"service": True, "token": True}
+    assert out["bc"]["status"] == "received" and out["c"] == {"service": True, "token": True}
+    assert out["c_ready"] == {"ok": True} and out["leak"] is False
+
+
+def test_the_capture_helper_without_a_write_policy_validates_with_its_own_patterns():
+    from src.fb_api import token_capture as tc
+    src = tc.helper_source("n", None)
+    assert "const WRITE = null;" in src and '"name_re"' in src and "const UPLOAD = {" in src
+
+
+def test_every_hop_records_which_pieces_it_holds_without_values(monkeypatch):
+    from src.fb_api import light_tab
+    events = []
+    monkeypatch.setattr(light_tab, "_record", events.append)
+
+    class H:
+        def __init__(self, parts):
+            self.parts = parts
+
+        def _upload_parts(self):
+            return self.parts
+
+        def fill_upload_from_page(self):
+            return True
+
+        def _eval_helper(self, tail, timeout=0):
+            return "acked" if ".handOver(" in tail else ("listening" if ".listen(" in tail else "received")
+
+    light_tab.hand_over(H({"service": True, "token": False}), H({"service": True, "token": True}), wait_s=0.1)
+    hops = [(e["hop"], e["service"], e["token"]) for e in events if e["event"] == "fb_api_upload_service"]
+    assert hops == [("after_fill", True, False), ("after_handover", True, True)]
+    assert all(set(e) <= {"event", "hop", "service", "token", "status", "clean_tab", "upload_only"} for e in events)

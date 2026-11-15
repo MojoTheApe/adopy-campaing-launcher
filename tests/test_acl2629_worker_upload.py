@@ -836,6 +836,41 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
       out.video_ads = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
                                            params: { upload_phase: 'start' }, files: {} }));
     }
+  } else if (SC.name === 'chain') {
+    // ACL-2639: light mode end to end: a READ-ONLY capture helper (no write policy) -> the light work helper -> the clean
+    // upload tab helper. The upload values must survive every hop.
+    const mkHelper = (src, nm, document) => {
+      const G = {};
+      new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
+                   'navigator', src)(G, loc, document, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
+                               crypto.webcrypto, FakeWorker, NAV);
+      return G[nm];
+    };
+    const empty = () => ({ readyState: 'complete', querySelector: () => null, scripts: [], documentElement: { innerHTML: '' } });
+    const capDoc = { readyState: 'complete', querySelector: () => null,
+      scripts: SC.token_only ? [{ textContent: 'x'.repeat(30) + '["DTSGInitData",[],{"token":"short","async_get_token":"' + DTSG + '"},1]' }] : PAGE_SCRIPTS,
+      documentElement: { innerHTML: '"accessToken":"' + TOKENV + '"' } };
+    const A = mkHelper(__HELPER_RO__, '__acl_ro', capDoc);
+    const B = mkHelper(__HELPER2__, '__acl_second', empty());
+    const C = mkHelper(__HELPER2__.replace('__acl_second', '__acl_third'), '__acl_third', empty());
+    let seq = 0;
+    const ho = async (src, dst) => {
+      const i = ++seq;
+      const ch = 'chan' + i + '_' + 'a'.repeat(20), nonce = 'nonce' + i + '_' + 'b'.repeat(20), ack = 'ack' + i + '_' + 'c'.repeat(20);
+      const l = dst.listen(ch, nonce, ack, 5000);
+      const s = await src.handOver(ch, nonce, ack, 3000);
+      return { listen: l, sent: s, status: dst.listenStatus() };
+    };
+    A.probe();
+    out.a_scan = A.uploadParts();
+    if (SC.main_world) out.a_set = A.setUploadService('rupload-ber1-1.up', 'facebook.com', '');       // what Python reads from require()
+    out.a_after = A.uploadParts();
+    out.ab = await ho(A, B);
+    out.b = B.uploadParts();
+    out.bc = await ho(B, C);
+    out.c = C.uploadParts();
+    out.c_ready = C.uploadService();
+    out.leak = JSON.stringify(out).indexOf(DTSG) >= 0;
   } else if (SC.name === 'handover') {
     // ACL-2639: a light/clean tab holds no page scripts; the upload values come with the token by the hand-over.
     const name2 = '__acl_second';
@@ -913,6 +948,7 @@ def _node(scenario, policy=None):
               .replace("__PATH__", json.dumps(PATH)).replace("__NAME__", json.dumps(name))
               .replace("__HELPER__", json.dumps(tc.helper_source(name, policy or POLICY)))
               .replace("__HELPER2__", json.dumps(tc.helper_source("__acl_second", policy or POLICY)))
+              .replace("__HELPER_RO__", json.dumps(tc.helper_source("__acl_ro", None)))
               .replace("__NAME2__", json.dumps("__acl_second")))
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)

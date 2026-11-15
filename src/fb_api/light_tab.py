@@ -241,6 +241,18 @@ def open_upload_document(tab: Any, *, timeout: float = 15.0) -> tuple[LightDocum
     return None, "upload tab: the service-worker state could not be read"
 
 
+def _note_upload_parts(hop: str, helper: Any, **extra: Any) -> None:
+    """ACL-2639 telemetry: which upload pieces a helper holds at one hop - booleans only, never a value. Never raises."""
+    try:
+        getter = getattr(helper, "_upload_parts", None)
+        parts = getter() if callable(getter) else None
+        _record({"event": "fb_api_upload_service", "hop": hop,
+                 "service": bool((parts or {}).get("service")), "token": bool((parts or {}).get("token")),
+                 **{k: v for k, v in extra.items() if isinstance(v, (bool, str)) and len(str(v)) < 30}})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0, upload_only: bool = False) -> str:
     """Token from the helper of `src` to the helper of `dst` (two `InPageGraph`s). '' or a reason code.
 
@@ -253,6 +265,7 @@ def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0, upload_only: bool = Fa
             fill()
         except Exception:  # noqa: BLE001 - the hand-over goes on without them
             pass
+    _note_upload_parts("after_fill" if not upload_only else "refresh_fill", src)
     name, nonce, ack = (secrets.token_urlsafe(18) for _ in range(3))
     args = ",".join(json.dumps(v) for v in (name, nonce, ack))
     ttl_ms = int((wait_s + 5.0) * 1000)
@@ -275,6 +288,7 @@ def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0, upload_only: bool = Fa
         return "work_tab_dead"
     # the receiver decides: it validated and stored the token. The sender's ack (`sent`) may be lost on a
     # busy machine (its evaluate timed out) although the token arrived - that is not a failure.
+    _note_upload_parts("after_handover", dst, upload_only=upload_only, status=status)
     if status == "received":
         return ""
     if status == "rejected":
