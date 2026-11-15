@@ -52,8 +52,6 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
     "adimages": frozenset(),
     "advideos": frozenset({"name", "title"}),
-    # ACL-2639: the documented resumable ("non-chunking") upload of ad videos; only through `upload_phase`.
-    "video_ads": frozenset(),
 }
 #: Рёбра, где статус обязателен и равен PAUSED.
 PAUSED_REQUIRED = frozenset({"campaigns", "adsets", "ads"})
@@ -104,62 +102,115 @@ SERVE_TOKEN_RE = re.compile(r"[a-z0-9]{16,40}", re.ASCII)
 UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
 UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
 
-#: ACL-2639: Marketing API guide "FB Video Ads" (https://developers.facebook.com/docs/marketing-api/guides/videoads/
-#: fbvideoads/): "Publishing video ads involves the Resumable (non-chunking) protocol".
-#:   1. POST /act_<id>/video_ads upload_phase=start -> video_id, upload_url
-#:      ("https://rupload.facebook.com/video-ads-upload/<version>/<VIDEO_ID>");
-#:   2. POST upload_url, headers `Authorization: OAuth <token>`, `offset`, `file_size`, body = the file bytes from
-#:      `offset` (resume: `GET /<VIDEO_ID>?fields=status` -> uploading_phase.bytes_transferred);
-#:   3. POST /act_<id>/video_ads upload_phase=finish, video_id.
-#: Step 2 is described to our policy as the phase "transfer" of the same edge; the helper sends it to the rupload
-#: address it builds itself from the fixed host and prefix, the version and the numeric video id - nothing else.
-VIDEO_ADS_EDGE = "video_ads"
-VIDEO_ADS_PHASES = ("start", "transfer", "finish")
-VIDEO_ADS_KEYS = {
-    "start": frozenset({"upload_phase"}),
-    "transfer": frozenset({"upload_phase", "video_id", "offset", "file_size", "upload_version"}),
-    "finish": frozenset({"upload_phase", "video_id"}),
+#: ACL-2639: the upload protocol of Ads Manager itself ("file API", recorded live 15.11 on a profile). The documented
+#: `video_ads` protocol is refused for the Ads Manager token ((#10) Permission Denied), so it is not used.
+#:   1. POST /act_<id>/advideos upload_phase=start, file_size, file_extension, waterfall_id, supports_chunking,
+#:      supports_file_api, partition offsets (0 .. file_size) -> video_id, upload_session_id;
+#:   2. the bytes go to the resumable service of the page (NOT Graph): GET/POST
+#:      https://<rupload-...up>.facebook.com/fb_video/<waterfall_id>-0-<file_size>?fb_dtsg_ag=...&__a=1 with the session
+#:      cookies (`credentials: include`), headers `offset`, `X-Entity-Length`, `X-Entity-Type`; the answer to the last
+#:      POST carries the file handle; GET answers {offset} (how many bytes Meta holds - the resume point);
+#:   3. POST advideos upload_phase=transfer ... fbuploader_video_file_chunk=<handle> (both offsets == file_size);
+#:   4. POST advideos upload_phase=finish, upload_session_id, video_id, title (the ACL tag name).
+#: The advideos shapes of this protocol are told from the chunked ones by their marker keys.
+FILE_API_MARKERS = ("supports_file_api", "fbuploader_video_file_chunk", "video_id")
+FILE_API_KEYS = {
+    "start": frozenset({"upload_phase", "file_size", "file_extension", "waterfall_id", "supports_chunking",
+                        "supports_file_api", "partition_start_offset", "partition_end_offset"}),
+    "transfer": frozenset({"upload_phase", "upload_session_id", "video_id", "start_offset", "end_offset",
+                           "partition_start_offset", "partition_end_offset", "fbuploader_video_file_chunk"}),
+    "finish": frozenset({"upload_phase", "upload_session_id", "video_id", "title"}),
 }
-VIDEO_ADS_FIELD = "video_ads_body"
+#: Opaque file handle from the answer to the last rupload POST: `N:<base64 name>:<mime>:<id>:e:<expiry>:<signature>`.
+FILE_HANDLE_RE = re.compile(r"^[0-9]{1,3}:[A-Za-z0-9+/=_-]*:[^:\s]{1,100}:[A-Za-z0-9_.-]{1,100}:e:[0-9]{1,20}:"
+                            r"[A-Za-z0-9_.-]{1,300}$", re.ASCII)
+FILE_HANDLE_MAX = 1000
+
+
+def file_handle(body: Any) -> str:
+    """The file handle in the answer of the last rupload POST, '' if none. Prefers the string field `h`; otherwise any
+    string value (of the answer or of one nested object) that has exactly the handle shape."""
+    if not isinstance(body, dict):
+        return ""
+    h = body.get("h")
+    if isinstance(h, str) and len(h) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(h):
+        return h
+    for v in body.values():
+        for x in (list(v.values()) if isinstance(v, dict) else [v]):
+            if isinstance(x, str) and len(x) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(x):
+                return x
+    return ""
+
+
 #: One rupload POST carries at most this many bytes (the next one continues from the offset Meta reports).
-VIDEO_ADS_SEGMENT_MAX = 512 * 1024 * 1024
-RUPLOAD_HOST = "rupload.facebook.com"
-RUPLOAD_PREFIX = "/video-ads-upload/"
-RUPLOAD_VERSION_RE = re.compile(r"^v[0-9]{1,3}\.[0-9]{1,3}$", re.ASCII)
-RUPLOAD_URL_RE = re.compile(r"^https://rupload\.facebook\.com/video-ads-upload/(v[0-9]{1,3}\.[0-9]{1,3})/([0-9]{5,25})$",
-                            re.ASCII)
+RUPLOAD_SEGMENT_MAX = 512 * 1024 * 1024
+#: The resumable service of the page (`AdsVideoUploadConfig`): `rupload-<place>.up` + facebook.com, nothing else.
+RUPLOAD_NAME_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up$", re.ASCII)
+RUPLOAD_DOMAIN = "facebook.com"
+RUPLOAD_PATH_RE = re.compile(r"^/fb_video/[0-9a-f]{32}-0-[0-9]{1,13}$", re.ASCII)
+RUPLOAD_METHODS = ("GET", "POST")
+RUPLOAD_QUERY_KEYS = ("fb_dtsg_ag", "__a")
+RUPLOAD_HEADERS = ("offset", "X-Entity-Length", "X-Entity-Type")
+RUPLOAD_TYPE = "application/octet-stream"
+RUPLOAD_BODY_FIELD = "rupload_body"
+#: The session token of the upload page (`DTSGInitData.async_get_token`): a secret, never logged or sent to Python.
+RUPLOAD_DTSG_RE = re.compile(r"^[A-Za-z0-9_:-]{20,100}$", re.ASCII)
 
-
-def rupload_version(upload_url: Any, video_id: str) -> str:
-    """ACL-2639: the version of an `upload_url` from the start answer, '' unless it is exactly the documented
-    `https://rupload.facebook.com/video-ads-upload/<version>/<video_id>` of THIS video."""
-    m = RUPLOAD_URL_RE.fullmatch(upload_url) if isinstance(upload_url, str) else None
-    return m.group(1) if m and m.group(2) == str(video_id) else ""
-
-
-#: ACL-2639: the tag name of an ad video (`creator.video_title`); the only text a video may be named with.
+#: ACL-2639: the tag name of an ad video (`creator.video_title`); the only title an upload may finish with.
 VIDEO_TITLE_RE = re.compile(r"^acl-[A-Za-z0-9_-]{1,64}-[0-9a-f]{12}$", re.ASCII)
-VIDEO_TITLE_EDGE = "video_title"
-_OBJECT_PATH_RE = re.compile(r"^/([0-9]{5,25})$", re.ASCII)
 
 
-def check_video_title(path: str, params: dict | None, files: dict | None = None) -> str:
-    """ACL-2639: `POST /<video_id>` with exactly {name, title}, both the same ACL tag name. Nothing else on an object
-    path. (The helper allows it only for a video it finished itself in this session: `video_ads` finish.)"""
-    params = dict(params or {})
-    if not _OBJECT_PATH_RE.fullmatch(path or ""):
-        raise WriteRefused("write refused: path must be /act_<id>/<edge>")
-    if files:
-        raise WriteRefused("write refused: naming a video takes no file")
-    if set(params) != {"name", "title"} or params["name"] != params["title"]:
-        raise WriteRefused("write refused: a video may only be given its ACL name and title")
-    if not (isinstance(params["name"], str) and VIDEO_TITLE_RE.fullmatch(params["name"])):
-        raise WriteRefused("write refused: the video name must be its ACL tag name")
-    return VIDEO_TITLE_EDGE
+def rupload_service_ok(name: Any, domain: Any) -> bool:
+    return isinstance(name, str) and bool(RUPLOAD_NAME_RE.fullmatch(name)) and domain == RUPLOAD_DOMAIN
 
 
-def rupload_url(version: str, video_id: str) -> str:
-    return f"https://{RUPLOAD_HOST}{RUPLOAD_PREFIX}{version}/{video_id}"
+def rupload_url(name: str, domain: str, path: str, dtsg: str) -> str:
+    """The address of one rupload request (the page helper builds the same; the token stays in the page)."""
+    if not (rupload_service_ok(name, domain) and RUPLOAD_PATH_RE.fullmatch(path) and RUPLOAD_DTSG_RE.fullmatch(dtsg)):
+        raise ValueError("not a usable upload service address")
+    return f"https://{name}.{domain}{path}?fb_dtsg_ag={dtsg}&__a=1"
+
+
+def rupload_path(waterfall: str, size: int) -> str:
+    return f"/fb_video/{waterfall}-0-{size}"
+
+
+def check_rupload(method: str, path: str, *, query: dict | None = None, headers: dict | None = None,
+                  files: dict | None = None) -> None:
+    """ACL-2639: one request to the resumable service: GET (offset) or POST (bytes of one segment) of THIS upload's
+    path, only the known query keys and headers, the body only a served window of the file."""
+    if method not in RUPLOAD_METHODS:
+        raise WriteRefused(f"write refused: upload service method {method!r} (only GET and POST)")
+    if not RUPLOAD_PATH_RE.fullmatch(path or ""):
+        raise WriteRefused("write refused: path must be /fb_video/<waterfall>-0-<size>")
+    extra = sorted(set(query or {}) - set(RUPLOAD_QUERY_KEYS))
+    if extra:
+        raise WriteRefused(f"write refused: query key {extra[0]!r} is not allowed on the upload service")
+    headers = dict(headers or {})
+    files = dict(files or {})
+    if method == "GET":
+        if headers or files:
+            raise WriteRefused("write refused: an upload service read takes no headers and no body")
+        return
+    if set(headers) != set(RUPLOAD_HEADERS):
+        raise WriteRefused("write refused: the upload needs exactly the headers offset, X-Entity-Length, X-Entity-Type")
+    total = int(path.rsplit("-", 1)[1])
+    off, length = _digits(headers["offset"]), _digits(headers["X-Entity-Length"])
+    if not total or total > UPLOAD_FILE_MAX or length != total:
+        raise WriteRefused("write refused: X-Entity-Length must be the size in the path, within the video limit")
+    if off is None or off >= total:
+        raise WriteRefused("write refused: offset must be a number inside the file")
+    if headers["X-Entity-Type"] != RUPLOAD_TYPE:
+        raise WriteRefused("write refused: X-Entity-Type must be application/octet-stream")
+    if set(files) != {RUPLOAD_BODY_FIELD} or not isinstance(files[RUPLOAD_BODY_FIELD], ServedChunk):
+        raise WriteRefused(f"write refused: the upload needs exactly the served body {RUPLOAD_BODY_FIELD!r}")
+    body = files[RUPLOAD_BODY_FIELD]
+    if not 0 < len(body) <= RUPLOAD_SEGMENT_MAX:
+        raise WriteRefused(f"write refused: one upload request carries 1..{RUPLOAD_SEGMENT_MAX} bytes")
+    if body.offset != off or off + len(body) > total:
+        raise WriteRefused("write refused: the served body must start at offset and end inside the file")
+
+
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
@@ -312,10 +363,12 @@ def policy_for_page(act: str, page: str = "") -> dict:
                    "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
                    "number_re": UPLOAD_NUMBER_RE.pattern},
         "video_title_re": VIDEO_TITLE_RE.pattern,
-        "video_ads": {"phases": list(VIDEO_ADS_PHASES), "keys": {k: sorted(v) for k, v in VIDEO_ADS_KEYS.items()},
-                      "field": VIDEO_ADS_FIELD, "segment_max": VIDEO_ADS_SEGMENT_MAX,
-                      "host": RUPLOAD_HOST, "prefix": RUPLOAD_PREFIX,
-                      "version_re": RUPLOAD_VERSION_RE.pattern},
+        "file_api": {"markers": list(FILE_API_MARKERS), "keys": {k: sorted(v) for k, v in FILE_API_KEYS.items()},
+                     "handle_re": FILE_HANDLE_RE.pattern, "handle_max": FILE_HANDLE_MAX},
+        "rupload": {"name_re": RUPLOAD_NAME_RE.pattern, "domain": RUPLOAD_DOMAIN, "path_re": RUPLOAD_PATH_RE.pattern,
+                    "methods": list(RUPLOAD_METHODS), "query_keys": list(RUPLOAD_QUERY_KEYS),
+                    "headers": list(RUPLOAD_HEADERS), "type": RUPLOAD_TYPE, "field": RUPLOAD_BODY_FIELD,
+                    "segment_max": RUPLOAD_SEGMENT_MAX, "dtsg_re": RUPLOAD_DTSG_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
@@ -863,39 +916,50 @@ def _check_upload(params: dict, files: dict) -> None:
         raise WriteRefused(f"write refused: upload phase {phase} takes no file")
 
 
-def _check_video_ads(params: dict, files: dict) -> None:
-    """ACL-2639: the phases of the resumable ad-video upload: closed keys per phase, numbers, the served body."""
+def _is_file_api(params: dict) -> bool:
+    return any(k in params for k in FILE_API_MARKERS)
+
+
+def _check_file_api(params: dict, files: dict) -> None:
+    """ACL-2639: the advideos phases of the Ads Manager file-API upload: closed keys per phase, exact values."""
     phase = params.get("upload_phase")
-    if not (isinstance(phase, str) and phase in VIDEO_ADS_PHASES):
-        raise WriteRefused("write refused: video_ads upload_phase must be start, transfer or finish")
-    extra = sorted(set(params) - VIDEO_ADS_KEYS[phase])
-    missing = sorted(VIDEO_ADS_KEYS[phase] - set(params))
+    if not (isinstance(phase, str) and phase in FILE_API_KEYS):
+        raise WriteRefused("write refused: upload_phase must be start, transfer or finish")
+    extra = sorted(set(params) - FILE_API_KEYS[phase])
+    missing = sorted(FILE_API_KEYS[phase] - set(params))
     if extra or missing:
         raise WriteRefused(f"write refused: key {(extra or missing)[0]!r} is "
-                           f"{'not allowed' if extra else 'required'} in video_ads phase {phase}")
-    if phase != "start":
-        vid = params.get("video_id")
-        if not (isinstance(vid, str) and VIDEO_ID_RE.fullmatch(vid)):
-            raise WriteRefused("write refused: video_id must be the numeric id Meta returned")
-    if phase != "transfer":
-        if files:
-            raise WriteRefused(f"write refused: video_ads phase {phase} takes no file")
+                           f"{'not allowed' if extra else 'required'} in upload phase {phase}")
+    if files:
+        raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+    if phase == "start":
+        size = _digits(params["file_size"])
+        if not size or size > UPLOAD_FILE_MAX or not isinstance(params["file_size"], str):
+            raise WriteRefused("write refused: file_size must be a positive size within the video limit")
+        if not (isinstance(params["waterfall_id"], str) and UPLOAD_WATERFALL_RE.fullmatch(params["waterfall_id"])):
+            raise WriteRefused("write refused: waterfall_id must be 32 lowercase hex characters")
+        if (params["file_extension"] != "mp4" or params["supports_chunking"] != "true"
+                or params["supports_file_api"] != "true" or params["partition_start_offset"] != "0"
+                or params["partition_end_offset"] != params["file_size"]):
+            raise WriteRefused("write refused: the start of an upload must be one whole-file mp4 partition")
         return
-    off, size = _digits(params.get("offset")), _digits(params.get("file_size"))
-    if not size or size > UPLOAD_FILE_MAX:
-        raise WriteRefused("write refused: file_size must be a positive size within the video limit")
-    if off is None or off >= size:
-        raise WriteRefused("write refused: offset must be a number inside the file")
-    ver = params.get("upload_version")
-    if not (isinstance(ver, str) and RUPLOAD_VERSION_RE.fullmatch(ver)):
-        raise WriteRefused("write refused: upload_version must look like v22.0")
-    if set(files) != {VIDEO_ADS_FIELD} or not isinstance(files[VIDEO_ADS_FIELD], ServedChunk):
-        raise WriteRefused(f"write refused: the upload needs exactly the served body {VIDEO_ADS_FIELD!r}")
-    body = files[VIDEO_ADS_FIELD]
-    if not 0 < len(body) <= VIDEO_ADS_SEGMENT_MAX:
-        raise WriteRefused(f"write refused: one upload request carries 1..{VIDEO_ADS_SEGMENT_MAX} bytes")
-    if body.offset != off or off + len(body) > size:
-        raise WriteRefused("write refused: the served body must start at offset and end inside the file")
+    for key in ("upload_session_id", "video_id"):
+        v = params[key]
+        if not (isinstance(v, str) and UPLOAD_ID_RE.fullmatch(v)):
+            raise WriteRefused(f"write refused: {key} must be the numeric id Meta returned")
+    if phase == "transfer":
+        end = _digits(params["end_offset"])
+        if (params["start_offset"] != "0" or params["partition_start_offset"] != "0" or not end
+                or end > UPLOAD_FILE_MAX or not isinstance(params["end_offset"], str)
+                or params["partition_end_offset"] != params["end_offset"]):
+            raise WriteRefused("write refused: the transfer must cover one whole-file partition from 0")
+        h = params["fbuploader_video_file_chunk"]
+        if not (isinstance(h, str) and len(h) <= FILE_HANDLE_MAX and FILE_HANDLE_RE.fullmatch(h)):
+            raise WriteRefused("write refused: fbuploader_video_file_chunk must be the file handle of the upload")
+    else:
+        t = params["title"]
+        if not (isinstance(t, str) and VIDEO_TITLE_RE.fullmatch(t)):
+            raise WriteRefused("write refused: the video title must be its ACL tag name")
 
 
 # ───────────────────────── lifetime-бюджет и расписание (ACL-1443) ─────────────────────────
@@ -990,8 +1054,6 @@ def check(act: str, method: str, path: str, params: dict | None,
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
     m = _PATH_RE.fullmatch(path or "")
-    if not m and _OBJECT_PATH_RE.fullmatch(path or ""):
-        return check_video_title(path, params, files)          # ACL-2639: the only object write of a creation
     if not m:
         raise WriteRefused("write refused: path must be /act_<id>/<edge>")
     if m.group(1) != act:
@@ -1001,10 +1063,10 @@ def check(act: str, method: str, path: str, params: dict | None,
         raise WriteRefused(f"write refused: edge {edge!r} is not on the allowlist")
     params = dict(params or {})
     if edge == "advideos" and "upload_phase" in params:
-        _check_upload(params, dict(files or {}))
-        return edge
-    if edge == VIDEO_ADS_EDGE:
-        _check_video_ads(params, dict(files or {}))
+        if _is_file_api(params):
+            _check_file_api(params, dict(files or {}))             # ACL-2639: the Ads Manager file-API upload
+        else:
+            _check_upload(params, dict(files or {}))
         return edge
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:

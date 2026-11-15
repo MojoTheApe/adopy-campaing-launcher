@@ -250,6 +250,17 @@ class WriteUnknown(RuntimeError):
         self.reason = reason
 
 
+class RuploadLost(RuntimeError):
+    """ACL-2639: a request to the resumable service was sent (or may have been) and no answer came back.
+
+    Not a Graph write: nothing is "unreconciled". The caller reads the offset (GET) and continues from it.
+    """
+
+    def __init__(self, message: str, *, reason: str = ""):
+        super().__init__(scrub(message))
+        self.reason = reason
+
+
 class WritesBlocked(RuntimeError):
     """Новая запись не отправлена: у прошлой результат неизвестен и не сверен (ревью M4).
 
@@ -729,6 +740,54 @@ class GraphClient:
             raise WriteUnknown("Graph API did not answer the write with JSON; the result is unknown", path=path,
                                status=status if isinstance(status, int) else None)
         return body
+
+    def upload_service_ready(self) -> tuple[bool, str]:
+        """ACL-2639: does the page that sends the video bytes know the resumable service and its session token?
+        Local: no Meta call, not counted. A transport without the check answers (True, "") (the call decides)."""
+        check = getattr(self.transport, "upload_service_ready", None)
+        if not callable(check):
+            return True, ""
+        return check()
+
+    def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk: Any = None,
+                progress: Callable[[float], None] | None = None,
+                cancelled: Callable[[], bool] | None = None) -> dict:
+        """ACL-2639: ONE request to the resumable service of Ads Manager (GET the offset / POST one served segment).
+
+        Not a Graph call: it is NOT counted in the call budget (the budget is Graph's) and never touches the
+        write-reconciliation flag. Returns {status, body}. Refused before sending (policy, page) - stop like a write;
+        no answer after sending - `RuploadLost` (the caller asks the offset and continues, never from zero).
+        """
+        if self.stopped is not None:
+            raise self.stopped
+        self._pace()
+        self._last_call = self._clock()
+        extra: dict[str, Any] = {}
+        if chunk is not None and progress is not None:
+            extra["progress"] = progress
+        if chunk is not None and cancelled is not None:
+            extra["cancelled"] = cancelled
+        try:
+            reply = self.transport.rupload(method, path, headers=headers, chunk=chunk, **extra)
+        except ValueError as exc:
+            raise self._stop(NotSent(f"write refused before sending: {exc}")) from exc
+        except GraphStop as exc:
+            raise self._stop(exc) from exc
+        self._last_call = self._clock()
+        err = reply.get("error") if isinstance(reply, dict) else "bad_reply"
+        if isinstance(err, str):
+            if err in _NOT_SENT:
+                why = reply.get("why") if isinstance(reply, dict) else ""
+                raise self._stop(NotSent(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
+            if err == "no_token":
+                self._check_page()
+                raise self._stop(LoggedOut("no session token in the page; the request was not sent"))
+            raise RuploadLost(f"no answer from the upload service ({err})", reason=err)
+        status = reply.get("status")
+        body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
+        if not isinstance(status, int):
+            raise RuploadLost("the upload service gave no status", reason="bad_reply")
+        return {"status": status, "body": body}
 
     def probe_worker(self) -> tuple[bool, str]:
         """ACL-2629: can the page's Web Worker be fed the file bytes (CSP, interception, hash)? Local: no Meta call,

@@ -566,6 +566,9 @@ const PREFIX = '/__acl_upload/';
 const windows = {};
 const log = { graph: [], pieces: 0, workers: 0, terminated: 0, rupload: [] };
 const meta = { size: 0, received: 0, md5: crypto.createHash('md5'), chunks: [], done: false };
+const rup = { received: 0, md5: crypto.createHash('md5') };
+const DTSG = 'D'.repeat(20) + 'Tg_AG' + 'x'.repeat(37);
+const HANDLE = '1:YWJj:application/octet-stream:7777777:e:1800000000:sig_-1';
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const reply = (status, obj) => ({ status: status, text: async () => JSON.stringify(obj), headers: { get: () => null } });
 const range = () => ({ start_offset: String(meta.received),
@@ -577,15 +580,26 @@ const NAV = { serviceWorker: { controller: SC.sw ? {} : null,
   removeEventListener: (t, f) => { const i = swListeners.indexOf(f); if (i >= 0) swListeners.splice(i, 1); } } };
 const fakeFetch = async (url, init) => {
   url = String(url);
-  if (url.startsWith('https://rupload.facebook.com/')) {
-    // ACL-2639: the resumable POST - headers and the raw body as Meta's guide describes.
+  if (/^https:\/\/[^/]+\.facebook\.com\/fb_video\//.test(url) || url.indexOf('/fb_video/') > 0) {
+    // ACL-2639: the resumable service of Ads Manager: GET -> {offset}; POST -> raw bytes with offset / X-Entity-* headers.
+    const q = url.split('?')[1] || '';
+    const common = { url: url.split('?')[0], method: init.method, cred: init.credentials, redirect: init.redirect,
+                     dtsg_in_url: q.indexOf('fb_dtsg_ag=' + DTSG) >= 0, query_keys: q.split('&').map((x) => x.split('=')[0]),
+                     token_in_url: url.indexOf(TOKENV) >= 0 };
+    if (init.method === 'GET') {
+      log.rupload.push(Object.assign(common, { offset_read: true }));
+      return reply(200, { dc: 'fra3', offset: String(rup.received) });
+    }
     const buf = Buffer.from(await init.body.arrayBuffer());
     const h = init.headers || {};
-    log.rupload.push({ url: url, auth: String(h['Authorization'] || '').replace(TOKENV, 'TOKEN'), offset: h['offset'],
-                       file_size: h['file_size'], cred: init.credentials, redirect: init.redirect, bytes: buf.length,
-                       md5: crypto.createHash('md5').update(buf).digest('hex'), form: typeof init.body.get === 'function',
-                       token_in_url: url.indexOf(TOKENV) >= 0 });
-    return reply(200, { success: true });
+    log.rupload.push(Object.assign(common, { headers: Object.keys(h).sort(), offset: h['offset'], length: h['X-Entity-Length'],
+                       type: h['X-Entity-Type'], auth: h['Authorization'], bytes: buf.length,
+                       md5: crypto.createHash('md5').update(buf).digest('hex'), form: typeof init.body.get === 'function' }));
+    if (Number(h['offset']) !== rup.received) return reply(400, { error: 'bad offset' });
+    rup.received += buf.length;
+    rup.md5.update(buf);
+    // the answer echoes the session token on purpose: the helper must mask it
+    return reply(200, { h: HANDLE, echo: DTSG });
   }
   if (url.startsWith(ORIGIN + PREFIX)) {
     const [token, o, n] = url.slice((ORIGIN + PREFIX).length).split('/');
@@ -607,6 +621,10 @@ const fakeFetch = async (url, init) => {
     meta.size = Number(body.get('file_size'));
     return reply(200, Object.assign({ upload_session_id: '900001', video_id: '777' }, range()));
   }
+  if (phase === 'transfer' && body.get('fbuploader_video_file_chunk')) {
+    return reply(200, { start_offset: String(meta.size), end_offset: String(meta.size) });
+  }
+  if (phase === 'finish' && body.get('video_id')) return reply(200, { success: true });
   if (phase === 'transfer') {
     const blob = body.get('video_file_chunk');
     const buf = Buffer.from(await blob.arrayBuffer());
@@ -644,7 +662,11 @@ const FakeWorker = function (url) {
 };
 const loc = { href: ORIGIN + '/adsmanager/manage/campaigns', origin: ORIGIN, hostname: 'adsmanager.facebook.com',
               pathname: '/adsmanager/manage/campaigns' };
-const doc = { readyState: 'complete', querySelector: () => null, scripts: [],
+const SVC_NAME = SC.service_name || 'rupload-fra3-1.up';
+const SVC_DOM = SC.service_domain || 'facebook.com';
+const PAGE_SCRIPTS = SC.no_service ? [] : [{ textContent: 'x'.repeat(30) + '["DTSGInitData",[],{"token":"short","async_get_token":"' + DTSG + '"},1]'
+  + ',["AdsVideoUploadConfig",[],{"a":{"b":1},"resumable_service_name":"' + SVC_NAME + '","resumable_service_domain":"' + SVC_DOM + '"},2]' }];
+const doc = { readyState: 'complete', querySelector: () => null, scripts: PAGE_SCRIPTS,
               documentElement: { innerHTML: '"accessToken":"' + TOKENV + '"' } };
 const G = {};
 new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
@@ -739,38 +761,91 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     out.bad = await h.probeWorker({ source: { token: 'AB', pieces: pieces } });
     out.graph_calls = log.graph.length;
   } else if (SC.name === 'rupload') {
-    // ACL-2639: one served segment to the rupload address, then the refusals of the policy.
+    // ACL-2639: the Ads Manager file API: Graph start / transfer(handle) / finish, and the bytes to the resumable service.
+    const WF = 'a'.repeat(32);
+    const RP = '/fb_video/' + WF + '-0-' + SOURCE.length;
+    const T = 'acl-tag1-0123456789ab';
+    const size = String(SOURCE.length);
     const seg = (off, len, mutate) => announce(off, len, SC.piece || 400000, (s) => {
-      s.path = PATHV.replace('/advideos', '/video_ads');
-      s.files = { video_ads_body: 'served' };
-      s.params = { upload_phase: 'transfer', video_id: '7770001', offset: String(off), file_size: String(SOURCE.length),
-                   upload_version: 'v22.0' };
+      s.kind = 'rupload'; s.path = RP; s.files = { rupload_body: 'served' }; delete s.params;
+      s.headers = { 'offset': String(off), 'X-Entity-Length': size, 'X-Entity-Type': 'application/octet-stream' };
       if (mutate) mutate(s);
     });
-    out.ok = slim(await job(seg(0, SOURCE.length)));
-    out.refused = {};
-    const bad = {
-      version: (s) => { s.params.upload_version = 'v22.0/../x'; },
-      video_id: (s) => { s.params.video_id = '../graph'; },
-      extra_key: (s) => { s.params.host = 'evil.example'; },
-      past_end: (s) => { s.params.offset = String(SOURCE.length - 10); },
-      staged: (s) => { delete s.source; s.files = { video_ads_body: 'stage1' }; },
-      wrong_field: (s) => { s.files = { video_file_chunk: 'served' }; },
-    };
-    for (const k of Object.keys(bad)) out.refused[k] = slim(await job(seg(0, 800000, bad[k])));
-    out.start = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
-                                    params: { upload_phase: 'start' }, files: {} }));
-    // ACL-2639: naming - only a video this helper finished, only {name, title} = the ACL tag name.
-    const T = 'acl-tag1-0123456789ab';
-    const name = (id, p) => h.call({ method: 'POST', path: '/' + id, params: p || { name: T, title: T }, files: {} });
-    out.rename_before = slim(await name('7770001'));
-    out.finish = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
-                                     params: { upload_phase: 'finish', video_id: '7770001' }, files: {} }));
-    out.rename_after = slim(await name('7770001'));
-    out.rename_other = slim(await name('7770002'));
-    out.rename_bad = slim(await name('7770001', { name: 'Campaign X', title: 'Campaign X' }));
-    out.rename_extra = slim(await name('7770001', { name: T, title: T, status: 'ACTIVE' }));
-    out.proto = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/constructor'), params: {}, files: {} }));
+    out.service = h.uploadService();
+    out.get = slim(await h.call({ kind: 'rupload', method: 'GET', path: RP }));
+    if (!SC.no_service && !SC.service_name && !SC.service_domain) {
+      out.ok = slim(await job(seg(0, SOURCE.length)));
+      out.refused = {};
+      const bad = {
+        path: (s) => { s.path = '/fb_video/xyz-0-5'; },
+        partition: (s) => { s.path = '/fb_video/' + WF + '-1-' + size; },
+        method_put: (s) => { s.method = 'PUT'; },
+        header_extra: (s) => { s.headers.Authorization = 'OAuth x'; },
+        header_missing: (s) => { delete s.headers['X-Entity-Type']; },
+        header_type: (s) => { s.headers['X-Entity-Type'] = 'text/plain'; },
+        length: (s) => { s.headers['X-Entity-Length'] = '5'; },
+        offset_end: (s) => { s.headers.offset = size; },
+        past_end: (s) => { s.headers.offset = String(SOURCE.length - 10); },
+        staged: (s) => { delete s.source; s.files = { rupload_body: 'stage1' }; },
+        wrong_field: (s) => { s.files = { video_file_chunk: 'served' }; },
+        extra_key_url: (s) => { s.url = 'https://evil.example/x'; },
+        extra_key_host: (s) => { s.host = 'evil.example'; },
+        extra_key_query: (s) => { s.query = { access_token: 'x' }; },
+      };
+      for (const k of Object.keys(bad)) out.refused[k] = slim(await job(seg(0, 800000, bad[k])));
+      out.refused.no_job = slim(await h.call(seg(0, 800000)));
+      out.refused.get_headers = slim(await h.call({ kind: 'rupload', method: 'GET', path: RP, headers: { offset: '0' } }));
+      out.refused.get_path = slim(await h.call({ kind: 'rupload', method: 'GET', path: '/fb_video/../x' }));
+      out.refused.post_unrelated = slim(await h.call({ kind: 'rupload', method: 'DELETE', path: RP }));
+      const G0 = { upload_phase: 'start', file_size: size, file_extension: 'mp4', waterfall_id: WF, supports_chunking: 'true',
+                   supports_file_api: 'true', partition_start_offset: '0', partition_end_offset: size };
+      const G1 = { upload_phase: 'transfer', upload_session_id: '900001', video_id: '7770001', start_offset: '0', end_offset: size,
+                   partition_start_offset: '0', partition_end_offset: size, fbuploader_video_file_chunk: HANDLE };
+      const G2 = { upload_phase: 'finish', upload_session_id: '900001', video_id: '7770001', title: T };
+      const gcall = (params, extra) => h.call(Object.assign({ method: 'POST', path: PATHV, params: params, files: {} }, extra || {}));
+      out.start = slim(await gcall(G0));
+      out.transfer = slim(await gcall(G1));
+      out.finish = slim(await gcall(G2));
+      const graph_before = log.graph.length;
+      const gbad = {
+        start_extra: Object.assign({}, G0, { composer_session_id: 'x' }),
+        start_wf: Object.assign({}, G0, { waterfall_id: 'A'.repeat(32) }),
+        start_ext: Object.assign({}, G0, { file_extension: 'exe' }),
+        start_part: Object.assign({}, G0, { partition_end_offset: '5' }),
+        start_missing: (() => { const x = Object.assign({}, G0); delete x.supports_file_api; return x; })(),
+        transfer_handle: Object.assign({}, G1, { fbuploader_video_file_chunk: 'not a handle' }),
+        transfer_start: Object.assign({}, G1, { start_offset: '5' }),
+        transfer_end: Object.assign({}, G1, { partition_end_offset: '7' }),
+        transfer_vid: Object.assign({}, G1, { video_id: '../me' }),
+        finish_title: Object.assign({}, G2, { title: 'Campaign' }),
+        finish_extra: Object.assign({}, G2, { name: T }),
+      };
+      out.graph_refused = {};
+      for (const k of Object.keys(gbad)) out.graph_refused[k] = slim(await gcall(gbad[k]));
+      out.graph_refused.with_file = slim(await gcall(G1, { files: { video_file_chunk: 'x' } }));
+      out.graph_untouched = log.graph.length === graph_before;
+      // a video is titled by its finish only: no write goes to an object path
+      out.rename = slim(await h.call({ method: 'POST', path: '/7770001', params: { name: T, title: T }, files: {} }));
+      out.video_ads = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
+                                           params: { upload_phase: 'start' }, files: {} }));
+    }
+  } else if (SC.name === 'handover') {
+    // ACL-2639: a light/clean tab holds no page scripts; the upload values come with the token by the hand-over.
+    const name2 = '__acl_second';
+    const doc2 = { readyState: 'complete', querySelector: () => null, scripts: [], documentElement: { innerHTML: '' } };
+    const G2 = {};
+    new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
+                 'navigator', __HELPER2__)(G2, loc, doc2, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
+                             crypto.webcrypto, FakeWorker, NAV);
+    const h2 = G2[__NAME2__];
+    out.before = h2.uploadService();
+    const ch = 'chan_' + 'a'.repeat(20), nonce = 'nonce_' + 'b'.repeat(20), ack = 'ack_' + 'c'.repeat(20);
+    out.listen = h2.listen(ch, nonce, ack, 5000);
+    out.sent = await h.handOver(ch, nonce, ack, 3000);
+    out.status = h2.listenStatus();
+    out.after = h2.uploadService();
+    out.state = h2.state();
+    out.leak = JSON.stringify(out).indexOf(DTSG) >= 0;
   } else if (SC.name === 'abort') {
     await phase({ upload_phase: 'start', file_size: String(SOURCE.length) });
     const spec = announce(0, 800000, 100000);
@@ -783,6 +858,7 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
   }
   out.log = { graph: log.graph, pieces: log.pieces, workers: log.workers, terminated: log.terminated, rupload: log.rupload };
   out.meta = { received: meta.received, size: meta.size, md5: meta.md5.digest('hex'), chunks: meta.chunks, done: meta.done };
+  out.rup = { received: rup.received, md5: rup.md5.digest('hex') };
   process.stdout.write(JSON.stringify(out));
   process.exit(0);
 })();
@@ -801,7 +877,9 @@ def _node(scenario, policy=None):
               .replace("__SCENARIO__", json.dumps(scenario))
               .replace("__TOKENV__", json.dumps("EAAB" + "Zx9" * 20))
               .replace("__PATH__", json.dumps(PATH)).replace("__NAME__", json.dumps(name))
-              .replace("__HELPER__", json.dumps(tc.helper_source(name, policy or POLICY))))
+              .replace("__HELPER__", json.dumps(tc.helper_source(name, policy or POLICY)))
+              .replace("__HELPER2__", json.dumps(tc.helper_source("__acl_second", policy or POLICY)))
+              .replace("__NAME2__", json.dumps("__acl_second")))
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
         fh.write(script)
         path = fh.name

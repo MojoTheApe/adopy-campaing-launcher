@@ -216,3 +216,66 @@ transport (`adopt_upload_context`; closed if the new transport cannot take it). 
 sends the worker `stopPieces` (not `abort`): ignored once the pieces are in, so a started POST is never cancelled.
 The buyer line for a file the fallback cannot take carries only the first part of the probe reason; the full text
 is a step, and the "compressed the slower way" warning is dropped in that case.
+
+## 13. ACL-2639: large videos with the upload protocol of Ads Manager ("file API")
+
+The first ACL-2639 version used Meta's documented "FB Video Ads" protocol (`POST act_X/video_ads` +
+`rupload.facebook.com/video-ads-upload/...` with `Authorization: OAuth`). Live run 15.11: the start is refused for the
+Ads Manager page token (`(#10) Permission Denied`), so the creator fell back to ~485 chunked calls and stopped on the
+call budget. That protocol is **removed** (edge, keys, version/URL checks, the object-path naming write); the creator
+now sends what Ads Manager itself sends (recorded live 15.11, values masked):
+
+1. `POST /act_X/advideos` (Graph, the page access token as before): `upload_phase=start, file_size, file_extension=mp4,
+   waterfall_id=<32 lowercase hex, random per upload>, supports_chunking=true, supports_file_api=true,
+   partition_start_offset=0, partition_end_offset=<file_size>`. No composer/source fields. Answer: `video_id`,
+   `upload_session_id`, `start_offset`, `end_offset`.
+2. The bytes go to the **resumable service of the page**, not Graph (not counted in the Graph call budget):
+   `https://<rupload-<place>.up>.facebook.com/fb_video/<waterfall_id>-0-<file_size>?fb_dtsg_ag=<token>&__a=1`,
+   `credentials: include` (the session cookies of the Ads Manager origin), no access token, no `Authorization`.
+   `GET` -> `{dc, offset}` (bytes already held = the resume point). `POST`, headers `offset`, `X-Entity-Length`
+   (= file size), `X-Entity-Type: application/octet-stream`, body = the file bytes from `offset`, at most 512 MB per POST
+   (served piece by piece from the file to the worker/inline runner, each piece hashed, as in section 2).
+   Only one partition (0 .. size).
+3. `POST /act_X/advideos`: `upload_phase=transfer, upload_session_id, video_id, start_offset=0, end_offset=<size>,
+   partition offsets, fbuploader_video_file_chunk=<file handle>`. `start_offset == end_offset == size` in the answer
+   means Meta holds every byte.
+4. `POST /act_X/advideos`: `upload_phase=finish, upload_session_id, video_id, title=<ACL tag>`. The title is what the
+   later search by tag finds, so the separate naming call (`POST /<id>`) and its policy/JS allowance are gone.
+
+**Where the values come from.** The service host is `AdsVideoUploadConfig.resumable_service_name` /
+`resumable_service_domain` of the Ads Manager page (observed `rupload-fra3-1.up` / `rupload-ber1-1.up` +
+`facebook.com`), the query token is `DTSGInitData.async_get_token` (62 characters). The helper reads both from the
+inline scripts next to the existing `DTSGInitialData` scan, validates them (name `^rupload-[a-z0-9-]{1,30}\.up$`,
+domain exactly `facebook.com`, token pattern) and carries them with the access token in the world-to-world hand-over
+(`handOver` / `listen`: fields `d` and `r`, optional) - so a light work tab, a clean `__acl_work` upload tab and an
+adopted upload context (`adopt_upload_context`) have them too. They are session secrets: they never leave the helper
+(the helper builds the address itself; Python sends only the path `/fb_video/<waterfall>-0-<size>`, the three headers
+and the served body), `clean()` masks the token in every answer, nothing is logged, put in telemetry, steps or
+exceptions. `InPageGraph.upload_service_ready()` asks the helper (local, no Meta call) before the start: no service or
+token -> `_ResumableRefused("upload service address not available on this page")` and the chunked path runs.
+
+**The file handle** is in the answer to the last POST (that answer was not captured live; parsed defensively): the
+string field `h`, otherwise any string value of the answer (or of one nested object) with the observed shape
+`N:<base64 name>:<mime>:<id>:e:<expiry>:<signature>` (`write_policy.FILE_HANDLE_RE`). An HTTP 4xx/5xx is a refusal
+(resume from the offset read by GET); a 2xx answer without a handle: one GET, and if the service holds every byte but
+there is no handle, the upload stops as refused-before-finish (`_ResumableRefused`, nothing finished) and the chunked
+fallback runs. Failures after a transfer was accepted are real stops, never a fallback.
+
+**Policy (Python `write_policy`, mirrored in the page helper).** advideos phases of this protocol are told from the
+chunked ones by their marker keys (`supports_file_api`, `fbuploader_video_file_chunk`, `video_id`) and checked with a
+closed key set and exact values per phase (`_check_file_api`; title must be the ACL tag name). The service request is
+`check_rupload`: only GET and POST, path `^/fb_video/[0-9a-f]{32}-0-[0-9]{1,13}$`, query keys only `fb_dtsg_ag` and
+`__a`, headers only `offset` / `X-Entity-Length` / `X-Entity-Type`, the POST body only a served window of the file
+starting at `offset` and ending inside it. The helper refuses any request that carries its own address, host, query or
+credentials (closed spec keys).
+
+**Budget and resume.** Graph calls per video: start, transfer, finish (+ one status read when an earlier run is
+continued or a finish answer is lost): `RESUMABLE_FIXED_CALLS = 4`, independent of the size (2.4 GB = 5 service POSTs
+of 512 MB). A dropped POST: GET the offset, continue from it (never from zero), at most `RESUMABLE_MAX_RESUMES`. The
+journal keeps `video_id`, `upload_session_id`, `waterfall_id`, file size and md5 after the start; a stopped run is
+continued from the offset the service reports. If the offset is unreadable, or every byte is in but the handle is gone,
+the old session is forgotten and a new one starts (a finished video is found by its title first). The emergency flag
+`ACL_VIDEO_RESUMABLE_UPLOAD=0` still sends everything through the chunked path.
+
+Assumptions checkable only live: the answer body of the last rupload POST (handle field), and that the service accepts
+the CORS preflight of the custom headers from the clean `__acl_work` origin like it does from Ads Manager itself.

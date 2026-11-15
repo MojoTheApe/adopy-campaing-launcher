@@ -101,7 +101,10 @@ _HELPER_JS = r"""
   let version = '';
   let retired = false;
   let amRequest = null;
-  const finishedVideos = Object.create(null);
+  // ACL-2639: the upload page's session values (a secret: never logged, never returned, masked in every answer):
+  // `async_get_token` of DTSGInitData and the resumable service of AdsVideoUploadConfig.
+  let dtsgAg = '';
+  let rsvc = null;
 
   // Разобрать адрес Graph: если в строке запроса есть access_token — это он.
   function consider(url) {
@@ -152,6 +155,39 @@ _HELPER_JS = r"""
     } catch (e) {}
   }
 
+  // ACL-2639: the Ads Manager upload values from the page's inline scripts (only on the full Ads Manager page; a light
+  // or clean tab gets them by the hand-over). Validated here with the policy's own patterns.
+  function rsvcOk(name, domain) {
+    const U = WRITE && WRITE.rupload;
+    return !!U && typeof name === 'string' && new RegExp(U.name_re).test(name) && domain === U.domain;
+  }
+  function dtsgOk(v) {
+    const U = WRITE && WRITE.rupload;
+    return !!U && typeof v === 'string' && new RegExp(U.dtsg_re).test(v);
+  }
+  function scanUpload() {
+    if ((dtsgAg && rsvc) || retired || !WRITE || !WRITE.rupload) return;
+    try {
+      for (const sc of document.scripts) {
+        if (sc.src) continue;
+        const t = sc.textContent || '';
+        if (t.length < 20 || t.length > 3000000) continue;
+        let m;
+        if (!dtsgAg && (m = /\["DTSGInitData",\[\],\{"token":"[^"]*","async_get_token":"([^"]{20,100})"/.exec(t)) && dtsgOk(m[1])) dtsgAg = m[1];
+        if (!rsvc) {
+          const at = t.indexOf('["AdsVideoUploadConfig",[],{');
+          if (at >= 0) {
+            const part = t.slice(at, at + 8000);
+            const n = /"resumable_service_name":"([^"]{1,60})"/.exec(part);
+            const d = /"resumable_service_domain":"([^"]{1,60})"/.exec(part);
+            if (n && d && rsvcOk(n[1], d[1])) rsvc = { name: n[1], domain: d[1] };
+          }
+        }
+        if (dtsgAg && rsvc) return;
+      }
+    } catch (e) {}
+  }
+
   function state() {
     scanFast();
     const h = location.hostname || '';
@@ -171,6 +207,7 @@ _HELPER_JS = r"""
   function clean(text) {
     let out = String(text);
     if (token) out = out.split(token).join('<token>');
+    if (dtsgAg) out = out.split(dtsgAg).join('<hidden>');
     return out.replace(PARAM_RE, '$1<hidden>').replace(TOKEN_ANY, '<token>');
   }
 
@@ -279,28 +316,68 @@ _HELPER_JS = r"""
     if (spec.source !== undefined && phase !== 'transfer') return 'source';
     return null;
   }
-  // ACL-2639: the resumable ad-video upload (mirror of write_policy._check_video_ads). Phase 'transfer' is the rupload
-  // POST; its body is always served piece by piece (never staged), it starts at `offset` and ends inside the file.
-  function videoAdsOk(params, spec) {
-    const V = WRITE.video_ads;
-    if (!V) return 'video_ads';
+  // ACL-2639: the Ads Manager file-API upload (mirror of write_policy._check_file_api): closed keys per phase, exact values.
+  function fileApiMarked(params) {
+    const F = WRITE.file_api;
+    return !!F && F.markers.some((k) => k in params);
+  }
+  function fileApiOk(params, spec) {
+    const F = WRITE.file_api;
+    if (!F) return 'file_api';
     const phase = params.upload_phase;
-    if (typeof phase !== 'string' || V.phases.indexOf(phase) < 0) return 'upload_phase';
-    const allowed = V.keys[phase];
+    if (typeof phase !== 'string' || Object.keys(F.keys).indexOf(phase) < 0) return 'upload_phase';
+    const allowed = F.keys[phase];
     const pk = Object.keys(params);
     for (const k of pk) if (allowed.indexOf(k) < 0) return 'upload_key';
     for (const k of allowed) if (pk.indexOf(k) < 0) return 'upload_key';
-    if (phase !== 'start' && !(typeof params.video_id === 'string' && /^[0-9]{5,25}$/.test(params.video_id))) return 'video_id';
+    if (Object.keys(spec.files || {}).length || spec.source !== undefined) return 'file';
+    const U = WRITE.upload;
+    const idOk = (v) => typeof v === 'string' && new RegExp(U.id_re).test(v);
+    if (phase === 'start') {
+      const n = typeof params.file_size === 'string' ? digitsOf(params.file_size) : null;
+      if (!n || n > U.file_max) return 'upload_size';
+      if (!(typeof params.waterfall_id === 'string' && /^[0-9a-f]{32}$/.test(params.waterfall_id))) return 'upload_waterfall';
+      if (params.file_extension !== 'mp4' || params.supports_chunking !== 'true' || params.supports_file_api !== 'true'
+          || params.partition_start_offset !== '0' || params.partition_end_offset !== params.file_size) return 'upload_partition';
+      return null;
+    }
+    if (!idOk(params.upload_session_id)) return 'upload_session';
+    if (!idOk(params.video_id)) return 'video_id';
+    if (phase === 'transfer') {
+      const end = typeof params.end_offset === 'string' ? digitsOf(params.end_offset) : null;
+      if (params.start_offset !== '0' || params.partition_start_offset !== '0' || !end || end > U.file_max
+          || params.partition_end_offset !== params.end_offset) return 'upload_partition';
+      const h = params.fbuploader_video_file_chunk;
+      if (typeof h !== 'string' || h.length > F.handle_max || !new RegExp(F.handle_re).test(h)) return 'upload_handle';
+      return null;
+    }
+    if (typeof params.title !== 'string' || !new RegExp(WRITE.video_title_re || '^$').test(params.title)) return 'upload_text';
+    return null;
+  }
+  // ACL-2639: one request to the resumable service (mirror of write_policy.check_rupload). The address is built HERE
+  // from the service the page itself announced (validated at capture) and its session token: Python never sends either.
+  function ruploadOk(spec) {
+    const R = WRITE.rupload;
+    if (!R) return 'rupload';
+    // The request carries no address, host, query or credentials of its own: only what the policy lists.
+    const SPEC_KEYS = ['kind', 'method', 'path', 'headers', 'files', 'source', 'expect', 'filename', 'referrer', 'piece_ms', 'timeout_ms'];
+    for (const k of Object.keys(spec)) if (SPEC_KEYS.indexOf(k) < 0) return 'key';
+    const method = spec.method;
+    if (R.methods.indexOf(method) < 0) return 'method';
+    if (typeof spec.path !== 'string' || !new RegExp(R.path_re).test(spec.path)) return 'path';
+    const total = Number(spec.path.slice(spec.path.lastIndexOf('-') + 1));
+    if (!Number.isSafeInteger(total) || total < 1 || total > WRITE.upload.file_max) return 'path';
+    const hk = Object.keys(spec.headers || {});
     const fk = Object.keys(spec.files || {});
-    if (phase !== 'transfer') return (fk.length || spec.source !== undefined) ? 'file' : null;
-    const size = digitsOf(params.file_size);
-    const off = digitsOf(params.offset);
-    if (!size || size > WRITE.upload.file_max) return 'upload_size';
-    if (off === null || off >= size) return 'upload_offset';
-    if (typeof params.upload_version !== 'string' || !new RegExp(V.version_re).test(params.upload_version)) return 'upload_version';
-    if (fk.length !== 1 || fk[0] !== V.field || spec.source === undefined) return 'source';
+    if (method === 'GET') return (hk.length || fk.length || spec.source !== undefined) ? 'file' : null;
+    if (hk.length !== R.headers.length || !R.headers.every((k) => hk.indexOf(k) >= 0)) return 'headers';
+    const off = digitsOf(spec.headers.offset);
+    if (off === null || off >= total) return 'upload_offset';
+    if (digitsOf(spec.headers['X-Entity-Length']) !== total) return 'upload_size';
+    if (spec.headers['X-Entity-Type'] !== R.type) return 'headers';
+    if (fk.length !== 1 || fk[0] !== R.field || spec.source === undefined) return 'source';
     const n = (spec.expect || {}).bytes;
-    if (typeof n !== 'number' || n < 1 || n > V.segment_max || off + n > size) return 'chunk_size';
+    if (typeof n !== 'number' || n < 1 || n > R.segment_max || off + n > total) return 'chunk_size';
     return null;
   }
   // ACL-2629: a chunk served to the page's Web Worker piece by piece (instead of staged as base64). Same limits as
@@ -757,10 +834,12 @@ _HELPER_JS = r"""
     if (!WRITE) return { error: 'read_only' };
     // ACL-2533: a helper installed only for the form-background upload has no Graph write chain at all.
     if (WRITE.form_photo_only) return { error: 'read_only' };
+    // ACL-2639: the bytes of a video go to the resumable service of the page (not Graph); only a job may send them.
+    if (spec.kind === 'rupload') return spec.method === 'POST' ? ruploadPost(spec, job) : refused('method');
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
     // ACL-2629: a served chunk exists only for a video upload chunk (act_X/advideos, transfer, video_file_chunk).
-    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/(?:advideos|video_ads)$/.test(path)) return refused('source');
+    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/advideos$/.test(path)) return refused('source');
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
@@ -772,15 +851,8 @@ _HELPER_JS = r"""
     // (без рёбер) пути создания не принимает.
     const objMatch = /^\/[1-9][0-9]{4,}$/.exec(path);
     if (objMatch && !WRITE.object_update) {
-      // ACL-2639: the one object write of a creation - naming a video THIS helper finished with video_ads (exactly
-      // {name, title}, the same ACL tag name). Any other object path stays refused.
-      const vid = path.slice(1);
-      const p = spec.params || {};
-      const pk = Object.keys(p);
-      if (!finishedVideos[vid] || pk.length !== 2 || !('name' in p) || !('title' in p) || p.name !== p.title
-          || typeof p.name !== 'string' || !new RegExp(WRITE.video_title_re || '^$').test(p.name)
-          || (spec.files && Object.keys(spec.files).length) || spec.source !== undefined) return refused('path');
-      return post(path, p, null, null, spec, {}, null);
+      // (ACL-2639: a video is titled by its finish; no other write goes to an object path of a creation.)
+      return refused('path');
     }
     if (!objMatch && WRITE.object_update) return refused('path');
     const params = spec.params || {};
@@ -811,18 +883,16 @@ _HELPER_JS = r"""
     const edge = m[2];
     const keys = Object.keys(WRITE.edges).indexOf(edge) >= 0 ? WRITE.edges[edge] : null;   // own keys only (N4)
     if (!keys) return refused('edge');
-    if (edge === 'advideos' && 'upload_phase' in params) {
+    if (edge === 'advideos' && 'upload_phase' in params && fileApiMarked(params)) {
+      // ACL-2639: the Ads Manager file-API phases; no file in any of them (the bytes go to the resumable service).
+      const why = fileApiOk(params, spec);
+      if (why) return refused(why);
+    } else if (edge === 'advideos' && 'upload_phase' in params) {
       // ACL-1891: своя закрытая схема на каждую фазу; файл только у transfer.
       const why = uploadOk(params, spec);
       if (why) return refused(why);
       files = spec.files || {};
       want = params.upload_phase === 'transfer' ? WRITE.upload.chunk_field : null;
-    } else if (edge === 'video_ads') {
-      // ACL-2639: only through its phases; the body of 'transfer' is served.
-      const why = videoAdsOk(params, spec);
-      if (why) return refused(why);
-      files = spec.files || {};
-      want = params.upload_phase === 'transfer' ? WRITE.video_ads.field : null;
     } else {
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
@@ -883,14 +953,12 @@ _HELPER_JS = r"""
     }
     }
     let blob = null;
-    const vaField = (WRITE.video_ads || {}).field;
-    const served = want === (WRITE.upload || {}).chunk_field || (!!vaField && want === vaField);
+    const served = want === (WRITE.upload || {}).chunk_field;
     if (spec.source !== undefined && !served) return refused('source');
-    if (want && vaField && want === vaField && spec.source === undefined) return refused('source');   // never staged
     if (want && spec.source !== undefined) {
       // ACL-2629: nothing is staged here; the worker pulls the bytes. Only a job (startCall) may do it.
       if (!job || !served) return refused('source');
-      const why = sourceOk(spec.source, (spec.expect || {}).bytes, want === vaField ? WRITE.video_ads.segment_max : undefined);
+      const why = sourceOk(spec.source, (spec.expect || {}).bytes);
       if (why) return refused(why);
     } else if (want) {
       const parts = staged[String(files[want])];
@@ -1372,12 +1440,7 @@ _HELPER_JS = r"""
       body.set('access_token', token);
     }
     // Токен — в теле, не в адресе. Один запрос, без повтора и перенаправлений.
-    // ACL-2639: the rupload POST goes to the fixed documented address of THIS video (host and prefix from the policy,
-    // the version and the numeric id checked in `videoAdsOk`); the token goes in the Authorization header there.
-    const V = WRITE.video_ads || {};
-    const rupload = /\/video_ads$/.test(path) && params.upload_phase === 'transfer';
-    const url = rupload ? 'https://' + V.host + V.prefix + params.upload_version + '/' + params.video_id
-                        : 'https://' + useHost + (version ? '/' + version : '') + path;
+    const url = 'https://' + useHost + (version ? '/' + version : '') + path;
     const endpoint = { host: useHost, version: version, credentials: cred };
     let resp = null;
     let text = '';
@@ -1385,18 +1448,12 @@ _HELPER_JS = r"""
       // ACL-2629: the Web Worker fetches the pieces from the controller, checks them and sends the POST itself.
       if (job.aborted) return { error: 'aborted' };
       const fields = {};
-      let raw = null;
-      if (rupload) {
-        // ACL-2639: the documented headers; the body is the bytes themselves (no form); no cookies with the header token.
-        raw = { 'Authorization': 'OAuth ' + token, 'offset': String(params.offset), 'file_size': String(params.file_size) };
-      } else {
-        for (const k of Object.keys(params)) {
-          const v = params[k];
-          fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
-        }
-        fields.access_token = token;
+      for (const k of Object.keys(params)) {
+        const v = params[k];
+        fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
       }
-      const got = await runInWorker({ url: url, cred: rupload ? 'omit' : cred, fields: fields, field: want, raw: raw,
+      fields.access_token = token;
+      const got = await runInWorker({ url: url, cred: cred, fields: fields, field: want, raw: null,
                                       pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
                                       ref: refOpt(spec).referrer || '',
                                       filename: String(spec.filename || 'chunk').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80),
@@ -1462,9 +1519,6 @@ _HELPER_JS = r"""
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
-    // ACL-2639: a video this helper finished (video_ads finish answered success) may be named once, here only.
-    if (/\/video_ads$/.test(path) && params.upload_phase === 'finish' && resp.status >= 200 && resp.status < 300
-        && parsed && parsed.success === true && typeof params.video_id === 'string') finishedVideos[params.video_id] = true;
     const headers = {};
     for (const name of HEADERS) {
       try { const v = resp.headers.get(name); if (v) headers[name] = clean(v); } catch (e) {}
@@ -1472,8 +1526,76 @@ _HELPER_JS = r"""
     return { status: resp.status, body: parsed, headers: headers, endpoint: endpoint };
   }
 
+  // ACL-2639: the address of one request to the resumable service; '' when the page gave no service or session token.
+  function ruploadUrl(path) {
+    scanUpload();
+    if (!rsvc || !dtsgAg || !rsvcOk(rsvc.name, rsvc.domain) || !dtsgOk(dtsgAg)) return '';
+    return 'https://' + rsvc.name + '.' + rsvc.domain + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1';
+  }
+  function uploadService() {
+    scanUpload();
+    return { ok: !!(rsvc && dtsgAg) };
+  }
+  async function ruploadReply(resp, text) {
+    text = clean(text);
+    let parsed;
+    try { parsed = JSON.parse(text.replace(/^\s*for\s*\(;;\);\s*/, '')); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
+    return { status: resp.status, body: parsed, headers: {}, endpoint: { host: rsvc ? rsvc.name + '.' + rsvc.domain : '', credentials: 'include' } };
+  }
+  // GET: how many bytes Meta holds of this upload (the resume point). One request, no redirect, own deadline.
+  async function ruploadGet(spec) {
+    const refused = (why) => ({ error: 'write_refused', why: why });
+    if (retired) return { error: 'retired' };
+    if (!WRITE || WRITE.form_photo_only) return { error: 'read_only' };
+    if (spec.method !== 'GET') return refused('method');
+    const why = ruploadOk(spec);
+    if (why) return refused(why);
+    const url = ruploadUrl(spec.path);
+    if (!url) return refused('upload_service');
+    if (typeof fetch !== 'function') return { error: 'no_fetch' };
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const limit = Math.max(1, Math.min(30000, Number(spec.timeout_ms) || 15000));
+    const timer = controller ? setTimeout(() => controller.abort(), limit) : null;
+    let resp;
+    let text;
+    try {
+      resp = await fetch(url, { method: 'GET', credentials: 'include', mode: 'cors', cache: 'no-store', redirect: 'error',
+                                ...refOpt(spec), ...(controller ? { signal: controller.signal } : {}) });
+      text = await resp.text();
+    } catch (e) {
+      return { error: (controller && controller.signal.aborted) ? 'network_timeout' : 'network' };
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
+    return ruploadReply(resp, text);
+  }
+  // POST: one segment of the file (pieces served by the controller, checked, sent by the worker) with the session cookies.
+  async function ruploadPost(spec, job) {
+    const refused = (why) => ({ error: 'write_refused', why: why });
+    if (!job) return refused('source');                         // a served body may only be sent by a job
+    const why = ruploadOk(spec);
+    if (why) return refused(why);
+    const R = WRITE.rupload;
+    const bad = sourceOk(spec.source, (spec.expect || {}).bytes, R.segment_max);
+    if (bad) return refused(bad);
+    const url = ruploadUrl(spec.path);
+    if (!url) return refused('upload_service');
+    const raw = { 'offset': String(spec.headers.offset), 'X-Entity-Length': String(spec.headers['X-Entity-Length']),
+                  'X-Entity-Type': R.type };
+    if (job.aborted) return { error: 'aborted' };
+    const got = await runInWorker({ url: url, cred: 'include', fields: {}, field: R.field, raw: raw,
+                                    pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
+                                    ref: refOpt(spec).referrer || '', filename: '', src: spec.source }, job);
+    if (got.error) {
+      if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120) };
+      return { error: job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network'), state: state() };
+    }
+    return ruploadReply({ status: got.status }, got.text);
+  }
+
   async function call(spec) {
     if (retired) return { error: 'retired' };
+    if (spec && spec.kind === 'rupload') return spec.method === 'GET' ? ruploadGet(spec) : write(spec);
     if (spec && spec.method === 'POST') return write(spec);
     if (!spec || spec.method !== 'GET') return { error: 'read_only' };
     const path = String(spec.path || '');
@@ -1587,6 +1709,9 @@ _HELPER_JS = r"""
         && typeof d.h === 'string' && HOST_RE.test(d.h) && typeof d.v === 'string' && VER_RE.test(d.v);
       if (ok) {
         token = d.t; host = d.h.toLowerCase(); version = d.v; source = 'handover';
+        // ACL-2639: the upload page's values come along (optional; each is validated by the policy's own pattern).
+        if (dtsgOk(d.d)) dtsgAg = d.d;
+        if (d.r && typeof d.r === 'object' && rsvcOk(d.r.name, d.r.domain)) rsvc = { name: d.r.name, domain: d.r.domain };
         amRequest = { via: 'handover', method: 'GET', credentials: 'include', path: '', params: [] };
       }
       stopListening(ok ? 'received' : 'rejected');                   // the nonce is used once, either way
@@ -1597,7 +1722,7 @@ _HELPER_JS = r"""
   function listenStatus() { return listening ? 'listening' : listenResult; }
   function stopListen() { stopListening('stopped'); return listenResult; }
   async function handOver(name, nonce, ack, waitMs) {
-    scanFast(); scanHtml();
+    scanFast(); scanHtml(); scanUpload();
     if (retired) return 'retired';
     if (!token) return 'no_token';
     if (typeof BroadcastChannel !== 'function') return 'no_channel';
@@ -1611,7 +1736,7 @@ _HELPER_JS = r"""
       timer = setTimeout(() => resolve('no_ack'), wait);
     });
     const ch = new BroadcastChannel(name);
-    try { ch.postMessage({ n: nonce, t: token, h: host, v: version }); } finally { ch.close(); }
+    try { ch.postMessage({ n: nonce, t: token, h: host, v: version, d: dtsgAg || undefined, r: rsvc || undefined }); } finally { ch.close(); }
     const result = await acked;
     if (timer !== null) clearTimeout(timer);
     try { a.close(); } catch (x) {}
@@ -1619,13 +1744,13 @@ _HELPER_JS = r"""
   }
 
   function probe() { scanFast(); scanHtml(); return state(); }
-  function retire() { retired = true; token = null; stopListening('retired'); return true; }
+  function retire() { retired = true; token = null; dtsgAg = ''; rsvc = null; stopListening('retired'); return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
                           listen: listen, listenStatus: listenStatus, stopListen: stopListen,
                           handOver: handOver,
                           validatePage: validatePage, uploadFormPhoto: uploadFormPhoto,
-                          stage: stage, unstage: unstage, probeWorker: probeWorker,
+                          stage: stage, unstage: unstage, probeWorker: probeWorker, uploadService: uploadService,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
@@ -2510,6 +2635,45 @@ class InPageGraph:
                 if token:
                     server.unregister(token)
                 server.disarm()
+
+    # -- ACL-2639: the resumable service of Ads Manager (the bytes of a large video; not Graph)
+    def upload_service_ready(self) -> tuple[bool, str]:
+        """The page that will send the bytes (the clean upload tab, else this one) knows the resumable service and
+        its session token. Local only: no request to Meta. (ok, reason)."""
+        target = self._upload_graph or self
+        try:
+            got = target._eval_helper(".uploadService()", timeout=10.0)
+        except (PageError, CdpError, TimeoutError):
+            return False, "the page did not answer"
+        if isinstance(got, dict) and got.get("ok") is True:
+            return True, ""
+        return False, "no upload service address or session token on this page"
+
+    #: One GET of the resumable service (the resume offset) has this long.
+    RUPLOAD_READ_S = 15.0
+
+    def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk=None,
+                progress: Callable[[float], None] | None = None,
+                cancelled: Callable[[], bool] | None = None) -> dict:
+        """ONE request to the resumable service: GET the offset, or POST one served segment. Policy first
+        (`write_policy.check_rupload`), the helper checks again and builds the address and the session token itself.
+        A GET changes nothing and is asked again by the caller; a POST is never repeated here."""
+        from src.fb_api import write_policy as _wp
+
+        files = {_wp.RUPLOAD_BODY_FIELD: chunk} if chunk is not None else None
+        _wp.check_rupload(method, path, headers=headers, files=files)
+        spec: dict[str, Any] = {"kind": "rupload", "method": method, "path": path}
+        if method == "POST":
+            spec["headers"] = dict(headers or {})
+            return self._write_served(spec, _wp.RUPLOAD_BODY_FIELD, chunk, progress, cancelled)
+        target = self._upload_graph or self
+        target._add_referrer(spec)
+        spec["timeout_ms"] = int(self.RUPLOAD_READ_S * 1000)
+        try:
+            return target._patiently(lambda: target._read_once(spec, self.RUPLOAD_READ_S),
+                                     max_runs=1 + self.MAX_READ_RESENDS)
+        except (PageError, CdpError):
+            return {"error": "call_unknown", "reason": "page_closed"}
 
     #: ACL-2533: the in-page upload has its own 120 s deadline; the CDP wait is a little longer.
     FORM_PHOTO_CALL_S = 150.0
