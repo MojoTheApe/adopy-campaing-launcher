@@ -670,7 +670,8 @@ const loc = { href: ORIGIN + '/adsmanager/manage/campaigns', origin: ORIGIN, hos
               pathname: '/adsmanager/manage/campaigns' };
 const SVC_NAME = SC.service_name || 'rupload-fra3-1.up';
 const SVC_DOM = SC.service_domain || 'facebook.com';
-const PAGE_SCRIPTS = SC.no_service ? [] : [{ textContent: 'x'.repeat(30) + '["DTSGInitData",[],{"token":"short","async_get_token":"' + DTSG + '"},1]'
+const DTSG_ONLY = [{ textContent: 'x'.repeat(30) + '["DTSGInitData",[],{"token":"short","async_get_token":"' + DTSG + '"},1]' }];
+const PAGE_SCRIPTS = SC.no_service ? [] : SC.token_only ? DTSG_ONLY : [{ textContent: 'x'.repeat(30) + '["DTSGInitData",[],{"token":"short","async_get_token":"' + DTSG + '"},1]'
   + ',["AdsVideoUploadConfig",[],{"a":{"b":1},"resumable_service_name":"' + SVC_NAME + '","resumable_service_domain":"' + SVC_DOM + '"},2]' }];
 const doc = { readyState: 'complete', querySelector: () => null, scripts: PAGE_SCRIPTS,
               documentElement: { innerHTML: '"accessToken":"' + TOKENV + '"' } };

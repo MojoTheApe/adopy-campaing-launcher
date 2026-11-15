@@ -3356,6 +3356,8 @@ class CampaignCreator:
         ready, why_not = self.client.upload_service_ready()
         if not ready:
             raise _ResumableRefused(why_not or "upload service address not available on this page")
+        if why_not:
+            self._step(out, f"{who}: resumable upload via the generic upload host")
         calls_before = getattr(self.client, "calls", 0)
         planned = upload_calls(size, True)
         # start, transfer, finish + the status reads of a continuation (worst case ~8); once the transfer is confirmed

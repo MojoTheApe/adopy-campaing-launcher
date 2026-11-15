@@ -1535,17 +1535,20 @@ _HELPER_JS = r"""
   // ACL-2639: the address of one request to the resumable service; '' when the page gave no service or session token.
   function ruploadUrl(path) {
     scanUpload();
-    if (!rsvc || !dtsgAg || !rsvcOk(rsvc.name, rsvc.domain) || !dtsgOk(dtsgAg)) return '';
-    return 'https://' + rsvc.name + '.' + rsvc.domain + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1';
+    if (!dtsgAg || !dtsgOk(dtsgAg) || !UPLOAD) return '';
+    // The page's regional service when known (its config module may load seconds after the page); otherwise the generic host.
+    const host = (rsvc && rsvcOk(rsvc.name, rsvc.domain)) ? rsvc.name + '.' + rsvc.domain : UPLOAD.generic_host;
+    if (typeof host !== 'string' || !/^rupload(?:-[a-z0-9-]{1,30}\.up)?\.facebook\.com$/.test(host)) return '';
+    return 'https://' + host + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1';
   }
   function uploadService() {
     scanUpload();
-    return { ok: !!(rsvc && dtsgAg) };
+    return { ok: !!dtsgAg };          // the regional service is optional: the generic host works with the token
   }
   // ACL-2639: which of the two upload values the helper has (booleans only, never the values).
   function uploadParts() {
     scanUpload();
-    return { service: !!rsvc, token: !!dtsgAg };
+    return { service: !!rsvc, token: !!dtsgAg, generic: !!dtsgAg && !rsvc };
   }
   // ACL-2639: the page's module registry is invisible to this isolated world; Python reads two fixed values in the main
   // world and hands them in here. Only values that pass the policy's own patterns are kept; anything else is ignored.
@@ -1575,13 +1578,13 @@ _HELPER_JS = r"""
     scanUpload();                          // inline scripts of the page for what the modules did not give
     if (!dtsgAg) dtsgAg = keepD;           // a tab without the Ads Manager page keeps its current values
     if (!rsvc) rsvc = keepR;
-    return { ok: !!(rsvc && dtsgAg) };
+    return { ok: !!dtsgAg };
   }
   async function ruploadReply(resp, text) {
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text.replace(/^\s*for\s*\(;;\);\s*/, '')); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
-    return { status: resp.status, body: parsed, headers: {}, endpoint: { host: rsvc ? rsvc.name + '.' + rsvc.domain : '', credentials: 'include' } };
+    return { status: resp.status, body: parsed, headers: {}, endpoint: { host: rsvc ? rsvc.name + '.' + rsvc.domain : (UPLOAD ? UPLOAD.generic_host : ''), credentials: 'include' } };
   }
   // GET: how many bytes Meta holds of this upload (the resume point). One request, no redirect, own deadline.
   async function ruploadGet(spec) {
@@ -1811,7 +1814,8 @@ def _upload_value_policy() -> dict:
     """ACL-2639: only the patterns that validate the upload service name/domain and the session token."""
     from src.fb_api import write_policy as _wp
 
-    return {"name_re": _wp.RUPLOAD_NAME_RE.pattern, "domain": _wp.RUPLOAD_DOMAIN, "dtsg_re": _wp.RUPLOAD_DTSG_RE.pattern}
+    return {"name_re": _wp.RUPLOAD_NAME_RE.pattern, "domain": _wp.RUPLOAD_DOMAIN, "dtsg_re": _wp.RUPLOAD_DTSG_RE.pattern,
+            "generic_host": _wp.RUPLOAD_GENERIC_HOST}
 
 
 def helper_source(name: str, write_policy: dict | None = None, validation_act: str | None = None) -> str:
@@ -2768,13 +2772,11 @@ class InPageGraph:
             target.fill_upload_from_page(wait_s=0.0)
             parts = target._upload_parts() or {}
             light_tab._note_upload_parts("ready_after_fill", target)
-        if parts.get("service") and parts.get("token"):
-            return True, ""
-        if not parts.get("service") and not parts.get("token"):
-            return False, "upload service address and session token not available on this page"
+        if not parts.get("token"):
+            return False, "session token for the upload not available on this page"
         if not parts.get("service"):
-            return False, "upload service address not available on this page"
-        return False, "session token for the upload not available on this page"
+            return True, "generic upload host"       # the regional service is not known (yet): rupload.facebook.com
+        return True, ""
 
     def refresh_upload_service(self) -> bool:
         """ACL-2639: read the upload service address and token again: this page re-scans its scripts, and the clean

@@ -1018,7 +1018,7 @@ def _service_graph(tab):
 def test_the_transport_asks_the_page_whether_it_knows_the_service():
     assert _service_graph(ServiceTab(ready=True)).upload_service_ready() == (True, "")
     ok, why = _service_graph(ServiceTab(ready=False)).upload_service_ready()
-    assert ok is False and "upload service address and session token not available" in why
+    assert ok is False and "session token for the upload not available" in why
 
 
 def test_a_service_get_is_one_helper_call_with_no_address_or_token():
@@ -1135,12 +1135,37 @@ def test_the_helper_checks_the_graph_phases_like_python_and_never_names_a_video(
 
 
 def test_the_helper_gives_up_on_a_service_it_does_not_trust():
-    for kw in ({"service_domain": "evil.com"}, {"service_name": "evil.up"}, {"service_name": "rupload-x.up.evil"},
-               {"no_service": True}):
+    # an untrusted regional service is ignored: the generic host is used instead, never the foreign one
+    for kw in ({"service_domain": "evil.com"}, {"service_name": "evil.up"}, {"service_name": "rupload-x.up.evil"}):
         out = _node(dict({"name": "rupload"}, **kw))
-        assert out["service"] == {"ok": False}, kw
-        assert out["get"] == {"error": "write_refused", "why": "upload_service"}, kw
-        assert out["log"]["rupload"] == [], kw
+        assert out["service"] == {"ok": True}, kw
+        assert out["get"]["ok"] is True, kw
+        urls = [x["url"] for x in out["log"]["rupload"]]
+        assert urls and all(u.startswith("https://rupload.facebook.com/fb_video/") for u in urls), (kw, urls)
+    # no session token at all: nothing can be sent
+    out = _node({"name": "rupload", "no_service": True})
+    assert out["service"] == {"ok": False}
+    assert out["get"] == {"error": "write_refused", "why": "upload_service"} and out["log"]["rupload"] == []
+
+
+def test_a_token_only_helper_uses_the_generic_host():
+    out = _node({"name": "rupload", "token_only": True, "piece": 400_000})
+    assert out["service"] == {"ok": True}
+    assert out["get"]["ok"] is True
+    log = out["log"]["rupload"]
+    assert [x["method"] for x in log] == ["GET", "POST"]
+    assert all(x["url"] == "https://rupload.facebook.com/fb_video/" + "a" * 32 + "-0-2500000" for x in log)
+    assert all(x["cred"] == "include" and x["dtsg_in_url"] is True and x["query_keys"] == ["fb_dtsg_ag", "__a"] for x in log)
+
+
+def test_the_policy_accepts_exactly_the_generic_and_the_regional_hosts():
+    for host in ("rupload.facebook.com", "rupload-fra3-1.up.facebook.com", "rupload-ber1-1.up.facebook.com"):
+        assert wp.rupload_host_ok(host), host
+    for host in ("rupload.facebook.com.evil", "rupload.up.facebook.com", "x.facebook.com", "facebook.com",
+                 "rupload-fra3-1.up.facebook.com.evil", "evil.rupload.facebook.com", "rupload.facebook.com:8080",
+                 "RUPLOAD.facebook.com", "rupload-.up.facebook.com ", "", None, "rupload-A.up.facebook.com"):
+        assert not wp.rupload_host_ok(host), host
+    assert wp.policy_for_page(ACT)["rupload"]["generic_host"] == "rupload.facebook.com"
 
 
 def test_the_session_token_is_masked_raw_and_url_encoded_in_error_and_html_bodies():
@@ -1387,7 +1412,7 @@ def test_a_value_that_is_not_the_pages_own_service_is_never_handed_in():
         t = _service_graph(tab)
         t._sleep = lambda s: None
         ok, why = t.upload_service_ready()
-        assert ok is False and "upload service address and session token not available" in why, raw
+        assert ok is False and "session token for the upload not available" in why, raw
         assert tab.set_args == [], raw                                           # nothing was passed to the helper
 
 
@@ -1397,10 +1422,10 @@ def test_the_reason_names_the_missing_piece_without_values():
     t._sleep = lambda s: None
     ok, why = t.upload_service_ready()
     assert ok is False and why == "session token for the upload not available on this page"
-    tab = MainWorldTab(service="")
+    tab = MainWorldTab(service="")                        # no regional service: the generic host, token present
     t = _service_graph(tab)
     t._sleep = lambda s: None
-    assert t.upload_service_ready() == (False, "upload service address not available on this page")
+    assert t.upload_service_ready() == (True, "generic upload host")
 
 
 def test_the_senders_page_values_are_read_before_a_hand_over():
@@ -1426,8 +1451,8 @@ def test_the_senders_page_values_are_read_before_a_hand_over():
 
 def test_the_helper_validates_what_python_hands_in():
     out = _node({"name": "handover"})
-    assert out["set_bad"] == {"service": False, "token": False}
-    assert out["set_good"] == {"service": True, "token": True}
+    assert out["set_bad"] == {"service": False, "token": False, "generic": False}
+    assert out["set_good"] == {"service": True, "token": True, "generic": False}
 
 
 def test_the_fast_upload_refused_for_a_missing_piece_says_which_piece(resumable, tmp_path):
@@ -1457,11 +1482,12 @@ def test_the_upload_values_survive_capture_light_and_clean_tab(variant):
     nothing reached the light tab and the clean upload tab (live: 'address and session token not available')."""
     out = _node(dict({"name": "chain"}, **variant))
     if variant == {"token_only": True}:                       # no main-world read: only the token can be there
-        assert out["a_after"] == {"service": False, "token": True} and out["c_ready"] == {"ok": False}
+        assert out["a_after"] == {"service": False, "token": True, "generic": True} and out["c_ready"] == {"ok": True}
         return
-    assert out["a_after"] == {"service": True, "token": True}                       # the capture helper holds both
-    assert out["ab"]["status"] == "received" and out["b"] == {"service": True, "token": True}
-    assert out["bc"]["status"] == "received" and out["c"] == {"service": True, "token": True}
+    both = {"service": True, "token": True, "generic": False}
+    assert out["a_after"] == both                                                    # the capture helper holds both
+    assert out["ab"]["status"] == "received" and out["b"] == both
+    assert out["bc"]["status"] == "received" and out["c"] == both
     assert out["c_ready"] == {"ok": True} and out["leak"] is False
 
 
@@ -1492,4 +1518,6 @@ def test_every_hop_records_which_pieces_it_holds_without_values(monkeypatch):
     light_tab.hand_over(H({"service": True, "token": False}), H({"service": True, "token": True}), wait_s=0.1)
     hops = [(e["hop"], e["service"], e["token"]) for e in events if e["event"] == "fb_api_upload_service"]
     assert hops == [("after_fill", True, False), ("after_handover", True, True)]
-    assert all(set(e) <= {"event", "hop", "service", "token", "status", "clean_tab", "upload_only"} for e in events)
+    assert [e["generic_host"] for e in events if e["event"] == "fb_api_upload_service"] == [False, False]
+    assert all(set(e) <= {"event", "hop", "service", "token", "generic_host", "status", "clean_tab", "upload_only"}
+               for e in events)

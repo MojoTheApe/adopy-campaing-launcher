@@ -246,8 +246,9 @@ def _note_upload_parts(hop: str, helper: Any, **extra: Any) -> None:
     try:
         getter = getattr(helper, "_upload_parts", None)
         parts = getter() if callable(getter) else None
-        _record({"event": "fb_api_upload_service", "hop": hop,
-                 "service": bool((parts or {}).get("service")), "token": bool((parts or {}).get("token")),
+        svc, tok = bool((parts or {}).get("service")), bool((parts or {}).get("token"))
+        _record({"event": "fb_api_upload_service", "hop": hop, "service": svc, "token": tok,
+                 "generic_host": tok and not svc,
                  **{k: v for k, v in extra.items() if isinstance(v, (bool, str)) and len(str(v)) < 30}})
     except Exception:  # noqa: BLE001
         pass

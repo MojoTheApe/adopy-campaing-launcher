@@ -147,6 +147,16 @@ RUPLOAD_SEGMENT_MAX = 512 * 1024 * 1024
 #: The resumable service of the page (`AdsVideoUploadConfig`): `rupload-<place>.up` + facebook.com, nothing else.
 RUPLOAD_NAME_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up$", re.ASCII)
 RUPLOAD_DOMAIN = "facebook.com"
+#: The generic upload host (live 15.11: answers GET/POST like the regional one): used when the page's regional service is
+#: not known (its config module loads a few seconds after the page). `rupload.up.facebook.com` does not exist.
+RUPLOAD_GENERIC_HOST = "rupload.facebook.com"
+_RUPLOAD_REGIONAL_HOST_RE = re.compile(r"^rupload-[a-z0-9-]{1,30}\.up\.facebook\.com$", re.ASCII)
+
+
+def rupload_host_ok(host: Any) -> bool:
+    """The only hosts a service request may go to: the page's regional `rupload-<x>.up.facebook.com` or exactly the
+    generic `rupload.facebook.com`."""
+    return isinstance(host, str) and (host == RUPLOAD_GENERIC_HOST or bool(_RUPLOAD_REGIONAL_HOST_RE.fullmatch(host)))
 RUPLOAD_PATH_RE = re.compile(r"^/fb_video/[0-9a-f]{32}-0-[0-9]{1,13}$", re.ASCII)
 RUPLOAD_METHODS = ("GET", "POST")
 RUPLOAD_QUERY_KEYS = ("fb_dtsg_ag", "__a")
@@ -358,7 +368,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "video_title_re": VIDEO_TITLE_RE.pattern,
         "file_api": {"markers": list(FILE_API_MARKERS), "keys": {k: sorted(v) for k, v in FILE_API_KEYS.items()},
                      "handle_re": FILE_HANDLE_RE.pattern, "handle_max": FILE_HANDLE_MAX},
-        "rupload": {"name_re": RUPLOAD_NAME_RE.pattern, "domain": RUPLOAD_DOMAIN, "path_re": RUPLOAD_PATH_RE.pattern,
+        "rupload": {"name_re": RUPLOAD_NAME_RE.pattern, "domain": RUPLOAD_DOMAIN, "generic_host": RUPLOAD_GENERIC_HOST, "path_re": RUPLOAD_PATH_RE.pattern,
                     "methods": list(RUPLOAD_METHODS), "query_keys": list(RUPLOAD_QUERY_KEYS),
                     "headers": list(RUPLOAD_HEADERS), "type": RUPLOAD_TYPE, "field": RUPLOAD_BODY_FIELD,
                     "segment_max": RUPLOAD_SEGMENT_MAX, "dtsg_re": RUPLOAD_DTSG_RE.pattern},
