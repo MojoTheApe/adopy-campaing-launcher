@@ -618,6 +618,15 @@ class PageTab:
             raise CdpError("the browser did not return an isolated world context")
         return ctx
 
+    def evaluate_main(self, expression: str, *, timeout: float = 10.0) -> Any:
+        """ACL-2639: a tiny READ-ONLY expression in the page's MAIN world (where its module registry lives), by value.
+        Only for values the isolated helper cannot see; the caller passes a fixed expression, never page data."""
+        got = self.call("Runtime.evaluate", {"expression": expression, "awaitPromise": False, "returnByValue": True},
+                        timeout=timeout + 5.0)
+        if got.get("exceptionDetails"):
+            return None
+        return (got.get("result") or {}).get("value")
+
     def evaluate_in(self, context_id: int, expression: str, *, timeout: float = 60.0) -> Any:
         """Выполнить JS в отдельном мире (`contextId`); промис дожидается."""
         try:

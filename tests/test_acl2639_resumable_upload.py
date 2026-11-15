@@ -135,7 +135,7 @@ class ResumableMeta(ServedMeta):
 
     # -- the transport of the resumable service
     def upload_service_ready(self):
-        return (True, "") if self.service else (False, "no upload service address or session token on this page")
+        return (True, "") if self.service else (False, "upload service address not available on this page")
 
     def refresh_upload_service(self):
         self.refreshes += 1
@@ -1004,9 +1004,9 @@ class ServiceTab(ServingTab):
         self.ready = ready
 
     def evaluate_in(self, ctx, expr, timeout=60.0):
-        if ".uploadService()" in expr:
+        if ".uploadParts()" in expr:
             self.exprs.append(expr)
-            return {"ok": self.ready}
+            return {"service": bool(self.ready), "token": bool(self.ready)}
         return super().evaluate_in(ctx, expr, timeout)
 
 
@@ -1018,7 +1018,7 @@ def _service_graph(tab):
 def test_the_transport_asks_the_page_whether_it_knows_the_service():
     assert _service_graph(ServiceTab(ready=True)).upload_service_ready() == (True, "")
     ok, why = _service_graph(ServiceTab(ready=False)).upload_service_ready()
-    assert ok is False and "no upload service address" in why
+    assert ok is False and "upload service address and session token not available" in why
 
 
 def test_a_service_get_is_one_helper_call_with_no_address_or_token():
@@ -1312,3 +1312,138 @@ def test_the_reserve_counts_the_videos_still_to_come_and_not_the_upload_writes(r
     assert out.stop_kind == "video_error" and "this run can spare" in out.error
     assert len(meta.sessions) == 1 and next(iter(meta.sessions.values()))["done"]
     assert client.calls < client.max_calls and "Nothing was uploaded" in out.error
+
+
+# ───────────────────────── the page's module registry (main world) ─────────────────────────
+
+TOKEN62 = "Q" * 20 + ":" + "z" * 41
+
+
+class MainWorldTab(ServingTab):
+    """A page whose inline scripts show neither value; the main world's module registry has them."""
+
+    def __init__(self, service="rupload-ber1-1.up|facebook.com", token=TOKEN62, loaded_after=0, **kw):
+        super().__init__(**kw)
+        self.have = {"service": False, "token": False}
+        self.service, self.token = service, token
+        self.loaded_after = loaded_after               # the module shows up only after this many reads
+        self.main_calls: list[str] = []
+        self.set_args: list[list] = []
+
+    def evaluate_main(self, expr, timeout=10.0):
+        self.main_calls.append(expr)
+        if "AdsVideoUploadConfig" in expr:
+            if len([c for c in self.main_calls if "AdsVideoUploadConfig" in c]) <= self.loaded_after:
+                return ""
+            return self.service
+        if "DTSGInitData" in expr:
+            return self.token
+        return None
+
+    def evaluate_in(self, ctx, expr, timeout=60.0):
+        if ".uploadParts()" in expr:
+            self.exprs.append(expr)
+            return dict(self.have)
+        if ".setUploadService(" in expr:
+            self.exprs.append(expr)
+            args = json.loads("[" + expr.split(".setUploadService(", 1)[1].rsplit(")", 1)[0] + "]")
+            self.set_args.append(args)
+            name, dom, tok = args
+            if name and dom:
+                self.have["service"] = True
+            if tok:
+                self.have["token"] = True
+            return dict(self.have)
+        return super().evaluate_in(ctx, expr, timeout)
+
+
+def test_the_main_world_read_is_used_when_the_scan_finds_nothing(caplog):
+    import logging
+    caplog.set_level(logging.DEBUG)
+    tab = MainWorldTab()
+    t = _service_graph(tab)
+    ok, why = t.upload_service_ready()
+    assert (ok, why) == (True, "")
+    assert tab.set_args == [["rupload-ber1-1.up", "facebook.com", TOKEN62]]
+    # only the two fixed read-only expressions ran in the main world; nothing else of those modules is read
+    assert len(tab.main_calls) == 2
+    assert not any("access_token" in c or "accessToken" in c for c in tab.main_calls)
+    assert TOKEN62 not in caplog.text and TOKEN62 not in why                    # the value is never logged
+
+
+def test_the_main_world_read_is_retried_once_when_the_module_is_not_loaded_yet():
+    tab = MainWorldTab(loaded_after=1)
+    t = _service_graph(tab)
+    slept: list[float] = []
+    t._sleep = slept.append
+    assert t.fill_upload_from_page() is True
+    assert slept and slept[0] <= 3.0 and len([c for c in tab.main_calls if "AdsVideoUploadConfig" in c]) == 2
+
+
+def test_a_value_that_is_not_the_pages_own_service_is_never_handed_in():
+    for raw in ("evil.up|facebook.com", "rupload-x.up|evil.com", "rupload-x.up|facebook.com|y", "rupload-x.up", "|", "",
+                "rupload-x.up.evil|facebook.com"):
+        tab = MainWorldTab(service=raw, token="short")
+        t = _service_graph(tab)
+        t._sleep = lambda s: None
+        ok, why = t.upload_service_ready()
+        assert ok is False and "upload service address and session token not available" in why, raw
+        assert tab.set_args == [], raw                                           # nothing was passed to the helper
+
+
+def test_the_reason_names_the_missing_piece_without_values():
+    tab = MainWorldTab(token="")
+    t = _service_graph(tab)
+    t._sleep = lambda s: None
+    ok, why = t.upload_service_ready()
+    assert ok is False and why == "session token for the upload not available on this page"
+    tab = MainWorldTab(service="")
+    t = _service_graph(tab)
+    t._sleep = lambda s: None
+    assert t.upload_service_ready() == (False, "upload service address not available on this page")
+
+
+def test_the_senders_page_values_are_read_before_a_hand_over():
+    from src.fb_api import light_tab
+
+    calls = []
+
+    class Src:
+        def fill_upload_from_page(self):
+            calls.append("fill")
+
+        def _eval_helper(self, tail, timeout=0):
+            calls.append(tail)
+            return "acked"
+
+    class Dst:
+        def _eval_helper(self, tail, timeout=0):
+            return "listening" if ".listen(" in tail else "received"
+
+    light_tab.hand_over(Src(), Dst(), wait_s=0.1)
+    assert calls[0] == "fill" and any(".handOver(" in c for c in calls)
+
+
+def test_the_helper_validates_what_python_hands_in():
+    out = _node({"name": "handover"})
+    assert out["set_bad"] == {"service": False, "token": False}
+    assert out["set_good"] == {"service": True, "token": True}
+
+
+def test_the_fast_upload_refused_for_a_missing_piece_says_which_piece(resumable, tmp_path):
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(service=False)
+    out, _ = _run(meta, d)
+    assert out.error == "" and any("upload service address not available on this page" in s for s in out.steps)
+
+
+def test_the_call_budget_stop_is_not_reported_as_a_bad_creative_file(resumable, tmp_path):
+    from src.fb_api import plain_errors as pe
+    d, f = _two_ads_video_first(tmp_path)
+    plan = cr.plan_from_draft(d)
+    meta = ResumableMeta(start="denied")
+    out, _ = _run(meta, d, max_calls=cr.estimate_create_calls(plan) + cr.resumable_calls() + 12)
+    assert "this run can spare" in out.error
+    failure = out.failure if out.failure is not None else pe.classify(out.error)
+    assert "too large for this run's Meta call budget" in failure.short
+    assert "creative file" not in failure.short.lower() and "replace the file" not in failure.next_step

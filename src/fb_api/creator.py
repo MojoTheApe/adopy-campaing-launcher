@@ -3353,9 +3353,9 @@ class CampaignCreator:
         segment = _wpol.RUPLOAD_SEGMENT_MAX
         if not title:
             raise _ResumableRefused("the video has no ACL tag title")
-        ready, _why = self.client.upload_service_ready()
+        ready, why_not = self.client.upload_service_ready()
         if not ready:
-            raise _ResumableRefused("upload service address not available on this page")
+            raise _ResumableRefused(why_not or "upload service address not available on this page")
         calls_before = getattr(self.client, "calls", 0)
         planned = upload_calls(size, True)
         # start, transfer, finish + the status reads of a continuation (worst case ~8); once the transfer is confirmed
@@ -3770,7 +3770,11 @@ class CampaignCreator:
                     f"{what}: the fast upload was refused and uploading in "
                     f"{min(VIDEO_CHUNK_MAX, CHUNK_WINDOW_LIVE) // (1024 * 1024)} MB pieces needs about {chunk_plan} "
                     f"Meta calls; this run can spare {spare}. Nothing was uploaded. Use a smaller video file or "
-                    "publish fewer ads in this run.", created=out.created, kind="video_error")
+                    "publish fewer ads in this run.", created=out.created, kind="video_error",
+                    failure=_plain.Failure(
+                        "plan_text", f"{who[:1].upper()}{who[1:]}: the video is too large for this run's Meta call budget "
+                                     "(the file itself is fine)",
+                        "use a smaller or shorter video, or publish fewer ads in this run, then republish"))
             chunk_allowance = min(chunk_allowance, spare)
         # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
         waterfall = uuid.uuid4().hex

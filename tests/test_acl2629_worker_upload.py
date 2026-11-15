@@ -863,6 +863,8 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     new Function('globalThis', 'location', 'document', 'performance', 'fetch', 'URL', 'URLSearchParams', 'crypto', 'Worker',
                  'navigator', __HELPER2__.replace('__acl_second', '__acl_third'))(G3, loc, doc3, { getEntriesByType: () => [] }, fakeFetch, URL, URLSearchParams,
                              crypto.webcrypto, FakeWorker, NAV);
+    out.set_bad = G3['__acl_third'].setUploadService('evil.up', 'facebook.com', 'short');
+    out.set_good = G3['__acl_third'].setUploadService('rupload-ber1-1.up', 'facebook.com', DTSG);
     out.listen3 = G3['__acl_third'].listen('chan3_' + 'a'.repeat(20), 'nonce3_' + 'b'.repeat(20), 'ack3_' + 'c'.repeat(20), 5000, true);
     // another session's token: an upload-only message with a different token is rejected
     const doc4 = { readyState: 'complete', querySelector: () => null, scripts: [],

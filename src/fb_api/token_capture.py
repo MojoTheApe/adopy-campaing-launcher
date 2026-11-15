@@ -1539,6 +1539,19 @@ _HELPER_JS = r"""
     scanUpload();
     return { ok: !!(rsvc && dtsgAg) };
   }
+  // ACL-2639: which of the two upload values the helper has (booleans only, never the values).
+  function uploadParts() {
+    scanUpload();
+    return { service: !!rsvc, token: !!dtsgAg };
+  }
+  // ACL-2639: the page's module registry is invisible to this isolated world; Python reads two fixed values in the main
+  // world and hands them in here. Only values that pass the policy's own patterns are kept; anything else is ignored.
+  function setUploadService(name, domain, dtsg) {
+    if (retired || !WRITE || !WRITE.rupload) return uploadParts();
+    if (!rsvc && rsvcOk(name, domain)) rsvc = { name: name, domain: domain };
+    if (!dtsgAg && dtsgOk(dtsg)) dtsgAg = dtsg;
+    return uploadParts();
+  }
   // Read the page's upload values again (the old ones stay if the page shows none: a light or clean tab).
   function refreshUpload() {
     const keepD = dtsgAg;
@@ -1785,6 +1798,7 @@ _HELPER_JS = r"""
                           handOver: handOver,
                           validatePage: validatePage, uploadFormPhoto: uploadFormPhoto,
                           stage: stage, unstage: unstage, probeWorker: probeWorker, uploadService: uploadService, refreshUpload: refreshUpload,
+                          uploadParts: uploadParts, setUploadService: setUploadService,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
@@ -2671,17 +2685,81 @@ class InPageGraph:
                 server.disarm()
 
     # -- ACL-2639: the resumable service of Ads Manager (the bytes of a large video; not Graph)
+    #: ACL-2639: fixed read-only expressions for the page's MAIN world (module registry). Nothing else of those modules
+    #: is ever read (never an access token), and the values are never logged.
+    _MAIN_SERVICE_JS = ("(() => { try { if (typeof require !== 'function') return ''; "
+                        "const c = require('AdsVideoUploadConfig'); "
+                        "return c ? String(c.resumable_service_name || '') + '|' + String(c.resumable_service_domain || '') : ''; "
+                        "} catch (e) { return ''; } })()")
+    _MAIN_TOKEN_JS = ("(() => { try { if (typeof require !== 'function') return ''; "
+                      "const t = require('DTSGInitData'); return t ? String(t.async_get_token || '') : ''; "
+                      "} catch (e) { return ''; } })()")
+
+    def _upload_parts(self) -> dict | None:
+        try:
+            got = self._eval_helper(".uploadParts()", timeout=10.0)
+        except (PageError, CdpError, TimeoutError):
+            return None
+        return got if isinstance(got, dict) else None
+
+    def fill_upload_from_page(self, *, wait_s: float = 3.0) -> bool:
+        """ACL-2639: the upload service address (and, only when the inline-script scan found none, the session token)
+        live in the page's module registry, which the isolated helper cannot see. Read them in the main world (fixed
+        read-only expressions), validate, hand them to the helper. If the module is not loaded yet, once more after a
+        short wait (at most 3 s). True when the helper has both afterwards. Never logs a value."""
+        from src.fb_api import write_policy as _wp
+
+        main = getattr(self.tab, "evaluate_main", None)
+        if not callable(main):
+            return False
+        for attempt in (0, 1):
+            parts = self._upload_parts()
+            if parts is None:
+                return False
+            if parts.get("service") and parts.get("token"):
+                return True
+            name = dom = tok = ""
+            try:
+                if not parts.get("service"):
+                    raw = main(self._MAIN_SERVICE_JS)
+                    pair = raw.split("|") if isinstance(raw, str) else []
+                    if len(pair) == 2 and _wp.rupload_service_ok(pair[0], pair[1]):
+                        name, dom = pair
+                if not parts.get("token"):
+                    t = main(self._MAIN_TOKEN_JS)
+                    if isinstance(t, str) and _wp.RUPLOAD_DTSG_RE.fullmatch(t):
+                        tok = t
+                if name or tok:
+                    self._eval_helper(f".setUploadService({json.dumps(name)},{json.dumps(dom)},{json.dumps(tok)})",
+                                      timeout=10.0)
+            except (PageError, CdpError, TimeoutError):
+                return False
+            finally:
+                tok = ""
+            parts = self._upload_parts() or {}
+            if parts.get("service") and parts.get("token"):
+                return True
+            if attempt == 0 and wait_s > 0:
+                self._sleep(min(float(wait_s), 3.0))
+        return False
+
     def upload_service_ready(self) -> tuple[bool, str]:
         """The page that will send the bytes (the clean upload tab, else this one) knows the resumable service and
-        its session token. Local only: no request to Meta. (ok, reason)."""
+        its session token. Local only: no request to Meta. (ok, reason); the reason names the missing piece."""
         target = self._upload_graph or self
-        try:
-            got = target._eval_helper(".uploadService()", timeout=10.0)
-        except (PageError, CdpError, TimeoutError):
+        parts = target._upload_parts()
+        if parts is None:
             return False, "the page did not answer"
-        if isinstance(got, dict) and got.get("ok") is True:
+        if not (parts.get("service") and parts.get("token")):
+            target.fill_upload_from_page(wait_s=0.0)
+            parts = target._upload_parts() or {}
+        if parts.get("service") and parts.get("token"):
             return True, ""
-        return False, "no upload service address or session token on this page"
+        if not parts.get("service") and not parts.get("token"):
+            return False, "upload service address and session token not available on this page"
+        if not parts.get("service"):
+            return False, "upload service address not available on this page"
+        return False, "session token for the upload not available on this page"
 
     def refresh_upload_service(self) -> bool:
         """ACL-2639: read the upload service address and token again: this page re-scans its scripts, and the clean
@@ -2689,6 +2767,7 @@ class InPageGraph:
         from src.fb_api import light_tab
 
         try:
+            self.fill_upload_from_page(wait_s=0.0)         # an Ads Manager page tab: its main-world modules first
             got = self._eval_helper(".refreshUpload()", timeout=10.0)
         except (PageError, CdpError, TimeoutError):
             return False

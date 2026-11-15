@@ -247,6 +247,12 @@ def hand_over(src: Any, dst: Any, *, wait_s: float = 8.0, upload_only: bool = Fa
     The channel name, nonce and ack name are random, live only for this call and are never logged.
     `dst` accepts exactly one message with the right nonce; whatever happens, its channel is closed.
     """
+    fill = getattr(src, "fill_upload_from_page", None)     # ACL-2639: the sender's page modules first (main world)
+    if callable(fill):
+        try:
+            fill()
+        except Exception:  # noqa: BLE001 - the hand-over goes on without them
+            pass
     name, nonce, ack = (secrets.token_urlsafe(18) for _ in range(3))
     args = ",".join(json.dumps(v) for v in (name, nonce, ack))
     ttl_ms = int((wait_s + 5.0) * 1000)
