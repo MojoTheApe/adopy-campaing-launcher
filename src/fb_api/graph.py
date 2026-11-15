@@ -749,6 +749,25 @@ class GraphClient:
             raise FormPhotoRefused("The work tab could not be switched to Ads Manager for the background "
                                    f"upload; nothing was sent ({type(exc).__name__}).", code="light_switch") from exc
         self.transport = new
+        self._carry_upload_context(old, new)
+
+    @staticmethod
+    def _carry_upload_context(old: Any, new: Any) -> None:
+        """ACL-2637: the separate upload tab does not depend on the work tab - it moves to the new transport, so the
+        videos still go up from it (the new Ads Manager tab is controlled by a service worker). A transport that
+        cannot take it gets it closed (and the upload path then fails closed, `no_file`)."""
+        if getattr(old, "_upload_graph", None) is None:
+            return
+        adopt = getattr(new, "adopt_upload_context", None)
+        try:
+            if callable(adopt):
+                adopt(old)
+                return
+        except Exception:  # noqa: BLE001 - fall through: close it
+            pass
+        close = getattr(old, "close_upload_context", None)
+        if callable(close):
+            close()
 
     def upload_form_photo(self, page_id: str, data: bytes, *, mime: str) -> dict:
         """ACL-2533: ONE upload of a lead form background as the pinned Page. Returns `{photo_id, width, height}`.

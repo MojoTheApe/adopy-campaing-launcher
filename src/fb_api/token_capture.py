@@ -971,21 +971,28 @@ _HELPER_JS = r"""
   // The token of the session goes to the worker in a message of this world only (the page cannot reach it).
   // The runner is self-contained (it is stringified into the worker): `fetch`, `crypto` and `emit` are parameters, so
   // the very same code also runs INLINE in this world when no worker can be started (see `transport`).
-  function makeRunner(fetch, crypto, emit) {
+  function makeRunner(fetch, crypto, emit, guard) {
     const jobs = {};
+    const halts = {};
+    const TAKEN = 'a service worker took control of the page during the upload';
     const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
     const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
-    async function pieces(m, ac) {
+    async function pieces(m, ac, st) {
       const parts = [];
       let got = 0;
       for (const p of m.src.pieces) {
+        // ACL-2637: inline mode re-checks the controller before EVERY piece (a service worker may claim the page
+        // mid-upload via clients.claim()); in a worker the page sends `stopPieces` on 'controllerchange' instead.
+        if (st.stopped || (guard && guard())) return { error: 'no_file', why: TAKEN };
+        if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };
         // Every piece has a deadline: a request the controller never answers must not hang the upload.
         const pc = new AbortController();
         let late = false;
         const onAbort = () => pc.abort();
         ac.signal.addEventListener('abort', onAbort);
         const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
-        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); };
+        st.pc = pc;
+        const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); st.pc = null; };
         let r;
         let blob;
         let buf;
@@ -997,7 +1004,7 @@ _HELPER_JS = r"""
           buf = await blob.arrayBuffer();
         } catch (e) {
           done();
-          return { error: 'no_file', why: ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
+          return { error: 'no_file', why: st.stopped ? TAKEN : ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
         }
         done();
         if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
@@ -1012,11 +1019,16 @@ _HELPER_JS = r"""
     }
     async function run(m) {
       const ac = new AbortController();
+      const st = { stopped: false, done: false, pc: null };
       jobs[m.id] = ac;
+      halts[m.id] = st;
       try {
-        const made = await pieces(m, ac);
+        const made = await pieces(m, ac, st);
+        st.done = true;               // from here on `stopPieces` is ignored: it never touches the POST
         if (made.error) return made;
         if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
+        if (st.stopped) return { error: 'no_file', why: TAKEN };                  // nothing posted yet
+        if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };        // nothing posted yet
         const body = new FormData();
         for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
         body.append(m.field, new Blob(made.parts), m.filename);
@@ -1031,14 +1043,22 @@ _HELPER_JS = r"""
         const headers = {};
         for (const n of HEADERS) { try { const v = resp.headers.get(n); if (v) headers[n] = v; } catch (e) {} }
         return { status: resp.status, text: text, headers: headers };
-      } finally { delete jobs[m.id]; }
+      } finally { delete jobs[m.id]; delete halts[m.id]; }
     }
     function abort(id) { const ac = jobs[id]; if (ac) ac.abort(); }
-    return { run: run, abort: abort };
+    // ACL-2637: a service worker took control - stop fetching pieces (no_file); a POST already started is left alone.
+    function stopPieces(id) {
+      const st = halts[id];
+      if (!st || st.done) return;
+      st.stopped = true;
+      try { if (st.pc) st.pc.abort(); } catch (e) {}
+    }
+    return { run: run, abort: abort, stopPieces: stopPieces };
   }
   const WORKER_GLUE = 'const r = make(fetch, crypto, (d) => self.postMessage(d));'
     + 'self.onmessage = (e) => { const m = e.data || {};'
     + ' if (m.abort !== undefined) { r.abort(m.abort); return; }'
+    + ' if (m.stopPieces !== undefined) { r.stopPieces(m.stopPieces); return; }'
     + ' if (m.quit) { self.close(); return; }'
     + ' r.run(m).then((x) => self.postMessage(Object.assign({ id: m.id, done: true }, x)),'
     + ' () => self.postMessage({ id: m.id, done: true, error: "network", sent: true })); };'
@@ -1053,6 +1073,7 @@ _HELPER_JS = r"""
     const w = worker;
     worker = null;
     try { if (w) { w.onmessage = null; w.postMessage({ quit: true }); } } catch (e) {}   // the worker closes itself
+    try { if (w) w.terminate(); } catch (e) {}                                             // ... or is ended here
     for (const k of Object.keys(waiting)) {
       const f = waiting[k];
       delete waiting[k];
@@ -1072,7 +1093,9 @@ _HELPER_JS = r"""
       const finish = (why) => {
         if (timer !== null) clearTimeout(timer);
         try { if (url) URL.revokeObjectURL(url); } catch (e) {}
-        if (why && w) { try { w.onmessage = null; w.postMessage({ quit: true }); } catch (e) {} if (worker === w) worker = null; }
+        // ACL-2637: a worker the controller left paused (its interception could not be turned on) never reads a
+        // message, so `quit` alone would leave it: the Web Worker API call below ends it from this side.
+        if (why && w) { try { w.onmessage = null; w.postMessage({ quit: true }); } catch (e) {} try { w.terminate(); } catch (e) {} if (worker === w) worker = null; }
         resolve(why);
       };
       try {
@@ -1108,7 +1131,7 @@ _HELPER_JS = r"""
     if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
     if (job && job.aborted) return { error: 'aborted' };
     if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
-    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {});
+    if (!inlineRunner) inlineRunner = makeRunner(fetch, crypto, () => {}, swControlled);
     const id = ++waitSeq;
     if (job) job.wid = id;
     const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
@@ -1123,12 +1146,20 @@ _HELPER_JS = r"""
     const id = ++waitSeq;
     const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
     const msg = Object.assign({ id: id, base: base }, m);
-    return new Promise((resolve) => {
+    // ACL-2637: a service worker that takes control while pieces are still being fetched stops the job before any
+    // more pieces move (nothing was posted yet: no_file). `stopPieces` is not `abort`: the worker ignores it once the
+    // pieces are in, so a POST that has started is never cancelled by it (no 'aborted, sent' -> no unknown result).
+    const onTake = () => { try { if (worker) worker.postMessage({ stopPieces: id }); } catch (e) {} };
+    const sw = (typeof navigator !== 'undefined' && navigator.serviceWorker) || null;
+    try { if (sw && typeof sw.addEventListener === 'function') sw.addEventListener('controllerchange', onTake); } catch (e) {}
+    const r = await new Promise((resolve) => {
       const f = resolve;
       waiting[id] = f;
       if (job) job.wid = id;
       try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
     });
+    try { if (sw && typeof sw.removeEventListener === 'function') sw.removeEventListener('controllerchange', onTake); } catch (e) {}
+    return r;
   }
   // Local self-test of the worker data path (CSP, worker session interception, piece hash): no request to Meta.
   async function probeWorker(spec) {
@@ -1144,21 +1175,27 @@ _HELPER_JS = r"""
     let result = null;
     try {
       transport = '';
-      const got = await runInWorker({ src: spec.source }, null);
+      // ACL-2637: a light document (the clean upload tab, `/__acl_work`) runs no app on its main thread, so the
+      // inline runner is the intended mode there: no worker is started (no worker session to intercept, no wait).
+      const inlineOnly = !!(spec && spec.inline_only);
+      const got = inlineOnly ? { error: 'skipped' } : await runInWorker({ src: spec.source }, null);
       if (!got.error) { transport = 'worker'; result = { ok: true, bytes: got.bytes, mode: 'worker' }; }
-      else notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
+      else if (!inlineOnly) notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
       if (!result) {
         // Stage 2: the same runner in this world (no worker needed; pieces are still fetch() answers from the controller).
         transport = 'inline';
         const inl = await runInline({ src: spec.source }, null);
-        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
+        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', intended: inlineOnly,
+                                   worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
         else { transport = ''; notes.push('inline: ' + String(inl.why || inl.error).slice(0, 140)); }
       }
     } finally {
       try { if (document && typeof document.removeEventListener === 'function') document.removeEventListener('securitypolicyviolation', onCsp); } catch (e) {}
     }
     if (result) return result;
-    return { error: 'no_worker', why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
+    // ACL-2637: `controlled` tells Python that THIS page is controlled by a service worker (a clean tab may help).
+    return { error: 'no_worker', controlled: swControlled(),
+             why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
   }
 
   // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
@@ -2274,33 +2311,130 @@ class InPageGraph:
     #: The transport can serve a file to the worker (the creator checks `probe_worker` before it relies on it).
     serves_chunks = True
 
+    #: ACL-2637: where the upload runs - '' (this tab) or 'clean_tab' (a separate tab without a service worker).
+    upload_context = ""
+    #: ACL-2637: `callable() -> tab` opening a new own tab of the same profile (default: `PageTab.open` on the
+    #: browser of this tab). Tests inject a fake.
+    upload_tab_factory: Callable[[], Any] | None = None
+    _upload_graph: "InPageGraph | None" = None
+
     def probe_worker(self) -> tuple[bool, str]:
         """Local self-test of the worker data path: CSP lets the worker start, its requests are intercepted and
-        answered from here, and the bytes arrive intact. No request to Meta. Returns (ok, reason)."""
+        answered from here, and the bytes arrive intact. No request to Meta. Returns (ok, reason).
+
+        ACL-2637: when THIS page is controlled by a service worker (the Ads Manager tab always is), the upload
+        moves to a separate tab of the same profile whose document is checked to be uncontrolled
+        (`light_tab.open_upload_document`); the token goes there world-to-world. Both reasons are kept.
+        """
+        if not self.allow_writes or self.object_updates or self.form_photo:
+            return False, "writes are not enabled for this page"
+        self.close_upload_context()
+        ok, why, controlled = self._probe_here()
+        if ok or not controlled:
+            return ok, why
+        up, reason = self._open_upload_context()
+        if up is None:
+            return False, f"{why}; clean upload tab: {reason}"[:1000]
+        ok2, why2, _ = up._probe_here()
+        if not ok2:
+            self.close_upload_context()
+            return False, f"{why}; clean upload tab: {why2}"[:1000]
+        self.upload_context = "clean_tab"
+        self.upload_mode, self.upload_mode_note = up.upload_mode, up.upload_mode_note
+        return True, up.upload_mode_note
+
+    def _open_upload_context(self) -> tuple["InPageGraph | None", str]:
+        """A new tab of THIS profile (same browser, same proxy) with the uncontrolled light document, a helper
+        with the same write policy, and the token handed over. (graph, '') or (None, reason); closed on failure."""
+        from src.fb_api import light_tab
+
+        factory = self.upload_tab_factory
+        if factory is None:
+            cdp_url = str(getattr(self.tab, "_cdp_url", "") or "")
+            if not cdp_url:
+                return None, "no way to open a tab of this profile"
+            from src.fb_api.cdp import PageTab
+
+            def factory():          # the same browser = the same profile and its proxy
+                return PageTab.open(cdp_url)
+        tab = None
+        try:
+            tab = factory()
+            doc, reason = light_tab.open_upload_document(tab)
+            if doc is None:
+                light_tab.settle_and_close(tab)
+                return None, reason
+            up = InPageGraph(tab, graph_host=self.graph_host, credentials=self.credentials, allow_writes=True,
+                             write_act=self.write_act, write_page=self.write_page,
+                             sleep=self._sleep, clock=self._clock)
+            up._write_policy = self._write_policy           # exactly the policy of this session
+            up.install()
+            up.bind_act(self.light_act_id or self.write_act or "")
+            got = up.receive_from(self)
+            if got:
+                light_tab.settle_and_close(tab)
+                return None, f"token hand-over failed ({got})"
+        except GraphStop:
+            light_tab.settle_and_close(tab)
+            raise
+        except Exception as exc:  # noqa: BLE001 - a clean tab that cannot be prepared is a fallback, not a stop
+            light_tab.settle_and_close(tab)
+            return None, f"could not be opened ({type(exc).__name__}: {str(exc)[:80]})"
+        self._upload_graph = up
+        return up, ""
+
+    def adopt_upload_context(self, old: "InPageGraph") -> None:
+        """ACL-2637: take over the clean upload tab of `old` (a light lease switched to Ads Manager, ACL-2593).
+        The clean tab holds its own token and the same session policy; nothing is re-opened or sent."""
+        self.close_upload_context()
+        up = getattr(old, "_upload_graph", None)
+        if up is None:
+            return
+        self._upload_graph, old._upload_graph = up, None
+        self.upload_context, old.upload_context = getattr(old, "upload_context", "") or "clean_tab", ""
+        self.upload_mode, self.upload_mode_note = old.upload_mode, old.upload_mode_note
+
+    def close_upload_context(self) -> bool:
+        """ACL-2637: close the separate upload tab (if any). True when none is left open. Never raises."""
+        up, self._upload_graph = self._upload_graph, None
+        self.upload_context = ""
+        if up is None:
+            return True
+        from src.fb_api import light_tab
+
+        try:
+            up._eval_helper(".retire()", timeout=5.0)
+        except Exception:  # noqa: BLE001 - closing anyway
+            pass
+        return light_tab.settle_and_close(up.tab)
+
+    def _probe_here(self) -> tuple[bool, str, bool]:
+        """The probe in THIS tab. (ok, reason, page_is_controlled_by_a_service_worker)."""
         from src.fb_api import write_policy as _wp
         from src.fb_api.upload_server import MemorySource
 
-        if not self.allow_writes or self.object_updates or self.form_photo:
-            return False, "writes are not enabled for this page"
         server = None
         token = ""
         try:
             self._ready_for_call()
             ctx = self._ensure()
             server = self._server()
-            server.arm()
+            inline_only = self.light
+            server.arm(attach_workers=not inline_only)
             probe = _wp.ServedChunk(MemorySource(secrets.token_bytes(4096)), 0, 4096)
             token, pieces = server.register(probe, piece=1024)
-            expr = (f"globalThis[{json.dumps(self.name)}].probeWorker("
-                    f"{json.dumps({'source': {'token': token, 'pieces': pieces}})})")
+            spec = {"source": {"token": token, "pieces": pieces}}
+            if inline_only:
+                spec["inline_only"] = True
+            expr = f"globalThis[{json.dumps(self.name)}].probeWorker({json.dumps(spec)})"
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.PROBE_CALL_S))
         except GraphStop:
             raise
         except (CdpTimeout, TimeoutError):
-            return False, "the worker probe timed out | " + (server.summary() if server is not None else "")
+            return False, "the worker probe timed out | " + (server.summary() if server is not None else ""), False
         except (StaleContextError, PageError, CdpError) as exc:
             return False, f"worker probe failed ({type(exc).__name__}: {str(exc)[:100]}) | " + (
-                server.summary() if server is not None else "")
+                server.summary() if server is not None else ""), False
         finally:
             if server is not None:
                 if token:
@@ -2312,16 +2446,34 @@ class InPageGraph:
             # for 'inline' the worker's failure is kept so the log tells why the worker was not used.
             self.upload_mode = str(got.get("mode") or "worker")
             note = str(got.get("worker_why") or "")
+            if self.upload_mode == "inline" and got.get("intended"):
+                # ACL-2637: the light document has no app on its main thread - inline is the plan, not a fallback.
+                self.upload_mode_note = ""
+                return True, "", False
             if self.upload_mode == "inline":
                 self.upload_mode_note = f"worker not used: {note[:300]}; {trace}"
-                return True, self.upload_mode_note
+                return True, self.upload_mode_note, False
             self.upload_mode_note = ""
-            return True, ""
+            return True, "", False
         why = str(got.get("why") or got.get("error")) if isinstance(got, dict) else "bad reply"
-        return False, f"{why[:400]} | {trace}"[:700]
+        controlled = isinstance(got, dict) and got.get("controlled") is True
+        return False, f"{why[:400]} | {trace}"[:700], controlled
 
     def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled) -> dict:
-        """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker."""
+        """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker.
+
+        ACL-2637: with a clean upload tab (see `probe_worker`) the call runs there; Python policy was checked in
+        `write` (one call, one check), the helper of that tab checks it again. A lost clean tab: `no_file`.
+        """
+        up = self._upload_graph
+        if up is not None:
+            try:
+                up._ready_for_call()
+            except Exception as exc:  # noqa: BLE001 - nothing was sent; the tab is not used again
+                self.close_upload_context()
+                return {"error": "no_file", "why": f"clean upload tab lost ({type(exc).__name__})"}
+            up._add_referrer(spec)
+            return up._write_served(spec, field_name, chunk, progress, cancelled)
         server = None
         token = ""
         try:
@@ -2329,7 +2481,7 @@ class InPageGraph:
                 self._ready_for_call()
                 ctx = self._ensure()
                 server = self._server()
-                server.arm()
+                server.arm(attach_workers=not self.light)
                 token, pieces = server.register(chunk, piece=self.SERVE_PIECE)
             except GraphStop:
                 raise

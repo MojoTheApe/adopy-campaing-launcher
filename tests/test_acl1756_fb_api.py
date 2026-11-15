@@ -396,6 +396,14 @@ def test_no_profile_stop_in_transport_or_read_only_pilot():
         if path.name == "connection.py":
             continue  # Explicitly authorized, leased lifecycle; covered by ACL-2092.
         src = path.read_text(encoding="utf-8")
+        if path.name == "token_capture.py":
+            # ACL-2637: the page helper ends its own Web Worker (`w.terminate()`, browser API inside the tab);
+            # that is not a profile stop. Only this exact call, only inside the helper JS, exactly twice.
+            head, rest = src.split('_HELPER_JS = r"""', 1)
+            helper, tail = rest.split('"""', 1)
+            call = re.compile(r"(?<![\w.])w\.terminate\(\)")
+            assert len(call.findall(helper)) == 2, "w.terminate() calls in the helper"
+            src = head + call.sub("", helper) + tail
         assert "stop_profile" not in src and "terminate" not in src.lower(), path.name
 
 
