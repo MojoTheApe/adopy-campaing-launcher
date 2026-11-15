@@ -40,7 +40,7 @@ class ResumableMeta(ServedMeta):
     """Meta with the file-API advideos phases, the resumable service (GET offset / POST segments) and the status read."""
 
     def __init__(self, *, start="ok", faults=(), keep_partial=True, finish_faults=(), service=True,
-                 handle_style="h", transfer="ok", transfer_faults=(), get_faults=(), get_returns_handle=False, refuse_calls=0, refuse_style="page", **kw):
+                 handle_style="h", transfer="ok", transfer_faults=(), get_faults=(), get_returns_handle=False, refuse_calls=0, refuse_style="page", host_kind_reply="", **kw):
         super().__init__(meta_chunk=MB, **kw)
         self.service = service                          # the page knows the resumable service and its session token
         self.finish_faults = list(finish_faults)        # per finish: "", "lost" (finished, no answer), ...
@@ -56,6 +56,8 @@ class ResumableMeta(ServedMeta):
         self.get_faults = list(get_faults)              # per offset GET: "lost" | "bad"
         self.refuse_calls = refuse_calls                # the first N service requests are refused before sending
         self.refuse_style = refuse_style                # "page" (helper) | "policy" (Python)
+        self.host_kind_reply = host_kind_reply          # the host kind the helper reports ("generic" | "regional")
+        self.host_kinds_asked: list[str | None] = []
         self.lag_titles = False                         # a list read (no status field) does not show titles yet
         self.get_returns_handle = get_returns_handle    # a GET of the finished upload also returns the file handle
         self.refreshes = 0
@@ -150,7 +152,14 @@ class ResumableMeta(ServedMeta):
         wp.check_rupload(method, path, headers=headers,
                          files={wp.RUPLOAD_BODY_FIELD: chunk} if chunk is not None else None)
         self.rup.append((method, path, dict(headers or {})))
+        self.host_kinds_asked.append(kw.get("host_kind"))
         sess = self.va[self.by_wf[path.split("/")[-1].split("-")[0]]]
+        reply = self._rupload_reply(method, path, headers, chunk, sess)
+        if self.host_kind_reply and isinstance(reply, dict) and "status" in reply:
+            reply = dict(reply, host_kind=self.host_kind_reply)
+        return reply
+
+    def _rupload_reply(self, method, path, headers, chunk, sess):
         if method == "GET":
             fault = self.get_faults.pop(0) if self.get_faults else ""
             if fault == "lost":
@@ -1521,3 +1530,68 @@ def test_every_hop_records_which_pieces_it_holds_without_values(monkeypatch):
     assert [e["generic_host"] for e in events if e["event"] == "fb_api_upload_service"] == [False, False]
     assert all(set(e) <= {"event", "hop", "service", "token", "generic_host", "status", "clean_tab", "upload_only"}
                for e in events)
+
+
+# ───────────────────────── the host of an upload is pinned ─────────────────────────
+
+def test_the_host_of_an_upload_is_pinned_by_its_path_in_the_helper():
+    out = _node({"name": "pin", "token_only": True})
+    hosts = [x["url"].split("/fb_video/")[0] for x in out["log"]["rupload"]]
+    g, r = "https://rupload.facebook.com", "https://rupload-ber1-1.up.facebook.com"
+    # a: generic, a again: STILL generic, b (new): regional, c asked generic: generic, d asked regional: regional,
+    # c again asked regional: the pin wins (generic)
+    assert hosts == [g, g, r, g, r, g]
+    assert out["bad"] == {"error": "write_refused", "why": "host_kind"} and len(hosts) == 6
+    assert out["svc"]["service"] is True
+
+
+def test_the_python_policy_validates_the_host_kind():
+    wp.check_rupload("GET", PATH, host_kind="generic")
+    wp.check_rupload("GET", PATH, host_kind="regional")
+    wp.check_rupload("GET", PATH, host_kind=None)
+    for bad in ("evil", "", "Generic", "rupload.facebook.com"):
+        with pytest.raises(wp.WriteRefused):
+            wp.check_rupload("GET", PATH, host_kind=bad)
+
+
+def test_the_client_passes_the_host_kind_and_checks_the_reported_host():
+    from src.fb_api import graph as g
+    seen = {}
+
+    class T:
+        reply = {"status": 200, "body": {}, "host_kind": "generic", "endpoint": {"host": "rupload.facebook.com"}}
+
+        def rupload(self, method, path, headers=None, chunk=None, **kw):
+            seen.update(kw)
+            return self.reply
+
+    t = T()
+    c = g.GraphClient(t, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+    assert c.rupload("GET", PATH, host_kind="generic")["host_kind"] == "generic" and seen == {"host_kind": "generic"}
+    t.reply = {"status": 200, "body": {}, "endpoint": {"host": "rupload-fra3-1.up.facebook.com"}}
+    assert "host_kind" not in c.rupload("GET", PATH)
+    for host in ("evil.example", "rupload.facebook.com.evil", "rupload.up.facebook.com"):
+        t.reply = {"status": 200, "body": {}, "endpoint": {"host": host}}
+        c = g.GraphClient(t, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0)
+        with pytest.raises(g.PageFailed):
+            c.rupload("GET", PATH)
+        assert c.stopped is not None
+
+
+def test_the_journal_keeps_the_host_kind_and_a_continuation_reuses_it(resumable, tmp_path):
+    from tests.test_acl1856_operation_journal import _go
+    oj, now, journal = _journal(tmp_path)
+    d, f = _big_draft(tmp_path)
+    meta = ResumableMeta(faults=["", "drop"] + ["refused"] * 10, host_kind_reply="generic")
+    first, _ = _go(meta, d, journal, request_key="r1#t")
+    assert first.stop_kind == "video_error"
+    st, = [s for s in _stages(tmp_path) if s.get("pending_id")]
+    assert st["pending"]["host_kind"] == "generic"                                  # the kind, never a host value
+    assert "rupload" not in json.dumps(st) and "facebook" not in json.dumps(st)
+    assert meta.host_kinds_asked[0] is None and meta.host_kinds_asked[-1] == "generic"   # pinned after the first reply
+    meta.faults = []
+    meta.host_kinds_asked.clear()
+    now[0] += oj.BUSY_S + 60
+    again, _ = _go(meta, d, journal, request_key="r1#t")
+    assert again.error == "", again.error
+    assert meta.host_kinds_asked and set(meta.host_kinds_asked) == {"generic"}       # the continuation asks the same kind

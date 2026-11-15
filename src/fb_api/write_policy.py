@@ -178,10 +178,15 @@ def rupload_path(waterfall: str, size: int) -> str:
     return f"/fb_video/{waterfall}-0-{size}"
 
 
+RUPLOAD_HOST_KINDS = ("generic", "regional")
+
+
 def check_rupload(method: str, path: str, *, query: dict | None = None, headers: dict | None = None,
-                  files: dict | None = None) -> None:
+                  files: dict | None = None, host_kind: str | None = None) -> None:
     """ACL-2639: one request to the resumable service: GET (offset) or POST (bytes of one segment) of THIS upload's
     path, only the known query keys and headers, the body only a served window of the file."""
+    if host_kind is not None and host_kind not in RUPLOAD_HOST_KINDS:
+        raise WriteRefused("write refused: host_kind must be generic or regional")
     if method not in RUPLOAD_METHODS:
         raise WriteRefused(f"write refused: upload service method {method!r} (only GET and POST)")
     if not RUPLOAD_PATH_RE.fullmatch(path or ""):

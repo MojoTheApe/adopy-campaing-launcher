@@ -366,9 +366,10 @@ _HELPER_JS = r"""
     const R = WRITE.rupload;
     if (!R) return 'rupload';
     // The request carries no address, host, query or credentials of its own: only what the policy lists.
-    const SPEC_KEYS = ['kind', 'method', 'path', 'headers', 'files', 'source', 'expect', 'filename', 'referrer', 'piece_ms', 'timeout_ms'];
+    const SPEC_KEYS = ['kind', 'method', 'path', 'headers', 'files', 'source', 'expect', 'filename', 'referrer', 'piece_ms', 'timeout_ms', 'host_kind'];
     for (const k of Object.keys(spec)) if (SPEC_KEYS.indexOf(k) < 0) return 'key';
     const method = spec.method;
+    if ('host_kind' in spec && spec.host_kind !== 'generic' && spec.host_kind !== 'regional') return 'host_kind';
     if (R.methods.indexOf(method) < 0) return 'method';
     if (typeof spec.path !== 'string' || !new RegExp(R.path_re).test(spec.path)) return 'path';
     const total = Number(spec.path.slice(spec.path.lastIndexOf('-') + 1));
@@ -1533,13 +1534,19 @@ _HELPER_JS = r"""
   }
 
   // ACL-2639: the address of one request to the resumable service; '' when the page gave no service or session token.
-  function ruploadUrl(path) {
+  // The host of one upload is PINNED by its path on the first request: a regional service that shows up later must not
+  // switch an upload already started on the generic host (and vice versa). `want` (a continuation) names the host kind
+  // an earlier run used. Returns { url, kind, host } or null.
+  const hostPin = Object.create(null);
+  function ruploadUrl(path, want) {
     scanUpload();
-    if (!dtsgAg || !dtsgOk(dtsgAg) || !UPLOAD) return '';
-    // The page's regional service when known (its config module may load seconds after the page); otherwise the generic host.
-    const host = (rsvc && rsvcOk(rsvc.name, rsvc.domain)) ? rsvc.name + '.' + rsvc.domain : UPLOAD.generic_host;
-    if (typeof host !== 'string' || !/^rupload(?:-[a-z0-9-]{1,30}\.up)?\.facebook\.com$/.test(host)) return '';
-    return 'https://' + host + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1';
+    if (!dtsgAg || !dtsgOk(dtsgAg) || !UPLOAD) return null;
+    const regional = (rsvc && rsvcOk(rsvc.name, rsvc.domain)) ? rsvc.name + '.' + rsvc.domain : '';
+    const kind = hostPin[path] || ((want === 'regional' || want === 'generic') ? want : (regional ? 'regional' : 'generic'));
+    const host = kind === 'regional' ? regional : UPLOAD.generic_host;
+    if (typeof host !== 'string' || !/^rupload(?:-[a-z0-9-]{1,30}\.up)?\.facebook\.com$/.test(host)) return null;
+    hostPin[path] = kind;
+    return { url: 'https://' + host + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1', kind: kind, host: host };
   }
   function uploadService() {
     scanUpload();
@@ -1580,11 +1587,11 @@ _HELPER_JS = r"""
     if (!rsvc) rsvc = keepR;
     return { ok: !!dtsgAg };
   }
-  async function ruploadReply(resp, text) {
+  async function ruploadReply(resp, text, u) {
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text.replace(/^\s*for\s*\(;;\);\s*/, '')); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
-    return { status: resp.status, body: parsed, headers: {}, endpoint: { host: rsvc ? rsvc.name + '.' + rsvc.domain : (UPLOAD ? UPLOAD.generic_host : ''), credentials: 'include' } };
+    return { status: resp.status, body: parsed, headers: {}, host_kind: u ? u.kind : '', endpoint: { host: u ? u.host : '', credentials: 'include' } };
   }
   // GET: how many bytes Meta holds of this upload (the resume point). One request, no redirect, own deadline.
   async function ruploadGet(spec) {
@@ -1594,8 +1601,9 @@ _HELPER_JS = r"""
     if (spec.method !== 'GET') return refused('method');
     const why = ruploadOk(spec);
     if (why) return refused(why);
-    const url = ruploadUrl(spec.path);
-    if (!url) return refused('upload_service');
+    const u = ruploadUrl(spec.path, spec.host_kind);
+    if (!u) return refused('upload_service');
+    const url = u.url;
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const limit = Math.max(1, Math.min(30000, Number(spec.timeout_ms) || 15000));
@@ -1611,7 +1619,7 @@ _HELPER_JS = r"""
     } finally {
       if (timer !== null) clearTimeout(timer);
     }
-    return ruploadReply(resp, text);
+    return ruploadReply(resp, text, u);
   }
   // POST: one segment of the file (pieces served by the controller, checked, sent by the worker) with the session cookies.
   async function ruploadPost(spec, job) {
@@ -1622,8 +1630,9 @@ _HELPER_JS = r"""
     const R = WRITE.rupload;
     const bad = sourceOk(spec.source, (spec.expect || {}).bytes, R.segment_max);
     if (bad) return refused(bad);
-    const url = ruploadUrl(spec.path);
-    if (!url) return refused('upload_service');
+    const u = ruploadUrl(spec.path, spec.host_kind);
+    if (!u) return refused('upload_service');
+    const url = u.url;
     const raw = { 'offset': String(spec.headers.offset), 'X-Entity-Length': String(spec.headers['X-Entity-Length']),
                   'X-Entity-Type': R.type };
     if (job.aborted) return { error: 'aborted' };
@@ -1634,7 +1643,7 @@ _HELPER_JS = r"""
       if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120) };
       return { error: job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network'), state: state() };
     }
-    return ruploadReply({ status: got.status }, got.text);
+    return ruploadReply({ status: got.status }, got.text, u);
   }
 
   async function call(spec) {
@@ -1797,7 +1806,7 @@ _HELPER_JS = r"""
   }
 
   function probe() { scanFast(); scanHtml(); return state(); }
-  function retire() { retired = true; token = null; dtsgAg = ''; rsvc = null; stopListening('retired'); return true; }
+  function retire() { retired = true; token = null; dtsgAg = ''; rsvc = null; for (const k of Object.keys(hostPin)) delete hostPin[k]; stopListening('retired'); return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
                           listen: listen, listenStatus: listenStatus, stopListen: stopListen,
@@ -2800,15 +2809,17 @@ class InPageGraph:
 
     def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk=None,
                 progress: Callable[[float], None] | None = None,
-                cancelled: Callable[[], bool] | None = None) -> dict:
+                cancelled: Callable[[], bool] | None = None, host_kind: str | None = None) -> dict:
         """ONE request to the resumable service: GET the offset, or POST one served segment. Policy first
         (`write_policy.check_rupload`), the helper checks again and builds the address and the session token itself.
         A GET changes nothing and is asked again by the caller; a POST is never repeated here."""
         from src.fb_api import write_policy as _wp
 
         files = {_wp.RUPLOAD_BODY_FIELD: chunk} if chunk is not None else None
-        _wp.check_rupload(method, path, headers=headers, files=files)
+        _wp.check_rupload(method, path, headers=headers, files=files, host_kind=host_kind)
         spec: dict[str, Any] = {"kind": "rupload", "method": method, "path": path}
+        if host_kind:
+            spec["host_kind"] = host_kind              # a continuation keeps the host kind of the first request
         if method == "POST":
             spec["headers"] = dict(headers or {})
             return self._write_served(spec, _wp.RUPLOAD_BODY_FIELD, chunk, progress, cancelled)

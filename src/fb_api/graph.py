@@ -764,7 +764,7 @@ class GraphClient:
 
     def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk: Any = None,
                 progress: Callable[[float], None] | None = None,
-                cancelled: Callable[[], bool] | None = None) -> dict:
+                cancelled: Callable[[], bool] | None = None, host_kind: str | None = None) -> dict:
         """ACL-2639: ONE request to the resumable service of Ads Manager (GET the offset / POST one served segment).
 
         Not a Graph call: it is NOT counted in the call budget (the budget is Graph's) and never touches the
@@ -776,6 +776,8 @@ class GraphClient:
         self._pace()
         self._last_call = self._clock()
         extra: dict[str, Any] = {}
+        if host_kind:
+            extra["host_kind"] = host_kind
         if chunk is not None and progress is not None:
             extra["progress"] = progress
         if chunk is not None and cancelled is not None:
@@ -800,7 +802,16 @@ class GraphClient:
         body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
         if not isinstance(status, int):
             raise RuploadLost("the upload service gave no status", reason="bad_reply")
-        return {"status": status, "body": body}
+        # The helper names the host it used: anything but the generic or a regional rupload host is a stop.
+        from src.fb_api import write_policy as _wp
+
+        host = (reply.get("endpoint") or {}).get("host") if isinstance(reply.get("endpoint"), dict) else None
+        if host and not _wp.rupload_host_ok(host):
+            raise self._stop(PageFailed("the upload service answered from an unexpected host; stopped"))
+        out = {"status": status, "body": body}
+        if reply.get("host_kind") in ("generic", "regional"):
+            out["host_kind"] = reply["host_kind"]
+        return out
 
     def probe_worker(self) -> tuple[bool, str]:
         """ACL-2629: can the page's Web Worker be fed the file bytes (CSP, interception, hash)? Local: no Meta call,

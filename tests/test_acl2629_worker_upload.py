@@ -837,6 +837,18 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
       out.video_ads = slim(await h.call({ method: 'POST', path: PATHV.replace('/advideos', '/video_ads'),
                                            params: { upload_phase: 'start' }, files: {} }));
     }
+  } else if (SC.name === 'pin') {
+    // ACL-2639: the host of one upload is pinned by its path on the first request.
+    const pth = (c) => '/fb_video/' + c.repeat(32) + '-0-2500000';
+    const get = (p, extra) => h.call(Object.assign({ kind: 'rupload', method: 'GET', path: p }, extra || {}));
+    out.g1 = slim(await get(pth('a')));                                    // token only: generic host, pinned for 'a'
+    out.svc = h.setUploadService('rupload-ber1-1.up', 'facebook.com', '');   // the regional service shows up later
+    out.g2 = slim(await get(pth('a')));                                    // still the generic host
+    out.g3 = slim(await get(pth('b')));                                    // a NEW upload: regional now
+    out.g4 = slim(await get(pth('c'), { host_kind: 'generic' }));          // a continuation that used the generic host
+    out.g5 = slim(await get(pth('d'), { host_kind: 'regional' }));
+    out.g6 = slim(await get(pth('c'), { host_kind: 'regional' }));         // pinned 'c' wins over the request
+    out.bad = slim(await get(pth('e'), { host_kind: 'evil' }));
   } else if (SC.name === 'chain') {
     // ACL-2639: light mode end to end: a READ-ONLY capture helper (no write policy) -> the light work helper -> the clean
     // upload tab helper. The upload values must survive every hop.

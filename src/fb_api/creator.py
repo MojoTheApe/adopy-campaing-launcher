@@ -3373,6 +3373,7 @@ class CampaignCreator:
         get_handle = ""                     # a file handle the service returned to a GET (once the upload is complete)
         streak = 0                          # consecutive 4xx answers of the service
         refreshed = False
+        host_kind = ""                      # "generic" | "regional": the host kind of this upload (pinned, journaled)
         mb_total = max(size // (1024 * 1024), 1)
 
         def room(n: int) -> None:
@@ -3404,8 +3405,17 @@ class CampaignCreator:
         def svc(method: str, **kw) -> dict:
             """One request to the resumable service. A request the Python policy or the page refused BEFORE sending:
             while nothing moved it is a refusal of this path (the chunked path takes over), afterwards a stop."""
+            nonlocal host_kind
+            if host_kind:
+                kw["host_kind"] = host_kind
             try:
-                return self.client.rupload(method, service_path(), **kw)
+                got = self.client.rupload(method, service_path(), **kw)
+                hk = got.get("host_kind")
+                if hk in ("generic", "regional") and hk != host_kind:
+                    host_kind = hk                         # kept, so a continuation uses the same host kind
+                    self._remember_pending_video(what, vid, sid, waterfall, size, transferred=transferred,
+                                                 host_kind=hk)
+                return got
             except NotSent as exc:
                 self.client.release_optional_stop(exc)
                 if "(no_file" in str(exc):
@@ -3510,7 +3520,7 @@ class CampaignCreator:
         # -- an upload this operation started earlier (stopped or crashed before its finish) is continued
         pending = self._pending_video(what, size)
         if pending:
-            vid, sid, waterfall, transferred = pending
+            vid, sid, waterfall, transferred, host_kind = pending
             try:
                 st = status()
             except GraphError as exc:
@@ -3524,7 +3534,7 @@ class CampaignCreator:
                 self._step(out, f"{who}: the upload of an earlier run is not available ({str(exc)[:80]}); "
                                 "starting a new one")
                 self._forget_pending_video(what)
-                pending, vid, sid, waterfall, transferred = None, "", "", "", False
+                pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
             else:
                 if last_title == title:
                     # The finish of an earlier run took: the video carries our tag. Adopted without any write.
@@ -3542,7 +3552,7 @@ class CampaignCreator:
                         self._step(out, f"{who}: Meta refused to finish the upload of an earlier run; "
                                         "starting a new one")
                         self._forget_pending_video(what)
-                        pending, vid, sid, waterfall, transferred = None, "", "", "", False
+                        pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
                     else:
                         raise CreationStopped(f"{what}: the result of finishing the upload of an earlier run is "
                                               "unknown. Publish again later: it is continued, not repeated.",
@@ -3558,7 +3568,7 @@ class CampaignCreator:
                         # answer to the last POST) is gone. The unfinished video is left; a new one is found by its title.
                         self._step(out, f"{who}: the upload of an earlier run cannot be continued; starting a new one")
                         self._forget_pending_video(what)
-                        pending, vid, sid, waterfall, transferred = None, "", "", "", False
+                        pending, vid, sid, waterfall, transferred, host_kind = None, "", "", "", False, ""
                     else:
                         self._step(out, f"{who}: continuing the upload of an earlier run at "
                                         f"{got // (1024 * 1024)}/{mb_total} MB")
@@ -3682,7 +3692,7 @@ class CampaignCreator:
         if not (s_raw == str(size) and e_raw == str(size)):
             raise _ResumableRefused(f"Meta did not take all the bytes ({s_raw or '?'}-{e_raw or '?'} of {size})")
         transferred = True
-        self._remember_pending_video(what, vid, sid, waterfall, size, transferred=True)
+        self._remember_pending_video(what, vid, sid, waterfall, size, transferred=True, host_kind=host_kind)
 
         # -- finish with the ACL tag as the title (a lost answer: sent once more, then the status decides)
         fparams = finish_params()
@@ -3720,7 +3730,7 @@ class CampaignCreator:
         except _oj.JournalError:
             self._journal_event("journal_save_failed", what=what, phase="pending_clear", error="JournalError")
 
-    def _pending_video(self, what: str, size: int) -> tuple[str, str, str, bool] | None:
+    def _pending_video(self, what: str, size: int) -> tuple[str, str, str, bool, str] | None:
         """ACL-2639: (video_id, upload_session_id, waterfall_id, transferred) of a resumable upload this operation
         started for the same file, if any. A continuation needs the three ids and the same file; otherwise it is
         forgotten (a new start). `transferred`: Meta already took the file by its handle - only the finish is left."""
@@ -3732,18 +3742,20 @@ class CampaignCreator:
         sid, waterfall = str(info.get("upload_session_id") or ""), str(info.get("waterfall_id") or "")
         if (vid.isdigit() and sid.isdigit() and _wpol.UPLOAD_WATERFALL_RE.fullmatch(waterfall)
                 and info.get("size") == size and info.get("md5") == st.get("content_md5")):
-            return vid, sid, waterfall, info.get("transferred") is True
+            kind = info.get("host_kind")
+            return vid, sid, waterfall, info.get("transferred") is True, kind if kind in ("generic", "regional") else ""
         return None
 
     def _remember_pending_video(self, what: str, vid: str, sid: str, waterfall: str, size: int,
-                                transferred: bool = False) -> None:
+                                transferred: bool = False, host_kind: str = "") -> None:
         op = self._op
         if op is None:
             return
         st = op.stage(what) or {}
         try:
             op.set_pending(what, vid, {"upload_session_id": sid, "waterfall_id": waterfall, "size": size,
-                                       "md5": st.get("content_md5"), "transferred": transferred})
+                                       "md5": st.get("content_md5"), "transferred": transferred,
+                                       "host_kind": host_kind})
         except _oj.JournalError:
             self._journal_event("journal_save_failed", what=what, phase="pending", error="JournalError")
 
