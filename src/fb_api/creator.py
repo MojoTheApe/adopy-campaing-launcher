@@ -3614,7 +3614,7 @@ class CampaignCreator:
                           progress=lambda _s: self._beat(), cancelled=self.cancelled)
             except RuploadLost as exc:
                 if exc.reason == "stream_rejected":
-                    self._step(out, f"{who}: the streamed upload was rejected immediately (probably not HTTP/2)")
+                    self._step(out, f"{who}: the streamed upload was rejected before any byte (not HTTP/2, CORS or network)")
                 # No answer: ask what the service holds (all of it with a handle: transfer; part: send the rest from
                 # there; nothing: send again from the offset, bounded by the resume cap).
                 resume(f"the answer was lost: {exc.reason or 'network'}")

@@ -1108,7 +1108,7 @@ _HELPER_JS = r"""
       const sb = m.sb || {};
       return new ReadableStream({
         async pull(ctrl) {
-          if (i >= ps.length) { ctrl.close(); return; }
+          if (i >= ps.length) { emit({ id: m.id, progress: got, drained: true }); ctrl.close(); return; }   // every piece is in the request
           const p = ps[i++];
           const r = await onePiece(m, ac, st, p);
           if (r.error) { ctrl.error(new Error(String(r.why || r.error))); return; }
@@ -1265,7 +1265,7 @@ _HELPER_JS = r"""
     if (!inlineRunner) {
       inlineRunner = makeRunner(fetch, crypto, (d) => {
         const j = inlineJobs[d.id];
-        if (j) { if (typeof d.progress === 'number') j.progress = d.progress; if (d.streaming) j.streaming = true; }
+        if (j) { if (typeof d.progress === 'number') j.progress = d.progress; if (d.streaming) j.streaming = true; if (d.drained) j.drained = true; }
       }, swControlled);
     }
     const id = ++waitSeq;
@@ -1290,7 +1290,7 @@ _HELPER_JS = r"""
     try { if (sw && typeof sw.addEventListener === 'function') sw.addEventListener('controllerchange', onTake); } catch (e) {}
     const r = await new Promise((resolve) => {
       const f = resolve;
-      if (job) f.onprogress = (n, d) => { if (typeof n === 'number') job.progress = n; if (d && d.streaming) job.streaming = true; };
+      if (job) f.onprogress = (n, d) => { if (typeof n === 'number') job.progress = n; if (d && d.streaming) job.streaming = true; if (d && d.drained) job.drained = true; };
       waiting[id] = f;
       if (job) job.wid = id;
       try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
@@ -1359,7 +1359,7 @@ _HELPER_JS = r"""
   function poll(id) {
     const j = jobs[String(id)];
     if (!j) return { state: 'error', result: { error: 'no_job' } };
-    if (j.state === 'running') return { state: 'running', progress: j.progress || 0, stream: j.streaming === true };
+    if (j.state === 'running') return { state: 'running', progress: j.progress || 0, stream: j.streaming === true, drained: j.drained === true };
     return { state: j.state, result: j.result };
   }
   function abort(id) {
@@ -2742,6 +2742,7 @@ class InPageGraph:
         silence watchdog, and the Stop button works while a multi-GB file is read."""
         def tick() -> None:
             try:
+                # (no local heartbeat exists in fb_api: `GraphClient._beat` uses this same module the same way)
                 from src.fb_ads_rpa import run_telemetry
 
                 run_telemetry.beat()
@@ -2997,6 +2998,8 @@ class InPageGraph:
     MAX_POLL_TIMEOUTS = 3
     #: ACL-2639: a streamed upload whose byte count does not grow for this long is aborted (then resumed).
     UPLOAD_STALL_S = 180.0
+    #: ... and the time the service gets to answer once every piece is in the request.
+    UPLOAD_DRAIN_S = 600.0
 
     def _wait(self, seconds: float, serving: bool) -> None:
         """Pause between two polls. While a worker is being served the events of the tab (its piece requests)
@@ -3027,6 +3030,7 @@ class InPageGraph:
         poll_timeouts = 0
         began = self._clock()
         last_count, last_change = -1, began
+        drained_at = None
         while True:
             if deadline_s and self._clock() - began > deadline_s:
                 # Overall deadline: the request may or may not have been sent -> unknown, reconciled by readback.
@@ -3070,7 +3074,14 @@ class InPageGraph:
                 # ACL-2639: a streamed POST whose byte count has not grown for STALL_S is stuck: abort it (the caller
                 # asks the service for its offset and resumes).
                 count = got.get("progress")
-                if got.get("stream") is True and isinstance(count, int) and not isinstance(count, bool):
+                if got.get("stream") is True and got.get("drained") is True:
+                    # every piece is in the request: the counter stops by design while the request drains and the
+                    # service answers; only the overall deadline and this own allowance apply
+                    if drained_at is None:
+                        drained_at = self._clock()
+                    elif self._clock() - drained_at > self.UPLOAD_DRAIN_S:
+                        return unknown("stalled")
+                elif got.get("stream") is True and isinstance(count, int) and not isinstance(count, bool):
                     if count > last_count:
                         last_count, last_change = count, self._clock()
                     elif self._clock() - last_change > self.UPLOAD_STALL_S:

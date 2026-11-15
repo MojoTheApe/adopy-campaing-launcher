@@ -1667,9 +1667,9 @@ def test_the_body_cap_is_the_file_limit_and_the_deadline_scales_with_the_size():
 def test_the_job_reports_the_streamed_byte_progress():
     out = _node({"name": "progress", "piece": 400_000})
     from tests.test_acl2629_worker_upload import _SOURCE
-    counts = [c for c, _ in out["seen"]]
+    counts = [x[0] for x in out["seen"]]
     assert out["final"]["ok"] is True and counts == sorted(counts)                      # never goes backwards
-    assert any(streams for _, streams in out["seen"]) and max(counts) <= len(_SOURCE)
+    assert any(x[1] for x in out["seen"]) and max(counts) <= len(_SOURCE)
     assert any(0 < c < len(_SOURCE) for c in counts)                                    # grows while the POST runs
 
 
@@ -1683,7 +1683,7 @@ def test_the_creator_says_a_streamed_upload_was_rejected_immediately(resumable, 
     meta = ResumableMeta(faults=["stream_rejected_net"])
     out, _ = _run(meta, d)
     assert out.error == "", out.error
-    assert any("rejected immediately (probably not HTTP/2)" in s for s in out.steps)
+    assert any("rejected before any byte (not HTTP/2, CORS or network)" in s for s in out.steps)
     assert next(iter(meta.va.values()))["sha"].hexdigest() == _sha(f)
 
 
@@ -1754,3 +1754,31 @@ def test_hashing_a_big_chunk_beats_and_can_be_cancelled():
     with pytest.raises(ValueError):
         tick()
     tc.InPageGraph._hash_tick(lambda: False)()
+
+
+def test_a_slow_service_answer_after_the_stream_drained_is_not_aborted():
+    # the byte count stops growing for a long time, but every piece is in the request: only the drain allowance applies
+    replies = [{"state": "running", "progress": 1000, "stream": True, "drained": False},
+               {"state": "running", "progress": 5000, "stream": True, "drained": True}] \
+        + [{"state": "running", "progress": 5000, "stream": True, "drained": True}] * 8 \
+        + [{"state": "done", "result": {"status": 200, "body": {"h": "x"}}}]
+    tab = _StallTab(replies)
+    t = _clocked(tab, 60.0)                                           # 8 polls x 60 s = 480 s > the 180 s stall limit
+    assert t._write_file_job(7, {"method": "POST"}, None, None)["status"] == 200
+    assert not any(".abort(" in e for e in tab.exprs)
+
+
+def test_a_drained_stream_that_never_answers_is_aborted_after_its_own_allowance():
+    tab = _StallTab([{"state": "running", "progress": 5000, "stream": True, "drained": True}])
+    t = _clocked(tab, 100.0)                                          # past 600 s of silence after the drain
+    got = t._write_file_job(7, {"method": "POST"}, None, None)
+    assert got == {"error": "call_unknown", "reason": "stalled"} and any(".abort(" in e for e in tab.exprs)
+
+
+def test_the_helper_reports_drained_once_every_piece_is_in_the_request():
+    out = _node({"name": "progress", "slow_answer": True, "piece": 400_000})
+    assert out["final"]["ok"] is True
+    drained = [x for x in out["seen"] if x[2]]
+    assert drained and all(x[1] for x in drained)                       # drained is only ever reported by a stream
+    from tests.test_acl2629_worker_upload import _SOURCE
+    assert all(x[0] == len(_SOURCE) for x in drained)                   # ... after the last byte was pulled

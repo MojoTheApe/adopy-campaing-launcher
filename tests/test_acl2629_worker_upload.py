@@ -598,7 +598,7 @@ const fakeFetch = async (url, init) => {
     if (init.method === 'POST' && SC.reject_stream) throw new TypeError('streaming upload needs HTTP/2');
     let buf;
     const streamed = !!(init.body && typeof init.body.getReader === 'function');
-    if (streamed) { const parts = []; for await (const c of init.body) { parts.push(Buffer.from(c)); await new Promise((r) => setTimeout(r, 3)); } buf = Buffer.concat(parts); }
+    if (streamed) { const parts = []; for await (const c of init.body) { parts.push(Buffer.from(c)); await new Promise((r) => setTimeout(r, 3)); } buf = Buffer.concat(parts); if (SC.slow_answer) await new Promise((r) => setTimeout(r, 40)); }
     else buf = Buffer.from(await init.body.arrayBuffer());
     const h = init.headers || {};
     log.rupload.push(Object.assign(common, { streamed: streamed, duplex: init.duplex, headers: Object.keys(h).sort(), offset: h['offset'], length: h['X-Entity-Length'],
@@ -851,7 +851,7 @@ const slim = (r) => (r && r.error) ? { error: r.error, why: r.why } : { ok: true
     const st0 = h.startCall(spec);
     const seen = [];
     let p;
-    while ((p = h.poll(st0.job)).state === 'running') { seen.push([p.progress, p.stream]); await sleep(1); }
+    while ((p = h.poll(st0.job)).state === 'running') { seen.push([p.progress, p.stream, p.drained]); await sleep(1); }
     out.seen = seen;
     out.final = p.result.error ? { error: p.result.error, stream_rejected: p.result.stream_rejected === true } : { ok: true, status: p.result.status };
   } else if (SC.name === 'pin') {
