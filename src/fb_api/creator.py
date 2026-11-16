@@ -514,16 +514,18 @@ def plan_upload_sizes(plan: "CampaignPlan", size_of: Callable[[str], int] | None
 
     if not _cc.ffmpeg_exe():
         return result                                      # nothing to compress with: the originals are planned (and refused)
+    # ACL-2644: a video known to be too long to compress stays at its original size whatever the cap
+    fixed = {p for p in large if video_cannot_compress(p, originals[p])}
     best = 0
     for cap in range(1, COMPRESS_FALLBACK_CAP_MB + 1):
-        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576
+        total = sum(_chunked_cost(sizes[p]) if sizes[p] <= cap * 1048576 or p in fixed
                     else _chunked_cost(int(cap * COMPRESS_FALLBACK_SHARE * 1048576), True) for p in large)
         if total > spare:
             break
         best = cap
     if best:
         for p in large:
-            if sizes[p] > best * 1048576:
+            if sizes[p] > best * 1048576 and p not in fixed:
                 result[p] = (int(best * COMPRESS_FALLBACK_SHARE * 1048576), True)
     return result
 
@@ -3501,7 +3503,8 @@ class CampaignCreator:
         upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
         finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
         chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
-        if not compress_fallback_enabled() or big.path in getattr(self, "_encoded_paths", ()):
+        if (not compress_fallback_enabled() or big.path in getattr(self, "_encoded_paths", ())
+                or big.path in getattr(self, "_over_failed", ())):
             return big                                      # ACL-2644: a copy made this run is never encoded a second time
         spare = self._chunk_spare(plan)
         if spare is None:
@@ -3509,8 +3512,6 @@ class CampaignCreator:
         size = len(big)
         label = f"{who[:1].upper()}{who[1:]}"
         planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
-        if big.path in getattr(self, "_over_failed", ()):
-            planned = None                                  # ACL-2644: that compression just failed; not repeated here
         if planned and planned[1] and planned[0] < size:
             target = max(1.0, planned[0] / (1024 * 1024))   # the plan already decided (and budgeted) this compression
         else:
@@ -3596,7 +3597,8 @@ class CampaignCreator:
         else:
             limit, target = over_mb, over_mb * COMPRESS_OVER_TARGET_SHARE
             planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
-            if planned and planned[1] and 1 <= planned[0] / 1048576 < target:
+            if (planned and planned[1] and 1 <= planned[0] / 1048576 < target
+                    and not self._is_threshold_copy_size(big.path, planned[0])):
                 limit = planned[0] / 1048576                        # the plan's smaller target: encode once, at that
                 target = limit * COMPRESS_OVER_TARGET_SHARE
             res = self._compress_big(out, big, who, limit, target, f"because it is above {over_mb:.0f} MB",
@@ -3622,6 +3624,18 @@ class CampaignCreator:
         out.warnings.append(f"{label} video ({mb:.0f} MB) could not be compressed under {over_mb:.0f} MB ({reason}); "
                             "the original is uploaded instead.")
         return big
+
+    @staticmethod
+    def _is_threshold_copy_size(path: str, planned: int) -> bool:
+        """ACL-2644: the plan's size is that of an existing threshold-cache copy (a resumed run): reuse it, do not
+        re-encode at a smaller target (a different cache name and size would lose the resumable session)."""
+        from src.fb_ads_rpa import creative_compress as _cc
+
+        try:
+            copy = _cc.cache_path(path, video_compress_over_mb() * COMPRESS_OVER_TARGET_SHARE)
+            return copy.is_file() and _disk_size(str(copy)) == planned
+        except Exception:  # noqa: BLE001
+            return False
 
     def _compress_big(self, out: Outcome, big: "LargeFile", who: str, limit_mb: float, target_mb: float,
                       why_short: str, why_long: str, max_bytes: int = 0) -> "LargeFile":

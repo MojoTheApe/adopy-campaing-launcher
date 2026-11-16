@@ -112,10 +112,16 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     chunks = estimate_upload_calls(plan, spare=ceiling - need - reads)
     if chunks and need + reads + chunks > ceiling:
         total = need + reads + chunks
+        from src.fb_api.creator import _disk_size, video_cannot_compress, video_compress_over_mb, video_files_of
+
+        # ACL-2644: a video planned at its original size because it is too long to compress is not an ffmpeg problem
+        too_long = any(video_cannot_compress(p, _disk_size(p)) for p in video_files_of(plan))
+        advice = (f"A video is too long to compress under {video_compress_over_mb():.0f} MB and is too large for one run: "
+                  "use a shorter video, or split the campaign." if too_long else
+                  "Let ACL compress the video (needs ffmpeg), use a shorter video, or split the campaign.")
         return ceiling, (f"This campaign needs about {total} Meta calls ({chunks} to upload large videos in "
                          f"chunks, {need + reads} for the rest), more than ACL allows in one run ({ceiling}). "
-                         "This is ACL's own per-run limit, not Meta's. Let ACL compress the video "
-                         "(needs ffmpeg), use a shorter video, or split the campaign. Nothing was created.")
+                         f"This is ACL's own per-run limit, not Meta's. {advice} Nothing was created.")
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
 
 

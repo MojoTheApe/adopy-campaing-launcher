@@ -280,3 +280,55 @@ def test_check_plan_and_publish_refuse_an_original_above_4_gb(worker_small, tmp_
     with pytest.raises(cr.PlanError) as err:
         creator._prepare(plan, writing=writing, out=cr.Outcome(campaign_name=plan.name))
     assert "larger than" in str(err.value) and "creative_file" == getattr(err.value, "key", "")
+
+
+# ───────────────────────── resume, narrow budget window, refusal text ─────────────────────────
+
+def test_a_cached_threshold_copy_is_reused_on_resume_without_a_new_encode(worker_small, tmp_path, monkeypatch, ffmpeg_present):
+    from src.fb_ads_rpa import creative_compress as cc
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_OVER_MB", "3")
+    monkeypatch.setattr(cc, "cache_dir", lambda: tmp_path / "cache")
+    d, f = _big_draft(tmp_path, size=4 * MB)
+    cached = cc.cache_path(str(f), 3.0 * 0.95)                                    # an earlier (resumed) run made this
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(b"c" * int(2.5 * MB))                                      # below 0.95 x threshold
+    plan = cr.plan_from_draft(d)
+    creator, _ = B._creator(ServedMeta(meta_chunk=MB), writes=False, max_calls=300)
+    creator.worker_path = True
+    ran: list = []
+    monkeypatch.setattr(cc, "compress", lambda *a, **k: ran.append(a) or False)   # any new encode would show here
+    size = cr.planned_upload_size(str(f), 4 * MB)
+    assert size == int(2.5 * MB)
+    creator._video_plan = {str(f): (size, True)}
+    got = creator._compress_over_threshold(cr.Outcome(campaign_name=plan.name), plan,
+                                           cr.LargeFile(str(f), 4 * MB, creator.read_range), "ad 1")
+    assert ran == [] and Path(got.path) == cached and len(got) == int(2.5 * MB)
+
+
+def test_the_budget_fallback_never_encodes_a_video_whose_threshold_compression_failed(worker_small, tmp_path, monkeypatch,
+                                                                                     ffmpeg_present):
+    monkeypatch.setenv("ACL_VIDEO_COMPRESS_OVER_MB", "3")
+    d, f = _big_draft(tmp_path, size=4 * MB)
+    plan = cr.plan_from_draft(d)
+    calls: list = []
+    creator, _ = B._creator(ServedMeta(meta_chunk=MB), writes=False, max_calls=300)
+    creator.worker_path = True
+    creator.compress_to_fit = _failing(calls)
+    big = cr.LargeFile(str(f), 4 * MB, creator.read_range)
+    need = cr.upload_calls(4 * MB, True, chunked=True)
+    assert cr.CHUNK_RETRY_SLACK_MIN >= 1
+    monkeypatch.setattr(cr.CampaignCreator, "_chunk_spare", lambda self, plan: need)   # need <= spare < need + slack
+    out = cr.Outcome(campaign_name=plan.name)
+    assert creator._compress_over_threshold(out, plan, big, "ad 1") is big and len(calls) == 1
+    assert creator._fit_for_chunks(out, plan, big, "ad 1") is big and len(calls) == 1
+
+
+def test_the_over_budget_refusal_for_a_too_long_video_does_not_blame_ffmpeg(tmp_path, monkeypatch, ffmpeg_present):
+    from src.fb_ads_rpa import creative_compress as cc
+    from src.web import publish_api
+    monkeypatch.setattr(cc, "duration_s", lambda path, **kw: 40000.0)
+    monkeypatch.delenv("ACL_VIDEO_COMPRESS_OVER_MB", raising=False)
+    monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
+    plan = B._plan(tmp_path, [3500, 3500, 3500], monkeypatch)
+    _budget, refusal = publish_api.create_call_budget(plan)
+    assert "too long to compress under 500 MB" in refusal and "ffmpeg" not in refusal, refusal
