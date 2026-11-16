@@ -494,9 +494,11 @@ def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instan
             if port:
                 _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt,
                                      pace=pace, adopted=True)
+                _mlx.note_started(instance)   # ACL-2668: сессия MLX слота жива
                 return None, port, True
             continue
         _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt, pace=pace)
+        _mlx.note_started(instance)   # ACL-2668: сессия MLX слота жива — защёлку пачек снять
         return started, None, attempt == 2
     raise AssertionError("unreachable")
 
