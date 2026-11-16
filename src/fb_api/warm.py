@@ -298,6 +298,23 @@ def _url_stop(url: str) -> GraphStop | None:
     return None
 
 
+def local_page_urls(port: int, *, timeout: float = 2.0) -> list[str]:
+    """ACL-2653: addresses of the open tabs of a profile from its LOCAL debugging port (`/json/list`).
+
+    One request to 127.0.0.1, no Graph call, no Meta, no script in a page. Unreachable: an empty list."""
+    import urllib.request
+
+    if not port:
+        return []
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(urllib.request.Request(f"http://127.0.0.1:{int(port)}/json/list"), timeout=timeout) as resp:
+            targets = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except Exception:  # noqa: BLE001 - a silent browser is "no answer", not a lock
+        return []
+    return [str(t.get("url") or "") for t in targets if isinstance(t, dict) and t.get("type") == "page"]         if isinstance(targets, list) else []
+
+
 def _url_act(url: str) -> str:
     try:
         got = urllib.parse.parse_qs(urllib.parse.urlsplit(url or "").query).get("act") or []

@@ -5,6 +5,10 @@ Fixtures only: no Meta call, no browser. The tab address is the whole evidence o
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import time
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -15,6 +19,7 @@ from src.analysis_agent import account_spend
 from src.analysis_agent import campaign_inventory as ci
 from src.analysis_agent.account_refresh_machine import MachineStore, binding
 from src.fb_api import account_blocks as blocks
+from src.web import account_state as astate
 from tests.test_acl2063_machine_queue import dashboards  # noqa: F401  (fixture)
 from tests.test_acl2063_refresh_queue import NOW, _queue, env  # noqa: F401  (fixture)
 
@@ -130,3 +135,203 @@ def test_an_empty_account_map_never_drops_stops(dashboards):
     _plant_stop(q._machine.root, known)
     q._accounts = lambda: []
     assert q.state()["halt"]["key"] == known
+
+
+# ───────── 3. the Facebook lock from the tab ─────────
+
+def test_a_checkpoint_tab_url_sets_a_facebook_lock_hold_without_any_graph_call(monkeypatch):
+    import socket
+
+    def no_network(*a, **k):
+        raise AssertionError("the lock is read from the tab address; nothing may be called")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    assert blocks.note_tab_url(KEY, LABEL, CHECKPOINT_URL, "Open profile") is True
+    held = blocks.hold_of(KEY)
+    assert held["kind"] == "checkpoint" and held["code"] is None and held["action"] == "Open profile"
+    assert blocks.is_person_lock(held)
+    # Another host and a normal Ads Manager tab are not locks.
+    assert blocks.note_tab_url("k2", "X", "https://www.facebook.com/adsmanager/manage/campaigns?act=1") is False
+    assert blocks.note_tab_url("k3", "X", "https://example.com/checkpoint/1") is False
+    assert not blocks.is_held("k2") and not blocks.is_held("k3")
+
+
+def test_the_lock_keeps_its_first_date_and_automatic_work_never_lifts_it(monkeypatch):
+    blocks.note_tab_url(KEY, LABEL, CHECKPOINT_URL, "Open profile")
+    first = blocks.hold_of(KEY)["at"]
+    blocks.note_tab_url(KEY, LABEL, CHECKPOINT_URL, "a background read")
+    assert blocks.hold_of(KEY)["at"] == first
+    assert blocks.lift_auth_hold(KEY, "publish") is False       # only a code-31 hold is lifted by an edit
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
+    assert ar._held_blocks(LABEL, "schedule:2026-11-16/08:00") and ar._held_blocks(LABEL, "attention")
+    assert not ar._held_blocks(LABEL, "retry")                  # a person's Retry is the one way through
+
+
+def test_open_profile_on_a_checkpoint_tab_records_the_lock_and_still_reads_the_status(monkeypatch):
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_profile_id", lambda label: "pid")
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
+    assert warm_api.note_tab_lock(LABEL, urls=["about:blank", CHECKPOINT_URL]) is True
+    assert blocks.is_held(KEY)
+    queued = []
+    monkeypatch.setattr(warm_api, "request_status_read", lambda label: queued.append(label) or "queued")
+    monkeypatch.setattr(warm_api, "note_tab_lock", lambda label, **k: True)
+    seen = {}
+    monkeypatch.setattr(warm_api, "_set_result", lambda job, label, result: seen.update(result))
+    warm_api._on_open_result("job", LABEL, {"ok": True})
+    # The owner's rule: Open on an account checks it, even on a lock. Meta's refusal is then shown with its time.
+    assert queued == [LABEL] and seen["status_read"] == "queued" and seen["locked"] is True
+
+
+def test_the_row_is_red_facebook_locked_since_the_date(monkeypatch):
+    blocks.note_person_lock(KEY, LABEL, "a background read")
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    assert hold["person_lock"] is True
+    state = astate.account_state({"account": LABEL, "status": {}, "has_data": False, "hold": hold})
+    since = datetime.fromtimestamp(hold["at"]).strftime("%d.%m")
+    assert state["key"] == "issue"
+    assert state["status_line"].startswith(f"Facebook locked · since {since}")
+    assert "locked" in state["status_tip"]
+    # An ad account restriction keeps its own words.
+    restricted = astate.account_state({"account": LABEL, "has_data": False, "hold": hold,
+                                       "status": {"status": "restricted", "status_text": "Restricted", "at": "2026-11-15"}})
+    assert restricted["key"] == "issue" and "locked" not in restricted["status_line"]
+
+
+# ───────── 4. no green Active for a stale clear; no false "Status updated" ─────────
+
+def test_a_stale_clear_is_not_shown_as_active_for_a_locked_profile():
+    blocks.note_person_lock(KEY, LABEL, "a background read")
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    today = date(2026, 11, 16)
+    row = {"account": LABEL, "has_data": True, "spend": 120.0, "hold": hold,
+           "status": {"status": "clear", "at": "2026-11-14 00:13", "source": "api"}}
+    assert astate.account_state({**row, "hold": None}, today)["key"] == "active"      # the old behaviour, as the control
+    locked = astate.account_state(row, today)
+    assert locked["key"] == "issue" and locked["label"] != "Active"
+    assert locked["status_line"].startswith("Facebook locked")
+
+
+NODE = shutil.which("node")
+
+_NODE_SCRIPT = r"""
+const fs = require('fs'), vm = require('vm'), assert = require('assert');
+const sb = { console, Promise, JSON, Object, String, Array, setTimeout, clearTimeout, encodeURIComponent,
+  document: { readyState: 'loading', addEventListener() {}, createElement: () => ({ style: {}, appendChild() {} }),
+              head: { appendChild() {} }, querySelectorAll: () => [], getElementById: () => null },
+  window: {}, fetch: () => Promise.resolve({}) };
+vm.createContext(sb);
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sb);
+const note = sb.window.aclWarmHome.statusNote;
+const same = note('2026-11-14 00:13|', '2026-11-14 00:13|', {holds: {}, rows: {}}, 'B93');
+assert.notStrictEqual(same.text, 'Status updated.');
+assert.ok(/not read/i.test(same.text));
+const failed = note('x', 'x', {holds: {}, rows: {B93: {state: 'failed', error: 'Meta said no'}}}, 'B93');
+assert.ok(failed.bad && /Meta said no/.test(failed.text));
+const moved = note('2026-11-14 00:13|', '2026-11-16 10:02|', {holds: {}, rows: {}}, 'B93');
+assert.strictEqual(moved.text, 'Status updated.'); assert.ok(!moved.bad);
+const lock = note('a', 'b', {locks: {B93: {person_lock: true, next: 'Solve it.', reason: 'r', seen: 1789000000}}, rows: {}}, 'B93');
+assert.ok(lock.bad && /Facebook locked/.test(lock.text));
+console.log('ok');
+"""
+
+
+@pytest.mark.skipif(not NODE, reason="node is not installed")
+def test_status_updated_is_only_said_when_the_read_time_moved():
+    out = subprocess.run([NODE, "-e", _NODE_SCRIPT, str(ROOT / "src/web/static/warm_sessions.js")],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and "ok" in out.stdout, out.stderr + out.stdout
+
+
+# ───────── 5. a stuck read ends as failed ─────────
+
+def test_a_read_stuck_in_updating_ends_as_failed_with_retry_text(env):
+    q = _queue(env)
+    q._rows["A"] = {"list_at": "2026-11-14 00:13:00", "state": "updating", "error": "", "since": NOW - ar.STUCK_UPDATING_S - 5}
+    q._running = "A"
+    state = q.state()
+    assert state["rows"]["A"]["state"] == "failed" and state["rows"]["A"]["error"] == ar.STUCK_TEXT
+    assert state["rows"]["A"]["list_at"] == "2026-11-14 00:13:00"      # the last good read time is kept
+    assert state["running"] is None
+
+
+def test_a_recent_or_unstamped_updating_row_is_left_alone_then_stamped(env):
+    q = _queue(env)
+    q._rows["A"] = {"state": "updating", "error": "", "since": NOW - 30}
+    q._rows["B"] = {"state": "updating", "error": ""}                  # saved by an older build
+    state = q.state()
+    assert state["rows"]["A"]["state"] == "updating"
+    assert state["rows"]["B"]["state"] == "updating" and state["rows"]["B"]["since"] == NOW
+    env.clock.t = NOW + ar.STUCK_UPDATING_S + 1
+    assert q.state()["rows"]["B"]["state"] == "failed"
+
+
+def test_an_executing_read_stamps_its_start(env):
+    q = _queue(env)
+    q.request("A", "attention")
+    seen = {}
+    real = env.reader
+
+    def reader(account, trigger):
+        seen.update(q._rows[account])
+        return real(account, trigger)
+
+    q._reader = reader
+    q._drain_once()
+    assert seen["state"] == "updating" and seen["since"] == NOW
+
+
+# ───────── 6. Open reads the account's status now ─────────
+
+def test_open_reads_status_now_while_another_profile_is_checkpointed_and_the_queue_has_work(env):
+    env.failures["F94"] = _checkpoint("F94")
+    q = _queue(env)
+    q.request("F94", "attention")
+    q._drain_once()
+    q.request("F92", "attention")                     # queue has work
+    q.request("Doc280", "schedule", window="08:00")
+    assert q.request("B93", "open", force=True) == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    reads = [a for a, _ in env.read]
+    assert reads[1] == "B93" and set(reads) == {"F94", "B93", "F92", "Doc280"}   # Open goes ahead of the waiting reads
+
+
+def test_open_reads_even_through_a_hold_and_a_global_halt(env, monkeypatch):
+    monkeypatch.setattr(ar, "_profile_held", lambda account: account == "B93")
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget")
+    q = _queue(env)
+    q.request("A", "attention")
+    q._drain_once()
+    assert q.state()["halt"] is not None
+    assert q.request("B93", "attention") == {"queued": False, "reason": "profile_held"}   # background work still stops
+    assert q.request("B93", "open", force=True) == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert ("B93", "open") in env.read
+
+
+def test_open_is_a_persons_action_that_may_probe_a_held_profile():
+    with blocks.problem_action(blocks.action_for_trigger("open")):
+        assert blocks.buyer_started()
+        assert blocks.current_action() == "Open profile"
+    with blocks.problem_action(blocks.action_for_trigger("attention")):
+        assert not blocks.buyer_started()
+
+
+def test_open_on_a_checkpointed_profile_records_the_refusal_and_its_read_time(env, monkeypatch):
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
+    blocks.note_person_lock(KEY, LABEL, "a background read")
+    first = blocks.hold_of(KEY)["at"]
+    later = first + 7200
+    monkeypatch.setattr(blocks.time, "time", lambda: later)
+    env.failures[LABEL] = _checkpoint(LABEL)
+    q = _queue(env)
+    assert q.request(LABEL, "open", force=True)["queued"] is True
+    q._drain_once()
+    assert q.state()["halt"] is None and q.state()["rows"][LABEL]["state"] == "failed"
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    assert hold["at"] == first and hold["seen"] == later          # since stays, the read time moves
+    row = astate.account_state({"account": LABEL, "status": {}, "has_data": False, "hold": hold})
+    assert row["key"] == "issue"
+    assert row["status_line"].startswith("Facebook locked · since ") and " · read " in row["status_line"]
+    assert datetime.fromtimestamp(later).strftime("%d.%m %H:%M") in row["status_line"]
