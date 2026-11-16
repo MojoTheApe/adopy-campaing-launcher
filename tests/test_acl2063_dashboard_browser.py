@@ -141,6 +141,8 @@ class Dashboard:
 @pytest.fixture
 def dashboard(tmp_path, monkeypatch):
     from src.web import app as web
+    from src.fb_api import account_blocks
+    monkeypatch.setattr(account_blocks, '_PATH_OVERRIDE', tmp_path / 'account_holds.json')    # never the machine's real holds
     site = Dashboard(web, monkeypatch, tmp_path)
     with sync_playwright() as pw:
         browser = launch_chromium(pw)
@@ -156,7 +158,7 @@ def dashboard(tmp_path, monkeypatch):
 
 
 def wait_ready(page):
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc && document.querySelector('.amap-campaigns')._hc.state.rows.Acc")
+    page.wait_for_function("document.querySelector('.amap-campaigns')?._hc?.state?.rows?.Acc")
 
 
 def test_ten_date_changes_rejoin_workbook_keep_structure_and_open_zero_profiles(dashboard):

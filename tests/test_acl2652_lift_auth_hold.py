@@ -18,6 +18,7 @@ from src.fb_api import account_blocks as blocks
 from src.fb_api import graph as g
 from tests.test_acl1760_api_read import ACCOUNT, D, world  # noqa: F401  (fixture)
 from tests.test_acl2063_refresh_queue import _queue, env  # noqa: F401  (fixture)
+from tests.test_acl2063_structure_read import _structure_snap, store  # noqa: F401  (fixture)
 
 ROOT = Path(__file__).resolve().parent.parent
 KEY = "prof-1"
@@ -212,7 +213,7 @@ def test_the_state_carries_the_hold_with_reason_and_since(monkeypatch):
     shown = app._account_holds([LABEL, "OTHER"])
     assert set(shown) == {LABEL}, "only the held profile is listed"
     assert shown[LABEL] == {
-        "kind": "checkpoint", "code": 31, "needs_confirm": False, "at": blocks.hold_of(KEY)["at"],
+        "kind": "checkpoint", "code": 31, "at": blocks.hold_of(KEY)["at"],
         "reason": "Meta asks to confirm this account (security check).",
         "next": "Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
                 "Existing ads keep running."}
@@ -412,7 +413,7 @@ def test_a_held_account_shows_retry_without_a_failed_read(monkeypatch):
 
     from src.web import app as web
 
-    hold = {"kind": "checkpoint", "code": 31, "needs_confirm": False, "at": 1_800_000_000.0,
+    hold = {"kind": "checkpoint", "code": 31, "at": 1_800_000_000.0,
             "reason": "Meta asks to confirm this account (security check).",
             "next": "Open Ads Manager in this profile and complete the check, then press Retry on this profile."}
     monkeypatch.setattr(web, "_account_holds", lambda accounts: {"Acc": hold})
@@ -435,3 +436,49 @@ def test_a_held_account_shows_retry_without_a_failed_read(monkeypatch):
             site.release.set()
             site.q.stop()
             browser.close()
+
+
+# ───────────────────────── Retry through the read machine; publish keeps timed pauses ─────────────────────────
+
+def test_retry_on_a_held_account_completes_through_run_read_and_keeps_the_saved_list(monkeypatch, store):  # noqa: F811
+    import contextlib
+
+    from src.analysis_agent import campaign_inventory as ci
+
+    monkeypatch.setattr(ci, "backend_ready", lambda: True)
+    monkeypatch.setattr(ci._as, "_lock_for", lambda account: contextlib.nullcontext())
+    monkeypatch.setattr(ci, "read_via_api", lambda account, *a, **k: ci.Snapshot(**{**_structure_snap().to_dict(), "account": account}))
+    ci.run_read("A", trigger="schedule")
+    assert len(ci.get_snapshot("A").campaigns) == 1
+    key = ci._as._profile_key("A")
+    _hold(label="A", key=key)
+    monkeypatch.setattr(ar, "_profile_held", lambda account: blocks.is_held(key))
+    seen = []
+
+    def status(account, *, trigger="open"):
+        seen.append((trigger, blocks.buyer_started()))
+        if blocks.buyer_started():
+            blocks.clear(key, "retry")                # what a healthy page does for a person's Retry
+        snap = ci.Snapshot(account=account, state="ok", currency="USD")
+        snap._status_only = True
+        return snap
+
+    monkeypatch.setattr(ci, "read_status_only", status)
+    done = ci.run_read("A", trigger="retry")
+    assert seen == [("retry", True)] and done.state == "ok" and ci.is_status_only_ok(done), done.error
+    assert len(ci.get_snapshot("A").campaigns) == 1, "the saved list is kept"
+    attempt = ci.get_attempt("A")
+    assert not attempt or attempt.get("state") != "failed", "no failed attempt is written"
+    assert not blocks.is_held(key)
+
+
+def test_publish_still_refuses_a_timed_pause_on_top_of_an_auth_hold(monkeypatch, tmp_path):
+    from tests.test_acl1761_api_create import FakeMeta
+    from tests.test_acl2595_auth_checkpoint import _rig
+
+    publish_api = _rig(monkeypatch, tmp_path, FakeMeta())
+    api._start_cooldown("prof-1", _auth_stop(), LABEL)
+    monkeypatch.setattr(publish_api, "_cooldown", lambda label: (300.0, "rate_limited"))
+    with pytest.raises(publish_api.ApiPublishError):
+        publish_api.ApiPublisher().open(LABEL)
+    assert blocks.is_held("prof-1")

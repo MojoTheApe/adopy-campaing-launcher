@@ -1170,7 +1170,11 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
                 paused._machine_committed = True
                 return paused
             done = None
-            if trigger.split(":")[0] == "open":
+            from src.analysis_agent import account_refresh as _ar
+
+            kind_ = trigger.split(":")[0]
+            # ACL-2652: Retry on a held profile is the same one status request as Open, so it ends the same way.
+            if kind_ == "open" or (kind_ == "retry" and _ar._profile_held(account)):  # noqa: SLF001
                 # ACL-2419: статус-чтение не публикует опись. Удача - без записи в общее
                 # хранилище результатов (оно заменило бы опись пустой); неудача идёт обычным путём.
                 done = operation()

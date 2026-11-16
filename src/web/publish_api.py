@@ -536,7 +536,8 @@ class ApiPublisher:
         key = _frozen_api(account_label)[1]
         # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
         # and a timed pause are explained by the one owner of that state.
-        blocked = None if self._auth_probe else _blocks.refusal(
+        # ACL-2652: only a bare hold is passed; a timed pause (rate limit, frozen tab) still refuses
+        blocked = None if self._auth_probe and left == float("inf") else _blocks.refusal(
             key, account_label, "publish", timed=(left, why) if left > 0 and not frozen_deferred else None)
         if blocked:
             held = _blocks.is_held(key)
