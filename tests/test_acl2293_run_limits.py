@@ -60,7 +60,7 @@ def test_a_change_reaches_the_engine_without_a_restart(machine, no_side_effects)
 @pytest.mark.parametrize("kwargs", [
     {"ceiling": 0}, {"ceiling": 9}, {"ceiling": 2.5}, {"ceiling": "auto"}, {"ceiling": True},
     {"ceiling": "3 profiles"}, {"ceiling": float("nan")}, {"ceiling": None, "warm_heavy": 4},
-    {"warm_heavy": 0}, {"memory_max_used_pct": 49}, {"memory_max_used_pct": 96},
+    {"warm_heavy": 0}, {"memory_max_used_pct": -1}, {"memory_max_used_pct": 96},
     {"memory_max_used_pct": "abc"}, {"memory_max_used_pct": float("inf")},
 ])
 def test_bad_values_change_nothing(machine, no_side_effects, kwargs):
@@ -79,6 +79,10 @@ def test_one_bad_field_rejects_the_whole_save(machine, no_side_effects):
 def test_bounds_accepted_and_comma_decimal(machine, no_side_effects):
     assert rl.save(ceiling=8, warm_heavy=3, memory_max_used_pct="95")["memory_max_used_pct"] == 95
     assert rl.save(ceiling=1, memory_max_used_pct="50,5")["memory_max_used_pct"] == 50.5
+    # ACL-2668: минимума 50 больше нет — 0 и 5 % сохраняются и доходят до движка как есть.
+    assert rl.save(memory_max_used_pct=0)["memory_max_used_pct"] == 0
+    assert rl.save(memory_max_used_pct="5")["memory_max_used_pct"] == 5
+    assert ps.load_settings().max_used_pct == 5.0
 
 
 def test_reset_writes_explicit_defaults_not_blank_keys(machine, no_side_effects, monkeypatch):
@@ -222,8 +226,10 @@ def test_any_value_in_bounds_saves_at_once_without_confirm(machine, no_side_effe
 
 
 def test_the_owner_ranges_are_unchanged():
-    # Решение владельца 09.11: потолок 1–8, доля памяти 50–95 — подтверждение убрали, границы нет.
-    assert rl.CEILING_BOUNDS == (1, 8) and rl.SHARE_BOUNDS == (50.0, 95.0)
+    # Потолок 1–8 (решение 09.11); доля памяти 0–95 (ACL-2668, решение 16.11 — без минимума 50).
+    assert rl.CEILING_BOUNDS == (1, 8) and rl.SHARE_BOUNDS == (0.0, 95.0)
+    html = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    assert '<input id="rl-share" type="number" min="0" max="95"' in html and "% (0-95, default" in html
     assert not hasattr(rl, "NeedsConfirm") and not hasattr(rl, "CONFIRM_CEILING_ABOVE")
     assert not hasattr(rl, "CONFIRM_SHARE_ABOVE") and not hasattr(rl, "warnings_for")
 
