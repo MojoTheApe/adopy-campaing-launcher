@@ -90,7 +90,7 @@ def test_videos_that_fit_chunked_are_never_planned_compressed(tmp_path, monkeypa
     assert sorted(size for size, _ in planned.values()) == sorted([70 * MB, 70 * MB, 30 * MB, 30 * MB])
 
 
-def test_the_plan_never_compresses_when_the_fast_upload_is_on_or_the_fallback_is_off(tmp_path, monkeypatch):
+def test_the_budget_fallback_is_not_planned_when_the_fast_upload_is_on_or_the_fallback_is_off(tmp_path, monkeypatch):
     monkeypatch.setenv("ACL_VIDEO_COMPRESS_OVER_MB", "100000")   # ACL-2644: the size threshold is not what this test is about
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     plan = B._plan(tmp_path, [2000, 2000], monkeypatch)

@@ -414,6 +414,28 @@ def video_compress_over_bytes() -> int:
     return int(video_compress_over_mb() * 1048576)
 
 
+_DURATION_CACHE: dict[tuple[str, int], float] = {}
+
+
+def video_cannot_compress(path: str, size: int) -> bool:
+    """ACL-2644: True when a video above the threshold is KNOWN to be too long to be compressed under it (the two-pass
+    bitrate would fall below the compressor's minimum): the original is planned (and budgeted) instead. An unknown
+    duration (no ffmpeg, no probe) is not a prediction: False."""
+    from src.fb_ads_rpa import creative_compress as _cc
+
+    over = video_compress_over_mb()
+    if size <= over * 1048576 or not _cc.ffmpeg_exe():
+        return False
+    try:
+        key = (path, size)
+        if key not in _DURATION_CACHE:
+            _DURATION_CACHE[key] = float(_cc.duration_s(path))
+        duration = _DURATION_CACHE[key]
+    except Exception:  # noqa: BLE001 - a courtesy estimate
+        return False
+    return duration > 0 and _cc.video_bitrate_kbps(duration, over * COMPRESS_OVER_TARGET_SHARE) == 0
+
+
 def planned_upload_size(path: str, original: int) -> int:
     """ACL-2621: размер файла, который реально уйдёт в Meta (байты).
 
@@ -426,7 +448,7 @@ def planned_upload_size(path: str, original: int) -> int:
     if worker_upload_enabled():
         # ACL-2644: the original goes up from the worker unless it is above the threshold: then the compressed copy
         over = video_compress_over_bytes()
-        if original <= over:
+        if original <= over or video_cannot_compress(path, original):
             return original
         try:
             copy = _cc.cache_path(path, video_compress_over_mb() * COMPRESS_OVER_TARGET_SHARE)
@@ -455,8 +477,8 @@ def planned_upload_size(path: str, original: int) -> int:
 
 def video_upload_calls(size: int, compressed: bool = False, worker: bool | None = None) -> int:
     """THE count of Graph calls for uploading one video of `size` bytes (no retry slack): the plan (`publish_api`, via
-    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is always
-    uploaded in chunks, so at least start + transfer + finish."""
+    `estimate_upload_calls`), `_prepare` and the chunked allowance all use this one. A compressed copy is counted on
+    the chunked path (the planning assumption), so at least start + transfer + finish."""
     if compressed:
         return max(upload_calls(size, True, chunked=True), CALLS_UPLOAD_FIXED + 1)
     return upload_calls(size, worker)
@@ -3441,7 +3463,8 @@ class CampaignCreator:
         """ACL-2639: a large original from the profile goes up with Meta's resumable protocol (a few calls); the
         chunked advideos protocol is the fallback when the resumable one is refused or cannot move a single byte.
         ACL-2644: a video above the compress threshold (500 MB) is compressed first, whichever protocol follows."""
-        big = self._compress_over_threshold(out, big, who)
+        self._compress_note = ""
+        big = self._compress_over_threshold(out, plan, big, who)
         if self.worker_path and resumable_upload_enabled():
             before = getattr(self.client, "calls", 0)
             try:
@@ -3478,9 +3501,8 @@ class CampaignCreator:
         upload THAT through the chunked path. The video keeps its ACL tag title (of the original), so a republish
         finds it. Not compressible (no ffmpeg, bitrate would be unusable, failure): the original goes on and the
         chunked pre-check stops with its clear message. `ACL_VIDEO_COMPRESS_FALLBACK=0` turns it off."""
-        self._compress_note = ""
-        if not compress_fallback_enabled():
-            return big
+        if not compress_fallback_enabled() or big.path in getattr(self, "_encoded_paths", ()):
+            return big                                      # ACL-2644: a copy made this run is never encoded a second time
         spare = self._chunk_spare(plan)
         if spare is None:
             return big
@@ -3525,7 +3547,7 @@ class CampaignCreator:
                     f"about {pl[0] / 1048576:.0f} MB before upload (resolution and aspect ratio stay the same"
                     + (f"; {eta}" if eta else "") + ").")
 
-    def _require_compressor_for_big_videos(self, plan: CampaignPlan) -> None:
+    def _require_compressor_for_big_videos(self, plan: CampaignPlan, out: Outcome) -> None:
         """ACL-2644: a video above the compress threshold cannot go up without ffmpeg: refuse BEFORE any write (and any
         profile probe), the same way as the missing-ffmpeg stop of the call budget."""
         over = video_compress_over_mb()
@@ -3544,22 +3566,65 @@ class CampaignCreator:
             raise PlanError(f"Videos above {over:.0f} MB are compressed before upload, and ACL needs ffmpeg for that "
                             f"(it was not found): {names}. Install ffmpeg or use a video of {over:.0f} MB or less. "
                             "Nothing was created.", key="creative_file")
+        labels = {}
+        for s_ in plan.ad_sets:
+            for a in s_.ads:
+                labels[a.path] = f"Ad {a.index}"
+                if a.vertical_path:
+                    labels[a.vertical_path] = f"Ad {a.index} Stories / Reels"
+        for path, size in big:
+            if video_cannot_compress(path, size):
+                out.warnings.append(f"{labels.get(path, 'A')} video ({size / 1048576:.0f} MB) is too long to compress "
+                                    f"under {over:.0f} MB; the original will be uploaded.")
 
-    def _compress_over_threshold(self, out: Outcome, big: "LargeFile", who: str) -> "LargeFile":
+    def _compress_over_threshold(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", who: str) -> "LargeFile":
         """ACL-2644: a video above `ACL_VIDEO_COMPRESS_OVER_MB` (default 500) is compressed to at most that size
         (the ACL-2000 ffmpeg 2-pass compressor: resolution and aspect ratio kept, cache, Stop). At or below it nothing
-        happens. A failed compression sends the original on (the chunked pre-check then speaks for it)."""
+        happens. ONE encode per video: when the plan already marked a smaller target (the budget fallback), the copy is
+        made at that target straight from the original, and the copy is never encoded again.
+
+        A failed compression: the original goes on only when its chunked upload fits what the run can still spare
+        (the budget never under-counts), with a visible warning naming the reason; otherwise a clean stop
+        (`video_error`) that names the reason, before anything of this video is uploaded."""
         over_mb = video_compress_over_mb()
         if not self.worker_path or len(big) <= over_mb * 1048576:
             return big
-        res = self._compress_big(out, big, who, over_mb, over_mb * COMPRESS_OVER_TARGET_SHARE,
-                                 f"because it is above {over_mb:.0f} MB", f"because it is above {over_mb:.0f} MB")
-        if res is big:
-            self._over_failed = set(getattr(self, "_over_failed", ())) | {big.path}
-        return res
+        label = f"{who[:1].upper()}{who[1:]}"
+        mb = len(big) / 1048576
+        if video_cannot_compress(big.path, len(big)):
+            res, reason = big, f"it is too long to fit under {over_mb:.0f} MB"      # announced by Check plan already
+        else:
+            limit, target = over_mb, over_mb * COMPRESS_OVER_TARGET_SHARE
+            planned = (getattr(self, "_video_plan", None) or {}).get(big.path)
+            if planned and planned[1] and 1 <= planned[0] / 1048576 < target:
+                limit = planned[0] / 1048576                        # the plan's smaller target: encode once, at that
+                target = limit * COMPRESS_OVER_TARGET_SHARE
+            res = self._compress_big(out, big, who, limit, target, f"because it is above {over_mb:.0f} MB",
+                                     f"because it is above {over_mb:.0f} MB", max_bytes=int(over_mb * 1048576))
+            reason = getattr(self, "_compress_note", "") or "unknown reason"
+        if res is not big:
+            self._encoded_paths = set(getattr(self, "_encoded_paths", ())) | {res.path}
+            return res
+        self._over_failed = set(getattr(self, "_over_failed", ())) | {big.path}
+        self._compress_note = reason
+        need = upload_calls(len(big), True, chunked=True)
+        spare = self._chunk_spare(plan)
+        if spare is not None and spare < need:
+            raise CreationStopped(
+                f"{label} video ({mb:.0f} MB) could not be compressed under {over_mb:.0f} MB ({reason}), and uploading "
+                f"the original needs about {need} Meta calls while this run can spare {spare}. Nothing was uploaded. "
+                "Use a smaller or shorter video file or publish fewer ads in this run.", created=out.created,
+                kind="video_error",
+                failure=_plain.Failure(
+                    "plan_text", f"{label} video: could not be compressed under {over_mb:.0f} MB ({reason}) and the "
+                                 "original is too large for this run's Meta call budget",
+                    "use a smaller or shorter video, or publish fewer ads in this run, then republish"))
+        out.warnings.append(f"{label} video ({mb:.0f} MB) could not be compressed under {over_mb:.0f} MB ({reason}); "
+                            "the original is uploaded instead.")
+        return big
 
     def _compress_big(self, out: Outcome, big: "LargeFile", who: str, limit_mb: float, target_mb: float,
-                      why_short: str, why_long: str) -> "LargeFile":
+                      why_short: str, why_long: str, max_bytes: int = 0) -> "LargeFile":
         """The shared compression step of `_fit_for_chunks` (budget) and `_compress_over_threshold` (size threshold)."""
         size = len(big)
         label = f"{who[:1].upper()}{who[1:]}"
@@ -3597,8 +3662,10 @@ class CampaignCreator:
             self._step(out, f"{who}: not compressed ({why})")
             return big
         new_size = self.size_of(prepared.path) or 0
-        if not new_size or new_size >= size:
-            self._step(out, f"{who}: the compressed copy is not smaller; the original goes on")
+        if not new_size or new_size >= size or (max_bytes and new_size > max_bytes):
+            self._compress_note = ("the compressed copy is not smaller" if not new_size or new_size >= size
+                                   else f"the compressed copy is {new_size / 1048576:.0f} MB, above the limit")
+            self._step(out, f"{who}: {self._compress_note}; the original goes on")
             return big
         self._step(out, f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB {why_short}")
         out.warnings.append(f"{label} video compressed from {prepared.original_mb:.0f} MB to {prepared.sent_mb:.0f} MB "
@@ -5148,6 +5215,7 @@ class CampaignCreator:
         """
         calls_at_start = getattr(self.client, "calls", 0)
         self._writes_base = getattr(self.client, "writes", 0)
+        self._require_compressor_for_big_videos(plan, out)      # ACL-2644: before any read or probe
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
         self.check_profile_page(plan)
@@ -5178,7 +5246,6 @@ class CampaignCreator:
             for step in self._form_steps.values():
                 self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
                            else f"preflight: form found on the Page, will be reused: {step.form_name}")
-        self._require_compressor_for_big_videos(plan)
         files: dict[str, bytes] = {}
         self.worker_path = self._decide_worker_path(plan, out) if writing else False
         # Check plan does not probe: it counts the original when the worker path is switched on.
@@ -5190,6 +5257,10 @@ class CampaignCreator:
             if not writing and isinstance(data, LargeFile):
                 return planned_upload_size(path, len(data))
             return len(data)
+
+        def checked_len(path: str, data: Any) -> int:
+            # ACL-2644: the worker path checks the ORIGINAL against Meta's 4 GB, in Check plan and in Publish alike
+            return len(data) if worker_plan else sent_len(path, data)
 
         def load(path: str, kind: str):
             # Check plan does not probe the worker path, but it plans for it: a video the worker would upload in chunks
@@ -5209,7 +5280,7 @@ class CampaignCreator:
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})", key="creative_file") from exc
                 limit = video_limit if ad.kind == "video" else IMAGE_MAX_BYTES
-                if not data or sent_len(ad.path, data) > limit:
+                if not data or checked_len(ad.path, data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
                                     f"{limit // (1024 * 1024)} MB", key="creative_file")
                 if ad.kind != "video":
@@ -5224,7 +5295,7 @@ class CampaignCreator:
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})", key="creative_file") from exc
                     vlimit = video_limit if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
-                    if not vdata or sent_len(ad.vertical_path, vdata) > vlimit:
+                    if not vdata or checked_len(ad.vertical_path, vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
                                         f"{vlimit // (1024 * 1024)} MB", key="creative_file")
                     if ad.vertical_kind != "video":
