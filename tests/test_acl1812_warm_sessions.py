@@ -208,6 +208,13 @@ class FakeQueue:
         return self.rig.others
 
 
+@pytest.fixture(autouse=True)
+def _restart_cooldown_override(monkeypatch):
+    # ACL-2668: по умолчанию паузы нет (0). Здесь проверяется сам механизм паузы,
+    # который остался аварийным рычагом, — поэтому включаем его явно, как раньше: 180 с.
+    monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
+
+
 def entry(pid=PID, label="Acc"):
     return SimpleNamespace(profile_id=pid, folder_id="F", multilogin_instance="A", ad_account_id=ACT)
 

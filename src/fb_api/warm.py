@@ -25,10 +25,9 @@
 для экрана (`states`) берётся ТОЛЬКО из реестра и процессов на машине — ни одного
 вызова к Meta, MLX или CDP.
 
-Перезапуск профиля быстро после остановки — вероятная причина двух разлогинов
-5414 (ACL-1811). Пока общий журнал остановок не вошёл, реестр ведёт свой
-(`stops` в том же файле): запуск раньше `ACL_PROFILE_RESTART_COOLDOWN_S`
-(3 минуты) после последней остановки отказывает с оставшимся временем.
+Пауза перед повторным запуском профиля после остановки (`ACL_PROFILE_RESTART_COOLDOWN_S`,
+журнал `stop_log`) с ACL-2668 по умолчанию 0 — профиль можно открыть сразу. Число > 0
+в переменной — только аварийный рычаг: тогда запуск раньше срока ждёт или отказывает.
 
 Антитроттлинг фоновой вкладки (focus emulation + lifecycle active) остаётся в
 `PageTab.open` — долгоживущая вкладка получает его при создании. Чтобы он не
@@ -1374,7 +1373,7 @@ class WarmRegistry:
         finally:
             sess.lock.release()
         log.info("warm: profile of %s closed on request", label)
-        return _result(True, "Closed. It can be started again in about 3 minutes.", "closed")
+        return _result(True, "Closed.", "closed")
 
     # -- аренда вкладки
     def checkout(self, profile_id: str, *, account: str, act: str, mode: str,

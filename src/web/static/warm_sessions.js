@@ -309,8 +309,7 @@
   function runClose(grid, labels) {
     if (!labels.length) { say(grid, 'Tick the accounts whose profiles to close.', true); return; }
     window.aclConfirm('Only profiles that this dashboard opened are closed, '
-      + 'gently, through Multilogin. Anything opened another way stays open. A closed profile can be '
-      + 'started again after about 3 minutes.',
+      + 'gently, through Multilogin. Anything opened another way stays open.',
       { title: 'Close ' + labels.length + ' profile(s)?', okLabel: 'Close profiles' })
       .then(function (ok) { if (ok) closeNow(grid, labels); });
   }
