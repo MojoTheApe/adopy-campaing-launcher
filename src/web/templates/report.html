@@ -3247,6 +3247,7 @@
     .cbd-tick input[disabled] { cursor: not-allowed; }
     .cbd-tick:has(input[disabled]) { cursor: not-allowed; opacity: 0.55; }
     .cbd-tick + .cbd-camp-row { padding-left: 0.4rem; }
+    .cbd-root .cbd-account .cbd-acc-tick { padding: 0; }
     .cbd-ticks {
       display: flex; align-items: center; gap: var(--space-xs);
       margin-bottom: var(--space-sm);
@@ -8898,7 +8899,9 @@ window.cbTree = (function () {
       var secs = Math.max(0, Math.floor((Date.now() - started) / 1000));
       return 'Checking with Meta… ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
     }
-    var n = t.some ? t.send.length : t.total;
+    // ACL-2658: «всё отмечено» — это отмеченные, а не `total`: в total сидят и кампании,
+    // которые сейчас собираются и в этот запуск не едут.
+    var n = t.on.length ? t.send.length : t.open.length;
     return 'Check ' + n + (n === 1 ? ' campaign' : ' campaigns') + ' with Meta';
   }
 
@@ -8948,6 +8951,13 @@ window.cbTree = (function () {
       var dot = box.querySelector('.cbd-acc-state');
       if (!a || !dot) return;
       var st = L.accountState(window.ACCOUNT_PREFLIGHT && window.ACCOUNT_PREFLIGHT[a.account], tickLocked(a));
+      var tick = box.querySelector('.cbd-acc-tick-box');
+      if (tick) {
+        var on = a.campaigns.filter(function (c) { return picked(c.slot); }).length;
+        tick.checked = on > 0 && on === a.campaigns.length;
+        tick.indeterminate = on > 0 && on < a.campaigns.length;
+        tick.disabled = !a.campaigns.length || (tickLocked(a) && !on);
+      }
       dot.className = 'cbd-ind cbd-acc-state cbd-acc-st-' + st.state;
       dot.title = st.why;
       var sign = dot.querySelector('span');
@@ -8969,7 +8979,14 @@ window.cbTree = (function () {
      null — прежний «Publish all». */
   function selectedForPublish() {
     var t = ticks();
-    return t.some ? t.on.slice() : null;
+    /* ACL-2658: отмечено хоть что-то — уходит ровно отмеченное (то, что видно на
+       галочках), даже если это «всё, что можно»: иначе запуск строился бы заново
+       по формам в момент клика, а не по отметкам. `.all` — лишь про слова в окне
+       подтверждения («every campaign» вместо «the selected»). */
+    if (!t.on.length) return null;
+    var out = t.on.slice();   // отмеченные у собираемого аккаунта в окне подтверждения попадают в «skipped»
+    out.all = t.every;
+    return out;
   }
 
   /* ── отрисовка ────────────────────────────────────────────────────── */
@@ -9033,6 +9050,11 @@ window.cbTree = (function () {
     var name = aclEscHtml(a.account);
     return '<div class="cbd-acc" data-acc="' + aclEscHtml(key) + '" data-collapsed="' + (closed ? '1' : '0') + '">'
       + '<div class="cbd-account">'
+      /* ACL-2658: галочка аккаунта ничего не хранит — её вид считается из отметок его
+         кампаний (refreshAccountStates), а клик ставит/снимает их же. */
+      + '<label class="cbd-tick cbd-acc-tick" title="Select every campaign of ' + name + '">'
+      + '<input type="checkbox" class="cbd-acc-tick-box" aria-label="Select all campaigns of ' + name + '"'
+      + (a.campaigns.length && a.campaigns.every(function (c) { return picked(c.slot); }) ? ' checked' : '') + '></label>'
       + '<button type="button" class="cbd-acc-toggle" data-act="acc-toggle" data-key="' + aclEscHtml(key) + '"'
       + ' aria-expanded="' + (closed ? 'false' : 'true') + '"'
       + ' aria-label="' + (closed ? 'Expand' : 'Collapse') + ' account ' + name + '"'
@@ -10353,6 +10375,21 @@ window.cbTree = (function () {
 
   foot.addEventListener('change', function (e) {
     if (e.target.classList.contains('cbd-pick-country')) paintAccounts();
+  });
+
+  /* ACL-2658: галочка аккаунта — отметить все его кампании (кроме собираемых сейчас) или снять
+     все, включая те, что остались отмеченными у собираемого аккаунта. */
+  body.addEventListener('change', function (e) {
+    if (!e.target.classList || !e.target.classList.contains('cbd-acc-tick-box')) return;
+    var box = e.target.closest('.cbd-acc');
+    var hit = null;
+    realTree().forEach(function (g) {
+      g.accounts.forEach(function (a) { if (box && g.country + '|' + a.account === box.dataset.acc) hit = a; });
+    });
+    if (!hit) return;
+    var slots = hit.campaigns.map(function (c) { return c.slot; });
+    if (e.target.checked && tickLocked(hit)) { refreshTicks(); return; }
+    setTicks(slots, e.target.checked);
   });
 
   body.addEventListener('change', function (e) {
@@ -20581,6 +20618,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   // ACL-1360: отмечена часть кампаний — едут только они, по заданию на
   // аккаунт. `picked` — отмеченные карточки; пусто — прежний «Publish all».
   var only = picked && picked.length ? picked : null;
+  var onlyWord = !!(only && !only.all);   // ACL-2658: отмечено всё, что можно — слова прежнего «Publish all»
   // ACL-1355: аккаунты, которые уже собираются в этой вкладке, вторым
   // заданием не идут — остальные встают в ту же сборку.
   // Ключ — страна и аккаунт: один аккаунт бывает привязан к нескольким
@@ -20658,8 +20696,8 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   });
 
   _safeConfirm(cbApiMode()
-      ? (only ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
-      : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
+      ? (onlyWord ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
+      : (onlyWord ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     parts.body,
     function () {
       if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, null); return; }
@@ -20671,7 +20709,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
-    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(), wide: true, lead: parts.lead });
+    { confirmLabel: (onlyWord ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(), wide: true, lead: parts.lead });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
@@ -23409,8 +23447,9 @@ function _doCbPublish(form) {
         });
         return out;
       };
-      begin(reselect, { onProgress: onProgress, confirmLabel: (hadPick ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(),
-        title: hadPick ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?' });
+      var pickWord = hadPick && !picked.all;   // ACL-2658: отмечено всё, что можно — слова прежнего «Publish all»
+      begin(reselect, { onProgress: onProgress, confirmLabel: (pickWord ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(),
+        title: pickWord ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?' });
     };
   }
   if (typeof prevOne === 'function') {
