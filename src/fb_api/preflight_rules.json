@@ -349,7 +349,7 @@
         "level": "ad",
         "sel": ".cb-creative-search"
       },
-      "hint": "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
+      "hint": "file type, size (image 30 MB, video 4096 MB) or video length is over the limit",
       "id": "media_limits",
       "label": "Media within Meta limits",
       "severity": "error",
@@ -408,20 +408,6 @@
       "hint": "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
       "id": "texts_limit",
       "label": "Up to 5 texts per field",
-      "severity": "error",
-      "side": "client",
-      "topic": "creative",
-      "unit": "ad"
-    },
-    {
-      "applies": "always",
-      "field": {
-        "level": "ad",
-        "sel": ".cb-vertical-search"
-      },
-      "hint": "Several primary texts and a Stories/Reels file can't be combined: Meta applies one text per placement group. Use several texts without the vertical file, or one text with it.",
-      "id": "texts_vertical",
-      "label": "Several texts and a Stories / Reels file",
       "severity": "error",
       "side": "client",
       "topic": "creative",

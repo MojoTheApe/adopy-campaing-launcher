@@ -78,6 +78,9 @@ _HELPER_JS = r"""
   // ACL-1761: политика записи (null — только чтение). Вшита при установке,
   // страница её не видит и не меняет.
   const WRITE = __WRITE__;
+  // ACL-2639: the patterns that validate the upload page's values. Separate from the write policy ON PURPOSE: the
+  // read-only helper of a capture tab (light mode) has no write policy, yet it must find and pass the values on.
+  const UPLOAD = __UPLOAD__;
   // ACL-2105: separate no-creation capability, pinned to the navigated account.
   const VALIDATE_ACT = __VALIDATE_ACT__;
   const g = (typeof globalThis !== 'undefined') ? globalThis : self;
@@ -89,7 +92,7 @@ _HELPER_JS = r"""
   // (adsmanager-graph); якорь на начале нормализованного адреса, сразу за
   // хостом — `/` (ни порта, ни userinfo, ни поддоменов, ни http:). Ревью r5.
   const GRAPH_RE = /^https:\/\/((?:[a-z0-9]+-)?graph\.facebook\.com)(?:\/(v\d+\.\d+))?(?:\/|$)/i;
-  const PARAM_RE = /(access_token(?:=|%3D|\\u003d))[^&"'\s\\]+/gi;
+  const PARAM_RE = /((?:access_token|fb_dtsg(?:_ag)?)(?:=|%3D|\\u003d))[^&"'\s\\]+/gi;
   const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage',
                    'x-fb-ads-insights-throttle'];
   const FORBIDDEN = ['method', '_method', 'batch', 'suppress_http_code', 'access_token'];
@@ -101,6 +104,10 @@ _HELPER_JS = r"""
   let version = '';
   let retired = false;
   let amRequest = null;
+  // ACL-2639: the upload page's session values (a secret: never logged, never returned, masked in every answer):
+  // `async_get_token` of DTSGInitData and the resumable service of AdsVideoUploadConfig.
+  let dtsgAg = '';
+  let rsvc = null;
 
   // Разобрать адрес Graph: если в строке запроса есть access_token — это он.
   function consider(url) {
@@ -151,6 +158,39 @@ _HELPER_JS = r"""
     } catch (e) {}
   }
 
+  // ACL-2639: the Ads Manager upload values from the page's inline scripts (only on the full Ads Manager page; a light
+  // or clean tab gets them by the hand-over). Validated here with the policy's own patterns.
+  function rsvcOk(name, domain) {
+    const U = UPLOAD;
+    return !!U && typeof name === 'string' && new RegExp(U.name_re).test(name) && domain === U.domain;
+  }
+  function dtsgOk(v) {
+    const U = UPLOAD;
+    return !!U && typeof v === 'string' && new RegExp(U.dtsg_re).test(v);
+  }
+  function scanUpload() {
+    if ((dtsgAg && rsvc) || retired || !UPLOAD) return;
+    try {
+      for (const sc of document.scripts) {
+        if (sc.src) continue;
+        const t = sc.textContent || '';
+        if (t.length < 20 || t.length > 3000000) continue;
+        let m;
+        if (!dtsgAg && (m = /\["DTSGInitData",\[\],\{"token":"[^"]*","async_get_token":"([^"]{20,100})"/.exec(t)) && dtsgOk(m[1])) dtsgAg = m[1];
+        if (!rsvc) {
+          const at = t.indexOf('["AdsVideoUploadConfig",[],{');
+          if (at >= 0) {
+            const part = t.slice(at, at + 8000);
+            const n = /"resumable_service_name":"([^"]{1,60})"/.exec(part);
+            const d = /"resumable_service_domain":"([^"]{1,60})"/.exec(part);
+            if (n && d && rsvcOk(n[1], d[1])) rsvc = { name: n[1], domain: d[1] };
+          }
+        }
+        if (dtsgAg && rsvc) return;
+      }
+    } catch (e) {}
+  }
+
   function state() {
     scanFast();
     const h = location.hostname || '';
@@ -170,6 +210,10 @@ _HELPER_JS = r"""
   function clean(text) {
     let out = String(text);
     if (token) out = out.split(token).join('<token>');
+    if (dtsgAg) {
+      out = out.split(dtsgAg).join('<hidden>');
+      try { out = out.split(encodeURIComponent(dtsgAg)).join('<hidden>'); } catch (e) {}
+    }
     return out.replace(PARAM_RE, '$1<hidden>').replace(TOKEN_ANY, '<token>');
   }
 
@@ -275,6 +319,96 @@ _HELPER_JS = r"""
     const fk = Object.keys(spec.files || {});
     if (phase === 'transfer') { if (fk.length !== 1 || fk[0] !== U.chunk_field) return 'file'; }
     else if (fk.length) return 'file';
+    if (spec.source !== undefined && phase !== 'transfer') return 'source';
+    return null;
+  }
+  // ACL-2639: the Ads Manager file-API upload (mirror of write_policy._check_file_api): closed keys per phase, exact values.
+  function fileApiMarked(params) {
+    const F = WRITE.file_api;
+    return !!F && F.markers.some((k) => k in params);
+  }
+  function fileApiOk(params, spec) {
+    const F = WRITE.file_api;
+    if (!F) return 'file_api';
+    const phase = params.upload_phase;
+    if (typeof phase !== 'string' || Object.keys(F.keys).indexOf(phase) < 0) return 'upload_phase';
+    const allowed = F.keys[phase];
+    const pk = Object.keys(params);
+    for (const k of pk) if (allowed.indexOf(k) < 0) return 'upload_key';
+    for (const k of allowed) if (pk.indexOf(k) < 0) return 'upload_key';
+    if (Object.keys(spec.files || {}).length || spec.source !== undefined) return 'file';
+    const U = WRITE.upload;
+    const idOk = (v) => typeof v === 'string' && new RegExp(U.id_re).test(v);
+    if (phase === 'start') {
+      const n = typeof params.file_size === 'string' ? digitsOf(params.file_size) : null;
+      if (!n || n > U.file_max) return 'upload_size';
+      if (!(typeof params.waterfall_id === 'string' && /^[0-9a-f]{32}$/.test(params.waterfall_id))) return 'upload_waterfall';
+      if (params.file_extension !== 'mp4' || params.supports_chunking !== 'true' || params.supports_file_api !== 'true'
+          || params.partition_start_offset !== '0' || params.partition_end_offset !== params.file_size) return 'upload_partition';
+      return null;
+    }
+    if (!idOk(params.upload_session_id)) return 'upload_session';
+    if (!idOk(params.video_id)) return 'video_id';
+    if (phase === 'transfer') {
+      const end = typeof params.end_offset === 'string' ? digitsOf(params.end_offset) : null;
+      if (params.start_offset !== '0' || params.partition_start_offset !== '0' || !end || end > U.file_max
+          || params.partition_end_offset !== params.end_offset) return 'upload_partition';
+      const h = params.fbuploader_video_file_chunk;
+      if (typeof h !== 'string' || h.length > F.handle_max || !new RegExp(F.handle_re).test(h)) return 'upload_handle';
+      return null;
+    }
+    if (typeof params.title !== 'string' || !new RegExp(WRITE.video_title_re || '^$').test(params.title)) return 'upload_text';
+    return null;
+  }
+  // ACL-2639: one request to the resumable service (mirror of write_policy.check_rupload). The address is built HERE
+  // from the service the page itself announced (validated at capture) and its session token: Python never sends either.
+  function ruploadOk(spec) {
+    const R = WRITE.rupload;
+    if (!R) return 'rupload';
+    // The request carries no address, host, query or credentials of its own: only what the policy lists.
+    const SPEC_KEYS = ['kind', 'method', 'path', 'headers', 'files', 'source', 'expect', 'filename', 'referrer', 'piece_ms', 'timeout_ms', 'host_kind', 'stream'];
+    for (const k of Object.keys(spec)) if (SPEC_KEYS.indexOf(k) < 0) return 'key';
+    const method = spec.method;
+    if ('host_kind' in spec && spec.host_kind !== 'generic' && spec.host_kind !== 'regional') return 'host_kind';
+    if (R.methods.indexOf(method) < 0) return 'method';
+    if (typeof spec.path !== 'string' || !new RegExp(R.path_re).test(spec.path)) return 'path';
+    const total = Number(spec.path.slice(spec.path.lastIndexOf('-') + 1));
+    if (!Number.isSafeInteger(total) || total < 1 || total > WRITE.upload.file_max) return 'path';
+    const hk = Object.keys(spec.headers || {});
+    const fk = Object.keys(spec.files || {});
+    if (method === 'GET') return (hk.length || fk.length || spec.source !== undefined) ? 'file' : null;
+    if (hk.length !== R.headers.length || !R.headers.every((k) => hk.indexOf(k) >= 0)) return 'headers';
+    const off = digitsOf(spec.headers.offset);
+    if (off === null || off >= total) return 'upload_offset';
+    if (digitsOf(spec.headers['X-Entity-Length']) !== total) return 'upload_size';
+    if (spec.headers['X-Entity-Type'] !== R.type) return 'headers';
+    if (fk.length !== 1 || fk[0] !== R.field || spec.source === undefined) return 'source';
+    const n = (spec.expect || {}).bytes;
+    if (typeof n !== 'number' || n < 1 || n > R.segment_max || off + n > total) return 'chunk_size';
+    return null;
+  }
+  // ACL-2629: a chunk served to the page's Web Worker piece by piece (instead of staged as base64). Same limits as
+  // write_policy.ServedChunk: the chunk is 1..served_chunk_max bytes, the pieces are contiguous, each 1..piece_max
+  // bytes with its SHA-256, and the token is the controller's random one. `bytes` (when given) must equal the sum.
+  function sourceOk(src, bytes, cap) {
+    const U = WRITE && WRITE.upload;
+    if (!U || typeof U.served_chunk_max !== 'number' || typeof U.piece_max !== 'number') return 'source';
+    if (!src || typeof src !== 'object' || Array.isArray(src)) return 'source';
+    const sk = Object.keys(src);
+    if (sk.length !== 2 || sk.indexOf('token') < 0 || sk.indexOf('pieces') < 0) return 'source';
+    if (typeof src.token !== 'string' || !new RegExp('^(?:' + U.serve_token_re + ')$').test(src.token)) return 'source';
+    const ps = src.pieces;
+    if (!Array.isArray(ps) || !ps.length || ps.length > 512) return 'source';
+    let at = 0;
+    for (const x of ps) {
+      if (!x || typeof x !== 'object' || Object.keys(x).length !== 3) return 'source';
+      if (!Number.isSafeInteger(x.o) || x.o !== at) return 'source';
+      if (!Number.isSafeInteger(x.n) || x.n < 1 || x.n > U.piece_max) return 'source';
+      if (typeof x.h !== 'string' || !/^[0-9a-f]{64}$/.test(x.h)) return 'source';
+      at += x.n;
+    }
+    if (at < 1 || at > (typeof cap === 'number' ? cap : U.served_chunk_max)) return 'chunk_size';
+    if (typeof bytes === 'number' && bytes !== at) return 'file_size';
     return null;
   }
   // ACL-1775, ACL-2528: места, где разрешён lead_gen_form_id (зеркало
@@ -366,6 +500,9 @@ _HELPER_JS = r"""
     const kind = hasImages ? 'images' : 'videos';
     const media = spec[kind];
     if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
+    // ACL-2611: Website, тексты с метками правил + два файла (зеркало write_policy._check_website_labelled_feed).
+    if (media.length > 1 && ['bodies', 'titles', 'descriptions'].some((k) => Array.isArray(spec[k])
+      && spec[k].some((x) => isObj(x) && 'adlabels' in x))) return websiteLabelledOk(spec, kind);
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
     // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
     if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
@@ -413,6 +550,54 @@ _HELPER_JS = r"""
     }
     return sameSet(used, names);
   }
+  function websiteLabelledOk(spec, mediaKind) {
+    const AF = WRITE.asset_feed, I = AF.instant;
+    if (!('titles' in spec)) return false;
+    const present = ['bodies', 'titles', 'descriptions'].filter((k) => k in spec).concat(['link_urls', mediaKind]);
+    for (const kind of ['bodies', 'titles', 'descriptions']) {
+      if (!(kind in spec)) continue;
+      const items = instantList(spec, kind, true);
+      if (!items) return false;
+      for (const it of items) {
+        const ks = Object.keys(it);
+        if (!(ks.length === 2 && ks.indexOf('text') >= 0 && ks.indexOf('adlabels') >= 0)) return false;
+        if (typeof it.text !== 'string' || it.text.trim() === '' || it.text.length > AF.text_max[kind]) return false;
+      }
+    }
+    const files = instantList(spec, mediaKind, false, true);
+    if (!files || files.length !== 2) return false;
+    for (const m of files) {
+      const mk = Object.keys(m);
+      if (mediaKind === 'images') {
+        if (!(mk.length === 2 && typeof m.hash === 'string' && new RegExp(AF.hash_re).test(m.hash))) return false;
+      } else if (!(mk.length === 3 && typeof m.video_id === 'string' && new RegExp(AF.video_id_re).test(m.video_id)
+        && typeof m.thumbnail_url === 'string' && m.thumbnail_url.indexOf('https://') === 0)) return false;
+    }
+    const llist = instantList(spec, 'link_urls', false);
+    if (!llist) return false;
+    const l = llist[0];
+    if (!(Object.keys(l).length === 2 && typeof l.website_url === 'string' && l.website_url.indexOf('https://') === 0)) return false;
+    const ctas = spec.call_to_action_types;
+    if (!(Array.isArray(ctas) && ctas.length === 1 && WRITE.cta_website.indexOf(ctas[0]) >= 0)) return false;
+    const want = mediaKind === 'images' ? 'SINGLE_IMAGE' : 'SINGLE_VIDEO';
+    if (!(Array.isArray(spec.ad_formats) && spec.ad_formats.length === 1 && spec.ad_formats[0] === want)) return false;
+    const rules = spec.asset_customization_rules;
+    if (!(Array.isArray(rules) && rules.length === 2)) return false;
+    for (let n = 0; n < 2; n++) {
+      const rule = rules[n];
+      if (!isObj(rule)) return false;
+      const keys = {};
+      for (const k of present) keys[I.kinds[k].rule_key] = I.kinds[k].labels[n];
+      const rk = Object.keys(rule);
+      if (rk.length !== Object.keys(keys).length + 1 || rk.indexOf('customization_spec') < 0) return false;
+      for (const k of Object.keys(keys)) {
+        const lab = rule[k];
+        if (!(isObj(lab) && Object.keys(lab).length === 1 && lab.name === keys[k])) return false;
+      }
+      if (!csOk(rule.customization_spec)) return false;
+    }
+    return true;
+  }
   // Площадки одного правила (зеркало write_policy._check_customization_spec).
   function csOk(cs) {
     const AF = WRITE.asset_feed;
@@ -427,16 +612,17 @@ _HELPER_JS = r"""
     return true;
   }
   // ACL-2584: зеркало write_policy._instant_labelled_list.
-  function instantList(spec, kind, texts) {
+  function instantList(spec, kind, texts, files) {
     const AF = WRITE.asset_feed;
     const lab = AF.instant.kinds[kind].labels;
     const items = spec[kind];
-    const cap = texts ? AF.max_texts : 1;
+    const cap = texts ? AF.max_texts : (files ? AF.max_media : 1);
     if (!(Array.isArray(items) && items.length >= 1 && items.length <= cap)) return null;
     for (let n = 0; n < items.length; n++) {
       const it = items[n];
       if (!isObj(it)) return null;
-      const want = n === 0 ? lab : [lab[0]];
+      let want = n === 0 ? lab : [lab[0]];
+      if (files && items.length === 2) want = [lab[n]];  // ACL-2611: two files, one label each
       const got = it.adlabels;
       if (!(Array.isArray(got) && got.length === want.length
         && got.every((g, i) => isObj(g) && Object.keys(g).length === 1 && g.name === want[i]))) return null;
@@ -468,13 +654,15 @@ _HELPER_JS = r"""
         if (typeof it.text !== 'string' || (it.text.trim() === '' && !noHeadline) || it.text.length > AF.text_max[kind]) return false;
       }
     }
-    const mlist = instantList(spec, mediaKind, false);
+    const mlist = instantList(spec, mediaKind, false, true);
     if (!mlist) return false;
-    const m = mlist[0], mk = Object.keys(m);
-    if (mediaKind === 'images') {
-      if (!(mk.length === 2 && typeof m.hash === 'string' && new RegExp(AF.hash_re).test(m.hash))) return false;
-    } else if (!(mk.length === 3 && typeof m.video_id === 'string' && new RegExp(AF.video_id_re).test(m.video_id)
-      && typeof m.thumbnail_url === 'string' && m.thumbnail_url.indexOf('https://') === 0)) return false;
+    for (const m of mlist) {
+      const mk = Object.keys(m);
+      if (mediaKind === 'images') {
+        if (!(mk.length === 2 && typeof m.hash === 'string' && new RegExp(AF.hash_re).test(m.hash))) return false;
+      } else if (!(mk.length === 3 && typeof m.video_id === 'string' && new RegExp(AF.video_id_re).test(m.video_id)
+        && typeof m.thumbnail_url === 'string' && m.thumbnail_url.indexOf('https://') === 0)) return false;
+    }
     const llist = instantList(spec, 'link_urls', false);
     if (!llist) return false;
     const lk = Object.keys(llist[0]);
@@ -707,8 +895,12 @@ _HELPER_JS = r"""
     if (!WRITE) return { error: 'read_only' };
     // ACL-2533: a helper installed only for the form-background upload has no Graph write chain at all.
     if (WRITE.form_photo_only) return { error: 'read_only' };
+    // ACL-2639: the bytes of a video go to the resumable service of the page (not Graph); only a job may send them.
+    if (spec.kind === 'rupload') return spec.method === 'POST' ? ruploadPost(spec, job) : refused('method');
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-2629: a served chunk exists only for a video upload chunk (act_X/advideos, transfer, video_file_chunk).
+    if (spec.source !== undefined && !/^\/act_[0-9]{5,}\/advideos$/.test(path)) return refused('source');
     // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
@@ -719,7 +911,10 @@ _HELPER_JS = r"""
     // создателя (без `object_update`) пути объекта не принимает; помощник правок
     // (без рёбер) пути создания не принимает.
     const objMatch = /^\/[1-9][0-9]{4,}$/.exec(path);
-    if (objMatch && !WRITE.object_update) return refused('path');
+    if (objMatch && !WRITE.object_update) {
+      // (ACL-2639: a video is titled by its finish; no other write goes to an object path of a creation.)
+      return refused('path');
+    }
     if (!objMatch && WRITE.object_update) return refused('path');
     const params = spec.params || {};
     let want = null;
@@ -744,12 +939,16 @@ _HELPER_JS = r"""
         if (!okNum && !okStr) return refused('amount');
       }
     } else {
-    const m = /^\/(act_[0-9]{5,})\/([a-z]+)$/.exec(path);
+    const m = /^\/(act_[0-9]{5,})\/([a-z_]+)$/.exec(path);
     if (!m || m[1] !== WRITE.act) return refused('path');
     const edge = m[2];
-    const keys = WRITE.edges[edge];
+    const keys = Object.keys(WRITE.edges).indexOf(edge) >= 0 ? WRITE.edges[edge] : null;   // own keys only (N4)
     if (!keys) return refused('edge');
-    if (edge === 'advideos' && 'upload_phase' in params) {
+    if (edge === 'advideos' && 'upload_phase' in params && fileApiMarked(params)) {
+      // ACL-2639: the Ads Manager file-API phases; no file in any of them (the bytes go to the resumable service).
+      const why = fileApiOk(params, spec);
+      if (why) return refused(why);
+    } else if (edge === 'advideos' && 'upload_phase' in params) {
       // ACL-1891: своя закрытая схема на каждую фазу; файл только у transfer.
       const why = uploadOk(params, spec);
       if (why) return refused(why);
@@ -815,7 +1014,14 @@ _HELPER_JS = r"""
     }
     }
     let blob = null;
-    if (want) {
+    const served = want === (WRITE.upload || {}).chunk_field;
+    if (spec.source !== undefined && !served) return refused('source');
+    if (want && spec.source !== undefined) {
+      // ACL-2629: nothing is staged here; the worker pulls the bytes. Only a job (startCall) may do it.
+      if (!job || !served) return refused('source');
+      const why = sourceOk(spec.source, (spec.expect || {}).bytes);
+      if (why) return refused(why);
+    } else if (want) {
       const parts = staged[String(files[want])];
       if (!parts || !parts.length) return { error: 'no_file' };
       blob = new Blob(parts);
@@ -878,6 +1084,311 @@ _HELPER_JS = r"""
     });
   }
 
+  // ── ACL-2629: Web Worker of this world. The page's main thread never sees the file bytes: the worker fetches
+  // them piece by piece from `<origin>/__acl_upload/<token>/<offset>/<length>` (answered by the controller through
+  // CDP Fetch), checks each piece's SHA-256, builds the multipart body and sends the Graph POST itself.
+  // The token of the session goes to the worker in a message of this world only (the page cannot reach it).
+  // The runner is self-contained (it is stringified into the worker): `fetch`, `crypto` and `emit` are parameters, so
+  // the very same code also runs INLINE in this world when no worker can be started (see `transport`).
+  function makeRunner(fetch, crypto, emit, guard) {
+    const jobs = {};
+    const halts = {};
+    const TAKEN = 'a service worker took control of the page during the upload';
+    const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const HEADERS = ['x-business-use-case-usage', 'x-ad-account-usage', 'x-app-usage', 'x-fb-ads-insights-throttle'];
+    // One piece: fetched from the controller, size and SHA-256 checked. { blob, buf } or { error, why }.
+    async function onePiece(m, ac, st, p) {
+      // ACL-2637: inline mode re-checks the controller before EVERY piece (a service worker may claim the page
+      // mid-upload via clients.claim()); in a worker the page sends `stopPieces` on 'controllerchange' instead.
+      if (st.stopped || (guard && guard())) return { error: 'no_file', why: TAKEN };
+      if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };
+      // Every piece has a deadline: a request the controller never answers must not hang the upload.
+      const pc = new AbortController();
+      let late = false;
+      const onAbort = () => pc.abort();
+      ac.signal.addEventListener('abort', onAbort);
+      const timer = setTimeout(() => { late = true; pc.abort(); }, m.pieceMs || 60000);
+      st.pc = pc;
+      const done = () => { clearTimeout(timer); ac.signal.removeEventListener('abort', onAbort); st.pc = null; };
+      let r;
+      let blob;
+      let buf;
+      try {
+        r = await fetch(m.base + p.o + '/' + p.n, { method: 'GET', cache: 'no-store', credentials: 'omit',
+                                                    redirect: 'error', signal: pc.signal });
+        if (r.status !== 200) { done(); return { error: 'no_file', why: 'worker piece refused ' + r.status }; }
+        blob = await r.blob();
+        buf = await blob.arrayBuffer();
+      } catch (e) {
+        done();
+        return { error: 'no_file', why: st.stopped ? TAKEN : ac.signal.aborted ? 'aborted' : (late ? 'worker piece request timed out' : 'worker piece request failed') };
+      }
+      done();
+      if (buf.byteLength !== p.n) return { error: 'no_file', why: 'worker piece has the wrong size' };
+      let digest;
+      try { digest = hex(await crypto.subtle.digest('SHA-256', buf)); } catch (e) { return { error: 'no_file', why: 'worker cannot hash' }; }
+      if (digest !== p.h) return { error: 'no_file', why: 'worker piece does not match the file' };
+      return { blob: blob, buf: buf };
+    }
+    async function pieces(m, ac, st) {
+      const parts = [];
+      let got = 0;
+      for (const p of m.src.pieces) {
+        const r = await onePiece(m, ac, st, p);
+        if (r.error) return r;
+        parts.push(r.blob);
+        got += p.n;
+        emit({ id: m.id, progress: got });
+      }
+      return { parts: parts, bytes: got };
+    }
+    // ACL-2639: can this context send a ReadableStream as a request body (Chrome 105+, HTTP/2 or 3)?
+    function streamSupported() {
+      try {
+        if (typeof ReadableStream !== 'function' || typeof Request !== 'function') return false;
+        let dup = false;
+        const hasType = new Request('https://stream-check.invalid/', { method: 'POST', body: new ReadableStream(),
+                                    get duplex() { dup = true; return 'half'; } }).headers.has('Content-Type');
+        return dup && !hasType;
+      } catch (e) { return false; }
+    }
+    // The whole remainder of the file as ONE request body, pulled piece by piece (never more than a piece or two in
+    // memory): each piece is checked when it is pulled; a bad piece errors the stream (the request fails, the caller
+    // asks the offset and resumes).
+    function streamBody(m, ac, st) {
+      const ps = m.src.pieces;
+      let i = 0;
+      let got = 0;
+      const sb = m.sb || {};
+      return new ReadableStream({
+        async pull(ctrl) {
+          if (i >= ps.length) { emit({ id: m.id, progress: got, drained: true }); ctrl.close(); return; }   // every piece is in the request
+          const p = ps[i++];
+          const r = await onePiece(m, ac, st, p);
+          if (r.error) { ctrl.error(new Error(String(r.why || r.error))); return; }
+          sb.pulled = true;
+          ctrl.enqueue(new Uint8Array(r.buf));
+          got += p.n;
+          emit({ id: m.id, progress: got });
+        },
+      }, { highWaterMark: 0 });
+    }
+    // A body this large may be built as one Blob of the checked pieces only below this size (Chrome backs blobs by memory
+    // up to a limit, then by disk; beyond this the streaming body is required).
+    const BLOB_SAFE = 256 * 1024 * 1024;
+    async function run(m) {
+      const ac = new AbortController();
+      const st = { stopped: false, done: false, pc: null };
+      jobs[m.id] = ac;
+      halts[m.id] = st;
+      try {
+        // ACL-2639: the rupload POST sends the whole remainder as ONE request. A streaming body keeps memory flat; where
+        // the context cannot stream, a Blob is used only up to BLOB_SAFE, and a larger body is refused before any byte.
+        let streaming = false;
+        const sb = { pulled: false };
+        m.sb = sb;
+        if (m.url && m.raw && m.stream) {
+          const total = m.src.pieces.reduce((a, p) => a + p.n, 0);
+          if (streamSupported()) streaming = true;
+          else if (total > Math.min(BLOB_SAFE, Number(m.blobMax) || BLOB_SAFE)) return { error: 'stream_unsupported' };
+        }
+        const made = streaming ? { parts: [], bytes: 0 } : await pieces(m, ac, st);
+        // Non-streaming: from here on `stopPieces` is ignored (all pieces are in), it never touches the POST.
+        // Streaming: pieces are pulled DURING the POST, so a service worker taking control (`stopPieces`) errors the
+        // stream and the request fails; the caller then asks the service for its offset and resumes.
+        if (!streaming) st.done = true;
+        if (made.error) return made;
+        if (!m.url) return { ok: true, bytes: made.bytes };       // probe: no request to Meta
+        if (st.stopped) return { error: 'no_file', why: TAKEN };                  // nothing posted yet
+        if (ac.signal.aborted) return { error: 'no_file', why: 'aborted' };        // nothing posted yet
+        let body;
+        if (m.raw) {
+          // ACL-2639: the rupload POST - the bytes are the body (a stream, or a Blob of the checked pieces), headers as documented.
+          if (streaming) emit({ id: m.id, progress: 0, streaming: true });
+          body = streaming ? streamBody(m, ac, st) : new Blob(made.parts, { type: 'application/octet-stream' });
+        } else {
+          body = new FormData();
+          for (const k of Object.keys(m.fields)) body.append(k, m.fields[k]);
+          body.append(m.field, new Blob(made.parts), m.filename);
+        }
+        let resp;
+        let text;
+        try {
+          resp = await fetch(m.url, Object.assign({ method: 'POST', body: body, credentials: m.cred, mode: 'cors',
+                                      cache: 'no-store', redirect: 'error', signal: ac.signal },
+                                      m.raw ? { headers: m.raw } : {},
+                                      streaming ? { duplex: 'half' } : {},
+                                      m.ref ? { referrer: m.ref } : {}));
+          text = await resp.text();
+        } catch (e) {
+          // a streamed POST that fails before ONE piece was pulled was rejected at once (typically: not HTTP/2)
+          return { error: ac.signal.aborted ? 'aborted' : 'network', sent: true, ...(streaming && !sb.pulled ? { stream_rejected: true } : {}) };
+        }
+        const headers = {};
+        for (const n of HEADERS) { try { const v = resp.headers.get(n); if (v) headers[n] = v; } catch (e) {} }
+        return { status: resp.status, text: text, headers: headers };
+      } finally { delete jobs[m.id]; delete halts[m.id]; }
+    }
+    function abort(id) { const ac = jobs[id]; if (ac) ac.abort(); }
+    // ACL-2637: a service worker took control - stop fetching pieces (no_file); a POST already started is left alone.
+    function stopPieces(id) {
+      const st = halts[id];
+      if (!st || st.done) return;
+      st.stopped = true;
+      try { if (st.pc) st.pc.abort(); } catch (e) {}
+    }
+    return { run: run, abort: abort, stopPieces: stopPieces };
+  }
+  const WORKER_GLUE = 'const r = make(fetch, crypto, (d) => self.postMessage(d));'
+    + 'self.onmessage = (e) => { const m = e.data || {};'
+    + ' if (m.abort !== undefined) { r.abort(m.abort); return; }'
+    + ' if (m.stopPieces !== undefined) { r.stopPieces(m.stopPieces); return; }'
+    + ' if (m.quit) { self.close(); return; }'
+    + ' r.run(m).then((x) => self.postMessage(Object.assign({ id: m.id, done: true }, x)),'
+    + ' () => self.postMessage({ id: m.id, done: true, error: "network", sent: true })); };'
+    + 'self.postMessage({ ready: true });';
+  function workerSource() { return 'const make = ' + makeRunner.toString() + ';' + WORKER_GLUE; }
+  let transport = '';              // 'worker' | 'inline' | '' (not probed yet: a worker is tried)
+  let inlineRunner = null;
+  let worker = null;
+  const waiting = {};
+  let waitSeq = 0;
+  function dropWorker(why) {
+    const w = worker;
+    worker = null;
+    try { if (w) { w.onmessage = null; w.postMessage({ quit: true }); } } catch (e) {}   // the worker closes itself
+    try { if (w) w.terminate(); } catch (e) {}                                             // ... or is ended here
+    for (const k of Object.keys(waiting)) {
+      const f = waiting[k];
+      delete waiting[k];
+      f({ id: Number(k), done: true, error: 'no_worker', why: why, sent: false });
+    }
+  }
+  // Returns '' when a worker is running, otherwise the reason (CSP, missing API, no answer): the caller decides.
+  function ensureWorker() {
+    if (worker) return Promise.resolve('');
+    if (typeof Worker !== 'function' || typeof Blob !== 'function' || !URL || typeof URL.createObjectURL !== 'function') {
+      return Promise.resolve('no worker API');
+    }
+    return new Promise((resolve) => {
+      let url = null;
+      let w = null;
+      let timer = null;
+      const finish = (why) => {
+        if (timer !== null) clearTimeout(timer);
+        try { if (url) URL.revokeObjectURL(url); } catch (e) {}
+        // ACL-2637: a worker the controller left paused (its interception could not be turned on) never reads a
+        // message, so `quit` alone would leave it: the Web Worker API call below ends it from this side.
+        if (why && w) { try { w.onmessage = null; w.postMessage({ quit: true }); } catch (e) {} try { w.terminate(); } catch (e) {} if (worker === w) worker = null; }
+        resolve(why);
+      };
+      try {
+        url = URL.createObjectURL(new Blob([workerSource()], { type: 'text/javascript' }));
+        w = new Worker(url);
+      } catch (e) {
+        finish('worker construct failed: ' + String((e && e.name) || 'error') + ': ' + String((e && e.message) || '').slice(0, 100));
+        return;
+      }
+      w.onmessage = (ev) => {
+        const d = ev.data || {};
+        if (d.ready) { worker = w; finish(''); return; }
+        const f = waiting[d.id];
+        if (!f) return;
+        if (d.done) { delete waiting[d.id]; f(d); } else if (typeof f.onprogress === 'function') f.onprogress(d.progress, d);
+      };
+      w.onerror = (ev) => {
+        const msg = String((ev && ev.message) || '').slice(0, 100);
+        if (worker === w) dropWorker('worker crashed: ' + msg); else finish('worker error event before ready: ' + msg);
+      };
+      timer = setTimeout(() => finish('worker created but sent no ready message in 8 s (no error event)'), 8000);
+    });
+  }
+  // A page controlled by a service worker may have our same-origin piece requests answered (or passed on) by it, outside
+  // the CDP Fetch interception: neither the worker nor the inline mode may run then (the run compresses instead).
+  function swControlled() {
+    try { return typeof navigator !== 'undefined' && !!(navigator.serviceWorker && navigator.serviceWorker.controller); }
+    catch (e) { return false; }
+  }
+  // Inline mode: the same runner in this world. Bytes still never go through base64 or the main thread's decoder:
+  // each piece is a fetch() answered by the controller (CDP Fetch), kept as a Blob; only one piece at a time is hashed.
+  const inlineJobs = Object.create(null);
+  async function runInline(m, job) {
+    if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
+    if (job && job.aborted) return { error: 'aborted' };
+    if (typeof fetch !== 'function' || typeof crypto === 'undefined' || !crypto.subtle) return { error: 'no_worker', why: 'inline: no fetch/crypto' };
+    if (!inlineRunner) {
+      inlineRunner = makeRunner(fetch, crypto, (d) => {
+        const j = inlineJobs[d.id];
+        if (j) { if (typeof d.progress === 'number') j.progress = d.progress; if (d.streaming) j.streaming = true; if (d.drained) j.drained = true; }
+      }, swControlled);
+    }
+    const id = ++waitSeq;
+    if (job) { job.wid = id; inlineJobs[id] = job; }
+    const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
+    try { return await inlineRunner.run(Object.assign({ id: id, base: base }, m)); } finally { delete inlineJobs[id]; }
+  }
+  async function runInWorker(m, job) {
+    if (swControlled()) return { error: 'no_worker', why: 'page is controlled by a service worker' };
+    if (transport === 'inline') return runInline(m, job);
+    const why = await ensureWorker();
+    if (why) return { error: 'no_worker', why: why };
+    if (job && job.aborted) return { error: 'aborted' };
+    const id = ++waitSeq;
+    const base = location.origin + WRITE.upload.serve_prefix + m.src.token + '/';
+    const msg = Object.assign({ id: id, base: base }, m);
+    // ACL-2637: a service worker that takes control while pieces are still being fetched stops the job before any
+    // more pieces move (nothing was posted yet: no_file). `stopPieces` is not `abort`: the worker ignores it once the
+    // pieces are in, so a POST that has started is never cancelled by it (no 'aborted, sent' -> no unknown result).
+    const onTake = () => { try { if (worker) worker.postMessage({ stopPieces: id }); } catch (e) {} };
+    const sw = (typeof navigator !== 'undefined' && navigator.serviceWorker) || null;
+    try { if (sw && typeof sw.addEventListener === 'function') sw.addEventListener('controllerchange', onTake); } catch (e) {}
+    const r = await new Promise((resolve) => {
+      const f = resolve;
+      if (job) f.onprogress = (n, d) => { if (typeof n === 'number') job.progress = n; if (d && d.streaming) job.streaming = true; if (d && d.drained) job.drained = true; };
+      waiting[id] = f;
+      if (job) job.wid = id;
+      try { worker.postMessage(msg); } catch (e) { delete waiting[id]; resolve({ error: 'no_worker', why: 'worker refused the job' }); }
+    });
+    try { if (sw && typeof sw.removeEventListener === 'function') sw.removeEventListener('controllerchange', onTake); } catch (e) {}
+    return r;
+  }
+  // Local self-test of the worker data path (CSP, worker session interception, piece hash): no request to Meta.
+  async function probeWorker(spec) {
+    if (retired || !WRITE || WRITE.form_photo_only) return { error: 'no_worker', why: 'read only' };
+    const why = sourceOk(spec && spec.source);
+    if (why) return { error: 'no_worker', why: why };
+    // Stage 1: a Web Worker (CSP worker-src, creation, start, session interception, piece hash). Every reason is kept
+    // (and any CSP violation the document reports meanwhile), so a failed probe says exactly where it stopped.
+    const csp = [];
+    const onCsp = (ev) => { if (csp.length < 3) csp.push(String(ev.effectiveDirective || ev.violatedDirective || '?').slice(0, 30) + ' blocked ' + String(ev.blockedURI || '?').slice(0, 20)); };
+    try { if (document && typeof document.addEventListener === 'function') document.addEventListener('securitypolicyviolation', onCsp); } catch (e) {}
+    const notes = [];
+    let result = null;
+    try {
+      transport = '';
+      // ACL-2637: a light document (the clean upload tab, `/__acl_work`) runs no app on its main thread, so the
+      // inline runner is the intended mode there: no worker is started (no worker session to intercept, no wait).
+      const inlineOnly = !!(spec && spec.inline_only);
+      const got = inlineOnly ? { error: 'skipped' } : await runInWorker({ src: spec.source }, null);
+      if (!got.error) { transport = 'worker'; result = { ok: true, bytes: got.bytes, mode: 'worker' }; }
+      else if (!inlineOnly) notes.push('worker: ' + String(got.why || got.error).slice(0, 140));
+      if (!result) {
+        // Stage 2: the same runner in this world (no worker needed; pieces are still fetch() answers from the controller).
+        transport = 'inline';
+        const inl = await runInline({ src: spec.source }, null);
+        if (!inl.error) result = { ok: true, bytes: inl.bytes, mode: 'inline', intended: inlineOnly,
+                                   worker_why: notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '') };
+        else { transport = ''; notes.push('inline: ' + String(inl.why || inl.error).slice(0, 140)); }
+      }
+    } finally {
+      try { if (document && typeof document.removeEventListener === 'function') document.removeEventListener('securitypolicyviolation', onCsp); } catch (e) {}
+    }
+    if (result) return result;
+    // ACL-2637: `controlled` tells Python that THIS page is controlled by a service worker (a clean tab may help).
+    return { error: 'no_worker', controlled: swControlled(),
+             why: (notes.join('; ') + (csp.length ? ' [CSP: ' + csp.join(', ') + ']' : '')).slice(0, 400) };
+  }
+
   // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
   // (локально, к Meta не ходит), `abort` рвёт отправку. Проверки политики — те же
   // (`write(spec, job)`), здесь ничего не ослаблено.
@@ -902,7 +1413,7 @@ _HELPER_JS = r"""
   function poll(id) {
     const j = jobs[String(id)];
     if (!j) return { state: 'error', result: { error: 'no_job' } };
-    if (j.state === 'running') return { state: 'running' };
+    if (j.state === 'running') return { state: 'running', progress: j.progress || 0, stream: j.streaming === true, drained: j.drained === true };
     return { state: j.state, result: j.result };
   }
   function abort(id) {
@@ -910,6 +1421,8 @@ _HELPER_JS = r"""
     if (!j) return { ok: false };
     j.aborted = true;
     try { if (j.xhr) j.xhr.abort(); } catch (e) {}
+    try { if (j.wid && transport !== 'inline' && worker) worker.postMessage({ abort: j.wid }); } catch (e) {}
+    try { if (j.wid && inlineRunner) inlineRunner.abort(j.wid); } catch (e) {}
     return { ok: true };
   }
 
@@ -1034,7 +1547,9 @@ _HELPER_JS = r"""
     const useHost = hostMode === 'public' ? 'graph.facebook.com' : host;
     const cred = credentialsFor(credMode);
     let body;
-    if (blob) {
+    if (spec.source !== undefined && !blob) {
+      body = null;                       // the worker builds the multipart body from the pieces it fetched
+    } else if (blob) {
       body = new FormData();
       for (const k of Object.keys(params)) {
         const v = params[k];
@@ -1055,7 +1570,28 @@ _HELPER_JS = r"""
     const endpoint = { host: useHost, version: version, credentials: cred };
     let resp = null;
     let text = '';
-    if (job && blob) {
+    if (job && spec.source !== undefined && !blob) {
+      // ACL-2629: the Web Worker fetches the pieces from the controller, checks them and sends the POST itself.
+      if (job.aborted) return { error: 'aborted' };
+      const fields = {};
+      for (const k of Object.keys(params)) {
+        const v = params[k];
+        fields[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      }
+      fields.access_token = token;
+      const got = await runInWorker({ url: url, cred: cred, fields: fields, field: want, raw: null,
+                                      pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
+                                      ref: refOpt(spec).referrer || '',
+                                      filename: String(spec.filename || 'chunk').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80),
+                                      src: spec.source }, job);
+      if (got.error) {
+        if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120), endpoint: endpoint };
+        const why = job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network');
+        return { error: why, state: state(), endpoint: endpoint };
+      }
+      resp = { status: got.status, headers: { get: (n) => (got.headers || {})[String(n).toLowerCase()] || null } };
+      text = got.text;
+    } else if (job && blob) {
       // ACL-1899: файл уходит через XMLHttpRequest — он отдаёт `upload.onprogress`.
       // Те же правила, что у fetch: один запрос, без повтора, без перенаправлений.
       if (typeof XMLHttpRequest !== 'function') { unstage(files[want]); return { error: 'no_fetch' }; }
@@ -1116,8 +1652,126 @@ _HELPER_JS = r"""
     return { status: resp.status, body: parsed, headers: headers, endpoint: endpoint };
   }
 
+  // ACL-2639: the address of one request to the resumable service; '' when the page gave no service or session token.
+  // The host of one upload is PINNED by its path on the first request: a regional service that shows up later must not
+  // switch an upload already started on the generic host (and vice versa). `want` (a continuation) names the host kind
+  // an earlier run used. Returns { url, kind, host } or null.
+  const hostPin = Object.create(null);
+  function ruploadUrl(path, want) {
+    scanUpload();
+    if (!dtsgAg || !dtsgOk(dtsgAg) || !UPLOAD) return null;
+    const regional = (rsvc && rsvcOk(rsvc.name, rsvc.domain)) ? rsvc.name + '.' + rsvc.domain : '';
+    const pin = hostPin[path];
+    const kind = pin ? pin.kind : ((want === 'regional' || want === 'generic') ? want : (regional ? 'regional' : 'generic'));
+    // a pinned upload keeps the very host STRING it started on, whatever the page announces later
+    const host = pin ? pin.host : (kind === 'regional' ? regional : UPLOAD.generic_host);
+    if (typeof host !== 'string' || !/^rupload(?:-[a-z0-9-]{1,30}\.up)?\.facebook\.com$/.test(host)) return null;
+    if (!pin) hostPin[path] = { kind: kind, host: host };
+    return { url: 'https://' + host + path + '?fb_dtsg_ag=' + encodeURIComponent(dtsgAg) + '&__a=1', kind: kind, host: host };
+  }
+  function uploadService() {
+    scanUpload();
+    return { ok: !!dtsgAg };          // the regional service is optional: the generic host works with the token
+  }
+  // ACL-2639: which of the two upload values the helper has (booleans only, never the values).
+  function uploadParts() {
+    scanUpload();
+    return { service: !!rsvc, token: !!dtsgAg, generic: !!dtsgAg && !rsvc };
+  }
+  // ACL-2639: the page's module registry is invisible to this isolated world; Python reads two fixed values in the main
+  // world and hands them in here. Only values that pass the policy's own patterns are kept; anything else is ignored.
+  function setUploadService(name, domain, dtsg) {
+    if (retired || !UPLOAD) return uploadParts();
+    if (!rsvc && rsvcOk(name, domain)) rsvc = { name: name, domain: domain };
+    if (!dtsgAg && dtsgOk(dtsg)) dtsgAg = dtsg;
+    return uploadParts();
+  }
+  // Read the page's upload values again (the old ones stay if the page shows none: a light or clean tab).
+  function refreshUpload() {
+    const keepD = dtsgAg;
+    const keepR = rsvc;
+    let d = '';
+    let r = null;
+    // The page's live module values (only where `require` is visible: the page's own world); validated like a scan.
+    try {
+      if (typeof require === 'function') {
+        const t = require('DTSGInitData');
+        if (t && dtsgOk(t.async_get_token)) d = t.async_get_token;
+        const c = require('AdsVideoUploadConfig');
+        if (c && rsvcOk(c.resumable_service_name, c.resumable_service_domain)) r = { name: c.resumable_service_name, domain: c.resumable_service_domain };
+      }
+    } catch (e) {}
+    dtsgAg = d;
+    rsvc = r;
+    scanUpload();                          // inline scripts of the page for what the modules did not give
+    if (!dtsgAg) dtsgAg = keepD;           // a tab without the Ads Manager page keeps its current values
+    if (!rsvc) rsvc = keepR;
+    return { ok: !!dtsgAg };
+  }
+  async function ruploadReply(resp, text, u) {
+    text = clean(text);
+    let parsed;
+    try { parsed = JSON.parse(text.replace(/^\s*for\s*\(;;\);\s*/, '')); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
+    return { status: resp.status, body: parsed, headers: {}, host_kind: u ? u.kind : '', endpoint: { host: u ? u.host : '', credentials: 'include' } };
+  }
+  // GET: how many bytes Meta holds of this upload (the resume point). One request, no redirect, own deadline.
+  async function ruploadGet(spec) {
+    const refused = (why) => ({ error: 'write_refused', why: why });
+    if (retired) return { error: 'retired' };
+    if (!WRITE || WRITE.form_photo_only) return { error: 'read_only' };
+    if (spec.method !== 'GET') return refused('method');
+    const why = ruploadOk(spec);
+    if (why) return refused(why);
+    const u = ruploadUrl(spec.path, spec.host_kind);
+    if (!u) return refused('upload_service');
+    const url = u.url;
+    if (typeof fetch !== 'function') return { error: 'no_fetch' };
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const limit = Math.max(1, Math.min(30000, Number(spec.timeout_ms) || 15000));
+    const timer = controller ? setTimeout(() => controller.abort(), limit) : null;
+    let resp;
+    let text;
+    try {
+      resp = await fetch(url, { method: 'GET', credentials: 'include', mode: 'cors', cache: 'no-store', redirect: 'error',
+                                ...refOpt(spec), ...(controller ? { signal: controller.signal } : {}) });
+      text = await resp.text();
+    } catch (e) {
+      return { error: (controller && controller.signal.aborted) ? 'network_timeout' : 'network' };
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
+    return ruploadReply(resp, text, u);
+  }
+  // POST: one segment of the file (pieces served by the controller, checked, sent by the worker) with the session cookies.
+  async function ruploadPost(spec, job) {
+    const refused = (why) => ({ error: 'write_refused', why: why });
+    if (!job) return refused('source');                         // a served body may only be sent by a job
+    const why = ruploadOk(spec);
+    if (why) return refused(why);
+    const R = WRITE.rupload;
+    const bad = sourceOk(spec.source, (spec.expect || {}).bytes, R.segment_max);
+    if (bad) return refused(bad);
+    const u = ruploadUrl(spec.path, spec.host_kind);
+    if (!u) return refused('upload_service');
+    const url = u.url;
+    const raw = { 'offset': String(spec.headers.offset), 'X-Entity-Length': String(spec.headers['X-Entity-Length']),
+                  'X-Entity-Type': R.type };
+    if (job.aborted) return { error: 'aborted' };
+    const got = await runInWorker({ url: url, cred: 'include', fields: {}, field: R.field, raw: raw, stream: true, blobMax: R.blob_safe,
+                                    pieceMs: Math.max(1000, Math.min(120000, Number(spec.piece_ms) || 60000)),
+                                    ref: refOpt(spec).referrer || '', filename: '', src: spec.source }, job);
+    if (got.error) {
+      if (got.error === 'no_file' || got.error === 'no_worker') return { error: 'no_file', why: String(got.why || got.error).slice(0, 120) };
+      if (got.error === 'stream_unsupported') return refused('stream_unsupported');
+      return { error: job.aborted ? 'aborted' : (got.error === 'redirected' ? 'redirected' : 'network'), state: state(),
+               ...(got.stream_rejected ? { stream_rejected: true } : {}) };
+    }
+    return ruploadReply({ status: got.status }, got.text, u);
+  }
+
   async function call(spec) {
     if (retired) return { error: 'retired' };
+    if (spec && spec.kind === 'rupload') return spec.method === 'GET' ? ruploadGet(spec) : write(spec);
     if (spec && spec.method === 'POST') return write(spec);
     if (!spec || spec.method !== 'GET') return { error: 'read_only' };
     const path = String(spec.path || '');
@@ -1213,9 +1867,10 @@ _HELPER_JS = r"""
     listening = null;
     listenResult = result;
   }
-  function listen(name, nonce, ack, ttlMs) {
+  function listen(name, nonce, ack, ttlMs, uploadOnly) {
     if (retired) return 'retired';
-    if (token) return 'has_token';
+    if (token && uploadOnly !== true) return 'has_token';
+    if (!token && uploadOnly === true) return 'no_token';
     if (listening) return 'busy';
     if (typeof BroadcastChannel !== 'function') return 'no_channel';
     if (![name, nonce, ack].every((v) => typeof v === 'string' && SECRET_RE.test(v))) return 'bad_args';
@@ -1227,10 +1882,21 @@ _HELPER_JS = r"""
     ch.onmessage = (e) => {
       const d = e.data;
       if (!d || typeof d !== 'object' || d.n !== nonce) return;      // not this hand-over: ignore
+      // upload-only: the SAME session token comes again with fresh upload values; nothing else is replaced
+      if (uploadOnly === true && !retired && token && d.t === token) {
+        if (dtsgOk(d.d)) dtsgAg = d.d;
+        if (d.r && typeof d.r === 'object' && rsvcOk(d.r.name, d.r.domain)) rsvc = { name: d.r.name, domain: d.r.domain };
+        stopListening('received');
+        try { const a = new BroadcastChannel(ack); a.postMessage({ ack: nonce }); a.close(); } catch (x) {}
+        return;
+      }
       const ok = !token && !retired && typeof d.t === 'string' && TOKEN_RE.test(d.t)
         && typeof d.h === 'string' && HOST_RE.test(d.h) && typeof d.v === 'string' && VER_RE.test(d.v);
       if (ok) {
         token = d.t; host = d.h.toLowerCase(); version = d.v; source = 'handover';
+        // ACL-2639: the upload page's values come along (optional; each is validated by the policy's own pattern).
+        if (dtsgOk(d.d)) dtsgAg = d.d;
+        if (d.r && typeof d.r === 'object' && rsvcOk(d.r.name, d.r.domain)) rsvc = { name: d.r.name, domain: d.r.domain };
         amRequest = { via: 'handover', method: 'GET', credentials: 'include', path: '', params: [] };
       }
       stopListening(ok ? 'received' : 'rejected');                   // the nonce is used once, either way
@@ -1241,7 +1907,7 @@ _HELPER_JS = r"""
   function listenStatus() { return listening ? 'listening' : listenResult; }
   function stopListen() { stopListening('stopped'); return listenResult; }
   async function handOver(name, nonce, ack, waitMs) {
-    scanFast(); scanHtml();
+    scanFast(); scanHtml(); scanUpload();
     if (retired) return 'retired';
     if (!token) return 'no_token';
     if (typeof BroadcastChannel !== 'function') return 'no_channel';
@@ -1255,7 +1921,7 @@ _HELPER_JS = r"""
       timer = setTimeout(() => resolve('no_ack'), wait);
     });
     const ch = new BroadcastChannel(name);
-    try { ch.postMessage({ n: nonce, t: token, h: host, v: version }); } finally { ch.close(); }
+    try { ch.postMessage({ n: nonce, t: token, h: host, v: version, d: dtsgAg || undefined, r: rsvc || undefined }); } finally { ch.close(); }
     const result = await acked;
     if (timer !== null) clearTimeout(timer);
     try { a.close(); } catch (x) {}
@@ -1263,22 +1929,32 @@ _HELPER_JS = r"""
   }
 
   function probe() { scanFast(); scanHtml(); return state(); }
-  function retire() { retired = true; token = null; stopListening('retired'); return true; }
+  function retire() { retired = true; token = null; dtsgAg = ''; rsvc = null; for (const k of Object.keys(hostPin)) delete hostPin[k]; stopListening('retired'); return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
                           listen: listen, listenStatus: listenStatus, stopListen: stopListen,
                           handOver: handOver,
                           validatePage: validatePage, uploadFormPhoto: uploadFormPhoto,
-                          stage: stage, unstage: unstage,
+                          stage: stage, unstage: unstage, probeWorker: probeWorker, uploadService: uploadService, refreshUpload: refreshUpload,
+                          uploadParts: uploadParts, setUploadService: setUploadService,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
+
+
+def _upload_value_policy() -> dict:
+    """ACL-2639: only the patterns that validate the upload service name/domain and the session token."""
+    from src.fb_api import write_policy as _wp
+
+    return {"name_re": _wp.RUPLOAD_NAME_RE.pattern, "domain": _wp.RUPLOAD_DOMAIN, "dtsg_re": _wp.RUPLOAD_DTSG_RE.pattern,
+            "generic_host": _wp.RUPLOAD_GENERIC_HOST}
 
 
 def helper_source(name: str, write_policy: dict | None = None, validation_act: str | None = None) -> str:
     """Исходник помощника. `write_policy` — только у создателя кампаний (ACL-1761)."""
     return (_HELPER_JS.replace("__NAME__", json.dumps(name))
             .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null")
+            .replace("__UPLOAD__", json.dumps(_upload_value_policy()))
             .replace("__VALIDATE_ACT__", json.dumps(validation_act)))
 
 
@@ -1911,6 +2587,9 @@ class InPageGraph:
             spec["children_active"] = True
         if files:
             (field_name, data), = files.items()
+            if isinstance(data, _wp.ServedChunk):
+                # ACL-2629: the Web Worker of the page pulls the bytes; nothing is copied into the page.
+                return self._write_served(spec, field_name, data, progress, cancelled)
             if not isinstance(data, (bytes, bytearray)):
                 raise ValueError("file content must be bytes")
             try:
@@ -1938,6 +2617,370 @@ class InPageGraph:
         except (PageError, CdpError):
             return {"error": "call_unknown", "reason": "page_closed"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    # -- ACL-2629: file bytes through the page's Web Worker
+    #: One request of the worker is at most this many bytes (it holds the piece in memory while it checks it).
+    SERVE_PIECE = 8 * 1024 * 1024
+    #: One piece request of the worker gets this long (then `no_file`: nothing sent, the retry/back-off takes over).
+    SERVE_PIECE_S = 60.0
+    #: Overall deadline of one served chunk: base + length at the slowest rate still accepted (100 KiB/s).
+    SERVE_BASE_S = 120.0
+    SERVE_MIN_BPS = 100 * 1024
+    PROBE_CALL_S = 25.0
+    _upload_server = None
+    #: Result of the last successful probe: 'worker' | 'inline' ('' - not probed) and why a worker was not used.
+    upload_mode = ""
+    upload_mode_note = ""
+
+    def _server(self):
+        from src.fb_api.upload_server import UploadServer
+
+        if self._upload_server is None or self._upload_server.tab is not self.tab:
+            self._upload_server = UploadServer(self.tab)
+        return self._upload_server
+
+    #: The transport can serve a file to the worker (the creator checks `probe_worker` before it relies on it).
+    serves_chunks = True
+
+    #: ACL-2637: where the upload runs - '' (this tab) or 'clean_tab' (a separate tab without a service worker).
+    upload_context = ""
+    #: ACL-2637: `callable() -> tab` opening a new own tab of the same profile (default: `PageTab.open` on the
+    #: browser of this tab). Tests inject a fake.
+    upload_tab_factory: Callable[[], Any] | None = None
+    _upload_graph: "InPageGraph | None" = None
+
+    def probe_worker(self) -> tuple[bool, str]:
+        """Local self-test of the worker data path: CSP lets the worker start, its requests are intercepted and
+        answered from here, and the bytes arrive intact. No request to Meta. Returns (ok, reason).
+
+        ACL-2637: when THIS page is controlled by a service worker (the Ads Manager tab always is), the upload
+        moves to a separate tab of the same profile whose document is checked to be uncontrolled
+        (`light_tab.open_upload_document`); the token goes there world-to-world. Both reasons are kept.
+        """
+        if not self.allow_writes or self.object_updates or self.form_photo:
+            return False, "writes are not enabled for this page"
+        self.close_upload_context()
+        ok, why, controlled = self._probe_here()
+        if ok or not controlled:
+            return ok, why
+        up, reason = self._open_upload_context()
+        if up is None:
+            return False, f"{why}; clean upload tab: {reason}"[:1000]
+        ok2, why2, _ = up._probe_here()
+        if not ok2:
+            self.close_upload_context()
+            return False, f"{why}; clean upload tab: {why2}"[:1000]
+        self.upload_context = "clean_tab"
+        self.upload_mode, self.upload_mode_note = up.upload_mode, up.upload_mode_note
+        return True, up.upload_mode_note
+
+    def _open_upload_context(self) -> tuple["InPageGraph | None", str]:
+        """A new tab of THIS profile (same browser, same proxy) with the uncontrolled light document, a helper
+        with the same write policy, and the token handed over. (graph, '') or (None, reason); closed on failure."""
+        from src.fb_api import light_tab
+
+        factory = self.upload_tab_factory
+        if factory is None:
+            cdp_url = str(getattr(self.tab, "_cdp_url", "") or "")
+            if not cdp_url:
+                return None, "no way to open a tab of this profile"
+            from src.fb_api.cdp import PageTab
+
+            def factory():          # the same browser = the same profile and its proxy
+                return PageTab.open(cdp_url)
+        tab = None
+        try:
+            tab = factory()
+            doc, reason = light_tab.open_upload_document(tab)
+            if doc is None:
+                light_tab.settle_and_close(tab)
+                return None, reason
+            up = InPageGraph(tab, graph_host=self.graph_host, credentials=self.credentials, allow_writes=True,
+                             write_act=self.write_act, write_page=self.write_page,
+                             sleep=self._sleep, clock=self._clock)
+            up._write_policy = self._write_policy           # exactly the policy of this session
+            up.install()
+            up.bind_act(self.light_act_id or self.write_act or "")
+            got = up.receive_from(self)
+            if got:
+                light_tab.settle_and_close(tab)
+                return None, f"token hand-over failed ({got})"
+        except GraphStop:
+            light_tab.settle_and_close(tab)
+            raise
+        except Exception as exc:  # noqa: BLE001 - a clean tab that cannot be prepared is a fallback, not a stop
+            light_tab.settle_and_close(tab)
+            return None, f"could not be opened ({type(exc).__name__}: {str(exc)[:80]})"
+        self._upload_graph = up
+        return up, ""
+
+    def adopt_upload_context(self, old: "InPageGraph") -> None:
+        """ACL-2637: take over the clean upload tab of `old` (a light lease switched to Ads Manager, ACL-2593).
+        The clean tab holds its own token and the same session policy; nothing is re-opened or sent."""
+        self.close_upload_context()
+        up = getattr(old, "_upload_graph", None)
+        if up is None:
+            return
+        self._upload_graph, old._upload_graph = up, None
+        self.upload_context, old.upload_context = getattr(old, "upload_context", "") or "clean_tab", ""
+        self.upload_mode, self.upload_mode_note = old.upload_mode, old.upload_mode_note
+
+    def close_upload_context(self) -> bool:
+        """ACL-2637: close the separate upload tab (if any). True when none is left open. Never raises."""
+        up, self._upload_graph = self._upload_graph, None
+        self.upload_context = ""
+        if up is None:
+            return True
+        from src.fb_api import light_tab
+
+        try:
+            up._eval_helper(".retire()", timeout=5.0)
+        except Exception:  # noqa: BLE001 - closing anyway
+            pass
+        return light_tab.settle_and_close(up.tab)
+
+    def _probe_here(self) -> tuple[bool, str, bool]:
+        """The probe in THIS tab. (ok, reason, page_is_controlled_by_a_service_worker)."""
+        from src.fb_api import write_policy as _wp
+        from src.fb_api.upload_server import MemorySource
+
+        server = None
+        token = ""
+        try:
+            self._ready_for_call()
+            ctx = self._ensure()
+            server = self._server()
+            inline_only = self.light
+            server.arm(attach_workers=not inline_only)
+            probe = _wp.ServedChunk(MemorySource(secrets.token_bytes(4096)), 0, 4096)
+            token, pieces = server.register(probe, piece=1024)
+            spec = {"source": {"token": token, "pieces": pieces}}
+            if inline_only:
+                spec["inline_only"] = True
+            expr = f"globalThis[{json.dumps(self.name)}].probeWorker({json.dumps(spec)})"
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.PROBE_CALL_S))
+        except GraphStop:
+            raise
+        except (CdpTimeout, TimeoutError):
+            return False, "the worker probe timed out | " + (server.summary() if server is not None else ""), False
+        except (StaleContextError, PageError, CdpError) as exc:
+            return False, f"worker probe failed ({type(exc).__name__}: {str(exc)[:100]}) | " + (
+                server.summary() if server is not None else ""), False
+        finally:
+            if server is not None:
+                if token:
+                    server.unregister(token)
+                server.disarm()
+        trace = server.summary() if server is not None else ""
+        if isinstance(got, dict) and got.get("ok") and got.get("bytes") == 4096:
+            # `mode`: 'worker' (Web Worker) or 'inline' (same runner in the helper's world when no worker could start);
+            # for 'inline' the worker's failure is kept so the log tells why the worker was not used.
+            self.upload_mode = str(got.get("mode") or "worker")
+            note = str(got.get("worker_why") or "")
+            if self.upload_mode == "inline" and got.get("intended"):
+                # ACL-2637: the light document has no app on its main thread - inline is the plan, not a fallback.
+                self.upload_mode_note = ""
+                return True, "", False
+            if self.upload_mode == "inline":
+                self.upload_mode_note = f"worker not used: {note[:300]}; {trace}"
+                return True, self.upload_mode_note, False
+            self.upload_mode_note = ""
+            return True, "", False
+        why = str(got.get("why") or got.get("error")) if isinstance(got, dict) else "bad reply"
+        controlled = isinstance(got, dict) and got.get("controlled") is True
+        return False, f"{why[:400]} | {trace}"[:700], controlled
+
+    @staticmethod
+    def _hash_tick(cancelled: Callable[[], bool] | None) -> Callable[[], None]:
+        """ACL-2639: called after every piece the controller hashes before a big upload: a heartbeat for the run's
+        silence watchdog, and the Stop button works while a multi-GB file is read."""
+        def tick() -> None:
+            try:
+                # (no local heartbeat exists in fb_api: `GraphClient._beat` uses this same module the same way)
+                from src.fb_ads_rpa import run_telemetry
+
+                run_telemetry.beat()
+            except Exception:  # noqa: BLE001
+                pass
+            if cancelled is not None and cancelled():
+                raise ValueError("cancelled")
+        return tick
+
+    def _write_served(self, spec: dict, field_name: str, chunk, progress, cancelled, deadline_s: float | None = None) -> dict:
+        """One transfer call whose chunk is a window of a file: announced to the interception, pulled by the worker.
+
+        ACL-2637: with a clean upload tab (see `probe_worker`) the call runs there; Python policy was checked in
+        `write` (one call, one check), the helper of that tab checks it again. A lost clean tab: `no_file`.
+        """
+        up = self._upload_graph
+        if up is not None:
+            try:
+                up._ready_for_call()
+            except Exception as exc:  # noqa: BLE001 - nothing was sent; the tab is not used again
+                self.close_upload_context()
+                return {"error": "no_file", "why": f"clean upload tab lost ({type(exc).__name__})"}
+            up._add_referrer(spec)
+            return up._write_served(spec, field_name, chunk, progress, cancelled, deadline_s)
+        server = None
+        token = ""
+        try:
+            try:
+                self._ready_for_call()
+                ctx = self._ensure()
+                server = self._server()
+                server.arm(attach_workers=not self.light)
+                token, pieces = server.register(chunk, piece=self.SERVE_PIECE, tick=self._hash_tick(cancelled))
+            except GraphStop:
+                raise
+            except (PageError, CdpError, OSError, ValueError) as exc:
+                return {"error": "no_file", "why": f"worker setup failed: {str(exc)[:80]}"}      # nothing was sent
+            spec["files"] = {field_name: "served"}
+            spec["source"] = {"token": token, "pieces": pieces}
+            spec["expect"] = {"bytes": len(chunk)}
+            spec["piece_ms"] = int(self.SERVE_PIECE_S * 1000)
+            return self._write_file_job(ctx, spec, progress, cancelled, serving=True,
+                                        deadline_s=deadline_s or self.SERVE_BASE_S + len(chunk) / self.SERVE_MIN_BPS)
+        finally:
+            # Every exit once the server exists (arm may have raised half-way): auto-attach and the pattern go off.
+            if server is not None:
+                if token:
+                    server.unregister(token)
+                server.disarm()
+
+    # -- ACL-2639: the resumable service of Ads Manager (the bytes of a large video; not Graph)
+    #: ACL-2639: fixed read-only expressions for the page's MAIN world (module registry). Nothing else of those modules
+    #: is ever read (never an access token), and the values are never logged.
+    _MAIN_SERVICE_JS = ("(() => { try { if (typeof require !== 'function') return ''; "
+                        "const c = require('AdsVideoUploadConfig'); "
+                        "return c ? String(c.resumable_service_name || '') + '|' + String(c.resumable_service_domain || '') : ''; "
+                        "} catch (e) { return ''; } })()")
+    _MAIN_TOKEN_JS = ("(() => { try { if (typeof require !== 'function') return ''; "
+                      "const t = require('DTSGInitData'); return t ? String(t.async_get_token || '') : ''; "
+                      "} catch (e) { return ''; } })()")
+
+    def _upload_parts(self) -> dict | None:
+        try:
+            got = self._eval_helper(".uploadParts()", timeout=10.0)
+        except (PageError, CdpError, TimeoutError):
+            return None
+        return got if isinstance(got, dict) else None
+
+    def fill_upload_from_page(self, *, wait_s: float = 3.0) -> bool:
+        """ACL-2639: the upload service address (and, only when the inline-script scan found none, the session token)
+        live in the page's module registry, which the isolated helper cannot see. Read them in the main world (fixed
+        read-only expressions), validate, hand them to the helper. If the module is not loaded yet, once more after a
+        short wait (at most 3 s). True when the helper has both afterwards. Never logs a value."""
+        from src.fb_api import write_policy as _wp
+
+        main = getattr(self.tab, "evaluate_main", None)
+        if not callable(main):
+            return False
+        for attempt in (0, 1):
+            parts = self._upload_parts()
+            if parts is None:
+                return False
+            if parts.get("service") and parts.get("token"):
+                return True
+            name = dom = tok = ""
+            try:
+                if not parts.get("service"):
+                    raw = main(self._MAIN_SERVICE_JS)
+                    pair = raw.split("|") if isinstance(raw, str) else []
+                    if len(pair) == 2 and _wp.rupload_service_ok(pair[0], pair[1]):
+                        name, dom = pair
+                if not parts.get("token"):
+                    t = main(self._MAIN_TOKEN_JS)
+                    if isinstance(t, str) and _wp.RUPLOAD_DTSG_RE.fullmatch(t):
+                        tok = t
+                if name or tok:
+                    self._eval_helper(f".setUploadService({json.dumps(name)},{json.dumps(dom)},{json.dumps(tok)})",
+                                      timeout=10.0)
+            except (PageError, CdpError, TimeoutError):
+                return False
+            finally:
+                tok = ""
+            parts = self._upload_parts() or {}
+            if parts.get("service") and parts.get("token"):
+                return True
+            if attempt == 0 and wait_s > 0:
+                self._sleep(min(float(wait_s), 3.0))
+        return False
+
+    def upload_service_ready(self) -> tuple[bool, str]:
+        """The page that will send the bytes (the clean upload tab, else this one) knows the resumable service and
+        its session token. Local only: no request to Meta. (ok, reason); the reason names the missing piece."""
+        from src.fb_api import light_tab
+
+        target = self._upload_graph or self
+        parts = target._upload_parts()
+        if parts is None:
+            return False, "the page did not answer"
+        light_tab._note_upload_parts("ready_check", target, clean_tab=target is not self)
+        if not (parts.get("service") and parts.get("token")):
+            target.fill_upload_from_page(wait_s=0.0)
+            parts = target._upload_parts() or {}
+            light_tab._note_upload_parts("ready_after_fill", target)
+        if not parts.get("token"):
+            return False, "session token for the upload not available on this page"
+        if not parts.get("service"):
+            return True, "generic upload host"       # the regional service is not known (yet): rupload.facebook.com
+        return True, ""
+
+    def refresh_upload_service(self) -> bool:
+        """ACL-2639: read the upload service address and token again: this page re-scans its scripts, and the clean
+        upload tab (if any) gets them again by an upload-only hand-over. Local only. True if the sender has them."""
+        from src.fb_api import light_tab
+
+        try:
+            self.fill_upload_from_page(wait_s=0.0)         # an Ads Manager page tab: its main-world modules first
+            got = self._eval_helper(".refreshUpload()", timeout=10.0)
+        except (PageError, CdpError, TimeoutError):
+            return False
+        if not (isinstance(got, dict) and got.get("ok") is True):
+            return False
+        up = self._upload_graph
+        if up is None:
+            return True
+        return light_tab.hand_over(self, up, upload_only=True) == ""
+
+    #: ACL-2639: the whole remainder goes in ONE POST: 60 s + size at 0.5 MB/s, never more than 2 hours.
+    RUPLOAD_BASE_S = 60.0
+    RUPLOAD_MIN_BPS = 512 * 1024
+    RUPLOAD_MAX_S = 7200.0
+
+    @classmethod
+    def rupload_deadline_s(cls, size: int) -> float:
+        return min(cls.RUPLOAD_MAX_S, cls.RUPLOAD_BASE_S + size / cls.RUPLOAD_MIN_BPS)
+
+    #: One GET of the resumable service (the resume offset) has this long.
+    RUPLOAD_READ_S = 15.0
+
+    def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk=None,
+                progress: Callable[[float], None] | None = None,
+                cancelled: Callable[[], bool] | None = None, host_kind: str | None = None) -> dict:
+        """ONE request to the resumable service: GET the offset, or POST one served segment. Policy first
+        (`write_policy.check_rupload`), the helper checks again and builds the address and the session token itself.
+        A GET changes nothing and is asked again by the caller; a POST is never repeated here."""
+        from src.fb_api import write_policy as _wp
+
+        files = {_wp.RUPLOAD_BODY_FIELD: chunk} if chunk is not None else None
+        _wp.check_rupload(method, path, headers=headers, files=files, host_kind=host_kind)
+        spec: dict[str, Any] = {"kind": "rupload", "method": method, "path": path}
+        if host_kind:
+            spec["host_kind"] = host_kind              # a continuation keeps the host kind of the first request
+        if method == "POST":
+            spec["headers"] = dict(headers or {})
+            spec["stream"] = True                        # the whole remainder in ONE request, streamed from the pieces
+            return self._write_served(spec, _wp.RUPLOAD_BODY_FIELD, chunk, progress, cancelled,
+                                      self.rupload_deadline_s(len(chunk)))
+        target = self._upload_graph or self
+        target._add_referrer(spec)
+        spec["timeout_ms"] = int(self.RUPLOAD_READ_S * 1000)
+        try:
+            return target._patiently(lambda: target._read_once(spec, self.RUPLOAD_READ_S),
+                                     max_runs=1 + self.MAX_READ_RESENDS)
+        except (PageError, CdpError):
+            return {"error": "call_unknown", "reason": "page_closed"}
 
     #: ACL-2533: the in-page upload has its own 120 s deadline; the CDP wait is a little longer.
     FORM_PHOTO_CALL_S = 150.0
@@ -2007,8 +3050,21 @@ class InPageGraph:
     UPLOAD_CDP_TIMEOUT_S = 15.0
     #: Сколько таймаутов ОПРОСА подряд терпим (повторно файл не шлём никогда).
     MAX_POLL_TIMEOUTS = 3
+    #: ACL-2639: a streamed upload whose byte count does not grow for this long is aborted (then resumed).
+    UPLOAD_STALL_S = 180.0
+    #: ... and the time the service gets to answer once every piece is in the request.
+    UPLOAD_DRAIN_S = 600.0
 
-    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled) -> dict:
+    def _wait(self, seconds: float, serving: bool) -> None:
+        """Pause between two polls. While a worker is being served the events of the tab (its piece requests)
+        are handled during the pause, so a request waits milliseconds, not a whole poll interval."""
+        if serving and hasattr(self.tab, "pump"):
+            self.tab.pump(seconds)
+        else:
+            self._sleep(seconds)
+
+    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled, serving: bool = False,
+                        deadline_s: float = 0.0) -> dict:
         """Запись с файлом без общего срока: старт, опрос раз в секунду, обрыв по Stop."""
         def run(method: str, arg: str = "") -> Any:
             expr = f"globalThis[{json.dumps(self.name)}].{method}({arg})"
@@ -2027,7 +3083,16 @@ class InPageGraph:
             return {"error": "call_unknown"}
         poll_timeouts = 0
         began = self._clock()
+        last_count, last_change = -1, began
+        drained_at = None
         while True:
+            if deadline_s and self._clock() - began > deadline_s:
+                # Overall deadline: the request may or may not have been sent -> unknown, reconciled by readback.
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                return {"error": "call_unknown", "reason": "cdp_timeout"}
             if cancelled is not None and cancelled():
                 try:
                     run("abort", json.dumps(job))
@@ -2035,28 +3100,52 @@ class InPageGraph:
                     pass
                 # Результат неизвестен: дальше обычная сверка чтением, повторной загрузки нет.
                 return {"error": "call_unknown", "why": "cancelled"}
+            def unknown(reason: str = "") -> dict:
+                # ACL-2639 (N3): the request may still be running in the page; abort it (best effort) so the caller's
+                # resume never runs a second POST of the same upload session next to it.
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                return {"error": "call_unknown", **({"reason": reason} if reason else {})}
+
             try:
                 got = run("poll", json.dumps(job))
             except (CdpTimeout, TimeoutError):
                 # Один опрос не ответил - не конец загрузки: терпим подряд до MAX_POLL_TIMEOUTS.
                 poll_timeouts += 1
                 if poll_timeouts > self.MAX_POLL_TIMEOUTS:
-                    return {"error": "call_unknown"}
-                self._sleep(self.UPLOAD_POLL_S)
+                    return unknown()
+                self._wait(self.UPLOAD_POLL_S, serving)
                 continue
             except (StaleContextError, PageError, CdpError):
-                return {"error": "call_unknown"}
+                return unknown()
             poll_timeouts = 0
             if not isinstance(got, dict):
-                return {"error": "call_unknown"}
+                return unknown()
             state = got.get("state")
             if state == "running":
+                # ACL-2639: a streamed POST whose byte count has not grown for STALL_S is stuck: abort it (the caller
+                # asks the service for its offset and resumes).
+                count = got.get("progress")
+                if got.get("stream") is True and got.get("drained") is True:
+                    # every piece is in the request: the counter stops by design while the request drains and the
+                    # service answers; only the overall deadline and this own allowance apply
+                    if drained_at is None:
+                        drained_at = self._clock()
+                    elif self._clock() - drained_at > self.UPLOAD_DRAIN_S:
+                        return unknown("stalled")
+                elif got.get("stream") is True and isinstance(count, int) and not isinstance(count, bool):
+                    if count > last_count:
+                        last_count, last_change = count, self._clock()
+                    elif self._clock() - last_change > self.UPLOAD_STALL_S:
+                        return unknown("stalled")
                 if progress is not None:
                     try:
                         progress(max(0.0, self._clock() - began))
                     except Exception:                    # noqa: BLE001 — показ не должен ронять запись
                         pass
-                self._sleep(self.UPLOAD_POLL_S)
+                self._wait(self.UPLOAD_POLL_S, serving)
                 continue
             result = got.get("result")
             if state in ("done", "error") and isinstance(result, dict):

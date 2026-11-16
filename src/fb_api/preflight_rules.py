@@ -132,7 +132,6 @@ _TOPIC_OF = {
     "vertical_needs_main": "creative",
     "vertical_ratio": "creative",
     "texts_limit": "creative",
-    "texts_vertical": "creative",
     "texts_dynamic": "creative",
     "devices_consistent": "audience",
     "start_time_valid": "budget",
@@ -200,7 +199,7 @@ RULES: list[dict[str, Any]] = [
        "the file is missing, empty or unreadable: choose another file",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_limits", "Media within Meta limits", ERROR, "server",
-       "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
+       "file type, size (image 30 MB, video 4096 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 or square Stories / Reels file: without one Facebook crops the picture itself",
@@ -215,8 +214,6 @@ RULES: list[dict[str, Any]] = [
     _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
        "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
-    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
-       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
     _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
        _wp.MSG_TEXTS_DYNAMIC_SET,
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -494,8 +491,6 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "texts_limit":
             out.append(_per_ad(rid, inp, lambda a, st: any(
                 len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
-        elif rid == "texts_vertical":
-            out.append(_per_ad(rid, inp, lambda a, st: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
             # ACL-2584: only a Website ad set runs several texts as Dynamic Creative (one ad per set); an
             # Instant Form ad set uses placement rules (Ads Manager shape) and takes as many ads as Meta allows.
@@ -904,7 +899,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             if not data:
                 problems["media_readable"].append((ad.index, f"Ad {ad.index}: creative file is empty"))
                 continue
-            limit = cr.VIDEO_MAX_BYTES if ad.kind == "video" else cr.IMAGE_MAX_BYTES
+            limit = cr.video_limit_bytes() if ad.kind == "video" else cr.IMAGE_MAX_BYTES
             if len(data) > limit:
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
@@ -918,7 +913,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 except OSError as exc:
                     problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
                     vdata = b""
-                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                vlimit = cr.video_limit_bytes() if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
                 if vdata and len(vdata) > vlimit:
                     problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
                 if vdata and ad.vertical_kind != ad.kind:

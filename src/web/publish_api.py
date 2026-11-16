@@ -107,7 +107,9 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     # ACL-2370: куски больших видео (>200 МБ) идут из того же счётчика вызовов; без них бюджет малого
     # плана был полом 150, и видео 1,3 ГБ (158 вызовов) отказывалось. Без больших видео chunks = 0 и
     # результат прежний. Пол 150 и потолок не меняются: растёт только сумма реальной ограниченной работы.
-    chunks = estimate_upload_calls(plan)
+    # ACL-2639: the fast upload is off by default: large videos are budgeted chunked at Meta's real windows, and the ones
+    # that would not fit the run are budgeted at the size of their compressed copy (`plan_upload_sizes`).
+    chunks = estimate_upload_calls(plan, spare=ceiling - need - reads)
     if chunks and need + reads + chunks > ceiling:
         total = need + reads + chunks
         return ceiling, (f"This campaign needs about {total} Meta calls ({chunks} to upload large videos in "

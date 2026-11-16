@@ -202,6 +202,10 @@ class PageFailed(GraphStop):
     kind = "page_failed"
 
 
+class NotSent(PageFailed):
+    """ACL-2639: a write refused BEFORE sending (the Python policy or the page helper): nothing reached Meta."""
+
+
 class PageUnresponsive(GraphStop):
     """Вкладка Ads Manager перестала отвечать (ACL-1761): не логин и не checkpoint.
 
@@ -246,6 +250,17 @@ class WriteUnknown(RuntimeError):
         self.reason = reason
 
 
+class RuploadLost(RuntimeError):
+    """ACL-2639: a request to the resumable service was sent (or may have been) and no answer came back.
+
+    Not a Graph write: nothing is "unreconciled". The caller reads the offset (GET) and continues from it.
+    """
+
+    def __init__(self, message: str, *, reason: str = ""):
+        super().__init__(scrub(message))
+        self.reason = reason
+
+
 class WritesBlocked(RuntimeError):
     """Новая запись не отправлена: у прошлой результат неизвестен и не сверен (ревью M4).
 
@@ -272,7 +287,7 @@ FILE_REFUSAL_SUBCODES = frozenset({1487411})
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
 _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", "retired",
-             "bad_path", "forbidden_param", "no_session"}
+             "bad_path", "forbidden_param", "no_session", "no_worker"}
 
 
 AUTH_REQUIRED_TITLE = "please authenticate your account"
@@ -398,6 +413,21 @@ class GraphClient:
     def _stop(self, exc: GraphStop) -> GraphStop:
         self.stopped = exc
         return exc
+
+    def release_optional_stop(self, exc: GraphStop) -> bool:
+        """ACL-2639: lift the stop of a request that never reached Meta - only `NotSent` (refused by the Python
+        policy or the page helper before sending; used for the resumable upload service requests), and only when it
+        is the current stop. Login, checkpoint, limits, the budget, policy blocks stay stops. True - lifted. An older
+        stop is never lifted here."""
+        if self.stopped is exc and isinstance(exc, NotSent):
+            self.stopped = None
+            return True
+        return False
+
+    def optional_write_ok(self) -> bool:
+        """ACL-2639: an optional write may be made now: no stop, no unreconciled write, a call left in the budget."""
+        return (self.stopped is None and self.unreconciled is None and self.allow_writes
+                and self.calls < self.max_calls)
 
     def resume_after_unsent(self, exc: GraphStop) -> bool:
         """ACL-2000: снять стоп, поставленный отказом ДО отправки (`no_file`: файл не лёг в страницу).
@@ -645,7 +675,7 @@ class GraphClient:
             reply = self.transport.write(path, params or {}, files=files, filename=filename, **extra)
         except ValueError as exc:
             # Политика Python: ничего не отправлено.
-            raise self._stop(PageFailed(f"write refused before sending: {exc}")) from exc
+            raise self._stop(NotSent(f"write refused before sending: {exc}")) from exc
         except GraphStop as exc:
             # Вкладка не отвечала ДО отправки (мир готовится до самого POST).
             raise self._stop(exc) from exc
@@ -655,7 +685,7 @@ class GraphClient:
         if isinstance(err, str):
             if err in _NOT_SENT:
                 why = reply.get("why") if isinstance(reply, dict) else ""
-                raise self._stop(PageFailed(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
+                raise self._stop(NotSent(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
             if err == "no_token":
                 self._check_page()
                 raise self._stop(LoggedOut("no session token in the page; the write was not sent"))
@@ -711,6 +741,87 @@ class GraphClient:
                                status=status if isinstance(status, int) else None)
         return body
 
+    def upload_service_ready(self) -> tuple[bool, str]:
+        """ACL-2639: does the page that sends the video bytes know the resumable service and its session token?
+        Local: no Meta call, not counted. A transport without the check answers (False, ...): no service."""
+        check = getattr(self.transport, "upload_service_ready", None)
+        if not callable(check):
+            return False, "upload service not supported here"
+        return check()
+
+    def refresh_upload_service(self) -> bool:
+        """ACL-2639: read the upload service address and session token again (local, no Meta call). True if the
+        page has them afterwards; a transport without the hook answers False."""
+        hook = getattr(self.transport, "refresh_upload_service", None)
+        if not callable(hook):
+            return False
+        try:
+            return bool(hook())
+        except GraphStop:
+            raise
+        except Exception:  # noqa: BLE001 - a refresh that fails changes nothing
+            return False
+
+    def rupload(self, method: str, path: str, *, headers: dict | None = None, chunk: Any = None,
+                progress: Callable[[float], None] | None = None,
+                cancelled: Callable[[], bool] | None = None, host_kind: str | None = None) -> dict:
+        """ACL-2639: ONE request to the resumable service of Ads Manager (GET the offset / POST one served segment).
+
+        Not a Graph call: it is NOT counted in the call budget (the budget is Graph's) and never touches the
+        write-reconciliation flag. Returns {status, body}. Refused before sending (policy, page) - stop like a write;
+        no answer after sending - `RuploadLost` (the caller asks the offset and continues, never from zero).
+        """
+        if self.stopped is not None:
+            raise self.stopped
+        self._pace()
+        self._last_call = self._clock()
+        extra: dict[str, Any] = {}
+        if host_kind:
+            extra["host_kind"] = host_kind
+        if chunk is not None and progress is not None:
+            extra["progress"] = progress
+        if chunk is not None and cancelled is not None:
+            extra["cancelled"] = cancelled
+        try:
+            reply = self.transport.rupload(method, path, headers=headers, chunk=chunk, **extra)
+        except ValueError as exc:
+            raise self._stop(NotSent(f"write refused before sending: {exc}")) from exc
+        except GraphStop as exc:
+            raise self._stop(exc) from exc
+        self._last_call = self._clock()
+        err = reply.get("error") if isinstance(reply, dict) else "bad_reply"
+        if isinstance(err, str):
+            if err in _NOT_SENT:
+                why = reply.get("why") if isinstance(reply, dict) else ""
+                raise self._stop(NotSent(f"the page refused the write ({err}{': ' + str(why) if why else ''})"))
+            if err == "no_token":
+                self._check_page()
+                raise self._stop(LoggedOut("no session token in the page; the request was not sent"))
+            raise RuploadLost(f"no answer from the upload service ({err})",
+                              reason="stream_rejected" if reply.get("stream_rejected") is True else err)
+        status = reply.get("status")
+        body = reply.get("body") if isinstance(reply.get("body"), dict) else {}
+        if not isinstance(status, int):
+            raise RuploadLost("the upload service gave no status", reason="bad_reply")
+        # The helper names the host it used: anything but the generic or a regional rupload host is a stop.
+        from src.fb_api import write_policy as _wp
+
+        host = (reply.get("endpoint") or {}).get("host") if isinstance(reply.get("endpoint"), dict) else None
+        if host and not _wp.rupload_host_ok(host):
+            raise self._stop(PageFailed("the upload service answered from an unexpected host; stopped"))
+        out = {"status": status, "body": body}
+        if reply.get("host_kind") in ("generic", "regional"):
+            out["host_kind"] = reply["host_kind"]
+        return out
+
+    def probe_worker(self) -> tuple[bool, str]:
+        """ACL-2629: can the page's Web Worker be fed the file bytes (CSP, interception, hash)? Local: no Meta call,
+        not counted in the budget. A transport without the worker path answers (False, "not supported")."""
+        probe = getattr(self.transport, "probe_worker", None)
+        if not callable(probe):
+            return False, "not supported by this transport"
+        return probe()
+
     #: ACL-2533: the address of the form-background upload (a web-session request, not a Graph path).
     FORM_PHOTO_PATH = "/ads/leadgen/upload/photo/"
 
@@ -741,6 +852,25 @@ class GraphClient:
             raise FormPhotoRefused("The work tab could not be switched to Ads Manager for the background "
                                    f"upload; nothing was sent ({type(exc).__name__}).", code="light_switch") from exc
         self.transport = new
+        self._carry_upload_context(old, new)
+
+    @staticmethod
+    def _carry_upload_context(old: Any, new: Any) -> None:
+        """ACL-2637: the separate upload tab does not depend on the work tab - it moves to the new transport, so the
+        videos still go up from it (the new Ads Manager tab is controlled by a service worker). A transport that
+        cannot take it gets it closed (and the upload path then fails closed, `no_file`)."""
+        if getattr(old, "_upload_graph", None) is None:
+            return
+        adopt = getattr(new, "adopt_upload_context", None)
+        try:
+            if callable(adopt):
+                adopt(old)
+                return
+        except Exception:  # noqa: BLE001 - fall through: close it
+            pass
+        close = getattr(old, "close_upload_context", None)
+        if callable(close):
+            close()
 
     def upload_form_photo(self, page_id: str, data: bytes, *, mime: str) -> dict:
         """ACL-2533: ONE upload of a lead form background as the pinned Page. Returns `{photo_id, width, height}`.
