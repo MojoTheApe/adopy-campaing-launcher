@@ -128,7 +128,7 @@ def main():
             sequence = value['sequence']; action = value['action']; extra = {}
             if action == 'crash':
                 from src.analysis_agent.account_refresh_machine import binding
-                with ars.read_session():
+                with queue._machine.fence(binding('B')).holding():
                     queue._machine.begin(binding('B'), queue._owner, 'retry')
                     write(status, {**identity, 'phase': 'crashed', 'sequence': sequence})
                     os._exit(77)  # own process only; kernel leases must release

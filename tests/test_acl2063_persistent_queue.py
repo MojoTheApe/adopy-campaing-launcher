@@ -280,30 +280,34 @@ _READ_CHILD = r'''
 import json,sys,time
 from pathlib import Path
 from src.fb_ads_rpa import profile_lease
-from src.analysis_agent.account_refresh_state import read_session
-root=Path(sys.argv[1]);label=sys.argv[2]
+root=Path(sys.argv[1]);label=sys.argv[2];other='B' if label=='A' else 'A'
 profile_lease._lease_root=lambda:root/'leases'
 from src.analysis_agent import account_refresh_state as ars
 ars.machine_root=lambda:root/'machine'
-with profile_lease.profile_lock('11111111-1111-1111-1111-'+('111111111111' if label=='A' else '222222222222')):
- with read_session(priority=label=='B'):
-  with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['start',label])+'\n')
-  time.sleep(.1)
-  with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['end',label])+'\n')
+from src.analysis_agent.account_refresh_machine import MachineStore
+profile='11111111-1111-1111-1111-'+('111111111111' if label=='A' else '222222222222')
+key=('a' if label=='A' else 'b')*64
+with profile_lease.profile_lock(profile), ars.target_activity(profile), MachineStore().run(key,label,'schedule'):
+ (root/('start-'+label)).write_text('1')
+ # ACL-2668: the other account's read starts while this one is still running.
+ deadline=time.monotonic()+90
+ while not (root/('start-'+other)).exists():
+  assert time.monotonic()<deadline,'the other account read never started while this one ran'
+  time.sleep(.02)
+ with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['overlap',label])+'\n')
 '''
 
 
-def test_command_and_schedule_read_sessions_share_one_machine_lease(tmp_path):
+def test_reads_of_two_accounts_in_two_processes_run_at_the_same_time(tmp_path):
     procs=[subprocess.Popen([sys.executable,'-c',_READ_CHILD,str(tmp_path),a],
         cwd=Path(__file__).resolve().parents[1],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
         env={**os.environ,'ACL_CONFIG_DIR':str(tmp_path/a)}) for a in ['A','B']]
     try:
         for proc in procs:
-            out,err=proc.communicate(timeout=20)
+            out,err=proc.communicate(timeout=180)
             assert proc.returncode==0,out+err
     finally:
         for proc in procs:
             if proc.poll() is None:proc.kill();proc.wait()
     events=[json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
-    first=events[0][1]; second='B' if first=='A' else 'A'
-    assert events==[['start',first],['end',first],['start',second],['end',second]]
+    assert sorted(events)==[['overlap','A'],['overlap','B']]
