@@ -6652,11 +6652,10 @@ window.cbDrawer = (function () {
 window.cbKeep = (function () {
   var KEY = 'acl.builder.v2';
   var VERSION = 4;
-  /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
-     нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
-  var STALE_MS = 14 * 24 * 60 * 60 * 1000;
+  /* Срока годности нет (ACL-2669): черновик живёт, пока человек сам его не
+     убрал. Выбросить чужую работу хуже, чем подержать лишнее. */
 
-  var state = { v: VERSION, forms: {} };
+  var state = { v: VERSION, forms: {}, removed: {} };
   var restoring = false;
 
   /* v2 -> v3 (ACL-1767): появились пол, языки, устройства, версия ОС и старт. Поля v2
@@ -6709,12 +6708,24 @@ window.cbKeep = (function () {
   function validate(parsed) {
     parsed = migrate(parsed);
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
-    var fresh = {}, now = Date.now();
+    var fresh = {};
     Object.keys(parsed.forms).forEach(function (k) {
       var entry = parsed.forms[k];
-      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; }) && entry.touched <= now && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
+      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; })) {
+        /* id кампании необязателен (старые черновики без него); не строка — выбрасываем */
+        entry.campaigns.forEach(function(c) { if ('id' in c && typeof c.id !== 'string') delete c.id; });
+        fresh[k] = entry;
+      }
     });
-    return { v: VERSION, forms: fresh };
+    /* надгробия «человек убрал сам»: только числовые отметки времени */
+    var removed = {};
+    if (parsed.removed && typeof parsed.removed === 'object' && !Array.isArray(parsed.removed)) {
+      Object.keys(parsed.removed).forEach(function (k) {
+        var t = parsed.removed[k];
+        if (typeof t === 'number' && isFinite(t)) removed[k] = t;
+      });
+    }
+    return { v: VERSION, forms: fresh, removed: removed };
   }
 
   function write() {
@@ -6865,12 +6876,21 @@ window.cbKeep = (function () {
   function save() {
     if (restoring) return;          // раскладываем своё же — записывать нечего
     var now = Date.now();
+    /* ACL-2669: начинаем с копии прежнего — формы, которых нет на странице,
+       переходят как есть; уходит запись только по надгробию человека. */
     var next = {};
+    var removed = state.removed || {};
+    Object.keys(state.forms).forEach(function (k) { next[k] = state.forms[k]; });
     forms().forEach(function (form) {
       var key = stamp(form);
       if (!key) return;
       var slots = form.querySelectorAll('.cb-slot');
-      if (!slots.length) return;    // пустой аккаунт не занимает места
+      if (!slots.length) {
+        /* пустая форма: прежняя запись остаётся, если человек её не убирал */
+        var prev = state.forms[key];
+        if (prev && typeof removed[key] === 'number' && removed[key] >= (prev.touched || 0)) delete next[key];
+        return;
+      }
       var campaigns = Array.prototype.map.call(slots, readSlot);
       var link = form.querySelector('[name="tracking_link"]');
       var tracking = link ? link.value : '';
@@ -6878,13 +6898,13 @@ window.cbKeep = (function () {
       var unchanged = old && old.tracking === tracking && JSON.stringify(old.campaigns) === JSON.stringify(campaigns);
       next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
     });
-    state = { v: VERSION, forms: next };
+    state = { v: VERSION, forms: next, removed: removed };
     write();
   }
 
   function restore(given) {
     var stored = given || read();
-    if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
+    if (!stored) { state = { v: VERSION, forms: {}, removed: {} }; return 0; }
     state = stored;
     restoring = true;
     var made = 0;
@@ -6998,8 +7018,7 @@ window.cbKeep = (function () {
     writeSlot: writeSlot,
     all: function () { return state.forms; },
     validate: validate,
-    staleMs: STALE_MS,
-    forget: function () { state = { v: VERSION, forms: {} }; write(); }
+    forget: function () { state = { v: VERSION, forms: {}, removed: {} }; write(); }
   };
 })();
 </script>
