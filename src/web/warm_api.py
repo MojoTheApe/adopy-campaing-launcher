@@ -226,6 +226,12 @@ def _start_worker_locked() -> None:
         _AUTO_WORKER.start()
 
 
+def running_job_count() -> int:
+    """Warm-session launch jobs that are not finished yet."""
+    with _JOBS_LOCK:
+        return sum(1 for j in _JOBS.values() if j.get("state") in ("running", "waiting"))
+
+
 def _manual_job_running() -> bool:
     with _JOBS_LOCK:
         return bool(_ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running")

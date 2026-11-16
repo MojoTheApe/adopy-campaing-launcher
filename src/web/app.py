@@ -7660,11 +7660,12 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "token is required"})
 
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
-    clash = _slot_clash(instance, _token_workspace(token))
+    claim = _slot_claim(token)
+    clash = _slot_clash(instance, claim)
     if clash:
         return JSONResponse({"ok": False, "error": clash})
     try:
-        update_machine_env({env_key: token})
+        update_machine_env(_slot_values(instance, token, claim))
     except Exception as exc:
         return JSONResponse(
             {"ok": False, "error": f"Failed to save machine settings: {exc}"},
@@ -7674,11 +7675,23 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "instance": instance, "env_key": env_key})
 
 
-def _token_workspace(token: str) -> str:
-    from src.fb_api import mlx_session
+def _slot_claim(token: str) -> str:
+    from src.web import mlx_slots
 
-    claims = mlx_session._claims((token or "").strip()) or {}
-    return str(claims.get("workspaceID") or claims.get("workspace_id") or "").strip().lower()
+    return mlx_slots.token_workspace(token)
+
+
+def _slot_values(instance: str, token: str, claim: str) -> dict:
+    """Machine-env values for a pasted token: the id always follows the token.
+
+    The remembered name is kept only when it already belonged to this same
+    workspace; otherwise it is stale and is blanked together with the id.
+    """
+    key_ws, key_id = f"MULTILOGIN_WORKSPACE_{instance}", f"MULTILOGIN_WORKSPACE_ID_{instance}"
+    values = {f"MULTILOGIN_AUTOMATION_TOKEN_{instance}": token, key_id: claim}
+    if not claim or (os.environ.get(key_id) or "").strip().lower() != claim:
+        values[key_ws] = ""
+    return values
 
 
 def _slot_clash(instance: str, workspace: str) -> str:
@@ -7709,7 +7722,13 @@ async def multilogin_slots_repair() -> JSONResponse:
     """
     from src.web import mlx_slots
 
+    from src.web.publish_jobs import publishing_busy
+
     try:
+        if mlx_slots.duplicate(claims_only=True) and publishing_busy():
+            return JSONResponse({"ok": True, "repaired": False, "deferred": True,
+                                 "message": mlx_slots.deferred_message()},
+                                headers={"Cache-Control": "no-store"})
         result = mlx_slots.repair(mlx_instance_labels())
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"Could not repair Multilogin connections: {exc}"})
@@ -7720,7 +7739,7 @@ async def multilogin_slots_repair() -> JSONResponse:
 async def multilogin_logout(request: Request) -> JSONResponse:
     """Disconnect one Multilogin slot on this machine. Body: {instance: 'A'|'B'}."""
     from src.web import mlx_slots
-    from src.web.publish_jobs import active_job_count
+    from src.web.publish_jobs import active_job_count, publishing_busy
 
     try:
         data = await request.json()
@@ -7731,9 +7750,18 @@ async def multilogin_logout(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Say which Multilogin account to log out of."},
                             status_code=400)
     busy = active_job_count()
-    if busy:
+    try:
+        from src.web import warm_api
+
+        warm = warm_api.running_job_count()
+    except Exception:
+        warm = 0
+    if busy or warm or publishing_busy():
+        what = f"{busy} campaign job(s)" if busy else "Campaign or profile work"
+        if warm:
+            what += f" ({warm} profile-launch job(s))"
         return JSONResponse(
-            {"ok": False, "error": f"{busy} campaign job(s) still running — they need this connection. "
+            {"ok": False, "error": f"{what} still running — they need this connection. "
                                    "Log out when they finish."},
             status_code=409,
         )
@@ -7810,10 +7838,10 @@ async def multilogin_signin(request: Request) -> JSONResponse:
     # token works for this request but could not be persisted for next launch.
     env_key = f"MULTILOGIN_AUTOMATION_TOKEN_{instance}"
     if save_token and auto_token:
-        clash = _slot_clash(instance, signed.workspace_id or _token_workspace(auto_token))
+        clash = _slot_clash(instance, signed.workspace_id or _slot_claim(auto_token))
         if clash:
             return JSONResponse({"ok": False, "error": clash})
-        values = {env_key: auto_token}
+        values = _slot_values(instance, auto_token, _slot_claim(auto_token))
         if signed.workspace_id:
             values.update({ws_key: signed.workspace_name, ws_id_key: signed.workspace_id})
         try:
