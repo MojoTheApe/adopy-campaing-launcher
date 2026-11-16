@@ -217,6 +217,8 @@ class RefreshQueue:
         self._bypass: set[str] = set()
         self._seq = 0
         self._running: str | None = None
+        #: Заявка идущего чтения: после рестарта посреди чтения оно ставится заново (ACL-2668 №11).
+        self._running_trigger = ""
         self._halt: dict | None = None
         self._sweep: dict | None = None
         self._rows: dict[str, dict] = {}
@@ -325,6 +327,7 @@ class RefreshQueue:
                 self._heap = [(v[0], v[1], a) for a, v in self._entries.items()]
                 heapq.heapify(self._heap)
                 self._running = state.get("running")
+                self._running_trigger = str(state.get("running_trigger") or "")
                 self._rows = state["rows"]
                 self._keys = state.get("machine_bindings", {})
                 self._halt = state.get("halt")
@@ -332,6 +335,7 @@ class RefreshQueue:
                 self._bypass = set(state.get("bypass", []))
                 yield state
                 state.update(seq=self._seq, entries=self._entries, running=self._running,
+                             running_trigger=self._running_trigger if self._running else "",
                              rows=self._rows, halt=self._halt, sweep=self._sweep,
                              bypass=sorted(self._bypass), machine_bindings=self._keys)
 
@@ -705,7 +709,7 @@ class RefreshQueue:
 
     def _execute_selected(self, account: str, trigger: str, bypassed: bool) -> Snapshot | None:
         with self._state_guard():
-            self._running = account
+            self._running, self._running_trigger = account, trigger
             self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
         snap = None
         try:
@@ -722,6 +726,39 @@ class RefreshQueue:
                     self._sweep_complete(account, trigger)
         return snap
 
+    def _resume_interrupted(self) -> None:
+        """Чтение, оборванное концом прежнего процесса, встаёт в очередь заново. Под замком.
+
+        ACL-2668 №11: обновление ACM больше не ждёт чтений — рестарт их
+        обрывает, и аккаунт просто читается снова, без Retry. Заявка та же,
+        что была, но принудительная: координатор машины уже записал оборванное
+        чтение неудачей, и без force автоматическая заявка её бы не повторила.
+        Удержанный профиль это не трогает (`_held_blocks` смотрит на вид заявки),
+        а заявка обхода окна переходит в `attention`: окно оборванное чтение уже
+        засчитало.
+        """
+        account, trigger = self._running, self._running_trigger or "attention"
+        self._running, self._running_trigger = None, ""
+        if account is None:
+            return
+        kind = trigger.split(":")[0]
+        if kind not in PRIORITY or kind == "schedule":
+            kind = trigger = "attention"
+        row = self._rows.get(account, {})
+        if self._known_account(account):
+            try:
+                self._push(account, kind, trigger, True)
+            except (ValueError, CoordinationError):
+                pass
+            else:
+                snap = campaign_inventory.get_snapshot(account)
+                self._rows[account] = {"list_at": row.get("list_at", ""),
+                                       "state": snap.state if snap else "", "error": ""}
+                return
+        self._rows[account] = {"list_at": row.get("list_at", ""), "state": "failed",
+                               "error": "The read was interrupted. Press Retry."}
+        self._sweep_complete(account)
+
     def _drain_machine(self) -> int:
         if not self._drain_lock.acquire(blocking=False):
             return 0
@@ -735,12 +772,7 @@ class RefreshQueue:
                 return 0
             done, blocked = 0, set()
             with self._state_guard():
-                if self._running is not None:
-                    previous = self._rows.get(self._running, {}).get("list_at", "")
-                    self._rows[self._running] = {"list_at": previous, "state": "failed",
-                                                "error": "The read was interrupted. Press Retry."}
-                    self._sweep_complete(self._running)
-                    self._running = None
+                self._resume_interrupted()
             while True:
                 self._pull_results()
                 with self._state_guard():
@@ -826,12 +858,7 @@ class RefreshQueue:
                     return 0
                 with self._state_guard():
                     # OS-аренда свободна: сохранённое running осталось от прерванного процесса.
-                    if self._running is not None:
-                        row = self._rows.get(self._running, {})
-                        self._rows[self._running] = {"list_at": row.get("list_at", ""), "state": "failed",
-                                                     "error": "The read was interrupted. Press Retry."}
-                        self._sweep_complete(self._running)
-                        self._running = None
+                    self._resume_interrupted()
             done = 0
             while True:
                 with self._state_guard():
@@ -839,7 +866,7 @@ class RefreshQueue:
                     skips, self._pending_skips = self._pending_skips, []
                     if item is not None:
                         account, trigger, bypassed = item
-                        self._running = account
+                        self._running, self._running_trigger = account, trigger
                         self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
                 for acc, label in skips:
                     self._telemetry_skipped(acc, label)

@@ -307,3 +307,34 @@ def test_command_and_schedule_read_sessions_share_one_machine_lease(tmp_path):
     events=[json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
     first=events[0][1]; second='B' if first=='A' else 'A'
     assert events==[['start',first],['end',first],['start',second],['end',second]]
+
+
+@pytest.mark.parametrize("trigger, again", [("retry", "retry"), ("action", "action"),
+                                            ("schedule:2026-11-16/08:00", "attention"), ("", "attention")])
+def test_read_cut_by_a_restart_runs_again_by_itself(tmp_path, trigger, again):
+    """ACL-2668 №11: an ACM update no longer waits for reads; the restart cuts the
+    read and the queue reads that account again, no Retry needed."""
+    seen = []
+
+    def read(account, trigger):
+        seen.append((account, trigger))
+        return ci.Snapshot(account=account, state="empty", finished_at="08:01")
+
+    store = RefreshStore(tmp_path)
+    with store.transaction() as state:      # the dead process was reading A
+        state["running"], state["running_trigger"] = "A", trigger
+    q = ar.RefreshQueue(reader=read, store=store, accounts=lambda: ["A"])
+    assert q._drain_once() == 1
+    assert seen == [("A", again)]
+    assert q.state()["rows"]["A"]["state"] == "empty"
+    assert q.state()["running"] is None
+
+
+def test_read_cut_by_a_restart_for_a_removed_account_is_not_replayed(tmp_path):
+    seen = []
+    store = RefreshStore(tmp_path)
+    with store.transaction() as state:
+        state["running"], state["running_trigger"] = "A", "retry"
+    q = ar.RefreshQueue(reader=lambda a, t: seen.append(a), store=store, accounts=lambda: ["B"])
+    assert q._drain_once() == 0
+    assert seen == []
