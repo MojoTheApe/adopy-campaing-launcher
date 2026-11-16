@@ -517,15 +517,17 @@ class ApiPublisher:
         profile_id = (getattr(entry, "profile_id", "") or "").strip()
         if not profile_id:
             raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        self._auth_probe = False
         try:
-            # ACL-2595: pressing Publish after the owner finished the Meta check lifts that one hold; a pending
-            # check is answered by Meta once and the stop sets the hold again.
+            # ACL-2595/2652: pressing Publish after the owner finished the Meta check passes that one hold (code 31)
+            # and makes the account check. The hold file is cleared only once Meta has answered it without a stop
+            # (`_finish_open`); a pending check sets it again, and a failure before any call leaves it in place.
             from src.analysis_agent import account_spend as _as_
             from src.fb_api import account_blocks as _b_
 
-            _b_.lift_auth_hold(_as_._profile_key(account_label), "publish")
+            self._auth_probe = _b_.is_auth_hold(_as_._profile_key(account_label))
         except Exception:  # noqa: BLE001 - never breaks the open
-            log.debug("auth hold lift failed", exc_info=True)
+            log.debug("auth hold check failed", exc_info=True)
         left, why = _cooldown(account_label)
         # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
         frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
@@ -534,8 +536,8 @@ class ApiPublisher:
         key = _frozen_api(account_label)[1]
         # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
         # and a timed pause are explained by the one owner of that state.
-        blocked = _blocks.refusal(key, account_label, "publish",
-                                  timed=(left, why) if left > 0 and not frozen_deferred else None)
+        blocked = None if self._auth_probe else _blocks.refusal(
+            key, account_label, "publish", timed=(left, why) if left > 0 and not frozen_deferred else None)
         if blocked:
             held = _blocks.is_held(key)
             raise ApiPublishError(blocked[0], code=blocked[1] if held else (
@@ -622,6 +624,23 @@ class ApiPublisher:
         self._resolver = TargetingResolver(self._client, search_cache=PLAN_SEARCH_CACHE, cache_scope=account_label,
                                            act=self.act)
         self.progress("ad account verified")
+        self._settle_auth_probe()
+
+    def _settle_auth_probe(self) -> None:
+        """ACL-2652: Meta answered the account check without a stop: the code-31 hold is over. No call, no clear."""
+        if not getattr(self, "_auth_probe", False):
+            return
+        client = self._client
+        if client is None or client.stopped is not None or not client.calls:
+            return
+        self._auth_probe = False
+        try:
+            from src.analysis_agent import account_spend as _as_
+            from src.fb_api import account_blocks as _b_
+
+            _b_.clear_auth_hold(_as_._profile_key(self.account_label), "publish")
+        except Exception:  # noqa: BLE001
+            log.debug("auth hold clear failed", exc_info=True)
 
     def _open_warm(self, account_label: str, profile_id: str) -> bool:
         """ACL-1812: профиль «на сегодня» — берём его вкладку робота, без перезагрузки.

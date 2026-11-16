@@ -466,6 +466,13 @@ def request_status_read(label: str) -> str:
     try:
         from src.analysis_agent import account_refresh
 
+        try:
+            from src.analysis_agent import account_spend
+            from src.fb_api import account_blocks
+
+            account_blocks.mark_person_open(account_spend._profile_key(label))  # noqa: SLF001 - ACL-2652
+        except Exception:  # noqa: BLE001
+            log.debug("could not mark the person's open", exc_info=True)
         got = account_refresh.queue().request(label, "open", force=True)
         return "queued" if got.get("queued") else "skipped"
     except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен

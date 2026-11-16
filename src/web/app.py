@@ -5268,7 +5268,7 @@ def _account_holds(accounts) -> dict:
     try:
         from src.fb_api import account_blocks
 
-        return {a: {k: v[k] for k in ("kind", "code", "reason", "next", "at")}
+        return {a: {k: v[k] for k in ("kind", "code", "reason", "next", "at", "needs_confirm")}
                 for a, v in account_blocks.view(list(accounts)).items()}
     except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the state
         return {}

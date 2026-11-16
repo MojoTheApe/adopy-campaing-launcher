@@ -917,6 +917,9 @@
   }
 
   function readOne(account) {
+    var hold = S.holds && S.holds[account];
+    // ACL-2652: a policy-block hold asks first (Retrying soon risks a checkpoint or a ban).
+    if (hold && hold.needs_confirm && !window.confirm(hold.reason + ' ' + hold.next + ' Retry anyway?')) return Promise.resolve();
     return window.aclAccountRefresh ? window.aclAccountRefresh.request(account, 'retry') : Promise.resolve();
   }
   function refreshAccount(account) {
