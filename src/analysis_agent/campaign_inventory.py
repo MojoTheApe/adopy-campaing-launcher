@@ -1140,7 +1140,7 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
     from src.analysis_agent.account_refresh_state import read_session, target_activity
     coordinator = machine if machine is not None else MachineStore()
     clock = now if now is not None else time.time
-    force = trigger.split(":")[0] in {"action", "retry"}
+    force = trigger.split(":")[0] in {"action", "retry", "open"}      # ACL-2653: a person's Open reads past an untimed stop
     try:
         profile = _as._profile_key(account)  # noqa: SLF001
         with browser_operation.reading(), _as._lock_for(account), target_activity(profile), read_session(priority=force):

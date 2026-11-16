@@ -496,6 +496,7 @@ def note_tab_lock(label: str, *, urls=None) -> bool:
 
 #: label -> why the Open's status read was not queued (empty: it was). Read once by `_on_open_result`.
 _SKIP_REASON: dict[str, str] = {}
+_SKIP_LOCK = threading.Lock()
 
 
 def request_status_read(label: str) -> str:
@@ -509,7 +510,8 @@ def request_status_read(label: str) -> str:
 
         got = account_refresh.queue().request(label, "open", force=True)
         reason = str(got.get("reason") or "")
-        _SKIP_REASON[label] = "" if got.get("queued") else reason
+        with _SKIP_LOCK:
+            _SKIP_REASON[label] = "" if got.get("queued") else reason
         # A read that is already running for this account answers the Open as well.
         return "queued" if got.get("queued") or reason == "running" else "skipped"
     except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен
@@ -525,7 +527,8 @@ def _on_open_result(job_id: str, label: str, result: dict) -> None:
         # A tab on a Facebook lock is recorded from its address first; the read then shows Meta's refusal and its time.
         result["locked"] = bool(note_tab_lock(label))
         result["status_read"] = request_status_read(label)
-        result["status_reason"] = _SKIP_REASON.pop(label, "")
+        with _SKIP_LOCK:
+            result["status_reason"] = _SKIP_REASON.pop(label, "")
     else:
         result["status_read"] = "n/a"
     _set_result(job_id, label, result)

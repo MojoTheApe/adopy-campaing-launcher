@@ -651,18 +651,16 @@ class MachineStore:
                 state["halt"] = self._selected_stop(state)
             return dropped
 
-    def prune_stops(self, known_keys) -> list[dict]:
-        """ACL-2653: drop stops that can never lift on their own.
+    def prune_stops(self) -> list[dict]:
+        """ACL-2653: drop every `checkpoint` stop, of any key (owner decision: a checkpoint never stops the queue;
+        it holds only its own profile, see `account_holds.json`).
 
-        * a stop whose key maps to no known account (the account was removed from ACL), and
-        * a `checkpoint` stop (owner decision: a checkpoint never stops the queue; `known_keys=None` drops only these): a checkpoint holds only its own profile (`account_holds.json`), never the machine.
-
+        `state.json` is shared by all dashboards of the machine, so "removed" is never inferred from one config's
+        map: stops of other kinds go only through the explicit removal path (`drop_stops`).
         The caller holds the machine read lease; the state transaction keeps the schema validation.
         """
-        known = None if known_keys is None else set(known_keys)
         with self.transaction() as state:
-            dropped = [dict(v) for k, v in state["stops"].items()
-                       if v["kind"] == "checkpoint" or (known is not None and k not in known)]
+            dropped = [dict(v) for v in state["stops"].values() if v["kind"] == "checkpoint"]
             for item in dropped:
                 state["stops"].pop(item["key"], None)
             if dropped:

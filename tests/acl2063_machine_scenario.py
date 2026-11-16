@@ -66,7 +66,8 @@ class MachinePeople:
         assert self.command(first, 'checkpoint')['state']['halt'] is None
         assert self.command(second, 'state')['state']['halt'] is None
         assert self.command(second, 'restart')['state']['halt'] is None
-        self.command(second, 'drain')
+        # No machine halt: the drain is not blocked (reads are bounded by the one-read fence, never by a stop).
+        assert self.command(second, 'drain')['reads'] in (0, 1)
         assert self.command(second, 'retry')['state']['halt'] is None
         assert self.command(first, 'state')['state']['halt'] is None
         assert all(self.command(p, 'schedule')['admitted']['queued'] == 0 for p in self.people)

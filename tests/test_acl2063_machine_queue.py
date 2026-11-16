@@ -87,7 +87,12 @@ def test_duplicate_map_gets_the_actual_result_without_another_read(dashboards):
     assert second.state()["rows"]["A"]["list_at"] == original.finished_at
 
 
-def test_checkpoint_in_another_config_is_visible_before_dispatch(dashboards):
+def test_checkpoint_in_another_config_is_no_machine_stop_and_does_not_halt_the_second_dashboard(dashboards):
+    """ACL-2653 (owner decision): a checkpoint is recorded on its own profile hold only, per config.
+
+    The hold file lives in the config dir, so a second dashboard of the same machine (the owner's dev setup) does
+    not see it and may read that account. That is accepted; what must hold is that nothing halts the machine.
+    """
     select, new, reads = dashboards
     first, second = new("one"), new("two")
     select("one")
@@ -96,9 +101,11 @@ def test_checkpoint_in_another_config_is_visible_before_dispatch(dashboards):
     first.record_result(snap, trigger="action")
     select("two")
     second.page_open(now=NOW, port=9095)
-    # ACL-2653: a checkpoint of A holds A's profile only; the other dashboard still reads A's neighbours.
     assert second.state()["halt"] is None
     assert MachineStore(second._machine.root).halt() is None
+    assert reads == []                              # admission alone reads nothing
+    assert second._drain_once() == 1                # the second config's schedule reads A: accepted cross-config
+    assert [a for _, a in reads] == ["A"]
 
 
 def test_partly_different_maps_join_once_and_both_get_their_whole_list(dashboards):
@@ -237,9 +244,15 @@ def test_checkpoint_survives_restart_and_only_own_success_clears_it(dashboards):
     second.page_open(now=NOW, port=9095)
     assert second.state()["halt"] is None          # ACL-2653: no machine-wide stop for a checkpoint
     second.request("B", "retry", force=True)
-    assert second._drain_once() >= 1
+    # Cross-config (the owner's dev setup only) is accepted: the second dashboard has no hold file of the first,
+    # so its own admitted sweep reads A as well. Nothing halts, and the reads are exactly these two.
+    assert second._drain_once() == 2
     assert second.state()["halt"] is None
-    assert "B" in [a for _, a in reads]
+    assert [a for _, a in reads] == ["B", "A"]
+    # Within the first config the hold keeps automatic reads off A's profile.
+    select("one")
+    assert first.request("A", "attention") == {"queued": False, "reason": "profile_held"}
+    assert first.request("A", "schedule", window="08:00") == {"queued": False, "reason": "profile_held"}
 
 
 def test_forced_requests_queued_before_peer_result_join_it_but_later_retry_reads(dashboards):

@@ -312,7 +312,9 @@ def local_page_urls(port: int, *, timeout: float = 2.0) -> list[str]:
             targets = json.loads(resp.read().decode("utf-8", errors="replace"))
     except Exception:  # noqa: BLE001 - a silent browser is "no answer", not a lock
         return []
-    return [str(t.get("url") or "") for t in targets if isinstance(t, dict) and t.get("type") == "page"]         if isinstance(targets, list) else []
+    if not isinstance(targets, list):
+        return []
+    return [str(t.get("url") or "") for t in targets if isinstance(t, dict) and t.get("type") == "page"]
 
 
 def _url_act(url: str) -> str:

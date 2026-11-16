@@ -103,19 +103,74 @@ def test_a_shared_profile_keeps_its_hold_while_another_label_uses_it(tmp_path, m
     assert blocks.is_held("prof-shared")
 
 
-def test_an_orphan_machine_stop_is_dropped_and_a_known_one_stays(dashboards):
+def test_the_automatic_prune_drops_only_checkpoint_stops_never_other_kinds(dashboards):
+    """state.json is shared by all dashboards: a key unknown to THIS config's map is not "removed"."""
+    select, new, reads = dashboards
+    q = new("one", ["A", "B"])
+    select("one")
+    root = q._machine.root
+    foreign = "d" * 64                                         # a stop of another dashboard's account
+    _plant_stop(root, foreign, kind="policy_block", until=NOW + 1800)
+    other_cp = "e" * 64
+    _plant_stop(root, other_cp, kind="checkpoint")             # a checkpoint stop of any key goes
+    two = new("two", ["A"])                                    # a second config that does not map B
+    st = two.state()
+    stops = json.loads((root / "state.json").read_text())["stops"]
+    assert foreign in stops and other_cp not in stops
+    assert st["halt"] is not None and st["halt"]["key"] == foreign
+
+
+def test_a_known_non_checkpoint_stop_stays(dashboards):
     select, new, reads = dashboards
     q = new("one")
-    root = q._machine.root
     known = binding("A")
-    orphan = "d" * 64
-    _plant_stop(root, orphan)
-    # The stop of a removed account (no map row has its key) never lifts by itself: the queue drops it.
-    assert q.state()["halt"] is None
-    assert orphan not in json.loads((root / "state.json").read_text())["stops"]
-    _plant_stop(root, known)
-    assert q.state()["halt"]["key"] == known                  # a known account's stop is untouched
-    assert known in json.loads((root / "state.json").read_text())["stops"]
+    _plant_stop(q._machine.root, known)
+    assert q.state()["halt"]["key"] == known
+    assert known in json.loads((q._machine.root / "state.json").read_text())["stops"]
+
+
+def test_removal_keeps_the_stop_and_hold_of_a_binding_a_remaining_alias_shares(tmp_path, monkeypatch):
+    monkeypatch.setattr(ars, "machine_root", lambda: tmp_path / "machine", raising=False)
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: "prof-shared")
+    monkeypatch.setattr(ar, "binding", lambda label: "f" * 64)
+    _plant_stop(tmp_path / "machine", "f" * 64)
+    blocks.note_person_lock("prof-shared", "ONE", "Retry")
+    ar.forget_accounts({"ONE": ("f" * 64, "prof-shared")}, remaining=["ALIAS"])
+    assert blocks.is_held("prof-shared")
+    assert MachineStore(tmp_path / "machine").halt(now=NOW)["key"] == "f" * 64
+
+
+def test_a_lease_timeout_still_clears_the_hold(tmp_path, monkeypatch):
+    monkeypatch.setattr(ars, "machine_root", lambda: tmp_path / "machine", raising=False)
+    blocks.note_person_lock("prof-x", "X", "Retry")
+
+    class Busy:
+        def lease(self, name):
+            raise TimeoutError("read in progress")
+
+    monkeypatch.setattr(ar, "MachineStore", lambda *a, **k: Busy())
+    ar.forget_accounts({"X": ("b" * 64, "prof-x")}, remaining=[])
+    assert not blocks.is_held("prof-x")
+
+
+def test_the_remove_route_runs_the_cleanup_off_the_event_loop():
+    src = (ROOT / "src/web/app.py").read_text(encoding="utf-8")
+    assert "await run_in_threadpool(_refresh.forget_accounts" in src
+
+
+def test_a_hold_keeps_automatic_reads_off_the_profile_within_one_config(dashboards, monkeypatch):
+    select, new, reads = dashboards
+    first = new("one", ["A", "B"])
+    select("one")
+    snap = ci.Snapshot(account="A", state="failed", stop="checkpoint", error="Synthetic checkpoint")
+    ci.put_result(snap)
+    first.record_result(snap, trigger="action")
+    assert blocks.is_held(account_spend._profile_key("A"))
+    assert first.request("A", "attention") == {"queued": False, "reason": "profile_held"}
+    assert first.request("A", "schedule", window="08:00") == {"queued": False, "reason": "profile_held"}
+    assert first.request("B", "attention")["queued"] is True
+    first._drain_once()
+    assert [a for _, a in reads] == ["B"]
 
 
 def test_old_machine_wide_checkpoint_stop_of_a_known_account_becomes_its_hold(dashboards, monkeypatch):
@@ -250,6 +305,7 @@ def test_a_read_stuck_in_updating_ends_as_failed_with_retry_text(env):
     q = _queue(env)
     q._rows["A"] = {"list_at": "2026-11-14 00:13:00", "state": "updating", "error": "", "since": NOW - ar.STUCK_UPDATING_S - 5}
     q._running = "A"
+    assert ar.STUCK_UPDATING_S == 1200.0
     state = q.state()
     assert state["rows"]["A"]["state"] == "failed" and state["rows"]["A"]["error"] == ar.STUCK_TEXT
     assert state["rows"]["A"]["list_at"] == "2026-11-14 00:13:00"      # the last good read time is kept
@@ -260,11 +316,26 @@ def test_a_recent_or_unstamped_updating_row_is_left_alone_then_stamped(env):
     q = _queue(env)
     q._rows["A"] = {"state": "updating", "error": "", "since": NOW - 30}
     q._rows["B"] = {"state": "updating", "error": ""}                  # saved by an older build
+    q._running = "B"
     state = q.state()
     assert state["rows"]["A"]["state"] == "updating"
     assert state["rows"]["B"]["state"] == "updating" and state["rows"]["B"]["since"] == NOW
     env.clock.t = NOW + ar.STUCK_UPDATING_S + 1
-    assert q.state()["rows"]["B"]["state"] == "failed"
+    rows = q.state()["rows"]
+    assert rows["B"]["state"] == "failed" and rows["A"]["state"] == "updating"   # only the running read expires
+
+
+def test_a_queued_or_paused_row_is_never_expired_and_keeps_its_queue_entry(env):
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget")
+    q = _queue(env)
+    q.request("A", "attention")
+    q._drain_once()
+    q.request("B", "attention")
+    q._rows["B"] = {"list_at": "", "state": "updating", "error": "", "since": NOW}
+    env.clock.t = NOW + 3 * ar.STUCK_UPDATING_S
+    state = q.state()
+    assert state["rows"]["B"]["state"] == "updating"
+    assert [item["account"] for item in state["queued"]] == ["B"]
 
 
 def test_an_executing_read_stamps_its_start(env):
@@ -335,3 +406,52 @@ def test_open_on_a_checkpointed_profile_records_the_refusal_and_its_read_time(en
     assert row["key"] == "issue"
     assert row["status_line"].startswith("Facebook locked · since ") and " · read " in row["status_line"]
     assert datetime.fromtimestamp(later).strftime("%d.%m %H:%M") in row["status_line"]
+
+
+# ───────── 7. review fixes ─────────
+
+def test_a_lock_found_again_keeps_its_first_seen_date():
+    from src.fb_api.graph import Checkpoint
+
+    blocks.note_stop(KEY, LABEL, Checkpoint("c"), "a background read")
+    first = blocks.hold_of(KEY)["at"]
+    time.sleep(0.01)
+    blocks.note_stop(KEY, LABEL, Checkpoint("c"), "Open profile")
+    again = blocks.hold_of(KEY)
+    assert again["at"] == first and again["seen"] > first and again["action"] == "Open profile"
+
+
+def test_the_checkpoint_path_match_is_a_path_segment_not_a_substring():
+    from src.fb_api.graph import classify_stop_url
+
+    assert classify_stop_url("/checkpoint/1501092823525282/") == "checkpoint"
+    assert classify_stop_url("/checkpoint") == "checkpoint"
+    assert classify_stop_url("/adsmanager/not-a-checkpoint-page") == ""
+    assert classify_stop_url("/groups/checkpoint-fans/") == ""
+
+
+def test_a_persons_open_is_read_past_an_untimed_stop_end_to_end(tmp_path):
+    from src.analysis_agent import campaign_inventory
+
+    src = (ROOT / "src/analysis_agent/campaign_inventory.py").read_text(encoding="utf-8")
+    assert '{"action", "retry", "open"}' in src
+    machine = MachineStore(tmp_path / "machine")
+    key = "a" * 64
+    machine.publish(key, ci.Snapshot(account="A", state="failed", error="call budget", error_code="call_budget"), now=NOW)
+    assert machine.halt(now=NOW)["until"] is None
+    assert campaign_inventory is not None
+
+
+def test_a_timed_stop_that_holds_back_a_persons_open_says_why_with_the_time(env):
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Meta rate limit", stop="rate_limited")
+    q = _queue(env)
+    q.request("A", "attention")
+    q._drain_once()
+    halt = q.state()["halt"]
+    assert halt and halt["until"] is not None
+    paused = ci.Snapshot(account="B", state="failed", error="x")
+    paused._machine_paused = {**halt, "generation": 1}
+    with q._state_guard():
+        q._settle("B", "open", paused, False)
+    row = q.state()["rows"]["B"]
+    assert row["state"] == "failed" and "Until " in row["error"] and halt["reason"] in row["error"]

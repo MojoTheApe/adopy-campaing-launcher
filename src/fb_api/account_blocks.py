@@ -192,8 +192,14 @@ def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_
         return False
     with _LOCK:
         holds = _load()
+        now = time.time()
+        old = holds.get(key) or {}
+        # ACL-2653: the same stop found again keeps its first-seen date; only `seen` moves.
+        again = old.get("kind") == kind and old.get("code") == _code_of(stop)
         holds[key] = {"kind": kind, "code": _code_of(stop), "label": str(label or ""), "action": action,
-                      "at": time.time(), "target_id": str(getattr(stop, "target_id", "") or "")}
+                      "at": old.get("at", now) if again else now, "target_id": str(getattr(stop, "target_id", "") or "")}
+        if again:
+            holds[key]["seen"] = now
         if not _save(holds):
             return False        # fail open: the caller keeps its timer
     _event("profile_block_set", kind=kind, code=_code_of(stop), action=action, timed=False,

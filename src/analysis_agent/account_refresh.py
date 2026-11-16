@@ -67,8 +67,8 @@ _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
 _MINUTES = re.compile(r"about (\d+) min", re.I)
 
 #: ACL-2653: a read that stays "updating" longer than this ends as failed (the row then shows Retry).
-STUCK_UPDATING_S = 600.0
-STUCK_TEXT = "The read did not finish in 10 minutes. Press Retry."
+STUCK_UPDATING_S = 1200.0
+STUCK_TEXT = "The read did not finish in 20 minutes. Press Retry."
 
 
 #: Остановки Meta (`Snapshot.stop`), общие для всех аккаунтов: вид → (причина, ждать по таймеру?).
@@ -491,14 +491,12 @@ class RefreshQueue:
         except TimeoutError:
             return
         try:
-            # An unreadable/empty map says nothing about removal: then only checkpoint stops go.
-            dropped = self._machine.prune_stops(set(keys.values()) if keys else None)
+            dropped = self._machine.prune_stops()
         finally:
             hold.__exit__(None, None, None)
         by_key = {key: account for account, key in keys.items()}
         for stop in dropped:
-            log.info("Dropped the machine stop of %s (%s)", "a known account" if stop["key"] in by_key else "a removed account",
-                     stop["kind"])
+            log.info("Dropped a machine checkpoint stop (%s)", "known account" if stop["key"] in by_key else "other config")
             account = by_key.get(stop["key"])
             if account and stop["kind"] == "checkpoint":
                 self._hold_person_lock(account, "a background read")
@@ -514,25 +512,24 @@ class RefreshQueue:
             log.debug("The Facebook lock hold was not written", exc_info=True)
 
     def _expire_stuck(self) -> None:
-        """ACL-2653: a read that stays `updating` past STUCK_UPDATING_S ends as failed, so the row shows Retry.
+        """ACL-2653: the read that is RUNNING and stays so past STUCK_UPDATING_S ends as failed, so the row shows Retry.
 
-        A row without a start stamp (saved by an older build) is stamped now. Under the state lock. The real read,
-        if it is still alive, overwrites this with its true result when it ends."""
+        Only the running row: queue and machine entries are never withdrawn. A running row without a start stamp
+        (saved by an older build) is stamped now. Under the state lock. The real read, if it is still alive,
+        overwrites this with its true result when it ends."""
+        account = self._running
+        row = self._rows.get(account) if account else None
+        if not row or row.get("state") != "updating":
+            return              # queued or paused rows are never expired: they are waiting, not reading
         now = self._clock()
-        for account, row in list(self._rows.items()):
-            if row.get("state") != "updating":
-                continue
-            since = row.get("since")
-            if not isinstance(since, (int, float)):
-                row["since"] = now
-                continue
-            if now - since <= STUCK_UPDATING_S:
-                continue
-            self._rows[account] = {"list_at": row.get("list_at", ""), "state": "failed", "error": STUCK_TEXT}
-            if self._running == account:
-                self._running = None
-            self._entries.pop(account, None)
-            self._sweep_complete(account)
+        since = row.get("since")
+        if not isinstance(since, (int, float)):
+            row["since"] = now
+            return
+        if now - since <= STUCK_UPDATING_S:
+            return
+        self._rows[account] = {"list_at": row.get("list_at", ""), "state": "failed", "error": STUCK_TEXT}
+        self._running = None
 
     def _maybe_lift(self) -> None:
         self._expire_stuck()
@@ -975,6 +972,12 @@ class RefreshQueue:
         if paused:
             self._halt = {**paused, "account": account, "machine_generation": paused["generation"]}
             self._push(account, trigger.split(":")[0], trigger, bypassed)
+            if trigger.split(":")[0] in ("open", "retry", "action"):
+                # ACL-2653: a person's read held back by a timed stop says why, not "updating".
+                until = paused.get("until")
+                when = f" Until {datetime.fromtimestamp(until).strftime('%H:%M')}." if until else ""
+                prev = self._rows.get(account, {}).get("list_at", "")
+                self._rows[account] = {"list_at": prev, "state": "failed", "error": f"{paused['reason']}{when}"}
             return
         verdict = classify(snap)
         self._sweep_complete(account, trigger)
@@ -1115,33 +1118,43 @@ def removal_keys(accounts: list[str]) -> dict[str, tuple[str, str]]:
 def forget_accounts(removed: dict[str, tuple[str, str]], remaining: list[str] | None = None) -> None:
     """ACL-2653: Remove from ACL drops the machine stop and the hold of the account, so nothing waits for it forever.
 
-    The hold belongs to the physical profile: it is kept while another remaining label shares that profile.
-    Never raises (the removal itself has already succeeded)."""
+    The stop belongs to the binding and the hold to the physical profile: each is kept while another remaining
+    label (an alias) shares it. Blocking: call it off the event loop. Each step has its own try, so a lease
+    timeout still clears the hold and the queue entry. Never raises (the removal itself has already succeeded)."""
     if not removed:
         return
-    try:
-        shared = set()
-        for label in remaining or []:
-            try:
-                from src.analysis_agent import account_spend
+    from src.analysis_agent import account_spend
 
-                shared.add(account_spend._profile_key(label))  # noqa: SLF001
-            except Exception:  # noqa: BLE001
-                continue
-        keys = {b for b, _p in removed.values() if b}
+    shared_profiles, shared_bindings = set(), set()
+    for label in remaining or []:
+        try:
+            shared_profiles.add(account_spend._profile_key(label))  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            shared_bindings.add(binding(label))
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        keys = {b for b, _p in removed.values() if b and b not in shared_bindings}
         if keys:
-            lease = MachineStore().lease("account-structure-read.lock").holding(timeout=10)
-            with lease:
+            with MachineStore().lease("account-structure-read.lock").holding(timeout=10):
                 MachineStore().drop_stops(keys)
+    except Exception:  # noqa: BLE001
+        log.warning("Could not drop the machine stop of a removed account", exc_info=True)
+    try:
         from src.fb_api import account_blocks
 
         for _account, (_b, profile) in removed.items():
-            if profile and profile not in shared:
+            if profile and profile not in shared_profiles:
                 account_blocks.clear(profile, "removed")
+    except Exception:  # noqa: BLE001
+        log.warning("Could not clear the hold of a removed account", exc_info=True)
+    try:
         if _QUEUE is not None:
             _QUEUE.forget(list(removed))
     except Exception:  # noqa: BLE001
-        log.warning("Could not drop the machine stop of a removed account", exc_info=True)
+        log.warning("Could not drop a removed account from the queue", exc_info=True)
 
 
 def resolve_account(account: str) -> str | None:

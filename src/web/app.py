@@ -6046,7 +6046,10 @@ async def account_map_remove(request: Request) -> JSONResponse:
 
     if _removal:
         try:
-            _refresh.forget_accounts(_removal, [(r.get("account_name") or "").strip() for r in kept])
+            from starlette.concurrency import run_in_threadpool
+
+            await run_in_threadpool(_refresh.forget_accounts, _removal,
+                                    [(r.get("account_name") or "").strip() for r in kept])
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).warning("Removed account stop was not dropped", exc_info=True)
 

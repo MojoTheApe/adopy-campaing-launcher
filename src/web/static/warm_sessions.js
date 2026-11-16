@@ -480,8 +480,10 @@
           setTimeout(function () { homeAwaitStatus(btn, account, tries + 1, before); }, 2000);
           return;
         }
+        var gaveUp = (waiting || v.running);
         homeRepaint(account).then(function (ok) {
           if (!ok) { homeSay(btn, 'Opened. Reload the page to see the new status.', true); return; }
+          if (gaveUp) { homeSay(btn, 'Still waiting for the read \u2014 it will update when the read runs.', false); return; }
           var note = homeStatusNote(before, homeReadMark(account), v, account);
           homeSay(btn, note.text, note.bad);
         });
