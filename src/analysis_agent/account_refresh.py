@@ -66,6 +66,10 @@ _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
 
 _MINUTES = re.compile(r"about (\d+) min", re.I)
 
+#: ACL-2653: a read that stays "updating" longer than this ends as failed (the row then shows Retry).
+STUCK_UPDATING_S = 600.0
+STUCK_TEXT = "The read did not finish in 10 minutes. Press Retry."
+
 
 #: Остановки Meta (`Snapshot.stop`), общие для всех аккаунтов: вид → (причина, ждать по таймеру?).
 #: Чекпоинт и потолок вызовов сами не проходят: только явный Retry, который удался.
@@ -131,7 +135,7 @@ def _held_blocks(account: str, trigger: str) -> bool:
     The skip writes no attempt row, so `campaign_inventory.latest_stops()` and a persisted
     global halt stay exactly as they were.
     """
-    return trigger.split(":")[0] != "retry" and _profile_held(account)
+    return trigger.split(":")[0] not in ("retry", "open") and _profile_held(account)
 
 
 def recently_failed(account: str, *, now: float | None = None) -> bool:
@@ -509,7 +513,29 @@ class RefreshQueue:
         except Exception:  # noqa: BLE001 - an unreadable map/hold file never stops the queue
             log.debug("The Facebook lock hold was not written", exc_info=True)
 
+    def _expire_stuck(self) -> None:
+        """ACL-2653: a read that stays `updating` past STUCK_UPDATING_S ends as failed, so the row shows Retry.
+
+        A row without a start stamp (saved by an older build) is stamped now. Under the state lock. The real read,
+        if it is still alive, overwrites this with its true result when it ends."""
+        now = self._clock()
+        for account, row in list(self._rows.items()):
+            if row.get("state") != "updating":
+                continue
+            since = row.get("since")
+            if not isinstance(since, (int, float)):
+                row["since"] = now
+                continue
+            if now - since <= STUCK_UPDATING_S:
+                continue
+            self._rows[account] = {"list_at": row.get("list_at", ""), "state": "failed", "error": STUCK_TEXT}
+            if self._running == account:
+                self._running = None
+            self._entries.pop(account, None)
+            self._sweep_complete(account)
+
     def _maybe_lift(self) -> None:
+        self._expire_stuck()
         if self._halt and self._halt.get("kind") == "checkpoint":
             self._halt = None       # ACL-2653: an old saved checkpoint halt no longer stops anything
         if self._machine is not None:
@@ -588,7 +614,7 @@ class RefreshQueue:
                 # use their already-open session and settle separately.
                 self._push(account, trigger, label, force)
                 halted = self._halt is not None
-                if halted and force and trigger in ("retry", "action") and self._halt["until"] is None:
+                if halted and force and trigger in ("retry", "action", "open") and self._halt["until"] is None:
                     self._bypass.add(account)
                     halted = False
                 self._wake.notify()
@@ -784,7 +810,7 @@ class RefreshQueue:
     def _execute_selected(self, account: str, trigger: str, bypassed: bool) -> Snapshot | None:
         with self._state_guard():
             self._running = account
-            self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
+            self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": "", "since": self._clock()}
         snap = None
         try:
             snap = self._read(account, trigger)
@@ -918,7 +944,7 @@ class RefreshQueue:
                     if item is not None:
                         account, trigger, bypassed = item
                         self._running = account
-                        self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
+                        self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": "", "since": self._clock()}
                 for acc, label in skips:
                     self._telemetry_skipped(acc, label)
                 if item is None:

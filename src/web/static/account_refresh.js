@@ -32,6 +32,26 @@
       box.appendChild(document.createTextNode(' ')); box.appendChild(b);
     }
   }
+  // ACL-2653: a Facebook lock holds only its profile. Its own line names the account and has its own Retry.
+  function lockBanner(locks) {
+    var anchor = statusBox(); if (!anchor) return;
+    var box = document.getElementById('account-lock-status');
+    var names = Object.keys(locks);
+    if (!names.length) { if (box) box.hidden = true; return; }
+    if (!box) {
+      box = document.createElement('div'); box.id = 'account-lock-status';
+      box.className = 'amap-refresh-status'; box.setAttribute('role', 'alert');
+      anchor.parentNode.insertBefore(box, anchor);
+    }
+    var account = names[0];
+    box.hidden = false; box.textContent = account + ': ' + locks[account].reason + ' ' + locks[account].next
+      + (names.length > 1 ? ' (+' + (names.length - 1) + ' more)' : '') + ' ';
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'amap-btn amap-banner-retry'; b.textContent = 'Retry';
+    b.title = 'Read the status of ' + account + ' once';
+    b.addEventListener('click', function () { b.disabled = true; request(account, 'retry'); });
+    box.appendChild(b);
+  }
   function accept(view) {
     last = view; failures = 0;
     var sweep = view.sweep, halt = view.halt;
@@ -39,6 +59,7 @@
     if (!retryFor && halt && halt.kind === 'checkpoint') retryFor = halt.account || Object.keys(holds)[0] || '';
     announce(halt ? halt.reason : view.needs_api ? 'Account reads are off: enable the API backend to refresh. Saved lists remain available.' : admissionError || (sweep && sweep.done < sweep.total
       ? 'Refreshing accounts ' + sweep.done + '/' + sweep.total : ''), !!halt || !!admissionError, halt ? retryFor : '');
+    lockBanner(view.locks || {});
     listeners.slice().forEach(function (fn) { fn(view); });
     if (view.running || (view.queued || []).length && (!halt || halt.until != null)) later();
   }

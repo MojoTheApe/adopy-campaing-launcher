@@ -49,13 +49,14 @@ _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_actio
 #: thread that runs the operation: `read_session`/the queued dispatcher run it in the caller's thread.
 _EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
 #: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
-BUYER_ACTIONS = ("retry", "read")
+BUYER_ACTIONS = ("retry", "read", "open")
 
 ACTION_TEXT = {
     "schedule": "a scheduled read",
     "attention": "a background read",
     "action": "a refresh after your action",
     "retry": "Retry",
+    "open": "Open profile",
     "read": "Read",
     "check_plan": "Check plan",
     "publish": "Publish",
@@ -93,10 +94,8 @@ def current_action() -> str:
 def action_for_trigger(trigger: str) -> str:
     """Map a read trigger (`schedule`, `attention`, `action`, `retry`, `button`...) to an action name."""
     trig = str(trigger or "").strip().lower()
-    if trig in ("schedule", "attention", "action", "retry"):
-        return trig
-    if trig == "open":      # a page open reads in the background
-        return "attention"
+    if trig in ("schedule", "attention", "action", "retry", "open"):
+        return trig     # ACL-2653: `open` is the person's Open button: it may probe a held profile
     return "read"
 
 
@@ -212,11 +211,23 @@ def note_person_lock(key: str, label: str, action: str = "") -> bool:
 
     Returns True when a new hold was written. Nothing here talks to Meta; only a person's Retry clears it.
     """
-    if not key or is_held(key):
+    if not key:
+        return False
+    if is_held(key):
+        _touch_seen(key)
         return False
     from src.fb_api.graph import Checkpoint
 
     return note_stop(key, label, Checkpoint("the profile is on a Facebook checkpoint"), action or current_action())
+
+
+def _touch_seen(key: str) -> None:
+    """The time the lock was last seen (read time of the refusal); the first date `at` stays."""
+    with _LOCK:
+        holds = _load()
+        if key in holds:
+            holds[key]["seen"] = time.time()
+            _save(holds)
 
 
 def note_tab_url(key: str, label: str, url: str, action: str = "") -> bool:
@@ -387,7 +398,7 @@ def view(labels: dict[str, str] | list[str]) -> dict[str, dict[str, Any]]:
         out[label] = {"kind": held["kind"], "code": held.get("code"), "reason": reason, "next": step,
                       "action": held.get("action") or "", "at": held.get("at"), "left_s": None,
                       "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block",
-                      "person_lock": is_person_lock(held)}
+                      "person_lock": is_person_lock(held), "seen": held.get("seen") or held.get("at")}
     return out
 
 
