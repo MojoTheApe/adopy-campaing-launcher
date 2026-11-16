@@ -15748,6 +15748,15 @@ function amapMlNoteSet(text, warn) {
   }
   if (typeof amapMlPaintAll === 'function') amapMlPaintAll();
 }
+/* The page note goes away only when neither slot is disconnected any more,
+   judged from freshly read slot state (not just the slot that signed in). */
+function amapMlNoteClearIfConnected() {
+  if (!AMAP_ML_NOTE) return Promise.resolve();
+  return Promise.all(['A', 'B'].map(function (i) { return amapMlRefresh(i, true); })).then(function () {
+    var all = ['A', 'B'].every(function (i) { return AMAP_ML_STATE[i] && AMAP_ML_STATE[i].has_token; });
+    if (all) amapMlNoteSet('');
+  });
+}
 var AMAP_ML_NOTE = '';  // что ACL починил или почему отказал — видно, пока не уйдёт со страницы
 
 function amapMlBlock(el) { return el.closest('.amap-add'); }
@@ -15877,12 +15886,12 @@ async function amapMlSubmit(btn, paste) {
       if (hits) { hits.replaceChildren(); hits.hidden = true; }
     });
     token.value = '';
-    amapMlNoteSet('');
     amapMlSay(block, 'Token saved; checking connection…');
     /* ACL-2185: токен обновлён — форма, открытая кнопкой «Sign in again»,
        больше не нужна (её уберёт перерисовка), плашка о сроке перечитывается. */
     delete block.dataset.mlRenew;
     var state = await amapMlRefresh(inst, true);
+    amapMlNoteClearIfConnected();
     aclMlxExpiryRefresh();
     amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
@@ -15963,6 +15972,8 @@ function aclMlxExpiryPaint() {
   box.hidden = false;
 }
 function aclMlxExpiryRefresh() {
+  /* A repair deferred because jobs were running is retried on this 60 s tick. */
+  if (typeof AMAP_ML_NOTE !== 'undefined' && AMAP_ML_NOTE && AMAP_ML_NOTE_WARN && typeof amapMlRepair === 'function') amapMlRepair();
   return fetch('/multilogin-token-expiry', {credentials: 'same-origin'})
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
@@ -16032,7 +16043,9 @@ function amapMlRepair() {
     .then(function (r) { return r.json().catch(function () { return null; }); })
     .then(function (j) {
       if (!j) return;
-      if (j.ok === false) {
+      if (j.ok !== false && !j.deferred && !j.repaired && AMAP_ML_NOTE && AMAP_ML_NOTE_WARN) {
+        amapMlNoteSet('');  /* the deferred conflict is gone */
+      } else if (j.ok === false) {
         amapMlNoteSet(j.error || 'Could not check the Multilogin connections.', false);
       } else if (j.deferred) {
         amapMlNoteSet(j.message || 'Both Multilogin slots use the same workspace; this will be fixed when the running jobs finish.', true);

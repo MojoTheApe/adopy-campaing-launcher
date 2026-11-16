@@ -304,3 +304,39 @@ def test_no_token_value_appears_in_any_response(machine, monkeypatch):
     for token in (ta, tb, pasted):
         for text in seen:
             assert token not in text and token.split(".")[2] not in text
+
+
+def test_repair_and_logout_wait_for_warm_ups_too(machine, monkeypatch):
+    _both(monkeypatch, "ws-kld", "ws-kld", name="KLD")
+    monkeypatch.setattr("src.web.publish_jobs.active_job_count", lambda: 0)
+    monkeypatch.setattr("src.web.publish_jobs.publishing_busy", lambda: False)
+    monkeypatch.setattr("src.web.warm_api.running_job_count", lambda: 1)
+    _, body = _call("POST", "/multilogin-slots-repair")
+    assert body["deferred"] is True and machine == []
+    code, out = _call("POST", "/multilogin-logout", {"instance": "A"})
+    assert code == 409 and machine == []
+
+
+def test_automatic_warm_ups_count_as_running_work(monkeypatch):
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_AUTO_QUEUE", [])
+    monkeypatch.setattr(warm_api, "_JOBS", {})
+    monkeypatch.setattr(warm_api, "_AUTO_RUNNING", [0])
+    assert warm_api.running_job_count() == 0
+    warm_api._AUTO_QUEUE.append("UL1")
+    assert warm_api.running_job_count() == 1
+    warm_api._AUTO_QUEUE.clear()
+    warm_api._AUTO_RUNNING[0] = 1
+    assert warm_api.running_job_count() == 1
+
+
+def test_a_deferred_note_is_retried_from_the_60s_tick_and_cleared_one_slot_is_not_enough():
+    html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
+    tick = html[html.index("function aclMlxExpiryRefresh()"):]
+    tick = tick[:tick.index("function aclMlxExpiryBoot")]
+    assert "AMAP_ML_NOTE_WARN" in tick and "amapMlRepair()" in tick
+    assert "setInterval(aclMlxExpiryRefresh, 60000)" in html
+    # Sign-in clears the note only through the both-slots check.
+    assert "amapMlNoteClearIfConnected();" in html
+    assert "['A', 'B'].every(" in html

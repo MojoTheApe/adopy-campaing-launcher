@@ -7675,6 +7675,23 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "instance": instance, "env_key": env_key})
 
 
+def _slot_work_busy() -> int:
+    """Work that needs the Multilogin connections: campaign jobs, held profile
+    slots, and profile warm-ups (manual or automatic). Returns a rough count."""
+    from src.web.publish_jobs import active_job_count, publishing_busy
+
+    n = active_job_count()
+    try:
+        from src.web import warm_api
+
+        n += warm_api.running_job_count()
+    except Exception:
+        pass
+    if not n and publishing_busy():
+        n = 1
+    return n
+
+
 def _slot_claim(token: str) -> str:
     from src.web import mlx_slots
 
@@ -7722,10 +7739,8 @@ async def multilogin_slots_repair() -> JSONResponse:
     """
     from src.web import mlx_slots
 
-    from src.web.publish_jobs import publishing_busy
-
     try:
-        if mlx_slots.duplicate(claims_only=True) and publishing_busy():
+        if mlx_slots.duplicate(claims_only=True) and _slot_work_busy():
             return JSONResponse({"ok": True, "repaired": False, "deferred": True,
                                  "message": mlx_slots.deferred_message()},
                                 headers={"Cache-Control": "no-store"})
@@ -7739,7 +7754,7 @@ async def multilogin_slots_repair() -> JSONResponse:
 async def multilogin_logout(request: Request) -> JSONResponse:
     """Disconnect one Multilogin slot on this machine. Body: {instance: 'A'|'B'}."""
     from src.web import mlx_slots
-    from src.web.publish_jobs import active_job_count, publishing_busy
+    from src.web.publish_jobs import active_job_count
 
     try:
         data = await request.json()
@@ -7750,16 +7765,8 @@ async def multilogin_logout(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Say which Multilogin account to log out of."},
                             status_code=400)
     busy = active_job_count()
-    try:
-        from src.web import warm_api
-
-        warm = warm_api.running_job_count()
-    except Exception:
-        warm = 0
-    if busy or warm or publishing_busy():
+    if busy or _slot_work_busy():
         what = f"{busy} campaign job(s)" if busy else "Campaign or profile work"
-        if warm:
-            what += f" ({warm} profile-launch job(s))"
         return JSONResponse(
             {"ok": False, "error": f"{what} still running — they need this connection. "
                                    "Log out when they finish."},
