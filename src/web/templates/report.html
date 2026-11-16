@@ -17456,6 +17456,37 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     return d.innerHTML;
   }
 
+  /* ACL-2662: previews never hold a live <video> until the person asks for one.
+     aclVideoPlaceholder() emits a play button; a click swaps it for a real <video>;
+     aclFreeVideos() releases the decoder/buffers of every video under `root`
+     before its HTML is thrown away (a detached <video> with a src keeps its
+     media buffers until GC, which a 1 s repaint turned into "Aw, Snap!"). */
+  window.aclFreeVideos = function(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('video').forEach(function(v) {
+      try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ }
+    });
+  };
+  window.aclVideoPlaceholder = function(src, cls, style) {
+    var esc = String(src).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return '<button type="button" class="acl-vplay ' + (cls || '') + '" data-acl-vsrc="' + esc + '"'
+      + (style ? ' style="' + style + '"' : '') + ' aria-label="Play video">&#9654; Play video</button>';
+  };
+  document.addEventListener('click', function(ev) {
+    var b = ev.target && ev.target.closest && ev.target.closest('[data-acl-vsrc]');
+    if (!b) return;
+    ev.preventDefault();
+    var v = document.createElement('video');
+    v.src = b.getAttribute('data-acl-vsrc');
+    v.muted = true; v.loop = true; v.controls = true; v.preload = 'auto';
+    v.setAttribute('playsinline', '');
+    v.className = b.className.replace(/acl-vplay/, '').trim();
+    if (b.getAttribute('style')) v.setAttribute('style', b.getAttribute('style'));
+    b.replaceWith(v);
+    var pr = v.play();
+    if (pr && pr.catch) pr.catch(function() { /* user can press play in controls */ });
+  });
+
   function cbRenderPreviews(slot) {
     cbMarkMissingCreatives();
     var col = slot.querySelector('[data-preview-col]');
@@ -17495,7 +17526,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
           story = cr.story_label + (cr.square_file ? ' · Post: ' + cr.square_file : '');
         }
         if (isVideo || (cr && cr.type === 'Video') || /\.(mp4|mov|webm)$/i.test(path)) {
-          media = '<video class="cbp-media" src="' + cbpEsc(url) + '" preload="metadata" muted controls></video>';
+          media = window.aclVideoPlaceholder(url, 'cbp-media');
         } else {
           media = '<img class="cbp-media" src="' + cbpEsc(url) + '" loading="lazy" alt="">';
         }
@@ -17542,7 +17573,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       cardsBox.className = 'cbp-cards';
       col.insertBefore(cardsBox, col.firstChild);
     }
-    cardsBox.innerHTML = cards.join('');
+    var cardsHtml = cards.join('');
+    /* ACL-2662: nothing changed -> keep the nodes (and any video being watched). */
+    if (cardsBox.getAttribute('data-cbp-sig') !== cardsHtml) {
+      window.aclFreeVideos(cardsBox);
+      cardsBox.innerHTML = cardsHtml;
+      cardsBox.setAttribute('data-cbp-sig', cardsHtml);
+    }
     cbpAlign(slot);
   }
 
@@ -19912,7 +19949,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     }
     var src = '/creative-file?path=' + encodeURIComponent(adRaw.creative_rel_path);
     return adRaw.creative_type === 'Video'
-      ? '<video src="' + src + '" muted loop autoplay playsinline></video>'
+      ? window.aclVideoPlaceholder(src, '', 'width:100%;height:100%;border:0;background:#000;color:#fff;cursor:pointer;font:inherit')
       : '<img src="' + src + '" alt="">';
   }
 
@@ -20170,6 +20207,7 @@ window.cbPreview = function(form, done, onlySlot) {
       }
 
       var visualHtml = buildVisualPreviewHtml(plan, pageName, ctaMap);
+      window.aclFreeVideos(panel);
       panel.innerHTML =
         '<div class="cb-preview-toggle">'
         + '<button type="button" class="cb-preview-toggle-btn cb-preview-toggle-active" data-view="diag">Diagnostic</button>'
@@ -23051,7 +23089,21 @@ function _doCbPublish(form) {
     if (!box) return;
     var lead = box.querySelector('.sfc-lead'), body = box.querySelector('.sfc-body');
     if (lead) lead.innerHTML = parts.lead;
-    if (body) body.innerHTML = parts.body;
+    if (body) {
+      /* ACL-2662: the 1 s tick must not rebuild the ad previews: keep the old
+         <details class="rv-vis"> nodes (same campaign = same signature) and
+         put them back into the fresh HTML. */
+      var keep = {};
+      body.querySelectorAll('details.rv-vis[data-vsig]').forEach(function (d) { keep[d.getAttribute('data-vsig')] = d; });
+      var tpl = document.createElement('div');
+      tpl.innerHTML = parts.body;
+      tpl.querySelectorAll('details.rv-vis[data-vsig]').forEach(function (d) {
+        var old = keep[d.getAttribute('data-vsig')];
+        if (old) { d.replaceWith(old); delete keep[d.getAttribute('data-vsig')]; }
+      });
+      Object.keys(keep).forEach(function (k) { window.aclFreeVideos(keep[k]); });
+      body.replaceChildren.apply(body, Array.prototype.slice.call(tpl.childNodes));
+    }
     // Строка о заморозке стоит над кнопками и не прокручивается вместе с телом.
     var foot = box.querySelector('.rv-foot-wrap');
     if (!foot) {
@@ -23149,8 +23201,9 @@ function _doCbPublish(form) {
           try {
             if (c.row && c.row._ads_raw && window.buildVisualPreviewHtml) {
               var acc = e.account, pfm = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
-              c.visual = '<details class="rv-vis"><summary>Ad previews</summary>'
-                + window.buildVisualPreviewHtml([c.row], pfm.page_name || acc || 'Your Page', {}) + '</details>';
+              var vis = window.buildVisualPreviewHtml([c.row], pfm.page_name || acc || 'Your Page', {});
+              c.visual = '<details class="rv-vis" data-vsig="' + esc(String(e.key) + '|' + c.name) + '"><summary>Ad previews</summary>'
+                + vis + '</details>';
             }
           } catch (err) { c.visual = ''; }
         });
