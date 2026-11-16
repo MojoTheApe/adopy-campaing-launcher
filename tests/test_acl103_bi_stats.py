@@ -280,7 +280,6 @@ def test_replaced_workbook_with_preserved_mtime_imports_its_actual_new_rows(monk
         monkeypatch.setattr(cache, "_resolve_excel_path", lambda _p: str(book))
         monkeypatch.setitem(bi_stats._REV, "value", "unchanged-bi-revision")
         monkeypatch.setattr(bi_stats, "refresh_revision", lambda **kw: "unchanged-bi-revision")
-        monkeypatch.setattr(bi_stats, "ensure_revision_watcher", lambda: None)
         load = morning_service.load_morning_report
         monkeypatch.setattr(cache, "load_morning_report", lambda **kw: load(
             excel_path=str(book), skip_gsheet=True, account_rows_cached=[], **kw))
