@@ -161,4 +161,117 @@ def test_a_fifteen_day_old_draft_survives_reload(make):
     p.reload()
     p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
     p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
-    assert "Ancient" in json.dumps(server_keep())
+    # после сохранения запись всё ещё держит свою кампанию
+    p.evaluate("cbKeep.save()")
+    _until(lambda: "Ancient" in json.dumps(server_keep()["forms"].get(FORM_KEY, {})), p)
+    assert len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 1
+
+
+def keep_slots(p):
+    return p.evaluate("document.querySelectorAll('.cb-slot').length")
+
+
+def test_form_with_zero_slots_and_no_tombstone_keeps_its_entry(make):
+    seed_keep({FORM_KEY: ["Keep me"]})
+    prof = make()
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    # карточку убрали не человеком (не через cbRemoveSlot): надгробия нет
+    p.evaluate("document.querySelector('.cb-slot').remove(); cbKeep.save()")
+    assert keep_slots(p) == 0
+    p.wait_for_timeout(800)
+    assert p.evaluate("Object.keys(cbKeep.all())") == [FORM_KEY]
+    assert server_keep()["forms"][FORM_KEY]["campaigns"][0]["fields"]["asset"] == "Keep me"
+    assert FORM_KEY not in (server_keep().get("removed") or {})
+
+
+def test_removing_the_last_campaign_stays_removed_after_reload(make):
+    seed_keep({FORM_KEY: ["Gone"]})
+    prof = make()
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    p.evaluate("cbRemoveSlot(document.querySelector('.cb-remove-btn'))")
+    _until(lambda: FORM_KEY not in server_keep()["forms"], p)
+    assert FORM_KEY in server_keep()["removed"]
+    p.reload()
+    p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
+    p.wait_for_timeout(500)
+    assert keep_slots(p) == 0
+    assert FORM_KEY not in server_keep()["forms"]
+
+
+def test_removing_a_campaign_is_tombstoned_and_an_older_copy_cannot_bring_it_back(make):
+    seed_keep({FORM_KEY: ["A", "B"]})
+    old_doc = json.loads(json.dumps(server_keep()))
+    prof = make()
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    p.evaluate("cbKeep.save()")
+    _until(lambda: all(c.get("id") for c in server_keep()["forms"][FORM_KEY]["campaigns"]), p)
+    full = json.loads(json.dumps(server_keep()))
+    gone = full["forms"][FORM_KEY]["campaigns"][1]
+    p.evaluate("cbRemoveSlot(document.querySelectorAll('.cb-remove-btn')[1])")
+    _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 1, p)
+    assert f"{FORM_KEY}#{gone['id']}" in server_keep()["removed"]
+    # старая копия с обоими кампаниями приходит позже и новее по saved_at
+    full["forms"][FORM_KEY]["touched"] = old_doc["forms"][FORM_KEY]["touched"]
+    full.pop("removed", None)
+    bd.save("keep", int(time.time() * 1000) + 5000, full)
+    ids = [c["id"] for c in server_keep()["forms"][FORM_KEY]["campaigns"]]
+    assert gone["id"] not in ids and len(ids) == 1
+
+
+def test_two_tabs_older_tab_save_does_not_drop_newer_campaigns(make):
+    seed_keep({FORM_KEY: ["One"]})
+    a = make().open()
+    a.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    b_prof = make("http://127.0.0.1:8001")
+    b = b_prof.open()
+    b.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    add(b)
+    _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 2, b)
+    # старая вкладка правит своё: сервер не должен потерять вторую кампанию
+    edit_first_asset(a, "One edited")
+    _until(lambda: "One edited" in json.dumps(server_keep()), a)
+    assert len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 2
+
+
+def test_duplicated_campaign_gets_its_own_id_and_ids_survive_reload(make):
+    seed_keep({FORM_KEY: ["Orig"]})
+    prof = make()
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    p.evaluate("cbDuplicateCampaign(document.querySelector('.cb-dup-slot-btn'))")
+    _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 2, p)
+    ids = [c["id"] for c in server_keep()["forms"][FORM_KEY]["campaigns"]]
+    assert len(set(ids)) == 2
+    p.reload()
+    p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    assert p.evaluate("[...document.querySelectorAll('.cb-slot')].map(s => s.dataset.cbdId)") == ids
+    touched = server_keep()["forms"][FORM_KEY]["touched"]
+    p.evaluate("cbKeep.save()")
+    p.wait_for_timeout(300)
+    assert server_keep()["forms"][FORM_KEY]["touched"] == touched
+
+
+def test_moving_the_last_campaign_to_another_form_tombstones_only_the_source(make):
+    other = "saudi-arabia|Other"
+    seed_keep({FORM_KEY: ["Mover"]})
+    prof = make()
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    p.evaluate("""() => {
+      const forms = document.querySelectorAll('form.open-account-form');
+      const copy = cbDuplicateSlot(forms[0].querySelector('.cb-slot'), forms[1]);
+      cbRemoveSlot(forms[0].querySelector('.cb-remove-btn'));
+    }""")
+    _until(lambda: FORM_KEY not in server_keep()["forms"] and other in server_keep()["forms"], p)
+    assert FORM_KEY in server_keep()["removed"]
+    assert other not in server_keep()["removed"]
+    p.reload()
+    p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    assert p.evaluate("document.querySelectorAll('form.open-account-form')[1].querySelectorAll('.cb-slot').length") == 1
+    assert len(server_keep()["forms"][other]["campaigns"]) == 1
+    assert FORM_KEY not in server_keep()["forms"]

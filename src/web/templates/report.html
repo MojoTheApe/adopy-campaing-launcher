@@ -6646,8 +6646,12 @@ window.cbDrawer = (function () {
  * едут: у десяти байеров десять разных наборов, общего места для них
  * нет.
  *
- * Хранилище само ничего не забывает, поэтому забывать приходится нам:
- * без срока годности через месяц здесь лежат позапрошлые черновики.
+ * Черновик никогда не уменьшается сам (ACL-2669): срока годности нет, а
+ * запись уходит только тогда, когда человек сам убрал кампанию
+ * (`cbRemoveSlot`) — это пишется надгробием в `removed`. Всё остальное —
+ * сбой, чужая вкладка, старая копия с сервера, форма, которой сейчас нет
+ * на странице — черновика не трогает: выбросить чужую работу хуже, чем
+ * подержать лишнее.
  */
 window.cbKeep = (function () {
   var KEY = 'acl.builder.v2';
@@ -6657,6 +6661,16 @@ window.cbKeep = (function () {
 
   var state = { v: VERSION, forms: {}, removed: {} };
   var restoring = false;
+
+  /* Стабильный id кампании: переживает перезагрузку и перенумерацию карточек,
+     по нему сервер и вкладки узнают одну и ту же кампанию. Лежит на карточке
+     (`data-cbd-id`); у копии карточки (Duplicate / Copy to) его нет, поэтому
+     она получает свой новый id. */
+  function newId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function slotId(slot) {
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = newId();
+    return slot.dataset.cbdId;
+  }
 
   /* v2 -> v3 (ACL-1767): появились пол, языки, устройства, версия ОС и старт. Поля v2
      сохраняются как есть; новые - пустые (умолчание = прежнее поведение). Кнопку не трогаем:
@@ -6706,6 +6720,8 @@ window.cbKeep = (function () {
 
   /* Годен ли документ: и из localStorage, и с сервера (ACL-1681) — те же правила. */
   function validate(parsed) {
+    /* входной документ не трогаем: migrate и чистка id работают с копией */
+    try { parsed = JSON.parse(JSON.stringify(parsed)); } catch (e) { return null; }
     parsed = migrate(parsed);
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
     var fresh = {};
@@ -6795,6 +6811,7 @@ window.cbKeep = (function () {
     /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
     var hints = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hint'), function (h) { return h.textContent; });
     var out = {
+      id: slotId(slot),
       fields: fields,
       shown: shown,
       hint: hint ? hint.textContent : '',
@@ -6808,6 +6825,8 @@ window.cbKeep = (function () {
   }
 
   function writeSlot(slot, data) {
+    /* id кампании едет вместе с карточкой; в старом черновике его нет — появится при первом сохранении */
+    if (typeof data.id === 'string' && data.id) slot.dataset.cbdId = data.id;
     /* ACL-1768: сначала наборы - поля и принадлежность объявлений ложатся по готовым разделам.
        Нет сохранённого числа (старый черновик) - один набор. */
     var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
@@ -6873,33 +6892,77 @@ window.cbKeep = (function () {
     return Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'));
   }
 
+  /* Запись формы без того, что человек сам убрал: кампании с надгробием
+     новее правки и форма целиком, если надгробие ключа не старше записи.
+     Вернёт null, если ничего не осталось. */
+  function pruned(key, entry, removed) {
+    var t = entry.touched || 0;
+    if (typeof removed[key] === 'number' && removed[key] >= t) return null;
+    var kept = entry.campaigns.filter(function (c) {
+      return !(c.id && typeof removed[key + '#' + c.id] === 'number' && removed[key + '#' + c.id] > t);
+    });
+    if (!kept.length) return null;
+    return kept.length === entry.campaigns.length ? entry : { touched: entry.touched, tracking: entry.tracking, campaigns: kept };
+  }
+
+  /* Совпадают ли кампании с прежними. id в сравнении участвует: у старой записи
+     без id чужой новый id — не изменение (иначе первое же сохранение подняло бы
+     `touched` нетронутой формы и старая копия перебила бы настоящую правку). */
+  function sameCampaigns(old, now) {
+    if (old.length !== now.length) return false;
+    return old.every(function (o, i) {
+      var n = now[i];
+      if (o.id && o.id !== n.id) return false;
+      var a = Object.assign({}, o), b = Object.assign({}, n);
+      delete a.id; delete b.id;
+      return JSON.stringify(a) === JSON.stringify(b);
+    });
+  }
+
   function save() {
     if (restoring) return;          // раскладываем своё же — записывать нечего
     var now = Date.now();
-    /* ACL-2669: начинаем с копии прежнего — формы, которых нет на странице,
-       переходят как есть; уходит запись только по надгробию человека. */
+    /* ACL-2669: начинаем с копии прежнего — формы, которых нет на странице, и
+       форма без карточек переходят как есть; уходит запись только по надгробию
+       человека. Для формы на странице её собственные карточки — правда. */
     var next = {};
     var removed = state.removed || {};
-    Object.keys(state.forms).forEach(function (k) { next[k] = state.forms[k]; });
+    Object.keys(state.forms).forEach(function (k) {
+      var kept = pruned(k, state.forms[k], removed);
+      if (kept) next[k] = kept;
+    });
     forms().forEach(function (form) {
       var key = stamp(form);
       if (!key) return;
       var slots = form.querySelectorAll('.cb-slot');
-      if (!slots.length) {
-        /* пустая форма: прежняя запись остаётся, если человек её не убирал */
-        var prev = state.forms[key];
-        if (prev && typeof removed[key] === 'number' && removed[key] >= (prev.touched || 0)) delete next[key];
-        return;
-      }
+      if (!slots.length) return;
       var campaigns = Array.prototype.map.call(slots, readSlot);
       var link = form.querySelector('[name="tracking_link"]');
       var tracking = link ? link.value : '';
       var old = state.forms[key];
-      var unchanged = old && old.tracking === tracking && JSON.stringify(old.campaigns) === JSON.stringify(campaigns);
+      var unchanged = old && old.tracking === tracking && sameCampaigns(old.campaigns, campaigns);
       next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
     });
     state = { v: VERSION, forms: next, removed: removed };
     write();
+  }
+
+  /* Человек убрал кампанию (× или «Remove» в дереве; отмена копии). Только
+     эти пути пишут надгробие: `removed["<форма>#<id>"]`, а если в форме не
+     осталось карточек — и `removed["<форма>"]`. `slot` уже снят со страницы,
+     `form` — форма, где она стояла. Пока cbKeep сам раскладывает копию
+     (`restoring`), ничего не пишем. Позднейшая правка формы (touched новее
+     надгробия) возвращает ключ — это решает слияние. */
+  function markRemoved(form, slot) {
+    if (restoring || !form) return;
+    var key = stamp(form);
+    if (!key) return;
+    var now = Date.now();
+    var removed = state.removed = state.removed || {};
+    var id = slot && slot.dataset ? slot.dataset.cbdId : '';
+    if (id) removed[key + '#' + id] = now;
+    if (!form.querySelectorAll('.cb-slot').length) removed[key] = now;
+    saveSoon();
   }
 
   function restore(given) {
@@ -7010,6 +7073,8 @@ window.cbKeep = (function () {
 
   return {
     save: save,
+    markRemoved: markRemoved,
+    slotId: slotId,
     migrate: migrate,
     saveSoon: saveSoon,
     restore: restore,
@@ -8673,7 +8738,8 @@ window.cbTree = (function () {
   /* Карточке нужно имя, которое переживёт перенумерацию: `data-idx`
      меняется при каждом удалении соседа. */
   function slotId(slot) {
-    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'cbs' + (++seq);
+    /* тот же id, что у черновика (cbKeep): стабильный, не «cbsN» на сессию */
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = window.cbKeep.slotId(slot);
     return slot.dataset.cbdId;
   }
 
@@ -10825,6 +10891,7 @@ window.cbMove = (function () {
         if (!copy.isConnected || formBusy(destForm)) return false;
         copy.remove();
         P.renumber(destForm); window.cbUpdateCount(destForm);
+        if (window.cbKeep) window.cbKeep.markRemoved(destForm, copy);   // отмена копии — решение человека
         repaintTree();
         return true;
       } };
@@ -19488,6 +19555,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var form = slot.closest('form');
     slot.remove();
     if (form) { cbRenumber(form); cbUpdateCount(form); }
+    /* ACL-2669: только человек убирает черновик; при раскладке копии cbKeep сам молчит */
+    if (form && window.cbKeep) window.cbKeep.markRemoved(form, slot);
   };
 
   function cbRenumber(form) {
