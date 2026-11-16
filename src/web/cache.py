@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import threading
 from itertools import count
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -112,19 +111,24 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
 
 
 def rebuild_deferred() -> bool:
-    """ACL-2260: a publish job or a kept profile window is active.
+    """ACL-2668 (#24): the computer is short of memory - the same 92 % gate that
+    holds a new profile back (`ACL_MEMORY_MAX_USED_PCT`, ACL-2400).
 
-    A rebuild of the report parses a 70k-row workbook and takes memory the
-    profiles need ("not enough free memory for another profile"), so nothing
-    starts one by itself while this is true. Refresh (force_rebuild) is the
-    person's own choice and is never deferred. If the publish module was never
-    loaded there cannot be a job: no import, no side effects.
+    A rebuild of the report parses a 70k-row workbook and takes memory, so it
+    does not start by itself while memory is short. A running publish or a kept
+    profile window no longer defers it (ACL-2260 did): the rebuild reads BI /
+    the workbook, not Meta. Refresh (force_rebuild) is the person's own choice
+    and is never deferred. Memory that cannot be read does not block the page.
     """
-    module = sys.modules.get("src.web.publish_jobs")
-    if module is None:
-        return False
     try:
-        return bool(module.publishing_busy())
+        # Ленивый импорт: cache грузится раньше всего веба, profile_slots лёгкий.
+        from src.web import profile_slots
+
+        memory = profile_slots.read_memory()
+        if memory is None:
+            return False
+        keep = profile_slots.keep_free_mb(memory.total_mb, profile_slots.load_settings())
+        return memory.available_mb < keep
     except Exception:  # noqa: BLE001 - an unreadable state must not block the page
         return False
 
@@ -162,9 +166,9 @@ def get_cached_report(
         hit = _warm_hit(expected_key, cm_key)
         if hit is not None:
             return hit
-        # ACL-2260: the source moved (new BI revision / workbook), but a publish
-        # is running: keep serving the report already in memory. Only when there
-        # is none at all the build must run - there is nothing to show instead.
+        # ACL-2260 / ACL-2668: the source moved (new BI revision / workbook), but
+        # memory is short: keep serving the report already in memory. Only when
+        # there is none at all the build must run - there is nothing to show instead.
         if rebuild_deferred() and has_entry(cm_key):
             entry = _CACHE["entry"]
             return entry[1][cm_key], entry[2], entry[3]
