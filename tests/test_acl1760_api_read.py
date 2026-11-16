@@ -423,6 +423,20 @@ def test_rate_limit_codes_stop_and_cool_the_profile_down(world, code):
     assert len(world.opened_profiles) == 1, "and its profile is not opened again"
 
 
+def test_acl2668_a_read_the_person_started_runs_inside_the_cooldown(world):
+    """ACL-2668 decision 7: the timer holds only background reads; a person's press goes to Meta at once."""
+    from src.fb_api.connection import user_started_action
+
+    world.page.routes["/ACT||"] = err(4)
+    assert api.read_via_api(ACCOUNT, D, D).state == "failed"
+    assert [k for k, _ in world.stops] == ["rate_limited"]
+    n = len(world.page.specs)
+    with user_started_action():
+        again = api.read_via_api(ACCOUNT, D, D)
+    assert "Nothing was called" not in again.error
+    assert len(world.page.specs) > n, "the person's read reaches Graph despite the timer"
+
+
 def test_368_is_a_policy_stop_with_a_long_cooldown(world):
     world.page.routes["/ACT||"] = err(368)
     r = api.read_via_api(ACCOUNT, D, D)

@@ -416,6 +416,18 @@ def note_tab_recovered(key: str) -> None:
     _blocks.clear(key, "recovered", kind="page_unresponsive")     # ACL-2091: the tab answers, the freeze is over
 
 
+def _person_started() -> bool:
+    """ACL-2668: действие запустил человек (кнопка, команда, Publish/Check plan), а не расписание или фон."""
+    try:
+        from src.fb_api.connection import person_started
+
+        if person_started():
+            return True
+    except Exception:  # noqa: BLE001 - нечитаемый флаг: считаем фоном, пауза остаётся
+        pass
+    return _blocks.buyer_started()
+
+
 def _cooldown_left(key: str) -> float:
     return _cooldown_state(key)[0]
 
@@ -764,8 +776,13 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
     # except a read a person started on purpose (Retry / Read): that one looks at the page, and lifts the hold
     # below once the page is healthy.
     probing = left == float("inf") and _blocks.buyer_started()
+    # ACL-2668 (решение 7): таймерная пауза после остановки Meta держит только фоновые чтения (расписание,
+    # обновления страницы). Действие, которое человек нажал сам (команда, Read/Retry, Check plan), идёт сразу;
+    # причина остановки и так видна в строке аккаунта.
+    person = _person_started()
     blocked = None if probing else _blocks.refusal(
-        key, account, "read", timed=(left, why) if left > 0 and not frozen_deferred else None, replaceable=False)
+        key, account, "read",
+        timed=(left, why) if left > 0 and not frozen_deferred and not person else None, replaceable=False)
     if blocked:
         held = _blocks.is_held(key)
         raise ApiReadError(blocked[0], code=_as.LOGGED_OUT_CODE if (why == "logged_out" and not held) else blocked[1])
@@ -785,7 +802,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
         with _warm_session(account, act, key, profile_id, commands, **extra) as warm_sess:
             yield warm_sess
         return
-    if frozen_deferred:
+    if frozen_deferred and not person:
         raise ApiReadError(
             f"The Ads Manager tab for {account} stopped answering on the last read; it is not "
             f"reopened for about {int(left // 60) + 1} min. Nothing was called.")

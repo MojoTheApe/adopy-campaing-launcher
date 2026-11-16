@@ -195,12 +195,6 @@ def _frozen_api(account_label: str):
         return None, ""
 
 
-def _frozen_tab_replaceable(account_label: str) -> bool:
-    """ACL-2262: the frozen-tab pause may be lifted once, right before the warm checkout replaces the tab."""
-    _api, key = _frozen_api(account_label)
-    return bool(_api is not None and _api.frozen_tab_replaceable(key))
-
-
 def _release_frozen_tab_cooldown(account_label: str) -> None:
     _api, key = _frozen_api(account_label)
     if _api is not None:
@@ -526,26 +520,16 @@ class ApiPublisher:
             _b_.lift_auth_hold(_as_._profile_key(account_label), "publish")
         except Exception:  # noqa: BLE001 - never breaks the open
             log.debug("auth hold lift failed", exc_info=True)
-        left, why = _cooldown(account_label)
-        # ACL-2262: one tab replacement per freeze episode, decided right before the warm checkout.
-        frozen_deferred = left > 0 and why == "page_unresponsive" and _frozen_tab_replaceable(account_label)
         from src.fb_api import account_blocks as _blocks
 
         key = _frozen_api(account_label)[1]
         # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
-        # and a timed pause are explained by the one owner of that state.
-        blocked = _blocks.refusal(key, account_label, "publish",
-                                  timed=(left, why) if left > 0 and not frozen_deferred else None)
+        # is explained by the one owner of that state.
+        # ACL-2668 (решение 7): таймерная пауза после остановки Meta (rate limit, вкладка не отвечает и т.п.)
+        # Publish/Check plan больше не отказывает: человек нажал — действие идёт. Пауза держит только фоновые чтения.
+        blocked = _blocks.refusal(key, account_label, "publish")
         if blocked:
-            held = _blocks.is_held(key)
-            raise ApiPublishError(blocked[0], code=blocked[1] if held else (
-                "page_unresponsive" if why == "page_unresponsive" else ""))
-        def frozen_error() -> ApiPublishError:
-            # Built only when it is raised: building it explains (and logs) a refusal that never happens.
-            return ApiPublishError(
-                (_blocks.refusal(key, account_label, "publish", timed=(max(left, 1.0), "page_unresponsive")) or
-                 (f"{account_label}: the Ads Manager tab stopped answering. Nothing was created.",))[0],
-                code="page_unresponsive")
+            raise ApiPublishError(blocked[0], code=blocked[1])
 
         self._entry = entry
         self._session_profile_id = profile_id
@@ -553,8 +537,6 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
-        if frozen_deferred:
-            raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
 
