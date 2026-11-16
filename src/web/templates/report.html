@@ -4532,6 +4532,9 @@
   <span id="mlx-expiry-text"></span>
   <button type="button" class="head-btn" id="mlx-expiry-signin" onclick="aclMlxSignInAgain()">Sign in again</button>
 </div>
+{#- ACL-2645: what ACL repaired (or deferred) about the two Multilogin slots —
+    page-wide, not only inside the account-connect blocks. Text only. -#}
+<div id="mlx-slot-note" class="mlx-expiry" role="alert" hidden></div>
 
 {#- ACL-1827: «Robot health» открывается панелью под шапкой. Ссылка остаётся
     настоящей (/robot-health) — без скрипта и по прямой ссылке открывается
@@ -15733,6 +15736,28 @@ async function amapOpenAndConnect(box, p, inst, btn, row) {
    password inputs live in hidden country tabs or remain after connection. */
 var AMAP_ML_STATE = {};
 var AMAP_ML_PENDING = {};
+var AMAP_ML_NOTE_WARN = false;  // true: «отложено» (жёлтая), false: ошибка/починено (красная)
+function amapMlNoteSet(text, warn) {
+  AMAP_ML_NOTE = text || '';
+  AMAP_ML_NOTE_WARN = !!warn;
+  var box = document.getElementById('mlx-slot-note');
+  if (box) {
+    box.textContent = AMAP_ML_NOTE;
+    box.hidden = !AMAP_ML_NOTE;
+    box.classList.toggle('mlx-expired', !!AMAP_ML_NOTE && !AMAP_ML_NOTE_WARN);
+  }
+  if (typeof amapMlPaintAll === 'function') amapMlPaintAll();
+}
+/* The page note goes away only when neither slot is disconnected any more,
+   judged from freshly read slot state (not just the slot that signed in). */
+function amapMlNoteClearIfConnected() {
+  if (!AMAP_ML_NOTE) return Promise.resolve();
+  return Promise.all(['A', 'B'].map(function (i) { return amapMlRefresh(i, true); })).then(function () {
+    var all = ['A', 'B'].every(function (i) { return AMAP_ML_STATE[i] && AMAP_ML_STATE[i].has_token; });
+    if (all) amapMlNoteSet('');
+  });
+}
+var AMAP_ML_NOTE = '';  // что ACL починил или почему отказал — видно, пока не уйдёт со страницы
 
 function amapMlBlock(el) { return el.closest('.amap-add'); }
 function amapMlInstance(block) {
@@ -15757,6 +15782,11 @@ function amapMlPaint(block) {
   if (alive && state.workspace) line.appendChild(document.createTextNode(' · workspace ' + state.workspace));
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
+  /* Выйти можно из любого слота, где что-то сохранено, — и из просроченного. */
+  var out = ml.querySelector('.amap-ml-logout');
+  if (out) out.hidden = !(state && state.has_token);
+  var note = ml.querySelector('.amap-ml-note');
+  if (note) { note.textContent = AMAP_ML_NOTE; note.hidden = true; }  /* page-wide banner shows it */
   var signin = ml.querySelector('.amap-ml-signin');
   if (alive && signin && !block.dataset.mlRenew) signin.remove();
 }
@@ -15861,6 +15891,7 @@ async function amapMlSubmit(btn, paste) {
        больше не нужна (её уберёт перерисовка), плашка о сроке перечитывается. */
     delete block.dataset.mlRenew;
     var state = await amapMlRefresh(inst, true);
+    amapMlNoteClearIfConnected();
     aclMlxExpiryRefresh();
     amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
@@ -15941,6 +15972,8 @@ function aclMlxExpiryPaint() {
   box.hidden = false;
 }
 function aclMlxExpiryRefresh() {
+  /* A repair deferred because jobs were running is retried on this 60 s tick. */
+  if (typeof AMAP_ML_NOTE !== 'undefined' && AMAP_ML_NOTE && AMAP_ML_NOTE_WARN && typeof amapMlRepair === 'function') amapMlRepair();
   return fetch('/multilogin-token-expiry', {credentials: 'same-origin'})
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
@@ -15973,10 +16006,64 @@ function aclMlxSignInAgain() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aclMlxExpiryBoot);
 else aclMlxExpiryBoot();
+/* «Log out»: забыть аккаунт Multilogin на этом компьютере. Профили в карте
+   аккаунтов не трогаем — они принадлежат пространству, и вход в нужное
+   пространство вернёт им силу. */
+async function amapMlLogout(btn) {
+  var block = amapMlBlock(btn), inst = amapMlInstance(block);
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
+  if (!window.confirm('Log out of Multilogin ' + label + ' on this computer?\n\nYou will need to sign in again to use it.')) return;
+  btn.disabled = true;
+  try {
+    var r = await fetch('/multilogin-logout', {method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({instance: inst})});
+    var j = await r.json();
+    if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || 'Log out failed');
+    amapMlNoteSet('');
+    Object.keys(_mlxCache).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
+    });
+    document.querySelectorAll('.amap-add').forEach(function (b) {
+      if (amapMlInstance(b) !== inst) return;
+      b._amapGeneration = (b._amapGeneration || 0) + 1;
+      var hits = b.querySelector('.amap-hits');
+      if (hits) { hits.replaceChildren(); hits.hidden = true; }
+    });
+    await amapMlRefresh(inst, true);
+    aclMlxExpiryRefresh();
+    amapMlSay(block, 'Logged out of ' + label + '.');
+  } catch (e) { amapMlSay(block, String(e.message || e), true); }
+  finally { btn.disabled = false; }
+}
+/* Один раз за загрузку страницы: если оба слота оказались подключены к одному
+   пространству (так вышло у байера, который ввёл логин KLD под Inhouse), ACL
+   отключает лишний слот и говорит об этом. Дальше — обычная проверка. */
+function amapMlRepair() {
+  return fetch('/multilogin-slots-repair', {method: 'POST', credentials: 'same-origin'})
+    .then(function (r) { return r.json().catch(function () { return null; }); })
+    .then(function (j) {
+      if (!j) return;
+      if (j.ok !== false && !j.deferred && !j.repaired && AMAP_ML_NOTE && AMAP_ML_NOTE_WARN) {
+        amapMlNoteSet('');  /* the deferred conflict is gone */
+      } else if (j.ok === false) {
+        amapMlNoteSet(j.error || 'Could not check the Multilogin connections.', false);
+      } else if (j.deferred) {
+        amapMlNoteSet(j.message || 'Both Multilogin slots use the same workspace; this will be fixed when the running jobs finish.', true);
+      } else if (j.repaired) {
+        amapMlNoteSet(j.message || 'A Multilogin connection was repaired — sign in again.', false);
+        AMAP_ML_STATE = {};
+        _mlxCache = {};
+        aclMlxExpiryRefresh();
+      }
+    })
+    .catch(function () { /* починка не удалась — обычная проверка ниже всё равно пройдёт */ });
+}
 function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
-  Object.keys(wanted).forEach(function (inst) { amapMlRefresh(inst, false); });
+  amapMlRepair().then(function () {
+    Object.keys(wanted).forEach(function (inst) { amapMlRefresh(inst, false); });
+  });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapMlBoot);
 else amapMlBoot();
