@@ -42,7 +42,7 @@ SETTINGS = profile_slots.SlotSettings(max_used_pct=92.0)
 
 def _memory(monkeypatch, available_mb):
     monkeypatch.setattr(profile_slots, "load_settings", lambda *a: SETTINGS)
-    monkeypatch.setattr(profile_slots, "read_memory",
+    monkeypatch.setattr(cache, "_read_memory",
                         lambda: profile_slots.MemoryReading(total_mb=TOTAL_MB, available_mb=available_mb))
 
 
@@ -98,13 +98,13 @@ def test_threshold_is_the_profile_memory_gate(monkeypatch):
 
 
 def test_unreadable_memory_does_not_defer(monkeypatch):
-    monkeypatch.setattr(profile_slots, "read_memory", lambda: None)
+    monkeypatch.setattr(cache, "_read_memory", lambda: None)
     assert cache.rebuild_deferred() is False
 
     def boom():
         raise RuntimeError("no psutil")
 
-    monkeypatch.setattr(profile_slots, "read_memory", boom)
+    monkeypatch.setattr(cache, "_read_memory", boom)
     assert cache.rebuild_deferred() is False
 
 

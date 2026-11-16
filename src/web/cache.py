@@ -110,6 +110,14 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
     return peek_cached_report(my_cm) is not None
 
 
+def _read_memory():
+    """Память машины для `rebuild_deferred` (тесты подменяют здесь, не трогая profile_slots)."""
+    # Ленивый импорт: cache грузится раньше всего веба, profile_slots лёгкий.
+    from src.web import profile_slots
+
+    return profile_slots.read_memory()
+
+
 def rebuild_deferred() -> bool:
     """ACL-2668 (#24): the computer is short of memory - the same 92 % gate that
     holds a new profile back (`ACL_MEMORY_MAX_USED_PCT`, ACL-2400).
@@ -121,10 +129,9 @@ def rebuild_deferred() -> bool:
     and is never deferred. Memory that cannot be read does not block the page.
     """
     try:
-        # Ленивый импорт: cache грузится раньше всего веба, profile_slots лёгкий.
         from src.web import profile_slots
 
-        memory = profile_slots.read_memory()
+        memory = _read_memory()
         if memory is None:
             return False
         keep = profile_slots.keep_free_mb(memory.total_mb, profile_slots.load_settings())
