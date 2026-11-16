@@ -1,6 +1,6 @@
 """Эндпоинты команд над кампаниями: превью, исполнение, статус (ACL-1800).
 
-Только при `ACL_FB_BACKEND=api`; при `rpa` — чёткий отказ. Сессию (профиль →
+Только на бэкенде `api` (по умолчанию, ACL-2668); при явном `ACL_FB_BACKEND=rpa` — чёткий отказ. Сессию (профиль →
 вкладка → клиент Graph) даёт тот же `account_spend_api._session`, что и чтениям:
 охлаждения (190/368/checkpoint), очередь мест по памяти и правило «чужой
 профиль не останавливаем» — оттуда. Браузер для превью и для записи берётся
@@ -15,9 +15,9 @@ from typing import Any
 
 from src.fb_api import bulk_edit as _bulk  # noqa: F401 - registers the bulk-edit runner (ACL-2457)
 from src.fb_api import commands as _cmd
+from src.fb_api.backend import BACKEND_ENV  # noqa: F401 - бэкенд решается в одном месте (ACL-2668)
 from src.fb_api.graph import GraphError, GraphStop
 
-BACKEND_ENV = "ACL_FB_BACKEND"
 RPA_REFUSAL = ("Campaign commands need the Graph API backend (ACL_FB_BACKEND=api). "
                "This machine uses the RPA backend, so nothing was changed.")
 

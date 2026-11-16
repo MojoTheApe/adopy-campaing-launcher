@@ -70,8 +70,8 @@ def test_the_backend_decides_which_campaign_ui_renders(monkeypatch):
     api = _country_html(monkeypatch, "api")
     assert api.count('class="hc hc-scoped amap-campaigns"') == 1 and "Read campaigns in Chile" not in api
     assert '<span class="amap-caret-off">·</span>' in api                        # строка аккаунта одна и та же
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)                          # по умолчанию — rpa
-    assert "amap-campaigns" in _country_html(monkeypatch, "")
+    # ACL-2668: пустое значение — это api (по умолчанию), RPA — только явно
+    assert _country_html(monkeypatch, "").count('class="hc hc-scoped amap-campaigns"') == 1
 
 
 def test_the_page_flag_and_the_component_follow_the_backend(monkeypatch):

@@ -2323,7 +2323,9 @@ def _fb_backend() -> str:
 
         return publish_api.backend()
     except Exception:  # pragma: no cover - кнопка не важнее страницы
-        return "rpa"
+        from src.fb_api import backend as _backend
+
+        return _backend.backend()
 
 
 

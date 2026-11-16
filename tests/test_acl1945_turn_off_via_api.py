@@ -343,7 +343,7 @@ def test_the_route_refuses_while_a_publish_job_runs_in_the_profile(meta, monkeyp
 
 
 def test_the_route_keeps_the_rpa_path_when_the_backend_is_rpa(monkeypatch):
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     seen = {}
 
     def rpa(account, level, object_id, **kw):

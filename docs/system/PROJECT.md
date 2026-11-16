@@ -139,7 +139,7 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   cleared. A new result for the same term invalidates its previous candidates,
   including when no candidates remain. These searches only read through the
   existing guarded session; the RPA backend cannot use confirmation endpoints.
-- `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
+- `src/fb_api`: API backend (the default since ACL-2668; `ACL_FB_BACKEND=rpa` is only the emergency switch back to RPA, decided in `src/fb_api/backend.py`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
   `XMLHttpRequest` as a job (`startCall` / `poll` / `abort`; no upload listener, because it would trigger a CORS preflight that Graph rejects for credentialed requests), Python polls it about once per second
