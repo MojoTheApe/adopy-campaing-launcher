@@ -68,6 +68,9 @@
   <div class="amap-ml" data-ml-state="unknown">
     <span class="amap-ml-line">Multilogin: <i>checking…</i></span>
     <button type="button" class="amap-btn amap-ml-open" hidden onclick="amapMlOpen(this)">Connect Multilogin</button>
+    <button type="button" class="amap-btn amap-ml-logout" hidden onclick="amapMlLogout(this)"
+            title="Forget this Multilogin account on this computer">Log out</button>
     <button type="button" class="amap-btn" onclick="document.getElementById('amap-rpa-help').showModal()">RPA help</button>
+    <div class="amap-ml-note" role="status" hidden style="flex-basis:100%;color:var(--danger);font-size:var(--adopy-text-sm)"></div>
   </div>
 </div>

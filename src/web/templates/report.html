@@ -15733,6 +15733,7 @@ async function amapOpenAndConnect(box, p, inst, btn, row) {
    password inputs live in hidden country tabs or remain after connection. */
 var AMAP_ML_STATE = {};
 var AMAP_ML_PENDING = {};
+var AMAP_ML_NOTE = '';  // что ACL починил или почему отказал — видно, пока не уйдёт со страницы
 
 function amapMlBlock(el) { return el.closest('.amap-add'); }
 function amapMlInstance(block) {
@@ -15757,6 +15758,11 @@ function amapMlPaint(block) {
   if (alive && state.workspace) line.appendChild(document.createTextNode(' · workspace ' + state.workspace));
   if (alive && state.expires_at) line.appendChild(document.createTextNode(' · until ' + state.expires_at));
   ml.querySelector('.amap-ml-open').hidden = !state || alive;
+  /* Выйти можно из любого слота, где что-то сохранено, — и из просроченного. */
+  var out = ml.querySelector('.amap-ml-logout');
+  if (out) out.hidden = !(state && state.has_token);
+  var note = ml.querySelector('.amap-ml-note');
+  if (note) { note.textContent = AMAP_ML_NOTE; note.hidden = !AMAP_ML_NOTE; }
   var signin = ml.querySelector('.amap-ml-signin');
   if (alive && signin && !block.dataset.mlRenew) signin.remove();
 }
@@ -15973,10 +15979,57 @@ function aclMlxSignInAgain() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aclMlxExpiryBoot);
 else aclMlxExpiryBoot();
+/* «Log out»: забыть аккаунт Multilogin на этом компьютере. Профили в карте
+   аккаунтов не трогаем — они принадлежат пространству, и вход в нужное
+   пространство вернёт им силу. */
+async function amapMlLogout(btn) {
+  var block = amapMlBlock(btn), inst = amapMlInstance(block);
+  var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
+  if (!window.confirm('Log out of Multilogin ' + label + ' on this computer?\n\nYou will need to sign in again to use it.')) return;
+  btn.disabled = true;
+  try {
+    var r = await fetch('/multilogin-logout', {method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({instance: inst})});
+    var j = await r.json();
+    if (!r.ok || !j || !j.ok) throw new Error((j && j.error) || 'Log out failed');
+    AMAP_ML_NOTE = '';
+    Object.keys(_mlxCache).forEach(function (k) {
+      if (k === inst || k.indexOf(inst + '\0') === 0) delete _mlxCache[k];
+    });
+    document.querySelectorAll('.amap-add').forEach(function (b) {
+      if (amapMlInstance(b) !== inst) return;
+      b._amapGeneration = (b._amapGeneration || 0) + 1;
+      var hits = b.querySelector('.amap-hits');
+      if (hits) { hits.replaceChildren(); hits.hidden = true; }
+    });
+    await amapMlRefresh(inst, true);
+    aclMlxExpiryRefresh();
+    amapMlSay(block, 'Logged out of ' + label + '.');
+  } catch (e) { amapMlSay(block, String(e.message || e), true); }
+  finally { btn.disabled = false; }
+}
+/* Один раз за загрузку страницы: если оба слота оказались подключены к одному
+   пространству (так вышло у байера, который ввёл логин KLD под Inhouse), ACL
+   отключает лишний слот и говорит об этом. Дальше — обычная проверка. */
+function amapMlRepair() {
+  return fetch('/multilogin-slots-repair', {method: 'POST', credentials: 'same-origin'})
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (j && j.repaired) {
+        AMAP_ML_NOTE = j.message || 'A Multilogin connection was repaired — sign in again.';
+        AMAP_ML_STATE = {};
+        _mlxCache = {};
+        aclMlxExpiryRefresh();
+      }
+    })
+    .catch(function () { /* починка не удалась — обычная проверка ниже всё равно пройдёт */ });
+}
 function amapMlBoot() {
   var wanted = {};
   document.querySelectorAll('.amap-ml').forEach(function (ml) { wanted[amapMlInstance(amapMlBlock(ml))] = 1; });
-  Object.keys(wanted).forEach(function (inst) { amapMlRefresh(inst, false); });
+  amapMlRepair().then(function () {
+    Object.keys(wanted).forEach(function (inst) { amapMlRefresh(inst, false); });
+  });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapMlBoot);
 else amapMlBoot();
