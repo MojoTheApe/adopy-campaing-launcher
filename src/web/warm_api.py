@@ -140,6 +140,7 @@ REFUSAL_TEXT = {
 _AUTO: dict[str, dict] = {}          # label -> {status: queued|opening|done|refused, code, retried}
 _AUTO_QUEUE: list[str] = []
 _AUTO_LOCK = threading.Lock()
+_AUTO_RUNNING = [0]  # automatic warm-ups being opened right now (0 or 1)
 _AUTO_WORKER: threading.Thread | None = None
 
 
@@ -226,6 +227,18 @@ def _start_worker_locked() -> None:
         _AUTO_WORKER.start()
 
 
+def running_job_count() -> int:
+    """Warm-session launch work that is not finished: manual jobs plus automatic warm-ups.
+
+    Automatic warm-ups count while queued and while one is being opened.
+    """
+    with _JOBS_LOCK:
+        n = sum(1 for j in _JOBS.values() if j.get("state") in ("running", "waiting"))
+    with _AUTO_LOCK:
+        n += len(_AUTO_QUEUE) + _AUTO_RUNNING[0]
+    return n
+
+
 def _manual_job_running() -> bool:
     with _JOBS_LOCK:
         return bool(_ACTIVE_JOB and _JOBS.get(_ACTIVE_JOB, {}).get("state") == "running")
@@ -241,6 +254,7 @@ def _auto_worker() -> None:
                     _AUTO_WORKER = None
                 return
             label = _AUTO_QUEUE.pop(0)
+            _AUTO_RUNNING[0] += 1
         try:
             waited = 0
             while _manual_job_running() and waited < 600:
@@ -250,6 +264,9 @@ def _auto_worker() -> None:
         except Exception as exc:  # noqa: BLE001 - the queue must not die on one account
             log.exception("Automatic warm-up of %s failed", label)
             _finish(label, "start_failed", started=False, error=type(exc).__name__)
+        finally:
+            with _AUTO_LOCK:
+                _AUTO_RUNNING[0] = max(0, _AUTO_RUNNING[0] - 1)
 
 
 def _requeue_later(label: str) -> None:
