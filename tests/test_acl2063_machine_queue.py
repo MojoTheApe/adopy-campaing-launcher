@@ -87,18 +87,31 @@ def test_duplicate_map_gets_the_actual_result_without_another_read(dashboards):
     assert second.state()["rows"]["A"]["list_at"] == original.finished_at
 
 
-def test_checkpoint_in_another_config_is_visible_before_dispatch(dashboards):
+def test_multilogin_stop_in_another_config_is_visible_before_dispatch(dashboards):
     select, new, reads = dashboards
     first, second = new("one"), new("two")
     select("one")
-    snap = ci.Snapshot(account="A", state="failed", stop="checkpoint", error="Synthetic checkpoint")
+    snap = ci.Snapshot(account="A", state="failed", error_code="mlx_session_lost", error="Synthetic MLX")
     ci.put_result(snap)
     first.record_result(snap, trigger="action")
     select("two")
     second.page_open(now=NOW, port=9095)
-    assert second.state()["halt"]["kind"] == "checkpoint"
+    assert second.state()["halt"]["kind"] == "global"
     assert second._drain_once() == 0
     assert reads == []
+
+
+def test_checkpoint_in_another_config_does_not_stop_its_reads(dashboards):
+    # ACL-2668 (решение 1): чекпоинт A, записанный первым дешбордом, не держит машину.
+    select, new, reads = dashboards
+    first = new("one")
+    first.record_result(ci.Snapshot(account="A", state="failed", stop="checkpoint"), trigger="action")
+    assert first._machine.halt(now=NOW.timestamp()) is None
+    second = new("two", ["A", "B"])
+    second.page_open(now=NOW, port=9095)
+    assert second.state()["halt"] is None
+    assert second._drain_once() >= 1
+    assert "B" in [a for _, a in reads]   # общей паузы нет: B этого дешборда читается
 
 
 def test_partly_different_maps_join_once_and_both_get_their_whole_list(dashboards):
@@ -229,20 +242,34 @@ def test_bad_map_row_does_not_block_another_accounts_actual_read(dashboards, mon
     assert first.request("A", "retry", force=True) == {"queued": False, "reason": "invalid_account_map"}
 
 
-def test_checkpoint_survives_restart_and_only_own_success_clears_it(dashboards):
+def test_checkpoint_after_restart_marks_only_its_account(dashboards):
     select, new, reads = dashboards
     first = new("one")
     first.record_result(ci.Snapshot(account="A", state="failed", stop="checkpoint"), trigger="action")
     second = new("two", ["A", "B"])
-    second.page_open(now=NOW, port=9095)
-    assert second._drain_once() == 0
     second.request("B", "retry", force=True)
     assert second._drain_once() == 1
-    assert second.state()["halt"]["kind"] == "checkpoint"
+    assert second.state()["halt"] is None
     second.request("A", "retry", force=True)
     assert second._drain_once() == 1
     assert second.state()["halt"] is None
     assert [a for _, a in reads] == ["B", "A"]
+
+
+def test_old_account_stop_in_machine_state_is_dropped(dashboards):
+    # ACL-2668: стоп чекпоинта, записанный прежней сборкой в общий state.json, машину больше не держит.
+    select, new, reads = dashboards
+    first = new("one", ["A", "B"])
+    from src.analysis_agent.account_refresh_machine import binding
+    key = binding("A")
+    with first._machine.transaction() as state:
+        state["revision"] += 1
+        state["stops"][key] = {"key": key, "kind": "checkpoint", "reason": "legacy", "until": None,
+                               "generation": state["revision"]}
+        state["halt"] = dict(state["stops"][key])
+    assert first._machine.halt(now=NOW.timestamp()) is None
+    first.request("B", "attention")
+    assert first._drain_once() == 1 and [a for _, a in reads] == ["B"]
 
 
 def test_forced_requests_queued_before_peer_result_join_it_but_later_retry_reads(dashboards):
@@ -286,14 +313,25 @@ def test_legacy_stop_migrates_before_first_schedule_window(dashboards):
     new.clock[0] = NOW.replace(hour=7).timestamp()
     first = new('one')
     with first._store.transaction() as state:
-        state['halt'] = {'kind': 'checkpoint', 'reason': 'legacy checkpoint', 'until': None, 'account': 'A'}
-    assert first.state()['halt']['kind'] == 'checkpoint'
+        state['halt'] = {'kind': 'global', 'reason': 'legacy Multilogin stop', 'until': None, 'account': 'A'}
+    assert first.state()['halt']['kind'] == 'global'
     assert first._store.read()['machine_migrated'] is True
     new.clock[0] = NOW.timestamp()
     select('two'); second = new('two')
     second.page_open(now=NOW, port=9095)
-    assert second.state()['halt']['kind'] == 'checkpoint'
+    assert second.state()['halt']['kind'] == 'global'
     assert second._drain_once() == 0 and reads == []
+
+
+def test_legacy_checkpoint_halt_is_not_migrated(dashboards):
+    # ACL-2668: старая локальная пауза чекпоинта не переносится в общий state.json машины.
+    select, new, reads = dashboards
+    new.clock[0] = NOW.replace(hour=7).timestamp()
+    first = new('one')
+    with first._store.transaction() as state:
+        state['halt'] = {'kind': 'checkpoint', 'reason': 'legacy checkpoint', 'until': None, 'account': 'A'}
+    assert first.state()['halt'] is None
+    assert first._machine.halt(now=new.clock[0]) is None
 
 
 @pytest.mark.parametrize('code,raw,expected', [

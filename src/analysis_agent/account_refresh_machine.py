@@ -27,6 +27,9 @@ class CoordinationError(RuntimeError):
 
 _ACTIVE = threading.local()
 
+#: ACL-2668: единственный вид стопа, который держит всю машину (Multilogin, выключенный API, общее состояние).
+MACHINE_STOP_KIND = "global"
+
 
 def default_root() -> Path:
     if os.name != "nt":
@@ -620,17 +623,19 @@ class MachineStore:
     def halt(self, *, now: float | None = None) -> dict | None:
         now = time.time() if now is None else now
         with self.transaction() as state:
+            # ACL-2668 (решение 1): машину останавливает только поломка машины (вид `global`).
+            # Стопы одного аккаунта (чекпоинт, лимит Meta, политика, потолок вызовов), записанные
+            # прежними сборками, здесь стираются: строка аккаунта и так показывает свою ошибку.
             state["stops"] = {k: v for k, v in state["stops"].items()
-                              if v["until"] is None or now < v["until"]}
+                              if v["kind"] == MACHINE_STOP_KIND and (v["until"] is None or now < v["until"])}
             halt = self._selected_stop(state)
             state["halt"] = halt
             return dict(halt) if halt else None
 
     @staticmethod
     def _selected_stop(state: dict) -> dict | None:
-        return min(state["stops"].values(), default=None,
-                   key=lambda h: (0 if h["kind"] == "checkpoint" else (1 if h["until"] is None else 2),
-                                  h["generation"]))
+        return min((h for h in state["stops"].values() if h["kind"] == MACHINE_STOP_KIND), default=None,
+                   key=lambda h: (0 if h["until"] is None else 1, h["generation"]))
 
     def stop_generation(self, key: str) -> int | None:
         with self.transaction() as state:
@@ -663,15 +668,12 @@ class MachineStore:
             state["results"][key] = _result_record(previous, key, payload, revision)
             if classify(snap) == "global":
                 reason, wait = _global_stop(snap)
-                old = state["stops"].get(key)
-                if not old or old["kind"] != "checkpoint" or _halt_kind(snap) == "checkpoint":
-                    state["stops"][key] = {"kind": _halt_kind(snap), "reason": reason,
-                                          "until": now + wait if wait else None,
-                                          "key": key, "generation": revision}
+                state["stops"][key] = {"kind": _halt_kind(snap), "reason": reason,
+                                      "until": now + wait if wait else None,
+                                      "key": key, "generation": revision}
             elif payload["ok"] and force:
                 halt = self._selected_stop(state)
-                if (halt and halt["generation"] == recovery
-                        and (halt["kind"] != "checkpoint" or halt["key"] == key)):
+                if halt and halt["generation"] == recovery:
                     state["stops"].pop(halt["key"], None)
                 own = state["stops"].get(key)
                 if own and own["generation"] == own_recovery:
