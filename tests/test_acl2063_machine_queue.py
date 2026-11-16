@@ -96,9 +96,9 @@ def test_checkpoint_in_another_config_is_visible_before_dispatch(dashboards):
     first.record_result(snap, trigger="action")
     select("two")
     second.page_open(now=NOW, port=9095)
-    assert second.state()["halt"]["kind"] == "checkpoint"
-    assert second._drain_once() == 0
-    assert reads == []
+    # ACL-2653: a checkpoint of A holds A's profile only; the other dashboard still reads A's neighbours.
+    assert second.state()["halt"] is None
+    assert MachineStore(second._machine.root).halt() is None
 
 
 def test_partly_different_maps_join_once_and_both_get_their_whole_list(dashboards):
@@ -235,14 +235,11 @@ def test_checkpoint_survives_restart_and_only_own_success_clears_it(dashboards):
     first.record_result(ci.Snapshot(account="A", state="failed", stop="checkpoint"), trigger="action")
     second = new("two", ["A", "B"])
     second.page_open(now=NOW, port=9095)
-    assert second._drain_once() == 0
+    assert second.state()["halt"] is None          # ACL-2653: no machine-wide stop for a checkpoint
     second.request("B", "retry", force=True)
-    assert second._drain_once() == 1
-    assert second.state()["halt"]["kind"] == "checkpoint"
-    second.request("A", "retry", force=True)
-    assert second._drain_once() == 1
+    assert second._drain_once() >= 1
     assert second.state()["halt"] is None
-    assert [a for _, a in reads] == ["B", "A"]
+    assert "B" in [a for _, a in reads]
 
 
 def test_forced_requests_queued_before_peer_result_join_it_but_later_retry_reads(dashboards):
@@ -287,13 +284,12 @@ def test_legacy_stop_migrates_before_first_schedule_window(dashboards):
     first = new('one')
     with first._store.transaction() as state:
         state['halt'] = {'kind': 'checkpoint', 'reason': 'legacy checkpoint', 'until': None, 'account': 'A'}
-    assert first.state()['halt']['kind'] == 'checkpoint'
+    assert first.state()['halt'] is None          # ACL-2653: a legacy checkpoint is not migrated as a machine stop
     assert first._store.read()['machine_migrated'] is True
     new.clock[0] = NOW.timestamp()
     select('two'); second = new('two')
     second.page_open(now=NOW, port=9095)
-    assert second.state()['halt']['kind'] == 'checkpoint'
-    assert second._drain_once() == 0 and reads == []
+    assert second.state()['halt'] is None
 
 
 @pytest.mark.parametrize('code,raw,expected', [

@@ -52,7 +52,7 @@ def test_inner_session_exit_cannot_admit_next_reader_before_result_and_stop(monk
     result = ci.run_read("A", trigger="schedule")
     assert result.stop == "checkpoint" and result.state == "failed"
     assert after_inner == ["blocked"]
-    assert MachineStore().halt()["kind"] == "checkpoint"
+    assert MachineStore().halt() is None       # ACL-2653: a checkpoint is no machine-wide stop
     with ars.read_session(timeout=0):
         assert ci.get_attempt("A")["stop"] == "checkpoint"
 
