@@ -111,7 +111,7 @@ def test_a_library_in_error_is_pulled_again(library):
 
 def test_a_local_write_does_not_count_as_a_pull(library, monkeypatch):
     """Своя запись обновляет копию, но чужих правок не приносит — тянем."""
-    monkeypatch.setattr(team_library, "_pulled", {"targets": time.monotonic()})
+    monkeypatch.setattr(team_library, "_status", {"targets": {"connected": True, "ok": True, "error": "", "synced_at": "x"}})
     enrich_draft._pull_unless_just_pulled("targets", library["pull"], {})
     assert library["pulls"] == [True]
 
