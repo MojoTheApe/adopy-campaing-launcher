@@ -4299,6 +4299,24 @@ class CampaignCreator:
         except _tt.ShiftError as exc:
             raise PlanError(f"Ad set {ad_set.name!r}: {exc}.") from exc
 
+    def schedule_zone_note(self, ad_set: AdSetPlan) -> str:
+        """ACL-2666: Check plan называет пояс кабинета и разницу, по которой переведены часы расписания.
+
+        Разница берётся на момент старта (так её применяет `schedule_windows`). Нет расписания или
+        старта, пояс кабинета неизвестен или разница не целая - пусто (отказ покажет сама запись окон).
+        """
+        account = self.facts.timezone_name
+        if not (ad_set.schedule and ad_set.time_zone and ad_set.start_time) or _tt.load_zone(account) is None:
+            return ""
+        try:
+            start = self._start_dt(ad_set)
+            shift = _tt.whole_hour_shift(ad_set.time_zone, account, start)
+        except (PlanError, _tt.ShiftError):
+            return ""
+        off = start.astimezone(_tt.load_zone(account)).utcoffset().total_seconds() / 3600
+        return (f"Hours ticked in Israel time are converted to the ad account time zone {account} "
+                f"(UTC{off:+g}, {shift:+d} h from Israel on {start.date().isoformat()}).")
+
     def schedule_shift_warnings(self, plan: CampaignPlan) -> list[str]:
         """ACL-1448: предупреждения (не ошибки), если разница Израиль-кабинет меняется между стартом и концом."""
         account = self.facts.timezone_name
@@ -5735,6 +5753,9 @@ class CampaignCreator:
         if ad_set.time_zone:
             # ACL-1448: время введено по поясу команды; расписание выше уже в часах кабинета.
             row["time_zone"] = ad_set.time_zone
+            note = self.schedule_zone_note(ad_set)
+            if note:
+                row["schedule_zone_note"] = note
 
     @staticmethod
     def _texts_summary(ad: AdPlan, files: dict[str, bytes]) -> dict:
