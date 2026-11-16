@@ -5311,10 +5311,11 @@ class CampaignCreator:
                 self._refuse_existing_without_cover(plan, tpl, existing)
                 _fc.clear_pending(plan.act, plan.page_id, fname)
             elif _fc.is_pending(plan.act, plan.page_id, fname):
-                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
-                raise PlanError(_fc.MSG_PENDING + ".")
+                # ACL-2668: прошлая запись могла дойти, но формы в списке нет - не ждём, создаём
+                # сразу; дубль допустим и называется «<шаблон> copy N · ACL <хэш>».
+                fname = _fc.next_copy_name(read, tpl)
             self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
-                                                 form_name=_ft.form_name(tpl), existing_id=existing)
+                                                 form_name=fname, existing_id=existing)
         if any(step.action == "create" for step in self._form_steps.values()):
             # Условия Lead Ads: робот их не принимает никогда; без них - остановка до записи.
             if _forms.page_terms_accepted(self.client, plan.page_id) is False:
@@ -5405,16 +5406,19 @@ class CampaignCreator:
             self._cover_ids[tid] = got["photo_id"]
             self._step(out, f"form {step.form_name!r}: background picture uploaded to the Page")
 
-    def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
-        """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
+    def _find_form_id(self, plan: CampaignPlan, tpl: dict, name: str = "") -> str | None:
+        """Сверка чтением списка форм Страницы: id своей формы по точному имени (`name` - имя дубля)."""
         read = _forms.read_page_forms(self.client, plan.page_id)
         if not read.ok:
             raise GraphError(read.message)
+        if name and name != _ft.form_name(tpl):
+            hit = sorted((f for f in read.forms if f.name == name and f.usable), key=lambda f: f.id)
+            return hit[0].id if hit else None
         existing, _why = _fc.match_existing(read, tpl)
         return existing or None
 
     def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str, reused: bool = False,
-                     cover_id: str = "") -> None:
+                     cover_id: str = "", name: str = "") -> None:
         """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп.
 
         Картинка (ACL-2188): у новой формы расхождение - стоп, у переиспользованной - заметка и дальше
@@ -5423,7 +5427,11 @@ class CampaignCreator:
         # ACL-2571: the Page photo id of a local picture is known only at publish; the name stays the template's.
         cov = dict(tpl, cover_photo_id=cover_id) if cover_id else tpl
         row = self.client.get(f"/{form_id}", {"fields": _fc.readback_fields(cov)})
-        bad = _fc.compare_form(tpl, plan.page_id, row)
+        if reused and isinstance(row, dict):
+            # ACL-2668: переиспользуется и дубль «<шаблон> copy N · ACL <хэш>» - тоже своя.
+            got = str(row.get("name") or "")
+            name = got if _fc.copy_number(got, tpl) >= 0 else name
+        bad = _fc.compare_form(tpl, plan.page_id, row, name=name)
         cover = _fc.compare_cover(cov, row)
         if cover and reused and not bad:
             self._step(out, f"form {_ft.form_name(tpl)!r}: {_fc.MSG_COVER_UNCONFIRMED}")
@@ -5454,30 +5462,32 @@ class CampaignCreator:
                 out.reused.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: found on the Page, reused")
             else:
+                base = _ft.form_name(tpl)
                 try:
-                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
-                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
-                except OSError as exc:
-                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
-                                          kind="form_state") from exc
+                    # Метка ДО записи: если ответ потеряется, следующий запуск назовёт дубль «copy N».
+                    _fc.record_pending(plan.act, plan.page_id, base)
+                except OSError:
+                    pass    # ACL-2668: метка - только имя дубля, публикацию она не останавливает
                 cover_id = self._cover_ids.get(tpl["id"], "")
+                params = _ft.form_params(tpl, cover_id)
+                params["name"] = step.form_name     # имя дубля после потерянного ответа
                 try:
                     step.form_id = self._write(
                         out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
-                        _ft.form_params(tpl, cover_id), lambda: self._find_form_id(plan, tpl),
+                        params, lambda: self._find_form_id(plan, tpl, step.form_name),
                         form_page=plan.page_id)
                 except GraphError as exc:
-                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
+                    _fc.clear_pending(plan.act, plan.page_id, base)   # Meta отказала: формы нет
                     if cover_id and tpl.get("cover_local_sha256"):
                         # The cached photo may be gone from the Page: the next publish uploads again.
                         _cover_store.forget_photo(plan.page_id, tpl["cover_local_sha256"])
                     raise CreationStopped(_fc.refused_message(exc, dict(tpl, cover_photo_id=cover_id) if cover_id else tpl),
                                           created=out.created, kind="form_refused") from exc
-                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
+                _fc.clear_pending(plan.act, plan.page_id, base)
                 out.created.setdefault("forms", []).append(step.form_id)
                 self._step(out, f"form {step.form_name!r}: created")
             self._verify_form(out, plan, tpl, step.form_id, reused=bool(step.existing_id),
-                              cover_id=self._cover_ids.get(tpl["id"], ""))
+                              cover_id=self._cover_ids.get(tpl["id"], ""), name=step.form_name)
             self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
         ad.form_id = step.form_id
 
