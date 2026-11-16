@@ -62,10 +62,11 @@ class MachinePeople:
             assert all(v['snapshot'] for v in state['visible'].values())
             assert state['state']['sweep']['done'] == state['state']['sweep']['total'] == 2
             assert state['private_unchanged']
-        assert self.command(first, 'checkpoint')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'state')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'restart')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'drain')['reads'] == 0
+        # ACL-2653: a checkpoint never halts the machine; it only fails the account row.
+        assert self.command(first, 'checkpoint')['state']['halt'] is None
+        assert self.command(second, 'state')['state']['halt'] is None
+        assert self.command(second, 'restart')['state']['halt'] is None
+        self.command(second, 'drain')
         assert self.command(second, 'retry')['state']['halt'] is None
         assert self.command(first, 'state')['state']['halt'] is None
         assert all(self.command(p, 'schedule')['admitted']['queued'] == 0 for p in self.people)

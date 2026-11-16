@@ -492,7 +492,8 @@ class MachineStore:
                         if key not in state["results"]:
                             state["results"][key] = _result_record({}, key, payload, state["revision"])
                         members[key] = {"owners": [owner], "done": state["revision"]}
-            if halt and not halt.get("machine_generation"):
+            if halt and not halt.get("machine_generation") and halt.get("kind") != "checkpoint":
+                # ACL-2653: a checkpoint belongs to its profile (a hold), never to the whole machine.
                 key = bindings.get(halt.get("account", ""))
                 if key and key not in state["stops"] and (halt.get("until") is None or halt["until"] > now):
                     state["revision"] += 1
@@ -636,6 +637,37 @@ class MachineStore:
         with self.transaction() as state:
             stop = state["stops"].get(key)
             return stop["generation"] if stop else None
+
+    def drop_stops(self, keys) -> list[dict]:
+        """ACL-2653: remove the machine stops of these bindings (an account was removed). Returns what was dropped."""
+        wanted = set(keys)
+        if not wanted:
+            return []
+        with self.transaction() as state:
+            dropped = [dict(v) for k, v in state["stops"].items() if k in wanted]
+            for item in dropped:
+                state["stops"].pop(item["key"], None)
+            if dropped:
+                state["halt"] = self._selected_stop(state)
+            return dropped
+
+    def prune_stops(self, known_keys) -> list[dict]:
+        """ACL-2653: drop stops that can never lift on their own.
+
+        * a stop whose key maps to no known account (the account was removed from ACL), and
+        * a `checkpoint` stop (owner decision: a checkpoint never stops the queue; `known_keys=None` drops only these): a checkpoint holds only its own profile (`account_holds.json`), never the machine.
+
+        The caller holds the machine read lease; the state transaction keeps the schema validation.
+        """
+        known = None if known_keys is None else set(known_keys)
+        with self.transaction() as state:
+            dropped = [dict(v) for k, v in state["stops"].items()
+                       if v["kind"] == "checkpoint" or (known is not None and k not in known)]
+            for item in dropped:
+                state["stops"].pop(item["key"], None)
+            if dropped:
+                state["halt"] = self._selected_stop(state)
+            return dropped
 
     def result(self, key: str) -> dict | None:
         with self.transaction() as state:

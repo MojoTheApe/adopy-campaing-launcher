@@ -202,6 +202,44 @@ def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_
     return True
 
 
+def is_person_lock(held: dict[str, Any] | None) -> bool:
+    """ACL-2653: a Facebook user lock / security check of the person (not "confirm this account", code 31)."""
+    return bool(held) and held.get("kind") == "checkpoint" and held.get("code") != AUTH_REQUIRED_CODE
+
+
+def note_person_lock(key: str, label: str, action: str = "") -> bool:
+    """Record a person-level Facebook lock (no Graph code). Keeps the original `at` of a hold that already exists.
+
+    Returns True when a new hold was written. Nothing here talks to Meta; only a person's Retry clears it.
+    """
+    if not key or is_held(key):
+        return False
+    from src.fb_api.graph import Checkpoint
+
+    return note_stop(key, label, Checkpoint("the profile is on a Facebook checkpoint"), action or current_action())
+
+
+def note_tab_url(key: str, label: str, url: str, action: str = "") -> bool:
+    """ACL-2653: a profile tab on facebook.com/checkpoint/... is a Facebook lock: record the hold (once) and say so.
+
+    No Graph call, only the address. True when the address is a lock."""
+    import urllib.parse
+
+    from src.fb_api.graph import classify_stop_url
+
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    if not (host == "facebook.com" or host.endswith(".facebook.com")):
+        return False
+    if classify_stop_url(parts.path) != "checkpoint":
+        return False
+    note_person_lock(key, label, action)    # keeps the `at` of an existing hold
+    return True
+
+
 def is_held(key: str) -> bool:
     """Is this physical profile waiting for a person? Builder prep and background reads must ask first."""
     return bool(key) and key in _load()
@@ -348,7 +386,8 @@ def view(labels: dict[str, str] | list[str]) -> dict[str, dict[str, Any]]:
                                 held.get("code"), same_profile=held.get("label") not in ("", label))
         out[label] = {"kind": held["kind"], "code": held.get("code"), "reason": reason, "next": step,
                       "action": held.get("action") or "", "at": held.get("at"), "left_s": None,
-                      "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block"}
+                      "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block",
+                      "person_lock": is_person_lock(held)}
     return out
 
 

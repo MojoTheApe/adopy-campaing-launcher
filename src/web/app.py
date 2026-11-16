@@ -5988,6 +5988,15 @@ async def account_map_remove(request: Request) -> JSONResponse:
         # Ordinary map-only removals retain their exact-name matching.
         return name.lower() if also_unlink else name
 
+    # ACL-2653: the machine stop and the profile hold of a removed account are keyed by its map row, so the keys
+    # are taken before the row goes.
+    try:
+        from src.analysis_agent import account_refresh as _refresh
+
+        _removal = _refresh.removal_keys(list(dict.fromkeys(wanted)))
+    except Exception:  # noqa: BLE001 - a key problem never blocks the removal
+        _removal = {}
+
     try:
         if map_path.is_file():
             with open(map_path, encoding="utf-8-sig", newline="") as f:
@@ -6030,6 +6039,12 @@ async def account_map_remove(request: Request) -> JSONResponse:
             _hidden.set_hidden(name, True)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    if _removal:
+        try:
+            _refresh.forget_accounts(_removal, [(r.get("account_name") or "").strip() for r in kept])
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Removed account stop was not dropped", exc_info=True)
 
     # `missing` is reported rather than treated as failure: the rest were
     # removed, and pretending otherwise would invite a confused retry.
