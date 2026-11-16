@@ -483,7 +483,10 @@ def request_status_read(label: str) -> str:
     try:
         from src.analysis_agent import account_refresh
 
-        got = account_refresh.queue().request(label, "open", force=True)
+        # ACL-2668: Open is the person's own press. A held profile gets the Retry read (the only read a hold
+        # lets through): a healthy page lifts the hold, a page that still has the problem shows its reason.
+        trigger = "retry" if account_refresh._profile_held(label) else "open"  # noqa: SLF001
+        got = account_refresh.queue().request(label, trigger, force=True)
         return "queued" if got.get("queued") else "skipped"
     except Exception:  # noqa: BLE001 — открытие профиля уже удалось, статус вторичен
         log.exception("Could not queue the status read after opening %s", label)
