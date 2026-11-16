@@ -206,5 +206,8 @@ def open_session(account: str, commands: bool):
 
     # ACL-2272: preview/execute are started by the person, so they may bring up a closed profile.
     with browser_operation.reading(), profile_lock(_as._profile_key(account)):
+        # ACL-2652: a budget/status/bulk edit is a person's action: it lifts an auth hold (code 31) and makes one
+        # real attempt. A pending check is answered by Meta again and the hold returns with the same message.
+        _api.lift_auth_hold_for_person(account, "command")
         with user_started_action(), _api._session(account, commands=commands) as sess:
             yield sess

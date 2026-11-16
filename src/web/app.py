@@ -5263,6 +5263,17 @@ async def account_refresh_request(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+def _account_holds(accounts) -> dict:
+    """ACL-2652: `{account: {kind, reason, next, at}}` of the profiles that wait for a person (local file only)."""
+    try:
+        from src.fb_api import account_blocks
+
+        return {a: {k: v[k] for k in ("kind", "code", "reason", "next", "at")}
+                for a, v in account_blocks.view(list(accounts)).items()}
+    except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the state
+        return {}
+
+
 @app.get("/account-refresh/state")
 @_off_loop
 def account_refresh_state() -> JSONResponse:
@@ -5274,7 +5285,7 @@ def account_refresh_state() -> JSONResponse:
     except (OSError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "Saved account refresh state is unavailable. Check the settings backup."}, status_code=503)
     state["rows"] = {a: value for a, value in state["rows"].items() if a in accounts}
-    return JSONResponse({"ok": True, **state, "accounts": ci.summaries(accounts),
+    return JSONResponse({"ok": True, **state, "holds": _account_holds(accounts), "accounts": ci.summaries(accounts),
                          "needs_api": not ci.backend_ready()})
 
 

@@ -714,6 +714,19 @@ def _touch_kept_window(account: str) -> None:
         pass
 
 
+def lift_auth_hold_for_person(account: str, by: str = "command") -> bool:
+    """ACL-2652: call this only from an action a person started (budget/status edit, bulk edit, shut-off).
+
+    Lifts the "Meta asks to confirm this account" hold (code 31) so the action makes its one real attempt; if
+    Meta still asks, the stop sets the same hold again. Other holds are never lifted here. Never raises.
+    """
+    try:
+        return _blocks.lift_auth_hold(_as._profile_key(account), by)
+    except Exception:  # noqa: BLE001 - never breaks the action
+        log.debug("auth hold lift failed", exc_info=True)
+        return False
+
+
 @contextmanager
 def _session(account: str, *, commands: bool = False, photo: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
@@ -1438,5 +1451,6 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
 
     # ACL-2272: the person pressed the shut-off button, so this action may bring up a closed profile.
     with user_started_action():
+        lift_auth_hold_for_person(account, "turn_off")
         return _turn_off_locked(account, level, oid, parent_id=parent, expected_name=expected_name,
                                 requester=who, profile_busy=profile_busy)

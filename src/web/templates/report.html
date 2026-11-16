@@ -2091,7 +2091,7 @@
     .aov-row[hidden] + .hc-acct-child { display: none; }
     .aov-table tr.hc-acct-child > td { padding: 0; white-space: normal; background: var(--adopy-surface); }
     /* На Home аккаунты не опрашиваются: кнопки чтения и открытия профиля дерева живут только в Manage. */
-    .aov .hc-rc, .aov .hc-ro, .aov .amap-pstate { display: none !important; }
+    .aov .hc-rc:not([data-hold]), .aov .hc-ro, .aov .amap-pstate { display: none !important; }  /* ACL-2652: Retry stays for a profile with a hold */
     @media (max-width: 699px) {
       .aov { padding: 0 var(--adopy-space-3) var(--adopy-space-3); }
       .aov-view { width: 100%; height: var(--adopy-touch-target); } .aov-vbtn { flex: 1; justify-content: center; }

@@ -711,12 +711,17 @@
       else { text = 'list failed — ' + noteFrom(failText, 'bad').text; bad = true; }
     }
     else text = sum.finished_at ? 'list ' + sum.finished_at.slice(11, 16) : 'list not read';
+    if (S.holds && S.holds[account] && !pending && !bad) text += ' — ' + S.holds[account].reason + (S.holds[account].at ? ' since ' + new Date(S.holds[account].at * 1000).toLocaleDateString() : '');
     if (h.snap) { h.snap.textContent = text; h.snap.title = row.error || att && att.error || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
     if (h.readBtn) {
-      h.readBtn.hidden = (!bad && !closed && !S.uncertain[account]) || S.readsAvailable === false;
+      // ACL-2652: a profile with a hold shows Retry even when no list read failed (also on Home, see `data-hold`).
+      var hold = S.holds && S.holds[account];
+      h.readBtn.hidden = (!bad && !closed && !hold && !S.uncertain[account]) || S.readsAvailable === false;
       h.readBtn.disabled = pending || S.readsAvailable === false;
       h.readBtn.textContent = 'Retry';
-      h.readBtn.title = row.error || att && att.error || 'Retry the account structure read';
+      if (hold) h.readBtn.dataset.hold = '1'; else delete h.readBtn.dataset.hold;
+      h.readBtn.title = hold ? hold.reason + ' ' + hold.next + (hold.at ? ' (since ' + new Date(hold.at * 1000).toLocaleString() + ')' : '')
+        : row.error || att && att.error || 'Retry the account structure read';
     }
     var wi = S.warm.available ? S.warm.accounts[account] : null, shown = !!(wi && wi.state && wi.state !== 'unknown');
     if (h.chip) {
@@ -1175,6 +1180,7 @@
   };
   if (window.aclAccountRefresh) window.aclAccountRefresh.subscribe(function (view) {
     S.refreshRows = view.rows || {};
+    S.holds = view.holds || {};
     S.readsAvailable = !view.needs_api;
     var previousRunning = S.running;
     S.running = {};

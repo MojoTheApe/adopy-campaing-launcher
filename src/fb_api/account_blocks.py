@@ -230,7 +230,7 @@ def clear(key: str, by: str = "retry", *, kind: str = "") -> bool:
 
 
 def lift_auth_hold(key: str, by: str = "publish") -> bool:
-    """ACL-2595: a person-started Publish lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
+    """ACL-2595/2652: a person-started Publish, budget/status edit or shut-off lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
 
     Only that kind of hold: every other checkpoint still clears through Retry. If the check is still pending, Meta
     answers 31/3858385 again, the sticky `AuthRequired` stop sets the hold again after at most one refused call.
@@ -270,7 +270,7 @@ def _reason(kind: str, label: str, action: str, code: int | None, same_profile: 
 
 def _next_step(kind: str, code: int | None, *, mins: int = 0, replaceable: bool = False) -> str:
     if kind == "checkpoint" and code == AUTH_REQUIRED_CODE:
-        return ("Open Ads Manager in this profile and complete the check, then publish again. "
+        return ("Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
                 "Existing ads keep running.")
     if kind == "checkpoint":
         return "Solve the checkpoint in the open profile window, then press Retry."
