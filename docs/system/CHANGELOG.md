@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2668 (decision 8) — No ACL call budgets for account reads and publishing — 2026-11-16
+
+Owner decision: ACL sets no call budget of its own. An account read no longer stops after 24 Graph calls
+(`ACL_FB_API_MAX_CALLS` is no longer read for account reads), so the `call_budget` stop and the machine-wide
+"call budget used up" pause are gone. A publish run no longer has a per-campaign budget (250, floor 150,
+`ACL_FB_API_CREATE_MAX_CALLS` removed): a large campaign is not refused up front with "split it", and large videos
+are uploaded in chunks without the budget-driven compress fallback. The 1 s minimum pause between read calls stays.
+Meta's own rate-limit answers keep being handled as a per-account state (cooldown). The small caps of other actions
+(on/off commands, Page and form reads, the account pre-check) are unchanged.
+
 ## ACL-2596 — An Automatic Page with a stored form photo keeps the light work tab — 2026-11-12
 
 When a draft's Page is "Automatic", the work-tab decision now resolves it the way the creator does (the first Page of

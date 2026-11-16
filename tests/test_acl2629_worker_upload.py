@@ -1366,10 +1366,8 @@ def test_check_plan_counts_the_original_and_the_64_mb_chunks(tmp_path, monkeypat
     monkeypatch.delenv("ACL_VIDEO_WORKER_UPLOAD", raising=False)
     import tests.test_acl2370_chunk_budget as T
     plan = T._plan(tmp_path, [2500], monkeypatch)
-    budget, refusal = T.publish_api.create_call_budget(plan)
-    assert refusal == ""                                              # a 2.5 GB file fits one run
-    # ACL-2639: chunked at 5 MB windows is the plan; a 2.5 GB file would not fit one run, so it is budgeted compressed
+    # ACL-2668: a publish run has no call budget, so a 2.5 GB file is never refused for its call count
+    # ACL-2639: chunked at 5 MB windows; only an explicit spare (a capped client) plans it compressed
     whole = cr.estimate_upload_calls(plan, size_of=lambda p: 2500 * MB)
     planned = cr.estimate_upload_calls(plan, size_of=lambda p: 2500 * MB, spare=100)
     assert whole > 500 and 0 < planned <= 100
-    assert budget >= cr.estimate_create_calls(plan) + planned
