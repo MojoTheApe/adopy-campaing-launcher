@@ -179,8 +179,12 @@ def test_form_with_zero_slots_and_no_tombstone_keeps_its_entry(make):
     # карточку убрали не человеком (не через cbRemoveSlot): надгробия нет
     p.evaluate("document.querySelector('.cb-slot').remove(); cbKeep.save()")
     assert keep_slots(p) == 0
-    p.wait_for_timeout(800)
+    # save() синхронный: смотрим на документ, который он только что собрал, и на его след на сервере
     assert p.evaluate("Object.keys(cbKeep.all())") == [FORM_KEY]
+    assert p.evaluate("cbKeep.all()['%s'].campaigns[0].fields.asset" % FORM_KEY) == "Keep me"
+    p.reload()
+    p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
     assert server_keep()["forms"][FORM_KEY]["campaigns"][0]["fields"]["asset"] == "Keep me"
     assert FORM_KEY not in (server_keep().get("removed") or {})
 
@@ -275,3 +279,24 @@ def test_moving_the_last_campaign_to_another_form_tombstones_only_the_source(mak
     assert p.evaluate("document.querySelectorAll('form.open-account-form')[1].querySelectorAll('.cb-slot').length") == 1
     assert len(server_keep()["forms"][other]["campaigns"]) == 1
     assert FORM_KEY not in server_keep()["forms"]
+
+
+def test_server_apply_writes_no_tombstones(make):
+    seed_keep({FORM_KEY: ["Before"]})
+    p = make().open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    p.evaluate("cbKeep.save()")
+    p.wait_for_timeout(500)
+    # на сервере появилась более новая копия: при загрузке она применится поверх локальной
+    later = int(time.time() * 1000) + 60000
+    # та же кампания (тот же id), правленная позже — применяется вместо локальной
+    cid = "legacy-0"
+    doc = {"v": 4, "forms": {FORM_KEY: {"touched": later, "tracking": "", "campaigns": [campaign("After", cid)]}}}
+    bd.save("keep", later, doc)
+    p.reload()
+    p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
+    p.wait_for_function("document.querySelector('.cb-slot [name$=\"_asset\"]') && document.querySelector('.cb-slot [name$=\"_asset\"]').value === 'After'", polling=100)
+    assert p.evaluate("document.querySelectorAll('.cb-slot').length") == 1
+    local = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2'))")
+    assert not local.get("removed")
+    assert not (server_keep().get("removed") or {})

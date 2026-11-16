@@ -6961,7 +6961,11 @@ window.cbKeep = (function () {
     var removed = state.removed = state.removed || {};
     var id = slot && slot.dataset ? slot.dataset.cbdId : '';
     if (id) removed[key + '#' + id] = now;
-    if (!form.querySelectorAll('.cb-slot').length) removed[key] = now;
+    /* форма убрана целиком, если в записи не осталось других кампаний, кроме убранной:
+       карточек на странице может быть 0, а в записи — чужие (копия + отмена) */
+    var entry = state.forms[key];
+    var rest = entry && entry.campaigns ? entry.campaigns.filter(function (c, i) { return !(id && (c.id || 'legacy-' + i) === id); }).length : 0;
+    if (!form.querySelectorAll('.cb-slot').length && !rest) removed[key] = now;
     saveSoon();
   }
 
@@ -6984,7 +6988,10 @@ window.cbKeep = (function () {
         if (i < already) return;
         window.cbAddSlot(form);
         var slots = form.querySelectorAll('.cb-slot');
-        writeSlot(slots[slots.length - 1], data);
+        /* Старая запись без id: id по номеру карточки, одинаковый во всех вкладках.
+           Случайные id в двух вкладках дали бы одной кампании две личности, и
+           слияние на сервере оставило бы обе копии. */
+        writeSlot(slots[slots.length - 1], data.id ? data : Object.assign({}, data, { id: 'legacy-' + i }));
         made += 1;
       });
     });
@@ -8733,14 +8740,11 @@ window.cbTree = (function () {
      то, что есть. Пока список был свой, половина работы была ящику не
      видна, и добавлять приходилось только через него. */
 
-  var seq = 0;
-
   /* Карточке нужно имя, которое переживёт перенумерацию: `data-idx`
      меняется при каждом удалении соседа. */
   function slotId(slot) {
     /* тот же id, что у черновика (cbKeep): стабильный, не «cbsN» на сессию */
-    if (!slot.dataset.cbdId) slot.dataset.cbdId = window.cbKeep.slotId(slot);
-    return slot.dataset.cbdId;
+    return window.cbKeep.slotId(slot);
   }
 
   function accountForm(row) {
