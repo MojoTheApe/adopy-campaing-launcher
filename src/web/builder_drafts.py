@@ -91,14 +91,103 @@ def _keep_older(name: str, doc: dict) -> None:
                                                 sort_keys=True).encode("utf-8"))
 
 
+def _num(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _touched(entry) -> float:
+    return entry["touched"] if isinstance(entry, dict) and _num(entry.get("touched")) else 0
+
+
+def _cid(campaign) -> str:
+    cid = campaign.get("id") if isinstance(campaign, dict) else None
+    return cid if isinstance(cid, str) else ""
+
+
+def _count_campaigns(data: dict) -> int:
+    forms = data.get("forms")
+    if not isinstance(forms, dict):
+        return 0
+    return sum(len(e["campaigns"]) for e in forms.values()
+               if isinstance(e, dict) and isinstance(e.get("campaigns"), list))
+
+
+def merge_keep(current: dict, incoming: dict) -> dict:
+    """Слить два документа `keep` (ACL-2669): черновики сами не сжимаются.
+
+    Слияние по кампании, а не по форме: на форме побеждает копия с большим
+    `touched` (при равенстве — `incoming`), а кампании другой копии, которых
+    нет у победителя (по `id`), дописываются в конец. Исчезнуть кампания или
+    форма может только по надгробию из `removed` (`"<форма>#<id>"` и
+    `"<форма>"` → мс удаления человеком): надгробие не младше копии убирает её,
+    а более поздняя правка возвращает. Кампании без `id` (старый формат) в
+    слияние не идут — по ним действует правило «новее форма целиком».
+    Остальные поля документа берутся из `incoming`."""
+    cur_forms = current.get("forms") if isinstance(current.get("forms"), dict) else {}
+    inc_forms = incoming.get("forms") if isinstance(incoming.get("forms"), dict) else {}
+    removed: dict = {}
+    for src in (current.get("removed"), incoming.get("removed")):
+        if isinstance(src, dict):
+            for k, ts in src.items():
+                if _num(ts) and ts > removed.get(k, float("-inf")):
+                    removed[k] = ts
+    forms: dict = {}
+    for key in list(cur_forms) + [k for k in inc_forms if k not in cur_forms]:
+        a, b = cur_forms.get(key), inc_forms.get(key)
+        if key in cur_forms and key in inc_forms:
+            newer, older = (a, b) if _touched(a) > _touched(b) else (b, a)
+        else:
+            newer, older = (a, None) if key in cur_forms else (b, None)
+        if not isinstance(newer, dict):
+            # Не форма билдера (старый/чужой формат): берём как есть.
+            if removed.get(key, float("-inf")) < 0:
+                forms[key] = newer
+            continue
+        entry = dict(newer)
+        n_camps = newer.get("campaigns")
+        o_camps = older.get("campaigns") if isinstance(older, dict) else None
+        if isinstance(n_camps, list) or isinstance(o_camps, list):
+            n_camps = n_camps if isinstance(n_camps, list) else []
+            n_touched, o_touched = _touched(newer), _touched(older)
+            kept = [c for c in n_camps
+                    if not (_cid(c) and removed.get(f"{key}#{_cid(c)}", float("-inf")) > n_touched)]
+            have = {_cid(c) for c in n_camps if _cid(c)}
+            for c in (o_camps if isinstance(o_camps, list) else []):
+                cid = _cid(c)
+                if cid and cid not in have and removed.get(f"{key}#{cid}", float("-inf")) < o_touched:
+                    kept.append(c)
+                    have.add(cid)
+            entry["campaigns"] = kept
+            if not kept:
+                continue
+        if removed.get(key, float("-inf")) >= _touched(entry):
+            continue
+        forms[key] = entry
+    merged = dict(incoming)
+    if "forms" in current or "forms" in incoming or forms:
+        merged["forms"] = forms
+    if removed:
+        merged["removed"] = removed
+    versions = [d["v"] for d in (current, incoming) if _num(d.get("v"))]
+    if versions:
+        merged["v"] = max(versions)
+    return merged
+
+
 def save(name: str, saved_at: float, data: dict, base=None) -> tuple[bool, dict]:
     """Записать документ. (принят, документ на сервере после вызова).
 
-    Входящая копия старше серверной — не принимается (серверная новее), а сама
-    уходит в `.older`. Принятая заменяет серверную; если серверная при этом
-    отличалась от той, что клиент видел (`base` ≠ её saved_at) и имела другое
-    содержимое, она тоже уходит в `.older`: две машины/вкладки писали параллельно,
-    и ни одна работа не должна пропасть молча.
+    `jobs` и `ui`: входящая копия старше серверной — не принимается (серверная
+    новее), а сама уходит в `.older`. Принятая заменяет серверную; если серверная
+    при этом отличалась от той, что клиент видел (`base` ≠ её saved_at) и имела
+    другое содержимое, она тоже уходит в `.older`: две машины/вкладки писали
+    параллельно, и ни одна работа не должна пропасть молча.
+
+    `keep` (ACL-2669): всегда сливается с серверным через `merge_keep`, даже
+    если входящий старше; `saved_at` результата — большая из двух меток.
+    Принят (True) только если слитое совпало с входящим, иначе клиент получает
+    слитый документ и применяет его. Серверная копия до слияния уходит в
+    `.older`, если слитое содержит меньше кампаний (возможно лишь по надгробию).
     ValueError — неизвестное имя, форма или размер."""
     if name not in NAMES:
         raise ValueError("unknown document")
@@ -111,6 +200,8 @@ def save(name: str, saved_at: float, data: dict, base=None) -> tuple[bool, dict]
     with _transaction():
         docs = _load_strict()
         stored = docs.get(name)
+        if name == "keep" and stored:
+            return _save_keep(docs, stored, incoming, base)
         if stored and saved_at < stored["saved_at"]:
             if stored["data"] != data:
                 _keep_older(name, incoming)
@@ -120,6 +211,25 @@ def save(name: str, saved_at: float, data: dict, base=None) -> tuple[bool, dict]
         docs[name] = incoming
         _write(docs)
         return True, incoming
+
+
+def _save_keep(docs: dict, stored: dict, incoming: dict, base) -> tuple[bool, dict]:
+    data = incoming["data"]
+    if incoming["saved_at"] < stored["saved_at"]:
+        # Серверная копия новее: при равенстве `touched` побеждает она.
+        merged_data = merge_keep(data, stored["data"])
+        if stored["data"] != data:
+            _keep_older("keep", incoming)
+    else:
+        merged_data = merge_keep(stored["data"], data)
+        if stored["data"] != data and base != stored["saved_at"]:
+            _keep_older("keep", stored)
+    if _count_campaigns(merged_data) < _count_campaigns(stored["data"]):
+        _keep_older("keep", stored)
+    merged = {"saved_at": max(stored["saved_at"], incoming["saved_at"]), "data": merged_data}
+    docs["keep"] = merged
+    _write(docs)
+    return (merged_data == data and incoming["saved_at"] >= stored["saved_at"]), merged
 
 
 def load_older(name: str) -> dict | None:
