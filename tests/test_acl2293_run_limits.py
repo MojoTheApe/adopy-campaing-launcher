@@ -48,7 +48,7 @@ def no_side_effects(monkeypatch):
 
 def test_a_change_reaches_the_engine_without_a_restart(machine, no_side_effects):
     assert ps.load_settings().ceiling == 2 and warm.max_heavy() == 1
-    result = rl.save(5, 2, 80, confirm=True)
+    result = rl.save(5, 2, 80)
     assert result["ceiling"] == 5 and result["warm_heavy"] == 2 and result["memory_max_used_pct"] == 80
     assert result["running_jobs_affected"] is False and result["applies"] == "next start decision"
     settings = ps.load_settings()
@@ -77,14 +77,14 @@ def test_one_bad_field_rejects_the_whole_save(machine, no_side_effects):
 
 
 def test_bounds_accepted_and_comma_decimal(machine, no_side_effects):
-    assert rl.save(ceiling=8, warm_heavy=3, memory_max_used_pct="95", confirm=True)["memory_max_used_pct"] == 95
+    assert rl.save(ceiling=8, warm_heavy=3, memory_max_used_pct="95")["memory_max_used_pct"] == 95
     assert rl.save(ceiling=1, memory_max_used_pct="50,5")["memory_max_used_pct"] == 50.5
 
 
 def test_reset_writes_explicit_defaults_not_blank_keys(machine, no_side_effects, monkeypatch):
     # Старый ключ из прежних настроек не должен «просочиться» после сброса.
     monkeypatch.setenv("ACL_MAX_PARALLEL_CEILING", "4")
-    rl.save(6, 3, 70, confirm=True)
+    rl.save(6, 3, 70)
     result = rl.save(reset=True)
     assert (result["ceiling"], result["warm_heavy"], result["memory_max_used_pct"]) == (2, 1, 92)
     text = machine.read_text(encoding="utf-8")
@@ -92,7 +92,7 @@ def test_reset_writes_explicit_defaults_not_blank_keys(machine, no_side_effects,
 
 
 def test_telemetry_row_has_numbers_only(machine, no_side_effects):
-    rl.save(4, None, None, confirm=True)
+    rl.save(4, None, None)
     rows = [kw for a, kw in no_side_effects if kw.get("note") == "run_limits_changed"]
     assert len(rows) == 1
     diag = rows[0]["diag"]
@@ -156,22 +156,16 @@ def _post(body):
 
 def test_api_roundtrip_and_validation(machine, no_side_effects):
     from src.web import app as web
-    ok = _post({"ceiling": 4, "memory_max_used_pct": 85, "confirm": True})
+    ok = _post({"ceiling": 4, "memory_max_used_pct": 85})
     data = json.loads(ok.body)
     assert ok.status_code == 200 and data["ceiling"] == 4 and data["memory_max_used_pct"] == 85
     got = json.loads(web.api_run_limits().body)
     assert got["ok"] and got["ceiling"] == 4 and got["bounds"]["ceiling"] == [1, 8]
     assert got["defaults"]["memory_max_used_pct"] == 92
-    for bad in ({"ceiling": 99}, {"colour": 1}, {"ceiling": True}, {"reset": "yes"}, [1], ValueError("x")):
+    for bad in ({"ceiling": 99}, {"colour": 1}, {"ceiling": 4, "confirm": True}, {"ceiling": True}, {"reset": "yes"}, [1], ValueError("x")):
         assert _post(bad).status_code == 400
     assert json.loads(web.api_run_limits().body)["ceiling"] == 4
     assert json.loads(_post({"reset": True}).body)["ceiling"] == 2
-
-
-def test_warnings_for_a_small_machine():
-    assert rl.warnings_for({"ceiling": 5, "memory_max_used_pct": 85}, 16 * 1024)
-    assert not rl.warnings_for({"ceiling": 5, "memory_max_used_pct": 70}, 64 * 1024)
-    assert not rl.warnings_for({"ceiling": 3, "memory_max_used_pct": 70}, 16 * 1024)
 
 
 def test_heavy_limit_is_labelled_as_a_limit_not_an_account(machine, no_side_effects):
@@ -212,33 +206,26 @@ def test_huge_json_integer_is_a_clean_400(machine, no_side_effects):
     assert machine.read_bytes() == before
 
 
-def test_risky_values_need_an_explicit_confirm_on_the_server(machine, no_side_effects):
-    before = machine.read_bytes()
-    for body in ({"ceiling": 4}, {"memory_max_used_pct": 94}, {"ceiling": 8, "warm_heavy": 2},
-                 {"ceiling": 4, "confirm": False}):
+def test_any_value_in_bounds_saves_at_once_without_confirm(machine, no_side_effects):
+    # ACL-2668 (решение владельца 16.11): ни «выше 3 профилей», ни «выше 80 % памяти» подтверждения не просят.
+    for body, ceiling, share in (({"ceiling": 8}, 8, 92), ({"memory_max_used_pct": 95}, 8, 95),
+                                 ({"ceiling": 4, "memory_max_used_pct": 85}, 4, 85),
+                                 ({"ceiling": 2}, 2, 85), ({"ceiling": 5, "memory_max_used_pct": 90}, 5, 90)):
         resp = _post(body)
         data = json.loads(resp.body)
-        assert resp.status_code == 409 and data["needs_confirm"] is True and data["ok"] is False
-    assert machine.read_bytes() == before and not no_side_effects, "nothing is written without confirm"
-    with pytest.raises(rl.NeedsConfirm):
-        rl.save(5)
-    assert _post({"ceiling": 4, "confirm": "yes"}).status_code == 400
-    ok = _post({"ceiling": 4, "memory_max_used_pct": 85, "confirm": True})
-    assert ok.status_code == 200 and json.loads(ok.body)["ceiling"] == 4
-    assert "ACL_MAX_PROFILES" in machine.read_text(encoding="utf-8")
-
-
-def test_lowering_a_share_that_is_still_above_80_needs_no_confirm(machine, no_side_effects):
-    assert _post({"memory_max_used_pct": 85}).status_code == 200   # 92 (default) -> 85: not a raise
-
-
-def test_safe_changes_and_lowering_need_no_confirm(machine, no_side_effects):
-    assert _post({"ceiling": 3, "memory_max_used_pct": 80, "warm_heavy": 3}).status_code == 200
-    assert _post({"ceiling": 4, "confirm": True}).status_code == 200
-    # Понижение с рискованного значения и сброс подтверждения не просят.
-    assert _post({"ceiling": 2}).status_code == 200
-    assert _post({"ceiling": 4, "confirm": True}).status_code == 200
+        assert resp.status_code == 200 and data["ok"] is True, body
+        assert data["ceiling"] == ceiling and data["memory_max_used_pct"] == share
+        assert "needs_confirm" not in data and "confirm_above" not in data and "warnings" not in data
+    assert 'ACL_MAX_PROFILES="5"' in machine.read_text(encoding="utf-8")
+    assert rl.save(7)["ceiling"] == 7
     assert _post({"reset": True}).status_code == 200
+
+
+def test_the_owner_ranges_are_unchanged():
+    # Решение владельца 09.11: потолок 1–8, доля памяти 50–95 — подтверждение убрали, границы нет.
+    assert rl.CEILING_BOUNDS == (1, 8) and rl.SHARE_BOUNDS == (50.0, 95.0)
+    assert not hasattr(rl, "NeedsConfirm") and not hasattr(rl, "CONFIRM_CEILING_ABOVE")
+    assert not hasattr(rl, "CONFIRM_SHARE_ABOVE") and not hasattr(rl, "warnings_for")
 
 
 def _page_functions(*names):
@@ -275,7 +262,8 @@ def test_wait_texts_say_the_ceiling_and_the_heavy_limit():
     assert _node("cbAccountWait({hold:'account_busy'})").startswith("Waiting for another account action")
 
 
-def test_the_dialog_sends_the_confirm_flag_for_risky_values():
+def test_the_settings_page_saves_without_a_confirm_dialog():
     html = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
-    assert "if (risky) body.confirm = true;" in html
-    assert html.index("if (risky) body.confirm = true;") < html.index("post(body, risky);")
+    block = html[html.index("// ── ACL-2293: лимиты запуска"):html.index("ACL-2038: подключение общей библиотеки")]
+    assert "window.confirm" not in block and "body.confirm" not in block and "confirm_above" not in block
+    assert "post(body);" in block and 'id="rl-warn"' not in html and "rl-warn" not in block

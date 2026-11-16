@@ -4980,7 +4980,6 @@ async function dashRefresh(ev) {
         <input id="rl-share" type="number" min="50" max="95" step="1" style="width:8rem">
       </label>
       <div id="rl-now" style="font-size:var(--adopy-text-sm);color:var(--muted)"></div>
-      <div id="rl-warn" style="font-size:var(--adopy-text-sm);color:var(--danger)"></div>
       <div style="display:flex;gap:0.6rem;align-items:center">
         <button type="button" id="rl-save" class="btn">Save</button>
         <button type="button" id="rl-reset" class="btn">Reset to default</button>
@@ -24883,11 +24882,10 @@ function aclPickerSearch(inst, text) {
 
 // ── ACL-2293: лимиты запуска (потолок профилей, тяжёлые действия, доля памяти) ──
 (function () {
-  var pending = false, loaded = {}, info = {};
+  var pending = false, loaded = {};
   function el(id) { return document.getElementById(id); }
   function say(text, error) { el('rl-msg').textContent = text || ''; el('rl-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function show(d) {
-    info = d;
     loaded = {ceiling: String(d.ceiling), warm_heavy: String(d.warm_heavy), memory_max_used_pct: String(d.memory_max_used_pct)};
     el('rl-ceiling').value = loaded.ceiling;
     el('rl-heavy').value = loaded.warm_heavy;
@@ -24901,7 +24899,6 @@ function aclPickerSearch(inst, text) {
     now.push(d.running + ' of ' + d.ceiling + ' profiles running' + (d.ceiling_reached ? ' - ceiling reached' : '')
       + (d.waiting ? ', ' + d.waiting + ' waiting' : ''));
     el('rl-now').textContent = now.join(' · ');
-    el('rl-warn').textContent = (d.warnings || []).join(' ');
   }
   async function load() {
     try {
@@ -24910,9 +24907,8 @@ function aclPickerSearch(inst, text) {
       if (r.ok && d.ok) show(d);
     } catch (e) { say(String(e), true); }
   }
-  async function post(body, ask) {
+  async function post(body) {
     if (pending) return;
-    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -24929,17 +24925,13 @@ function aclPickerSearch(inst, text) {
     if (el('rl-heavy').value !== loaded.warm_heavy) body.warm_heavy = el('rl-heavy').value;
     if (el('rl-share').value !== loaded.memory_max_used_pct) body.memory_max_used_pct = el('rl-share').value;
     if (!Object.keys(body).length) { say('Nothing changed.'); return; }
-    var c = parseFloat(el('rl-ceiling').value), p = parseFloat(el('rl-share').value);
-    var cf = info.confirm_above || {};
-    var risky = ('ceiling' in body && c > (cf.ceiling || 3)) || ('memory_max_used_pct' in body && p > (cf.memory_max_used_pct || 80));
-    if (risky) body.confirm = true;   // сервер без этого флага рискованное значение не принимает
-    post(body, risky);
+    post(body);   // ACL-2668: без подтверждения — любое значение в границах сохраняется сразу
   }
   document.addEventListener('click', function (ev) {
     var t = ev.target;
     if (!t || !t.getAttribute) return;
     if (t.id === 'rl-save') { save(); return; }
-    if (t.id === 'rl-reset') { post({reset: true}, false); return; }
+    if (t.id === 'rl-reset') { post({reset: true}); return; }
     if (t.getAttribute('data-view') === 'accounts') load();
   });
   document.addEventListener('acl:viewchange', function (e) {
