@@ -10295,9 +10295,17 @@ window.cbTree = (function () {
       else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
       else {
         if (setIdx < 1) return;
-        if (!window.confirm('Remove this ad set and its ads from the campaign?')) return;
-        window.cbRemoveAdset(cur.camp.slot, setIdx);
-        setIdx = Math.max(0, setIdx - 1);
+        /* Свой диалог дашборда вместо window.confirm (ACL-2668 #37). Ответ асинхронный:
+           за это время дерево могли перерисовать — проверяем, что кампания и набор те же. */
+        var askSlot = cur.camp.slot, askIdx = setIdx, askId = openId;
+        window.aclConfirm('', { title: 'Remove this ad set and its ads from the campaign?', okLabel: 'Remove', danger: true })
+          .then(function (yes) {
+            if (!yes || openId !== askId || setIdx !== askIdx || !findCampaign(askId)) return;
+            window.cbRemoveAdset(askSlot, askIdx);
+            setIdx = Math.max(0, setIdx - 1);
+            paint();
+          });
+        return;
       }
       paint();
     } else if (act === 'open-ad') {
@@ -16050,7 +16058,7 @@ else aclMlxExpiryBoot();
 async function amapMlLogout(btn) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
   var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
-  if (!window.confirm('Log out of Multilogin ' + label + ' on this computer?\n\nYou will need to sign in again to use it.')) return;
+  if (!await window.aclConfirm('You will need to sign in again to use it.', { title: 'Log out of Multilogin ' + label + ' on this computer?', okLabel: 'Log out', danger: true })) return;
   btn.disabled = true;
   try {
     var r = await fetch('/multilogin-logout', {method: 'POST', credentials: 'same-origin',
@@ -24912,7 +24920,7 @@ function aclPickerSearch(inst, text) {
   }
   async function post(body, ask) {
     if (pending) return;
-    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
+    if (ask && !await window.aclConfirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use.', { title: 'Save anyway?', okLabel: 'Save' })) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
