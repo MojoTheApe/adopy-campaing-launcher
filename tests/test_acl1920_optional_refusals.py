@@ -235,8 +235,7 @@ def test_check_plan_without_refusals_has_no_new_warnings(tmp_path):
     assert got["interests_resolve"]["status"] == "ok"
 
 
-@pytest.mark.parametrize("count_term", [True, False])
-def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_path, count_term):
+def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_path):
     class Transport:
         def request(self, method, path, params):
             if params["type"] == "adTargetingCategory":
@@ -250,33 +249,25 @@ def test_late_permission_refusal_counts_every_page_and_blocks_more_reads(tmp_pat
 
     client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
                            sleep=lambda _: None, max_calls=100)
-    resolver = tr.TermResolver(client, _store(tmp_path), term_cap=3, job_cap=3)
-    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3,
-                            count_term=count_term) == []
+    resolver = tr.TermResolver(client, _store(tmp_path))
+    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3) == []
     assert client.calls == 3
     assert resolver.reads == 3
-    assert resolver._term_reads == (3 if count_term else 0)
     assert "adTargetingCategory" in resolver.refused
-    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3,
-                            count_term=count_term) == []
-    with pytest.raises(tr._Spent):
-        resolver._lookup("adworkposition", {"type": "adworkposition"}, 1)
-    assert client.calls == 3 and client.writes == 0
+    assert resolver._lookup("adTargetingCategory", {"type": "adTargetingCategory"}, 3) == []
+    assert client.calls == 3 and client.writes == 0, "отказанный поиск не повторяется в задании"
 
 
-@pytest.mark.parametrize("count_term", [True, False])
-def test_refused_client_without_call_counter_still_charges_one_read(tmp_path, count_term):
+def test_refused_client_without_call_counter_still_charges_one_read(tmp_path):
     class NoCounterClient:
         def get_all(self, path, params, *, max_pages):
             raise _denied()
 
-    resolver = tr.TermResolver(NoCounterClient(), _store(tmp_path), term_cap=1, job_cap=1)
-    assert resolver._lookup("adworkposition", {"type": "adworkposition"}, 1,
-                            count_term=count_term) == []
+    resolver = tr.TermResolver(NoCounterClient(), _store(tmp_path))
+    assert resolver._lookup("adworkposition", {"type": "adworkposition"}, 1) == []
     assert resolver.reads == 1
-    assert resolver._term_reads == (1 if count_term else 0)
-    with pytest.raises(tr._Spent):
-        resolver._lookup("adworkemployer", {"type": "adworkemployer"}, 1)
+    assert resolver._lookup("adworkemployer", {"type": "adworkemployer"}, 1) == []
+    assert resolver.reads == 2
 
 
 @pytest.mark.parametrize("refused", [
@@ -310,17 +301,18 @@ def test_compound_interests_still_offer_components_when_optional_searches_are_re
     assert client.writes == 0
 
 
-def test_a_budget_unknown_compound_is_not_silently_split(tmp_path):
+def test_acl2668_a_compound_found_nowhere_is_checked_in_full_and_not_split(tmp_path):
     class Transport:
         def request(self, method, path, params):
             return {"status": 200, "body": {"data": []}}
 
     client = g.GraphClient(Transport(), allow_writes=False, min_interval_s=0,
                            sleep=lambda _: None, max_calls=200)
-    resolver = tr.TermResolver(client, _store(tmp_path), term_cap=1, job_cap=1)
+    resolver = tr.TermResolver(client, _store(tmp_path))
     result = resolver.resolve("Alpari Group or Plus500")
-    assert result["state"] == "unknown" and not result.get("split")
-    assert result["picks"] == [] and client.calls <= 1 and client.writes == 0
+    assert result["state"] == "unresolved" and not result.get("split")
+    assert [p["term"] for p in result["parts"]] == ["Alpari Group", "Plus500"]
+    assert result["picks"] == [] and client.calls > 1 and client.writes == 0
 
 
 def test_acl2473_term_with_candidates_gets_no_refused_lookup_note(tmp_path):
