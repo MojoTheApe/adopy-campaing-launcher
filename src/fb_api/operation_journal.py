@@ -26,8 +26,8 @@ from config.paths import get_local_config_dir, machine_file_lock, _atomic_write
 log = logging.getLogger(__name__)
 
 SCHEMA = 1
-#: Сколько после неизвестного результата записи мы не повторяем её вслепую (спека §7, решение 2).
-UNKNOWN_HOLD_S = 10 * 60
+#: Только для текста подсказки «Publish again»: шаг, отправленный моложе этого, описывается как недавний. Ожидания нет.
+UNKNOWN_RECENT_WORDING_S = 10 * 60
 #: A step another run sent this recently (shorter than the ~30 s read-back pause) is treated as still in flight (a concurrent run): two runs must not send the
 #: same step. Short on purpose (ACL-2583 owner rule: no 10-minute waits); a run that died is passed after this.
 BUSY_S = 20
@@ -298,7 +298,7 @@ class Operation:
         # Only a write whose outcome is really unknown waits; one that was looked for and not found is sent again.
         # No time-based wait (owner rule 2026-11-12): the creator reads it back once more, then sends it again.
         unknown = [k for k, s_ in st.items() if s_["state"] == UNKNOWN and s_.get("note") != NOT_FOUND_NOTE]
-        sent = [k for k, s_ in st.items() if s_["state"] == SENT and self.age_s(k) < UNKNOWN_HOLD_S]
+        sent = [k for k, s_ in st.items() if s_["state"] == SENT and self.age_s(k) < UNKNOWN_RECENT_WORDING_S]
         if unknown or sent:
             return ("Publish again - the last step is read back first and sent again only if Meta does not have it "
                     "(a duplicate is possible; objects are PAUSED).")
