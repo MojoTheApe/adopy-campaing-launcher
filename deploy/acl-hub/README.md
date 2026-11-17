@@ -13,10 +13,11 @@
 Все команды из папки `deploy/acl-hub`. Сначала `npx wrangler whoami`: должен быть новый аккаунт.
 
 ```
-npx wrangler d1 create acl_hub                      # id -> wrangler.toml (database_id)
-npx wrangler d1 migrations apply acl_hub --remote
-npx wrangler secret put OWNER_KEY                   # длинная случайная строка, только у владельца
-npx wrangler deploy                                 # напечатает https://acl-hub.<поддомен>.workers.dev
+npx wrangler d1 create acl_hub                      # напечатает database_id
+cp wrangler.toml wrangler.local.toml                # в копии: database_id = <id>; копия в .gitignore
+npx wrangler d1 migrations apply acl_hub --remote --config wrangler.local.toml
+npx wrangler secret put OWNER_KEY --config wrangler.local.toml   # длинная случайная строка, только у владельца
+npx wrangler deploy --config wrangler.local.toml    # напечатает https://acl-hub.<поддомен>.workers.dev
 curl -i https://acl-hub.<поддомен>.workers.dev/api/machines     # ожидание 401
 ```
 
