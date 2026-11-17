@@ -111,7 +111,7 @@ def test_a_library_in_error_is_pulled_again(library):
 
 def test_a_local_write_does_not_count_as_a_pull(library, monkeypatch):
     """Своя запись обновляет копию, но чужих правок не приносит — тянем."""
-    monkeypatch.setattr(team_library, "_pulled", {"targets": time.monotonic()})
+    monkeypatch.setattr(team_library, "_status", {"targets": {"connected": True, "ok": True, "error": "", "synced_at": "x"}})
     enrich_draft._pull_unless_just_pulled("targets", library["pull"], {})
     assert library["pulls"] == [True]
 
@@ -140,6 +140,44 @@ def test_preview_then_publish_pulls_the_library_once(library, monkeypatch, tmp_p
     pulls = [r for r in rows if r["step"] == "job_phase" and r["note"] == "library_pull"]
     assert [r["diag"].get("pulled", r["diag"].get("fresh")) for r in pulls] == [["targets"], ["targets"]]
     assert "fresh" in pulls[1]["diag"]
+
+
+def test_publish_start_refreshes_targets_texts_and_form_templates(library, monkeypatch, tmp_path, rows):
+    """ACL-2668 #41: запуск публикации — событие для всех трёх видов библиотеки.
+
+    Шаблон формы на объявление читается по копии без сети, поэтому копию
+    шаблонов обновляет этот же запуск, рядом с целями и текстами.
+    """
+    from src.analysis_agent import ad_text_registry, targeting_registry
+    from src.fb_api import form_templates
+    from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft
+
+    kinds: list[str] = []
+
+    def pull_of(kind):
+        def pull(*, force=False):
+            kinds.append(kind)
+            return library["pull"](force=force)
+        return pull
+
+    monkeypatch.setattr(targeting_registry, "pull", pull_of("targets"))
+    monkeypatch.setattr(ad_text_registry, "pull", pull_of("ad_texts"))
+    monkeypatch.setattr(form_templates, "pull", pull_of("form_templates"))
+    account_map = tmp_path / "map.csv"
+    account_map.write_text("account_label,ad_account_id,page_id\n", encoding="utf-8")
+    drafts = [CampaignDraft("Campaign A", "MX", "Account", ad_sets=[
+        AdSetDraft("Set A", targeting_label="Investing",
+                   ads=[AdDraft(ad_title="t", ad_body="b", copy_name="ES how much",
+                                lead_form_template="aaaaaaaaaaaa")])])]
+
+    enrich_draft.enrich_campaign_drafts(
+        drafts, account_label="Account", upload_fb_path=str(tmp_path / "none.xlsx"),
+        ad_account_map_path=str(account_map), creatives_root=str(tmp_path), preview_mode=False)
+
+    assert kinds == ["targets", "ad_texts", "form_templates"]
+    assert library["pulls"] == [True, True, True]
+    [phase] = [r for r in rows if r["step"] == "job_phase" and r["note"] == "library_pull"]
+    assert phase["diag"]["pulled"] == ["targets", "ad_texts", "form_templates"]
 
 
 # ── публикатор ─────────────────────────────────────────────────────────────
