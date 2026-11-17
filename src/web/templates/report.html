@@ -6943,6 +6943,8 @@ window.cbKeep = (function () {
     if (typeof removed[key] === 'number' && removed[key] >= t) return null;
     var kept = entry.campaigns.filter(function (c, i) {
       var cid = c.id || 'legacy-' + key + '-' + i;
+      var bareLegacy = /^legacy-(\d+)$/.exec(cid);   // голый номер промежуточной сборки
+      if (bareLegacy) cid = 'legacy-' + key + '-' + bareLegacy[1];
       var ts = removed[key + '#' + cid];
       if (typeof ts !== 'number') return true;
       /* R12/R15: любое надгробие абсолютно, и у legacy-id тоже */
@@ -7050,8 +7052,10 @@ window.cbKeep = (function () {
     var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
     var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
     var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
+    var ownRaw = own; own = {};
+    Object.keys(ownRaw).forEach(function (id) { own[normId(id)] = true; });
     var free = otherCamps.filter(function (c) {
-      return isObj(c) && cidOf(c) && !own[cidOf(c)]
+      return isObj(c) && cidOf(c) && !own[normId(cidOf(c))]
         && !Object.prototype.hasOwnProperty.call(removed, key + '#' + normId(cidOf(c)));   // R14
     });
     var content = function (c) { var d = Object.assign({}, c); delete d.id; return canon(d); };
@@ -7063,7 +7067,7 @@ window.cbKeep = (function () {
       }
     });
     var taken = {};
-    Object.keys(own).forEach(function (id) { taken[normId(id)] = true; });
+    Object.keys(own).forEach(function (id) { taken[id] = true; });
     Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
     otherCamps.forEach(function (c) {
       var cid = isObj(c) ? cidOf(c) : '';
@@ -7130,7 +7134,7 @@ window.cbKeep = (function () {
     var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
     var forms = {};
     keys.forEach(function (key) {
-      var a = normEntry(adoptIds(curForms[key], incForms[key], key, removed), key), b = normEntry(adoptIds(incForms[key], curForms[key], key, removed), key);
+      var a = normEntry(curForms[key], key), b = normEntry(adoptIds(incForms[key], a, key, removed), key);   // R16: недоверенная — только incoming
       var inCur = has(curForms, key), inInc = has(incForms, key);
       var newer, older;
       if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
@@ -7198,6 +7202,21 @@ window.cbKeep = (function () {
       });
     });
     restoring = false;
+    /* R16: id, которые restore выдал карточкам (`legacy-<форма>-<номер>`), сразу
+       пишем и в state, и в localStorage — без `touched` и без отправки. Иначе
+       state остаётся без id до первого сохранения, и первая же отправка (например,
+       снятие кампании) идёт без id и не совпадает с серверной копией. */
+    var gave = false;
+    Object.keys(state.forms).forEach(function (k) {
+      var e = state.forms[k];
+      if (!e || !Array.isArray(e.campaigns)) return;
+      var named = normEntry(e, k);
+      if (named.campaigns.some(function (c, i) { return c && e.campaigns[i] && c.id !== e.campaigns[i].id; })) {
+        state.forms[k] = named;
+        gave = true;
+      }
+    });
+    if (gave) { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ } }
     return made;
   }
 

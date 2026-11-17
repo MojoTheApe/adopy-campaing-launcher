@@ -269,10 +269,21 @@ def test_bare_legacy_id_next_to_an_idless_campaign_does_not_collide():
     assert len(set(ids(out, "F"))) == 2 and sorted(names(out)) == ["X", "Y"]
 
 
-def test_same_idless_campaign_in_both_copies_at_different_positions_is_not_doubled():
-    out = bd.merge_keep(doc({"F": form(10, named("E"), named("B"))}),
-                        doc({"F": form(20, named("A"), named("B"), named("C", "legacy-1"))}))
-    assert sorted(names(out)) == ["A", "B", "C"] and len(set(ids(out, "F"))) == 3  # E и A делят номер 0: правка
+def test_stored_idless_copy_is_numbered_by_index_and_the_incoming_one_pairs_with_it():
+    # R16: стоящая на сервере копия без id — доверенная, номера по порядку; страница старой версии подбирает id
+    out = bd.merge_keep(doc({"F": form(10, named("E"), named("B"))}), doc({"F": form(20, named("A"), named("B"))}))
+    assert sorted(names(out)) == ["A", "B"] and len(set(ids(out, "F"))) == 2
+
+
+def test_removal_from_a_page_that_restored_a_stored_idless_copy_keeps_the_campaign_removed():
+    # R16, S1-S3: на сервере [X,Y,Z] без id, страница восстановила их как legacy-F-0..2 и первым постом шлёт снятие
+    for gone, left in ((0, (("Y", 1), ("Z", 2))), (1, (("X", 0), ("Z", 2))), (2, (("X", 0), ("Y", 1)))):
+        stored = doc({"F": form(10, named("X"), named("Y"), named("Z"))})
+        incoming = doc({"F": form(20, *[named(n, f"legacy-F-{i}") for n, i in left])},
+                       removed={f"F#legacy-F-{gone}": 15})
+        out = bd.merge_keep(stored, incoming)
+        assert sorted(names(out)) == sorted(n for n, _ in left), gone
+        assert len(set(ids(out, "F"))) == 2
 
 
 def test_tombstone_of_a_bare_legacy_id_applies_to_the_normalised_id():

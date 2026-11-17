@@ -529,3 +529,23 @@ def test_account_label_with_a_quote_does_not_break_tree_selectors(make):
     p.locator(".cbd-camp").first.click()
     p.wait_for_timeout(300)
     assert p.evaluate("!!document.querySelector('.cb-slot[data-cbd-id=\"' + CSS.escape('legacy-peru|Acc\"x-0') + '\"]')")
+
+
+def test_removing_a_campaign_of_a_stored_idless_copy_survives_reload(make):
+    # R16: сервер держит [X,Y,Z] без id; страница восстановила их, человек снял X
+    seed_keep({FORM_KEY: ["X", "Y", "Z"]})
+    prof = make()
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 3", polling=100)
+    # id записаны в state и localStorage сразу, без отправки
+    assert p.evaluate("cbKeep.all()['%s'].campaigns.every(c => !!c.id)" % FORM_KEY)
+    assert not [x for x in prof.posts if x["name"] == "keep"]
+    p.evaluate("cbRemoveSlot(document.querySelector('.cb-remove-btn'))")
+    _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 2, p)
+    assert "X" not in json.dumps(server_keep()["forms"])
+    p.reload()
+    p.wait_for_function("window.cbSrv && cbSrv.ready()", polling=100)
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length >= 2", polling=100)
+    p.wait_for_timeout(800)
+    assert sorted(_assets(p)) == ["Y", "Z"]
+    assert sorted(c["fields"]["asset"] for c in server_keep()["forms"][FORM_KEY]["campaigns"]) == ["Y", "Z"]

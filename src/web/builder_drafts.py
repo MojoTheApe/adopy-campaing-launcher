@@ -147,9 +147,9 @@ def _adopt_ids(entry, other, key, removed):
     if not idless:
         return entry
     other_camps = other["campaigns"] if isinstance(other, dict) and isinstance(other.get("campaigns"), list) else []
-    own = {_cid(c) for c in camps if isinstance(c, dict) and _cid(c)}
+    own = {_norm_id(_cid(c), key) for c in camps if isinstance(c, dict) and _cid(c)}
     free = [c for c in other_camps
-            if isinstance(c, dict) and _cid(c) and _cid(c) not in own
+            if isinstance(c, dict) and _cid(c) and _norm_id(_cid(c), key) not in own
             and f"{key}#{_norm_id(_cid(c), key)}" not in removed]
     given: dict = {}
     for i in idless:
@@ -159,7 +159,7 @@ def _adopt_ids(entry, other, key, removed):
                 given[i] = _cid(c)
                 free.remove(c)
                 break
-    taken = {_norm_id(x, key) for x in own} | {_norm_id(x, key) for x in given.values()}
+    taken = set(own) | {_norm_id(x, key) for x in given.values()}
     for c in other_camps:
         cid = _cid(c) if isinstance(c, dict) else ""
         m = re.match(r"^legacy-(\d+)$", cid)
@@ -243,7 +243,7 @@ def _normalized(entry, key):
     return out
 
 
-def merge_keep(current: dict, incoming: dict) -> dict:
+def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> dict:
     """Слить два документа `keep` (ACL-2669): черновики сами не сжимаются.
 
     Слияние по кампании, а не по форме: на форме побеждает копия с большим
@@ -253,7 +253,14 @@ def merge_keep(current: dict, incoming: dict) -> dict:
     `"<форма>"` → мс удаления человеком): надгробие не младше копии убирает её,
     а более поздняя правка возвращает. Кампании без `id` (старый формат) перед
     слиянием получают `legacy-<номер>` (R9) и дальше идут как обычные.
-    Остальные поля документа берутся из `incoming`."""
+    Остальные поля документа берутся из `incoming`.
+
+    R16: недоверенной бывает только одна сторона (`untrusted`: "incoming" или
+    "current") — копия от страницы старой версии, где кампании без `id`. Её
+    кампании берут id у другой копии (`_adopt_ids`). У доверенной стороны
+    (серверная копия, страница новой версии) кампании без `id` получают
+    `legacy-<форма>-<номер>` по номеру, без подбора: так их назвала страница
+    при раскладке."""
     cur_forms = current.get("forms") if isinstance(current.get("forms"), dict) else {}
     inc_forms = incoming.get("forms") if isinstance(incoming.get("forms"), dict) else {}
     removed: dict = {}
@@ -263,8 +270,14 @@ def merge_keep(current: dict, incoming: dict) -> dict:
                 k = _BARE_TOMB.sub(r"\1#legacy-\1-\2", k)   # голый legacy-<номер> промежуточной сборки
                 if _num(ts) and ts > removed.get(k, float("-inf")):
                     removed[k] = ts
-    adopted_cur = {k: _normalized(_adopt_ids(v, inc_forms.get(k), k, removed), k) for k, v in cur_forms.items()}
-    adopted_inc = {k: _normalized(_adopt_ids(v, cur_forms.get(k), k, removed), k) for k, v in inc_forms.items()}
+    trusted_cur = {k: _normalized(v, k) for k, v in cur_forms.items()}
+    trusted_inc = {k: _normalized(v, k) for k, v in inc_forms.items()}
+    if untrusted == "current":
+        adopted_cur = {k: _normalized(_adopt_ids(v, trusted_inc.get(k), k, removed), k) for k, v in cur_forms.items()}
+        adopted_inc = trusted_inc
+    else:
+        adopted_cur = trusted_cur
+        adopted_inc = {k: _normalized(_adopt_ids(v, trusted_cur.get(k), k, removed), k) for k, v in inc_forms.items()}
     cur_forms, inc_forms = adopted_cur, adopted_inc
     forms: dict = {}
     for key in list(cur_forms) + [k for k in inc_forms if k not in cur_forms]:
@@ -351,7 +364,7 @@ def _save_keep(docs: dict, stored: dict, incoming: dict, base) -> tuple[bool, di
     data = incoming["data"]
     if incoming["saved_at"] < stored["saved_at"]:
         # Серверная копия новее: при равенстве `touched` побеждает она.
-        merged_data = merge_keep(data, stored["data"])
+        merged_data = merge_keep(data, stored["data"], untrusted="current")
         if stored["data"] != data:
             _keep_older("keep", incoming)
     else:

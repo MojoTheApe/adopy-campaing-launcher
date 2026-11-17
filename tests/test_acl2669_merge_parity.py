@@ -134,9 +134,17 @@ CASES = {
         doc({"F": form(10, named("F", "legacy-F-2"))}, removed={"F#legacy-F-0": 15}), doc({"F": form(10, named("E"))})),
     "R15 bare legacy next to id-less": (
         doc({}), doc({"F": form(5, named("X"), named("Y", "legacy-0"))})),
-    "R15 same id-less campaign at different positions": (
-        doc({"F": form(10, named("E"), named("B"))}),
-        doc({"F": form(20, named("A"), named("B"), named("C", "legacy-1"))})),
+    "R16 S1 stored id-less, first campaign removed": (
+        doc({"F": form(10, named("X"), named("Y"), named("Z"))}),
+        doc({"F": form(20, named("Y", "legacy-F-1"), named("Z", "legacy-F-2"))}, removed={"F#legacy-F-0": 15})),
+    "R16 S2 stored id-less, second campaign removed": (
+        doc({"F": form(10, named("X"), named("Y"), named("Z"))}),
+        doc({"F": form(20, named("X", "legacy-F-0"), named("Z", "legacy-F-2"))}, removed={"F#legacy-F-1": 15})),
+    "R16 S3 stored id-less, third campaign removed": (
+        doc({"F": form(10, named("X"), named("Y"), named("Z"))}),
+        doc({"F": form(20, named("X", "legacy-F-0"), named("Y", "legacy-F-1"))}, removed={"F#legacy-F-2": 15})),
+    "R16 stored id-less vs id-less incoming": (
+        doc({"F": form(10, named("E"), named("B"))}), doc({"F": form(20, named("A"), named("B"))})),
     "R15 bare legacy tombstone applies to the normalised id": (
         doc({"F": form(10, named("C", "legacy-1"))}, removed={"F#legacy-1": 5}), doc({"F": form(20, named("C"))})),
     "bare legacy number is rewritten": (
