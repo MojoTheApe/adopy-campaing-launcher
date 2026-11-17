@@ -109,10 +109,10 @@ def test_a_newer_release_is_offered_with_what_it_fixes(github):
     assert github.storage_saw_token == [False], "the token must not travel to asset storage"
 
 
-def test_github_is_asked_at_most_every_fifteen_minutes(github):
+def test_github_is_asked_at_most_every_minute(github):
     ru.check(now=1000.0)
     calls = github.api_calls
-    ru.check(now=1000.0 + 600)
+    ru.check(now=1000.0 + 30)
     assert github.api_calls == calls
     ru.check(now=1000.0 + 25 * 3600)
     assert github.api_calls > calls
