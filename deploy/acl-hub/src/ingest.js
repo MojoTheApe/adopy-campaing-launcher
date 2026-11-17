@@ -179,18 +179,20 @@ export async function handleBatch(request, env, ctx) {
   const { error, events } = await readBatchBody(request);
   if (error) return error;
   const failedRuns = [];
+  let response;
   try {
-    const out = await ingestEvents(env, events, { batchId, failedRuns });
-    // Алерт уходит после ответа машине: отправка не держит приём.
-    if (failedRuns.length) {
-      const job = notifyFailedRuns(env, failedRuns);
-      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(job); else await job;
-    }
-    return json({ ok: true, ...out });
+    response = json({ ok: true, ...(await ingestEvents(env, events, { batchId, failedRuns })) });
   } catch (_) {
     // Сбой D1: машина повторит позже, события лежат в её ящике.
-    return json({ error: "storage unavailable" }, 503);
+    response = json({ error: "storage unavailable" }, 503);
   }
+  // Сбои, выводы которых уже записаны, алертятся и при 503: на повторе они не будут «новыми».
+  // Алерт уходит после ответа машине: отправка не держит приём.
+  if (failedRuns.length) {
+    const job = notifyFailedRuns(env, failedRuns);
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(job); else await job;
+  }
+  return response;
 }
 
 // Перенос истории владельцем: машина берётся из каждого события, заголовок машины не нужен.

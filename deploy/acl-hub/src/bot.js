@@ -40,7 +40,7 @@ export async function handleWebhook(request, env) {
   if (!(await sameSecret(secret, env.TG_WEBHOOK_SECRET || ""))) return json({ error: "unauthorized" }, 401);
   let update = null;
   try { update = await request.json(); } catch (_) { return json({ ok: true }); }
-  const msg = update?.message || update?.edited_message;
+  const msg = update?.message;   // правка старого сообщения команду не повторяет
   const chat = msg?.chat?.id;
   if (chat === undefined || !allowedChats(env).includes(String(chat)) || typeof msg.text !== "string") return json({ ok: true });
   try {
