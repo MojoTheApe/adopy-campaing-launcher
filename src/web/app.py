@@ -62,6 +62,7 @@ from src.web.cache import (
     rebuild_deferred,
     has_entry as report_has_entry,
     peek_cached_report,
+    recheck_bi_revision,
     start_background_build,
     verified_source_key,
 )
@@ -1269,44 +1270,43 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
-_targets_refresh_lock = threading.Lock()
-_targets_refreshing = False
+def _sync_team_library_in_background(*kinds: str) -> None:
+    """Обновить копии общей библиотеки в своих потоках — событие, не таймер.
 
-
-def _refresh_sheet_targets_in_background() -> None:
-    """Обновить копию библиотеки таргетингов в своём потоке, один раз за раз.
-
-    ACL-1380: раньше страница сама ходила в api.github.com (`pull(force=True)`,
-    таймаут 15 с) на каждом открытии и на каждом `/api/ref-data`. Теперь
-    отрисовка читает копию на машине, а обновление идёт рядом: свежие цели
-    коллег видны со следующего открытия. Без force — `pull` сам не ходит в сеть
-    чаще раза в PULL_EVERY_SECONDS; второй поток, пока первый ещё ждёт ответа,
-    не запускается.
+    ACL-1380: отрисовка читает копию на машине, обновление идёт рядом: свежие
+    правки коллег видны со следующего показа. ACL-2668 (решение владельца
+    17.11): обновление только по событиям — загрузка страницы и её Refresh,
+    открытие выбора в билдере; 15-секундного порога больше нет, каждое событие
+    идёт в GitHub. Пока прошлое обновление вида ещё ждёт ответа, второе не
+    запускается.
     """
-    global _targets_refreshing
-    with _targets_refresh_lock:
-        if _targets_refreshing:
-            return
-        _targets_refreshing = True
+    from src.analysis_agent import team_library as tl
 
-    def run() -> None:
-        global _targets_refreshing
+    def wrapper(kind: str):
+        def run() -> None:
+            # Импорт реестра подписывает его копию на свежие данные (on_update).
+            if kind == "targets":
+                from src.analysis_agent import targeting_registry as reg
+            elif kind == "ad_texts":
+                from src.analysis_agent import ad_text_registry as reg
+            else:
+                from src.fb_api import form_templates as reg
+            reg.pull(force=True)
+        return run
+
+    for kind in kinds or ("targets", "ad_texts", "form_templates"):
         try:
-            from src.analysis_agent import targeting_registry as tr
-            tr.pull()
+            tl.pull_in_background(kind, wrapper(kind))
         except Exception:
             pass
-        finally:
-            with _targets_refresh_lock:
-                _targets_refreshing = False
-
-    threading.Thread(target=run, daemon=True, name="acl-targets-refresh").start()
 
 
 def _load_sheet_targets() -> list[dict]:
     """The team targeting library from the machine's read copy (no network)."""
     from src.analysis_agent import targeting_registry as tr
-    _refresh_sheet_targets_in_background()
+    # Страница (и её Refresh) и /api/ref-data строят билдер: всё, что в нём
+    # выбирается из библиотеки, обновляется рядом, не задерживая ответ.
+    _sync_team_library_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -2957,12 +2957,34 @@ def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLRespon
     return response
 
 
+# ACL-2668 #21: последний показанный период по менеджеру. Новые данные BI
+# проверяются, когда байер сменил период или сравнение (и по Refresh), а не
+# фоновым опросом раз в пять минут.
+_PERIOD_FIELDS = ("date_from", "date_to", "span", "compare", "cmp_from", "cmp_to")
+_LAST_PERIOD: dict[str, tuple] = {}
+_LAST_PERIOD_LOCK = threading.Lock()
+
+
+def _period_changed(inputs: dict) -> bool:
+    """Этот запрос меняет период/сравнение относительно прошлого показа. Без сети."""
+    period = tuple(inputs[name] for name in _PERIOD_FIELDS)
+    with _LAST_PERIOD_LOCK:
+        previous = _LAST_PERIOD.get(inputs["cm"])
+        _LAST_PERIOD[inputs["cm"]] = period
+    return previous is not None and previous != period
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = "",
     compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
     inputs = _store_inputs(date_from, date_to, span, compare, cmp_from, cmp_to)
+    if _period_changed(inputs) and bi_stats.bi_enabled():
+        # Смена периода — событие байера: спросить BI о новых данных в пуле
+        # (ограниченное ожидание). Новая ревизия меняет ключ, и ниже
+        # страница уйдёт в фоновую пересборку, как после Refresh.
+        await _in_report_pool(recheck_bi_revision)
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
     # а сразу ответить и собрать его в фоне. ACL-2207: отвечаем последней
     # сохранённой страницей, если она есть, а не экраном ожидания.
@@ -6563,9 +6585,13 @@ def api_form_templates_list(force: bool = False) -> JSONResponse:
     `templates` - годные к публикации (выбор в билдере); `rows` - все записи для
     вкладки Forms, в том числе invalid; `deleted`, `library`, `migration` - для неё же.
     `force` перечитывает библиотеку: вкладка открывается с ним, билдер - без.
+    ACL-2668: билдер отвечает по копии сразу, а открытие выбора — событие:
+    библиотека обновляется рядом, к следующему показу.
     """
     from src.fb_api import form_templates
 
+    if not force:
+        _sync_team_library_in_background("form_templates")
     try:
         view = form_templates.listing(force=force)
     except form_templates.TemplateError as exc:

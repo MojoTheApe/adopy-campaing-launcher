@@ -6283,8 +6283,7 @@ window.cbSrv = (function () {
         if (j.accepted || (generations[name] || 0) !== generation) return;
         /* Сервер новее (писали с другого адреса/вкладки): берём его. */
         reg.apply(j.doc);
-        last[name] = snap(name);
-        setStamp(name, j.doc.saved_at, j.doc.saved_at);
+        afterApply(name, j.doc);
       })
       .catch(function () { if (inFlight[name] === request) dirty[name] = true; })
       .then(function () {
@@ -6298,6 +6297,37 @@ window.cbSrv = (function () {
       });
   }
 
+  /* Ключи по алфавиту: сервер отдаёт документ с отсортированными ключами, а
+     слитый локальный собран в другом порядке — сравнивать надо по смыслу. */
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+
+  /* После применения серверной копии (ACL-2669): модуль мог слить её со своим
+     и получить больше, чем у сервера (своя кампания, своё надгробие). Тогда
+     слитое надо отправить — иначе сервер так и останется без него. Сервер
+     слитое примет как есть (accepted=true), цикла нет. */
+  var reposted = {};      // имя → saved_at серверной копии, ради которой уже перепостили
+  function afterApply(name, doc) {
+    last[name] = snap(name);
+    setStamp(name, doc.saved_at, doc.saved_at);
+    var mine;
+    try { mine = canon(regs[name].snapshot()); } catch (e) { return; }
+    if (mine === canon(doc.data)) return;
+    /* сервер держит то, что клиент не принимает (validate вырезает): без этой метки пост→ответ→пост шёл бы по кругу */
+    var theirs = canon(doc.data);
+    if (reposted[name] && (reposted[name].at === doc.saved_at || reposted[name].data === theirs)) return;
+    reposted[name] = { at: doc.saved_at, data: theirs };
+    generations[name] = (generations[name] || 0) + 1;
+    setStamp(name, Math.max(Date.now(), doc.saved_at + 1));
+    dirty[name] = true;
+    if (ready) schedule(name);
+  }
+
   function reconcile(name, doc) {
     var reg = regs[name];
     var at = stamp(name);
@@ -6309,8 +6339,7 @@ window.cbSrv = (function () {
       if (at) post(name);
     } else if (doc.saved_at > at) {
       reg.apply(doc);
-      last[name] = snap(name);
-      setStamp(name, doc.saved_at, doc.saved_at);
+      afterApply(name, doc);
     } else if (doc.saved_at < at) {
       meta.base[name] = doc.saved_at; persist();
       post(name);
@@ -6646,18 +6675,31 @@ window.cbDrawer = (function () {
  * едут: у десяти байеров десять разных наборов, общего места для них
  * нет.
  *
- * Хранилище само ничего не забывает, поэтому забывать приходится нам:
- * без срока годности через месяц здесь лежат позапрошлые черновики.
+ * Черновик никогда не уменьшается сам (ACL-2669): срока годности нет, а
+ * запись уходит только тогда, когда человек сам убрал кампанию
+ * (`cbRemoveSlot`) — это пишется надгробием в `removed`. Всё остальное —
+ * сбой, чужая вкладка, старая копия с сервера, форма, которой сейчас нет
+ * на странице — черновика не трогает: выбросить чужую работу хуже, чем
+ * подержать лишнее.
  */
 window.cbKeep = (function () {
   var KEY = 'acl.builder.v2';
   var VERSION = 4;
-  /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
-     нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
-  var STALE_MS = 14 * 24 * 60 * 60 * 1000;
+  /* Срока годности нет (ACL-2669): черновик живёт, пока человек сам его не
+     убрал. Выбросить чужую работу хуже, чем подержать лишнее. */
 
-  var state = { v: VERSION, forms: {} };
+  var state = { v: VERSION, forms: {}, removed: {} };
   var restoring = false;
+
+  /* Стабильный id кампании: переживает перезагрузку и перенумерацию карточек,
+     по нему сервер и вкладки узнают одну и ту же кампанию. Лежит на карточке
+     (`data-cbd-id`); у копии карточки (Duplicate / Copy to) его нет, поэтому
+     она получает свой новый id. */
+  function newId() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function slotId(slot) {
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = newId();
+    return slot.dataset.cbdId;
+  }
 
   /* v2 -> v3 (ACL-1767): появились пол, языки, устройства, версия ОС и старт. Поля v2
      сохраняются как есть; новые - пустые (умолчание = прежнее поведение). Кнопку не трогаем:
@@ -6707,14 +6749,28 @@ window.cbKeep = (function () {
 
   /* Годен ли документ: и из localStorage, и с сервера (ACL-1681) — те же правила. */
   function validate(parsed) {
+    /* входной документ не трогаем: migrate и чистка id работают с копией */
+    try { parsed = JSON.parse(JSON.stringify(parsed)); } catch (e) { return null; }
     parsed = migrate(parsed);
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
-    var fresh = {}, now = Date.now();
+    var fresh = {};
     Object.keys(parsed.forms).forEach(function (k) {
       var entry = parsed.forms[k];
-      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; }) && entry.touched <= now && (now - (entry.touched || 0)) < STALE_MS) fresh[k] = entry;
+      if (entry && Array.isArray(entry.campaigns) && entry.campaigns.every(function(c) { return c && c.fields && typeof c.fields === 'object' && !Array.isArray(c.fields) && c.shown && typeof c.shown === 'object' && !Array.isArray(c.shown) && Number.isInteger(c.ads) && c.ads > 0 && c.ads <= 100; })) {
+        /* id кампании необязателен (старые черновики без него); не строка — выбрасываем */
+        entry.campaigns.forEach(function(c) { if ('id' in c && typeof c.id !== 'string') delete c.id; });
+        fresh[k] = entry;
+      }
     });
-    return { v: VERSION, forms: fresh };
+    /* надгробия «человек убрал сам»: только числовые отметки времени */
+    var removed = {};
+    if (parsed.removed && typeof parsed.removed === 'object' && !Array.isArray(parsed.removed)) {
+      Object.keys(parsed.removed).forEach(function (k) {
+        var t = parsed.removed[k];
+        if (typeof t === 'number' && isFinite(t)) removed[k] = t;
+      });
+    }
+    return { v: VERSION, forms: fresh, removed: removed };
   }
 
   function write() {
@@ -6784,6 +6840,7 @@ window.cbKeep = (function () {
     /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
     var hints = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hint'), function (h) { return h.textContent; });
     var out = {
+      id: slotId(slot),
       fields: fields,
       shown: shown,
       hint: hint ? hint.textContent : '',
@@ -6797,10 +6854,25 @@ window.cbKeep = (function () {
   }
 
   function writeSlot(slot, data) {
+    /* id кампании едет вместе с карточкой; в старом черновике его нет — появится при первом сохранении */
+    if (typeof data.id === 'string' && data.id) slot.dataset.cbdId = data.id;
     /* ACL-1768: сначала наборы - поля и принадлежность объявлений ложатся по готовым разделам.
        Нет сохранённого числа (старый черновик) - один набор. */
     var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
     var haveSets = slot.querySelectorAll('.cb-adset-sec').length;
+    /* Обновление на месте (ACL-2669): если в копии наборов или объявлений
+       меньше, лишние убираем тем же путём, что и кнопки ×, иначе следующее
+       сохранение вернёт убранное. Надгробий это не пишет: они только на
+       кампании, а тут cbKeep раскладывает копию сам. */
+    for (; haveSets > wantSets && haveSets > 1 && window.cbRemoveAdset; haveSets -= 1) {
+      if (!window.cbRemoveAdset(slot, haveSets - 1)) break;
+    }
+    var wantAds = data.ads || 1;
+    var rowsNow = slot.querySelectorAll('.cb-ad-row');
+    for (var ri = rowsNow.length - 1; ri >= wantAds && ri > 0 && window.cbRemoveAd; ri -= 1) {
+      var rb = rowsNow[ri].querySelector('.cb-remove-ad-btn');
+      if (rb) window.cbRemoveAd(rb);
+    }
     for (var ks = haveSets; ks < wantSets && ks < 10 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
     var have = slot.querySelectorAll('.cb-ad-row').length;
     var addAd = slot.querySelector('.cb-add-btn-sm');
@@ -6862,29 +6934,305 @@ window.cbKeep = (function () {
     return Array.prototype.slice.call(document.querySelectorAll('form.open-account-form'));
   }
 
+  /* Запись формы без того, что человек сам убрал: кампании с надгробием
+     новее правки и форма целиком, если надгробие ключа не старше записи.
+     Вернёт null, если ничего не осталось. */
+  function isLegacyId(id) { return typeof id === 'string' && id.indexOf('legacy-') === 0; }
+  function pruned(key, entry, removed) {
+    var t = entry.touched || 0;
+    if (typeof removed[key] === 'number' && removed[key] >= t) return null;
+    var kept = entry.campaigns.filter(function (c, i) {
+      var cid = c.id || 'legacy-' + key + '-' + i;
+      var bareLegacy = /^legacy-(\d+)$/.exec(cid);   // голый номер промежуточной сборки
+      if (bareLegacy) cid = 'legacy-' + key + '-' + bareLegacy[1];
+      var ts = removed[key + '#' + cid];
+      if (typeof ts !== 'number') return true;
+      /* R12/R15: любое надгробие абсолютно, и у legacy-id тоже */
+      return false;
+    });
+    if (!kept.length) return null;
+    return kept.length === entry.campaigns.length ? entry : { touched: entry.touched, tracking: entry.tracking, campaigns: kept };
+  }
+
+  /* Совпадают ли кампании с прежними. id в сравнении участвует: у старой записи
+     без id чужой новый id — не изменение (иначе первое же сохранение подняло бы
+     `touched` нетронутой формы и старая копия перебила бы настоящую правку). */
+  function sameContent(o, n) {
+    var a = Object.assign({}, o), b = Object.assign({}, n);
+    delete a.id; delete b.id; delete a.touched; delete b.touched;
+    return canon(a) === canon(b);
+  }
+
+  function has0(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function noTouched(c) { var d = Object.assign({}, c); delete d.touched; return d; }
   function save() {
     if (restoring) return;          // раскладываем своё же — записывать нечего
     var now = Date.now();
+    /* ACL-2669: начинаем с копии прежнего — формы, которых нет на странице, и
+       форма без карточек переходят как есть; уходит запись только по надгробию
+       человека. Для формы на странице её собственные карточки — правда. */
     var next = {};
+    var removed = state.removed || {};
+    Object.keys(state.forms).forEach(function (k) {
+      var kept = pruned(k, state.forms[k], removed);
+      if (kept) next[k] = kept;
+    });
     forms().forEach(function (form) {
       var key = stamp(form);
       if (!key) return;
       var slots = form.querySelectorAll('.cb-slot');
-      if (!slots.length) return;    // пустой аккаунт не занимает места
+      if (!slots.length) return;
       var campaigns = Array.prototype.map.call(slots, readSlot);
       var link = form.querySelector('[name="tracking_link"]');
       var tracking = link ? link.value : '';
       var old = state.forms[key];
-      var unchanged = old && old.tracking === tracking && JSON.stringify(old.campaigns) === JSON.stringify(campaigns);
-      next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
+      /* B1/R17: у каждой кампании своя метка правки. Та же кампания (тот же id) с тем
+         же содержимым оставляет прежнюю метку, иначе — now. Метка записи формы — максимум
+         по кампаниям и правка ссылки; без изменений остаётся прежней. */
+      var oldById = {};
+      if (old && Array.isArray(old.campaigns)) normEntry(old, key).campaigns.forEach(function (o) {
+        if (o && o.id && !has0(oldById, o.id)) oldById[o.id] = o;
+      });
+      var top = 0;
+      campaigns.forEach(function (c) {
+        var o = has0(oldById, c.id) ? oldById[c.id] : null;
+        if (o && sameContent(o, c)) c.touched = typeof o.touched === 'number' ? o.touched : (old.touched || 0);
+        else c.touched = now;
+        if (c.touched > top) top = c.touched;
+      });
+      var trackChanged = !old || old.tracking !== tracking;
+      next[key] = { touched: trackChanged ? now : Math.max(top, old.touched || 0), campaigns: campaigns, tracking: tracking };
     });
-    state = { v: VERSION, forms: next };
+    state = { v: VERSION, forms: next, removed: removed };
     write();
+  }
+
+  /* Человек убрал кампанию (× или «Remove» в дереве; отмена копии). Только
+     эти пути пишут надгробие: `removed["<форма>#<id>"]` (формы целиком — нет, R11). `slot` уже снят со страницы,
+     `form` — форма, где она стояла. Пока cbKeep сам раскладывает копию
+     (`restoring`), ничего не пишем. Позднейшая правка формы (touched новее
+     надгробия) возвращает ключ — это решает слияние. */
+  function markRemoved(form, slot) {
+    if (restoring || !form) return;
+    var key = stamp(form);
+    if (!key) return;
+    var now = Date.now();
+    var removed = state.removed = state.removed || {};
+    var id = slot && slot.dataset ? slot.dataset.cbdId : '';
+    if (id) removed[key + '#' + id] = now;
+    /* R11: надгробие формы целиком не пишем — оно стирало кампании, которых человек
+       не видел; форма без кампаний и так уходит из слияния и из save() */
+    saveSoon();
+  }
+
+  /* Слияние двух документов `keep` (ACL-2669). То же правило, что у
+     `merge_keep` в src/web/builder_drafts.py, результат совпадает до байта
+     (tests/test_acl2669_merge_parity.py). Сначала кампании без id получают
+     `legacy-<номер>` (R9), дальше — по кампании: на форме побеждает копия с
+     большим `touched` (при равенстве — `incoming`), чужие кампании дописываются
+     в конец, исчезнуть кампания или форма может только по надгробию. */
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+  function numeric(x) { return typeof x === 'number' && isFinite(x); }
+  function normEntry(entry, key) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var out = Object.assign({}, entry);
+    out.campaigns = entry.campaigns.map(function (c, i) {
+      if (!c || typeof c !== 'object') return c;
+      if (!(typeof c.id === 'string' && c.id)) return Object.assign({}, c, { id: 'legacy-' + key + '-' + i });
+      var m = /^legacy-(\d+)$/.exec(c.id);      // F3: голый legacy-<номер> промежуточной сборки
+      return m ? Object.assign({}, c, { id: 'legacy-' + key + '-' + m[1] }) : c;
+    });
+    return out;
+  }
+  /* R19: у доверенной стороны запись без id нумеруется сперва по равному содержимому
+     с кампанией другой копии, остальные — по номеру, пропуская занятые в записи.
+     То же, что `_number_trusted` в builder_drafts.py. */
+  function numberTrusted(entry, other, key) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var camps = entry.campaigns;
+    if (!camps.some(function (c) { return isObj(c) && !cidOf(c); })) return normEntry(entry, key);
+    var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
+    var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
+    var used = {};
+    camps.forEach(function (c) { if (isObj(c) && cidOf(c)) used[normId(cidOf(c))] = true; });
+    var free = otherCamps.filter(function (c) { return isObj(c) && cidOf(c) && !used[normId(cidOf(c))]; });
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; delete d.touched; return canon(d); };
+    var given = {};
+    camps.forEach(function (c, i) {
+      if (!isObj(c) || cidOf(c)) return;
+      var mine = content(c);
+      for (var j = 0; j < free.length; j += 1) {
+        if (content(free[j]) === mine) { given[i] = normId(cidOf(free[j])); used[given[i]] = true; free.splice(j, 1); break; }
+      }
+    });
+    camps.forEach(function (c, i) {
+      if (!isObj(c) || cidOf(c) || (i in given)) return;
+      var j = i;
+      while (used['legacy-' + key + '-' + j]) j += 1;
+      given[i] = 'legacy-' + key + '-' + j;
+      used[given[i]] = true;
+    });
+    var out = Object.assign({}, entry);
+    out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
+    return normEntry(out, key);
+  }
+  /* R13: кампании без id (страница старой версии) берут id у другой копии формы:
+     сначала по равному содержимому, потом по порядку среди оставшихся; каждый id
+     не больше раза. То же правило, что `_adopt_ids` в builder_drafts.py. */
+  function adoptIds(entry, other, key, removed) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var camps = entry.campaigns, idless = [], own = {};
+    camps.forEach(function (c, i) {
+      if (c && typeof c === 'object' && !Array.isArray(c)) { if (cidOf(c)) own[cidOf(c)] = true; else idless.push(i); }
+    });
+    if (!idless.length) return entry;
+    var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
+    var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
+    var ownRaw = own; own = {};
+    Object.keys(ownRaw).forEach(function (id) { own[normId(id)] = true; });
+    var free = otherCamps.filter(function (c) {
+      return isObj(c) && cidOf(c) && !own[normId(cidOf(c))]
+        && !Object.prototype.hasOwnProperty.call(removed, key + '#' + normId(cidOf(c)));   // R14
+    });
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; delete d.touched; return canon(d); };
+    var given = {};
+    idless.forEach(function (i) {
+      var mine = content(camps[i]);
+      for (var j = 0; j < free.length; j += 1) {
+        if (content(free[j]) === mine) { given[i] = cidOf(free[j]); free.splice(j, 1); break; }
+      }
+    });
+    var taken = {};
+    Object.keys(own).forEach(function (id) { taken[id] = true; });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    otherCamps.forEach(function (c) {
+      var cid = isObj(c) ? cidOf(c) : '';
+      if (!cid) return;
+      var m = /^legacy-(\d+)$/.exec(cid);
+      taken[m ? 'legacy-' + key + '-' + m[1] : cid] = true;
+    });
+    /* одна и та же кампания без id в обеих копиях: общий id по меньшему номеру */
+    var otherIdless = [];
+    otherCamps.forEach(function (c, j) { if (isObj(c) && !cidOf(c)) otherIdless.push([j, c]); });
+    idless.forEach(function (i) {
+      if (i in given) return;
+      var mine = content(camps[i]);
+      for (var p = 0; p < otherIdless.length; p += 1) {
+        if (content(otherIdless[p][1]) === mine) {
+          var n = Math.min(i, otherIdless[p][0]);
+          while (taken['legacy-' + key + '-' + n] || Object.prototype.hasOwnProperty.call(removed, key + '#legacy-' + key + '-' + n)) n += 1;
+          var cand = 'legacy-' + key + '-' + n;
+          given[i] = cand; taken[cand] = true; otherIdless.splice(p, 1); break;
+        }
+      }
+    });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    /* legacy-id той же позиции — та же кампания по номеру (R9) */
+    idless.forEach(function (i) {
+      if (i in given) return;
+      for (var j = 0; j < free.length; j += 1) {
+        var fid = cidOf(free[j]), bm = /^legacy-(\d+)$/.exec(fid);
+        if ((bm ? 'legacy-' + key + '-' + bm[1] : fid) === 'legacy-' + key + '-' + i) { given[i] = fid; free.splice(j, 1); break; }
+      }
+    });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    /* по порядку — только настоящие id: номер у legacy-id сдвигается (R14) */
+    free = free.filter(function (c) { return !legacyId(cidOf(c)); });
+    idless.forEach(function (i) { if (!(i in given) && free.length) given[i] = cidOf(free.shift()); });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    idless.forEach(function (i) {
+      if (i in given) return;
+      var j = i;
+      while (taken['legacy-' + key + '-' + j] || (otherCamps.length && Object.prototype.hasOwnProperty.call(removed, key + '#legacy-' + key + '-' + j))) j += 1;
+      given[i] = 'legacy-' + key + '-' + j;
+      taken[given[i]] = true;
+    });
+    var out = Object.assign({}, entry);
+    out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
+    return out;
+  }
+  function touchedOf(entry) { return entry && typeof entry === 'object' && numeric(entry.touched) ? entry.touched : 0; }
+  function legacyId(id) { return id.indexOf('legacy-') === 0; }
+  function cidOf(c) { return c && typeof c === 'object' && typeof c.id === 'string' ? c.id : ''; }
+  function merge(current, incoming) {
+    current = current || {}; incoming = incoming || {};
+    var curForms = current.forms && typeof current.forms === 'object' && !Array.isArray(current.forms) ? current.forms : {};
+    var incForms = incoming.forms && typeof incoming.forms === 'object' && !Array.isArray(incoming.forms) ? incoming.forms : {};
+    var removed = {};
+    [current.removed, incoming.removed].forEach(function (src) {
+      if (!src || typeof src !== 'object') return;
+      Object.keys(src).forEach(function (k0) {
+        var k = k0.replace(/^(.*)#legacy-(\d+)$/, '$1#legacy-$1-$2');   // голый legacy-<номер> промежуточной сборки
+        if (numeric(src[k0]) && (!(k in removed) || src[k0] > removed[k])) removed[k] = src[k0];
+      });
+    });
+    var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+    var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
+    var forms = {};
+    var adoptedCur = {}, adoptedInc = {};
+    keys.forEach(function (key) {
+      var a = numberTrusted(curForms[key], incForms[key], key), b = normEntry(adoptIds(incForms[key], a, key, removed), key);   // R16: недоверенная — только incoming
+      var inCur = has(curForms, key), inInc = has(incForms, key);
+      if (inCur) adoptedCur[key] = a;
+      if (inInc) adoptedInc[key] = b;
+      var newer, older;
+      if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
+      else { newer = inCur ? a : b; older = null; }
+      var rem = function (k) { return has(removed, k) ? removed[k] : -Infinity; };
+      if (!newer || typeof newer !== 'object' || Array.isArray(newer)) {
+        if (!has(removed, key)) forms[key] = newer;   // не форма билдера: как есть
+        return;
+      }
+      var entry = Object.assign({}, newer);
+      var nCamps = newer.campaigns, oCamps = older && typeof older === 'object' ? older.campaigns : null;
+      if (Array.isArray(nCamps) || Array.isArray(oCamps)) {
+        nCamps = Array.isArray(nCamps) ? nCamps : [];
+        var nT = touchedOf(newer), oT = touchedOf(older);
+        var oList = Array.isArray(oCamps) ? oCamps : [];
+        /* B1/R17: побеждает кампания с большим своим `touched` (нет — метка записи
+           формы той же копии; ничья — копия более новой формы) */
+        var ct = function (c, et) { return c && typeof c === 'object' && numeric(c.touched) ? c.touched : et; };
+        var oById = {};
+        oList.forEach(function (c) { var id = cidOf(c); if (id && !has(oById, id)) oById[id] = c; });
+        var kept = [];
+        nCamps.forEach(function (c) {
+          var cid = cidOf(c);
+          if (cid && rem(key + '#' + cid) !== -Infinity) return;   // R12/R15: любое надгробие абсолютно
+          if (cid && has(oById, cid) && ct(oById[cid], oT) > ct(c, nT)) c = oById[cid];
+          kept.push(c);
+        });
+        var have = {};
+        nCamps.forEach(function (c) { if (cidOf(c)) have[cidOf(c)] = true; });
+        oList.forEach(function (c) {
+          var cid = cidOf(c);
+          if (cid && !have[cid] && rem(key + '#' + cid) === -Infinity) { kept.push(c); have[cid] = true; }
+        });
+        entry.campaigns = kept;
+        if (!kept.length) return;
+      }
+      if (rem(key) >= touchedOf(entry)) return;
+      forms[key] = entry;
+    });
+    /* R21: надгробия не истекают никогда (любой срок воскрешает кампанию из копии вне слияния) */
+    var merged = Object.assign({}, incoming);
+    if ('forms' in current || 'forms' in incoming || Object.keys(forms).length) merged.forms = forms;
+    if (Object.keys(removed).length) merged.removed = removed;
+    var vs = [current.v, incoming.v].filter(numeric);
+    if (vs.length) merged.v = Math.max.apply(null, vs);
+    return merged;
   }
 
   function restore(given) {
     var stored = given || read();
-    if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
+    if (!stored) { state = { v: VERSION, forms: {}, removed: {} }; return 0; }
     state = stored;
     restoring = true;
     var made = 0;
@@ -6901,11 +7249,30 @@ window.cbKeep = (function () {
         if (i < already) return;
         window.cbAddSlot(form);
         var slots = form.querySelectorAll('.cb-slot');
-        writeSlot(slots[slots.length - 1], data);
+        /* Старая запись без id: id по номеру карточки, одинаковый во всех вкладках.
+           Случайные id в двух вкладках дали бы одной кампании две личности, и
+           слияние на сервере оставило бы обе копии. */
+        var bare = typeof data.id === 'string' ? /^legacy-(\d+)$/.exec(data.id) : null;
+        writeSlot(slots[slots.length - 1], data.id && !bare ? data : Object.assign({}, data, { id: 'legacy-' + key + '-' + (bare ? bare[1] : i) }));
         made += 1;
       });
     });
     restoring = false;
+    /* R16: id, которые restore выдал карточкам (`legacy-<форма>-<номер>`), сразу
+       пишем и в state, и в localStorage — без `touched` и без отправки. Иначе
+       state остаётся без id до первого сохранения, и первая же отправка (например,
+       снятие кампании) идёт без id и не совпадает с серверной копией. */
+    var gave = false;
+    Object.keys(state.forms).forEach(function (k) {
+      var e = state.forms[k];
+      if (!e || !Array.isArray(e.campaigns)) return;
+      var named = normEntry(e, k);
+      if (named.campaigns.some(function (c, i) { return c && e.campaigns[i] && c.id !== e.campaigns[i].id; })) {
+        state.forms[k] = named;
+        gave = true;
+      }
+    });
+    if (gave) { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ } }
     return made;
   }
 
@@ -6967,20 +7334,75 @@ window.cbKeep = (function () {
       apply: function (doc) {
         var incoming = validate(doc.data);
         if (!incoming) return;
-        if (Object.keys(state.forms).length && JSON.stringify(state.forms) !== JSON.stringify(incoming.forms)) {
+        /* ACL-2669: страницу не стираем и не раскладываем заново. Сначала
+           сохраняем недосохранённый ввод (его `touched` новее и он выиграет
+           слияние), затем сливаем копию сервера с тем, что есть. */
+        if (timer) { clearTimeout(timer); timer = null; save(); }
+        var merged = merge(state, incoming);
+        var removedNow = merged.removed || {};
+        var normOld = {};
+        Object.keys(state.forms).forEach(function (k) { normOld[k] = normEntry(state.forms[k], k); });
+        if (Object.keys(state.forms).length && JSON.stringify(normOld) !== JSON.stringify(merged.forms)) {
           try { localStorage.setItem(KEY + '.older', JSON.stringify(state)); } catch (e) { /* не помним */ }
         }
-        restoring = true;
-        forms().forEach(function (form) {
-          Array.prototype.slice.call(form.querySelectorAll('.cb-slot')).reverse().forEach(function (slot) {
-            window.cbRemoveSlot(slot);
+        /* какие id кто-то из копий знает: слот, чей id не знает никто, — это
+           набранное прямо сейчас и ещё не сохранённое, его не трогаем */
+        var known = {};
+        [state, incoming].forEach(function (d) {
+          Object.keys(d.forms).forEach(function (k) {
+            var e = normEntry(d.forms[k], k);
+            if (e && Array.isArray(e.campaigns)) e.campaigns.forEach(function (c) { known[k + '#' + c.id] = true; });
           });
         });
-        restoring = false;
-        state = incoming;
+        var active = document.activeElement;
+        var changed = false;
+        restoring = true;
+        try {
+          forms().forEach(function (form) {
+            var key = stamp(form);
+            if (!key) return;
+            var entry = merged.forms[key];
+            var slots = Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
+            var byId = {};
+            slots.forEach(function (s) { if (s.dataset.cbdId) byId[s.dataset.cbdId] = s; });
+            var wanted = {};
+            if (entry) {
+              var link = form.querySelector('[name="tracking_link"]');
+              if (link && typeof entry.tracking === 'string' && link.value !== entry.tracking && active !== link) link.value = entry.tracking;
+              entry.campaigns.forEach(function (c) {
+                wanted[c.id] = true;
+                var slot = byId[c.id];
+                if (!slot) {
+                  window.cbAddSlot(form);
+                  var all = form.querySelectorAll('.cb-slot');
+                  slot = all[all.length - 1];
+                  writeSlot(slot, c);
+                  changed = true;
+                  return;
+                }
+                var typing = active && slot.contains(active) && 'value' in active ? { el: active, value: active.value } : null;
+                if (canon(readSlot(slot)) !== canon(noTouched(c))) {
+                  writeSlot(slot, c);
+                  changed = true;
+                  /* тронут не весь слот: набираемое прямо сейчас поле остаётся как было */
+                  if (typing && document.contains(typing.el) && typing.el.value !== typing.value) typing.el.value = typing.value;
+                }
+              });
+            }
+            /* со страницы уходит только то, что слияние убрало по надгробию */
+            slots.forEach(function (slot) {
+              var id = slot.dataset.cbdId;
+              if (!id || wanted[id] || !known[key + '#' + id]) return;
+              if (typeof removedNow[key + '#' + id] === 'number' || (!entry && typeof removedNow[key] === 'number')) {
+                window.cbRemoveSlot(slot);
+                changed = true;
+              }
+            });
+          });
+        } finally { restoring = false; }
+        state = merged;
         try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
-        var made = restore(incoming);
-        if (made && window.cbTree) window.cbTree.paint();
+        if (changed && window.cbTree) window.cbTree.paint();
       }
     });
   }
@@ -6990,6 +7412,8 @@ window.cbKeep = (function () {
 
   return {
     save: save,
+    markRemoved: markRemoved,
+    slotId: slotId,
     migrate: migrate,
     saveSoon: saveSoon,
     restore: restore,
@@ -6998,8 +7422,8 @@ window.cbKeep = (function () {
     writeSlot: writeSlot,
     all: function () { return state.forms; },
     validate: validate,
-    staleMs: STALE_MS,
-    forget: function () { state = { v: VERSION, forms: {} }; write(); }
+    merge: merge,
+    forget: function () { state = { v: VERSION, forms: {}, removed: {} }; write(); }
   };
 })();
 </script>
@@ -8649,12 +9073,14 @@ window.cbTree = (function () {
      то, что есть. Пока список был свой, половина работы была ящику не
      видна, и добавлять приходилось только через него. */
 
-  var seq = 0;
-
   /* Карточке нужно имя, которое переживёт перенумерацию: `data-idx`
      меняется при каждом удалении соседа. */
   function slotId(slot) {
-    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'cbs' + (++seq);
+    /* тот же id, что у черновика (cbKeep): стабильный, не «cbsN» на сессию */
+    if (window.cbKeep) return window.cbKeep.slotId(slot);
+    /* без cbKeep (часть страницы отдельно, тестовая обвязка): свой id на карточке,
+       тот же `data-cbd-id`, который потом подхватит cbKeep */
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     return slot.dataset.cbdId;
   }
 
@@ -9133,7 +9559,7 @@ window.cbTree = (function () {
 
     /* Выбранная кампания получает настоящую форму — ту самую, а не копию, —
        но живёт она в правой колонке. Карточки в дереве нет — отпускаем. */
-    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + openId + '"]') : null;
+    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + CSS.escape(openId) + '"]') : null;
     if (!card && openId) release();
     paintEditor();
 
@@ -10476,7 +10902,7 @@ window.cbTree = (function () {
      трогать надо только подпись строки. */
   function refreshOpenRow() {
     if (!openId) return;
-    var card = body.querySelector('.cbd-camp[data-camp="' + openId + '"]');
+    var card = body.querySelector('.cbd-camp[data-camp="' + CSS.escape(openId) + '"]');
     var found = findCampaign(openId);
     if (!card || !found) return;
     var c = found.camp;
@@ -10623,7 +11049,7 @@ window.cbMove = (function () {
   /* Names may already be stripped (cbRenumber keeps them in data-renumber-name), so match both. */
   function formIdInput(row) { return row.querySelector('input[name$="_form_id"], input[data-renumber-name$="_form_id"]'); }
   function slotById(id) {
-    return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
+    return id ? document.querySelector('.cb-slot[data-cbd-id="' + CSS.escape(id) + '"]') : null;
   }
   function formByKey(key) {
     var hit = null;
@@ -10806,6 +11232,7 @@ window.cbMove = (function () {
         if (!copy.isConnected || formBusy(destForm)) return false;
         copy.remove();
         P.renumber(destForm); window.cbUpdateCount(destForm);
+        if (window.cbKeep) window.cbKeep.markRemoved(destForm, copy);   // отмена копии — решение человека
         repaintTree();
         return true;
       } };
@@ -19469,6 +19896,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     var form = slot.closest('form');
     slot.remove();
     if (form) { cbRenumber(form); cbUpdateCount(form); }
+    /* ACL-2669: только человек убирает черновик; при раскладке копии cbKeep сам молчит */
+    if (form && window.cbKeep) window.cbKeep.markRemoved(form, slot);
   };
 
   function cbRenumber(form) {
