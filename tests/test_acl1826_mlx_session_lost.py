@@ -29,6 +29,7 @@ from tests.test_acl1812_warm_sessions import Rig  # noqa: E402
 
 LOST_TEXT = ("Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). "
              "Sign in again in the Multilogin app here, then press Retry.")
+SKIP_TEXT = "Multilogin: sign in again, then press Retry."   # ACL-2668: одна общая причина пропуска
 PROXY_TEXT = "The proxy login for this profile is wrong or expired — update it in Multilogin"
 E403 = "Start profile failed HTTP 403: restricted permission"
 PROXY_ERR = "page.goto: net::ERR_INVALID_AUTH_CREDENTIALS at https://adsmanager.facebook.com/"
@@ -195,40 +196,63 @@ def _items(order):
     return [(f"{slot}{i}", _entry(i, slot)) for i, slot in enumerate(order, 1)]
 
 
-def test_batch_skips_remaining_slot_b_and_slot_a_continues(tmp_path):
+def test_batch_rechecks_once_then_skips_remaining_slot_b_and_slot_a_continues(tmp_path):
     b = BatchRig(tmp_path)
-    results = b.rig.reg.open_many(_items(["B", "A", "B", "B", "A"]), job_id="job1")
+    results = b.rig.reg.open_many(_items(["B", "A", "B", "B", "B", "A"]), job_id="job1")
     assert results["B1"]["code"] == "mlx_session_lost" and not results["B1"].get("skipped")
-    for label in ("B3", "B4"):
+    # ACL-2668: следующий старт слота — перепроверка; он тоже отказал по-настоящему.
+    assert results["B3"]["code"] == "mlx_session_lost" and not results["B3"].get("skipped")
+    for label in ("B4", "B5"):
         assert results[label]["code"] == "mlx_session_lost" and results[label]["skipped"] is True
-        assert results[label]["message"] == LOST_TEXT
-    assert results["A2"]["ok"] and results["A5"]["ok"]
-    assert len(b.launchers["B"].calls) == 1            # в MLX сходили один раз
+        assert results[label]["message"] == SKIP_TEXT        # одна общая причина, не поток ошибок
+    assert results["A2"]["ok"] and results["A6"]["ok"]
+    assert len(b.launchers["B"].calls) == 2            # отказ + одна перепроверка
     assert len(b.launchers["A"].calls) == 2            # слот A не затронут
+
+
+class FlakyLauncher(FakeLauncher):
+    """Один случайный 403, дальше слот работает."""
+
+    def start_profile(self, folder, pid, headless=False):
+        self.calls.append(pid)
+        if len(self.calls) == 1:
+            raise MultiloginLauncherError(E403, status=403)
+        return SimpleNamespace(port="9333", folder_id=folder or "F", ws_endpoint=None)
+
+
+def test_one_transient_403_does_not_skip_the_rest_of_the_slot(tmp_path):
+    b = BatchRig(tmp_path)
+    b.launchers["B"] = FlakyLauncher("B")
+    results = b.rig.reg.open_many(_items(["B", "B", "A", "B", "B"]), job_id="job-flaky")
+    assert results["B1"]["code"] == "mlx_session_lost"
+    assert all(results[l]["ok"] for l in ("B2", "A3", "B4", "B5"))
+    assert not any(r.get("skipped") for r in results.values())
+    assert len(b.launchers["B"].calls) == 4
 
 
 def test_skip_is_recorded_but_sentry_hears_only_the_real_failure(tmp_path, sentry):
     b = BatchRig(tmp_path)
-    b.rig.reg.open_many(_items(["B", "B", "B"]), job_id="job2")
+    b.rig.reg.open_many(_items(["B", "B", "B", "B"]), job_id="job2")
     rows = [json.loads(l) for l in (tmp_path / "rpa_telemetry.jsonl").read_text(encoding="utf-8").splitlines()]
     steps = [r["step"] for r in rows]
-    assert steps.count("mlx_start_failed") == 1 and steps.count("mlx_start_skipped") == 2
-    assert len(sentry) == 1
+    # Отказ + отказ на перепроверке; остальные два — пропуски.
+    assert steps.count("mlx_start_failed") == 2 and steps.count("mlx_start_skipped") == 2
+    assert len(sentry) == 2
 
 
 def test_a_new_batch_starts_clean_and_retry_touches_only_the_skipped(tmp_path):
     b = BatchRig(tmp_path)
-    first = b.rig.reg.open_many(_items(["B", "A", "B", "B"]), job_id="j1")
+    first = b.rig.reg.open_many(_items(["B", "A", "B", "B", "B"]), job_id="j1")
     skipped = [k for k, v in first.items() if v.get("skipped")]
-    assert skipped == ["B3", "B4"]
+    assert skipped == ["B4", "B5"]
     # Человек вошёл в Multilogin заново — лаунчер B снова работает.
     b.launchers["B"].fail = None
     b.launchers["B"].calls.clear()
     b.launchers["A"].calls.clear()
-    items = {label: e for label, e in _items(["B", "A", "B", "B"])}
+    items = {label: e for label, e in _items(["B", "A", "B", "B", "B"])}
     second = b.rig.reg.open_many([(l, items[l]) for l in skipped], job_id="j2")
     assert all(r["ok"] for r in second.values())
-    assert b.launchers["B"].calls == [_pid(3), _pid(4)]
+    assert b.launchers["B"].calls == [_pid(4), _pid(5)]
     assert b.launchers["A"].calls == []                  # A1/A2 не трогали
 
 
@@ -236,22 +260,70 @@ def test_a_still_broken_retry_fails_once_and_skips_the_rest(tmp_path):
     b = BatchRig(tmp_path)
     b.rig.reg.open_many(_items(["B", "B", "B"]), job_id="j1")
     b.launchers["B"].calls.clear()
-    second = b.rig.reg.open_many(_items(["B", "B", "B"])[1:], job_id="j2")
-    assert len(b.launchers["B"].calls) == 1
-    assert [bool(r.get("skipped")) for r in second.values()] == [False, True]
+    second = b.rig.reg.open_many(_items(["B", "B", "B", "B"])[1:], job_id="j2")
+    assert len(b.launchers["B"].calls) == 2            # отказ + одна перепроверка
+    assert [bool(r.get("skipped")) for r in second.values()] == [False, False, True]
 
 
 # ───────────────────────── пачки со страницы (batch в форме) ─────────────────────────
 
-def test_refusal_is_per_batch_and_per_slot():
-    mlx.begin_batch("b1")
-    mlx.begin_batch("b2")
+def _latch(batch: str) -> None:
+    """Отказ, перепроверка пущена и тоже отказала — слот B защёлкнут в пачке."""
+    mlx.begin_batch(batch)
     mlx.note_failure(mlx.SESSION_LOST, "B", "KLD B93")
-    assert mlx.refusal("b1", "B", "KLD B90")["code"] == "mlx_session_lost"
+    assert mlx.refusal(batch, "B", "KLD B94") is None    # этот старт — перепроверка
+    mlx.note_failure(mlx.SESSION_LOST, "B", "KLD B94")
+
+
+def test_refusal_is_per_batch_and_per_slot():
+    mlx.begin_batch("b2")
+    _latch("b1")
+    skip = mlx.refusal("b1", "B", "KLD B90")
+    assert skip["code"] == "mlx_session_lost" and skip["message"] == SKIP_TEXT
     assert mlx.refusal("b1", "A", "Doc120") is None
     assert mlx.refusal("", "B", "x") is None             # без пачки (одиночное нажатие) не пропускаем
     mlx.begin_batch("b3")                                # новая пачка (Retry) — чистая
     assert mlx.refusal("b3", "B", "KLD B90") is None
+
+
+def test_first_failure_only_marks_the_slot_and_the_next_start_is_the_recheck():
+    mlx.begin_batch("r1")
+    mlx.note_failure(mlx.SESSION_LOST, "B", "KLD B93")
+    assert mlx.refusal("r1", "B", "KLD B90") is None     # перепроверка пущена
+    assert mlx.refusal("r1", "B", "KLD B90") is None     # повторный вопрос того же старта
+    mlx.note_started("B")                                # сессия жива
+    mlx.note_failure("mlx_start_other", "B", "KLD B91")  # не наш код — ничего не защёлкивает
+    assert mlx.refusal("r1", "B", "KLD B92") is None
+
+
+def test_latch_lives_until_a_successful_start_not_by_the_clock(monkeypatch):
+    _latch("r2")
+    clock = {"t": 0.0}
+    monkeypatch.setattr(mlx, "_clock", lambda: clock["t"])
+    clock["t"] = 10 * 3600.0                            # 10 ч спустя защёлка всё ещё стоит
+    mlx.begin_batch("other")
+    assert mlx.refusal("r2", "B", "KLD B90")["skipped"] is True
+    assert not hasattr(mlx, "BATCH_TTL_S")
+    mlx.note_started("B")                                # удачный старт слота снимает защёлку
+    assert mlx.refusal("r2", "B", "KLD B90") is None
+
+
+def test_latch_is_lifted_by_a_new_sign_in(monkeypatch):
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_B", "old-token")
+    _latch("r3")
+    assert mlx.refusal("r3", "B", "KLD B90")["skipped"] is True
+    monkeypatch.setenv("MULTILOGIN_AUTOMATION_TOKEN_B", "new-token")   # вошли заново
+    assert mlx.refusal("r3", "B", "KLD B90") is None
+
+
+def test_recheck_with_a_dead_token_confirms_without_a_start(monkeypatch):
+    mlx.begin_batch("r4")
+    mlx.refusal("r4", "B", "KLD B93")                   # первая предполётная проверка (токен пустой — ок)
+    mlx.note_failure(mlx.SESSION_LOST, "B", "KLD B93")
+    for k, v in _env(exp=1).items():
+        monkeypatch.setenv(k, v)
+    skip = mlx.refusal("r4", "B", "KLD B90")             # перепроверка: токен истёк — старт не нужен
+    assert skip["code"] == mlx.TOKEN_EXPIRED and skip["message"] == SKIP_TEXT
 
 
 class _FormReq:
@@ -284,8 +356,7 @@ def test_endpoints_skip_slot_b_after_the_loss_and_serve_slot_a(monkeypatch, hand
     for mod, fn in ((account_spend, "start_read"), (country_split, "start_split"), (campaign_inventory, "start_read")):
         monkeypatch.setattr(mod, fn, fake)
     monkeypatch.setattr(web, "_spend_period", lambda a, b, c: ("2026-10-01", "2026-10-01"))
-    mlx.begin_batch("page1")
-    mlx.note_failure(mlx.SESSION_LOST, "B", "KLD B93")
+    _latch("page1")
 
     def call(account):
         fields = {"account": account, "batch": "page1", **extra}
@@ -293,7 +364,7 @@ def test_endpoints_skip_slot_b_after_the_loss_and_serve_slot_a(monkeypatch, hand
         return resp.status_code, json.loads(resp.body)
 
     status, body = call("KLD B90")
-    assert status == 409 and body["code"] == "mlx_session_lost" and body["error"] == LOST_TEXT
+    assert status == 409 and body["code"] == "mlx_session_lost" and body["error"] == SKIP_TEXT
     assert "KLD B90" not in started
     status, body = call("Doc120")
     assert status != 409 and "Doc120" in started
@@ -304,12 +375,11 @@ def test_publish_endpoint_skips_slot_b_with_the_same_reason(monkeypatch):
 
     monkeypatch.setattr(web, "_parse_build_upload_form", lambda form: ("MX", "KLD B90", [{"name": "C1"}]))
     monkeypatch.setattr(mlx, "instance_of", lambda a: "B")
-    mlx.begin_batch("pa-1")
-    mlx.note_failure(mlx.SESSION_LOST, "B", "KLD B93")
+    _latch("pa-1")
     form = {"batch": "pa-1", "user_confirmed": "1"}
     resp = asyncio.run(web.publish_jobs_start(_FormReq(form)))
     body = json.loads(resp.body)
-    assert resp.status_code == 409 and body["code"] == "mlx_session_lost" and body["error"] == LOST_TEXT
+    assert resp.status_code == 409 and body["code"] == "mlx_session_lost" and body["error"] == SKIP_TEXT
 
 
 def test_publish_job_error_text_becomes_the_clear_message(monkeypatch):

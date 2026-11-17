@@ -14,8 +14,8 @@ crons = ["*/5 * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "acl_hub"
-# Подставить id, который напечатает `wrangler d1 create acl_hub`.
-database_id = "75b520a8-b3aa-4396-8b8d-23a6fc2016d6"
+# Живой id базы в гит не кладётся: развёртывание идёт с локальной копией wrangler.local.toml (см. README.md).
+database_id = "REPLACE_WITH_D1_ID"
 migrations_dir = "migrations"
 
 # Секреты (только `wrangler secret put`, в файл не писать): OWNER_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
