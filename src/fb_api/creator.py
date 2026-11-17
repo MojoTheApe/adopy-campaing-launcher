@@ -271,10 +271,12 @@ def upload_calls(size: int, worker: bool | None = None, *, chunked: bool = False
 #: ACL-2637: calls reserved for a growing upload window (1, 2, 4 ... 64 MB) on the worker path.
 CALLS_UPLOAD_WINDOW_RAMP = 6
 
-#: Ожидание обработки видео — с потолком по времени и по числу вызовов.
-VIDEO_WAIT_S = 300.0
+#: Ожидание обработки видео (ACL-2668, решение 16): без потолка - публикация не останавливается, пока Meta
+#: обрабатывает видео; стоп только по ошибке обработки. Опрос раз в 15 с, после `VIDEO_POLL_SLOW_AFTER`
+#: опросов - раз в `VIDEO_POLL_MAX_S` (большие видео обрабатываются десятки минут). Отмена задания работает всегда.
 VIDEO_POLL_S = 15.0
-VIDEO_MAX_POLLS = 20
+VIDEO_POLL_MAX_S = 60.0
+VIDEO_POLL_SLOW_AFTER = 20
 
 #: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
 #: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
@@ -1959,8 +1961,37 @@ MSG_MISMATCH = ('"{name}" was changed or removed in Ads Manager after it was cre
                 "Fix or delete it there, then publish again.")
 MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campaign. '
                      "Delete or move it, then publish again.")
-MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
-                       "Publish again once it is ready, or replace the video.")
+def video_error_reason(status: dict) -> str:
+    """Причина Meta из `status` видео с ошибкой обработки (ACL-2668): тексты ошибок фаз, иначе пусто."""
+    texts: list[str] = []
+    for phase in ("uploading_phase", "processing_phase", "publishing_phase"):
+        part = status.get(phase) if isinstance(status.get(phase), dict) else {}
+        for err in part.get("errors") or []:
+            text = str((err or {}).get("message") or "").strip() if isinstance(err, dict) else str(err).strip()
+            if text and text not in texts:
+                texts.append(text)
+    err = status.get("error")
+    text = str(err.get("message") or "").strip() if isinstance(err, dict) else str(err or "").strip()
+    if text and text not in texts:
+        texts.append(text)
+    return "; ".join(texts)
+
+
+def video_progress_text(status: dict) -> str:
+    """` (45%)` по `processing_progress` Meta, если она его дала; иначе пусто."""
+    try:
+        pct = int(status.get("processing_progress"))
+    except (TypeError, ValueError):
+        return ""
+    return f" ({max(0, min(100, pct))}%)"
+
+
+def _wait_span(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60:02d} s"
+
+
+MSG_VIDEO_NOT_READY = ("Meta could not process the video for {name}. Replace the video, then publish again.")
 MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
             "Nothing was created twice.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
@@ -1982,8 +2013,7 @@ class CampaignCreator:
                  read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
-                 video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
-                 video_max_polls: int = VIDEO_MAX_POLLS,
+                 video_poll_s: float = VIDEO_POLL_S, video_poll_max_s: float = VIDEO_POLL_MAX_S,
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
@@ -2014,9 +2044,8 @@ class CampaignCreator:
         self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
-        self.video_wait_s = video_wait_s
         self.video_poll_s = video_poll_s
-        self.video_max_polls = video_max_polls
+        self.video_poll_max_s = max(video_poll_s, video_poll_max_s)
         self.reconcile_wait_s = RECONCILE_WAIT_S if reconcile_wait_s is None else reconcile_wait_s
         #: Имя → id наших креативов (список кабинета читается раз на кампанию).
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
@@ -2511,8 +2540,11 @@ class CampaignCreator:
                 if oid not in video_ids[0] and video_ids[1]:     # complete listing and the video is not in it
                     raise mismatch(key, MSG_OTHER_ACCOUNT)
                 status = row.get("status") if isinstance(row.get("status"), dict) else {}
-                if str(status.get("video_status") or "").lower() != "ready":
-                    raise mismatch(key, MSG_VIDEO_NOT_READY)
+                # ACL-2668 (решение 16): видео, которое Meta ещё обрабатывает, - не стоп: его дождётся `_wait_video`.
+                # Стоп только по ошибке обработки.
+                if str(status.get("video_status") or "").lower() == "error":
+                    reason = video_error_reason(status).replace("{", "{{").replace("}", "}}")
+                    raise mismatch(key, MSG_VIDEO_NOT_READY + (f" Meta's reason: {reason}" if reason else ""))
         if adset_names or ad_names:
             # Кампания: найденная выбором имени, иначе подтверждённая в журнале (запись о ней могла не сохраниться).
             campaign_id = campaign_id or next((st["object_id"] for _k, st in stages if st["kind"] == "campaign"), "")
@@ -4084,26 +4116,43 @@ class CampaignCreator:
         return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str, *, who: str = "") -> str:
-        """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
+        """Ждать обработку видео до готовности (ACL-2668, решение 16): без потолка по времени и опросам.
+
+        Стоп только по ошибке обработки у Meta (с её причиной) и по отмене задания. Пока ждём - живая строка
+        статуса с процентом Meta и временем; сторож тишины видит ожидание, а не зависание. Опросы сверх запаса
+        плана (`CALLS_PER_VIDEO_POLLS`) добавляются к бюджету вызовов запуска: ожидание не упирается в бюджет.
+        """
         who = who or f"ad {ad.index}"
-        deadline = self.clock() + self.video_wait_s
+        began = self.clock()
         polls = 0
-        while True:
-            self._check_cancel(out)
-            row = self.client.get(f"/{vid}", {"fields": "status"})
-            polls += 1
-            status = row.get("status") if isinstance(row.get("status"), dict) else {}
-            state = str(status.get("video_status") or "").lower()
-            if state == "ready":
-                break
-            if state == "error":
-                raise CreationStopped(f"{who}: Meta could not process the video", created=out.created,
-                                      kind="video_error")
-            if polls >= self.video_max_polls or self.clock() + self.video_poll_s > deadline:
-                raise CreationStopped(
-                    f"{who}: the video is still processing after {int(self.video_wait_s)} s; "
-                    "publish again later (nothing is duplicated)", created=out.created, kind="video_timeout")
-            self.sleep(self.video_poll_s)
+        announced = False
+        try:
+            while True:
+                self._check_cancel(out)
+                if polls >= CALLS_PER_VIDEO_POLLS and isinstance(getattr(self.client, "max_calls", None), int):
+                    self.client.max_calls += 1          # опрос сверх запаса плана - часть бюджета этого запуска
+                row = self.client.get(f"/{vid}", {"fields": "status"})
+                polls += 1
+                status = row.get("status") if isinstance(row.get("status"), dict) else {}
+                state = str(status.get("video_status") or "").lower()
+                if state == "ready":
+                    break
+                if state == "error":
+                    reason = video_error_reason(status)
+                    raise CreationStopped(
+                        f"{who}: Meta could not process the video" + (f": {reason}" if reason else ""),
+                        created=out.created, kind="video_error")
+                if not announced:
+                    self._step(out, f"{who}: video processing at Meta - waiting until it is ready")
+                    self._waiting("video_processing")
+                    announced = True
+                self._beat()
+                self.live_progress(f"{who}: video processing at Meta{video_progress_text(status)}, "
+                                   f"{_wait_span(self.clock() - began)}")
+                self.sleep(self.video_poll_s if polls < VIDEO_POLL_SLOW_AFTER else self.video_poll_max_s)
+        finally:
+            if announced:
+                self._waiting("")
         self._step(out, f"{who}: video processed")
         thumbs = self.client.get_all(f"/{vid}/thumbnails", {"fields": "uri,is_preferred"}, max_pages=1)
         pick = next((t for t in thumbs if t.get("is_preferred")), thumbs[0] if thumbs else None)

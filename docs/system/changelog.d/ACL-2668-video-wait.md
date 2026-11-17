@@ -1,0 +1,10 @@
+## ACL-2668 — Publish waits for Meta's video processing until the video is ready — 2026-11-16
+
+Publish no longer stops with "the video is still processing after 300 s; publish again later". The creator polls the
+video's status until Meta reports it ready (every 15 s, every 60 s after 20 polls), with no time or poll cap; the
+buyer's Cancel still works at every poll. The live status line shows "video processing at Meta (NN%), M min SS s"
+(Meta's `processing_progress` when given). Polls beyond the plan's reserve (`CALLS_PER_VIDEO_POLLS`) extend the run's
+call budget instead of ending the run. Only a real processing error stops that ad, with Meta's reason from the
+status phases. A resumed publish no longer stops on a video that is still processing; only a failed video stops it.
+Owner decision 16 of the ACL-2668 audit.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1668).
