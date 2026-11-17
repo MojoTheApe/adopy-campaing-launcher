@@ -47,7 +47,7 @@ def test_by_default_a_large_video_goes_straight_to_chunks_without_touching_the_f
 def _budget_parts(plan):
     need = cr.estimate_create_calls(plan)
     reads = cr.estimate_targeting_reads(plan)
-    hard_max = publish_api.DEFAULT_CREATE_MAX_CALLS + publish_api._tr_cap.JOB_READ_ABS_CAP
+    hard_max = publish_api.DEFAULT_CREATE_MAX_CALLS + publish_api._tr_cap.PUBLISH_READS_ALLOWANCE
     return need, reads, hard_max
 
 
