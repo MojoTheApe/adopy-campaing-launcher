@@ -277,7 +277,7 @@ test("unknown path is 404", async () => {
 - Test: `tests/test_acl_event_log_hub.py`
 
 **Interfaces:**
-- Produces: `shipper.CYCLE_S = 120`; `shipper.DEFAULT_URL = "https://acl-hub.<поддомен>.workers.dev"` — значение подставляется в Task 9 после развёртывания, до этого остаётся прежний адрес (`acl-event-log.adopy-acl…`), чтобы ветка не ломала отправку.
+- Produces: `shipper.CYCLE_S = 120`; `shipper.DEFAULT_URL = "https://acl-hub.<поддомен>.workers.dev"` — значение подставляется в Task 9 после развёртывания, до этого остаётся прежний адрес (старый Worker `acl-event-log`), чтобы ветка не ломала отправку.
 - В `publish_jobs.py` после `_log_event("publish.result", …)`: если `res.get("success") is not True` — `wake_shipper()` в `try/except`.
 
 - [ ] **Step 1: Тесты:**

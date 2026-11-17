@@ -20,7 +20,7 @@ test("normalizeReason matches python", () => {
   assert.equal(normalizeReason("ad 1: video upload: the fast upload was refused and uploading in 5 MB pieces needs "
     + "about 494 Meta calls; this run can spare 88."),
   "ad #: video upload: the fast upload was refused and uploading in # mb pieces needs about # meta calls; this run can spare #.");
-  assert.equal(normalizeReason("Job 3f2a1b4c-1111-2222-3333-444455556666 failed at step 12 after 30.5 s, id abcdef0123456789"),
+  assert.equal(normalizeReason("Job 550e8400-e29b-41d4-a716-446655440000 failed at step 12 after 30.5 s, id abcdef0123456789"),
     "job <uuid> failed at step # after # s, id <id>");
   assert.equal(normalizeReason("   "), "(no reason)");
 });

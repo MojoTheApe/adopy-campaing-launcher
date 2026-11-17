@@ -1,5 +1,25 @@
 # System history
 
+## ACL-2750 — Connecting an account from the builder links it to a country that has no accounts yet — 2026-11-17
+
+The connect block of a country with spend but no linked account rendered an empty country, so a connect from the builder's "+ Account" saved the account without linking it and the builder lost it after the reload. The block now carries the country name, like the Home view does.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1750
+
+## ACL-2746 — A lost light-tab session or clean upload tab no longer stops a publish — 2026-11-17
+
+The 90 s re-capture bound and the 2-per-run limit (ACL-2344) are gone: a lost Graph session of the light tab is taken again as often as needed. A lost clean upload tab is reopened and the upload retried; if none can be opened the upload continues in the light tab. Checkpoint, login and wrong-origin still stop. Lost session/tab reasons are logged as codes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1746).
+
+## ACL-2703 — Team library syncs on events, no 15 s pull — 2026-11-17
+
+The read copy of the team library no longer goes to GitHub whenever it is older than 15 s
+(ACL-2668 decision #41). Events refresh it instead: page load and Refresh (all three kinds,
+in the background, the page does not wait), opening the builder's form picker, the Targeting /
+Ad texts / Forms sections, the publish start (targets, ad texts and form templates) and own saves.
+Reads during a publish use the copy without network calls. Conflict handling is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1703).
+
 ## ACL-2668 decision 12 — Profiles start together, no separate start limit or gap — 2026-11-16
 
 MLX `start` requests are no longer sent one at a time: as many profiles start at once as the "Profiles at once" slot
