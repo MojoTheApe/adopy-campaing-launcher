@@ -79,6 +79,15 @@ CASES = {
         doc({"A": form(10, camp("a1"))}), doc({"A": form(30, camp())})),
     "removed is a union with max, v is max": (
         doc({}, removed={"A": 1, "B": 9}, v=3), doc({}, removed={"A": 5, "C": 2}, v=4)),
+    "campaign tombstone equals older.touched blocks it": (
+        doc({"A": form(20, camp("a1"))}, removed={"A#a2": 10}), doc({"A": form(10, camp("a1"), camp("a2"))})),
+    "campaign tombstone equals newer.touched keeps it": (
+        doc({"A": form(20, camp("a1"), camp("a2"))}, removed={"A#a2": 20}), doc({})),
+    "form tombstone equals result touched drops the form": (
+        doc({"A": form(20, camp("a1"))}, removed={"A": 20}), doc({})),
+    "non-dict and non-string-id campaigns in older": (
+        doc({"A": form(20, camp("a1"))}),
+        doc({"A": form(10, camp("a1"), "junk", {"id": 5, "fields": {}}, None, camp("a2"))})),
     "one side has no forms": (
         {"v": 4}, doc({"A": form(1, camp("a1"))})),
 }

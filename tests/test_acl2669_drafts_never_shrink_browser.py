@@ -350,7 +350,9 @@ def test_older_server_copy_does_not_bring_back_a_removed_campaign(make):
                  now - 5000)
     p = prof.open()
     p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
-    p.wait_for_timeout(600)
+    # слитое (с надгробием) должно дойти до сервера без новой правки
+    _until(lambda: (server_keep().get("removed") or {}).get(FORM_KEY + "#cb") == now - 30000, p)
+    assert [c["id"] for c in server_keep()["forms"][FORM_KEY]["campaigns"]] == ["ca"]
     assert _assets(p) == ["A"]
     local = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2'))")
     assert [c["id"] for c in local["forms"][FORM_KEY]["campaigns"]] == ["ca"]
@@ -398,3 +400,37 @@ def test_apply_while_typing_in_another_campaign_keeps_text_and_slot_nodes(make):
     assert field.input_value().endswith(typed)
     assert a.evaluate("window.__nodes.every((n, i) => n === document.querySelectorAll('.cb-slot')[i])")
     assert a.evaluate("document.activeElement === document.querySelectorAll('.cb-slot')[1].querySelector('[name$=\"_asset\"]')")
+
+
+def test_local_only_campaign_reaches_the_server_after_reconcile_without_an_edit(make):
+    now = int(time.time() * 1000)
+    bd.save("keep", now, _doc(now - 60000, [("A", "ca")]))
+    prof = make()
+    _stale_local(prof, _doc(now - 90000, [("A", "ca"), ("X", "cx")]), now - 5000)
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    _until(lambda: [c["id"] for c in server_keep()["forms"][FORM_KEY]["campaigns"]] == ["ca", "cx"], p)
+    # сходится: после ответа сервера новых отправок нет
+    p.wait_for_timeout(1500)
+    n = len(prof.posts)
+    p.wait_for_timeout(1500)
+    assert len(prof.posts) == n
+    assert sorted(_assets(p)) == ["A", "X"]
+
+
+def test_server_copy_with_fewer_ads_shrinks_the_slot_and_the_next_save_keeps_it(make):
+    now = int(time.time() * 1000)
+    older = _doc(now - 60000, [("A", "ca")])
+    older["forms"][FORM_KEY]["campaigns"][0]["ads"] = 3
+    newer = _doc(now, [("A", "ca")])
+    newer["forms"][FORM_KEY]["campaigns"][0]["ads"] = 2
+    bd.save("keep", now, newer)
+    prof = make()
+    _stale_local(prof, older, now - 5000)
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot .cb-ad-row').length === 2", polling=100)
+    assert keep_slots(p) == 1
+    p.evaluate("cbKeep.save()")
+    assert p.evaluate("cbKeep.all()['%s'].campaigns[0].ads" % FORM_KEY) == 2
+    p.wait_for_timeout(1200)
+    assert server_keep()["forms"][FORM_KEY]["campaigns"][0]["ads"] == 2

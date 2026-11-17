@@ -6283,8 +6283,7 @@ window.cbSrv = (function () {
         if (j.accepted || (generations[name] || 0) !== generation) return;
         /* Сервер новее (писали с другого адреса/вкладки): берём его. */
         reg.apply(j.doc);
-        last[name] = snap(name);
-        setStamp(name, j.doc.saved_at, j.doc.saved_at);
+        afterApply(name, j.doc);
       })
       .catch(function () { if (inFlight[name] === request) dirty[name] = true; })
       .then(function () {
@@ -6298,6 +6297,32 @@ window.cbSrv = (function () {
       });
   }
 
+  /* Ключи по алфавиту: сервер отдаёт документ с отсортированными ключами, а
+     слитый локальный собран в другом порядке — сравнивать надо по смыслу. */
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
+
+  /* После применения серверной копии (ACL-2669): модуль мог слить её со своим
+     и получить больше, чем у сервера (своя кампания, своё надгробие). Тогда
+     слитое надо отправить — иначе сервер так и останется без него. Сервер
+     слитое примет как есть (accepted=true), цикла нет. */
+  function afterApply(name, doc) {
+    last[name] = snap(name);
+    setStamp(name, doc.saved_at, doc.saved_at);
+    var mine;
+    try { mine = canon(regs[name].snapshot()); } catch (e) { return; }
+    if (mine === canon(doc.data)) return;
+    generations[name] = (generations[name] || 0) + 1;
+    setStamp(name, Math.max(Date.now(), doc.saved_at + 1));
+    dirty[name] = true;
+    if (ready) schedule(name);
+  }
+
   function reconcile(name, doc) {
     var reg = regs[name];
     var at = stamp(name);
@@ -6309,8 +6334,7 @@ window.cbSrv = (function () {
       if (at) post(name);
     } else if (doc.saved_at > at) {
       reg.apply(doc);
-      last[name] = snap(name);
-      setStamp(name, doc.saved_at, doc.saved_at);
+      afterApply(name, doc);
     } else if (doc.saved_at < at) {
       meta.base[name] = doc.saved_at; persist();
       post(name);
@@ -6831,6 +6855,19 @@ window.cbKeep = (function () {
        Нет сохранённого числа (старый черновик) - один набор. */
     var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
     var haveSets = slot.querySelectorAll('.cb-adset-sec').length;
+    /* Обновление на месте (ACL-2669): если в копии наборов или объявлений
+       меньше, лишние убираем тем же путём, что и кнопки ×, иначе следующее
+       сохранение вернёт убранное. Надгробий это не пишет: они только на
+       кампании, а тут cbKeep раскладывает копию сам. */
+    for (; haveSets > wantSets && haveSets > 1 && window.cbRemoveAdset; haveSets -= 1) {
+      if (!window.cbRemoveAdset(slot, haveSets - 1)) break;
+    }
+    var wantAds = data.ads || 1;
+    var rowsNow = slot.querySelectorAll('.cb-ad-row');
+    for (var ri = rowsNow.length - 1; ri >= wantAds && ri > 0 && window.cbRemoveAd; ri -= 1) {
+      var rb = rowsNow[ri].querySelector('.cb-remove-ad-btn');
+      if (rb) window.cbRemoveAd(rb);
+    }
     for (var ks = haveSets; ks < wantSets && ks < 10 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
     var have = slot.querySelectorAll('.cb-ad-row').length;
     var addAd = slot.querySelector('.cb-add-btn-sm');
@@ -7172,8 +7209,13 @@ window.cbKeep = (function () {
                   changed = true;
                   return;
                 }
-                if (active && slot.contains(active)) return;      // человек печатает здесь
-                if (JSON.stringify(readSlot(slot)) !== JSON.stringify(c)) { writeSlot(slot, c); changed = true; }
+                var typing = active && slot.contains(active) && 'value' in active ? { el: active, value: active.value } : null;
+                if (JSON.stringify(readSlot(slot)) !== JSON.stringify(c)) {
+                  writeSlot(slot, c);
+                  changed = true;
+                  /* тронут не весь слот: набираемое прямо сейчас поле остаётся как было */
+                  if (typing && document.contains(typing.el) && typing.el.value !== typing.value) typing.el.value = typing.value;
+                }
               });
             }
             /* со страницы уходит только то, что слияние убрало по надгробию */
