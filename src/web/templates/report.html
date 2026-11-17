@@ -3485,6 +3485,8 @@
     .rv-grey { color: var(--muted); font-size: var(--adopy-text-sm); }
     .rv-edit { display: inline-block; margin: 0.2rem 0 0.2rem 1rem; font-size: var(--adopy-text-sm); color: var(--accent); }
     .rv-btn { margin-left: 0.4rem; cursor: pointer; }
+    .rv-x { margin-left: 0.4rem; cursor: pointer; border: 0; background: transparent; color: inherit; font-size: 1.1em; line-height: 1; padding: 0 0.3rem; opacity: 0.7; }
+    .rv-x:hover, .rv-x:focus-visible { opacity: 1; }
     .rv-vis { margin: 0.2rem 0 0 1rem; }
     .pc-budget, .pc-checked { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
     .rv-foot-wrap { flex: none; margin-top: 0.5rem; font-size: var(--adopy-text-sm); color: var(--muted); }
@@ -23504,16 +23506,55 @@ function _doCbPublish(form) {
       + bad.map(function (a) {
           return '<div>' + esc(a.account) + ' — ' + esc((a.reasons || []).map(function (r) {
             return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
-          }).join('; ')) + '</div>';
+          }).join('; ')) + ' ' + dropButton('data-rv-drop-acct="' + esc(a.account) + '"', a.account) + '</div>';
         }).join('')
       + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway" data-rv-anyway="1"'
       + (model.anyway ? ' checked' : '') + '> Run anyway</label></div>';
+  }
+  /* «Publish N ready»: крестик выводит кампанию только из ЭТОЙ публикации и снимает с неё галочку;
+     черновик остаётся (стирает черновики только Remove человека в билдере). */
+  function dropButton(attr, what) {
+    return '<button type="button" class="rv-x" ' + attr + ' title="Take out of this publish — the draft stays in the builder" '
+      + 'aria-label="Take ' + esc(what) + ' out of this publish">×</button>';
+  }
+  function dropCamps(pairs) {
+    if (!model || !pairs.length) return;
+    var drop = [];
+    pairs.forEach(function (x) {
+      /* карточки одного имени — одна кампания: уходят вместе */
+      x.e.camps.forEach(function (c) { if ((c === x.c || c.name === x.c.name) && drop.indexOf(c) < 0) drop.push(c); });
+    });
+    var slots = drop.map(function (c) { return c.slot; });
+    model.removed = model.removed.concat(slots);
+    model.entries.forEach(function (e) {
+      var skip = {}, any = false;
+      e.camps.forEach(function (c, i) { if (slots.indexOf(c.slot) >= 0) { skip[i] = true; any = true; } });
+      if (!any) return;
+      e.fd = cbFormDataSkipping(e.form, skip, e.fd).body;
+      e.camps = e.camps.filter(function (c) { return slots.indexOf(c.slot) < 0; });
+      e.slots = e.slots.filter(function (s) { return slots.indexOf(s) < 0; });
+      var seen = {};
+      e.camps.forEach(function (c) { c.rep = !seen[c.name]; seen[c.name] = true; });
+      e.reps = e.camps.filter(function (c) { return c.rep; });
+    });
+    model.entries = model.entries.filter(function (e) { return e.slots.length; });
+    try { window.cbTree.untick(slots); } catch (err) { /* без отметок — просто вне этой публикации */ }
+    paint();
+  }
+  function dropAccount(account) {
+    var key = String(account).toLowerCase(), pairs = [];
+    model.entries.forEach(function (e) {
+      if (String(e.account).toLowerCase() === key) e.camps.forEach(function (c) { pairs.push({ e: e, c: c }); });
+    });
+    model.badList = model.badList.filter(function (a) { return String(a.account).toLowerCase() !== key; });
+    dropCamps(pairs);
+    paint();
   }
   function blockedHtml(ev) {
     if (!ev.blocked.length) return '';
     return '<div class="pc-note pc-block rv-blocked"><strong>✕ Will not be created (' + ev.blocked.length + ')</strong><ul>'
       + ev.blocked.map(function (x) {
-          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + '</li>';
+          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + ' ' + dropButton('data-rv-drop="' + esc(slotId(x.c.slot)) + '"', x.c.name) + '</li>';
         }).join('') + '</ul></div>';
   }
   function warningsHtml(ev) {
@@ -23601,6 +23642,9 @@ function _doCbPublish(form) {
       + (!model.checking && !ev.create.length ? '<div class="rv-nothing">' + esc(NOTHING) + '</div>' : '');
     var ok = box.querySelector('#sfc-ok');
     if (ok) {
+      if (model.okLabel == null) model.okLabel = ok.textContent;
+      var notReady = ev.blocked.length + (model.badList || []).length + model.removed.length;
+      ok.textContent = notReady ? 'Publish ' + ev.create.length + ' ready' : model.okLabel;
       ok.disabled = !!(model.checking || !ev.create.length);
       ok.title = model.checking ? 'Checking with Meta…' : (!ev.create.length ? NOTHING : '');
     }
@@ -23733,6 +23777,7 @@ function _doCbPublish(form) {
     });
     m.badList = badList;
     m.entries.forEach(function (e) { e.notReady = !!bad[e.account.toLowerCase()]; });
+    m.removed = []; m.okLabel = null;
     m.anyway = false; m.checking = false; m.stale = null; m.checkedAt = 0; m.closeReason = '';
     model = m;
     var opts = m.opts;
@@ -23749,6 +23794,12 @@ function _doCbPublish(form) {
         m.closeReason = 'edit';
         overlay.remove();
         try { window.cbTree.open(edit.getAttribute('data-rv-edit')); } catch (err) { /* карточка могла уйти */ }
+      } else if (t.closest('[data-rv-drop]')) {
+        var id = t.closest('[data-rv-drop]').getAttribute('data-rv-drop'), hit = null;
+        (m.ev ? m.ev.blocked : []).forEach(function (x) { if (!hit && slotId(x.c.slot) === id) hit = x; });
+        if (hit) dropCamps([hit]);
+      } else if (t.closest('[data-rv-drop-acct]')) {
+        dropAccount(t.closest('[data-rv-drop-acct]').getAttribute('data-rv-drop-acct'));
       } else if (t.closest('[data-rv-recheck]')) {
         runChecks();
       } else if (t.closest('[data-rv-again]')) {
@@ -23776,7 +23827,9 @@ function _doCbPublish(form) {
 
   /* ── Confirm ────────────────────────────────────────────────────────── */
   function staleNames() {
-    var fresh = model.reselect(), names = [];
+    var fresh = model.reselect().map(function (it) {
+      return { form: it.form, slots: it.slots.filter(function (s) { return model.removed.indexOf(s) < 0; }) };
+    }).filter(function (it) { return it.slots.length; }), names = [];
     var byKey = {};
     fresh.forEach(function (it) { byKey[cbFormKey(it.form)] = it; });
     model.entries.forEach(function (e) {
