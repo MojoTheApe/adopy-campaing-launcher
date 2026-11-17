@@ -580,8 +580,7 @@ def test_status_values_other_than_active_paused_are_refused(world, value):
 @pytest.mark.parametrize("targets", [None, [], "x", [{"level": "account", "id": "1000001"}],
                                      [{"level": "campaign", "id": "12"}],
                                      [{"level": "campaign", "id": "../1000001"}],
-                                     [{"level": "campaign", "id": f"{ACT}"}], ["1000001"],
-                                     [t("campaign", str(1000001 + i)) for i in range(cmd.MAX_TARGETS + 1)]])
+                                     [{"level": "campaign", "id": f"{ACT}"}], ["1000001"]])
 def test_bad_targets_are_refused(world, targets):
     with pytest.raises(cmd.CommandRefused):
         world.preview("set_status", "ACTIVE", targets)
@@ -672,21 +671,72 @@ def test_trailing_newline_in_paths_is_refused():
                                                       "status": "PAUSED"})
 
 
-def test_session_budget_is_capped_by_the_operator_ceiling(world, monkeypatch):
+def test_session_budget_is_capped_by_the_operator_ceiling_per_chunk(world, monkeypatch):
     monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "10")
     assert cmd.call_ceiling() == 10 and cmd.call_budget(20) == 10
-    assert cmd.max_targets_for_ceiling() == 3
+    assert cmd.chunk_size() == 3
     targets = [t("campaign", CAMP_A), t("campaign", CAMP_CBO), t("adset", SET_BID), t("adset", SET_AUTO)]
-    with pytest.raises(cmd.CommandRefused) as ei:
-        world.preview("set_status", "ACTIVE", targets)
-    assert "At most 3 objects" in str(ei.value) and world.sessions == []
-    pv = world.preview("set_status", "ACTIVE", targets[:3])
+    pv = world.preview("set_status", "ACTIVE", targets)          # ACL-2668: больше куска — не отказ
     world.execute(pv)
-    assert world.clients[-1].max_calls == 10 and world.final(pv)["state"] == "Succeeded"
+    assert world.clients[-1].max_calls <= 10 and world.final(pv)["state"] == "Succeeded"
     monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "999")
     assert cmd.call_ceiling() == 60
     monkeypatch.setenv("ACL_FB_API_MAX_CALLS", "junk")
     assert cmd.call_ceiling() == 24
+
+
+def _many_campaigns(world, n):
+    """`n` выключенных кампаний в кабинете (копии Camp A)."""
+    ids = [str(3000001 + i) for i in range(n)]
+    for i, oid in enumerate(ids):
+        world.meta.objs[oid] = {**world.meta.objs[CAMP_A], "id": oid, "name": f"Bulk {i}"}
+    return ids
+
+
+def test_any_number_of_objects_runs_in_chunks_without_asking(world, monkeypatch):
+    """ACL-2668, решение 30: потолков 20 объектов и 24 вызовов на команду нет — ACL идёт кусками."""
+    monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
+    ids = _many_campaigns(world, 45)
+    budgets = []
+    real_reset = g.GraphClient.reset_budget
+
+    def spy(self, max_calls):
+        budgets.append(int(max_calls))
+        real_reset(self, max_calls)
+    monkeypatch.setattr(g.GraphClient, "reset_budget", spy)
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", oid) for oid in ids])
+    assert len(pv["affected"]) == 45 and pv["skipped"] == []
+    assert max(budgets) <= cmd.call_ceiling() == 24             # потолок оператора — на кусок
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == cmd.SUCCEEDED, done["message"]
+    assert [a["result"] for a in done["affected"]] == ["saved"] * 45
+    assert all(world.meta.objs[oid]["status"] == "ACTIVE" for oid in ids)
+    assert len(world.meta.posts) == 45                           # одна запись на объект, без повторов
+    assert max(budgets) <= 24
+    assert all(c.calls <= c.max_calls for c in world.clients)
+
+
+def test_chunks_keep_the_reread_before_any_write(world, monkeypatch):
+    """Изменился объект из последнего куска — не пишем ничего, и в первых кусках тоже."""
+    monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
+    ids = _many_campaigns(world, 30)
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", oid) for oid in ids])
+    world.meta.objs[ids[-1]]["status"] = "ACTIVE"
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == cmd.FAILED and done["stale"] is True and world.meta.posts == []
+
+
+def test_a_refused_write_in_a_later_chunk_stops_the_rest_and_reports_per_object(world, monkeypatch):
+    monkeypatch.delenv("ACL_FB_API_MAX_CALLS", raising=False)
+    ids = _many_campaigns(world, 20)
+    pv = world.preview("set_status", "ACTIVE", [t("campaign", oid) for oid in ids])
+    world.meta.fail_next[ids[12]] = "refuse"
+    world.execute(pv)
+    results = [a["result"] for a in world.final(pv)["affected"]]
+    assert results[:12] == ["saved"] * 12 and results[12] == "refused"
+    assert results[13:] == ["not_attempted"] * 7
 
 
 def test_get_store_is_created_once_under_concurrency(monkeypatch, tmp_path):

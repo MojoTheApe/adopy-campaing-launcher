@@ -95,8 +95,10 @@ def test_post_write_call_ceiling_failure_keeps_success_and_does_not_reset_budget
     preview = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
     execute(w, preview, after_write=webcmd._refresh_after_write)
     assert w.final(preview)["state"] == cmd.SUCCEEDED and len(w.meta.posts) == 1
+    # ACL-2668: команда идёт кусками, обновлению достаётся остаток бюджета последнего куска —
+    # чтение успевает часть и встаёт на своём потолке, бюджет не сбрасывается.
     assert w.clients[-1].calls == 4 and w.clients[-1].stopped.kind == "call_budget"
-    assert ci.get_attempt(ACCOUNT)["state"] == "failed"
+    assert ci.get_attempt(ACCOUNT) is None                     # неполное чтение — не «упавшая попытка»
     assert q.state()["rows"][ACCOUNT]["state"] == "failed" and q.state()["halt"] is not None
 
 
