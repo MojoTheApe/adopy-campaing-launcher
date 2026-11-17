@@ -27,8 +27,9 @@ DEFAULT_URL = "https://acl-event-log.adopy-acl.workers.dev"
 
 USER_AGENT = "acl-event-log/1"
 BATCH_MAX_BYTES = 512 * 1024
-#: Раз в час: бесплатный KV Cloudflare пускает 1000 записей в сутки на все машины.
-CYCLE_S = 3600
+#: Раз в 2 минуты: хаб acl-hub на D1 (старый Worker на KV требовал раз в час — 1000 записей в сутки).
+#: Менять только вместе с DEFAULT_URL на хаб: в старый Worker такая частота сожжёт суточный лимит.
+CYCLE_S = 120   # хаб на D1 (acl-hub): почти реальное время; при сбое и в конце задания — сразу
 JITTER = 0.2
 FIRST_DELAY_S = (60, 300)
 MAX_BACKOFF_S = 3600
