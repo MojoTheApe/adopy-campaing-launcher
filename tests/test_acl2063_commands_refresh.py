@@ -97,7 +97,7 @@ def test_post_write_call_ceiling_failure_keeps_success_and_does_not_reset_budget
     assert w.final(preview)["state"] == cmd.SUCCEEDED and len(w.meta.posts) == 1
     assert w.clients[-1].calls == 4 and w.clients[-1].stopped.kind == "call_budget"
     assert ci.get_attempt(ACCOUNT)["state"] == "failed"
-    assert q.state()["rows"][ACCOUNT]["state"] == "failed" and q.state()["halt"] is not None
+    assert q.state()["rows"][ACCOUNT]["state"] == "failed" and q.state()["halt"] is None  # ACL-2668: only this account
 
 
 def test_unexpected_refresh_exception_cannot_rewrite_a_confirmed_command(world):

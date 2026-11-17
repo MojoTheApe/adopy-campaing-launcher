@@ -225,25 +225,34 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     assert not retry.is_visible() and site.errors == []
 
 
-def test_global_checkpoint_has_one_banner_and_only_explicit_same_account_retry_resumes(dashboard):
+@pytest.mark.parametrize('width', [1280, 390])
+def test_checkpoint_marks_only_its_row_with_the_reason_and_retry_and_others_are_read(dashboard, width):
+    # ACL-2682 (ACL-2668 decision 1): a checkpoint on one account is not a machine stop.
+    # No banner; the Acc row shows the reason and its own Retry; Fresh is read in the same sweep.
     site, page = dashboard
+    page.set_viewport_size({'width': width, 'height': 900})
     site.checkpoint.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
-    banner = page.locator('#account-refresh-status[role=alert]')
-    banner.wait_for(state='visible')
-    assert 'checkpoint' in banner.inner_text().lower()
-    assert page.locator('#account-refresh-status').count() == 1
-    assert [a for a, _ in site.reads] == ['Acc']
-    assert site.q.state()['queued'] == [{'account': 'Fresh', 'trigger': 'schedule:2026-10-24/08:00'}]
-    assert site.q.state()['sweep']['done'] == 1
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'"
+                           " && document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'failed'")
+    assert [a for a, _ in site.reads] == ['Acc', 'Fresh']
+    state = site.q.state()
+    assert state['halt'] is None and state['queued'] == [] and state['sweep']['done'] == 2
+    assert page.locator('#account-refresh-status').is_hidden()
+    assert page.locator('[role=alert]:visible').count() == 0
+    snap = page.locator('tr:has(td[data-account="Acc"]) .hc-snap')
+    assert snap.inner_text().startswith('list failed')
+    assert 'checkpoint' in (snap.get_attribute('title') or '').lower()
+    retry = page.locator('tr:has(td[data-account="Acc"]) button.hc-rc')
+    assert retry.is_visible() and retry.inner_text() == 'Retry'
+    assert 'checkpoint' in (retry.get_attribute('title') or '').lower()
+    assert page.locator('button.hc-rc:visible').count() == 1          # Fresh has no Retry: it was read
     site.checkpoint.clear()
-    page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
-    assert [a for a, _ in site.reads] == ['Acc', 'Acc', 'Fresh']
-    assert site.reads[1] == ('Acc', 'retry')
-    assert site.q.state()['halt'] is None and site.q.state()['sweep']['done'] == 2
-    assert banner.is_hidden() and site.errors == []
+    retry.click()
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    assert site.reads[-1] == ('Acc', 'retry') and len(site.reads) == 3
+    assert not retry.is_visible() and site.errors == []
 
 
 @pytest.mark.parametrize('width', [1280, 390])

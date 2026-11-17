@@ -62,9 +62,9 @@ class MachinePeople:
             assert all(v['snapshot'] for v in state['visible'].values())
             assert state['state']['sweep']['done'] == state['state']['sweep']['total'] == 2
             assert state['private_unchanged']
-        assert self.command(first, 'checkpoint')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'state')['state']['halt']['kind'] == 'checkpoint'
-        assert self.command(second, 'restart')['state']['halt']['kind'] == 'checkpoint'
+        assert self.command(first, 'checkpoint')['state']['halt']['kind'] == 'global'
+        assert self.command(second, 'state')['state']['halt']['kind'] == 'global'
+        assert self.command(second, 'restart')['state']['halt']['kind'] == 'global'
         assert self.command(second, 'drain')['reads'] == 0
         assert self.command(second, 'retry')['state']['halt'] is None
         assert self.command(first, 'state')['state']['halt'] is None
