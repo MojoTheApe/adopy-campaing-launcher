@@ -209,3 +209,11 @@ def test_partially_configured_map_preserves_unconfigured_legacy_fields():
     ref = {"accounts": {"Demo": {"link": "https://example.test/legacy", "domain": "example.test", "pixel": "old"}}}
     info = get_account_info(ref, "Demo", account_map={"Demo": AccountMapEntry("act_demo", pixel_id="local")})
     assert info == {"link": "https://example.test/legacy", "domain": "example.test", "pixel": "local"}
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

@@ -174,3 +174,11 @@ def test_real_windows_api_accepts_guard_and_reads_own_session():
     assert not t.is_alive()
     assert result[0] is True
     assert isinstance(result[1], int)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

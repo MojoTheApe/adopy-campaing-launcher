@@ -1,3 +1,4 @@
+import pytest
 """ACL-1604: «Publish all» показывает «Not ready» и не ставит такие аккаунты (headless).
 
 Страница настоящая, сеть подменена: проверка отвечает, что Demo разлогинен, а
@@ -108,3 +109,11 @@ def test_single_card_publish_falls_back_to_the_old_confirm_when_the_check_fails(
             break
         p.wait_for_timeout(100)
     assert [f['account_label'] for f in state['posts']] == ['Demo']
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

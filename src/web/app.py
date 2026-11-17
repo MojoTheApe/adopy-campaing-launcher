@@ -1488,6 +1488,10 @@ def _flag_code(name: object) -> str:
 
 templates.env.filters["flag_code"] = _flag_code
 templates.env.globals["flag_codes"] = _FLAG_CODES
+# ACL-2668: флаг бэкенда на странице без `fb_backend` в контексте — из того же единого места.
+from src.fb_api import backend as _fb_backend_choice  # noqa: E402
+
+templates.env.globals["acl_fb_backend"] = _fb_backend_choice.backend
 from src.web.account_state import AOV_ROWS_COLLAPSED as _AOV_ROWS_COLLAPSED  # noqa: E402
 templates.env.globals["aov_rows_collapsed"] = _AOV_ROWS_COLLAPSED
 

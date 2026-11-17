@@ -54,7 +54,7 @@
   <script>
     // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
     // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
-    try { window.ACL_FB_BACKEND = {{ (fb_backend or 'api') | tojson }}; } catch(e) {}
+    try { window.ACL_FB_BACKEND = {{ (fb_backend or acl_fb_backend()) | tojson }}; } catch(e) {}
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
     try { window.CB_ACCOUNT_FACTS = {{ (account_facts_json or {}) | tojson }}; } catch(e) {}

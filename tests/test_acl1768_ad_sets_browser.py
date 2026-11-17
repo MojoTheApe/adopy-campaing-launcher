@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import pytest
 import json
 import os
 import sys
@@ -225,3 +226,11 @@ def test_screenshots_of_the_ad_set_tree(page):
         page.emulate_media(color_scheme=theme)
         page.wait_for_timeout(200)
         page.locator("#cbd-panel").screenshot(path=str(Path(out) / f"ad-set-tree-{theme}.png"))
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

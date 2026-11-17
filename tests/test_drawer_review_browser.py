@@ -362,3 +362,11 @@ def test_delayed_tree_repaint_keeps_typing_focus_and_selection(ui):
     p.wait_for_timeout(250)
     expect(p.locator('.cb-in-drawer .cb-targeting-search')).to_be_focused()
     assert p.evaluate('[document.activeElement.selectionStart,document.activeElement.selectionEnd]') == [2,7]
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

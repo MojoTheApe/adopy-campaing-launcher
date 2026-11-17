@@ -48,6 +48,13 @@ def test_no_other_python_module_reads_the_backend_env_itself():
     assert offenders == []
 
 
-def test_page_falls_back_to_api_when_the_flag_is_missing():
+def test_page_falls_back_to_the_one_helper_when_the_flag_is_missing(monkeypatch):
+    from src.web.app import templates
+
+    assert templates.env.globals["acl_fb_backend"] is b.backend
+    monkeypatch.delenv(b.BACKEND_ENV, raising=False)
+    assert templates.env.from_string("{{ (fb_backend or acl_fb_backend()) }}").render() == "api"
+    monkeypatch.setenv(b.BACKEND_ENV, "rpa")
+    assert templates.env.from_string("{{ (fb_backend or acl_fb_backend()) }}").render() == "rpa"
     text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
-    assert "window.ACL_FB_BACKEND = {{ (fb_backend or 'api') | tojson }}" in text
+    assert "window.ACL_FB_BACKEND = {{ (fb_backend or acl_fb_backend()) | tojson }}" in text

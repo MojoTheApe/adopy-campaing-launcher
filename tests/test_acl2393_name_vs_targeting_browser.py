@@ -126,3 +126,11 @@ def test_publish_confirm_warns_but_does_not_block(page):
     assert "name says Green, targeting is Mix2".lower() in asked["body"].lower()
     assert "the campaign goes out with Mix2" in asked["body"]
     assert asked["label"] == "Build anyway"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

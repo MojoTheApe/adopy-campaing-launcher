@@ -74,7 +74,7 @@ def backend() -> str:
 
 
 def api_enabled() -> bool:
-    return _backend.api_enabled()
+    return backend() == _backend.API
 
 
 def _env_number(name: str, default: float, lo: float, hi: float) -> float:

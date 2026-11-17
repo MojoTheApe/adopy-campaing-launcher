@@ -477,3 +477,11 @@ def test_a_broken_model_table_never_breaks_the_build_dot(browser, html, breakage
         context.close()
     if breakage == 'bad_rule':
         assert len([w for w in warnings if 'cb-build-model' in w]) == 1, warnings
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

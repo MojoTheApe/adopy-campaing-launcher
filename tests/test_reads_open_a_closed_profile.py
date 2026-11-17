@@ -570,3 +570,11 @@ def test_a_publish_that_finished_before_the_timer_keeps_its_window(reads, page_r
     time.sleep(0.5)
     assert _stops(reads) == [], "таймер чтения закрыл окно, оставленное Publish"
     assert not sp._PENDING_CLOSE, "чтение считает профиль Publish своим"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

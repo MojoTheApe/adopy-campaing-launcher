@@ -272,3 +272,11 @@ def test_the_job_thread_names_its_job_before_the_robot_runs(monkeypatch):
         with pj._jobs_lock:
             pj._jobs.pop(job_id, None)
     assert seen.get("job") == job_id
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield
