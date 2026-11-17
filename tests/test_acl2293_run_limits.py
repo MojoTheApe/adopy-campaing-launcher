@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ACL-2293: потолок профилей, тяжёлые действия и доля памяти меняются в Settings без перезапуска."""
+"""ACL-2293: потолок профилей и доля памяти меняются в Settings без перезапуска (лимит тяжёлых действий убран в ACL-2668)."""
 from __future__ import annotations
 
 import asyncio
@@ -47,20 +47,21 @@ def no_side_effects(monkeypatch):
 
 
 def test_a_change_reaches_the_engine_without_a_restart(machine, no_side_effects):
-    assert ps.load_settings().ceiling == 2 and warm.max_heavy() == 1
-    result = rl.save(5, 2, 80, confirm=True)
-    assert result["ceiling"] == 5 and result["warm_heavy"] == 2 and result["memory_max_used_pct"] == 80
+    assert ps.load_settings().ceiling == 2
+    result = rl.save(5, 80, confirm=True)
+    assert result["ceiling"] == 5 and result["memory_max_used_pct"] == 80
+    assert "warm_heavy" not in result and "warm_heavy" not in result["defaults"], "ACL-2668: no heavy-action limit"
     assert result["running_jobs_affected"] is False and result["applies"] == "next start decision"
     settings = ps.load_settings()
-    assert settings.ceiling == 5 and settings.max_used_pct == 80.0 and warm.max_heavy() == 2
+    assert settings.ceiling == 5 and settings.max_used_pct == 80.0
     text = machine.read_text(encoding="utf-8")
     assert "KEEP_ME=1" in text and "ACL_MAX_PROFILES" in text
 
 
 @pytest.mark.parametrize("kwargs", [
     {"ceiling": 0}, {"ceiling": 9}, {"ceiling": 2.5}, {"ceiling": "auto"}, {"ceiling": True},
-    {"ceiling": "3 profiles"}, {"ceiling": float("nan")}, {"ceiling": None, "warm_heavy": 4},
-    {"warm_heavy": 0}, {"memory_max_used_pct": 49}, {"memory_max_used_pct": 96},
+    {"ceiling": "3 profiles"}, {"ceiling": float("nan")},
+    {"memory_max_used_pct": 49}, {"memory_max_used_pct": 96},
     {"memory_max_used_pct": "abc"}, {"memory_max_used_pct": float("inf")},
 ])
 def test_bad_values_change_nothing(machine, no_side_effects, kwargs):
@@ -77,22 +78,23 @@ def test_one_bad_field_rejects_the_whole_save(machine, no_side_effects):
 
 
 def test_bounds_accepted_and_comma_decimal(machine, no_side_effects):
-    assert rl.save(ceiling=8, warm_heavy=3, memory_max_used_pct="95", confirm=True)["memory_max_used_pct"] == 95
+    assert rl.save(ceiling=8, memory_max_used_pct="95", confirm=True)["memory_max_used_pct"] == 95
     assert rl.save(ceiling=1, memory_max_used_pct="50,5")["memory_max_used_pct"] == 50.5
 
 
 def test_reset_writes_explicit_defaults_not_blank_keys(machine, no_side_effects, monkeypatch):
     # Старый ключ из прежних настроек не должен «просочиться» после сброса.
     monkeypatch.setenv("ACL_MAX_PARALLEL_CEILING", "4")
-    rl.save(6, 3, 70, confirm=True)
+    rl.save(6, 70, confirm=True)
     result = rl.save(reset=True)
-    assert (result["ceiling"], result["warm_heavy"], result["memory_max_used_pct"]) == (2, 1, 92)
+    assert (result["ceiling"], result["memory_max_used_pct"]) == (2, 92)
     text = machine.read_text(encoding="utf-8")
-    assert all(f in text for f in ("ACL_MAX_PROFILES=\"2\"", "ACL_MEMORY_MAX_USED_PCT=\"92\"", "ACL_WARM_MAX_HEAVY=\"1\""))
+    assert all(f in text for f in ("ACL_MAX_PROFILES=\"2\"", "ACL_MEMORY_MAX_USED_PCT=\"92\""))
+    assert "ACL_WARM_MAX_HEAVY" not in text
 
 
 def test_telemetry_row_has_numbers_only(machine, no_side_effects):
-    rl.save(4, None, None, confirm=True)
+    rl.save(4, None, confirm=True)
     rows = [kw for a, kw in no_side_effects if kw.get("note") == "run_limits_changed"]
     assert len(rows) == 1
     diag = rows[0]["diag"]
@@ -114,14 +116,14 @@ def test_a_waiting_job_starts_after_the_ceiling_is_raised(machine, no_side_effec
     slots = ps.ProfileSlots(memory=lambda: memory, tick_s=0.02,
                             usage=ps.ProfileUsage(lambda profiles: {}, background=False),
                             open_probe=ps.OpenProfileProbe(lambda profiles: set(), background=False))
-    rl.save(1, None, None)
+    rl.save(1, None)
     assert slots.acquire("j1", "p1") is not None
     got = {}
     t = threading.Thread(target=lambda: got.setdefault("r", slots.acquire("j2", "p2")), daemon=True)
     t.start()
     time.sleep(0.2)
     assert "r" not in got and slots.snapshot()["next"]["reason"] == "ceiling"
-    rl.save(3, None, None)
+    rl.save(3, None)
     slots.wake()
     t.join(3)
     assert got.get("r") is not None
@@ -134,10 +136,10 @@ def test_lowering_the_ceiling_below_running_stops_nobody(machine, no_side_effect
     slots = ps.ProfileSlots(memory=lambda: memory, tick_s=0.02,
                             usage=ps.ProfileUsage(lambda profiles: {}, background=False),
                             open_probe=ps.OpenProfileProbe(lambda profiles: set(), background=False))
-    rl.save(3, None, None)
+    rl.save(3, None)
     for i in range(3):
         assert slots.acquire(f"j{i}", f"p{i}") is not None
-    rl.save(1, None, None)
+    rl.save(1, None)
     snap = slots.snapshot()
     assert len(snap["running"]) == 3 and snap["next"]["allow"] is False and snap["next"]["reason"] == "ceiling"
     assert snap["next"]["running"] == 3 and snap["next"]["cap"] == 1
@@ -174,18 +176,20 @@ def test_warnings_for_a_small_machine():
     assert not rl.warnings_for({"ceiling": 3, "memory_max_used_pct": 70}, 16 * 1024)
 
 
-def test_heavy_limit_is_labelled_as_a_limit_not_an_account(machine, no_side_effects):
+def test_a_waiting_action_is_never_labelled_as_a_heavy_limit(machine, no_side_effects):
+    """ACL-2668: лимита тяжёлых действий нет - ни в шлюзе, ни в очереди, ни на странице."""
     memory = ps.MemoryReading(total_mb=32 * 1024, available_mb=28 * 1024)
-    gate = warm.HeavyGate(limit=lambda: 2, memory=lambda: memory, settings=ps.load_settings,
+    gate = warm.HeavyGate(memory=lambda: memory, settings=ps.load_settings,
                           usage=ps.ProfileUsage(lambda profiles: {}, background=False))
-    gate.acquire("a")
-    gate.acquire("b")
-    view = gate.wait_view("limit")
-    assert view["hold"] == "heavy_limit" and view["heavy_limit"] == 2 and view["running"] == 2
-    assert gate.wait_view("memory_ok")["hold"] == "account_busy"
+    for pid in ("a", "b", "c", "d"):
+        gate.acquire(pid, wait_s=0.1)       # memory is free: no count holds the fourth one
+    assert gate.active() == ["a", "b", "c", "d"]
+    view = gate.wait_view("memory_ok")
+    assert view["hold"] == "account_busy" and "heavy_limit" not in view
+    assert not hasattr(warm, "max_heavy") and not hasattr(rl, "check_heavy")
     from src.web import publish_jobs as pj
     queue = pj._queue_view({"reason": view["hold"], **{k: v for k, v in view.items() if k != "hold"}})
-    assert queue["state"] == "waiting_account" and queue["hold"] == "heavy_limit" and queue["heavy_limit"] == 2
+    assert queue["state"] == "waiting_account" and "heavy_limit" not in queue
 
 
 def test_the_ceiling_wait_text_and_the_settings_block_are_on_the_page():
@@ -193,8 +197,9 @@ def test_the_ceiling_wait_text_and_the_settings_block_are_on_the_page():
     assert "function cbCeilingWait(" in html
     assert "profiles in use (ceiling " in html and "ceiling is now " in html
     assert html.count("cbCeilingWait(") >= 4
-    assert "heavy actions in progress (limit " in html
-    for marker in ('id="rl-box"', 'id="rl-ceiling"', 'id="rl-heavy"', 'id="rl-share"', 'id="rl-reset"',
+    assert "heavy actions in progress (limit " not in html and 'id="rl-heavy"' not in html
+    assert "Heavy actions at once" not in html and "warm_heavy" not in html
+    for marker in ('id="rl-box"', 'id="rl-ceiling"', 'id="rl-share"', 'id="rl-reset"',
                    "/api/run-limits"):
         assert marker in html
     # slot_decision несёт различие «потолок / память» для разбора.
@@ -204,7 +209,7 @@ def test_the_ceiling_wait_text_and_the_settings_block_are_on_the_page():
 
 def test_huge_json_integer_is_a_clean_400(machine, no_side_effects):
     before = machine.read_bytes()
-    for field in ("ceiling", "warm_heavy", "memory_max_used_pct"):
+    for field in ("ceiling", "memory_max_used_pct"):
         with pytest.raises(rl.RunLimitError):
             rl.save(**{field: 10 ** 400})
         resp = _post({field: 10 ** 400})
@@ -214,7 +219,7 @@ def test_huge_json_integer_is_a_clean_400(machine, no_side_effects):
 
 def test_risky_values_need_an_explicit_confirm_on_the_server(machine, no_side_effects):
     before = machine.read_bytes()
-    for body in ({"ceiling": 4}, {"memory_max_used_pct": 94}, {"ceiling": 8, "warm_heavy": 2},
+    for body in ({"ceiling": 4}, {"memory_max_used_pct": 94}, {"ceiling": 8},
                  {"ceiling": 4, "confirm": False}):
         resp = _post(body)
         data = json.loads(resp.body)
@@ -233,7 +238,9 @@ def test_lowering_a_share_that_is_still_above_80_needs_no_confirm(machine, no_si
 
 
 def test_safe_changes_and_lowering_need_no_confirm(machine, no_side_effects):
-    assert _post({"ceiling": 3, "memory_max_used_pct": 80, "warm_heavy": 3}).status_code == 200
+    assert _post({"ceiling": 3, "memory_max_used_pct": 80}).status_code == 200
+    # ACL-2668: старое поле страницы больше не принимается
+    assert _post({"warm_heavy": 2}).status_code == 400
     assert _post({"ceiling": 4, "confirm": True}).status_code == 200
     # Понижение с рискованного значения и сброс подтверждения не просят.
     assert _post({"ceiling": 2}).status_code == 200
@@ -264,14 +271,12 @@ def _node(expr):
     return json.loads(done.stdout)
 
 
-def test_wait_texts_say_the_ceiling_and_the_heavy_limit():
+def test_wait_texts_say_the_ceiling_and_another_account():
     assert _node("cbCeilingWait({cap:5, running:5})") == (
         "Waiting: 5 of 5 profiles in use (ceiling 5). The next one starts when a run finishes")
     assert _node("cbCeilingWait({cap:2, running:3, ahead:2})") == (
         "Waiting: 3 profiles running, ceiling is now 2 - new runs start when fewer than 2 are running (2 ahead)")
     assert _node("cbCeilingWait({})") == "Waiting for a free profile slot"
-    assert _node("cbAccountWait({hold:'heavy_limit', heavy_limit:2, running:2})") == (
-        "Waiting: 2 of 2 heavy actions in progress (limit 2) - it starts by itself, Stop cancels it")
     assert _node("cbAccountWait({hold:'account_busy'})").startswith("Waiting for another account action")
 
 
