@@ -436,3 +436,11 @@ def test_of_two_cards_with_one_name_only_the_ticked_goes(ui):
     post = state['posts'][0]
     assert post['camp_count'] == '1', post
     assert post['camp_0_ad_0_creative_file'] == 'offline-1.png', post
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

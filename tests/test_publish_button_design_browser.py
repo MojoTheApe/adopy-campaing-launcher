@@ -203,3 +203,11 @@ def test_api_target_label_compatibility_uses_paused_without_a_write(ui):
     box(p, 0, 0).click()
     expect(p.locator('.cbd-publish-all')).to_have_text('Publish selected → PAUSED campaigns (1)')
     assert not state['posts']
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

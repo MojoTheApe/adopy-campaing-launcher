@@ -838,13 +838,10 @@ def web(monkeypatch, tmp_path):
     cmd._STORES.clear()
 
 
-@pytest.mark.parametrize("backend", [None, "rpa", "", "graph"])
+@pytest.mark.parametrize("backend", ["rpa", " RPA "])
 def test_rpa_backend_refuses_every_endpoint(web, monkeypatch, backend):
     cc, w = web
-    if backend is None:
-        monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
-    else:
-        monkeypatch.setenv("ACL_FB_BACKEND", backend)
+    monkeypatch.setenv("ACL_FB_BACKEND", backend)   # ACL-2668: RPA только при явном значении
     body = {"account": ACCOUNT, "command": "set_status", "value": "ACTIVE",
             "targets": [t("campaign", CAMP_A)], "revision_id": "rev_x", "idempotency_key": "idem-key-0001"}
     for data, code in (cc.run_preview(body), cc.run_execute(body), cc.get_status("op_x")):
@@ -886,7 +883,7 @@ def test_routes_are_registered_and_refuse_under_rpa(monkeypatch):
 
     from src.web import app as web
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     paths = {(r.path, tuple(sorted(r.methods))) for r in web.app.routes if hasattr(r, "methods")}
     assert ("/campaign-commands/preview", ("POST",)) in paths
     assert ("/campaign-commands/execute", ("POST",)) in paths

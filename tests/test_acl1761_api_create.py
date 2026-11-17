@@ -1200,11 +1200,14 @@ def test_result_dict_shape_and_publishability(tmp_path, monkeypatch):
 def test_backend_switch(monkeypatch):
     from src.web import publish_api
 
+    # ACL-2668: по умолчанию api; rpa — только явное `ACL_FB_BACKEND=rpa`.
     monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
-    assert publish_api.backend() == "rpa"
+    assert publish_api.backend() == "api"
     monkeypatch.setenv("ACL_FB_BACKEND", "API")
     assert publish_api.backend() == "api"
     monkeypatch.setenv("ACL_FB_BACKEND", "bogus")
+    assert publish_api.backend() == "api"
+    monkeypatch.setenv("ACL_FB_BACKEND", " Rpa ")
     assert publish_api.backend() == "rpa"
 
 

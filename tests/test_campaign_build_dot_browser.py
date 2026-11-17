@@ -369,3 +369,11 @@ def test_the_publish_all_list_says_queued_and_then_building(ui):
     show(p, state, progress('running', [], idle_s=1))
     expect(box).to_contain_text('Demo — building the draft', timeout=6000)
     expect(box.locator('.cbd-q-queued')).to_have_count(0)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

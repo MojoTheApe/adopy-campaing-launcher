@@ -1,6 +1,7 @@
 """Чтение спенда, состояния кабинета и дерева через Graph API внутри профиля (ACL-1760).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+Работает по умолчанию; `ACL_FB_BACKEND=rpa` в `.env` машины — аварийный возврат на RPA
+(ACL-2668, бэкенд решает `src.fb_api.backend`). Тогда
 «Read spend» / «Read all spend» и разбивка по странам идут не кликами по Ads
 Manager, а GET-запросами `fetch()` из своей вкладки профиля (`src/fb_api`,
 ACL-1756). Ответ — ровно тот же `SpendReading` / `CountrySplit`, что отдаёт
@@ -45,6 +46,7 @@ from typing import Any
 from src.analysis_agent import account_spend as _as
 from src.fb_ads_rpa.operations import browser_operation
 from src.fb_api import account_blocks as _blocks
+from src.fb_api import backend as _backend
 from src.fb_api import profile as _fb_profile
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
@@ -65,7 +67,7 @@ from src.fb_api.graph import (
 
 log = logging.getLogger(__name__)
 
-BACKEND_ENV = "ACL_FB_BACKEND"
+BACKEND_ENV = _backend.BACKEND_ENV
 MAX_CALLS_ENV = "ACL_FB_API_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 
@@ -84,13 +86,12 @@ COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — это `rpa`."""
-    value = (os.environ.get(BACKEND_ENV) or "").strip().lower()
-    return "api" if value == "api" else "rpa"
+    """`api` (по умолчанию) или `rpa` — только при явном `ACL_FB_BACKEND=rpa` (ACL-2668)."""
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
-    return backend() == "api"
+    return backend() == _backend.API
 
 
 def _env_number(name: str, default: float, lo: float, hi: float) -> float:

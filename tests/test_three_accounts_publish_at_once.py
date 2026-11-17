@@ -215,3 +215,11 @@ def test_outside_a_run_the_folder_is_the_base(tmp_path):
 
     t = threading.Thread(target=other); t.start(); t.join(5)
     assert seen["dir"] == tmp_path / "shots"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

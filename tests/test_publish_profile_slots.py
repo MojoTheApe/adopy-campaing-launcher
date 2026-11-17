@@ -502,3 +502,11 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     assert body["mode"] == "auto" and body["running"] == [] and body["waiting"] == []
     assert body["next"]["reason"] == "below_reserve" and body["next"]["available_mb"] == 1 * GB
     assert body["settings"]["ceiling"] == ps.DEFAULT_CEILING == 2
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

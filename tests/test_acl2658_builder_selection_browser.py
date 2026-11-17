@@ -235,3 +235,11 @@ def test_publish_sends_exactly_the_ticked_campaigns(ui):
     expect(publish_button(p)).to_have_text('Publish all → drafts (0)')
     assert len(state['posts']) == 2
     assert state['dialogs'] == []
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

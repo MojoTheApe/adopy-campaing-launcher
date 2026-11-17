@@ -1,3 +1,4 @@
+import pytest
 """ACL-1992: у API-задания процент у точки — done / total объектов, а не модель робота.
 
 Тот же настоящий шаблон и подменённая сеть, что в
@@ -51,3 +52,11 @@ def test_api_percent_does_not_go_back_when_a_form_grows_the_total(ui):
     # Форма добавила единицу в total — доля меньше, но процент держит достигнутое.
     assert api_step(p, state, a, 3, 8, "form 'Lead': created") == 42
     assert api_step(p, state, a, 4, 8, 'ad 1: image uploaded') == 50
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

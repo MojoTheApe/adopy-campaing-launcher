@@ -659,3 +659,11 @@ def test_busy_profile_does_not_block_publish_the_job_queues_itself(ui):
     publish_one(p, state, 0)
     publish_one(p, state, 1)
     assert [f['account_label'] for f in state['posts']] == ['Demo', 'Other']
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

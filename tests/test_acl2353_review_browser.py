@@ -789,3 +789,11 @@ def test_a_resend_answer_with_refused_rows_looks_like_the_first_answer(browser):
         assert not _real(errors), errors
     finally:
         ctx.close()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

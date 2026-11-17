@@ -378,3 +378,11 @@ def test_a_renamed_campaign_is_matched_by_its_builder_name_and_only_warns(browse
         assert not state["errors"], state["errors"]
     finally:
         state["ctx"].close()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

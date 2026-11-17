@@ -356,3 +356,11 @@ def test_the_server_row_keeps_failed_retry_for_other_failures(rendered, dashboar
 def _attach_without_reopen():
     with sp.profile_lock(PROFILE):
         return sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield

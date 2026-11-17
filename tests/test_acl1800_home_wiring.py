@@ -34,7 +34,7 @@ TEMPLATE = (ROOT / "src" / "web" / "templates" / "_campaign_table.html").read_te
 @pytest.mark.parametrize("backend,host,ok,code", [
     ("api", "127.0.0.1", True, ""), ("api", "localhost", True, ""),
     ("api", "0.0.0.0", False, "not_loopback"), ("api", "", False, "not_loopback"),
-    ("rpa", "127.0.0.1", False, "rpa_backend"), (None, "127.0.0.1", False, "rpa_backend"),
+    ("rpa", "127.0.0.1", False, "rpa_backend"), (None, "127.0.0.1", True, ""),   # ACL-2668: по умолчанию api
 ])
 def test_availability_says_why_commands_are_off(monkeypatch, backend, host, ok, code):
     from src.web import campaign_commands as cc

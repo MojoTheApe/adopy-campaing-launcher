@@ -1,6 +1,7 @@
 """«Publish selected» через Graph API в профиле — кампании на паузе (ACL-1761).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+Работает по умолчанию; `ACL_FB_BACKEND=rpa` в `.env` машины — аварийный возврат на RPA
+(ACL-2668, бэкенд решает `src.fb_api.backend`). Тогда
 задание публикации (`publish_jobs._run_job_inner`) вместо робота Ads Manager
 зовёт `ApiPublisher`: тот же черновик билдера (`slots_to_campaign_drafts` →
 `enrich_campaign_drafts`), та же очередь мест по памяти и замок профиля (их
@@ -28,6 +29,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from src.fb_api import backend as _backend
 from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import plain_errors as _plain
 from src.fb_api import operation_journal as _oj
@@ -47,7 +49,7 @@ from src.fb_api.graph import AuthRequired, CallBudget, GraphClient, GraphError, 
 
 log = logging.getLogger(__name__)
 
-BACKEND_ENV = "ACL_FB_BACKEND"
+BACKEND_ENV = _backend.BACKEND_ENV
 CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 #: Потолок вызовов Graph на одну кампанию (ACL-1768): сам бюджет считается по плану
@@ -67,12 +69,12 @@ PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are created and pa
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — `rpa`."""
-    return "api" if (os.environ.get(BACKEND_ENV) or "").strip().lower() == "api" else "rpa"
+    """`api` (по умолчанию) или `rpa` — только при явном `ACL_FB_BACKEND=rpa` (ACL-2668)."""
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
-    return backend() == "api"
+    return backend() == _backend.API
 
 
 def _env_number(name: str, default: float, lo: float, hi: float) -> float:

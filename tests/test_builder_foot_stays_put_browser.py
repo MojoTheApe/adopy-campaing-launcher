@@ -1,3 +1,4 @@
+import pytest
 """ACL-1728: нижние поля ящика билдера не пересоздаются, пока идут задания.
 
 Владелец: «страна» внизу ящика закрывалась сама через пару секунд, пока
@@ -86,3 +87,11 @@ def test_deferred_repaint_runs_after_focus_leaves_and_keeps_input(ui):
     p.locator('#cbd-foot .cbd-publish-all').focus()
     p.wait_for_timeout(300)
     expect(p.locator('#cbd-foot .cbd-new-country')).to_have_value('Narnia')
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _acl2668_rpa_backend():
+    """ACL-2668: по умолчанию теперь api; эти проверки — про RPA-путь, поэтому `rpa` явно."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("ACL_FB_BACKEND", "rpa")
+        yield
