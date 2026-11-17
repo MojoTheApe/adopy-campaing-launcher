@@ -1947,13 +1947,6 @@ def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
     return fam
 
 
-#: Owner rule 12.11 ("publishing beats blocking"; supersedes the ACL-2338 exclusion of cdp_timeout): an unknown write
-#: result whose reason says only that no answer came back - network, network_timeout, cdp_timeout (a tab frozen for the
-#: whole CDP wait), context_stale, page_closed - is sent once more after two empty readbacks, an upload too (an extra
-#: uploaded file is harmless). A duplicate is acceptable, a lost publish is not. An unclear answer of Meta itself
-#: (5xx, code 1/2: empty reason) is not here: that write is only reconciled.
-RESEND_REASONS = frozenset({"network", "network_timeout", "cdp_timeout", "context_stale", "page_closed"})
-
 #: ACL-1856: тексты остановок по журналу операции (English, для человека).
 MSG_JOURNAL = ("Progress could not be saved on this computer, so nothing was written to Meta. "
                "Free some disk space or check the folder permissions, then publish again.")
