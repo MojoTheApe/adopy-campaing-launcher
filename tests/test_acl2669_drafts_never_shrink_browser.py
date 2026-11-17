@@ -549,3 +549,52 @@ def test_removing_a_campaign_of_a_stored_idless_copy_survives_reload(make):
     p.wait_for_timeout(800)
     assert sorted(_assets(p)) == ["Y", "Z"]
     assert sorted(c["fields"]["asset"] for c in server_keep()["forms"][FORM_KEY]["campaigns"]) == ["Y", "Z"]
+
+
+def test_stale_tab_editing_y_does_not_undo_the_newer_edits_of_x_in_the_same_form(make):
+    # B1 (ревью PR #1732): слияние по кампании, а не по форме
+    now = int(time.time() * 1000)
+    seeded = _doc(now - 60000, [("X", "cx"), ("Y", "cy")])
+    seeded["forms"][FORM_KEY]["campaigns"][0]["ads"] = 2
+    bd.save("keep", now - 60000, seeded)
+    a = make().open()
+    a.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    b = make("http://127.0.0.1:8001").open()
+    b.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    # вкладка A: переименовала X и убрала у него объявление
+    a.evaluate("() => { const x = document.querySelectorAll('.cb-slot [name$=\"_asset\"]')[0]; x.value = 'X renamed';"
+               " x.dispatchEvent(new Event('input', {bubbles: true}));"
+               " const rows = document.querySelectorAll('.cb-slot')[0].querySelectorAll('.cb-remove-ad-btn');"
+               " cbRemoveAd(rows[rows.length - 1]); }")
+    _until(lambda: "X renamed" in json.dumps(server_keep())
+           and server_keep()["forms"][FORM_KEY]["campaigns"][0]["ads"] == 1, a)
+    # вкладка B (устарела) правит только Y
+    b.evaluate("() => { const y = document.querySelectorAll('.cb-slot [name$=\"_asset\"]')[1]; y.value = 'Y edited by B';"
+               " y.dispatchEvent(new Event('input', {bubbles: true})); }")
+    _until(lambda: "Y edited by B" in json.dumps(server_keep()), b)
+    b.wait_for_timeout(1500)
+    by = {c["id"]: c for c in server_keep()["forms"][FORM_KEY]["campaigns"]}
+    assert by["cx"]["fields"]["asset"] == "X renamed" and by["cx"]["ads"] == 1
+    assert by["cy"]["fields"]["asset"] == "Y edited by B"
+    for page in (a, b):
+        page.wait_for_function("document.querySelectorAll('.cb-slot')[0].querySelectorAll('.cb-ad-row').length === 1", polling=100)
+        assert page.evaluate("document.querySelectorAll('.cb-slot [name$=\"_asset\"]')[0].value") == "X renamed"
+    assert b.evaluate("document.querySelectorAll('.cb-slot [name$=\"_asset\"]')[1].value") == "Y edited by B"
+
+
+def test_save_keeps_the_campaign_touched_of_an_unchanged_campaign(make):
+    now = int(time.time() * 1000)
+    bd.save("keep", now - 60000, _doc(now - 60000, [("X", "cx"), ("Y", "cy")]))
+    p = make().open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    # первое сохранение приводит заготовку к тому, что читает страница; дальше метки стабильны
+    p.evaluate("cbKeep.save()")
+    settled = {c["id"]: c["touched"] for c in p.evaluate("cbKeep.all()['%s'].campaigns" % FORM_KEY)}
+    p.wait_for_timeout(50)
+    p.evaluate("() => { const y = document.querySelectorAll('.cb-slot [name$=\"_asset\"]')[1]; y.value = 'Y2';"
+               " y.dispatchEvent(new Event('input', {bubbles: true})); }")
+    _until(lambda: "Y2" in json.dumps(server_keep()), p)
+    by = {c["id"]: c for c in server_keep()["forms"][FORM_KEY]["campaigns"]}
+    assert by["cx"]["touched"] == settled["cx"]          # не тронута — метка прежняя
+    assert by["cy"]["touched"] > settled["cy"]
+    assert server_keep()["forms"][FORM_KEY]["touched"] == by["cy"]["touched"]

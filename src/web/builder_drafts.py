@@ -100,6 +100,13 @@ def _touched(entry) -> float:
     return entry["touched"] if isinstance(entry, dict) and _num(entry.get("touched")) else 0
 
 
+def _ctouched(campaign, entry_touched) -> float:
+    """Метка правки кампании; нет своей — метка записи формы той же копии."""
+    if isinstance(campaign, dict) and _num(campaign.get("touched")):
+        return campaign["touched"]
+    return entry_touched
+
+
 def _cid(campaign) -> str:
     cid = campaign.get("id") if isinstance(campaign, dict) else None
     return cid if isinstance(cid, str) else ""
@@ -122,8 +129,9 @@ def _is_removed(removed: dict, key: str, campaign) -> bool:
 
 
 def _content(campaign) -> str:
-    """Содержимое кампании без `id` — для сопоставления (R13)."""
-    return json.dumps({k: v for k, v in campaign.items() if k != "id"}, sort_keys=True, ensure_ascii=False)
+    """Содержимое кампании без `id` и `touched` — для сопоставления (R13, B1)."""
+    return json.dumps({k: v for k, v in campaign.items() if k not in ("id", "touched")},
+                      sort_keys=True, ensure_ascii=False)
 
 
 def _norm_id(cid: str, key: str) -> str:
@@ -243,6 +251,82 @@ def _normalized(entry, key):
     return out
 
 
+def _number_trusted(entry, other, key):
+    """R19: у доверенной стороны запись формы без `id` нумеруется не только по
+    номеру: сначала по равному содержимому с кампанией другой копии (она берёт её
+    `id`), остальные — `legacy-<форма>-<номер>`, пропуская уже занятые в этой
+    записи. Так серверная копия без id и страница с `legacy-*` не дают двойника."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("campaigns"), list):
+        return entry
+    camps = entry["campaigns"]
+    if not any(isinstance(c, dict) and not _cid(c) for c in camps):
+        return _normalized(entry, key)
+    other_camps = other["campaigns"] if isinstance(other, dict) and isinstance(other.get("campaigns"), list) else []
+    used = {_norm_id(_cid(c), key) for c in camps if isinstance(c, dict) and _cid(c)}
+    free = [c for c in other_camps if isinstance(c, dict) and _cid(c) and _norm_id(_cid(c), key) not in used]
+    given: dict = {}
+    for i, c in enumerate(camps):
+        if not isinstance(c, dict) or _cid(c):
+            continue
+        mine = _content(c)
+        for o in free:
+            if _content(o) == mine:
+                given[i] = _norm_id(_cid(o), key)
+                used.add(given[i])
+                free.remove(o)
+                break
+    for i, c in enumerate(camps):
+        if not isinstance(c, dict) or _cid(c) or i in given:
+            continue
+        j = i
+        while f"legacy-{key}-{j}" in used:
+            j += 1
+        given[i] = f"legacy-{key}-{j}"
+        used.add(given[i])
+    out = dict(entry)
+    out["campaigns"] = [{**c, "id": given[i]} if i in given else c for i, c in enumerate(camps)]
+    return _normalized(out, key)
+
+
+#: R20: надгробие, которому больше 30 суток относительно самой свежей метки
+#: в документах и id которого не держит ни одна копия, больше не нужно.
+TOMBSTONE_TTL_MS = 30 * 24 * 3600 * 1000
+
+
+def _newest_stamp(*docs) -> float:
+    """Самая свежая метка в документах (`touched` форм и кампаний, надгробия):
+    без часов машины, результат одинаков в Python и JS."""
+    best = float("-inf")
+    for d in docs:
+        forms = d.get("forms") if isinstance(d.get("forms"), dict) else {}
+        for e in forms.values():
+            if not isinstance(e, dict):
+                continue
+            if _num(e.get("touched")):
+                best = max(best, e["touched"])
+            for c in (e.get("campaigns") if isinstance(e.get("campaigns"), list) else []):
+                if isinstance(c, dict) and _num(c.get("touched")):
+                    best = max(best, c["touched"])
+        rem = d.get("removed") if isinstance(d.get("removed"), dict) else {}
+        for ts in rem.values():
+            if _num(ts):
+                best = max(best, ts)
+    return best
+
+
+def _prune_tombstones(removed: dict, current: dict, incoming: dict, cur_forms: dict, inc_forms: dict) -> dict:
+    newest = _newest_stamp(current, incoming)
+    held = set()
+    for forms in (cur_forms, inc_forms):
+        for k, e in forms.items():
+            if isinstance(e, dict) and isinstance(e.get("campaigns"), list):
+                for c in e["campaigns"]:
+                    if _cid(c):
+                        held.add(f"{k}#{_cid(c)}")
+    return {k: ts for k, ts in removed.items()
+            if "#" not in k or k in held or ts >= newest - TOMBSTONE_TTL_MS}
+
+
 def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> dict:
     """Слить два документа `keep` (ACL-2669): черновики сами не сжимаются.
 
@@ -270,8 +354,8 @@ def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> di
                 k = _BARE_TOMB.sub(r"\1#legacy-\1-\2", k)   # голый legacy-<номер> промежуточной сборки
                 if _num(ts) and ts > removed.get(k, float("-inf")):
                     removed[k] = ts
-    trusted_cur = {k: _normalized(v, k) for k, v in cur_forms.items()}
-    trusted_inc = {k: _normalized(v, k) for k, v in inc_forms.items()}
+    trusted_cur = {k: _number_trusted(v, inc_forms.get(k), k) for k, v in cur_forms.items()}
+    trusted_inc = {k: _number_trusted(v, cur_forms.get(k), k) for k, v in inc_forms.items()}
     if untrusted == "current":
         adopted_cur = {k: _normalized(_adopt_ids(v, trusted_inc.get(k), k, removed), k) for k, v in cur_forms.items()}
         adopted_inc = trusted_inc
@@ -296,10 +380,25 @@ def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> di
         o_camps = older.get("campaigns") if isinstance(older, dict) else None
         if isinstance(n_camps, list) or isinstance(o_camps, list):
             n_camps = n_camps if isinstance(n_camps, list) else []
+            o_list = o_camps if isinstance(o_camps, list) else []
             n_touched, o_touched = _touched(newer), _touched(older)
-            kept = [c for c in n_camps if not _is_removed(removed, key, c)]
+            # B1/R17: побеждает не форма, а кампания — с большим `touched` кампании
+            # (нет своей метки — метка записи формы своей копии; ничья — копия
+            # более новой формы)
+            o_by_id: dict = {}
+            for c in o_list:
+                if _cid(c) and _cid(c) not in o_by_id:
+                    o_by_id[_cid(c)] = c
+            kept = []
+            for c in n_camps:
+                if _is_removed(removed, key, c):
+                    continue
+                oc = o_by_id.get(_cid(c)) if _cid(c) else None
+                if oc is not None and _ctouched(oc, o_touched) > _ctouched(c, n_touched):
+                    c = oc
+                kept.append(c)
             have = {_cid(c) for c in n_camps if _cid(c)}
-            for c in (o_camps if isinstance(o_camps, list) else []):
+            for c in o_list:
                 cid = _cid(c)
                 if cid and cid not in have and not _is_removed(removed, key, c):
                     kept.append(c)
@@ -310,11 +409,14 @@ def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> di
         if removed.get(key, float("-inf")) >= _touched(entry):
             continue
         forms[key] = entry
+    removed = _prune_tombstones(removed, current, incoming, cur_forms, inc_forms)
     merged = dict(incoming)
     if "forms" in current or "forms" in incoming or forms:
         merged["forms"] = forms
     if removed:
         merged["removed"] = removed
+    elif merged.get("removed"):
+        merged["removed"] = {}          # все надгробия сняты по сроку (R20)
     versions = [d["v"] for d in (current, incoming) if _num(d.get("v"))]
     if versions:
         merged["v"] = max(versions)

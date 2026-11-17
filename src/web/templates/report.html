@@ -6957,17 +6957,14 @@ window.cbKeep = (function () {
   /* Совпадают ли кампании с прежними. id в сравнении участвует: у старой записи
      без id чужой новый id — не изменение (иначе первое же сохранение подняло бы
      `touched` нетронутой формы и старая копия перебила бы настоящую правку). */
-  function sameCampaigns(old, now) {
-    if (old.length !== now.length) return false;
-    return old.every(function (o, i) {
-      var n = now[i];
-      if (o.id && o.id !== n.id) return false;
-      var a = Object.assign({}, o), b = Object.assign({}, n);
-      delete a.id; delete b.id;
-      return JSON.stringify(a) === JSON.stringify(b);
-    });
+  function sameContent(o, n) {
+    var a = Object.assign({}, o), b = Object.assign({}, n);
+    delete a.id; delete b.id; delete a.touched; delete b.touched;
+    return canon(a) === canon(b);
   }
 
+  function has0(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function noTouched(c) { var d = Object.assign({}, c); delete d.touched; return d; }
   function save() {
     if (restoring) return;          // раскладываем своё же — записывать нечего
     var now = Date.now();
@@ -6989,8 +6986,22 @@ window.cbKeep = (function () {
       var link = form.querySelector('[name="tracking_link"]');
       var tracking = link ? link.value : '';
       var old = state.forms[key];
-      var unchanged = old && old.tracking === tracking && sameCampaigns(old.campaigns, campaigns);
-      next[key] = { touched: unchanged ? old.touched : now, campaigns: campaigns, tracking: tracking };
+      /* B1/R17: у каждой кампании своя метка правки. Та же кампания (тот же id) с тем
+         же содержимым оставляет прежнюю метку, иначе — now. Метка записи формы — максимум
+         по кампаниям и правка ссылки; без изменений остаётся прежней. */
+      var oldById = {};
+      if (old && Array.isArray(old.campaigns)) normEntry(old, key).campaigns.forEach(function (o) {
+        if (o && o.id && !has0(oldById, o.id)) oldById[o.id] = o;
+      });
+      var top = 0;
+      campaigns.forEach(function (c) {
+        var o = has0(oldById, c.id) ? oldById[c.id] : null;
+        if (o && sameContent(o, c)) c.touched = typeof o.touched === 'number' ? o.touched : (old.touched || 0);
+        else c.touched = now;
+        if (c.touched > top) top = c.touched;
+      });
+      var trackChanged = !old || old.tracking !== tracking;
+      next[key] = { touched: trackChanged ? now : Math.max(top, old.touched || 0), campaigns: campaigns, tracking: tracking };
     });
     state = { v: VERSION, forms: next, removed: removed };
     write();
@@ -7039,6 +7050,39 @@ window.cbKeep = (function () {
     });
     return out;
   }
+  /* R19: у доверенной стороны запись без id нумеруется сперва по равному содержимому
+     с кампанией другой копии, остальные — по номеру, пропуская занятые в записи.
+     То же, что `_number_trusted` в builder_drafts.py. */
+  function numberTrusted(entry, other, key) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var camps = entry.campaigns;
+    if (!camps.some(function (c) { return isObj(c) && !cidOf(c); })) return normEntry(entry, key);
+    var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
+    var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
+    var used = {};
+    camps.forEach(function (c) { if (isObj(c) && cidOf(c)) used[normId(cidOf(c))] = true; });
+    var free = otherCamps.filter(function (c) { return isObj(c) && cidOf(c) && !used[normId(cidOf(c))]; });
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; delete d.touched; return canon(d); };
+    var given = {};
+    camps.forEach(function (c, i) {
+      if (!isObj(c) || cidOf(c)) return;
+      var mine = content(c);
+      for (var j = 0; j < free.length; j += 1) {
+        if (content(free[j]) === mine) { given[i] = normId(cidOf(free[j])); used[given[i]] = true; free.splice(j, 1); break; }
+      }
+    });
+    camps.forEach(function (c, i) {
+      if (!isObj(c) || cidOf(c) || (i in given)) return;
+      var j = i;
+      while (used['legacy-' + key + '-' + j]) j += 1;
+      given[i] = 'legacy-' + key + '-' + j;
+      used[given[i]] = true;
+    });
+    var out = Object.assign({}, entry);
+    out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
+    return normEntry(out, key);
+  }
   /* R13: кампании без id (страница старой версии) берут id у другой копии формы:
      сначала по равному содержимому, потом по порядку среди оставшихся; каждый id
      не больше раза. То же правило, что `_adopt_ids` в builder_drafts.py. */
@@ -7058,7 +7102,7 @@ window.cbKeep = (function () {
       return isObj(c) && cidOf(c) && !own[normId(cidOf(c))]
         && !Object.prototype.hasOwnProperty.call(removed, key + '#' + normId(cidOf(c)));   // R14
     });
-    var content = function (c) { var d = Object.assign({}, c); delete d.id; return canon(d); };
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; delete d.touched; return canon(d); };
     var given = {};
     idless.forEach(function (i) {
       var mine = content(camps[i]);
@@ -7133,9 +7177,12 @@ window.cbKeep = (function () {
     var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
     var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
     var forms = {};
+    var adoptedCur = {}, adoptedInc = {};
     keys.forEach(function (key) {
-      var a = normEntry(curForms[key], key), b = normEntry(adoptIds(incForms[key], a, key, removed), key);   // R16: недоверенная — только incoming
+      var a = numberTrusted(curForms[key], incForms[key], key), b = normEntry(adoptIds(incForms[key], a, key, removed), key);   // R16: недоверенная — только incoming
       var inCur = has(curForms, key), inInc = has(incForms, key);
+      if (inCur) adoptedCur[key] = a;
+      if (inInc) adoptedInc[key] = b;
       var newer, older;
       if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
       else { newer = inCur ? a : b; older = null; }
@@ -7149,14 +7196,22 @@ window.cbKeep = (function () {
       if (Array.isArray(nCamps) || Array.isArray(oCamps)) {
         nCamps = Array.isArray(nCamps) ? nCamps : [];
         var nT = touchedOf(newer), oT = touchedOf(older);
-        var kept = nCamps.filter(function (c) {
+        var oList = Array.isArray(oCamps) ? oCamps : [];
+        /* B1/R17: побеждает кампания с большим своим `touched` (нет — метка записи
+           формы той же копии; ничья — копия более новой формы) */
+        var ct = function (c, et) { return c && typeof c === 'object' && numeric(c.touched) ? c.touched : et; };
+        var oById = {};
+        oList.forEach(function (c) { var id = cidOf(c); if (id && !has(oById, id)) oById[id] = c; });
+        var kept = [];
+        nCamps.forEach(function (c) {
           var cid = cidOf(c);
-          if (!cid) return true;
-          return rem(key + '#' + cid) === -Infinity;   // R12/R15: любое надгробие абсолютно
+          if (cid && rem(key + '#' + cid) !== -Infinity) return;   // R12/R15: любое надгробие абсолютно
+          if (cid && has(oById, cid) && ct(oById[cid], oT) > ct(c, nT)) c = oById[cid];
+          kept.push(c);
         });
         var have = {};
         nCamps.forEach(function (c) { if (cidOf(c)) have[cidOf(c)] = true; });
-        (Array.isArray(oCamps) ? oCamps : []).forEach(function (c) {
+        oList.forEach(function (c) {
           var cid = cidOf(c);
           if (cid && !have[cid] && rem(key + '#' + cid) === -Infinity) { kept.push(c); have[cid] = true; }
         });
@@ -7166,9 +7221,37 @@ window.cbKeep = (function () {
       if (rem(key) >= touchedOf(entry)) return;
       forms[key] = entry;
     });
+    /* R20: надгробие старше самой свежей метки документов больше чем на 30 суток,
+       чей id не держит ни одна копия, больше не нужно (без часов машины) */
+    var newest = -Infinity;
+    [current, incoming].forEach(function (d) {
+      var fs = d.forms && typeof d.forms === 'object' && !Array.isArray(d.forms) ? d.forms : {};
+      Object.keys(fs).forEach(function (k) {
+        var e = fs[k];
+        if (!e || typeof e !== 'object') return;
+        if (numeric(e.touched)) newest = Math.max(newest, e.touched);
+        (Array.isArray(e.campaigns) ? e.campaigns : []).forEach(function (c) {
+          if (c && typeof c === 'object' && numeric(c.touched)) newest = Math.max(newest, c.touched);
+        });
+      });
+      var rs = d.removed && typeof d.removed === 'object' ? d.removed : {};
+      Object.keys(rs).forEach(function (k) { if (numeric(rs[k])) newest = Math.max(newest, rs[k]); });
+    });
+    var heldIds = {};
+    [curForms, incForms].forEach(function (fs, n) {
+      Object.keys(fs).forEach(function (k) {
+        /* держат id обе копии после выбора id: берём тот вид, что у участвовавших в слиянии */
+        var e = n === 0 ? adoptedCur[k] : adoptedInc[k];
+        if (e && Array.isArray(e.campaigns)) e.campaigns.forEach(function (c) { if (cidOf(c)) heldIds[k + '#' + cidOf(c)] = true; });
+      });
+    });
+    Object.keys(removed).forEach(function (k) {
+      if (k.indexOf('#') !== -1 && !has(heldIds, k) && removed[k] < newest - 30 * 24 * 3600 * 1000) delete removed[k];
+    });
     var merged = Object.assign({}, incoming);
     if ('forms' in current || 'forms' in incoming || Object.keys(forms).length) merged.forms = forms;
     if (Object.keys(removed).length) merged.removed = removed;
+    else if (merged.removed && Object.keys(merged.removed).length) merged.removed = {};   // все сняты по сроку (R20)
     var vs = [current.v, incoming.v].filter(numeric);
     if (vs.length) merged.v = Math.max.apply(null, vs);
     return merged;
@@ -7325,7 +7408,7 @@ window.cbKeep = (function () {
                   return;
                 }
                 var typing = active && slot.contains(active) && 'value' in active ? { el: active, value: active.value } : null;
-                if (canon(readSlot(slot)) !== canon(c)) {
+                if (canon(readSlot(slot)) !== canon(noTouched(c))) {
                   writeSlot(slot, c);
                   changed = true;
                   /* тронут не весь слот: набираемое прямо сейчас поле остаётся как было */
@@ -9021,7 +9104,11 @@ window.cbTree = (function () {
      меняется при каждом удалении соседа. */
   function slotId(slot) {
     /* тот же id, что у черновика (cbKeep): стабильный, не «cbsN» на сессию */
-    return window.cbKeep.slotId(slot);
+    if (window.cbKeep) return window.cbKeep.slotId(slot);
+    /* без cbKeep (часть страницы отдельно, тестовая обвязка): свой id на карточке,
+       тот же `data-cbd-id`, который потом подхватит cbKeep */
+    if (!slot.dataset.cbdId) slot.dataset.cbdId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return slot.dataset.cbdId;
   }
 
   function accountForm(row) {

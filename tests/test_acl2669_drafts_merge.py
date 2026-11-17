@@ -289,3 +289,101 @@ def test_removal_from_a_page_that_restored_a_stored_idless_copy_keeps_the_campai
 def test_tombstone_of_a_bare_legacy_id_applies_to_the_normalised_id():
     out = bd.merge_keep(doc({"F": form(10, named("C", "legacy-1"))}, removed={"F#legacy-1": 5}), doc({"F": form(20, named("C"))}))
     assert names(out) == ["C"] and "legacy-F-1" not in ids(out, "F")
+
+
+# ── ревью PR #1732: B1 (метка правки кампании), M3 (R19), L4 (R20) ───────────
+
+def named(name, cid=None, **kw):
+    c = {"fields": {"name": name}, "shown": {}, "ads": 1, **kw}
+    if cid:
+        c["id"] = cid
+    return c
+
+
+def test_b1_stale_tab_does_not_overwrite_a_newer_campaign_in_the_same_form():
+    """Репро ревью: вкладка A правила X позже, чем вкладка B его видела; B правит только Y."""
+    stored = doc({"K": form(200, named("X-new", "X", ads=3, touched=200))})
+    stale = doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))})
+    for out in (bd.merge_keep(stored, stale), bd.merge_keep(stale, stored, untrusted="current")):
+        by = {c["id"]: c for c in out["forms"]["K"]["campaigns"]}
+        assert by["X"]["ads"] == 3 and by["X"]["fields"]["name"] == "X-new"
+        assert by["Y"]["fields"]["name"] == "Y"
+        assert out["forms"]["K"]["touched"] == 300
+
+
+def test_b1_order_is_the_newer_forms_then_the_others():
+    stored = doc({"K": form(200, named("A", "a", touched=200), named("B", "b", touched=200))})
+    inc = doc({"K": form(300, named("C", "c", touched=300), named("A-old", "a", touched=100))})
+    out = bd.merge_keep(stored, inc)
+    assert ids(out, "K") == ["c", "a", "b"]
+    assert out["forms"]["K"]["campaigns"][1]["fields"]["name"] == "A"
+
+
+def test_b1_missing_campaign_touched_falls_back_to_the_form_touched():
+    stored = doc({"K": form(200, named("new", "X"))})
+    inc = doc({"K": form(300, named("old", "X"))})
+    out = bd.merge_keep(stored, inc)
+    assert out["forms"]["K"]["campaigns"][0]["fields"]["name"] == "old"   # 300 > 200, как раньше
+
+
+def test_b1_tie_goes_to_the_newer_form_copy():
+    stored = doc({"K": form(200, named("s", "X", touched=150))})
+    inc = doc({"K": form(300, named("i", "X", touched=150))})
+    assert bd.merge_keep(stored, inc)["forms"]["K"]["campaigns"][0]["fields"]["name"] == "i"
+
+
+def test_b1_ad_removed_in_the_newer_campaign_does_not_come_back():
+    stored = doc({"K": form(200, named("X", "X", ads=1, touched=200))})
+    stale = doc({"K": form(300, named("X", "X", ads=3, touched=100), named("Y", "Y", touched=300))})
+    out = bd.merge_keep(stored, stale)
+    assert out["forms"]["K"]["campaigns"][0]["ads"] == 1
+
+
+def test_b1_save_through_the_server_keeps_the_newer_campaign(tmp_path):
+    bd.save("keep", 1000, doc({"K": form(200, named("X-new", "X", ads=3, touched=200))}))
+    ok, out = bd.save("keep", 2000, doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))}))
+    assert ok is False
+    by = {c["id"]: c for c in out["data"]["forms"]["K"]["campaigns"]}
+    assert by["X"]["ads"] == 3 and "Y" in by
+    # и в обратном порядке saved_at
+    bd.save("keep", 5000, doc({"K": form(200, named("X-new", "X", ads=3, touched=200))}))
+    ok, out = bd.save("keep", 4000, doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))}))
+    by = {c["id"]: c for c in out["data"]["forms"]["K"]["campaigns"]}
+    assert by["X"]["ads"] == 3 and "Y" in by
+
+
+def test_m3_idless_server_copy_pairs_with_the_incoming_ids_by_content():
+    """Репро ревью: серверное [Q,R] без id + страница [P,Q,R] с legacy-id — без двойника R."""
+    stored = doc({"K": form(10, named("Q"), named("R"))})
+    inc = doc({"K": form(20, named("P", "legacy-K-0"), named("Q", "legacy-K-1"), named("R", "legacy-K-2"))})
+    for out in (bd.merge_keep(stored, inc), bd.merge_keep(inc, stored, untrusted="current")):
+        names = [c["fields"]["name"] for c in out["forms"]["K"]["campaigns"]]
+        assert sorted(names) == ["P", "Q", "R"]
+        assert len(set(ids(out, "K"))) == 3
+
+
+def test_m3_unpaired_idless_campaign_takes_the_next_free_index():
+    stored = doc({"K": form(10, named("Q"), named("Z"))})
+    inc = doc({"K": form(20, named("A", "legacy-K-0"), named("Q", "legacy-K-1"))})
+    out = bd.merge_keep(stored, inc)
+    names = sorted(c["fields"]["name"] for c in out["forms"]["K"]["campaigns"])
+    assert names == ["A", "Q", "Z"]
+
+
+DAY = 24 * 3600 * 1000
+
+
+def test_l4_old_tombstone_of_an_id_nobody_holds_is_dropped():
+    cur = doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))}, removed={"K#gone": 5 * DAY})
+    out = bd.merge_keep(cur, doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))}))
+    assert "removed" not in out or "K#gone" not in out["removed"]
+
+
+def test_l4_tombstone_within_30_days_or_held_by_a_copy_stays():
+    cur = doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))},
+              removed={"K#recent": 20 * DAY, "K#held": 5 * DAY})
+    inc = doc({"K": form(30 * DAY, named("H", "held", touched=30 * DAY))})
+    out = bd.merge_keep(cur, inc)
+    assert "K#recent" in out["removed"]
+    assert "K#held" in out["removed"]
+    assert "held" not in ids(out, "K")           # а сама кампания по-прежнему убрана

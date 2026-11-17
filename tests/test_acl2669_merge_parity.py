@@ -32,8 +32,8 @@ def camp(cid=None, **kw):
     return c
 
 
-def named(name, cid=None):
-    c = {"fields": {"name": name}, "shown": {}, "ads": 1}
+def named(name, cid=None, **kw):
+    c = {"fields": {"name": name}, "shown": {}, "ads": 1, **kw}
     if cid:
         c["id"] = cid
     return c
@@ -151,6 +151,32 @@ CASES = {
         doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))})),
     "non-dict entry with a form tombstone": (
         doc({"A": "junk"}, removed={"A": 5}), doc({"B": "junk"})),
+    "B1 stale tab keeps the newer campaign (review repro)": (
+        doc({"K": form(200, named("X-new", "X", ads=3, touched=200))}),
+        doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))})),
+    "B1 same repro, the newer campaign on the incoming side": (
+        doc({"K": form(300, named("X-old", "X", ads=1, touched=100), named("Y", "Y", touched=300))}),
+        doc({"K": form(200, named("X-new", "X", ads=3, touched=200))})),
+    "B1 campaign touched tie goes to the newer form": (
+        doc({"K": form(200, named("s", "X", touched=150))}), doc({"K": form(300, named("i", "X", touched=150))})),
+    "B1 missing campaign touched falls back to the form touched": (
+        doc({"K": form(200, named("new", "X"))}), doc({"K": form(300, named("old", "X"))})),
+    "B1 order is the newer form's then the rest": (
+        doc({"K": form(200, named("A", "a", touched=200), named("B", "b", touched=200))}),
+        doc({"K": form(300, named("C", "c", touched=300), named("A-old", "a", touched=100))})),
+    "M3 id-less stored pairs by content with legacy ids (review repro)": (
+        doc({"K": form(10, named("Q"), named("R"))}),
+        doc({"K": form(20, named("P", "legacy-K-0"), named("Q", "legacy-K-1"), named("R", "legacy-K-2"))})),
+    "M3 unpaired id-less stored campaign takes the next free index": (
+        doc({"K": form(10, named("Q"), named("Z"))}),
+        doc({"K": form(20, named("A", "legacy-K-0"), named("Q", "legacy-K-1"))})),
+    "L4 old tombstone of an id nobody holds is dropped": (
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))}, removed={"K#gone": 5 * 86400000}),
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))})),
+    "L4 recent or held tombstones stay": (
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))},
+            removed={"K#recent": 20 * 86400000, "K#held": 5 * 86400000}),
+        doc({"K": form(30 * 86400000, named("H", "held", touched=30 * 86400000))})),
     "one side has no forms": (
         {"v": 4}, doc({"A": form(1, camp("a1"))})),
 }
