@@ -1787,6 +1787,23 @@ def video_title(tag: str, data: bytes) -> str:
     return f"acl-{tag}-{_md5(data)[:12]}"
 
 
+def video_title_matches(title: str, content: str) -> bool:
+    """Our video title (`acl-<tag>-<md5[:12]>`) of any campaign with this content hash."""
+    return bool(content) and title.startswith("acl-") and title.endswith(f"-{content}")
+
+
+def throughput_mb_s(size: int, seconds: float) -> float | None:
+    return round(size / 1048576 / seconds, 2) if seconds > 0 and size > 0 else None
+
+
+def _speed_text(size: int, seconds: float) -> str:
+    """'180 MB, 2m 05s, 1.4 MB/s' - the size and speed of one upload, so a slow proxy is visible."""
+    secs = int(round(seconds))
+    span = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+    rate = throughput_mb_s(size, seconds)
+    return f"{_mb(size)}, {span}" + (f", {rate:.1f} MB/s" if rate is not None else "")
+
+
 @dataclass
 class Outcome:
     campaign_name: str
@@ -2120,6 +2137,8 @@ class CampaignCreator:
                                     "metric": "video_upload", "mode": mode, "bytes": len(data),
                                     "md5": _md5(data)[:12],
                                     "upload_s": round(float(self.clock() - began), 1)}
+            if mode != "found":
+                diag["mb_s"] = throughput_mb_s(len(data), float(self.clock() - began))
             if error is not None:
                 details = getattr(error, "details", None) or {}
                 diag.update(error=type(error).__name__, kind=getattr(error, "kind", ""),
@@ -3311,6 +3330,7 @@ class CampaignCreator:
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes, *,
                path: str = "", role: str = "") -> tuple[str, str]:
         title = video_title(plan.video_tag, data)
+        content = _md5(data)[:12]
         path = path or ad.path
         who = f"ad {ad.index}{role}"
 
@@ -3318,6 +3338,9 @@ class CampaignCreator:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
                                        max_pages=pages)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
+            if hit is None:
+                # The same content under another campaign's tag is the same video of this ad account.
+                hit = next((r for r in rows if video_title_matches(str(r.get("title") or ""), content)), None)
             return str(hit["id"]) if hit else None
 
         began = self.clock()
@@ -3326,9 +3349,9 @@ class CampaignCreator:
         seen = getattr(self, "_videos_this_run", None)
         if seen is None:
             seen = self._videos_this_run = {}
-        vid = seen.get(title) or find()
+        vid = seen.get(content) or find()
         if vid:
-            self._step(out, f"{who}: video already in the ad account")
+            self._step(out, f"{who}: video already in the ad account ({_mb(len(data))}, same content, not uploaded again)")
             self._video_row(plan, who, data, "found", began)
         else:
             mode = "chunked" if isinstance(data, LargeFile) else "whole"
@@ -3351,8 +3374,9 @@ class CampaignCreator:
             finally:
                 self._waiting("")
             out.created.setdefault("videos", []).append(vid)
-            seen[title] = vid
-            self._step(out, f"{who}: video uploaded")
+            seen[content] = vid
+            took = max(0.0, float(self.clock() - began))
+            self._step(out, f"{who}: video uploaded ({_speed_text(len(data), took)})")
             self._video_row(plan, who, data, mode, began)
         return vid, self._wait_video(out, ad, vid, who=who)
 
