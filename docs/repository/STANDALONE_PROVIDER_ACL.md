@@ -4,17 +4,19 @@
 
 The current provider is the exact published revision in
 [delivery.json](../../delivery.json) and [tracker/engine.json](../../tracker/engine.json).
-ACL-2512 selects published [Tracker3.28.1](https://github.com/MojoTheApe/task-tracker/releases/tag/v3.28.1)
-at `6e8dce91d1696f8f24e50deaf03dcff04703303c` (stable release440543254).
+ACL-2758 selects published [Tracker3.28.3](https://github.com/MojoTheApe/task-tracker/releases/tag/v3.28.3)
+at `0f38be0711f3c614d356b006f5e61790fb26ae66` (stable release448972235).
 Provider, engine and trusted private-checkout workflow use that same exact source.
-The old official3.27.3 source reproduces all96 retained pristine files; the new
-maintained renderer and three-way writer supply the genuine98-file baseline and
-canonical helper closure. The two local overlaps preserve ACL's PR template and
-render its selected guide from the unchanged native config. Daily instructions
-now link to generated selected details; both retain the guarded ACL adapter,
-actual package target and all four required native checks.
+The released provider's isolated `upgrade --previous-provider` command authenticates
+the exact old official3.28.1 checkout and reproduces all98 retained pristine files.
+Its maintained renderer and three-way writer update the coherent pins, archive
+helper, manifest and genuine baseline without conflicts. TT-276 reuses the existing
+archive while its live envelope fits the unchanged1MiB limit; TT-278 supplies this
+authenticated cross-version upgrade. Neither changes state format, policy or defaults.
+Daily instructions retain the guarded ACL adapter, actual package target and all
+four required native checks.
 
-Use the [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/6e8dce91d1696f8f24e50deaf03dcff04703303c/docs/STANDALONE_WORKFLOW_PROVIDER.md).
+Use the [immutable provider procedure](https://github.com/MojoTheApe/task-tracker/blob/0f38be0711f3c614d356b006f5e61790fb26ae66/docs/STANDALONE_WORKFLOW_PROVIDER.md).
 The descriptor and pristine baseline retain audited Master1.8.0 ancestry; current
 shared author/reviewer guidance remains Master1.11.0 in [AGENTS.md](../../AGENTS.md).
 Native config and every non-pin descriptor choice remain unchanged, including
@@ -22,16 +24,19 @@ Native config and every non-pin descriptor choice remain unchanged, including
 checks, authorization, IDs, existing ownership and original delivery requests.
 No policy activation, service deployment or unchanged ACL installer is selected.
 
-This support supplies the owner's signed preview/apply partial-batch procedure
-and recognizes verified batch-part receipts in ordinary client admission. It
+This selection retains the owner's signed preview/apply partial-batch procedure
+and verified batch-part receipts in ordinary client admission. It
 preserves original criteria and named unfinished follow-ups. Installing the pin
 alone neither applies a recovery nor verifies a release. The old product batch
 and its explicitly requested package retain their actual acceptance and native
 receipt obligations. The canonical process proof, independent whole-outcome and
 import-isolation assessment, genuine source/batch admission and every applicable
-check remain required for this support task's own completion.
+check remain required for this support task's own completion. Rollback uses a
+reviewed revert of the complete canonical adoption change, restoring3.28.1 at
+`6e8dce91d1696f8f24e50deaf03dcff04703303c` with its actual helpers, manifest,
+workflow and baseline together; never replace individual pins or hashes manually.
 
-ACL-2421's3.27.3 universal process support, ACL-2417's3.26.0 recovery/handoff and
+ACL-2512's3.28.1 partial-batch recovery client, ACL-2421's3.27.3 universal process support, ACL-2417's3.26.0 recovery/handoff and
 ACL-2351's3.24.1 selection remain historical adoptions. ACL-2423's exact existing
 process declaration, TT-188's guarded lossless archive activation, ACL-2424's
 original-product continuation and ACL-2425's instruction schema2 selection remain
