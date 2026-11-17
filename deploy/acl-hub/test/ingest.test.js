@@ -107,3 +107,29 @@ test("storage failure is 503", async () => {
   env.DB.batch = async () => { throw new Error("D1_ERROR"); };
   assert.equal((await post(env, { batch: "b".repeat(32) + "-1-1" })).status, 503);
 });
+
+// ── Task 6: перенос истории владельцем ──
+const OWNER = "owner_key_" + "z".repeat(20);
+function backfill(env, { key = OWNER, events = YOTAM, batch = "backfill-1-7" } = {}) {
+  const headers = { "X-ACL-Batch": batch };
+  if (key) headers.Authorization = `Bearer ${key}`;
+  return worker.fetch(new Request("https://hub/v1/backfill", { method: "POST", headers, body: ndjson(events) }), env);
+}
+
+test("backfill requires owner key", async () => {
+  const env = makeEnv();
+  assert.equal((await backfill(env, { key: "" })).status, 401);
+  assert.equal((await backfill(env, { key: TOKEN })).status, 401);
+  assert.equal(await count(env, "events"), 0);
+});
+
+test("backfill keeps each event's machine", async () => {
+  const env = makeEnv();
+  const gil = { ...YOTAM[1], event_id: "g:1", machine_id: "m-gil", machine: "Gil Zangi", manager: "Gil Zangi", job_id: "jg" };
+  const res = await backfill(env, { events: [YOTAM[1], gil] });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, accepted: 2, duplicates: 0, rejected: 0 });
+  const { results } = await env.DB.prepare("SELECT machine_id, machine FROM machines ORDER BY machine_id").all();
+  assert.deepEqual(results.map((r) => r.machine), ["Gil Zangi", "Yotam Balteriski"]);
+  assert.equal((await env.DB.prepare("SELECT batch_id FROM events WHERE event_id='g:1'").first()).batch_id, "backfill-1-7");
+});

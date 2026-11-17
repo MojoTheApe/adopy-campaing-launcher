@@ -1,7 +1,7 @@
 // Приём событий: пачка машины (POST /v1/batch) и перенос истории владельцем (Task 6).
 // Каждое событие пишется один раз (UNIQUE event_id); выводы строятся только для новых.
 import { json } from "./respond.js";
-import { authorize, bearer } from "./auth.js";
+import { authorize, bearer, isOwner } from "./auth.js";
 import { deriveStatements, machineStatement } from "./derive.js";
 
 export const MAX_BODY = 1024 * 1024;
@@ -124,6 +124,20 @@ export async function handleBatch(request, env) {
     return json({ ok: true, ...(await ingestEvents(env, events, { batchId })) });
   } catch (_) {
     // Сбой D1: машина повторит позже, события лежат в её ящике.
+    return json({ error: "storage unavailable" }, 503);
+  }
+}
+
+// Перенос истории владельцем: машина берётся из каждого события, заголовок машины не нужен.
+export async function handleBackfill(request, env) {
+  if (!(await isOwner(request, env))) return json({ error: "unauthorized" }, 401);
+  const batchId = request.headers.get("X-ACL-Batch") || "";
+  if (!BATCH_RE.test(batchId)) return json({ error: "bad headers" }, 400);
+  const { error, events } = await readBatchBody(request);
+  if (error) return error;
+  try {
+    return json({ ok: true, ...(await ingestEvents(env, events, { batchId })) });
+  } catch (_) {
     return json({ error: "storage unavailable" }, 503);
   }
 }
