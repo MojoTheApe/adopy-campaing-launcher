@@ -150,11 +150,11 @@ def get_cached_report(
     """
     excel_path = _resolve_excel_path(None)
     if bi_stats.bi_enabled():
-        # Сеть — только когда ревизии ещё нет или нажат Refresh. Иначе её
-        # обновляет фоновый поток: запрос страницы не ждёт BI (ACL-1399).
+        # Сеть — только когда ревизии ещё нет или нажат Refresh. Смену
+        # периода проверяет recheck_bi_revision; фонового опроса нет
+        # (ACL-2668 #21): запрос страницы не ждёт BI (ACL-1399).
         if force_rebuild or bi_stats.known_revision() is None:
             bi_stats.refresh_revision(force=True)
-        bi_stats.ensure_revision_watcher()
     expected_key = _current_key(excel_path)
     cm_key = _cm_key(my_cm)
 
@@ -331,6 +331,25 @@ def entry_source_key():
     """Source key of the report now in memory (what the last build was made from)."""
     entry = _CACHE["entry"]
     return entry[0] if entry is not None else None
+
+
+def recheck_bi_revision(timeout: float = 4.0) -> None:
+    """Спросить BI о новой ревизии по событию страницы (ACL-2668 #21).
+
+    Вызывается при смене периода или сравнения: новые данные в BI видны
+    тогда, когда байер что-то делает, а не опросом раз в пять минут. Вопрос
+    идёт в отдельном потоке, страница ждёт не дольше `timeout` секунд; если
+    BI отвечает дольше, ответ всё равно обновит ревизию, и новый ключ
+    пересоберёт отчёт при следующем запросе. Не вызывать из цикла событий.
+    """
+    if not bi_stats.bi_enabled():
+        return
+    worker = threading.Thread(
+        target=bi_stats.refresh_revision, kwargs={"force": True},
+        name="acl-bi-revision-event", daemon=True,
+    )
+    worker.start()
+    worker.join(timeout)
 
 
 def verified_source_key(timeout: float = 4.0):

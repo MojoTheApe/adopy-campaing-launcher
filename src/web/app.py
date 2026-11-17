@@ -62,6 +62,7 @@ from src.web.cache import (
     rebuild_deferred,
     has_entry as report_has_entry,
     peek_cached_report,
+    recheck_bi_revision,
     start_background_build,
     verified_source_key,
 )
@@ -2957,12 +2958,34 @@ def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLRespon
     return response
 
 
+# ACL-2668 #21: последний показанный период по менеджеру. Новые данные BI
+# проверяются, когда байер сменил период или сравнение (и по Refresh), а не
+# фоновым опросом раз в пять минут.
+_PERIOD_FIELDS = ("date_from", "date_to", "span", "compare", "cmp_from", "cmp_to")
+_LAST_PERIOD: dict[str, tuple] = {}
+_LAST_PERIOD_LOCK = threading.Lock()
+
+
+def _period_changed(inputs: dict) -> bool:
+    """Этот запрос меняет период/сравнение относительно прошлого показа. Без сети."""
+    period = tuple(inputs[name] for name in _PERIOD_FIELDS)
+    with _LAST_PERIOD_LOCK:
+        previous = _LAST_PERIOD.get(inputs["cm"])
+        _LAST_PERIOD[inputs["cm"]] = period
+    return previous is not None and previous != period
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = "",
     compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
     inputs = _store_inputs(date_from, date_to, span, compare, cmp_from, cmp_to)
+    if _period_changed(inputs) and bi_stats.bi_enabled():
+        # Смена периода — событие байера: спросить BI о новых данных в пуле
+        # (ограниченное ожидание). Новая ревизия меняет ключ, и ниже
+        # страница уйдёт в фоновую пересборку, как после Refresh.
+        await _in_report_pool(recheck_bi_revision)
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
     # а сразу ответить и собрать его в фоне. ACL-2207: отвечаем последней
     # сохранённой страницей, если она есть, а не экраном ожидания.
