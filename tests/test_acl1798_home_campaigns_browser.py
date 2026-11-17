@@ -476,8 +476,10 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.running.Fresh === true")
     assert [q for q in site.q.state()['queued'] if q['account'] == 'Fresh'] == [
         {'account': 'Fresh', 'trigger': 'attention'}]
-    # That read fails again (the fixture worker is off, so it is drained by hand).
+    # The queue is paused (Multilogin unreachable above), so the expand waits; the person's
+    # Retry reads past the pause and fails again (the fixture worker is off: drained by hand).
     site.q._reader = failed_read
+    page.evaluate("() => window.aclAccountRefresh.request('Fresh', 'retry')")
     site.q._drain_once()
     page.evaluate('() => window.aclAccountRefresh.load()')
     page.evaluate("() => document.querySelector('.amap-campaigns')._hc.reload('Fresh')")
