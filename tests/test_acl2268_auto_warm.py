@@ -190,6 +190,15 @@ def test_closed_profile_is_opened_once_through_prepare_existing(api, monkeypatch
     assert api.rig.reg.is_warm(PID)
 
 
+def test_auto_open_does_not_pause_after_a_start(api, monkeypatch):
+    # ACL-2668 #14: после запуска профиля автооткрытие больше не ждёт 5–10 с.
+    slept = []
+    monkeypatch.setattr(warm_api, "_sleep", slept.append)
+    ensure()
+    run_queue()
+    assert warm_api._AUTO["Acc"]["code"] == "started" and slept == []
+
+
 def test_repeat_inside_the_window_starts_nothing(api):
     ensure()
     assert ensure()[0]["accounts"]["Acc"] == "queued"          # in flight: no second queue entry

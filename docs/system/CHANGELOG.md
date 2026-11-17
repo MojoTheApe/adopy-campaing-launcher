@@ -1,5 +1,12 @@
 # System history
 
+## ACL-2668 decision 12 — Profiles start together, no separate start limit or gap — 2026-11-16
+
+MLX `start` requests are no longer sent one at a time: as many profiles start at once as the "Profiles at once" slot
+ceiling (`ACL_MAX_PROFILES`) lets through. The 3 s gap after a queued start (`ACL_MLX_START_GAP_S`) is removed.
+`ACL_MLX_PARALLEL_STARTS` stays only as an emergency cap (unset = no separate limit). The single delayed retry after an
+MLX connection drop (10053/10054) is unchanged.
+
 ## ACL-2596 — An Automatic Page with a stored form photo keeps the light work tab — 2026-11-12
 
 When a draft's Page is "Automatic", the work-tab decision now resolves it the way the creator does (the first Page of

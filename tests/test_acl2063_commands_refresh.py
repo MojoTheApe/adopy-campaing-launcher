@@ -5,7 +5,6 @@ import pytest
 
 from tests.profile_lease_fakes import fake_profile
 from src.analysis_agent import account_refresh as ar, campaign_inventory as ci
-from src.analysis_agent.account_refresh_state import read_session
 from src.fb_ads_rpa.profile_lease import profile_lock
 from src.fb_api import commands as cmd
 from src.web import campaign_commands as webcmd
@@ -29,7 +28,7 @@ class SessionWorld(World):
     active = False
     @contextmanager
     def open_session(self, account, commands):
-        with profile_lock(fake_profile(ACCOUNT)), read_session(priority=commands):
+        with profile_lock(fake_profile(ACCOUNT)):
             with super().open_session(account, commands) as sess:
                 self.active = True
                 sess.profile_id = fake_profile(ACCOUNT)
