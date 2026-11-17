@@ -340,7 +340,7 @@ def test_a_lost_confirmation_record_is_only_a_note_and_the_next_run_adopts(tmp_p
 def test_an_unsent_write_found_nowhere_is_written_again_without_waiting(tmp_path, journal):
     """ACL-2250 contract: the earlier run looked and found nothing; a rerun does not wait 10 minutes."""
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"                  # ответа нет, объект не создан
+    meta.fail_next["ads"] = "unsent_stuck"            # ответа нет, объект не создан
     first, _ = _go(meta, _draft(tmp_path, ads=1), journal)
     assert first.stop_kind == "unknown"
     assert first.operation["stages"][-1]["state"] == oj.UNKNOWN
@@ -819,7 +819,7 @@ def test_next_action_agrees_with_every_failed_result(tmp_path, journal, monkeypa
     if scenario == "crash":
         meta.crash_at, meta.phase = 4, "after"
     elif scenario == "unknown":
-        meta.fail_next["ads"] = "unsent"
+        meta.fail_next["ads"] = "unsent_stuck"
     elif scenario == "cancel":
         flag = {"stop": False}
         real = meta.write
@@ -898,7 +898,7 @@ def test_a_lifetime_plan_with_a_start_today_keeps_its_operation_when_the_clock_m
 
     monkeypatch.setenv("ACL_TEAM_TIMEZONE", "America/New_York")
     meta = ZoneMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first = _zone_run(meta, _life(tmp_path, start="2026-10-20T09:00"), _at(9, 30), journal)    # start moves to 09:45
     assert first.error and first.operation["stages"]
     ops = list(journal.root.glob("op-*.json"))

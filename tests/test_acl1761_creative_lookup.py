@@ -31,7 +31,7 @@ def test_creatives_are_never_looked_up_with_a_name_filter(tmp_path):
 
 def test_unknown_creative_send_stays_blocked_until_an_object_is_reconciled(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["adcreatives"] = "unsent"
+    meta.fail_next["adcreatives"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=2))
     assert first.stop_kind == "unknown"
     before = list(meta.posts)
@@ -42,7 +42,7 @@ def test_unknown_creative_send_stays_blocked_until_an_object_is_reconciled(tmp_p
 
 def test_a_creative_left_without_its_ad_is_reused_not_duplicated(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=1))
     assert first.stop_kind == "unknown"
     second, _ = _run(meta, _draft(tmp_path, ads=1))

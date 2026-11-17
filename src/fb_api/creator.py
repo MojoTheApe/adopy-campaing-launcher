@@ -2570,9 +2570,10 @@ class CampaignCreator:
                    upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
-        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
-        объект, запись без файла отправляется ОДИН раз повторно. Записи с файлом и ответы Meta
-        вроде 5xx/кода 1-2 по-прежнему только сверяются и стоп.
+        Owner rule 12.11 («публикация важнее блокировки»; ACL-2301/2338/2748): если результат неизвестен (нет ответа
+        любой причины, ответ без причины - 5xx, код 1-2, не JSON, без id) и сверка дважды не нашла объект, запись,
+        в том числе с файлом, отправляется ОДИН раз повторно (дубль допустим). Если и повтор неизвестен - стоп только
+        этой кампании (`run_continues`). Детерминированный отказ Meta (`_REJECTION_SUBCODES`) не повторяется.
 
         `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
         с показом процента и Stop; неизвестный результат сверяется несколько раз.
@@ -2641,7 +2642,7 @@ class CampaignCreator:
                                           "in the ad account yet. Meta may still be processing the "
                                           "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
-                if exc.reason in RESEND_REASONS and not _resent:
+                if not _resent and exc.subcode not in _REJECTION_SUBCODES:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
@@ -2670,7 +2671,7 @@ class CampaignCreator:
                                                id_of=id_of, on_ad=on_ad, children_active=children_active,
                                                form_page=form_page, upload=upload, _resent=True)
                 else:
-                    resent_again = exc.reason in RESEND_REASONS and _resent
+                    resent_again = _resent and exc.subcode not in _REJECTION_SUBCODES
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
                     if resent_again:
                         # The re-send got no answer either: this campaign stops, the next ones of the run still publish.
@@ -2693,9 +2694,18 @@ class CampaignCreator:
             self.client.unreconciled = path
             found = find()
             if not found:
+                # Owner rule 12.11: no answer to rely on and nothing found: send once more (a duplicate is acceptable).
+                self.client.reconciled(path)
+                if not _resent:
+                    if what == "campaign" and self._op is not None:
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
+                    self._step(out, f"{what}: answered without an id and not found by readback - sending once more")
+                    return self._write_raw(out, what, path, params, find, files=files, filename=filename,
+                                           id_of=id_of, on_ad=on_ad, children_active=children_active,
+                                           form_page=form_page, upload=upload, _resent=True)
                 raise CreationStopped(f"{what}: Graph answered without an id and nothing was found "
                                       "by readback.", created=out.created, kind="unknown",
-                                      not_found=not (files or upload))
+                                      not_found=not (files or upload), run_continues=True)
             self.client.reconciled(path)
             return str(found)
         return str(got)
@@ -5939,7 +5949,8 @@ class CampaignCreator:
                     if rewrites > MAX_CAMPAIGN_REWRITES:
                         self._snapshot_operation(out)
                         raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name),
-                                              created=out.created, kind="unknown") from None
+                                              created=out.created, kind="unknown",
+                                              run_continues=True) from None
                     old_name = plan.name
                     n = max(choice.copy_number, rw.copy_number,
                             name_copy_number(old_name, base_plan.name)) + 1

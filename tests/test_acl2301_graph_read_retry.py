@@ -155,12 +155,12 @@ def test_second_timeout_after_resend_stops_without_a_third_post(tmp_path):
     assert len(_edges(meta, "campaigns")) == 2
 
 
-def test_unknown_result_without_network_error_is_never_resent(tmp_path):
+def test_unknown_result_without_a_reason_is_resent_once(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["campaigns"] = "unsent"          # call_unknown: Meta may have it
+    meta.fail_next["campaigns"] = "unsent"          # call_unknown without a reason
     out, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
-    assert out.error and out.stop_kind == "unknown"
-    assert len(_edges(meta, "campaigns")) == 1
+    assert not out.error, out.error                 # owner rule 12.11: reasonless unknowns are re-sent too
+    assert len(_edges(meta, "campaigns")) == 2
 
 
 def _run_with_sleeps(meta, draft, sleeps, **kw):
