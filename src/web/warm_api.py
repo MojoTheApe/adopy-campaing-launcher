@@ -90,7 +90,7 @@ def availability() -> dict:
                 "reason": "Opening and closing profiles needs the dashboard to listen on 127.0.0.1 only"}
     from src.fb_api import warm
 
-    return {"available": True, "actions": True, "max_heavy": warm.max_heavy(),
+    return {"available": True, "actions": True,
             "restart_cooldown_s": int(warm.restart_cooldown_s())}
 
 

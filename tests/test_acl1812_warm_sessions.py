@@ -104,7 +104,7 @@ class FakeGraph:
 class Rig:
     """Реестр с подставными процессами, вкладками, MLX и часами."""
 
-    def __init__(self, tmp_path, *, limit=1, memory=None, usage=None, reg_memory=None, reg_usage=None):
+    def __init__(self, tmp_path, *, memory=None, usage=None, reg_memory=None, reg_usage=None):
         self.tabs: list[FakeTab] = []
         self.tab_urls: list[str] = []
         self.alive_pids: set[int] = set()
@@ -125,7 +125,7 @@ class Rig:
         self.gate_skew = [0.0]
         self.gate_pauses: list[float] = []
         self.gate = warm.HeavyGate(
-            limit=lambda: limit, memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
+            memory=memory or (lambda: ps.MemoryReading(64000, 40000)),
             settings=lambda: _s90(), usage=usage if usage is not None else FakeUsage(), tick_s=0.01,
             clock=lambda: time.monotonic() + self.gate_skew[0], pause=self._gate_pause)
         self.reg = warm.WarmRegistry(
@@ -391,7 +391,7 @@ def test_nested_checkout_in_the_same_thread_is_refused_not_deadlocked(rig):
 
 def test_idle_warm_profiles_do_not_block_the_gate(tmp_path, monkeypatch):
     monkeypatch.setenv(warm.GATE_WAIT_ENV, "2")      # зависание не должно ждать 5 минут
-    rig = Rig(tmp_path, limit=1)
+    rig = Rig(tmp_path)
     pids = [f"{i:08d}-0000-4000-8000-000000000000" for i in range(6)]
     for pid in pids:
         rig.warm_up(pid)
@@ -403,37 +403,42 @@ def test_idle_warm_profiles_do_not_block_the_gate(tmp_path, monkeypatch):
     lease.release()
 
 
-def test_one_heavy_action_at_a_time_by_default(tmp_path):
-    rig = Rig(tmp_path, limit=1)
+def test_actions_on_two_accounts_run_at_once_even_with_an_old_limit_in_env(tmp_path, monkeypatch):
+    """ACL-2668 (решение владельца 16.11): лимита «Heavy actions at once» нет; старое значение в .env не действует."""
+    monkeypatch.setenv("ACL_WARM_MAX_HEAVY", "1")
+    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
+    rig = Rig(tmp_path)
     a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
     rig.warm_up(a)
     rig.warm_up(b)
     first = rig.checkout(a)
+    started = time.monotonic()
+    second = rig.checkout(b)
+    assert time.monotonic() - started < 0.5, "the second account waited for the first one"
+    assert sorted(rig.gate.active()) == [a, b]
+    first.release()
+    second.release()
+
+
+def test_two_actions_on_the_same_profile_still_never_run_together(tmp_path):
+    """ACL-2668: без лимита тяжёлых действий замок профиля по-прежнему разводит два действия на одном профиле."""
+    rig = Rig(tmp_path)
+    rig.warm_up()
+    first = rig.checkout()
     got = []
-    t = threading.Thread(target=lambda: got.append(rig.checkout(b)))
+    t = threading.Thread(target=lambda: got.append(rig.checkout()))
     t.start()
     time.sleep(0.2)
-    assert got == [], "the second heavy action must wait while the first one runs"
+    assert got == [], "a second action on the same profile must wait for the first one"
     first.release()
     t.join(3)
     assert len(got) == 1
     got[0].release()
 
 
-def test_two_heavy_actions_when_configured_and_memory_is_free(tmp_path):
-    rig = Rig(tmp_path, limit=2, memory=lambda: ps.MemoryReading(64000, 40000))
-    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
-    rig.warm_up(a)
-    rig.warm_up(b)
-    first, second = rig.checkout(a), rig.checkout(b)
-    assert sorted(rig.gate.active()) == [a, b]
-    first.release()
-    second.release()
-
-
 def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(tmp_path):
     free = [4000]
-    rig = Rig(tmp_path, limit=3, memory=lambda: ps.MemoryReading(16000, free[0]),
+    rig = Rig(tmp_path, memory=lambda: ps.MemoryReading(16000, free[0]),
               usage=FakeUsage(per_profile=6000))
     a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
     rig.warm_up(a)
@@ -450,23 +455,14 @@ def test_second_action_waits_while_more_than_ninety_percent_of_memory_is_in_use(
     first.release()
 
 
-def test_gate_wait_times_out_with_a_clear_message(tmp_path, monkeypatch):
-    monkeypatch.setenv(warm.GATE_WAIT_ENV, "1")
-    rig = Rig(tmp_path, limit=1)
-    a, b = "a" * 8 + "-0000-4000-8000-000000000000", "b" * 8 + "-0000-4000-8000-000000000000"
-    rig.warm_up(a)
-    rig.warm_up(b)
-    first = rig.checkout(a)
+def test_gate_wait_times_out_with_a_clear_message():
+    # Память не прочиталась - не больше двух разом (FALLBACK_LIMIT); третье ждёт и отказывает понятно.
+    gate = warm.HeavyGate(memory=lambda: None, settings=lambda: _s90(), usage=None, tick_s=0.01)
+    gate.acquire("a")
+    gate.acquire("b")
     with pytest.raises(warm.WarmError) as ei:
-        rig.checkout(b)
+        gate.acquire("c", wait_s=0.1)
     assert ei.value.code == "gate_wait" and "Nothing was called" in str(ei.value)
-    first.release()
-
-
-def test_max_heavy_is_clamped_to_one_to_three(monkeypatch):
-    for raw, want in [("", 1), ("0", 1), ("2", 2), ("3", 3), ("9", 3), ("x", 1)]:
-        monkeypatch.setenv(warm.MAX_HEAVY_ENV, raw)
-        assert warm.max_heavy() == want, raw
 
 
 # ───────────────────────── окно, открытое руками ─────────────────────────
