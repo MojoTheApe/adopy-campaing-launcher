@@ -286,3 +286,29 @@ def test_stage_file_and_validate_page_work_on_the_work_tab():
     assert tab.reloads == 0 and ig.light_recaptures == 0            # no heavy page involved
     with pytest.raises(ValueError):
         ig.validate_page("act_999999999", "123456789012")          # still bound to the lease's account
+
+
+def test_a_lost_session_is_taken_again_with_no_count_limit_and_no_floor(monkeypatch):
+    """ACL-2746: no per-run limit on re-captures; every loss leaves a reason code."""
+    tab, ig, client, rows, closed = _lease(monkeypatch, second_190=False)
+    ig.light_recaptures = 50                                        # far past the old limit of 2
+    seen = []
+    monkeypatch.setattr(light_tab, "_record", seen.append)
+    ig.light_recapture = lambda g, t: {"kind": "ads_manager", "has_token": True}
+    ig._light_check({"has_token": False}, timeout=5.0)
+    assert ig.light_recaptures == 51
+    assert any(r.get("phase") == "light_lost" and r["lost_reason"].startswith("session_lost:") for r in seen)
+
+
+def test_a_plain_miss_is_tried_again_but_login_and_checkpoint_still_stop(monkeypatch):
+    tab, ig, client, rows, closed = _lease(monkeypatch, second_190=False)
+    answers = [{"kind": "other", "has_token": False}, {"kind": "other", "has_token": False},
+               {"kind": "ads_manager", "has_token": True}]
+    ig.light_recapture = lambda g, t: answers.pop(0)
+    ig._sleep = lambda s: None
+    ig._light_check({"has_token": False}, timeout=5.0)
+    assert not answers
+    for kind in ("login", "checkpoint"):
+        ig.light_recapture = lambda g, t, k=kind: {"kind": k, "has_token": False}
+        with pytest.raises(GraphStop):
+            ig._light_check({"has_token": False}, timeout=5.0)
