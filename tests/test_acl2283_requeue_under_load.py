@@ -324,10 +324,10 @@ def test_next_profile_waits_for_the_previous_one_to_be_ready(tmp_path):
     assert waiting and views[-1] is None
 
 
-def test_next_start_waits_for_the_cpu_to_settle(tmp_path):
+def test_next_start_does_not_wait_for_the_cpu(tmp_path):
+    # ACL-2668 (решение №13): CPU больше не держит старт.
     rig = Rig(tmp_path)
-    reads = [96.0, 96.0, 91.0]
-    rig.reg._cpu = lambda: reads.pop(0) if reads else 40.0
+    rig.reg._cpu = lambda: 96.0
     started_at = []
     real_start = rig.reg._start_profile
 
@@ -339,8 +339,7 @@ def test_next_start_waits_for_the_cpu_to_settle(tmp_path):
     t0 = rig.now[0]
     with warm.job_wait(lambda: False, lambda v: None):
         assert rig.reg.open_one("A", _entry(PID))["ok"]
-    # three busy looks (6 s), then the CPU must stay below the level for the settle time
-    assert started_at[0] - t0 >= 6 + warm.DEFAULT_START_CPU_SETTLE_S
+    assert started_at[0] - t0 < 2.0
 
 
 def test_a_failed_start_gives_the_turn_back(tmp_path):

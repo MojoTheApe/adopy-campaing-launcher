@@ -1,5 +1,13 @@
 # System history
 
+## ACL-2668 (decision 13) — Profile starts no longer wait for the CPU — 2026-11-16
+
+The next profile of a job no longer waits for the CPU to stay below 70 % for 5 s (up to 180 s). The settings
+`ACL_START_CPU_SETTLE_S` and `ACL_START_MAX_HOLD_S` are removed. A start is now held only by the memory gate
+(ACL-2255) and the profile ceiling; profiles of a job still start one at a time while the previous one is warming
+up. The load wait text shows the CPU reading without a "starts below" level. `ACL_LOAD_CPU_PCT` stays for tab
+patience and the closed-while-starting pause. Audit ACL-2668, report row 6.
+
 ## ACL-2596 — An Automatic Page with a stored form photo keeps the light work tab — 2026-11-12
 
 When a draft's Page is "Automatic", the work-tab decision now resolves it the way the creator does (the first Page of
