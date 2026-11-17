@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import pytest
 from playwright.sync_api import expect
 
 from test_builder_duplicate_buttons import browser  # noqa: F401 - fixture
@@ -21,17 +22,40 @@ from test_builder_multi_publish_browser import (
 )
 from test_builder_per_account import _render
 from src.web.report_store import StoredPage, decorate
+from src.web import account_links as links
+import _home_overview_site as site
 
 ROOT = Path(__file__).resolve().parent.parent
-OLD, NEW = 'OLD 100 spend', 'NEW 250 spend'
 BUILT_BEFORE = '2026-06-08'  # built_at, с которым test_web_drill рисует страницу
-FRAGMENT = ('<div class="amap"><details class="amap-country" data-country="Demo" data-country-name="Demo">'
-            '<div class="amap-live-summary"><span class="amap-country-read">' + NEW + '</span></div>'
-            '<div class="amap-add"><input name="fresh-connect"></div></details></div>')
-SEED = ('<details class="amap-country" data-country="Demo" data-country-name="Demo">'
-        '<div class="amap-live-summary"><span class="amap-country-read">' + OLD + '</span></div>'
-        '<div class="amap-add"><input name="connect-name"></div></details>')
-SWAPPED = "document.querySelector('.amap-country-read').textContent.startsWith('NEW')"
+ACC, OTHER = 'Facebook_DQ-214', 'Facebook_DQ-217'
+BEFORE = {'Colombia': [(ACC, 117.0, None, '', 0), (OTHER, 5.0, None, '', 0)]}
+AFTER = {'Colombia': [(ACC, 0, 'restricted', 'Ad account not in BM', 0), (OTHER, 40.0, None, '', 0)]}
+MAP_CSV = ('account_name,ad_account_id,page_id,multilogin_instance,folder_id,profile_id,proxy_type,proxy_host,proxy_port,proxy_user,proxy_pass\n'
+           f'{ACC},act_1,1,A,f,prof-214,,,,,\n{OTHER},act_2,2,A,f,,,,,,\n')
+# Что человек видит на Home: числа блока страны и итог. Меняются после обновления.
+HOME_PROBE = """() => ({block: document.querySelector('#aov .aov-block').innerText,
+  totals: document.getElementById('amap-totals').innerText})"""
+SWAPPED = "document.getElementById('amap-totals').innerText !== window.__before.totals"
+UNUSABLE = '<div class="amap-empty">Could not calculate the selected period.</div>'
+
+
+@pytest.fixture
+def home(monkeypatch, tmp_path):
+    """Настоящий Home из _account_map.html: страница «до» и фрагмент «после»."""
+    from src.web import app as web
+    from src.web.app import templates
+
+    csv = tmp_path / 'map.csv'
+    csv.write_text(MAP_CSV, encoding='utf-8')
+    monkeypatch.setattr(links, 'get_local_config_dir', lambda: str(tmp_path))
+    monkeypatch.setattr(links, 'get_ad_account_map_path', lambda: str(csv))
+    monkeypatch.setattr('src.web.app.get_ad_account_map_path', lambda: str(csv))
+
+    def body(spec):
+        amap = site.build_amap(web, links, monkeypatch, spec)
+        return templates.env.get_template('_account_map.html').render(
+            amap=amap, compare=None, compare_fragment_note='', mlx={})
+    return {'before': body(BEFORE), 'after': body(AFTER)}
 
 
 def stored(reasons):
@@ -46,7 +70,7 @@ class Rig:
         self.html = html
         self.status = {'ready': False, 'building': True, 'error': None, 'built_at': '2026-11-17 12:00',
                        'deferred': False}
-        self.fragment = (200, FRAGMENT)
+        self.fragment = (200, '')
         self.documents = 0
         self.status_calls = 0
         self.fragment_urls = []
@@ -67,6 +91,9 @@ class Rig:
         elif path == '/report/status':
             self.status_calls += 1
             r.fulfill(json=self.status)
+        elif path.startswith('/campaign-inventory/'):
+            # Дерево кампаний Home спрашивает статус чтения — отвечаем «ничего не идёт».
+            r.fulfill(json={'running': [], 'accounts': {}, 'needs_api': False})
         elif path == '/account-map':
             self.fragment_urls.append(parsed.query)
             r.fulfill(status=self.fragment[0], content_type='text/html', body=self.fragment[1])
@@ -76,18 +103,21 @@ class Rig:
             self.inner(r)
 
 
-def open_page(browser, html, url='http://acl.test/', queue_state=None):
+def open_page(browser, html, home, url='http://acl.test/', queue_state=None):
     ctx = browser.new_context()
     p = ctx.new_page()
     errors = []
-    p.on('pageerror', lambda e: errors.append(str(e)))
+    p.on('pageerror', lambda e: errors.append(str(e) + ' | ' + str(getattr(e, 'stack', ''))[:600]))
     p.on('dialog', lambda d: d.accept())
     rig = Rig(html, queue_state)
+    rig.fragment = (200, home['after'])
     p.route('**/*', rig.route)
     p.goto(url)
     p.evaluate('cbDrawer.open()')
-    p.evaluate("""(seed) => { document.querySelector('#amap-slot .amap')
-        .insertAdjacentHTML('afterbegin', seed); window.__alive = 1; }""", SEED)
+    # Home страницы заменяется настоящим Home «до»; билдер и остальная страница — те же.
+    p.evaluate("""(body) => { document.getElementById('amap-slot').innerHTML = body;
+        if (window.aovApply) window.aovApply(); window.__alive = 1; }""", home['before'])
+    p.evaluate(f"window.__before = ({HOME_PROBE})()")
     return ctx, p, rig, errors
 
 
@@ -95,29 +125,33 @@ def make_ready(rig):
     rig.status = {**rig.status, 'ready': True, 'building': False}
 
 
-def read_text(p):
-    return p.evaluate("document.querySelector('.amap-country-read').textContent")
+def home_now(p):
+    return p.evaluate(HOME_PROBE)
 
 
-def test_ready_report_updates_numbers_without_reloading(browser):
-    ctx, p, rig, errors = open_page(browser, stored(['source']))
+def test_ready_report_updates_numbers_without_reloading(browser, home):
+    ctx, p, rig, errors = open_page(browser, stored(['source']), home)
     loads = []
     p.on('load', lambda: loads.append(1))
-    assert read_text(p) == OLD
+    assert p.evaluate("document.getElementById('acl-stored-frame') !== null"), 'the OUTDATED frame is the case under test'
+    before = home_now(p)
     make_ready(rig)
     p.wait_for_function(SWAPPED, timeout=10000)
-    assert read_text(p) == NEW
+    now = home_now(p)
+    assert now['totals'] != before['totals'], 'the totals row did not change'
+    assert now['block'] != before['block'], 'the country block did not change'
     assert p.evaluate("document.getElementById('acl-built-at').textContent") == '2026-11-17 12:00'
     assert p.evaluate("document.getElementById('acl-stored-bar')") is None
+    assert p.evaluate("document.getElementById('acl-stored-frame')") is None, 'the red frame stayed'
     assert p.evaluate('window.__alive') == 1, 'the page was reloaded'
     assert rig.documents == 1 and loads == []
     ctx.close()
     assert not errors, errors
 
 
-def test_builder_draft_and_running_job_survive_the_refresh(browser):
+def test_builder_draft_and_running_job_survive_the_refresh(browser, home):
     state = {'posts': [], 'jobs': {}, 'cancels': []}
-    ctx, p, rig, errors = open_page(browser, stored([]), queue_state=state)
+    ctx, p, rig, errors = open_page(browser, stored([]), home, queue_state=state)
     add(p, 0)
     ready(p)
     name = p.evaluate("(" + FORM_JS + ")('Demo').querySelector('.cb-slot [name$=\"_asset\"]').value")
@@ -140,35 +174,37 @@ def test_builder_draft_and_running_job_survive_the_refresh(browser):
     assert not errors, errors
 
 
-def test_borrowed_connect_block_stays_in_the_drawer(browser):
-    ctx, p, rig, errors = open_page(browser, stored([]))
+def test_borrowed_connect_block_stays_in_the_drawer(browser, home):
+    ctx, p, rig, errors = open_page(browser, stored([]), home)
     # То же, что делает borrowConnect: блок уходит в ящик, на его месте остаётся метка.
-    p.evaluate("""() => {
-      const block = document.querySelector('details.amap-country .amap-add');
+    found = p.evaluate("""() => {
+      const block = document.querySelector('#amap-slot .amap-add');
+      if (!block) return false;
       const host = document.createElement('div'); host.className = 'cbd-connect-host';
       document.getElementById('cbd-root').appendChild(host);
       const mark = document.createComment('cbd-connect');
       block.parentNode.insertBefore(mark, block); host.appendChild(block);
-      block.querySelector('input').value = 'typed by hand'; window.__block = block;
+      block.setAttribute('data-test-borrowed', '1'); window.__block = block; return true;
     }""")
+    assert found, 'the real Home has no connect block to borrow'
     make_ready(rig)
     p.wait_for_function(SWAPPED, timeout=10000)
     assert p.evaluate("window.__block.parentNode.className") == 'cbd-connect-host', 'the block left the drawer'
-    assert p.evaluate("document.querySelectorAll('.amap-add input[name=\"connect-name\"]').length") == 1
-    assert p.evaluate("window.__block.querySelector('input').value") == 'typed by hand'
-    assert p.evaluate("document.querySelector('.amap-add input[name=\"fresh-connect\"]')") is None
+    assert p.evaluate("document.querySelectorAll('[data-test-borrowed]').length") == 1
+    assert p.evaluate("window.__block.isConnected")
     assert rig.documents == 1
     ctx.close()
     assert not errors, errors
 
 
-def test_fragment_error_changes_nothing_and_does_not_reload(browser):
-    ctx, p, rig, errors = open_page(browser, stored(['source']))
+def test_fragment_error_changes_nothing_and_does_not_reload(browser, home):
+    ctx, p, rig, errors = open_page(browser, stored(['source']), home)
     rig.fragment = (500, 'boom')
     make_ready(rig)
     p.wait_for_timeout(4500)
-    assert read_text(p) == OLD
+    assert home_now(p) == p.evaluate('window.__before')
     assert p.evaluate("document.getElementById('acl-stored-bar') !== null")
+    assert p.evaluate("document.getElementById('acl-stored-frame') !== null")
     assert p.evaluate("document.getElementById('acl-built-at').textContent") == BUILT_BEFORE
     assert rig.documents == 1 and p.evaluate('window.__alive') == 1
     calls = rig.status_calls
@@ -178,9 +214,26 @@ def test_fragment_error_changes_nothing_and_does_not_reload(browser):
     assert not errors, errors
 
 
-def test_fragment_request_uses_the_page_period(browser):
+def test_unusable_fragment_changes_nothing_and_does_not_reload(browser, home):
+    ctx, p, rig, errors = open_page(browser, stored(['source']), home)
+    rig.fragment = (200, UNUSABLE)
+    make_ready(rig)
+    p.wait_for_timeout(4500)
+    assert home_now(p) == p.evaluate('window.__before')
+    assert p.evaluate("document.getElementById('acl-stored-bar') !== null")
+    assert p.evaluate("document.getElementById('acl-built-at').textContent") == BUILT_BEFORE
+    assert rig.documents == 1 and p.evaluate('window.__alive') == 1
+    assert len(rig.fragment_urls) == 1
+    calls = rig.status_calls
+    p.wait_for_timeout(3500)
+    assert rig.status_calls == calls, 'polling went on after the unusable answer'
+    ctx.close()
+    assert not errors, errors
+
+
+def test_fragment_request_uses_the_page_period(browser, home):
     query = 'date_from=2026-10-01&date_to=2026-10-31&span=custom'
-    ctx, p, rig, errors = open_page(browser, stored([]), url='http://acl.test/?' + query)
+    ctx, p, rig, errors = open_page(browser, stored([]), home, url='http://acl.test/?' + query)
     make_ready(rig)
     p.wait_for_function(SWAPPED, timeout=10000)
     assert rig.fragment_urls == [query]
@@ -188,8 +241,8 @@ def test_fragment_request_uses_the_page_period(browser):
     assert not errors, errors
 
 
-def test_page_rendered_by_other_code_still_reloads(browser):
-    ctx, p, rig, errors = open_page(browser, stored(['code', 'source']))
+def test_page_rendered_by_other_code_still_reloads(browser, home):
+    ctx, p, rig, errors = open_page(browser, stored(['code', 'source']), home)
     make_ready(rig)
     for _ in range(100):
         if rig.documents >= 2:
@@ -198,10 +251,11 @@ def test_page_rendered_by_other_code_still_reloads(browser):
     assert rig.documents == 2, 'code differs: the page must reload'
     assert rig.fragment_urls == []
     ctx.close()
+    assert not errors, errors
 
 
-def test_page_rendered_by_the_same_code_does_not_reload(browser):
-    ctx, p, rig, errors = open_page(browser, stored(['settings']))
+def test_page_rendered_by_the_same_code_does_not_reload(browser, home):
+    ctx, p, rig, errors = open_page(browser, stored(['settings']), home)
     make_ready(rig)
     p.wait_for_function(SWAPPED, timeout=10000)
     assert rig.documents == 1 and p.evaluate('window.__alive') == 1

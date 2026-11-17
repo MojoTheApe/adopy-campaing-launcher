@@ -265,6 +265,8 @@ _SCRIPT = """
         if (at && s.built_at) { at.textContent = s.built_at; }
         var bar = document.getElementById('acl-stored-bar');
         if (bar) { bar.remove(); }
+        var frame = document.getElementById('acl-stored-frame');
+        if (frame) { frame.remove(); }
       })
       .catch(function () {});
   }
@@ -349,7 +351,7 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
         '<script src="/static/connections.js"></script>'
     )
     frame = (
-        '<style>html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
+        '<style id="acl-stored-frame">html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
     )
     page = stored.html
     reload_on_ready = "true" if "code" in stored.reasons else "false"
