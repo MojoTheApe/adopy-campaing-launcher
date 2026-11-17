@@ -39,8 +39,10 @@ async function failedRows(db, ids) {
   for (let i = 0; i < ids.length; i += IN_LIST) {
     const part = ids.slice(i, i + IN_LIST);
     const { results } = await db.prepare(
-      "SELECT r.*, j.dry_run AS job_dry_run, m.until AS mute_until FROM runs r "
+      "SELECT r.rowid AS rid, r.*, j.dry_run AS job_dry_run, m.until AS mute_until, fh.hint AS hint, "
+      + "(SELECT count(*) FROM runs r3 WHERE r3.fingerprint = r.fingerprint) AS fp_total FROM runs r "
       + "LEFT JOIN jobs j ON j.job_id = r.job_id LEFT JOIN mutes m ON m.fingerprint = r.fingerprint "
+      + "LEFT JOIN failure_hints fh ON fh.fingerprint = r.fingerprint "
       + `WHERE r.outcome = 'failed' AND r.run_id IN (${part.map(() => "?").join(", ")})`,
     ).bind(...part).all();
     out.push(...results);
@@ -48,13 +50,24 @@ async function failedRows(db, ids) {
   return out;
 }
 
+// Кнопки под алертом. callback_data ≤ 64 байт: rowid прогона вместо длинного run_id.
+export function alertButtons(env, r) {
+  return { reply_markup: { inline_keyboard: [
+    [{ text: "Open run", url: runLink(env, r.run_id) }, { text: "Mute 24h", callback_data: `m:${r.fingerprint || "-"}` }],
+    [{ text: "Explain", callback_data: `e:${r.rid}` }, { text: "Create task", callback_data: `t:${r.rid}` }],
+  ] } };
+}
+
+const isNew = (r) => Boolean(r.fingerprint) && Number(r.fp_total) <= 1;
+
 function singleText(env, r, verdict, same) {
   return [
-    `🔴 <b>Campaign failed</b> — ${h(r.manager || r.machine_id || "unknown")} · at ${localTime(r.finished_at)}`,
+    `🔴 <b>Campaign failed</b>${isNew(r) ? " 🆕 NEW" : ""} — ${h(r.manager || r.machine_id || "unknown")} · at ${localTime(r.finished_at)}`,
     `${h(r.account || "—")} · ${h(r.campaign)}`,
     r.stop_kind ? `Stop: ${h(r.stop_kind)}` : null,
     h(cut(r.error || "no error text", 350)),
     same && same.n > 1 ? `Same error: ${same.n}× in 24 h on ${same.m} machine(s)` : null,
+    r.hint ? `💡 Known fix: ${h(cut(r.hint, 300))}` : null,
     verdict.held ? `(${verdict.held} more like this were not sent in the last 30 min)` : null,
     `<a href="${h(runLink(env, r.run_id))}">Open run</a>${r.fingerprint ? ` · mute: /mute ${r.fingerprint}` : ""}`,
   ].filter(Boolean).join("\n");
@@ -62,7 +75,8 @@ function singleText(env, r, verdict, same) {
 
 function groupText(env, rows, verdict) {
   const first = rows[0];
-  const lines = [`🔴 <b>${rows.length} campaigns failed</b> — ${h(first.manager || first.machine_id || "unknown")} · at ${localTime(first.finished_at)}`,
+  const fresh = rows.some(isNew) ? " 🆕 NEW" : "";
+  const lines = [`🔴 <b>${rows.length} campaigns failed</b>${fresh} — ${h(first.manager || first.machine_id || "unknown")} · at ${localTime(first.finished_at)}`,
     h(first.account || "—")];
   for (const r of rows.slice(0, 5)) lines.push(`• ${h(cut(r.campaign, 60))} — ${h(cut(r.error || "no error text", 120))}`);
   if (rows.length > 5) lines.push(`…and ${rows.length - 5} more`);
@@ -96,11 +110,11 @@ export async function notifyFailedRuns(env, runIds, now = Date.now()) {
         const same = r.fingerprint ? await env.DB.prepare(
           "SELECT count(*) AS n, count(DISTINCT machine_id) AS m FROM runs WHERE fingerprint = ? AND finished_at >= ?",
         ).bind(r.fingerprint, iso(now - 24 * 3600000)).first() : null;
-        await broadcast(env, singleText(env, r, verdict, same));
+        await broadcast(env, singleText(env, r, verdict, same), alertButtons(env, r));
       } else {
         const verdict = await admit(env.DB, `job:${jobId}`, now);
         if (!verdict) continue;
-        await broadcast(env, groupText(env, list, verdict));
+        await broadcast(env, groupText(env, list, verdict), alertButtons(env, list[0]));
       }
     } catch (err) {
       console.error(`alerts: job ${jobId}: ${err?.message || err}`);
@@ -167,6 +181,10 @@ async function digest(env, now) {
     "SELECT machine, manager FROM machines WHERE coalesce(last_heartbeat_at, last_event_at) < ? AND last_event_at > ?",
   ).bind(iso(now - 24 * 3600000), iso(now - 7 * 86400000)).all();
   if (quiet.length) lines.push("", "Quiet > 24 h: " + quiet.map((m) => h(m.machine || m.manager)).join(", "));
+  const unfinished = await unfinishedRuns(env, now);
+  if (unfinished.length) lines.push("", `⚠️ ${unfinished.length} unfinished campaign(s) left in Meta — /unfinished`);
+  const open = await env.DB.prepare("SELECT count(*) AS n FROM task_requests WHERE status = 'open'").first("n");
+  if (open) lines.push(`📝 ${open} open task request(s) — /tasks`);
   lines.push("", `<a href="${h(hubUrl(env))}/">Open Control Center</a>`);
   if (await broadcast(env, lines.join("\n"))) {
     await env.DB.prepare("INSERT OR IGNORE INTO bot_state (k, v) VALUES (?, ?)").bind(key, iso(now)).run();
@@ -177,4 +195,18 @@ export async function runScheduled(env, cron, now) {
   if (!botReady(env)) return;
   try { await digest(env, now); } catch (err) { console.error(`digest: ${err?.message || err}`); }
   try { await stuckJobs(env, now); } catch (err) { console.error(`stuck jobs: ${err?.message || err}`); }
+}
+
+// Недоделанные кампании: последний сбой кампании на аккаунте оставил что-то в Meta,
+// и после него этой кампании не было успеха. За 14 дней.
+export async function unfinishedRuns(env, now = Date.now()) {
+  const { results } = await env.DB.prepare(
+    "SELECT r.rowid AS rid, r.* FROM runs r WHERE r.outcome = 'failed' AND r.created_any = 1 AND r.finished_at >= ? "
+    + "AND NOT EXISTS (SELECT 1 FROM runs r2 WHERE r2.account = r.account AND r2.campaign = r.campaign "
+    + "AND r2.outcome = 'ok' AND r2.finished_at > r.finished_at) "
+    + "AND r.finished_at = (SELECT max(r4.finished_at) FROM runs r4 WHERE r4.account = r.account "
+    + "AND r4.campaign = r.campaign AND r4.outcome = 'failed' AND r4.created_any = 1) "
+    + "ORDER BY r.finished_at DESC LIMIT 50",
+  ).bind(iso(now - 14 * 86400000)).all();
+  return results;
 }

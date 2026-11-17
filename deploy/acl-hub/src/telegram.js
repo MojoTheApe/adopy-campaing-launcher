@@ -33,8 +33,8 @@ export function plain(html) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function call(env, payload) {
-  const res = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+async function call(env, payload, method = "sendMessage") {
+  const res = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
   });
   let info = {};
@@ -42,12 +42,14 @@ async function call(env, payload) {
   return { status: res.status, retryAfter: Number(info?.parameters?.retry_after) || 0, description: info?.description || "" };
 }
 
-// Одно сообщение (или несколько частей) одному чату. Ошибки не бросаются: телеметрия не падает из-за бота.
-export async function sendTo(env, chatId, text) {
+// Одно сообщение (или несколько частей) одному чату. extra (кнопки) — на последней части.
+// Ошибки не бросаются: телеметрия не падает из-за бота.
+export async function sendTo(env, chatId, text, extra = {}) {
   if (!env.TG_BOT_TOKEN) return false;
   let allOk = true;
-  for (const part of splitMessage(text)) {
-    const base = { chat_id: String(chatId), disable_web_page_preview: true };
+  const parts = splitMessage(text);
+  for (const [i, part] of parts.entries()) {
+    const base = { chat_id: String(chatId), disable_web_page_preview: true, ...(i === parts.length - 1 ? extra : {}) };
     try {
       let r = await call(env, { ...base, text: part, parse_mode: "HTML" });
       if (r.status === 429 && r.retryAfter && r.retryAfter <= 5) {
@@ -67,9 +69,15 @@ export async function sendTo(env, chatId, text) {
   return allOk;
 }
 
-export async function broadcast(env, text) {
+export async function broadcast(env, text, extra = {}) {
   if (!botReady(env)) return 0;
   let n = 0;
-  for (const chat of allowedChats(env)) if (await sendTo(env, chat, text)) n++;
+  for (const chat of allowedChats(env)) if (await sendTo(env, chat, text, extra)) n++;
   return n;
+}
+
+// Ответ на нажатие кнопки (короткая всплывающая надпись).
+export async function answerButton(env, callbackId, text) {
+  if (!env.TG_BOT_TOKEN) return;
+  try { await call(env, { callback_query_id: callbackId, text: cut(text, 190) }, "answerCallbackQuery"); } catch (_) { /* не важно */ }
 }

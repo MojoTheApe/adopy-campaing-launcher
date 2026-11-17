@@ -64,7 +64,15 @@ async function machines(env) {
   return json({ machines: results.map((m) => ({ ...m, profile: m.profile ? JSON.parse(m.profile) : null })) });
 }
 
-const ROUTES = { "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines,
+async function taskRequests(env) {
+  const { results } = await env.DB.prepare(
+    "SELECT t.*, r.manager, r.account, r.campaign, r.stop_kind, r.error, fh.hint FROM task_requests t "
+    + "LEFT JOIN runs r ON r.run_id = t.run_id LEFT JOIN failure_hints fh ON fh.fingerprint = t.fingerprint "
+    + "WHERE t.status = 'open' ORDER BY t.created_at").all();
+  return json({ requests: results });
+}
+
+const ROUTES = { "/api/task-requests": taskRequests, "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines,
   "/api/summary": summary, "/api/live": live, "/api/run": runDetail, "/api/failures": failures };
 
 export async function handleApi(request, env, url) {
