@@ -49,7 +49,9 @@ _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_actio
 #: thread that runs the operation: `read_session`/the queued dispatcher run it in the caller's thread.
 _EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
 #: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
-BUYER_ACTIONS = ("retry", "read")
+#: ACL-2668 (решение 15): Publish, команды по кампаниям и Check plan — тоже действие человека и работают
+#: как Retry. Автоматические чтения (`schedule`, `attention`, `action`) сюда не входят и держат паузу.
+BUYER_ACTIONS = ("retry", "read", "publish", "command", "check_plan")
 
 ACTION_TEXT = {
     "schedule": "a scheduled read",
@@ -79,9 +81,21 @@ def problem_action(action: str, *, only_if_unset: bool = False) -> Iterator[None
 
 
 def buyer_started() -> bool:
-    """Did a person start the running action (Retry, or an explicit Read)? Schedules, background reads,
-    publish and a defaulted `a read` are not."""
+    """Did a person start the running action (Retry, Read, Publish, a campaign command, Check plan)?
+    Schedules, background reads, refreshes after an action and a defaulted `a read` are not."""
     return bool(_EXPLICIT.get()) and _ACTION.get() in BUYER_ACTIONS
+
+
+def lift_after_probe(key: str) -> bool:
+    """ACL-2668: the page of a held profile answered a person's own action: the hold is over.
+
+    Called right after the tab came up healthy (no checkpoint, no login page, a Graph session). Does nothing
+    outside a buyer-started action. If the problem is still there, the next stop sets the hold again and the
+    row shows its reason, as after Retry.
+    """
+    if not buyer_started():
+        return False
+    return clear(key, _ACTION.get() or "retry")
 
 
 def current_action() -> str:
