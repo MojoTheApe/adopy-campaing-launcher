@@ -89,10 +89,10 @@ def test_tombstoned_campaign_in_an_older_copy_does_not_resurrect():
     out = bd.merge_keep(doc({"A": form(10, camp("a1"))}, removed={"A#a2": 35}),
                         doc({"A": form(36, camp("a1"), camp("a2"))}))
     assert ids(out) == ["a1"]
-    # а у legacy-id надгробие сравнивается с правкой формы
+    # R15: и у legacy-id надгробие абсолютно
     out = bd.merge_keep(doc({"A": form(10, camp("legacy-A-0"))}, removed={"A#legacy-A-1": 35}),
                         doc({"A": form(36, camp("legacy-A-0"), camp("legacy-A-1"))}))
-    assert ids(out) == ["legacy-A-0", "legacy-A-1"]
+    assert ids(out) == ["legacy-A-0"]
 
 
 def test_tombstone_on_a_real_id_is_absolute_for_a_later_stale_edit():
@@ -241,3 +241,40 @@ def test_tombstoned_real_id_is_not_given_to_a_new_idless_campaign():
     out = bd.merge_keep(stored, doc({"F": form(20, named("Q"), named("Z"))}))
     assert sorted(names(out)) == ["Q", "Z"]
     assert "c2" not in ids(out, "F")
+
+
+def test_r15_legacy_tombstone_is_absolute_and_adoption_does_not_duplicate():
+    # три воспроизведения ревью: ни одной кампании дважды, ни одного убранного id
+    out = bd.merge_keep(doc({"F": form(20, named("A", "legacy-F-0"), named("B", "legacy-F-1"))},
+                            removed={"F#legacy-F-0": 10}),
+                        doc({"F": form(30, named("A"), named("B"))}))
+    assert sorted(names(out)) == ["A", "B"] and "legacy-F-0" not in ids(out, "F")
+    out = bd.merge_keep(doc({"F": form(20, named("B", "legacy-F-1"))}, removed={"F#legacy-F-1": 5}),
+                        doc({"F": form(20, named("B"))}))
+    assert names(out) == ["B"] and "legacy-F-1" not in ids(out, "F")
+    out = bd.merge_keep(doc({"F": form(20, named("A", "legacy-F-1"))}, removed={"F#legacy-F-1": 10}),
+                        doc({"F": form(30, named("A"), named("B"))}))
+    assert sorted(names(out)) == ["A", "B"] and "legacy-F-1" not in ids(out, "F")
+
+
+def test_fallback_legacy_id_skips_tombstoned_numbers():
+    out = bd.merge_keep(doc({"F": form(10, named("F", "legacy-F-2"))}, removed={"F#legacy-F-0": 15}),
+                        doc({"F": form(10, named("E"))}))
+    assert sorted(names(out)) == ["E", "F"]
+    assert "legacy-F-0" not in ids(out, "F")
+
+
+def test_bare_legacy_id_next_to_an_idless_campaign_does_not_collide():
+    out = bd.merge_keep(doc({}), doc({"F": form(5, named("X"), named("Y", "legacy-0"))}))
+    assert len(set(ids(out, "F"))) == 2 and sorted(names(out)) == ["X", "Y"]
+
+
+def test_same_idless_campaign_in_both_copies_at_different_positions_is_not_doubled():
+    out = bd.merge_keep(doc({"F": form(10, named("E"), named("B"))}),
+                        doc({"F": form(20, named("A"), named("B"), named("C", "legacy-1"))}))
+    assert sorted(names(out)) == ["A", "B", "C"] and len(set(ids(out, "F"))) == 3  # E и A делят номер 0: правка
+
+
+def test_tombstone_of_a_bare_legacy_id_applies_to_the_normalised_id():
+    out = bd.merge_keep(doc({"F": form(10, named("C", "legacy-1"))}, removed={"F#legacy-1": 5}), doc({"F": form(20, named("C"))}))
+    assert names(out) == ["C"] and "legacy-F-1" not in ids(out, "F")

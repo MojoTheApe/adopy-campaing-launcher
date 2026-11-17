@@ -6945,9 +6945,8 @@ window.cbKeep = (function () {
       var cid = c.id || 'legacy-' + key + '-' + i;
       var ts = removed[key + '#' + cid];
       if (typeof ts !== 'number') return true;
-      /* R12: надгробие на настоящем id абсолютно; legacy-id держится на номере
-         и сравнивается с правкой формы */
-      return isLegacyId(cid) ? !(ts > t) : false;
+      /* R12/R15: любое надгробие абсолютно, и у legacy-id тоже */
+      return false;
     });
     if (!kept.length) return null;
     return kept.length === entry.campaigns.length ? entry : { touched: entry.touched, tracking: entry.tracking, campaigns: kept };
@@ -7050,9 +7049,10 @@ window.cbKeep = (function () {
     if (!idless.length) return entry;
     var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
     var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var normId = function (id) { var m0 = /^legacy-(\d+)$/.exec(id); return m0 ? 'legacy-' + key + '-' + m0[1] : id; };
     var free = otherCamps.filter(function (c) {
       return isObj(c) && cidOf(c) && !own[cidOf(c)]
-        && !Object.prototype.hasOwnProperty.call(removed, key + '#' + cidOf(c));   // R14
+        && !Object.prototype.hasOwnProperty.call(removed, key + '#' + normId(cidOf(c)));   // R14
     });
     var content = function (c) { var d = Object.assign({}, c); delete d.id; return canon(d); };
     var given = {};
@@ -7062,6 +7062,31 @@ window.cbKeep = (function () {
         if (content(free[j]) === mine) { given[i] = cidOf(free[j]); free.splice(j, 1); break; }
       }
     });
+    var taken = {};
+    Object.keys(own).forEach(function (id) { taken[normId(id)] = true; });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
+    otherCamps.forEach(function (c) {
+      var cid = isObj(c) ? cidOf(c) : '';
+      if (!cid) return;
+      var m = /^legacy-(\d+)$/.exec(cid);
+      taken[m ? 'legacy-' + key + '-' + m[1] : cid] = true;
+    });
+    /* одна и та же кампания без id в обеих копиях: общий id по меньшему номеру */
+    var otherIdless = [];
+    otherCamps.forEach(function (c, j) { if (isObj(c) && !cidOf(c)) otherIdless.push([j, c]); });
+    idless.forEach(function (i) {
+      if (i in given) return;
+      var mine = content(camps[i]);
+      for (var p = 0; p < otherIdless.length; p += 1) {
+        if (content(otherIdless[p][1]) === mine) {
+          var n = Math.min(i, otherIdless[p][0]);
+          while (taken['legacy-' + key + '-' + n] || Object.prototype.hasOwnProperty.call(removed, key + '#legacy-' + key + '-' + n)) n += 1;
+          var cand = 'legacy-' + key + '-' + n;
+          given[i] = cand; taken[cand] = true; otherIdless.splice(p, 1); break;
+        }
+      }
+    });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
     /* legacy-id той же позиции — та же кампания по номеру (R9) */
     idless.forEach(function (i) {
       if (i in given) return;
@@ -7070,21 +7095,15 @@ window.cbKeep = (function () {
         if ((bm ? 'legacy-' + key + '-' + bm[1] : fid) === 'legacy-' + key + '-' + i) { given[i] = fid; free.splice(j, 1); break; }
       }
     });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
     /* по порядку — только настоящие id: номер у legacy-id сдвигается (R14) */
     free = free.filter(function (c) { return !legacyId(cidOf(c)); });
     idless.forEach(function (i) { if (!(i in given) && free.length) given[i] = cidOf(free.shift()); });
-    var taken = Object.assign({}, own);
-    Object.keys(given).forEach(function (i) { taken[given[i]] = true; });
-    otherCamps.forEach(function (c) {
-      var cid = isObj(c) ? cidOf(c) : '';
-      if (!cid) return;
-      var m = /^legacy-(\d+)$/.exec(cid);
-      taken[m ? 'legacy-' + key + '-' + m[1] : cid] = true;
-    });
+    Object.keys(given).forEach(function (i) { taken[normId(given[i])] = true; });
     idless.forEach(function (i) {
       if (i in given) return;
       var j = i;
-      while (taken['legacy-' + key + '-' + j]) j += 1;
+      while (taken['legacy-' + key + '-' + j] || (otherCamps.length && Object.prototype.hasOwnProperty.call(removed, key + '#legacy-' + key + '-' + j))) j += 1;
       given[i] = 'legacy-' + key + '-' + j;
       taken[given[i]] = true;
     });
@@ -7102,8 +7121,9 @@ window.cbKeep = (function () {
     var removed = {};
     [current.removed, incoming.removed].forEach(function (src) {
       if (!src || typeof src !== 'object') return;
-      Object.keys(src).forEach(function (k) {
-        if (numeric(src[k]) && (!(k in removed) || src[k] > removed[k])) removed[k] = src[k];
+      Object.keys(src).forEach(function (k0) {
+        var k = k0.replace(/^(.*)#legacy-(\d+)$/, '$1#legacy-$1-$2');   // голый legacy-<номер> промежуточной сборки
+        if (numeric(src[k0]) && (!(k in removed) || src[k0] > removed[k])) removed[k] = src[k0];
       });
     });
     var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
@@ -7128,14 +7148,13 @@ window.cbKeep = (function () {
         var kept = nCamps.filter(function (c) {
           var cid = cidOf(c);
           if (!cid) return true;
-          var ts = rem(key + '#' + cid);
-          return legacyId(cid) ? !(ts > nT) : ts === -Infinity;   // R12: настоящий id — надгробие абсолютно
+          return rem(key + '#' + cid) === -Infinity;   // R12/R15: любое надгробие абсолютно
         });
         var have = {};
         nCamps.forEach(function (c) { if (cidOf(c)) have[cidOf(c)] = true; });
         (Array.isArray(oCamps) ? oCamps : []).forEach(function (c) {
           var cid = cidOf(c);
-          if (cid && !have[cid] && (legacyId(cid) ? rem(key + '#' + cid) < oT : rem(key + '#' + cid) === -Infinity)) { kept.push(c); have[cid] = true; }
+          if (cid && !have[cid] && rem(key + '#' + cid) === -Infinity) { kept.push(c); have[cid] = true; }
         });
         entry.campaigns = kept;
         if (!kept.length) return;

@@ -113,25 +113,23 @@ def _count_campaigns(data: dict) -> int:
                if isinstance(e, dict) and isinstance(e.get("campaigns"), list))
 
 
-def _is_removed(removed: dict, key: str, campaign, touched: float, strict: bool = True) -> bool:
-    """Убрана ли кампания человеком (R12). Надгробие на настоящем id абсолютно;
-    у `legacy-*` id опора на номер, поэтому надгробие сравнивается с `touched`
-    копии: для победителя оно должно быть новее правки (`strict`), для чужой
-    старой копии — не старше неё."""
+def _is_removed(removed: dict, key: str, campaign) -> bool:
+    """Убрана ли кампания человеком (R12/R15): любое надгробие `"<форма>#<id>"`
+    абсолютно, и у `legacy-*` id тоже. Кампания с убранным id в слитый документ
+    не попадает ни из какой копии."""
     cid = _cid(campaign)
-    if not cid:
-        return False
-    ts = removed.get(f"{key}#{cid}")
-    if ts is None:
-        return False
-    if not cid.startswith("legacy-"):
-        return True
-    return ts > touched if strict else ts >= touched
+    return bool(cid) and f"{key}#{cid}" in removed
 
 
 def _content(campaign) -> str:
     """Содержимое кампании без `id` — для сопоставления (R13)."""
     return json.dumps({k: v for k, v in campaign.items() if k != "id"}, sort_keys=True, ensure_ascii=False)
+
+
+def _norm_id(cid: str, key: str) -> str:
+    """Голый `legacy-<номер>` промежуточной сборки -> `legacy-<форма>-<номер>`."""
+    m = _BARE_LEGACY.match(cid)
+    return f"legacy-{key}-{m.group(1)}" if m else cid
 
 
 def _adopt_ids(entry, other, key, removed):
@@ -152,7 +150,7 @@ def _adopt_ids(entry, other, key, removed):
     own = {_cid(c) for c in camps if isinstance(c, dict) and _cid(c)}
     free = [c for c in other_camps
             if isinstance(c, dict) and _cid(c) and _cid(c) not in own
-            and f"{key}#{_cid(c)}" not in removed]
+            and f"{key}#{_norm_id(_cid(c), key)}" not in removed]
     given: dict = {}
     for i in idless:
         mine = _content(camps[i])
@@ -160,6 +158,29 @@ def _adopt_ids(entry, other, key, removed):
             if _content(c) == mine:
                 given[i] = _cid(c)
                 free.remove(c)
+                break
+    taken = {_norm_id(x, key) for x in own} | {_norm_id(x, key) for x in given.values()}
+    for c in other_camps:
+        cid = _cid(c) if isinstance(c, dict) else ""
+        m = re.match(r"^legacy-(\d+)$", cid)
+        if cid:
+            taken.add(f"legacy-{key}-{m.group(1)}" if m else cid)
+    # одна и та же кампания без id в обеих копиях: общий id по меньшему номеру,
+    # обе стороны выбирают его одинаково (иначе она задвоится)
+    other_idless = [(j, c) for j, c in enumerate(other_camps) if isinstance(c, dict) and not _cid(c)]
+    for i in idless:
+        if i in given:
+            continue
+        mine = _content(camps[i])
+        for pos, (j, c) in enumerate(other_idless):
+            if _content(c) == mine:
+                n = min(i, j)
+                while f"legacy-{key}-{n}" in taken or f"{key}#legacy-{key}-{n}" in removed:
+                    n += 1
+                cand = f"legacy-{key}-{n}"
+                given[i] = cand
+                taken.add(cand)
+                other_idless.pop(pos)
                 break
     # legacy-id той же позиции — это та же кампания по номеру (R9)
     for i in idless:
@@ -171,22 +192,20 @@ def _adopt_ids(entry, other, key, removed):
                 given[i] = _cid(c)
                 free.remove(c)
                 break
+    taken |= {_norm_id(x, key) for x in given.values()}
     # по порядку — только настоящие id: номер у legacy-id сдвигается (R14)
     free = [c for c in free if not _cid(c).startswith("legacy-")]
     for i in idless:
         if i not in given and free:
             given[i] = _cid(free.pop(0))
-    taken = set(own) | set(given.values())
-    for c in other_camps:
-        cid = _cid(c) if isinstance(c, dict) else ""
-        m = re.match(r"^legacy-(\d+)$", cid)
-        if cid:
-            taken.add(f"legacy-{key}-{m.group(1)}" if m else cid)
+    taken |= {_norm_id(x, key) for x in given.values()}
     for i in idless:
         if i in given:
             continue
         j = i
-        while f"legacy-{key}-{j}" in taken:
+        # убранный номер пропускаем, только если есть вторая копия формы: форма
+        # без пары — это та самая старая кампания, и надгробие должно её убрать
+        while f"legacy-{key}-{j}" in taken or (other_camps and f"{key}#legacy-{key}-{j}" in removed):
             j += 1
         given[i] = f"legacy-{key}-{j}"
         taken.add(given[i])
@@ -196,6 +215,7 @@ def _adopt_ids(entry, other, key, removed):
 
 
 _BARE_LEGACY = re.compile(r"^legacy-(\d+)$")
+_BARE_TOMB = re.compile(r"^(.*)#legacy-(\d+)$")
 
 
 def _normalized(entry, key):
@@ -240,6 +260,7 @@ def merge_keep(current: dict, incoming: dict) -> dict:
     for src in (current.get("removed"), incoming.get("removed")):
         if isinstance(src, dict):
             for k, ts in src.items():
+                k = _BARE_TOMB.sub(r"\1#legacy-\1-\2", k)   # голый legacy-<номер> промежуточной сборки
                 if _num(ts) and ts > removed.get(k, float("-inf")):
                     removed[k] = ts
     adopted_cur = {k: _normalized(_adopt_ids(v, inc_forms.get(k), k, removed), k) for k, v in cur_forms.items()}
@@ -263,11 +284,11 @@ def merge_keep(current: dict, incoming: dict) -> dict:
         if isinstance(n_camps, list) or isinstance(o_camps, list):
             n_camps = n_camps if isinstance(n_camps, list) else []
             n_touched, o_touched = _touched(newer), _touched(older)
-            kept = [c for c in n_camps if not _is_removed(removed, key, c, n_touched)]
+            kept = [c for c in n_camps if not _is_removed(removed, key, c)]
             have = {_cid(c) for c in n_camps if _cid(c)}
             for c in (o_camps if isinstance(o_camps, list) else []):
                 cid = _cid(c)
-                if cid and cid not in have and not _is_removed(removed, key, c, o_touched, strict=False):
+                if cid and cid not in have and not _is_removed(removed, key, c):
                     kept.append(c)
                     have.add(cid)
             entry["campaigns"] = kept

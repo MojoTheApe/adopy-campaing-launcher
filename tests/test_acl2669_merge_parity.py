@@ -97,7 +97,7 @@ CASES = {
         doc({"A": form(10, camp("a1"), "junk", {"id": 5, "fields": {}}, None, camp("a2"))})),
     "real-id tombstone is absolute against a later edit": (
         doc({}, removed={"A#cx": 10}), doc({"A": form(20, camp("cx"), camp("cy"))})),
-    "legacy-id tombstone older than the edit lets it back": (
+    "R15 legacy-id tombstone older than the edit still removes it": (
         doc({"A": form(5, camp("legacy-A-0"))}, removed={"A#legacy-A-1": 10}),
         doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))})),
     "form tombstone from an old document is still honoured": (
@@ -122,6 +122,23 @@ CASES = {
     "R14 tombstoned real id is not adopted": (
         doc({"F": form(10, named("A", "c1"), named("B", "c2"))}, removed={"F#c2": 15}),
         doc({"F": form(20, named("Q"), named("Z"))})),
+    "R15 repro 1": (
+        doc({"F": form(20, named("A", "legacy-F-0"), named("B", "legacy-F-1"))}, removed={"F#legacy-F-0": 10}),
+        doc({"F": form(30, named("A"), named("B"))})),
+    "R15 repro 2": (
+        doc({"F": form(20, named("B", "legacy-F-1"))}, removed={"F#legacy-F-1": 5}), doc({"F": form(20, named("B"))})),
+    "R15 repro 3": (
+        doc({"F": form(20, named("A", "legacy-F-1"))}, removed={"F#legacy-F-1": 10}),
+        doc({"F": form(30, named("A"), named("B"))})),
+    "R15 fallback skips tombstoned numbers": (
+        doc({"F": form(10, named("F", "legacy-F-2"))}, removed={"F#legacy-F-0": 15}), doc({"F": form(10, named("E"))})),
+    "R15 bare legacy next to id-less": (
+        doc({}), doc({"F": form(5, named("X"), named("Y", "legacy-0"))})),
+    "R15 same id-less campaign at different positions": (
+        doc({"F": form(10, named("E"), named("B"))}),
+        doc({"F": form(20, named("A"), named("B"), named("C", "legacy-1"))})),
+    "R15 bare legacy tombstone applies to the normalised id": (
+        doc({"F": form(10, named("C", "legacy-1"))}, removed={"F#legacy-1": 5}), doc({"F": form(20, named("C"))})),
     "bare legacy number is rewritten": (
         doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))})),
     "non-dict entry with a form tombstone": (
