@@ -530,10 +530,21 @@ def active_job_count() -> int:
 
 
 def publishing_busy() -> bool:
-    """A publish job is live, or a profile window (running or kept open) holds a slot.
+    """A publish job is live, or a job runs or waits in the profile queue.
 
     ACL-2260: the report must not start a rebuild of its own while this is true.
+    ACL-2668: a profile window kept open after a publish or Check plan does not count:
+    it neither defers the scheduled account reads nor the report rebuild.
     Cheap and non-blocking: two short locks, no snapshot of the queue decision.
+    """
+    return active_job_count() > 0 or _slots.working()
+
+
+def profile_slots_held() -> bool:
+    """A publish job is live, or a profile window (running or kept open) holds a queue entry.
+
+    For work that needs the Multilogin connections themselves (log out, repair): a kept
+    window is an open profile on that connection.
     """
     return active_job_count() > 0 or _slots.occupied()
 

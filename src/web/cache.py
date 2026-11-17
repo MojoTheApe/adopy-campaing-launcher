@@ -112,7 +112,7 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
 
 
 def rebuild_deferred() -> bool:
-    """ACL-2260: a publish job or a kept profile window is active.
+    """ACL-2260: a publish job is active (ACL-2668: a kept profile window does not count).
 
     A rebuild of the report parses a 70k-row workbook and takes memory the
     profiles need ("not enough free memory for another profile"), so nothing

@@ -7678,7 +7678,7 @@ async def multilogin_save_token(request: Request) -> JSONResponse:
 def _slot_work_busy() -> int:
     """Work that needs the Multilogin connections: campaign jobs, held profile
     slots, and profile warm-ups (manual or automatic). Returns a rough count."""
-    from src.web.publish_jobs import active_job_count, publishing_busy
+    from src.web.publish_jobs import active_job_count, profile_slots_held
 
     n = active_job_count()
     try:
@@ -7687,7 +7687,8 @@ def _slot_work_busy() -> int:
         n += warm_api.running_job_count()
     except Exception:
         pass
-    if not n and publishing_busy():
+    # ACL-2668: оставленное открытым окно — открытый профиль на этом подключении, считаем его.
+    if not n and profile_slots_held():
         n = 1
     return n
 

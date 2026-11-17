@@ -273,11 +273,11 @@ _SCRIPT = """
 """
 
 
-#: Shown while a publish or a kept profile window is active (ACL-2260).
+#: Shown while a publish is active (ACL-2260). ACL-2668: a kept profile window no longer defers.
 DEFERRED_TEXT = (
-    "Showing the saved version because a profile window is open or a publish is running "
+    "Showing the saved version because a publish is running "
     "(a rebuild now would take memory the profiles need). "
-    "Close the profile window or wait for the publish to finish and the page updates by itself; "
+    "Wait for the publish to finish and the page updates by itself; "
     "or press Refresh to build and show the fresh report now."
 )
 
