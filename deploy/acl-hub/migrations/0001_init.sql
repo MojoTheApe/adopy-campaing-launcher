@@ -4,8 +4,10 @@ CREATE TABLE events (
   event_id TEXT NOT NULL UNIQUE, type TEXT NOT NULL, ts TEXT NOT NULL,
   machine_id TEXT, machine TEXT, manager TEXT, flow_version TEXT, channel TEXT,
   job_id TEXT, account TEXT, campaign TEXT, stream_id TEXT, seq INTEGER,
-  batch_id TEXT, received_at TEXT NOT NULL, payload TEXT NOT NULL
+  batch_id TEXT, received_at TEXT NOT NULL, payload TEXT NOT NULL,
+  derived INTEGER NOT NULL DEFAULT 1   -- 0: выводы ещё не построены (повторная доставка достроит)
 );
+CREATE INDEX events_pending ON events(derived) WHERE derived = 0;
 CREATE INDEX events_ts ON events(ts);
 CREATE INDEX events_job ON events(job_id);
 CREATE INDEX events_machine_ts ON events(machine_id, ts);
@@ -36,7 +38,8 @@ CREATE TABLE runs (
   duration_s REAL, calls INTEGER, writes INTEGER,
   campaign_id TEXT, published_as TEXT, created_any INTEGER, reused_any INTEGER,
   spec_hash TEXT, country TEXT, daily_budget REAL, adset_names TEXT, ad_names TEXT,
-  n_ads INTEGER, load TEXT, flow_version TEXT
+  n_ads INTEGER, load TEXT, flow_version TEXT,
+  stats_at TEXT, spec_at TEXT          -- время событий stats/spec: побеждает более позднее
 );
 CREATE INDEX runs_finished ON runs(finished_at);
 CREATE INDEX runs_manager ON runs(manager, finished_at);

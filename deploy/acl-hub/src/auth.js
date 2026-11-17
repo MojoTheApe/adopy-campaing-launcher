@@ -45,12 +45,17 @@ export async function authorize(token, env) {
     });
     status = resp.status;
   } catch (_) { status = 0; }
+  // Сбой записи о токене не меняет решение: GitHub уже ответил.
   if (status === 200) {
-    await env.DB.prepare("INSERT OR REPLACE INTO tokens (token_sha, checked_at) VALUES (?, ?)").bind(key, now).run();
+    try {
+      await env.DB.prepare("INSERT OR REPLACE INTO tokens (token_sha, checked_at) VALUES (?, ?)").bind(key, now).run();
+    } catch (_) { /* следующая попытка спросит GitHub снова */ }
     return "ok";
   }
   if (status === 401 || status === 403 || status === 404) {
-    await env.DB.prepare("DELETE FROM tokens WHERE token_sha = ?").bind(key).run();
+    try {
+      await env.DB.prepare("DELETE FROM tokens WHERE token_sha = ?").bind(key).run();
+    } catch (_) { /* запись истечёт сама: свежесть 1 час */ }
     return "denied";
   }
   // GitHub лежит (5xx или сеть): рабочая машина продолжает писать по записи не старше суток.

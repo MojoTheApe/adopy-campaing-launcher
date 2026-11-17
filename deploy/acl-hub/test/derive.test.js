@@ -129,3 +129,32 @@ test("publish event without job id derives nothing", async () => {
   await ingestEvents(env, [{ ...YOTAM[3], event_id: "x:3", job_id: null }], { batchId: "b" });
   assert.equal((await all(env, "SELECT * FROM runs")).length, 0);
 });
+
+test("repeated result for the same run: latest ts wins in any order", async () => {
+  const base = YOTAM.find((e) => e.type === "publish.result" && e.campaign.endsWith("_45_16.11"));
+  const failed = { ...base, event_id: "rr:1", ts: "2026-11-16T16:00:00.000+00:00" };
+  const ok = { ...base, event_id: "rr:2", ts: "2026-11-16T16:10:00.000+00:00",
+    payload: { campaign_name: base.campaign, success: true, created: {}, reused: { campaign: 1 } } };
+  for (const order of [[failed, ok], [ok, failed]]) {
+    const env = makeEnv();
+    for (const ev of order) await ingestEvents(env, [ev], { batchId: "b" });
+    const r = await env.DB.prepare("SELECT outcome, finished_at FROM runs").first();
+    assert.equal(r.outcome, "ok");
+    assert.equal(r.finished_at, ok.ts);
+  }
+});
+
+test("older machine profile does not overwrite newer", async () => {
+  const env = makeEnv();
+  const p = (id, ts, ram) => ({ ...YOTAM[1], event_id: id, type: "machine.profile", ts, job_id: null, payload: { ram_gb: ram } });
+  await ingestEvents(env, [p("p:2", "2026-11-17T09:00:00.000+00:00", 32)], { batchId: "b" });
+  await ingestEvents(env, [p("p:1", "2026-11-16T09:00:00.000+00:00", 8)], { batchId: "b" });
+  assert.deepEqual(JSON.parse((await env.DB.prepare("SELECT profile FROM machines").first()).profile), { ram_gb: 32 });
+});
+
+test("non-finite numbers become null", async () => {
+  const env = makeEnv();
+  const stats = YOTAM.find((e) => e.type === "publish.stats");
+  await ingestEvents(env, [{ ...stats, event_id: "nf:1", payload: { ...stats.payload, duration_s: "Infinity" } }], { batchId: "b" });
+  assert.equal((await env.DB.prepare("SELECT duration_s FROM runs").first()).duration_s, null);
+});

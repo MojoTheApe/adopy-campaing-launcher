@@ -30,7 +30,8 @@ export function classify(result) {
 }
 
 // Любое событие с machine_id: машина, её последняя подпись и время. null — если машины нет.
-export function machineStatement(db, ev) {
+// first/last — границы времени по всем событиям машины в пачке (одна строка на машину, а не на событие).
+export function machineStatement(db, ev, first = ev.ts, last = ev.ts) {
   if (!ev.machine_id) return null;
   const latest = "excluded.last_event_at >= coalesce(machines.last_event_at, '')";
   return db.prepare(
@@ -42,19 +43,21 @@ export function machineStatement(db, ev) {
     + "  ELSE machines.flow_version END, "
     + "first_seen_at = min(coalesce(machines.first_seen_at, excluded.first_seen_at), excluded.first_seen_at), "
     + "last_event_at = max(coalesce(machines.last_event_at, ''), excluded.last_event_at)",
-  ).bind(ev.machine_id, ev.machine ?? null, ev.manager ?? null, ev.flow_version ?? null, ev.ts, ev.ts);
+  ).bind(ev.machine_id, ev.machine ?? null, ev.manager ?? null, ev.flow_version ?? null, first, last);
 }
 
 // Апсерт строки: ключ + общие колонки (только если пусто) + колонки события (перезаписываются).
+// guard — колонка времени события: более старое событие той же природы строку не перезаписывает.
 // Имена колонок задаёт код, не данные.
-function upsert(db, table, key, keyValue, common, own) {
+function upsert(db, table, key, keyValue, common, own, guard = null) {
   const cols = [key, ...Object.keys(common), ...Object.keys(own)];
   const vals = [keyValue, ...Object.values(common), ...Object.values(own)].map((v) => (v === undefined ? null : v));
   const sets = [
     ...Object.keys(common).map((c) => `${c} = coalesce(${table}.${c}, excluded.${c})`),
     ...Object.keys(own).map((c) => `${c} = excluded.${c}`),
   ];
-  const tail = sets.length ? `DO UPDATE SET ${sets.join(", ")}` : "DO NOTHING";
+  const cond = guard ? ` WHERE excluded.${guard} >= coalesce(${table}.${guard}, '')` : "";
+  const tail = sets.length ? `DO UPDATE SET ${sets.join(", ")}${cond}` : "DO NOTHING";
   return db.prepare(
     `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ON CONFLICT(${key}) ${tail}`,
   ).bind(...vals);
@@ -68,7 +71,7 @@ function recountJob(db, jobId) {
 }
 
 const bool = (v) => (v === undefined || v === null ? null : v ? 1 : 0);
-const num = (v) => (v === undefined || v === null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
+const num = (v) => (v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 const nonEmpty = (o) => (o && typeof o === "object" ? Object.keys(o).length > 0 : false);
 
 function errorText(p) {
@@ -77,12 +80,14 @@ function errorText(p) {
   return rows.length ? String(rows[0]) : "";
 }
 
+export const derivable = (type) => type.startsWith("job.") || type.startsWith("publish.") || type === "machine.profile";
+
 export async function deriveStatements(db, ev) {
   const p = ev.payload && typeof ev.payload === "object" ? ev.payload : {};
   const jobId = ev.job_id;
   if (ev.type === "machine.profile" && ev.machine_id) {
-    return [db.prepare("UPDATE machines SET profile = ?, profile_at = ? WHERE machine_id = ?")
-      .bind(JSON.stringify(p), ev.ts, ev.machine_id)];
+    return [db.prepare("UPDATE machines SET profile = ?, profile_at = ? WHERE machine_id = ? AND coalesce(profile_at, '') <= ?")
+      .bind(JSON.stringify(p), ev.ts, ev.machine_id, ev.ts)];
   }
   if (!jobId) return [];
   const jobCommon = { machine_id: ev.machine_id, manager: ev.manager, account: ev.account };
@@ -106,16 +111,19 @@ export async function deriveStatements(db, ev) {
   if (!campaign) return [];
   const runCommon = { job_id: jobId, campaign, ...jobCommon, flow_version: ev.flow_version };
   let own = {};
+  let guard = null;
   if (ev.type === "publish.spec") {
     const adsets = Array.isArray(p.adsets) ? p.adsets : [];
     const ads = Array.isArray(p.ads) ? p.ads : [];
     own = { spec_hash: p.spec_hash ?? null, country: p.country ?? null, daily_budget: num(p.daily_budget),
       adset_names: JSON.stringify(adsets.map((a) => a?.name ?? null)),
-      ad_names: JSON.stringify(ads.map((a) => a?.name ?? null)), n_ads: ads.length };
+      ad_names: JSON.stringify(ads.map((a) => a?.name ?? null)), n_ads: ads.length, spec_at: ev.ts };
+    guard = "spec_at";
   } else if (ev.type === "publish.stats") {
     own = { duration_s: num(p.duration_s), calls: num(p.calls), writes: num(p.writes), stop_kind: p.stop_kind ?? null,
-      load: p.load && typeof p.load === "object" ? JSON.stringify(p.load) : null };
+      load: p.load && typeof p.load === "object" ? JSON.stringify(p.load) : null, stats_at: ev.ts };
     if (p.spec_hash) own.spec_hash = p.spec_hash;
+    guard = "stats_at";
   } else if (ev.type === "publish.result") {
     const outcome = classify(p);
     const error = errorText(p);
@@ -123,6 +131,7 @@ export async function deriveStatements(db, ev) {
       fingerprint: outcome === "failed" ? await fingerprint(error) : null,
       campaign_id: p.campaign_id ?? null, published_as: p.published_as || null,
       created_any: nonEmpty(p.created) ? 1 : 0, reused_any: nonEmpty(p.reused) ? 1 : 0 };
+    guard = "finished_at";
   } else return [];
-  return [upsert(db, "runs", "run_id", `${jobId}|${campaign}`, runCommon, own), recountJob(db, jobId)];
+  return [upsert(db, "runs", "run_id", `${jobId}|${campaign}`, runCommon, own, guard), recountJob(db, jobId)];
 }

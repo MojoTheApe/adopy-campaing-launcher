@@ -73,7 +73,7 @@ test("bad lines are skipped", async () => {
 
 test("secret-looking payload is rejected", async () => {
   const env = makeEnv();
-  const bad = { ...YOTAM[1], event_id: "s:98", payload: { url: "https://x/?access_token=abc" } };
+  const bad = { ...YOTAM[1], event_id: "s:98", payload: { url: "https://x/?access_token=abcdef0123456789" } };
   const res = await post(env, { events: [bad] });
   assert.equal((await res.json()).rejected, 1);
   assert.equal(await count(env, "events"), 0);
@@ -132,4 +132,75 @@ test("backfill keeps each event's machine", async () => {
   const { results } = await env.DB.prepare("SELECT machine_id, machine FROM machines ORDER BY machine_id").all();
   assert.deepEqual(results.map((r) => r.machine), ["Gil Zangi", "Yotam Balteriski"]);
   assert.equal((await env.DB.prepare("SELECT batch_id FROM events WHERE event_id='g:1'").first()).batch_id, "backfill-1-7");
+});
+
+// ── Финальное ревью: исправления ──
+test("cleaned token forms are accepted, raw tokens rejected", async () => {
+  const env = makeEnv();
+  const mk = (id, url) => ({ ...YOTAM[1], event_id: id, payload: { next: url } });
+  const res = await post(env, { events: [
+    mk("c:1", "https://graph.facebook.com/v21.0/act_1/ads?access_token=<hidden>&after=x"),
+    mk("c:2", "https://graph.facebook.com/v21.0/act_1/ads?access_token=<v>&limit=25"),
+    mk("c:3", "https://x/?access_token=<token>"),
+    mk("c:4", "https://x/?access_token=abcdefghijklmnop"),
+    mk("c:5", "token EAA" + "B".repeat(30)),
+  ] });
+  assert.deepEqual(await res.json(), { ok: true, accepted: 3, duplicates: 0, rejected: 2 });
+});
+
+test("secret outside payload is rejected too", async () => {
+  const env = makeEnv();
+  const res = await post(env, { events: [{ ...YOTAM[1], event_id: "c:6", campaign: "EAA" + "C".repeat(30) }] });
+  assert.equal((await res.json()).rejected, 1);
+});
+
+test("derive failure is repaired on redelivery", async () => {
+  const env = makeEnv();
+  await post(env, { events: [YOTAM[1]] });               // запись о токене уже есть
+  const realBatch = env.DB.batch.bind(env.DB);
+  let calls = 0;
+  env.DB.batch = async (stmts) => {                         // первый batch (вставка) проходит, второй (выводы) падает
+    calls += 1;
+    if (calls === 2) throw new Error("D1_ERROR transient");
+    return realBatch(stmts);
+  };
+  assert.equal((await post(env, { batch: "c".repeat(32) + "-1-7" })).status, 503);
+  env.DB.batch = realBatch;
+  const res = await post(env, { batch: "c".repeat(32) + "-1-7" });
+  assert.equal(res.status, 200);
+  const job = await env.DB.prepare("SELECT * FROM jobs").first();
+  assert.equal(job.n_failed, 1);
+  assert.equal(job.n_not_started, 1);
+  assert.equal((await env.DB.prepare("SELECT count(*) AS n FROM runs").first()).n, 2);
+});
+
+test("heartbeat redelivery does not double dropped, older beat does not win", async () => {
+  const env = makeEnv();
+  const beat = (id, ts, dropped, bytes) => ({ ...YOTAM[0], event_id: id, type: "heartbeat", ts, job_id: null,
+    payload: { outbox_bytes: bytes, dropped } });
+  const newer = beat("h:2", "2026-11-17T08:00:00.000+00:00", 3, 100);
+  await post(env, { events: [newer] });
+  const again = await post(env, { events: [newer] });
+  assert.deepEqual(await again.json(), { ok: true, accepted: 0, duplicates: 1, rejected: 0 });
+  await post(env, { events: [beat("h:1", "2026-11-17T07:00:00.000+00:00", 5, 999)] });
+  const m = await env.DB.prepare("SELECT * FROM machines").first();
+  assert.equal(m.dropped_total, 3);
+  assert.equal(m.outbox_bytes, 100);
+  assert.equal(m.last_heartbeat_at, newer.ts);
+});
+
+test("big raw batch fits D1 limits", async () => {
+  const env = makeEnv();
+  const raws = Array.from({ length: 2500 }, (_, i) => ({ ...YOTAM[1], event_id: `r:${i}`, type: "raw.run",
+    job_id: null, payload: { step: "api_read", ok: true } }));
+  let statements = 0;
+  const realBatch = env.DB.batch.bind(env.DB);
+  env.DB.batch = async (stmts) => {
+    for (const s of stmts) assert.ok(s.args.length <= 100, "D1: не больше 100 параметров в запросе");
+    statements += stmts.length;
+    return realBatch(stmts);
+  };
+  const res = await post(env, { events: raws });
+  assert.deepEqual(await res.json(), { ok: true, accepted: 2500, duplicates: 0, rejected: 0 });
+  assert.ok(statements < 900, `statements per invocation: ${statements}`);
 });
