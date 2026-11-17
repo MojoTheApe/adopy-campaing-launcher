@@ -10,7 +10,7 @@ LIBRARY_REPO = "MojoTheApe/acl-lib"
 binding = "DB"
 database_name = "acl_hub"
 # Подставить id, который напечатает `wrangler d1 create acl_hub`.
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "75b520a8-b3aa-4396-8b8d-23a6fc2016d6"
 migrations_dir = "migrations"
 
 # Секрет OWNER_KEY задаётся `wrangler secret put OWNER_KEY`, в файл его не писать.
