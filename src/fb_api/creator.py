@@ -514,7 +514,6 @@ GONE_WARNING = ("A creative remembered from an earlier run no longer exists in M
 GONE_WARNING_REUSED = ("A creative remembered from an earlier run no longer exists in Meta; "
                        "a matching creative was used instead.")
 ORDER_WARNING = "The creative carries the same files in another order; accepted."
-RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
@@ -602,8 +601,10 @@ class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
     def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
-                 failure: Any = None, not_found: bool = False):
+                 failure: Any = None, not_found: bool = False, run_continues: bool = False):
         super().__init__(message)
+        #: Unknown result that stays unknown after the re-send: only this campaign stops, the run goes on.
+        self.run_continues = run_continues
         self.created = dict(created or {})
         self.kind = kind
         #: ACL-1856: an unknown write that the readback looked for and did not find (not "could not look").
@@ -1803,6 +1804,8 @@ class Outcome:
     readback: dict = field(default_factory=dict)
     error: str = ""
     stop_kind: str = ""
+    #: The stop is an unknown write result that stays unresolved after the re-send: the next campaigns still publish.
+    run_continues: bool = False
     #: Объявление → что мы ему дали: creative_id, image_hash / video_id (для сверки, B2).
     ad_media: dict = field(default_factory=dict)
     #: Пробный запуск: что было бы создано (ни одной записи).
@@ -1943,12 +1946,6 @@ def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
                 fam.setdefault(int(tail), []).append(row)
     return fam
 
-
-#: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
-#: page aborts its own request at a deadline, so `network_timeout` means the first request is finished): after two empty
-#: readbacks it is sent once more (a file upload never is). `cdp_timeout` (a tab frozen for the whole CDP wait: a queued
-#: POST may still start later), `context_stale` and `page_closed` only name the cause and stop.
-RESEND_REASONS = frozenset({"network", "network_timeout"})
 
 #: ACL-1856: тексты остановок по журналу операции (English, для человека).
 MSG_JOURNAL = ("Progress could not be saved on this computer, so nothing was written to Meta. "
@@ -2565,9 +2562,10 @@ class CampaignCreator:
                    upload: tuple[int, str] | None = None, _resent: bool = False) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
-        ACL-2301: если ответа не было вовсе (`network`/`network_timeout`/`cdp_timeout`, ACL-2338) и сверка дважды не нашла
-        объект, запись без файла отправляется ОДИН раз повторно. Записи с файлом и ответы Meta
-        вроде 5xx/кода 1-2 по-прежнему только сверяются и стоп.
+        Owner rule 12.11 («публикация важнее блокировки»; ACL-2301/2338/2748): если результат неизвестен (нет ответа
+        любой причины, ответ без причины - 5xx, код 1-2, не JSON, без id) и сверка дважды не нашла объект, запись,
+        в том числе с файлом, отправляется ОДИН раз повторно (дубль допустим). Если и повтор неизвестен - стоп только
+        этой кампании (`run_continues`). Детерминированный отказ Meta (`_REJECTION_SUBCODES`) не повторяется.
 
         `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
         с показом процента и Stop; неизвестный результат сверяется несколько раз.
@@ -2636,7 +2634,7 @@ class CampaignCreator:
                                           "in the ad account yet. Meta may still be processing the "
                                           "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
-                if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
+                if not _resent and exc.subcode not in _REJECTION_SUBCODES:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
@@ -2665,7 +2663,11 @@ class CampaignCreator:
                                                id_of=id_of, on_ad=on_ad, children_active=children_active,
                                                form_page=form_page, upload=upload, _resent=True)
                 else:
+                    resent_again = _resent and exc.subcode not in _REJECTION_SUBCODES
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    if resent_again:
+                        # The re-send got no answer either: this campaign stops, the next ones of the run still publish.
+                        self.client.reconciled(path)
                     # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
                     # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
                     rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
@@ -2674,7 +2676,7 @@ class CampaignCreator:
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
                         created=out.created, kind="unknown", failure=rejection,
-                        not_found=not (files or upload)) from exc
+                        not_found=not (files or upload), run_continues=resent_again) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -2684,9 +2686,18 @@ class CampaignCreator:
             self.client.unreconciled = path
             found = find()
             if not found:
+                # Owner rule 12.11: no answer to rely on and nothing found: send once more (a duplicate is acceptable).
+                self.client.reconciled(path)
+                if not _resent:
+                    if what == "campaign" and self._op is not None:
+                        raise _CampaignRewrite(int(self._op.data.get("copy_number") or 0))
+                    self._step(out, f"{what}: answered without an id and not found by readback - sending once more")
+                    return self._write_raw(out, what, path, params, find, files=files, filename=filename,
+                                           id_of=id_of, on_ad=on_ad, children_active=children_active,
+                                           form_page=form_page, upload=upload, _resent=True)
                 raise CreationStopped(f"{what}: Graph answered without an id and nothing was found "
                                       "by readback.", created=out.created, kind="unknown",
-                                      not_found=not (files or upload))
+                                      not_found=not (files or upload), run_continues=True)
             self.client.reconciled(path)
             return str(found)
         return str(got)
@@ -3100,11 +3111,9 @@ class CampaignCreator:
                     creative_id = candidates()
                     if creative_id:
                         receipt.save(creative_id)
-                    elif receipt.data and receipt.age_s() < RECEIPT_UNKNOWN_S:
-                        raise CreationStopped("An earlier creative write has an unknown result. "
-                                              "No new creative was sent. Reconcile the existing object first.",
-                                              kind="creative_unknown")
                     else:
+                        # Owner decision 17.11 ("убирай 15 минут"): an earlier unknown write of this creative is
+                        # reconciled by the readback above; not found -> written again (a duplicate is acceptable).
                         self._check_cancel(out)
                         receipt.save()
                         creative_id = self._write(out, f"ad {ad.index}: creative",
@@ -4775,6 +4784,7 @@ class CampaignCreator:
             self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.run_continues = exc.run_continues
             out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
@@ -5929,7 +5939,8 @@ class CampaignCreator:
                     if rewrites > MAX_CAMPAIGN_REWRITES:
                         self._snapshot_operation(out)
                         raise CreationStopped(MSG_CAMPAIGN_UNKNOWN_STOP.format(name=plan.name),
-                                              created=out.created, kind="unknown") from None
+                                              created=out.created, kind="unknown",
+                                              run_continues=True) from None
                     old_name = plan.name
                     n = max(choice.copy_number, rw.copy_number,
                             name_copy_number(old_name, base_plan.name)) + 1
