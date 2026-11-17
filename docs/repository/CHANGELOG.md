@@ -1,5 +1,16 @@
 # Repository process history
 
+## 2026-11-17 — ACL-2758 fast archive writer
+
+Select published Tracker3.28.3 at `0f38be0711f3c614d356b006f5e61790fb26ae66`
+through its maintained authenticated previous-provider upgrade. TT-276 avoids
+routine full archive uploads; TT-278 enables the genuine cross-version adoption.
+The provider owns all seven generated changes and the98-entry pristine baseline.
+Keep native config, policies/defaults, actual owners/history and product/release
+inputs unchanged. Source review, frozen singleton integration after release-train
+batch3, applicable checks and actual process acceptance remain required. See the
+[current selection](STANDALONE_PROVIDER_ACL.md) and [isolation evidence](PROCESS_SUPPORT_ACL.md).
+
 ## 2026-11-10 — ACL-2512 ordinary recovery client support
 
 Select published Tracker3.28.1 at `6e8dce91d1696f8f24e50deaf03dcff04703303c`.
