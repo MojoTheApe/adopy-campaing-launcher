@@ -248,15 +248,35 @@ _SCRIPT = """
 <script>
 (function () {
   var DEFERRED_TEXT = __DEFERRED__;
+  // ACL-2671: полный reload — только если страница отрисована другим кодом, чем работает сервер;
+  // во всех остальных случаях цифры карты аккаунтов обновляются на месте.
+  var RELOAD_ON_READY = __RELOAD_ON_READY__;
   var note = document.getElementById('acl-stored-note');
   var original = note.textContent;
   var timer = null;
   function stop() { if (timer) { clearInterval(timer); timer = null; } }
+  // Свежий фрагмент /account-map вместо перезагрузки: черновики билдера и идущие задания не трогаем.
+  // Любая ошибка — опрос уже остановлен, страница остаётся как была.
+  function swapInPlace(s) {
+    fetch('/account-map' + window.location.search, {cache: 'no-store', credentials: 'same-origin'})
+      .then(function (r) { if (!r.ok) { throw new Error('account-map'); } return r.text(); })
+      .then(function (html) {
+        if (typeof window.aclSwapAccountMap !== 'function') { return; }
+        window.aclSwapAccountMap(html);
+        var at = document.getElementById('acl-built-at');
+        if (at && s.built_at) { at.textContent = s.built_at; }
+        var bar = document.getElementById('acl-stored-bar');
+        if (bar) { bar.remove(); }
+        var frame = document.getElementById('acl-stored-frame');
+        if (frame) { frame.remove(); }
+      })
+      .catch(function () {});
+  }
   function poll() {
     fetch('/report/status' + window.location.search, {cache: 'no-store'})
       .then(function (r) { return r.json(); })
       .then(function (s) {
-        if (s.ready) { stop(); window.location.reload(); }
+        if (s.ready) { stop(); if (RELOAD_ON_READY) { window.location.reload(); } else { swapInPlace(s); } }
         else if (s.deferred) { note.textContent = DEFERRED_TEXT; }
         else if (note.textContent === DEFERRED_TEXT) { note.textContent = original; }
         else if (s.error) {
@@ -300,7 +320,8 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
 
     ``error`` is a failed rebuild: shown in the bar, polling stops.
     ``deferred``: the rebuild waits for the publish to finish (ACL-2260); polling
-    goes on and the page reloads once the new report is ready.
+    goes on and the numbers update in place once the new report is ready; a full
+    reload happens only when the stored page was rendered by different code (ACL-2671).
     """
     state = "outdated" if stored.outdated else "cached"
     if state == "outdated":
@@ -312,7 +333,7 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
         )
     else:
         head = "From cache, refreshing…"
-        text = f"Saved report from {_age_text(stored.saved_at)}. The page reloads when the new report is ready."
+        text = f"Saved report from {_age_text(stored.saved_at)}. The numbers update here when the new report is ready."
     if deferred and not error:
         text = DEFERRED_TEXT
     if error:
@@ -332,10 +353,12 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
         '<script src="/static/connections.js"></script>'
     )
     frame = (
-        '<style>html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
+        '<style id="acl-stored-frame">html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
     )
     page = stored.html
-    marker = bar + frame + _SCRIPT.replace("__DEFERRED__", json.dumps(DEFERRED_TEXT))
+    reload_on_ready = "true" if "code" in stored.reasons else "false"
+    marker = bar + frame + _SCRIPT.replace(
+        "__DEFERRED__", json.dumps(DEFERRED_TEXT)).replace("__RELOAD_ON_READY__", reload_on_ready)
     lower = page.lower()
     body = lower.find("<body")
     end = lower.find(">", body) + 1 if body != -1 else 0
