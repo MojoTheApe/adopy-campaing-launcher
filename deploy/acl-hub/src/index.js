@@ -7,12 +7,14 @@
 // Привязка: D1 `DB`. Секрет: `OWNER_KEY`. Переменная: `LIBRARY_REPO`.
 import { json } from "./respond.js";
 import { handleBatch } from "./ingest.js";
+import { handleApi } from "./api.js";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const { method } = request;
     if (method === "POST" && url.pathname === "/v1/batch") return handleBatch(request, env);
+    if (method === "GET" && url.pathname.startsWith("/api/")) return handleApi(request, env, url);
     return json({ error: "not found" }, 404);
   },
 };
