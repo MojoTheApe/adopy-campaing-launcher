@@ -75,8 +75,30 @@ def test_error_without_any_known_release_does_not_raise(rig):
     assert not state["available"] and not state["ok"]
 
 
-def test_header_first_check_forces_and_hourly_one_does_not():
+def test_header_checks_on_events_only_and_always_forces():
+    """ACL-2668 decision 23: no periodic timer; page load and Refresh force a check."""
     html = TEMPLATE.read_text(encoding="utf-8")
     assert "'/acl/update/check' + (force ? '?force=1' : '')" in html
-    assert "aclCheck(true);" in html
-    assert "setInterval(function () { aclCheck(false); }, 60 * 1000);" in html
+    assert "window.aclUpdateCheck = function () { aclCheck(true); };" in html
+    block = html[html.index("(function aclUpdateControl()"):]
+    block = block[:block.index("btn.addEventListener('click'")]
+    assert "aclCheck(true);" in block
+    assert "aclCheck(false)" not in block
+    assert "setInterval" not in block and "setTimeout" not in block
+
+
+def test_refresh_without_reload_checks_for_a_release():
+    html = TEMPLATE.read_text(encoding="utf-8")
+    body = html[html.index("async function dashRefresh(ev)"):html.index("function dashRefreshUpdateCheck()")]
+    # обе ветки сбоя (ответ с ошибкой и исключение) зовут проверку
+    assert body.count("dashRefreshUpdateCheck();") == 2
+    # успех перезагружает страницу — проверка идёт при загрузке
+    assert "location.reload();" in body
+
+
+def test_date_change_reloads_the_page_so_the_forced_load_check_covers_it():
+    html = TEMPLATE.read_text(encoding="utf-8")
+    body = html[html.index("function amapApply(from, to, span, cmp)"):]
+    body = body[:body.index("\n}\n")]
+    assert "window.location.href = " in body
+    assert "acl-update-check-soft" not in html
