@@ -74,7 +74,7 @@ def test_created_id_with_wrong_content_never_reaches_an_ad(tmp_path, field, valu
     assert out.creative_ids == [creatives(meta)[0]["id"]]
 
 
-def test_unknown_creative_send_is_not_repeated_after_restart(tmp_path):
+def test_unknown_creative_send_is_read_back_then_written_after_restart(tmp_path):
     meta = UntaggedMeta()
     meta.fail_next["adcreatives"] = "unsent_stuck"
     draft = _draft(tmp_path, ads=1)
@@ -82,8 +82,8 @@ def test_unknown_creative_send_is_not_repeated_after_restart(tmp_path):
     assert one.error
     before = len([p for p, _ in meta.posts if p.endswith("/adcreatives")])
     two, _ = _run(meta, draft, reconcile_wait_s=0)
-    assert two.error and not two.ad_ids
-    assert len([p for p, _ in meta.posts if p.endswith("/adcreatives")]) == before
+    assert not two.error and len(two.ad_ids) == 1      # owner decision 17.11: nothing found -> written again
+    assert len([p for p, _ in meta.posts if p.endswith("/adcreatives")]) == before + 1
 
 
 def test_receipt_failure_before_dispatch_prevents_creative_post(tmp_path, monkeypatch):
@@ -420,21 +420,15 @@ def test_several_identical_creatives_use_the_oldest(tmp_path):
     assert second.creative_ids == [old["id"]] and len(creatives(meta)) == 2
 
 
-def test_old_unknown_send_receipt_stops_blocking_after_15_minutes(tmp_path):
-    import os
-    import time
+def test_unknown_send_receipt_never_blocks_a_rerun_by_age(tmp_path):
+    """Owner decision 17.11 ("убирай 15 минут"): a fresh receipt does not refuse; the rerun reads back, then writes."""
     meta = UntaggedMeta()
     meta.fail_next["adcreatives"] = "unsent_stuck"
     draft = _draft(tmp_path, ads=1)
     one, _ = _run(meta, draft, reconcile_wait_s=0)
     assert one.error
     two, _ = _run(meta, draft, reconcile_wait_s=0)
-    assert two.error and not two.ad_ids          # fresh receipt still blocks
-    old = time.time() - cr.RECEIPT_UNKNOWN_S - 60
-    for path in (Path(recovery.get_local_config_dir()) / "creative_receipts").glob("*.json"):
-        os.utime(path, (old, old))
-    three, _ = _run(meta, draft, reconcile_wait_s=0)
-    assert not three.error and len(three.ad_ids) == 1
+    assert not two.error and len(two.ad_ids) == 1          # right away, no waiting
 
 
 def test_video_reads_only_use_fields_that_exist_on_the_video_node():

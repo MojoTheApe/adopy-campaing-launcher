@@ -278,11 +278,6 @@ def test_a_crash_at_any_write_resumes_without_duplicates(tmp_path, journal, cloc
     meta.crash_at = None
     clock.t += oj.UNKNOWN_HOLD_S + 1                 # удержание неизвестной записи прошло
     second, _ = _go(meta, _draft(tmp_path, ads=2), journal)
-    if n in (4, 7) and phase == "before":
-        # Креатив имеет свою прежнюю квитанцию (creative_recovery): оборванная запись креатива требует сверки руками.
-        assert "earlier creative write has an unknown result" in second.error
-        assert _count(meta, "creative") <= want["creative"] and len(meta.posts) == n - 1
-        return
     assert second.error == "", second.error
     assert {k: _count(meta, k) for k in want} == want
     assert len(meta.posts) - (1 if phase == "after" else 0) <= want_posts + (1 if phase == "before" else 0)

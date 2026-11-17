@@ -514,7 +514,6 @@ GONE_WARNING = ("A creative remembered from an earlier run no longer exists in M
 GONE_WARNING_REUSED = ("A creative remembered from an earlier run no longer exists in Meta; "
                        "a matching creative was used instead.")
 ORDER_WARNING = "The creative carries the same files in another order; accepted."
-RECEIPT_UNKNOWN_S = 900
 #: Тексты и вертикальный файл (ACL-1774).
 MAX_TEXTS = _wpol.ASSET_FEED_MAX_TEXTS
 LABEL_MAIN = "acl_main"
@@ -3119,11 +3118,9 @@ class CampaignCreator:
                     creative_id = candidates()
                     if creative_id:
                         receipt.save(creative_id)
-                    elif receipt.data and receipt.age_s() < RECEIPT_UNKNOWN_S:
-                        raise CreationStopped("An earlier creative write has an unknown result. "
-                                              "No new creative was sent. Reconcile the existing object first.",
-                                              kind="creative_unknown")
                     else:
+                        # Owner decision 17.11 ("убирай 15 минут"): an earlier unknown write of this creative is
+                        # reconciled by the readback above; not found -> written again (a duplicate is acceptable).
                         self._check_cancel(out)
                         receipt.save()
                         creative_id = self._write(out, f"ad {ad.index}: creative",
