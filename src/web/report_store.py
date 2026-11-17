@@ -40,7 +40,9 @@ from config.paths import _atomic_write, get_local_config_dir
 SCHEMA = 1
 
 # Caps. A page with every country is a few MB of HTML, ~10x smaller gzipped.
-DEFAULT_MAX_AGE_DAYS = 14
+# ACL-2668 (решение владельца 16.11): мгновенно показываем только свежую копию,
+# не старше суток. Более старая не показывается и удаляется — байер ждёт сборку.
+DEFAULT_MAX_AGE_DAYS = 1
 MAX_ENTRIES = 12                    # distinct views kept on disk
 MAX_ENTRY_BYTES = 40 * 1024 * 1024  # compressed file; bigger pages are not stored
 MAX_TOTAL_BYTES = 150 * 1024 * 1024  # all stored files together
