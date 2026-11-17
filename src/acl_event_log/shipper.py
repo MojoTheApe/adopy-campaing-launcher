@@ -23,7 +23,7 @@ from typing import Any, Callable
 from src.acl_event_log import writer
 
 #: Адрес Worker. Пусто, пока владелец не развернул Worker; можно задать `ACL_EVENT_LOG_URL`.
-DEFAULT_URL = "https://acl-event-log.adopy-acl.workers.dev"
+DEFAULT_URL = "https://acl-hub.acl-hub.workers.dev"   # хаб телеметрии на D1; старый acl-event-log остаётся для истории
 
 USER_AGENT = "acl-event-log/1"
 BATCH_MAX_BYTES = 512 * 1024

@@ -145,3 +145,9 @@ def test_profile_collected_off_the_caller_thread(monkeypatch):
     mp.start_sampler()
     assert done.wait(5)
     assert seen and seen[0] != threading.current_thread().name
+
+
+def test_default_url_is_hub(monkeypatch):
+    monkeypatch.delenv("ACL_EVENT_LOG_URL", raising=False)
+    assert shipper.ingest_url() == "https://acl-hub.acl-hub.workers.dev"
+    assert shipper.cycle_s() == 120
