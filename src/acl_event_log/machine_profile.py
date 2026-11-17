@@ -21,6 +21,11 @@ from src.acl_event_log.writer import emit
 
 _emitted = False
 _lock = threading.Lock()
+#: Замер нагрузки раз в 30 с в фоне; кампания берёт последний замер, процессы не обходит.
+SAMPLE_S = 30
+_LOAD_KEYS = ("cpu_pct", "mem_pct", "mem_avail_mb", "chrome_procs", "chrome_mem_mb")
+_last_load: dict | None = None
+_sampler: threading.Thread | None = None
 
 
 def _safe(fn) -> Any:
@@ -86,16 +91,44 @@ def collect_profile() -> dict:
     }
 
 
-def load_snapshot() -> dict:
+def _sample_load() -> dict:
     chrome = _safe(_chrome) or (None, None)
     mem = _safe(psutil.virtual_memory)
     return {
-        # interval=None: процент с прошлого вызова, без ожидания (кампания не тормозит).
+        # interval=None: процент с прошлого замера потока (первый замер в start_sampler — затравка).
         "cpu_pct": _safe(lambda: psutil.cpu_percent(interval=None)),
         "mem_pct": getattr(mem, "percent", None),
         "mem_avail_mb": round(mem.available / 1024 ** 2) if mem is not None else None,
         "chrome_procs": chrome[0], "chrome_mem_mb": chrome[1],
     }
+
+
+def load_snapshot() -> dict:
+    """Последний фоновый замер нагрузки; до первого замера — те же ключи с None. Без обхода процессов."""
+    last = _last_load
+    return dict(last) if last else {k: None for k in _LOAD_KEYS}
+
+
+def _sampler_loop() -> None:
+    global _last_load
+    emit_machine_profile()
+    _safe(lambda: psutil.cpu_percent(interval=None))
+    while True:
+        time.sleep(SAMPLE_S)
+        try:
+            _last_load = _sample_load()
+        except Exception:
+            pass
+
+
+def start_sampler() -> None:
+    """Фоновый поток: паспорт машины один раз, потом замер нагрузки раз в SAMPLE_S."""
+    global _sampler
+    with _lock:
+        if _sampler is not None and _sampler.is_alive():
+            return
+        _sampler = threading.Thread(target=_sampler_loop, name="acl-machine-sampler", daemon=True)
+        _sampler.start()
 
 
 def emit_machine_profile() -> None:

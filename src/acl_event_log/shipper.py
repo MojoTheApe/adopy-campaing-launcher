@@ -33,6 +33,8 @@ CYCLE_S = 120   # хаб на D1 (acl-hub): почти реальное врем
 JITTER = 0.2
 FIRST_DELAY_S = (60, 300)
 MAX_BACKOFF_S = 3600
+#: Побудки (сбой кампании, конец задания) — не чаще раза в 30 с.
+MIN_WAKE_GAP_S = 30
 FOREIGN_TTL_S = 86400
 LOCK_TTL_S = 3600
 #: Недописанная строка чужого потока считается потерянной, если файл не менялся так долго.
@@ -243,9 +245,26 @@ def ship_once(*, post: Post | None = None) -> dict:
     return result
 
 
+def cycle_s() -> float:
+    """Частота отправки по адресу: старый Worker на KV выдерживает только раз в час."""
+    return 3600 if "acl-event-log." in ingest_url() else CYCLE_S
+
+
 def _delay(failures: int) -> float:
-    base = min(MAX_BACKOFF_S, CYCLE_S * (2 ** failures)) if failures else CYCLE_S
+    cycle = cycle_s()
+    base = min(MAX_BACKOFF_S, cycle * (2 ** failures)) if failures else cycle
     return base * random.uniform(1 - JITTER, 1 + JITTER)
+
+
+def _after_wake(*, deadline: float, last: float, failures: int, now: float) -> float:
+    """Новый срок отправки после побудки (сбой кампании, конец задания).
+
+    Пока идёт backoff (хаб или сеть недоступны), побудка срок не сокращает. Иначе отправка
+    сразу, но не чаще раза в MIN_WAKE_GAP_S: задание из 50 упавших кампаний — не 50 отправок.
+    """
+    if failures:
+        return deadline
+    return min(deadline, max(now, last + MIN_WAKE_GAP_S))
 
 
 def _loop() -> None:
@@ -253,12 +272,20 @@ def _loop() -> None:
     failures = 0
     while True:
         _wake.clear()
+        last = time.monotonic()
         try:
             status_ = ship_once()["status"]
         except Exception:
             status_ = "retry"
         failures = failures + 1 if status_ == "retry" else 0
-        _wake.wait(_delay(failures))
+        deadline = last + _delay(failures)
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                break
+            if _wake.wait(left):
+                _wake.clear()
+                deadline = _after_wake(deadline=deadline, last=last, failures=failures, now=time.monotonic())
 
 
 def start_shipper() -> None:
@@ -267,9 +294,9 @@ def start_shipper() -> None:
     if not writer.enabled():
         return
     try:
-        from src.acl_event_log.machine_profile import emit_machine_profile
+        from src.acl_event_log.machine_profile import start_sampler
 
-        emit_machine_profile()   # паспорт машины раз за процесс, до первой отправки
+        start_sampler()   # паспорт машины и замер нагрузки — в своём потоке, не на пути запуска
     except Exception:
         pass
     with _start_lock:

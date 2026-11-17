@@ -92,3 +92,56 @@ def test_stats_payload_carries_load():
 
 def test_stats_payload_without_load_unchanged():
     assert "load" not in stats_payload("C", "h", began=0.0, calls=1, writes=0)
+
+
+# ── Финальное ревью: исправления клиента ──
+import threading
+
+
+def test_old_url_keeps_hourly_cycle(monkeypatch):
+    monkeypatch.setenv("ACL_EVENT_LOG_URL", "https://acl-event-log.adopy-acl.workers.dev")
+    assert shipper.cycle_s() == 3600
+    monkeypatch.setenv("ACL_EVENT_LOG_URL", "https://acl-hub.example.workers.dev")
+    assert shipper.cycle_s() == 120
+
+
+def test_wake_ignored_while_failing():
+    # backoff идёт: побудка не сокращает ожидание
+    assert shipper._after_wake(deadline=1000.0, last=0.0, failures=2, now=10.0) == 1000.0
+
+
+def test_wake_soon_after_ship_is_deferred():
+    # отправка была 10 с назад: следующая не раньше чем через 30 с после неё
+    assert shipper._after_wake(deadline=120.0, last=0.0, failures=0, now=10.0) == shipper.MIN_WAKE_GAP_S
+    # прошло больше 30 с: отправка сразу
+    assert shipper._after_wake(deadline=120.0, last=0.0, failures=0, now=45.0) == 45.0
+
+
+def test_load_snapshot_does_not_scan_processes(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("process scan on the publish path")
+
+    monkeypatch.setattr(mp.psutil, "process_iter", boom)
+    monkeypatch.setattr(mp, "_last_load", {"cpu_pct": 12.0, "mem_pct": 50.0, "mem_avail_mb": 4000,
+                                           "chrome_procs": 7, "chrome_mem_mb": 900.0})
+    assert mp.load_snapshot()["chrome_procs"] == 7
+
+
+def test_profile_collected_off_the_caller_thread(monkeypatch):
+    seen = []
+    done = threading.Event()
+
+    def fake_collect():
+        seen.append(threading.current_thread().name)
+        done.set()
+        return {}
+
+    monkeypatch.setattr(mp, "_emitted", False)
+    monkeypatch.setattr(mp, "_sampler", None)
+    monkeypatch.setattr(mp, "collect_profile", fake_collect)
+    monkeypatch.setattr(mp, "emit", lambda *a, **k: None)
+    monkeypatch.setattr(mp, "_sample_load", lambda: {})
+    monkeypatch.setattr(mp, "SAMPLE_S", 0.01)
+    mp.start_sampler()
+    assert done.wait(5)
+    assert seen and seen[0] != threading.current_thread().name
