@@ -219,3 +219,25 @@ def test_content_pairing_beats_index_and_each_id_is_used_once():
 def test_bare_legacy_number_is_rewritten_with_the_form_key():
     out = bd.merge_keep(doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))}))
     assert ids(out, "F") == ["legacy-F-0", "legacy-F-1"]
+
+
+def names(d, key="F"):
+    return [c["fields"]["name"] for c in d["forms"][key]["campaigns"]]
+
+
+def test_legacy_ids_and_tombstoned_ids_are_never_handed_to_an_idless_campaign():
+    # R14, случай 1: у сохранённой копии id legacy-F-1, номер 0 снят человеком
+    stored = doc({"F": form(20, named("A", "legacy-F-1"))}, removed={"F#legacy-F-0": 10})
+    out = bd.merge_keep(stored, doc({"F": form(30, named("A"), named("B"))}))
+    assert len(set(ids(out, "F"))) == len(ids(out, "F")) and sorted(set(names(out))) == ["A", "B"]
+    # следом сохраняется новая страница, видевшая только A под legacy-F-1: B не пропадает
+    out = bd.merge_keep(out, doc({"F": form(40, named("A", "legacy-F-1"))}))
+    assert "B" in names(out)
+
+
+def test_tombstoned_real_id_is_not_given_to_a_new_idless_campaign():
+    # R14, случай 2: c2 снят, а Z без id не должен его получить и пропасть
+    stored = doc({"F": form(10, named("A", "c1"), named("B", "c2"))}, removed={"F#c2": 15})
+    out = bd.merge_keep(stored, doc({"F": form(20, named("Q"), named("Z"))}))
+    assert sorted(names(out)) == ["Q", "Z"]
+    assert "c2" not in ids(out, "F")

@@ -7041,16 +7041,19 @@ window.cbKeep = (function () {
   /* R13: кампании без id (страница старой версии) берут id у другой копии формы:
      сначала по равному содержимому, потом по порядку среди оставшихся; каждый id
      не больше раза. То же правило, что `_adopt_ids` в builder_drafts.py. */
-  function adoptIds(entry, other) {
+  function adoptIds(entry, other, key, removed) {
     if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
-    if (!other || typeof other !== 'object' || !Array.isArray(other.campaigns)) return entry;
     var camps = entry.campaigns, idless = [], own = {};
     camps.forEach(function (c, i) {
       if (c && typeof c === 'object' && !Array.isArray(c)) { if (cidOf(c)) own[cidOf(c)] = true; else idless.push(i); }
     });
     if (!idless.length) return entry;
-    var free = other.campaigns.filter(function (c) { return c && typeof c === 'object' && cidOf(c) && !own[cidOf(c)]; });
-    if (!free.length) return entry;
+    var otherCamps = other && typeof other === 'object' && Array.isArray(other.campaigns) ? other.campaigns : [];
+    var isObj = function (c) { return c && typeof c === 'object' && !Array.isArray(c); };
+    var free = otherCamps.filter(function (c) {
+      return isObj(c) && cidOf(c) && !own[cidOf(c)]
+        && !Object.prototype.hasOwnProperty.call(removed, key + '#' + cidOf(c));   // R14
+    });
     var content = function (c) { var d = Object.assign({}, c); delete d.id; return canon(d); };
     var given = {};
     idless.forEach(function (i) {
@@ -7059,7 +7062,32 @@ window.cbKeep = (function () {
         if (content(free[j]) === mine) { given[i] = cidOf(free[j]); free.splice(j, 1); break; }
       }
     });
+    /* legacy-id той же позиции — та же кампания по номеру (R9) */
+    idless.forEach(function (i) {
+      if (i in given) return;
+      for (var j = 0; j < free.length; j += 1) {
+        var fid = cidOf(free[j]), bm = /^legacy-(\d+)$/.exec(fid);
+        if ((bm ? 'legacy-' + key + '-' + bm[1] : fid) === 'legacy-' + key + '-' + i) { given[i] = fid; free.splice(j, 1); break; }
+      }
+    });
+    /* по порядку — только настоящие id: номер у legacy-id сдвигается (R14) */
+    free = free.filter(function (c) { return !legacyId(cidOf(c)); });
     idless.forEach(function (i) { if (!(i in given) && free.length) given[i] = cidOf(free.shift()); });
+    var taken = Object.assign({}, own);
+    Object.keys(given).forEach(function (i) { taken[given[i]] = true; });
+    otherCamps.forEach(function (c) {
+      var cid = isObj(c) ? cidOf(c) : '';
+      if (!cid) return;
+      var m = /^legacy-(\d+)$/.exec(cid);
+      taken[m ? 'legacy-' + key + '-' + m[1] : cid] = true;
+    });
+    idless.forEach(function (i) {
+      if (i in given) return;
+      var j = i;
+      while (taken['legacy-' + key + '-' + j]) j += 1;
+      given[i] = 'legacy-' + key + '-' + j;
+      taken[given[i]] = true;
+    });
     var out = Object.assign({}, entry);
     out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
     return out;
@@ -7082,7 +7110,7 @@ window.cbKeep = (function () {
     var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
     var forms = {};
     keys.forEach(function (key) {
-      var a = normEntry(adoptIds(curForms[key], incForms[key]), key), b = normEntry(adoptIds(incForms[key], curForms[key]), key);
+      var a = normEntry(adoptIds(curForms[key], incForms[key], key, removed), key), b = normEntry(adoptIds(incForms[key], curForms[key], key, removed), key);
       var inCur = has(curForms, key), inInc = has(incForms, key);
       var newer, older;
       if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }

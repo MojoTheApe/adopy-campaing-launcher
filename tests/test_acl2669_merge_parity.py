@@ -113,6 +113,15 @@ CASES = {
     "content pairing first, each id once": (
         doc({"F": form(10, named("A", "c1"), named("B", "c2"))}),
         doc({"F": form(20, named("B"), named("B"), named("Z"))})),
+    "R14 legacy id of the stored copy is not adopted": (
+        doc({"F": form(20, named("A", "legacy-F-1"))}, removed={"F#legacy-F-0": 10}),
+        doc({"F": form(30, named("A"), named("B"))})),
+    "R14 follow-up save from a new page keeps B": (
+        doc({"F": form(30, named("A", "legacy-F-0"), named("B", "legacy-F-2"))}, removed={"F#legacy-F-0": 10}),
+        doc({"F": form(40, named("A", "legacy-F-1"))})),
+    "R14 tombstoned real id is not adopted": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}, removed={"F#c2": 15}),
+        doc({"F": form(20, named("Q"), named("Z"))})),
     "bare legacy number is rewritten": (
         doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))})),
     "non-dict entry with a form tombstone": (

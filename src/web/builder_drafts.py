@@ -134,23 +134,25 @@ def _content(campaign) -> str:
     return json.dumps({k: v for k, v in campaign.items() if k != "id"}, sort_keys=True, ensure_ascii=False)
 
 
-def _adopt_ids(entry, other):
-    """R13: страница старой версии шлёт кампании без `id`. Если у другой копии
-    формы `id` есть, берём их оттуда: сначала по равному содержимому, потом по
-    порядку среди оставшихся; каждый id — не больше одного раза. Не нашлось
-    пары — остаётся без id (дальше получит `legacy-<форма>-<номер>`)."""
+def _adopt_ids(entry, other, key, removed):
+    """R13/R14: страница старой версии шлёт кампании без `id`. Если у другой копии
+    формы есть настоящие `id` (не `legacy-*` и не снятые человеком в этой форме),
+    берём их оттуда: сначала по равному содержимому (годятся и `legacy-*`), потом
+    по порядку среди оставшихся настоящих id; каждый id — не больше одного раза. Не нашлось пары — кампания
+    получает `legacy-<форма>-<номер>`, а если такой id уже занят у другой копии
+    или у соседки, берётся ближайший свободный номер: два разных черновика не
+    должны делить id, иначе слияние потеряет один из них."""
     if not isinstance(entry, dict) or not isinstance(entry.get("campaigns"), list):
-        return entry
-    if not isinstance(other, dict) or not isinstance(other.get("campaigns"), list):
         return entry
     camps = entry["campaigns"]
     idless = [i for i, c in enumerate(camps) if isinstance(c, dict) and not _cid(c)]
     if not idless:
         return entry
+    other_camps = other["campaigns"] if isinstance(other, dict) and isinstance(other.get("campaigns"), list) else []
     own = {_cid(c) for c in camps if isinstance(c, dict) and _cid(c)}
-    free = [c for c in other["campaigns"] if isinstance(c, dict) and _cid(c) and _cid(c) not in own]
-    if not free:
-        return entry
+    free = [c for c in other_camps
+            if isinstance(c, dict) and _cid(c) and _cid(c) not in own
+            and f"{key}#{_cid(c)}" not in removed]
     given: dict = {}
     for i in idless:
         mine = _content(camps[i])
@@ -159,9 +161,35 @@ def _adopt_ids(entry, other):
                 given[i] = _cid(c)
                 free.remove(c)
                 break
+    # legacy-id той же позиции — это та же кампания по номеру (R9)
+    for i in idless:
+        if i in given:
+            continue
+        for c in free:
+            m = _BARE_LEGACY.match(_cid(c))
+            if (f"legacy-{key}-{m.group(1)}" if m else _cid(c)) == f"legacy-{key}-{i}":
+                given[i] = _cid(c)
+                free.remove(c)
+                break
+    # по порядку — только настоящие id: номер у legacy-id сдвигается (R14)
+    free = [c for c in free if not _cid(c).startswith("legacy-")]
     for i in idless:
         if i not in given and free:
             given[i] = _cid(free.pop(0))
+    taken = set(own) | set(given.values())
+    for c in other_camps:
+        cid = _cid(c) if isinstance(c, dict) else ""
+        m = re.match(r"^legacy-(\d+)$", cid)
+        if cid:
+            taken.add(f"legacy-{key}-{m.group(1)}" if m else cid)
+    for i in idless:
+        if i in given:
+            continue
+        j = i
+        while f"legacy-{key}-{j}" in taken:
+            j += 1
+        given[i] = f"legacy-{key}-{j}"
+        taken.add(given[i])
     out = dict(entry)
     out["campaigns"] = [{**c, "id": given[i]} if i in given else c for i, c in enumerate(camps)]
     return out
@@ -208,15 +236,15 @@ def merge_keep(current: dict, incoming: dict) -> dict:
     Остальные поля документа берутся из `incoming`."""
     cur_forms = current.get("forms") if isinstance(current.get("forms"), dict) else {}
     inc_forms = incoming.get("forms") if isinstance(incoming.get("forms"), dict) else {}
-    adopted_cur = {k: _normalized(_adopt_ids(v, inc_forms.get(k)), k) for k, v in cur_forms.items()}
-    adopted_inc = {k: _normalized(_adopt_ids(v, cur_forms.get(k)), k) for k, v in inc_forms.items()}
-    cur_forms, inc_forms = adopted_cur, adopted_inc
     removed: dict = {}
     for src in (current.get("removed"), incoming.get("removed")):
         if isinstance(src, dict):
             for k, ts in src.items():
                 if _num(ts) and ts > removed.get(k, float("-inf")):
                     removed[k] = ts
+    adopted_cur = {k: _normalized(_adopt_ids(v, inc_forms.get(k), k, removed), k) for k, v in cur_forms.items()}
+    adopted_inc = {k: _normalized(_adopt_ids(v, cur_forms.get(k), k, removed), k) for k, v in inc_forms.items()}
+    cur_forms, inc_forms = adopted_cur, adopted_inc
     forms: dict = {}
     for key in list(cur_forms) + [k for k in inc_forms if k not in cur_forms]:
         a, b = cur_forms.get(key), inc_forms.get(key)
