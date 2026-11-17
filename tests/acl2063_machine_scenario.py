@@ -55,8 +55,9 @@ class MachinePeople:
         assert not any(v['state']['queued'] for v in drained), drained
         assert actual_reads == 3
         trace = read_json(self.ipc / 'trace.json')
-        # ACL-2668: up to two reads at once across the two processes, never one account twice.
-        assert 1 <= trace['max'] <= 2 and trace['active'] == {}
+        # ACL-2668: each process reads up to Profiles at once accounts, so across the two
+        # processes all three distinct accounts (A, B, C) may be read together; one account never twice.
+        assert 1 <= trace['max'] <= 3 and trace['active'] == {}, trace
         assert sorted(row[1] for row in trace['reads']) == ['A', 'B', 'C']
         for p in self.people:
             state = self.command(p, 'state')
