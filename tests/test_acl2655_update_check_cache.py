@@ -39,23 +39,23 @@ def rig(tmp_path, monkeypatch):
     return r
 
 
-def test_cache_window_is_fifteen_minutes():
-    assert ru.CHECK_EVERY_SECONDS == 15 * 60
+def test_cache_window_is_one_minute():
+    assert ru.CHECK_EVERY_SECONDS == 60
 
 
 def test_check_repeats_only_after_the_window(rig):
     ru.check(now=1000.0)
-    ru.check(now=1000.0 + 14 * 60)
+    ru.check(now=1000.0 + 59)
     assert rig.calls == 1
-    ru.check(now=1000.0 + 16 * 60)
+    ru.check(now=1000.0 + 61)
     assert rig.calls == 2
 
 
 def test_forced_check_sees_a_release_published_after_the_last_check(rig):
     assert not ru.check(now=1000.0)["available"]
     rig.latest = "2026-11-16.1651"
-    assert not ru.check(now=1060.0)["available"], "cached answer inside the window"
-    state = ru.check(now=1120.0, force=True)
+    assert not ru.check(now=1030.0)["available"], "cached answer inside the window"
+    state = ru.check(now=1060.0, force=True)
     assert state["available"] and state["candidate"]["version"] == "2026-11-16.1651"
 
 
@@ -79,4 +79,4 @@ def test_header_first_check_forces_and_hourly_one_does_not():
     html = TEMPLATE.read_text(encoding="utf-8")
     assert "'/acl/update/check' + (force ? '?force=1' : '')" in html
     assert "aclCheck(true);" in html
-    assert "setInterval(function () { aclCheck(false); }, 60 * 60 * 1000);" in html
+    assert "setInterval(function () { aclCheck(false); }, 60 * 1000);" in html
