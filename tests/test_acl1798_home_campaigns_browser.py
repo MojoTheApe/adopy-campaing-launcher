@@ -480,6 +480,7 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     site.q._reader = failed_read
     site.q._drain_once()
     page.evaluate('() => window.aclAccountRefresh.load()')
+    page.evaluate("() => document.querySelector('.amap-campaigns')._hc.reload('Fresh')")
     page.wait_for_selector('tr[data-msg="acct:Fresh:read"]')
     assert not [q for q in site.q.state()['queued'] if q['account'] == 'Fresh']
     assert site.q.state()['running'] != 'Fresh'
