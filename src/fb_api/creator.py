@@ -602,8 +602,10 @@ class CreationStopped(RuntimeError):
     """Создание кампании остановлено; что уже создано — в `created`."""
 
     def __init__(self, message: str, *, created: dict | None = None, kind: str = "stopped",
-                 failure: Any = None, not_found: bool = False):
+                 failure: Any = None, not_found: bool = False, run_continues: bool = False):
         super().__init__(message)
+        #: Unknown result that stays unknown after the re-send: only this campaign stops, the run goes on.
+        self.run_continues = run_continues
         self.created = dict(created or {})
         self.kind = kind
         #: ACL-1856: an unknown write that the readback looked for and did not find (not "could not look").
@@ -1803,6 +1805,8 @@ class Outcome:
     readback: dict = field(default_factory=dict)
     error: str = ""
     stop_kind: str = ""
+    #: The stop is an unknown write result that stays unresolved after the re-send: the next campaigns still publish.
+    run_continues: bool = False
     #: Объявление → что мы ему дали: creative_id, image_hash / video_id (для сверки, B2).
     ad_media: dict = field(default_factory=dict)
     #: Пробный запуск: что было бы создано (ни одной записи).
@@ -1944,11 +1948,12 @@ def family_rows(base: str, rows: list[dict]) -> dict[int, list[dict]]:
     return fam
 
 
-#: ACL-2338: an unknown write result with one of these reasons had no answer at all (for a POST without a file the
-#: page aborts its own request at a deadline, so `network_timeout` means the first request is finished): after two empty
-#: readbacks it is sent once more (a file upload never is). `cdp_timeout` (a tab frozen for the whole CDP wait: a queued
-#: POST may still start later), `context_stale` and `page_closed` only name the cause and stop.
-RESEND_REASONS = frozenset({"network", "network_timeout"})
+#: Owner rule 12.11 ("publishing beats blocking"; supersedes the ACL-2338 exclusion of cdp_timeout): an unknown write
+#: result whose reason says only that no answer came back - network, network_timeout, cdp_timeout (a tab frozen for the
+#: whole CDP wait), context_stale, page_closed - is sent once more after two empty readbacks, an upload too (an extra
+#: uploaded file is harmless). A duplicate is acceptable, a lost publish is not. An unclear answer of Meta itself
+#: (5xx, code 1/2: empty reason) is not here: that write is only reconciled.
+RESEND_REASONS = frozenset({"network", "network_timeout", "cdp_timeout", "context_stale", "page_closed"})
 
 #: ACL-1856: тексты остановок по журналу операции (English, для человека).
 MSG_JOURNAL = ("Progress could not be saved on this computer, so nothing was written to Meta. "
@@ -2636,7 +2641,7 @@ class CampaignCreator:
                                           "in the ad account yet. Meta may still be processing the "
                                           "upload; publish again to check it first.",
                                           created=out.created, kind="cancelled") from exc
-                if exc.reason in RESEND_REASONS and not files and not upload and not _resent:
+                if exc.reason in RESEND_REASONS and not _resent:
                     # Ответа не было: проверяем ещё раз (запрос мог долететь позже) и только потом повторяем.
                     self._beat()
                     if self.reconcile_wait_s > 0:
@@ -2665,7 +2670,11 @@ class CampaignCreator:
                                                id_of=id_of, on_ad=on_ad, children_active=children_active,
                                                form_page=form_page, upload=upload, _resent=True)
                 else:
+                    resent_again = exc.reason in RESEND_REASONS and _resent
                     self._note_unknown_write(what, exc, began, first=True, outcome="stop_not_found")
+                    if resent_again:
+                        # The re-send got no answer either: this campaign stops, the next ones of the run still publish.
+                        self.client.reconciled(path)
                     # ACL-2392: a known Meta rejection (subcode 1870226) is CLASSIFIED as a rejection for the text
                     # only; the stop stays "unknown" so the gating (blocked job, unreconciled path) is unchanged.
                     rejection = (_plain.classify(exc, kind="unknown", ctx={"stage": _plain.stage_of(what)})
@@ -2674,7 +2683,7 @@ class CampaignCreator:
                         f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                         "Nothing else was written; reconcile the existing object before a re-run.",
                         created=out.created, kind="unknown", failure=rejection,
-                        not_found=not (files or upload)) from exc
+                        not_found=not (files or upload), run_continues=resent_again) from exc
             self.client.reconciled(path)
             self._step(out, f"{what}: reconciled — found by readback")
             return str(found)
@@ -4775,6 +4784,7 @@ class CampaignCreator:
             self._finish_operation(out, _oj.OP_COMPLETE if not out.error else _oj.OP_STOPPED)
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            out.run_continues = exc.run_continues
             out.failure = self._failure(plan, out, exc, kind=exc.kind)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"

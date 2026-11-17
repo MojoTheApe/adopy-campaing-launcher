@@ -860,7 +860,7 @@ class ApiPublisher:
                 _start_cooldown(self.account_label, exc)
             raise
         # ACL-2392: a deterministic rejection proven by readback ("rejected") does not block the next campaigns.
-        if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
+        if (outcome.stop_kind == "unknown" and not outcome.run_continues) or self._client.unreconciled is not None:
             self.blocked = outcome.campaign_name
         if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
             self.stop = self._client.stopped
