@@ -803,7 +803,7 @@ def may_open_closed_profile() -> bool:
 #: кнопка «Open profiles for today», на `rpa` её нет — там кнопка «open profile» в строке.
 HAND_OPEN_MESSAGE_API = ("Opened in Multilogin by hand — close its window there, then run Check plan or "
                          "Publish and the dashboard opens it for automation")
-HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, "
                      "then use the open profile button on this row")
 HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
 
