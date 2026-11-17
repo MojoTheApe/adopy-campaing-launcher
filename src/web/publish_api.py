@@ -926,9 +926,15 @@ class ApiPublisher:
             from src.acl_event_log import emit
             from src.acl_event_log.events import stats_payload
 
+            try:
+                from src.acl_event_log.machine_profile import load_snapshot
+
+                load = load_snapshot()
+            except Exception:  # noqa: BLE001
+                load = None
             emit("publish.stats", stats_payload(
                 name, spec.get("spec_hash", ""), outcome=outcome, plan=plan, began=began,
-                calls=self._client.calls, writes=self._client.writes, raised=raised),
+                calls=self._client.calls, writes=self._client.writes, raised=raised, load=load),
                 account=self.account_label, campaign=name)
         except Exception:  # noqa: BLE001
             pass

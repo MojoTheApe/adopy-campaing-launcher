@@ -266,6 +266,12 @@ def start_shipper() -> None:
     global _thread
     if not writer.enabled():
         return
+    try:
+        from src.acl_event_log.machine_profile import emit_machine_profile
+
+        emit_machine_profile()   # паспорт машины раз за процесс, до первой отправки
+    except Exception:
+        pass
     with _start_lock:
         if _thread is not None and _thread.is_alive():
             return
