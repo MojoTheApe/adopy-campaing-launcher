@@ -373,17 +373,22 @@ def test_m3_unpaired_idless_campaign_takes_the_next_free_index():
 DAY = 24 * 3600 * 1000
 
 
-def test_l4_old_tombstone_of_an_id_nobody_holds_is_dropped():
-    cur = doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))}, removed={"K#gone": 5 * DAY})
-    out = bd.merge_keep(cur, doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))}))
-    assert "removed" not in out or "K#gone" not in out["removed"]
+def test_r21_tombstones_never_expire_and_a_stale_copy_cannot_resurrect_the_campaign():
+    # сервер K=[Y], надгробие X на T; самая свежая метка — позже чем через 31 сутки
+    T = 5 * DAY
+    cur = doc({"K": form(40 * DAY, named("Y", "y", touched=40 * DAY))}, removed={"K#x": T})
+    # устаревшая копия (другой адрес / профиль / вкладка) шлёт K=[X,Y]
+    stale = doc({"K": form(T - DAY, named("X", "x", touched=T - DAY), named("Y", "y", touched=T - DAY))})
+    out = bd.merge_keep(cur, stale)
+    assert ids(out, "K") == ["y"]
+    assert out["removed"]["K#x"] == T
+    # и надгробие пережило слияние без участия держателей id
+    again = bd.merge_keep(out, doc({"K": form(41 * DAY, named("Y", "y", touched=41 * DAY))}))
+    assert again["removed"]["K#x"] == T
 
 
-def test_l4_tombstone_within_30_days_or_held_by_a_copy_stays():
-    cur = doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))},
-              removed={"K#recent": 20 * DAY, "K#held": 5 * DAY})
-    inc = doc({"K": form(30 * DAY, named("H", "held", touched=30 * DAY))})
+def test_r21_removed_is_the_plain_union_of_both_copies():
+    cur = doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))}, removed={"K#old": 1 * DAY})
+    inc = doc({"K": form(40 * DAY, named("A", "a", touched=40 * DAY))}, removed={"K#new": 39 * DAY})
     out = bd.merge_keep(cur, inc)
-    assert "K#recent" in out["removed"]
-    assert "K#held" in out["removed"]
-    assert "held" not in ids(out, "K")           # а сама кампания по-прежнему убрана
+    assert out["removed"] == {"K#old": 1 * DAY, "K#new": 39 * DAY}

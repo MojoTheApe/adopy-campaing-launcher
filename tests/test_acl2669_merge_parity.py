@@ -170,13 +170,12 @@ CASES = {
     "M3 unpaired id-less stored campaign takes the next free index": (
         doc({"K": form(10, named("Q"), named("Z"))}),
         doc({"K": form(20, named("A", "legacy-K-0"), named("Q", "legacy-K-1"))})),
-    "L4 old tombstone of an id nobody holds is dropped": (
-        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))}, removed={"K#gone": 5 * 86400000}),
-        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))})),
-    "L4 recent or held tombstones stay": (
-        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))},
-            removed={"K#recent": 20 * 86400000, "K#held": 5 * 86400000}),
-        doc({"K": form(30 * 86400000, named("H", "held", touched=30 * 86400000))})),
+    "R21 tombstone older than 31 days is kept and a stale copy cannot resurrect": (
+        doc({"K": form(40 * 86400000, named("Y", "y", touched=40 * 86400000))}, removed={"K#x": 5 * 86400000}),
+        doc({"K": form(4 * 86400000, named("X", "x", touched=4 * 86400000), named("Y", "y", touched=4 * 86400000))})),
+    "R21 removed is the plain union": (
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))}, removed={"K#old": 86400000}),
+        doc({"K": form(40 * 86400000, named("A", "a", touched=40 * 86400000))}, removed={"K#new": 39 * 86400000})),
     "one side has no forms": (
         {"v": 4}, doc({"A": form(1, camp("a1"))})),
 }

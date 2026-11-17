@@ -288,45 +288,6 @@ def _number_trusted(entry, other, key):
     return _normalized(out, key)
 
 
-#: R20: надгробие, которому больше 30 суток относительно самой свежей метки
-#: в документах и id которого не держит ни одна копия, больше не нужно.
-TOMBSTONE_TTL_MS = 30 * 24 * 3600 * 1000
-
-
-def _newest_stamp(*docs) -> float:
-    """Самая свежая метка в документах (`touched` форм и кампаний, надгробия):
-    без часов машины, результат одинаков в Python и JS."""
-    best = float("-inf")
-    for d in docs:
-        forms = d.get("forms") if isinstance(d.get("forms"), dict) else {}
-        for e in forms.values():
-            if not isinstance(e, dict):
-                continue
-            if _num(e.get("touched")):
-                best = max(best, e["touched"])
-            for c in (e.get("campaigns") if isinstance(e.get("campaigns"), list) else []):
-                if isinstance(c, dict) and _num(c.get("touched")):
-                    best = max(best, c["touched"])
-        rem = d.get("removed") if isinstance(d.get("removed"), dict) else {}
-        for ts in rem.values():
-            if _num(ts):
-                best = max(best, ts)
-    return best
-
-
-def _prune_tombstones(removed: dict, current: dict, incoming: dict, cur_forms: dict, inc_forms: dict) -> dict:
-    newest = _newest_stamp(current, incoming)
-    held = set()
-    for forms in (cur_forms, inc_forms):
-        for k, e in forms.items():
-            if isinstance(e, dict) and isinstance(e.get("campaigns"), list):
-                for c in e["campaigns"]:
-                    if _cid(c):
-                        held.add(f"{k}#{_cid(c)}")
-    return {k: ts for k, ts in removed.items()
-            if "#" not in k or k in held or ts >= newest - TOMBSTONE_TTL_MS}
-
-
 def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> dict:
     """Слить два документа `keep` (ACL-2669): черновики сами не сжимаются.
 
@@ -409,14 +370,12 @@ def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> di
         if removed.get(key, float("-inf")) >= _touched(entry):
             continue
         forms[key] = entry
-    removed = _prune_tombstones(removed, current, incoming, cur_forms, inc_forms)
+    # R21: надгробия не истекают никогда: любой срок воскрешает кампанию из копии вне слияния
     merged = dict(incoming)
     if "forms" in current or "forms" in incoming or forms:
         merged["forms"] = forms
     if removed:
         merged["removed"] = removed
-    elif merged.get("removed"):
-        merged["removed"] = {}          # все надгробия сняты по сроку (R20)
     versions = [d["v"] for d in (current, incoming) if _num(d.get("v"))]
     if versions:
         merged["v"] = max(versions)

@@ -539,7 +539,14 @@ def test_removing_a_campaign_of_a_stored_idless_copy_survives_reload(make):
     p.wait_for_function("document.querySelectorAll('.cb-slot').length === 3", polling=100)
     # id записаны в state и localStorage сразу, без отправки
     assert p.evaluate("cbKeep.all()['%s'].campaigns.every(c => !!c.id)" % FORM_KEY)
-    assert not [x for x in prof.posts if x["name"] == "keep"]
+    # После применения серверной копии MutationObserver ставит saveSoon (400 мс):
+    # одна законная отправка тех же трёх кампаний, уже с id и без надгробий.
+    # Ждём её затухания, а не утверждаем «отправок нет» (гонка на медленной машине).
+    p.wait_for_timeout(1500)
+    for post in [x for x in prof.posts if x["name"] == "keep"]:
+        camps = post["data"]["forms"][FORM_KEY]["campaigns"]
+        assert len(camps) == 3 and all(c.get("id") for c in camps)
+        assert not post["data"].get("removed")
     p.evaluate("cbRemoveSlot(document.querySelector('.cb-remove-btn'))")
     _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 2, p)
     assert "X" not in json.dumps(server_keep()["forms"])

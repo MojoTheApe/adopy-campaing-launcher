@@ -7221,37 +7221,10 @@ window.cbKeep = (function () {
       if (rem(key) >= touchedOf(entry)) return;
       forms[key] = entry;
     });
-    /* R20: надгробие старше самой свежей метки документов больше чем на 30 суток,
-       чей id не держит ни одна копия, больше не нужно (без часов машины) */
-    var newest = -Infinity;
-    [current, incoming].forEach(function (d) {
-      var fs = d.forms && typeof d.forms === 'object' && !Array.isArray(d.forms) ? d.forms : {};
-      Object.keys(fs).forEach(function (k) {
-        var e = fs[k];
-        if (!e || typeof e !== 'object') return;
-        if (numeric(e.touched)) newest = Math.max(newest, e.touched);
-        (Array.isArray(e.campaigns) ? e.campaigns : []).forEach(function (c) {
-          if (c && typeof c === 'object' && numeric(c.touched)) newest = Math.max(newest, c.touched);
-        });
-      });
-      var rs = d.removed && typeof d.removed === 'object' ? d.removed : {};
-      Object.keys(rs).forEach(function (k) { if (numeric(rs[k])) newest = Math.max(newest, rs[k]); });
-    });
-    var heldIds = {};
-    [curForms, incForms].forEach(function (fs, n) {
-      Object.keys(fs).forEach(function (k) {
-        /* держат id обе копии после выбора id: берём тот вид, что у участвовавших в слиянии */
-        var e = n === 0 ? adoptedCur[k] : adoptedInc[k];
-        if (e && Array.isArray(e.campaigns)) e.campaigns.forEach(function (c) { if (cidOf(c)) heldIds[k + '#' + cidOf(c)] = true; });
-      });
-    });
-    Object.keys(removed).forEach(function (k) {
-      if (k.indexOf('#') !== -1 && !has(heldIds, k) && removed[k] < newest - 30 * 24 * 3600 * 1000) delete removed[k];
-    });
+    /* R21: надгробия не истекают никогда (любой срок воскрешает кампанию из копии вне слияния) */
     var merged = Object.assign({}, incoming);
     if ('forms' in current || 'forms' in incoming || Object.keys(forms).length) merged.forms = forms;
     if (Object.keys(removed).length) merged.removed = removed;
-    else if (merged.removed && Object.keys(merged.removed).length) merged.removed = {};   // все сняты по сроку (R20)
     var vs = [current.v, incoming.v].filter(numeric);
     if (vs.length) merged.v = Math.max.apply(null, vs);
     return merged;
