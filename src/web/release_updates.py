@@ -47,7 +47,7 @@ from config.paths import get_local_config_dir, _atomic_write
 from src.web import release_signing
 
 API = "https://api.github.com"
-CHECK_EVERY_SECONDS = 15 * 60
+CHECK_EVERY_SECONDS = 60
 CHANNEL_FILE = "acl-update-channel.json"
 _VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
