@@ -204,3 +204,10 @@ test("big raw batch fits D1 limits", async () => {
   assert.deepEqual(await res.json(), { ok: true, accepted: 2500, duplicates: 0, rejected: 0 });
   assert.ok(statements < 900, `statements per invocation: ${statements}`);
 });
+
+test("lowercase hex hashes starting with eaa are not tokens", async () => {
+  const env = makeEnv();
+  const ev = { ...YOTAM[1], event_id: "hx:1", payload: { spec_hash: "eaa7292eb4f071" + "0".repeat(50), plan_hash: "EAA" } };
+  const res = await post(env, { events: [ev] });
+  assert.deepEqual(await res.json(), { ok: true, accepted: 1, duplicates: 0, rejected: 0 });
+});

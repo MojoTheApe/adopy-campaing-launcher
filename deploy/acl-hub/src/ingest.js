@@ -9,7 +9,8 @@ const MAX_UNPACKED = 16 * 1024 * 1024;     // защита от «бомбы»: 
 const MACHINE_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const BATCH_RE = /^[A-Za-z0-9-]{1,128}$/;
 // Настоящий токен; почищенные клиентом формы (`access_token=<hidden>`, `<v>`, `<token>`) пропускаются.
-const SECRET_RE = /EAA[A-Za-z0-9]{20,}|access_token(?:=|%3D)(?!<(?:hidden|v|token)>)[^&"'\s<]{8,}/i;
+const SECRET_RE = /EAA[A-Za-z0-9]{20,}/;   // токен Meta: заглавные EAA (хэши в нижнем регистре сюда не попадают)
+const PARAM_SECRET_RE = /access_token(?:=|%3D)(?!<(?:hidden|v|token)>)[^&"'\s<]{8,}/i;
 const EVENT_COLS = ["event_id", "type", "ts", "machine_id", "machine", "manager", "flow_version", "channel",
   "job_id", "account", "campaign", "stream_id", "seq", "batch_id", "received_at", "payload", "derived"];
 // D1: не больше 100 параметров в запросе → 5 строк × 17 колонок = 85.
@@ -18,6 +19,7 @@ const STMTS_PER_BATCH = 100;
 const DERIVE_EVENTS_PER_BATCH = 30;
 const IN_LIST = 90;
 
+const looksSecret = (text) => SECRET_RE.test(text) || PARAM_SECRET_RE.test(text);
 const str = (v, max) => (typeof v === "string" && v.length > 0 && v.length <= max ? v : null);
 
 // Событие пригодно: объект с event_id, type, ts. Остальные поля берутся как есть.
@@ -74,7 +76,7 @@ export async function ingestEvents(env, events, { batchId }) {
   const receivedAt = new Date().toISOString();
   const good = [];
   for (const ev of events) {
-    if (!valid(ev) || SECRET_RE.test(JSON.stringify(ev))) { out.rejected++; continue; }
+    if (!valid(ev) || looksSecret(JSON.stringify(ev))) { out.rejected++; continue; }
     good.push(ev);
   }
   const beats = good.filter((ev) => ev.type === "heartbeat");
