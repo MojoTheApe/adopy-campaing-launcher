@@ -5,13 +5,14 @@
 // GET  /api/*       — владелец читает события и выводы (OWNER_KEY).
 //
 // Привязка: D1 `DB`. Секрет: `OWNER_KEY`. Переменная: `LIBRARY_REPO`.
-
-export const json = (obj, status = 200, headers = {}) =>
-  new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json", ...headers } });
+import { json } from "./respond.js";
+import { handleBatch } from "./ingest.js";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const { method } = request;
+    if (method === "POST" && url.pathname === "/v1/batch") return handleBatch(request, env);
     return json({ error: "not found" }, 404);
   },
 };
