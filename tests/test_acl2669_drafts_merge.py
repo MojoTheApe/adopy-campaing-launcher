@@ -101,15 +101,24 @@ def test_form_whose_last_campaign_is_gone_is_dropped():
     assert "A" not in out["forms"]
 
 
-def test_legacy_campaigns_without_id_follow_per_form_newest_wins():
+def test_legacy_campaigns_without_id_are_named_legacy_index_and_merged():
+    # R9: кампании без id получают legacy-<номер> и идут как обычные
     cur = doc({"A": form(20, camp(), camp())})
     out = bd.merge_keep(cur, doc({"A": form(30, camp())}))
-    assert len(out["forms"]["A"]["campaigns"]) == 1  # новее форма — целиком
+    assert ids(out) == ["legacy-0", "legacy-1"]  # победитель legacy-0, у старой копии добавилась legacy-1
     out = bd.merge_keep(cur, doc({"A": form(10, camp(), camp(), camp())}))
-    assert len(out["forms"]["A"]["campaigns"]) == 2  # старая копия legacy не добавляет
+    assert ids(out) == ["legacy-0", "legacy-1", "legacy-2"]
     # legacy у победителя + id у старой копии
     out = bd.merge_keep(doc({"A": form(10, camp("a1"))}), doc({"A": form(30, camp())}))
-    assert ids(out) == [None, "a1"]
+    assert ids(out) == ["legacy-0", "a1"]
+
+
+def test_stored_idless_copy_and_incoming_with_legacy_ids_give_no_duplicates():
+    stored = doc({"A": form(10, camp(), camp())})
+    incoming = doc({"A": form(20, camp("legacy-0"), camp("legacy-1"))})
+    assert ids(bd.merge_keep(stored, incoming)) == ["legacy-0", "legacy-1"]
+    # и наоборот: старая копия с legacy-id, свежая без id
+    assert ids(bd.merge_keep(incoming, doc({"A": form(30, camp(), camp())}))) == ["legacy-0", "legacy-1"]
 
 
 def test_v_is_max_and_removed_is_a_union_with_max_per_key():

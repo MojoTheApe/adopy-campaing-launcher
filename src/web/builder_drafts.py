@@ -112,6 +112,19 @@ def _count_campaigns(data: dict) -> int:
                if isinstance(e, dict) and isinstance(e.get("campaigns"), list))
 
 
+def _normalized(entry):
+    """Копия записи формы, где у каждой кампании без `id` он равен `legacy-<номер>`
+    (R9: так же называет их клиент при раскладке, см. cbKeep.restore)."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("campaigns"), list):
+        return entry
+    out = dict(entry)
+    out["campaigns"] = [
+        c if (not isinstance(c, dict) or _cid(c)) else {**c, "id": f"legacy-{i}"}
+        for i, c in enumerate(entry["campaigns"])
+    ]
+    return out
+
+
 def merge_keep(current: dict, incoming: dict) -> dict:
     """Слить два документа `keep` (ACL-2669): черновики сами не сжимаются.
 
@@ -120,11 +133,13 @@ def merge_keep(current: dict, incoming: dict) -> dict:
     нет у победителя (по `id`), дописываются в конец. Исчезнуть кампания или
     форма может только по надгробию из `removed` (`"<форма>#<id>"` и
     `"<форма>"` → мс удаления человеком): надгробие не младше копии убирает её,
-    а более поздняя правка возвращает. Кампании без `id` (старый формат) в
-    слияние не идут — по ним действует правило «новее форма целиком».
+    а более поздняя правка возвращает. Кампании без `id` (старый формат) перед
+    слиянием получают `legacy-<номер>` (R9) и дальше идут как обычные.
     Остальные поля документа берутся из `incoming`."""
     cur_forms = current.get("forms") if isinstance(current.get("forms"), dict) else {}
     inc_forms = incoming.get("forms") if isinstance(incoming.get("forms"), dict) else {}
+    cur_forms = {k: _normalized(v) for k, v in cur_forms.items()}
+    inc_forms = {k: _normalized(v) for k, v in inc_forms.items()}
     removed: dict = {}
     for src in (current.get("removed"), incoming.get("removed")):
         if isinstance(src, dict):

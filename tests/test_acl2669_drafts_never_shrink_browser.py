@@ -300,3 +300,101 @@ def test_server_apply_writes_no_tombstones(make):
     local = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2'))")
     assert not local.get("removed")
     assert not (server_keep().get("removed") or {})
+
+
+# ── Задача 4: копия сервера сливается со страницей, а не стирает её ─────────────
+
+def _doc(touched, items, removed=None):
+    """items: [(актив, id или None)] → документ keep одной формы."""
+    d = {"v": 4, "forms": {FORM_KEY: {"touched": touched, "tracking": "",
+                                      "campaigns": [campaign(a, cid) for a, cid in items]}}}
+    if removed:
+        d["removed"] = removed
+    return d
+
+
+def _stale_local(prof, doc, at):
+    """Положить в localStorage профиля «осколок» до первой загрузки страницы
+    (как после краха Chrome): документ keep и метку времени синхронизации."""
+    script = ("if (!localStorage.getItem('acl.builder.v2')) {"
+              "localStorage.setItem('acl.builder.v2', %s);"
+              "localStorage.setItem('acl.builder.sync', %s); }"
+              % (json.dumps(json.dumps(doc)), json.dumps(json.dumps({"at": {"keep": at}, "base": {}}))))
+    prof.ctx.add_init_script(script)
+
+
+def _assets(p):
+    return p.evaluate("[...document.querySelectorAll('.cb-slot [name$=\"_asset\"]')].map(a => a.value)")
+
+
+def test_crash_reload_with_stale_local_copy_loses_nothing(make):
+    # Review Focus 2: на сервере две кампании, в localStorage осколок с одной
+    now = int(time.time() * 1000)
+    bd.save("keep", now, _doc(now, [("A", "ca"), ("B", "cb")]))
+    prof = make()
+    _stale_local(prof, _doc(now - 60000, [("A", "ca")]), now + 5000)
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    assert sorted(_assets(p)) == ["A", "B"]
+    _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 2, p)
+    local = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2'))")
+    assert len(local["forms"][FORM_KEY]["campaigns"]) == 2
+
+
+def test_older_server_copy_does_not_bring_back_a_removed_campaign(make):
+    # Review Focus 3: человек убрал B, а на сервере лежит старая копия с A и B
+    now = int(time.time() * 1000)
+    bd.save("keep", now, _doc(now - 120000, [("A", "ca"), ("B", "cb")]))
+    prof = make()
+    _stale_local(prof, _doc(now - 60000, [("A", "ca")], removed={FORM_KEY + "#cb": now - 30000}),
+                 now - 5000)
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length === 1", polling=100)
+    p.wait_for_timeout(600)
+    assert _assets(p) == ["A"]
+    local = p.evaluate("JSON.parse(localStorage.getItem('acl.builder.v2'))")
+    assert [c["id"] for c in local["forms"][FORM_KEY]["campaigns"]] == ["ca"]
+    assert local["removed"][FORM_KEY + "#cb"] == now - 30000
+
+
+def test_stored_idless_server_copy_and_the_page_give_no_duplicate_slots(make):
+    now = int(time.time() * 1000)
+    bd.save("keep", now, _doc(now, [("New A", None), ("New B", None)]))
+    prof = make()
+    # на странице те же кампании под legacy-id, как их раскладывает restore
+    _stale_local(prof, _doc(now - 60000, [("Old A", "legacy-0"), ("Old B", "legacy-1")]), now - 5000)
+    p = prof.open()
+    p.wait_for_function("document.querySelectorAll('.cb-slot').length >= 2", polling=100)
+    p.evaluate("window.__nodes = [...document.querySelectorAll('.cb-slot')]")
+    p.wait_for_function("[...document.querySelectorAll('.cb-slot [name$=\"_asset\"]')].map(a => a.value).join() === 'New A,New B'",
+                        polling=100)
+    assert keep_slots(p) == 2
+    assert p.evaluate("[...document.querySelectorAll('.cb-slot')].every((s, i) => s === window.__nodes[i])")
+    assert p.evaluate("[...document.querySelectorAll('.cb-slot')].map(s => s.dataset.cbdId)") == ["legacy-0", "legacy-1"]
+    p.evaluate("cbKeep.save()")
+    _until(lambda: [c.get("id") for c in server_keep()["forms"][FORM_KEY]["campaigns"]] == ["legacy-0", "legacy-1"], p)
+
+
+def test_apply_while_typing_in_another_campaign_keeps_text_and_slot_nodes(make):
+    seed_keep({FORM_KEY: ["One", "Two"]})
+    a = make().open()
+    a.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    a.evaluate("cbKeep.save()")
+    _until(lambda: all(c.get("id") for c in server_keep()["forms"][FORM_KEY]["campaigns"]), a)
+    b = make("http://127.0.0.1:8001").open()
+    b.wait_for_function("document.querySelectorAll('.cb-slot').length === 2", polling=100)
+    add(b)
+    _until(lambda: len(server_keep()["forms"][FORM_KEY]["campaigns"]) == 3, b)
+    a.evaluate("window.__nodes = [...document.querySelectorAll('.cb-slot')]")
+    # save() ставит отправку через 0.8 с; пока печатаем, ответ сервера (с третьей кампанией) применяется
+    a.evaluate("() => { const x = document.querySelector('.cb-slot [name$=\"_asset\"]'); x.value = 'One edited'; cbKeep.save(); }")
+    a.evaluate("cbDrawer.open()")
+    a.locator(".cbd-camp").nth(1).click()    # показать редактор второй кампании
+    field = a.locator(".cb-slot").nth(1).locator("[name$='_asset']")
+    field.click()
+    typed = "typed-while-merging-" * 3
+    field.press_sequentially(typed, delay=70)
+    a.wait_for_function("document.querySelectorAll('.cb-slot').length === 3", polling=100)
+    assert field.input_value().endswith(typed)
+    assert a.evaluate("window.__nodes.every((n, i) => n === document.querySelectorAll('.cb-slot')[i])")
+    assert a.evaluate("document.activeElement === document.querySelectorAll('.cb-slot')[1].querySelector('[name$=\"_asset\"]')")

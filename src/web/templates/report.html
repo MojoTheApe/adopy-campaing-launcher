@@ -6969,6 +6969,75 @@ window.cbKeep = (function () {
     saveSoon();
   }
 
+  /* Слияние двух документов `keep` (ACL-2669). То же правило, что у
+     `merge_keep` в src/web/builder_drafts.py, результат совпадает до байта
+     (tests/test_acl2669_merge_parity.py). Сначала кампании без id получают
+     `legacy-<номер>` (R9), дальше — по кампании: на форме побеждает копия с
+     большим `touched` (при равенстве — `incoming`), чужие кампании дописываются
+     в конец, исчезнуть кампания или форма может только по надгробию. */
+  function numeric(x) { return typeof x === 'number' && isFinite(x); }
+  function normEntry(entry) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    var out = Object.assign({}, entry);
+    out.campaigns = entry.campaigns.map(function (c, i) {
+      if (!c || typeof c !== 'object' || (typeof c.id === 'string' && c.id)) return c;
+      return Object.assign({}, c, { id: 'legacy-' + i });
+    });
+    return out;
+  }
+  function touchedOf(entry) { return entry && typeof entry === 'object' && numeric(entry.touched) ? entry.touched : 0; }
+  function cidOf(c) { return c && typeof c === 'object' && typeof c.id === 'string' ? c.id : ''; }
+  function merge(current, incoming) {
+    current = current || {}; incoming = incoming || {};
+    var curForms = current.forms && typeof current.forms === 'object' && !Array.isArray(current.forms) ? current.forms : {};
+    var incForms = incoming.forms && typeof incoming.forms === 'object' && !Array.isArray(incoming.forms) ? incoming.forms : {};
+    var removed = {};
+    [current.removed, incoming.removed].forEach(function (src) {
+      if (!src || typeof src !== 'object') return;
+      Object.keys(src).forEach(function (k) {
+        if (numeric(src[k]) && (!(k in removed) || src[k] > removed[k])) removed[k] = src[k];
+      });
+    });
+    var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+    var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
+    var forms = {};
+    keys.forEach(function (key) {
+      var a = normEntry(curForms[key]), b = normEntry(incForms[key]);
+      var inCur = has(curForms, key), inInc = has(incForms, key);
+      var newer, older;
+      if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
+      else { newer = inCur ? a : b; older = null; }
+      var rem = function (k) { return has(removed, k) ? removed[k] : -Infinity; };
+      if (!newer || typeof newer !== 'object' || Array.isArray(newer)) {
+        if (rem(key) < 0) forms[key] = newer;   // не форма билдера: как есть
+        return;
+      }
+      var entry = Object.assign({}, newer);
+      var nCamps = newer.campaigns, oCamps = older && typeof older === 'object' ? older.campaigns : null;
+      if (Array.isArray(nCamps) || Array.isArray(oCamps)) {
+        nCamps = Array.isArray(nCamps) ? nCamps : [];
+        var nT = touchedOf(newer), oT = touchedOf(older);
+        var kept = nCamps.filter(function (c) { return !(cidOf(c) && rem(key + '#' + cidOf(c)) > nT); });
+        var have = {};
+        nCamps.forEach(function (c) { if (cidOf(c)) have[cidOf(c)] = true; });
+        (Array.isArray(oCamps) ? oCamps : []).forEach(function (c) {
+          var cid = cidOf(c);
+          if (cid && !have[cid] && rem(key + '#' + cid) < oT) { kept.push(c); have[cid] = true; }
+        });
+        entry.campaigns = kept;
+        if (!kept.length) return;
+      }
+      if (rem(key) >= touchedOf(entry)) return;
+      forms[key] = entry;
+    });
+    var merged = Object.assign({}, incoming);
+    if ('forms' in current || 'forms' in incoming || Object.keys(forms).length) merged.forms = forms;
+    if (Object.keys(removed).length) merged.removed = removed;
+    var vs = [current.v, incoming.v].filter(numeric);
+    if (vs.length) merged.v = Math.max.apply(null, vs);
+    return merged;
+  }
+
   function restore(given) {
     var stored = given || read();
     if (!stored) { state = { v: VERSION, forms: {}, removed: {} }; return 0; }
@@ -7057,20 +7126,70 @@ window.cbKeep = (function () {
       apply: function (doc) {
         var incoming = validate(doc.data);
         if (!incoming) return;
-        if (Object.keys(state.forms).length && JSON.stringify(state.forms) !== JSON.stringify(incoming.forms)) {
+        /* ACL-2669: страницу не стираем и не раскладываем заново. Сначала
+           сохраняем недосохранённый ввод (его `touched` новее и он выиграет
+           слияние), затем сливаем копию сервера с тем, что есть. */
+        if (timer) { clearTimeout(timer); timer = null; save(); }
+        var merged = merge(state, incoming);
+        var removedNow = merged.removed || {};
+        var normOld = {};
+        Object.keys(state.forms).forEach(function (k) { normOld[k] = normEntry(state.forms[k]); });
+        if (Object.keys(state.forms).length && JSON.stringify(normOld) !== JSON.stringify(merged.forms)) {
           try { localStorage.setItem(KEY + '.older', JSON.stringify(state)); } catch (e) { /* не помним */ }
         }
-        restoring = true;
-        forms().forEach(function (form) {
-          Array.prototype.slice.call(form.querySelectorAll('.cb-slot')).reverse().forEach(function (slot) {
-            window.cbRemoveSlot(slot);
+        /* какие id кто-то из копий знает: слот, чей id не знает никто, — это
+           набранное прямо сейчас и ещё не сохранённое, его не трогаем */
+        var known = {};
+        [state, incoming].forEach(function (d) {
+          Object.keys(d.forms).forEach(function (k) {
+            var e = normEntry(d.forms[k]);
+            if (e && Array.isArray(e.campaigns)) e.campaigns.forEach(function (c) { known[k + '#' + c.id] = true; });
           });
         });
-        restoring = false;
-        state = incoming;
+        var active = document.activeElement;
+        var changed = false;
+        restoring = true;
+        try {
+          forms().forEach(function (form) {
+            var key = stamp(form);
+            if (!key) return;
+            var entry = merged.forms[key];
+            var slots = Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
+            var byId = {};
+            slots.forEach(function (s) { if (s.dataset.cbdId) byId[s.dataset.cbdId] = s; });
+            var wanted = {};
+            if (entry) {
+              var link = form.querySelector('[name="tracking_link"]');
+              if (link && typeof entry.tracking === 'string' && link.value !== entry.tracking && active !== link) link.value = entry.tracking;
+              entry.campaigns.forEach(function (c) {
+                wanted[c.id] = true;
+                var slot = byId[c.id];
+                if (!slot) {
+                  window.cbAddSlot(form);
+                  var all = form.querySelectorAll('.cb-slot');
+                  slot = all[all.length - 1];
+                  writeSlot(slot, c);
+                  changed = true;
+                  return;
+                }
+                if (active && slot.contains(active)) return;      // человек печатает здесь
+                if (JSON.stringify(readSlot(slot)) !== JSON.stringify(c)) { writeSlot(slot, c); changed = true; }
+              });
+            }
+            /* со страницы уходит только то, что слияние убрало по надгробию */
+            slots.forEach(function (slot) {
+              var id = slot.dataset.cbdId;
+              if (!id || wanted[id] || !known[key + '#' + id]) return;
+              if (typeof removedNow[key + '#' + id] === 'number' || (!entry && typeof removedNow[key] === 'number')) {
+                window.cbRemoveSlot(slot);
+                changed = true;
+              }
+            });
+          });
+        } finally { restoring = false; }
+        state = merged;
         try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
-        var made = restore(incoming);
-        if (made && window.cbTree) window.cbTree.paint();
+        if (changed && window.cbTree) window.cbTree.paint();
       }
     });
   }
@@ -7090,6 +7209,7 @@ window.cbKeep = (function () {
     writeSlot: writeSlot,
     all: function () { return state.forms; },
     validate: validate,
+    merge: merge,
     forget: function () { state = { v: VERSION, forms: {}, removed: {} }; write(); }
   };
 })();
