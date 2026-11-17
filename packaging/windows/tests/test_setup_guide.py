@@ -110,9 +110,14 @@ class SetupGuideMatchesTheProductTests(unittest.TestCase):
         block = block[:block.index("def _period_owner")]
         refusals = re.findall(r'"error": (?:message if|"([^"]+)")', block)
         refusals = [text for text in refusals if text]
-        self.assertGreaterEqual(len(refusals), 4, refusals)
+        # ACL-2668 №11: публикация и чтение больше не отказ — обновление ждёт
+        # конца публикации; остался отказ «уже идёт» и сбой подготовки.
+        self.assertGreaterEqual(len(refusals), 1, refusals)
         for text in refusals:
             self.assertIn(text.split(". ")[0].rstrip("."), GUIDE, text)
+        queue_source = (REPO_ROOT / "src" / "web" / "update_queue.py").read_text(encoding="utf-8")
+        waiting = re.search(r'WAITING_TEXT = "([^"]+)"', queue_source).group(1)
+        self.assertIn(waiting, GUIDE, waiting)
         page = (REPO_ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
         for phrase in (
             "Update not started",
