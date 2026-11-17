@@ -155,7 +155,8 @@ export async function dayText(env, day, title) {
   if (!buyers.length) lines.push("No activity.");
   for (const b of buyers) {
     const hours = b.first_at ? ` · active ${b.active_h} h` : "";
-    lines.push(`${h(b.manager)}: ${b.campaigns} campaigns · ${b.ok} ok · ${b.failed} failed · ${b.not_started} not started`
+    const warn = b.issues ? ` (${b.issues} with problems)` : "";
+    lines.push(`${h(b.manager)}: ${b.campaigns} campaigns · ${b.ok} ok${warn} · ${b.failed} failed · ${b.not_started} not started`
       + ` · ${b.jobs} job(s)${hours}`);
   }
   return lines;
