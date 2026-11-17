@@ -1,5 +1,14 @@
 # System history
 
+## ACL-2703 — Team library syncs on events, no 15 s pull — 2026-11-17
+
+The read copy of the team library no longer goes to GitHub whenever it is older than 15 s
+(ACL-2668 decision #41). Events refresh it instead: page load and Refresh (all three kinds,
+in the background, the page does not wait), opening the builder's form picker, the Targeting /
+Ad texts / Forms sections, the publish start (targets, ad texts and form templates) and own saves.
+Reads during a publish use the copy without network calls. Conflict handling is unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1703).
+
 ## ACL-2668 decision 12 — Profiles start together, no separate start limit or gap — 2026-11-16
 
 MLX `start` requests are no longer sent one at a time: as many profiles start at once as the "Profiles at once" slot
