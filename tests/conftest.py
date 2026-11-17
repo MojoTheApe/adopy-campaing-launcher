@@ -102,6 +102,19 @@ def _heavy_tab_fakes_pin_light_tab_off(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _profile_ceiling_not_from_the_test_machine(monkeypatch):
+    # ACL-2668: потолок профилей по умолчанию зависит от памяти машины. Тесты не должны
+    # зависеть от памяти ноутбука/CI: память «не прочиталась» → потолок DEFAULT_CEILING (2).
+    # Тесты ступеней подменяют `machine_total_mb` сами.
+    from src.web import profile_slots
+    def unknown_memory():
+        return None
+    unknown_memory.__wrapped__ = profile_slots.machine_total_mb   # настоящая — для теста кэша
+    monkeypatch.setattr(profile_slots, "machine_total_mb", unknown_memory)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl_config")))
     yield
