@@ -56,9 +56,16 @@ export async function sendTo(env, chatId, text, extra = {}) {
         await sleep(r.retryAfter * 1000);
         r = await call(env, { ...base, text: part, parse_mode: "HTML" });
       }
+      if (r.status !== 200 && r.status !== 429 && base.reply_markup) {
+        // Кнопки могли не понравиться Telegram (BUTTON_URL_INVALID и т. п.): тот же текст без кнопок.
+        console.error(`telegram ${r.status}: ${r.description}; resending without buttons`);
+        const { reply_markup, ...noButtons } = base;
+        r = await call(env, { ...noButtons, text: part, parse_mode: "HTML" });
+      }
       if (r.status !== 200 && r.status !== 429) {
         console.error(`telegram ${r.status}: ${r.description}; resending as plain text`);
-        r = await call(env, { ...base, text: plain(part) });
+        const { reply_markup, ...noButtons } = base;
+        r = await call(env, { ...noButtons, text: plain(part) });
       }
       if (r.status !== 200) { console.error(`telegram send failed ${r.status}: ${r.description}`); allOk = false; }
     } catch (err) {

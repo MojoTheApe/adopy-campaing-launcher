@@ -10,7 +10,7 @@
 // `TG_ALLOWED_CHATS`, `HUB_URL`.
 import { json } from "./respond.js";
 import { handleBackfill, handleBatch } from "./ingest.js";
-import { handleApi } from "./api.js";
+import { closeTaskRequest, handleApi } from "./api.js";
 import { isOwner, sameSecret } from "./auth.js";
 import { clearCookie, makeSession, setCookie } from "./session.js";
 import { LOGIN_HTML, PAGE_HTML } from "./ui.js";
@@ -46,6 +46,7 @@ export default {
     if (method === "POST" && url.pathname === "/tg/webhook") return handleWebhook(request, env);
     if (method === "POST" && url.pathname === "/v1/backfill") return handleBackfill(request, env);
     if (method === "GET" && url.pathname.startsWith("/api/")) return handleApi(request, env, url);
+    if (method === "POST" && url.pathname.startsWith("/api/task-requests/")) return closeTaskRequest(request, env, url);
     return json({ error: "not found" }, 404);
   },
 

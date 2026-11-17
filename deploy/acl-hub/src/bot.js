@@ -15,7 +15,8 @@ const HELP = [
   "/failures — top failures, last 24 h",
   "/unfinished — campaigns left half-made in Meta",
   "/buyer &lt;name&gt; · /machine &lt;name&gt; — one buyer or machine",
-  "/tasks — open task requests",
+  "/tasks — open task requests · /done &lt;n&gt; — close one",
+  "/cleared &lt;n&gt; — drop a campaign from /unfinished (fixed by hand in Meta)",
   "/hint &lt;id&gt; &lt;text&gt; — save the fix for a failure (shown in every next alert)",
   "/mute &lt;id&gt; [hours] · /unmute &lt;id&gt;",
   "Buttons under an alert: Open run, Mute 24h, Explain, Create task.",
@@ -29,9 +30,10 @@ async function unfinishedText(env, now) {
   const lines = [`<b>${rows.length} unfinished campaign(s)</b> — something was created in Meta, then it stopped. `
     + "\"Publish again\" reuses what is there."];
   for (const r of rows.slice(0, 15)) {
-    lines.push(`• ${h(r.manager || "—")} · ${h(r.account || "—")} · <a href="${h(runLink(env, r.run_id))}">${h(cut(r.campaign, 60))}</a> · ${when(r.finished_at)}`);
+    lines.push(`[${r.rid}] ${h(r.manager || "—")} · ${h(r.account || "—")} · <a href="${h(runLink(env, r.run_id))}">${h(cut(r.campaign, 60))}</a> · ${when(r.finished_at)}`);
   }
   if (rows.length > 15) lines.push(`…and ${rows.length - 15} more`);
+  lines.push("", "Fixed one by hand in Meta? /cleared &lt;n&gt;");
   return lines.join("\n");
 }
 
@@ -40,11 +42,14 @@ async function findName(env, column, query) {
   const q = String(query || "").trim().toLowerCase();
   if (!q) return { usage: true };
   const { results } = await env.DB.prepare(`SELECT DISTINCT ${column} AS name FROM machines WHERE ${column} IS NOT NULL`).all();
-  const hits = results.map((r) => r.name).filter((n) => n.toLowerCase().startsWith(q) || n.toLowerCase().includes(q));
-  const exact = hits.find((n) => n.toLowerCase() === q);
+  const names = results.map((r) => r.name);
+  const exact = names.find((n) => n.toLowerCase() === q);
   if (exact) return { name: exact };
+  // Сначала по началу имени или слова, иначе — по вхождению.
+  let hits = names.filter((n) => n.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || n.toLowerCase().startsWith(q));
+  if (!hits.length) hits = names.filter((n) => n.toLowerCase().includes(q));
   if (hits.length === 1) return { name: hits[0] };
-  return { many: hits };
+  return { many: hits.slice(0, 10) };
 }
 
 async function buyerText(env, query, now) {
@@ -94,8 +99,9 @@ async function tasksText(env) {
   if (!results.length) return "No open task requests.";
   const lines = [`<b>${results.length} open task request${results.length > 1 ? "s" : ""}</b> — the tracker session picks them up`];
   for (const t of results.slice(0, 15)) {
-    lines.push(`• ${when(t.created_at)} · ${h(t.manager || "—")} · ${h(cut(t.error || t.campaign || "", 120))}${t.fingerprint ? ` (${t.fingerprint})` : ""}`);
+    lines.push(`[${t.id}] ${when(t.created_at)} · ${h(t.manager || "—")} · ${h(cut(t.error || t.campaign || "", 120))}${t.fingerprint ? ` (${t.fingerprint})` : ""}`);
   }
+  lines.push("", "Done? /done &lt;n&gt;");
   return lines.join("\n");
 }
 
@@ -110,9 +116,22 @@ async function answer(env, text, now) {
   if (name === "/buyer") return buyerText(env, args.join(" "), now);
   if (name === "/machine") return machineText(env, args.join(" "), now);
   if (name === "/tasks") return tasksText(env);
+  if (name === "/done") {
+    const id = Number.parseInt(args[0], 10);
+    if (!Number.isFinite(id)) return "Usage: /done &lt;number from /tasks&gt;";
+    const r = await env.DB.prepare("UPDATE task_requests SET status = 'done' WHERE id = ? AND status = 'open'").bind(id).run();
+    return r.meta.changes ? `Closed task request ${id}.` : `No open task request ${id}.`;
+  }
+  if (name === "/cleared") {
+    const rid = Number.parseInt(args[0], 10);
+    const run = Number.isFinite(rid) ? await env.DB.prepare("SELECT run_id FROM runs WHERE rowid = ?").bind(rid).first() : null;
+    if (!run) return "Usage: /cleared &lt;number from /unfinished&gt;";
+    await env.DB.prepare("INSERT OR REPLACE INTO bot_state (k, v) VALUES (?, ?)").bind(`cleared:${run.run_id}`, iso(now)).run();
+    return `Removed [${rid}] from /unfinished.`;
+  }
   if (name === "/hint") {
     const fp = (args[0] || "").toLowerCase();
-    const hint = raw.split(/\s+/).slice(2).join(" ").trim();
+    const hint = raw.replace(/^\S+\s+\S+\s*/, "").trim();   // переносы строк сохраняются
     if (!FP_RE.test(fp) || !hint) return "Usage: /hint &lt;12-character id from an alert&gt; &lt;what to do&gt;";
     await env.DB.prepare("INSERT INTO failure_hints (fingerprint, hint, updated_at) VALUES (?, ?, ?) "
       + "ON CONFLICT(fingerprint) DO UPDATE SET hint = excluded.hint, updated_at = excluded.updated_at")
@@ -133,18 +152,25 @@ async function answer(env, text, now) {
   return HELP;
 }
 
-async function mute(env, fp, hours, now) {
-  await env.DB.prepare("INSERT INTO mutes (fingerprint, until) VALUES (?, ?) "
-    + "ON CONFLICT(fingerprint) DO UPDATE SET until = excluded.until")
+// keepLonger — кнопка не укорачивает уже стоящую более долгую тишину; /mute ставит ровно заданное.
+async function mute(env, fp, hours, now, keepLonger = false) {
+  const set = keepLonger ? "until = max(mutes.until, excluded.until)" : "until = excluded.until";
+  await env.DB.prepare(`INSERT INTO mutes (fingerprint, until) VALUES (?, ?) ON CONFLICT(fingerprint) DO UPDATE SET ${set}`)
     .bind(fp, new Date(now + hours * 3600000).toISOString()).run();
 }
+
+const parse = (text) => { try { return JSON.parse(text || "{}"); } catch (_) { return {}; } };
 
 // Разбор одного сбоя без ИИ: ошибка, последние шаги, что осталось в Meta, известное решение.
 async function explainText(env, run, now) {
   const hint = run.fingerprint ? await env.DB.prepare("SELECT hint FROM failure_hints WHERE fingerprint = ?").bind(run.fingerprint).first("hint") : null;
+  // Шаги этой кампании: от её publish.spec до итога (у raw.run нет имени кампании, режем по времени).
+  const spec = await env.DB.prepare("SELECT min(ts) AS ts FROM events WHERE job_id = ? AND type = 'publish.spec' AND campaign = ?")
+    .bind(run.job_id, run.campaign).first("ts");
+  const end = Date.parse(run.finished_at || "");
   const { results: steps } = await env.DB.prepare(
-    "SELECT ts, payload FROM events WHERE job_id = ? AND type = 'raw.run' AND ts <= ? ORDER BY ts DESC LIMIT 6",
-  ).bind(run.job_id, run.finished_at ? iso(Date.parse(run.finished_at) + 1000) : "9999").all();
+    "SELECT ts, payload FROM events WHERE job_id = ? AND type = 'raw.run' AND ts >= ? AND ts <= ? ORDER BY ts DESC LIMIT 6",
+  ).bind(run.job_id, spec || "", Number.isFinite(end) ? iso(end + 1000) : "9999").all();
   const same = run.fingerprint ? await env.DB.prepare(
     "SELECT count(*) AS n, count(DISTINCT machine_id) AS m, min(finished_at) AS first_at FROM runs WHERE fingerprint = ?",
   ).bind(run.fingerprint).first() : null;
@@ -154,8 +180,8 @@ async function explainText(env, run, now) {
   if (steps.length) {
     lines.push("", "<b>Last steps</b>");
     for (const s of steps.reverse()) {
-      const p = JSON.parse(s.payload || "{}");
-      const note = (p.diag && (p.diag.step || p.diag.error)) || p.note || p.step || "";
+      const p = parse(s.payload);
+      const note = (p.diag && (p.diag.step || p.diag.error)) || p.note || p.step || "(unreadable step)";
       lines.push(`${p.ok === false ? "✗" : "·"} ${when(s.ts).split(", ").pop()} ${h(cut(note, 120))}`);
     }
   }
@@ -171,15 +197,20 @@ async function onButton(env, cq, now) {
   const [kind, arg] = String(cq.data || "").split(":");
   if (kind === "m") {
     if (!FP_RE.test(arg || "")) return answerButton(env, cq.id, "Nothing to mute for this one.");
-    await mute(env, arg, 24, now);
+    await mute(env, arg, 24, now, true);
     return answerButton(env, cq.id, `Muted for 24 h (${arg}).`);
   }
   const rid = Number.parseInt(arg, 10);
   const run = Number.isFinite(rid) ? await env.DB.prepare("SELECT * FROM runs WHERE rowid = ?").bind(rid).first() : null;
-  if (!run) return answerButton(env, cq.id, "This run is no longer in the hub.");
+  if (!run || run.outcome !== "failed") return answerButton(env, cq.id, "This failure is no longer in the hub.");
   if (kind === "e") {
     await answerButton(env, cq.id, "Looking…");
-    return sendTo(env, chat, await explainText(env, run, now));
+    let text;
+    try { text = await explainText(env, run, now); } catch (err) {
+      console.error(`explain: ${err?.message || err}`);
+      text = "Could not explain this one. Open the run on the page instead.";
+    }
+    return sendTo(env, chat, text);
   }
   if (kind === "t") {
     const res = await env.DB.prepare("INSERT OR IGNORE INTO task_requests (fingerprint, run_id, created_at) VALUES (?, ?, ?)")

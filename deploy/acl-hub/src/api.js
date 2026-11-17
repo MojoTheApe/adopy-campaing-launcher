@@ -75,6 +75,18 @@ async function taskRequests(env) {
 const ROUTES = { "/api/task-requests": taskRequests, "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines,
   "/api/summary": summary, "/api/live": live, "/api/run": runDetail, "/api/failures": failures };
 
+// POST /api/task-requests/<id>/done — сессия трекера закрывает запрос, когда задача заведена.
+export async function closeTaskRequest(request, env, url) {
+  if (!(await isOwner(request, env))) return json({ error: "unauthorized" }, 401);
+  const m = /^\/api\/task-requests\/(\d+)\/done$/.exec(url.pathname);
+  if (!m) return json({ error: "not found" }, 404);
+  let note = null;
+  try { note = String((await request.json())?.note || "").slice(0, 300) || null; } catch (_) { /* без заметки */ }
+  const r = await env.DB.prepare("UPDATE task_requests SET status = 'done', note = coalesce(?, note) WHERE id = ? AND status = 'open'")
+    .bind(note, Number(m[1])).run();
+  return json({ ok: true, closed: r.meta.changes });
+}
+
 export async function handleApi(request, env, url) {
   const route = ROUTES[url.pathname];
   if (!route) return json({ error: "not found" }, 404);

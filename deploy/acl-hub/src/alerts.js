@@ -40,7 +40,8 @@ async function failedRows(db, ids) {
     const part = ids.slice(i, i + IN_LIST);
     const { results } = await db.prepare(
       "SELECT r.rowid AS rid, r.*, j.dry_run AS job_dry_run, m.until AS mute_until, fh.hint AS hint, "
-      + "(SELECT count(*) FROM runs r3 WHERE r3.fingerprint = r.fingerprint) AS fp_total FROM runs r "
+      + "EXISTS (SELECT 1 FROM runs r3 WHERE r3.fingerprint = r.fingerprint AND r3.job_id IS NOT r.job_id "
+      + "AND r3.finished_at <= r.finished_at) AS seen_before FROM runs r "
       + "LEFT JOIN jobs j ON j.job_id = r.job_id LEFT JOIN mutes m ON m.fingerprint = r.fingerprint "
       + "LEFT JOIN failure_hints fh ON fh.fingerprint = r.fingerprint "
       + `WHERE r.outcome = 'failed' AND r.run_id IN (${part.map(() => "?").join(", ")})`,
@@ -51,14 +52,17 @@ async function failedRows(db, ids) {
 }
 
 // Кнопки под алертом. callback_data ≤ 64 байт: rowid прогона вместо длинного run_id.
-export function alertButtons(env, r) {
+// group — кнопки относятся к первой кампании списка, это видно в подписи.
+export function alertButtons(env, r, group = false) {
+  const first = group ? " first" : "";
   return { reply_markup: { inline_keyboard: [
-    [{ text: "Open run", url: runLink(env, r.run_id) }, { text: "Mute 24h", callback_data: `m:${r.fingerprint || "-"}` }],
-    [{ text: "Explain", callback_data: `e:${r.rid}` }, { text: "Create task", callback_data: `t:${r.rid}` }],
+    [{ text: `Open${first} run`, url: runLink(env, r.run_id) }, { text: "Mute 24h", callback_data: `m:${r.fingerprint || "-"}` }],
+    [{ text: `Explain${first}`, callback_data: `e:${r.rid}` }, { text: "Create task", callback_data: `t:${r.rid}` }],
   ] } };
 }
 
-const isNew = (r) => Boolean(r.fingerprint) && Number(r.fp_total) <= 1;
+// Новый — этот текст ошибки раньше не встречался ни в одном другом задании.
+const isNew = (r) => Boolean(r.fingerprint) && !Number(r.seen_before);
 
 function singleText(env, r, verdict, same) {
   return [
@@ -114,7 +118,7 @@ export async function notifyFailedRuns(env, runIds, now = Date.now()) {
       } else {
         const verdict = await admit(env.DB, `job:${jobId}`, now);
         if (!verdict) continue;
-        await broadcast(env, groupText(env, list, verdict), alertButtons(env, list[0]));
+        await broadcast(env, groupText(env, list, verdict), alertButtons(env, list[0], true));
       }
     } catch (err) {
       console.error(`alerts: job ${jobId}: ${err?.message || err}`);
@@ -181,7 +185,8 @@ async function digest(env, now) {
     "SELECT machine, manager FROM machines WHERE coalesce(last_heartbeat_at, last_event_at) < ? AND last_event_at > ?",
   ).bind(iso(now - 24 * 3600000), iso(now - 7 * 86400000)).all();
   if (quiet.length) lines.push("", "Quiet > 24 h: " + quiet.map((m) => h(m.machine || m.manager)).join(", "));
-  const unfinished = await unfinishedRuns(env, now);
+  let unfinished = [];
+  try { unfinished = await unfinishedRuns(env, now); } catch (err) { console.error(`digest unfinished: ${err?.message || err}`); }
   if (unfinished.length) lines.push("", `⚠️ ${unfinished.length} unfinished campaign(s) left in Meta — /unfinished`);
   const open = await env.DB.prepare("SELECT count(*) AS n FROM task_requests WHERE status = 'open'").first("n");
   if (open) lines.push(`📝 ${open} open task request(s) — /tasks`);
@@ -201,12 +206,13 @@ export async function runScheduled(env, cron, now) {
 // и после него этой кампании не было успеха. За 14 дней.
 export async function unfinishedRuns(env, now = Date.now()) {
   const { results } = await env.DB.prepare(
-    "SELECT r.rowid AS rid, r.* FROM runs r WHERE r.outcome = 'failed' AND r.created_any = 1 AND r.finished_at >= ? "
-    + "AND NOT EXISTS (SELECT 1 FROM runs r2 WHERE r2.account = r.account AND r2.campaign = r.campaign "
+    "SELECT max(r.rowid) AS rid, r.* FROM runs r WHERE r.outcome = 'failed' AND r.created_any = 1 AND r.finished_at >= ? "
+    + "AND NOT EXISTS (SELECT 1 FROM runs r2 WHERE r2.account IS r.account AND r2.campaign = r.campaign "
     + "AND r2.outcome = 'ok' AND r2.finished_at > r.finished_at) "
-    + "AND r.finished_at = (SELECT max(r4.finished_at) FROM runs r4 WHERE r4.account = r.account "
+    + "AND r.finished_at = (SELECT max(r4.finished_at) FROM runs r4 WHERE r4.account IS r.account "
     + "AND r4.campaign = r.campaign AND r4.outcome = 'failed' AND r4.created_any = 1) "
-    + "ORDER BY r.finished_at DESC LIMIT 50",
+    + "AND NOT EXISTS (SELECT 1 FROM bot_state b WHERE b.k = 'cleared:' || r.run_id) "
+    + "GROUP BY r.account, r.campaign ORDER BY r.finished_at DESC LIMIT 50",
   ).bind(iso(now - 14 * 86400000)).all();
   return results;
 }

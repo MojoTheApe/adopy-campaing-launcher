@@ -157,13 +157,16 @@ test("alerts already derived before a D1 error are still sent", async () => {
   assert.equal(texts().length, 1, "the failure committed in the first derive chunk is alerted");
 });
 
-test("telegram 400 is retried as plain text", async () => {
+test("telegram 400 is retried without buttons, then as plain text", async () => {
   const env = makeEnv();
-  tgStatus = [400, 200];
+  tgStatus = [400, 400, 200];
   await post(env, [single(1, 1)]);
-  assert.equal(sent.length, 2);
-  assert.equal(sent[1].body.parse_mode, undefined);
-  assert.ok(!/<b>|<a /.test(sent[1].body.text));
+  assert.equal(sent.length, 3);
+  assert.ok(sent[0].body.reply_markup);
+  assert.equal(sent[1].body.reply_markup, undefined);
+  assert.equal(sent[1].body.parse_mode, "HTML");
+  assert.equal(sent[2].body.parse_mode, undefined);
+  assert.ok(!/<b>|<a /.test(sent[2].body.text));
 });
 
 test("long text is split at line boundaries", () => {

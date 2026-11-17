@@ -168,3 +168,94 @@ test("/hint without text shows usage and hints are escaped", async () => {
   assert.equal(h, "<b>do</b> this");
   await say(env, "/failures");
 });
+
+// ── Ревью этапа 1 ──
+test("rejected buttons do not lose the alert", async () => {
+  const env = makeEnv();
+  let k = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith("https://api.telegram.org/")) {
+      const body = JSON.parse(init.body);
+      calls.push({ method: String(url).split("/").pop(), body });
+      k += 1;
+      return new Response(JSON.stringify({ ok: !body.reply_markup, description: "BUTTON_URL_INVALID" }), { status: body.reply_markup ? 400 : 200 });
+    }
+    return new Response("{}", { status: 200 });
+  };
+  await post(env, [single(1, 2)]);
+  const last = messages().at(-1);
+  assert.equal(last.reply_markup, undefined);
+  assert.match(last.text, /Campaign failed/);
+});
+
+test("NEW stays for a new error repeated inside one job", async () => {
+  const env = makeEnv();
+  const evs = [1, 2, 3].map((i) => ({ ...failed(), event_id: `g:${i}`, job_id: "jg", ts: isoAgo(2),
+    campaign: `C${i}`, payload: { ...failed().payload, campaign_name: `C${i}` } }));
+  await post(env, evs);
+  assert.match(messages()[0].text, /3 campaigns failed<\/b> 🆕 NEW/);
+  assert.equal(buttons(messages()[0]).find((b) => b.callback_data?.startsWith("e:")).text, "Explain first");
+});
+
+test("Explain shows only this campaign's steps and survives bad data", async () => {
+  const env = makeEnv();
+  const other = { ...YOTAM[1], event_id: "o:1", type: "raw.run", ts: isoAgo(30), job_id: "j1",
+    payload: { step: "api_create_step", ok: true, diag: { step: "OTHER CAMPAIGN STEP" } } };
+  const spec = { ...YOTAM.find((e) => e.type === "publish.spec"), event_id: "sp:1", job_id: "j1", ts: isoAgo(10) };
+  const mine = { ...other, event_id: "o:2", ts: isoAgo(5), payload: { step: "api_create_step", ok: false, diag: { step: "MY STEP" } } };
+  await post(env, [other, spec, mine, single(1, 2)]);
+  await env.DB.prepare("UPDATE events SET payload = '{broken' WHERE event_id = 'o:2'").run();
+  const explain = buttons(messages()[0]).find((b) => b.text === "Explain");
+  await press(env, explain.callback_data);
+  const m = messages().at(-1).text;
+  assert.match(m, /Why it failed/);
+  assert.doesNotMatch(m, /OTHER CAMPAIGN STEP/);
+});
+
+test("task requests can be closed with /done and by the API", async () => {
+  const env = makeEnv();
+  await post(env, [single(1, 2)]);
+  await press(env, buttons(messages()[0]).find((b) => b.text === "Create task").callback_data);
+  const id = await env.DB.prepare("SELECT id FROM task_requests").first("id");
+  await say(env, `/done ${id}`);
+  assert.match(messages().at(-1).text, /Closed/);
+  assert.equal(await env.DB.prepare("SELECT status FROM task_requests").first("status"), "done");
+  await press(env, buttons(messages()[0]).find((b) => b.text === "Create task").callback_data);
+  const id2 = await env.DB.prepare("SELECT max(id) AS id FROM task_requests").first("id");
+  const res = await worker.fetch(new Request(`https://hub/api/task-requests/${id2}/done`, { method: "POST",
+    headers: { Authorization: `Bearer ${env.OWNER_KEY}` } }), env);
+  assert.equal(res.status, 200);
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM task_requests WHERE status = 'open'").first("n"), 0);
+});
+
+test("Create task only for failed runs", async () => {
+  const env = makeEnv();
+  const ok = { ...failed(), event_id: "k:1", job_id: "jk", ts: isoAgo(2), payload: { campaign_name: failed().campaign, success: true, created: {}, reused: {} } };
+  await ingestEvents(env, [ok], { batchId: "b" });
+  const rid = await env.DB.prepare("SELECT rowid AS r FROM runs").first("r");
+  await press(env, `t:${rid}`);
+  assert.equal(await env.DB.prepare("SELECT count(*) AS n FROM task_requests").first("n"), 0);
+});
+
+test("Mute button never shortens a longer mute; /hint keeps line breaks", async () => {
+  const env = makeEnv();
+  await post(env, [single(1, 2)]);
+  const fp = /\/mute ([0-9a-f]{12})/.exec(messages()[0].text)[1];
+  await say(env, `/mute ${fp} 720`);
+  await press(env, `m:${fp}`);
+  const until = await env.DB.prepare("SELECT until FROM mutes").first("until");
+  assert.ok(Date.parse(until) > Date.now() + 700 * 3600000);
+  await say(env, `/hint ${fp} line one\nline two`);
+  assert.equal(await env.DB.prepare("SELECT hint FROM failure_hints").first("hint"), "line one\nline two");
+});
+
+test("/cleared removes an unfinished campaign from the list", async () => {
+  const env = makeEnv();
+  const partial = single(1, 60, { payload: { ...failed().payload, created: { campaign: 1 } } });
+  await ingestEvents(env, [partial], { batchId: "b" });
+  await say(env, "/unfinished");
+  const id = /\[(\d+)\]/.exec(messages().at(-1).text)[1];
+  await say(env, `/cleared ${id}`);
+  await say(env, "/unfinished");
+  assert.match(messages().at(-1).text, /No unfinished campaigns/);
+});
