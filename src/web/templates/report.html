@@ -7031,9 +7031,37 @@ window.cbKeep = (function () {
     if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
     var out = Object.assign({}, entry);
     out.campaigns = entry.campaigns.map(function (c, i) {
-      if (!c || typeof c !== 'object' || (typeof c.id === 'string' && c.id)) return c;
-      return Object.assign({}, c, { id: 'legacy-' + key + '-' + i });
+      if (!c || typeof c !== 'object') return c;
+      if (!(typeof c.id === 'string' && c.id)) return Object.assign({}, c, { id: 'legacy-' + key + '-' + i });
+      var m = /^legacy-(\d+)$/.exec(c.id);      // F3: голый legacy-<номер> промежуточной сборки
+      return m ? Object.assign({}, c, { id: 'legacy-' + key + '-' + m[1] }) : c;
     });
+    return out;
+  }
+  /* R13: кампании без id (страница старой версии) берут id у другой копии формы:
+     сначала по равному содержимому, потом по порядку среди оставшихся; каждый id
+     не больше раза. То же правило, что `_adopt_ids` в builder_drafts.py. */
+  function adoptIds(entry, other) {
+    if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
+    if (!other || typeof other !== 'object' || !Array.isArray(other.campaigns)) return entry;
+    var camps = entry.campaigns, idless = [], own = {};
+    camps.forEach(function (c, i) {
+      if (c && typeof c === 'object' && !Array.isArray(c)) { if (cidOf(c)) own[cidOf(c)] = true; else idless.push(i); }
+    });
+    if (!idless.length) return entry;
+    var free = other.campaigns.filter(function (c) { return c && typeof c === 'object' && cidOf(c) && !own[cidOf(c)]; });
+    if (!free.length) return entry;
+    var content = function (c) { var d = Object.assign({}, c); delete d.id; return canon(d); };
+    var given = {};
+    idless.forEach(function (i) {
+      var mine = content(camps[i]);
+      for (var j = 0; j < free.length; j += 1) {
+        if (content(free[j]) === mine) { given[i] = cidOf(free[j]); free.splice(j, 1); break; }
+      }
+    });
+    idless.forEach(function (i) { if (!(i in given) && free.length) given[i] = cidOf(free.shift()); });
+    var out = Object.assign({}, entry);
+    out.campaigns = camps.map(function (c, i) { return i in given ? Object.assign({}, c, { id: given[i] }) : c; });
     return out;
   }
   function touchedOf(entry) { return entry && typeof entry === 'object' && numeric(entry.touched) ? entry.touched : 0; }
@@ -7054,14 +7082,14 @@ window.cbKeep = (function () {
     var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
     var forms = {};
     keys.forEach(function (key) {
-      var a = normEntry(curForms[key], key), b = normEntry(incForms[key], key);
+      var a = normEntry(adoptIds(curForms[key], incForms[key]), key), b = normEntry(adoptIds(incForms[key], curForms[key]), key);
       var inCur = has(curForms, key), inInc = has(incForms, key);
       var newer, older;
       if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
       else { newer = inCur ? a : b; older = null; }
       var rem = function (k) { return has(removed, k) ? removed[k] : -Infinity; };
       if (!newer || typeof newer !== 'object' || Array.isArray(newer)) {
-        if (rem(key) < 0) forms[key] = newer;   // не форма билдера: как есть
+        if (!has(removed, key)) forms[key] = newer;   // не форма билдера: как есть
         return;
       }
       var entry = Object.assign({}, newer);
@@ -7117,7 +7145,8 @@ window.cbKeep = (function () {
         /* Старая запись без id: id по номеру карточки, одинаковый во всех вкладках.
            Случайные id в двух вкладках дали бы одной кампании две личности, и
            слияние на сервере оставило бы обе копии. */
-        writeSlot(slots[slots.length - 1], data.id ? data : Object.assign({}, data, { id: 'legacy-' + key + '-' + i }));
+        var bare = typeof data.id === 'string' ? /^legacy-(\d+)$/.exec(data.id) : null;
+        writeSlot(slots[slots.length - 1], data.id && !bare ? data : Object.assign({}, data, { id: 'legacy-' + key + '-' + (bare ? bare[1] : i) }));
         made += 1;
       });
     });
@@ -9404,7 +9433,7 @@ window.cbTree = (function () {
 
     /* Выбранная кампания получает настоящую форму — ту самую, а не копию, —
        но живёт она в правой колонке. Карточки в дереве нет — отпускаем. */
-    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + openId + '"]') : null;
+    var card = openId ? body.querySelector('.cbd-camp[data-camp="' + CSS.escape(openId) + '"]') : null;
     if (!card && openId) release();
     paintEditor();
 
@@ -10747,7 +10776,7 @@ window.cbTree = (function () {
      трогать надо только подпись строки. */
   function refreshOpenRow() {
     if (!openId) return;
-    var card = body.querySelector('.cbd-camp[data-camp="' + openId + '"]');
+    var card = body.querySelector('.cbd-camp[data-camp="' + CSS.escape(openId) + '"]');
     var found = findCampaign(openId);
     if (!card || !found) return;
     var c = found.camp;
@@ -10894,7 +10923,7 @@ window.cbMove = (function () {
   /* Names may already be stripped (cbRenumber keeps them in data-renumber-name), so match both. */
   function formIdInput(row) { return row.querySelector('input[name$="_form_id"], input[data-renumber-name$="_form_id"]'); }
   function slotById(id) {
-    return id ? document.querySelector('.cb-slot[data-cbd-id="' + id + '"]') : null;
+    return id ? document.querySelector('.cb-slot[data-cbd-id="' + CSS.escape(id) + '"]') : null;
   }
   function formByKey(key) {
     var hit = null;

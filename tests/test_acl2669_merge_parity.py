@@ -32,6 +32,13 @@ def camp(cid=None, **kw):
     return c
 
 
+def named(name, cid=None):
+    c = {"fields": {"name": name}, "shown": {}, "ads": 1}
+    if cid:
+        c["id"] = cid
+    return c
+
+
 def form(touched, *campaigns, tracking="t"):
     return {"touched": touched, "tracking": tracking, "campaigns": list(campaigns)}
 
@@ -97,6 +104,19 @@ CASES = {
         doc({"A": form(5, camp("cy"))}, removed={"A": 10}), doc({})),
     "same position in two forms stays separate": (
         doc({"A": form(5, camp(), camp()), "B": form(5, camp())}), doc({"B": form(9, camp(), camp())})),
+    "idless incoming pairs by content then index": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}), doc({"F": form(20, named("A"), named("B2"))})),
+    "idless incoming with fewer campaigns keeps both": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}), doc({"F": form(20, named("A"))})),
+    "idless stored pairs with incoming ids": (
+        doc({"F": form(20, named("A"), named("B2"))}), doc({"F": form(10, named("A", "c1"), named("B", "c2"))})),
+    "content pairing first, each id once": (
+        doc({"F": form(10, named("A", "c1"), named("B", "c2"))}),
+        doc({"F": form(20, named("B"), named("B"), named("Z"))})),
+    "bare legacy number is rewritten": (
+        doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))})),
+    "non-dict entry with a form tombstone": (
+        doc({"A": "junk"}, removed={"A": 5}), doc({"B": "junk"})),
     "one side has no forms": (
         {"v": 4}, doc({"A": form(1, camp("a1"))})),
 }

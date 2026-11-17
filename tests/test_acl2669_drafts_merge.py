@@ -125,9 +125,9 @@ def test_legacy_campaigns_without_id_are_named_legacy_index_and_merged():
     assert ids(out) == ["legacy-A-0", "legacy-A-1"]  # победитель legacy-A-0, у старой копии добавилась legacy-A-1
     out = bd.merge_keep(cur, doc({"A": form(10, camp(), camp(), camp())}))
     assert ids(out) == ["legacy-A-0", "legacy-A-1", "legacy-A-2"]
-    # legacy у победителя + id у старой копии
+    # id-less у победителя + id у старой копии
     out = bd.merge_keep(doc({"A": form(10, camp("a1"))}), doc({"A": form(30, camp())}))
-    assert ids(out) == ["legacy-A-0", "a1"]
+    assert ids(out) == ["a1"]  # R13: id без id берёт у старой копии по порядку
 
 
 def test_stored_idless_copy_and_incoming_with_legacy_ids_give_no_duplicates():
@@ -185,3 +185,37 @@ def test_jobs_and_ui_keep_replace_semantics():
     assert ok is False and out["data"] == {"j": 2}
     ok, out = bd.save("ui", 5, {"open": True})
     assert ok is True
+
+
+def named(name, cid=None):
+    c = {"fields": {"name": name}}
+    if cid:
+        c["id"] = cid
+    return c
+
+
+def test_idless_incoming_pairs_with_stored_ids_by_content_then_by_index():
+    # R13: страница старой версии шлёт кампании без id — дублей быть не должно
+    stored = doc({"F": form(10, named("A", "c1"), named("B", "c2"))})
+    out = bd.merge_keep(stored, doc({"F": form(20, named("A"), named("B2"))}))
+    camps = out["forms"]["F"]["campaigns"]
+    assert [c["id"] for c in camps] == ["c1", "c2"]
+    assert [c["fields"]["name"] for c in camps] == ["A", "B2"]
+
+
+def test_idless_incoming_with_fewer_campaigns_never_shrinks_the_stored_copy():
+    stored = doc({"F": form(10, named("A", "c1"), named("B", "c2"))})
+    out = bd.merge_keep(stored, doc({"F": form(20, named("A"))}))
+    assert ids(out, "F") == ["c1", "c2"]
+
+
+def test_content_pairing_beats_index_and_each_id_is_used_once():
+    stored = doc({"F": form(10, named("A", "c1"), named("B", "c2"))})
+    out = bd.merge_keep(stored, doc({"F": form(20, named("B"), named("B"), named("Z"))}))
+    assert ids(out, "F")[0] == "c2"
+    assert len(set(ids(out, "F"))) == 3  # c2, c1 по порядку, и legacy для третьей
+
+
+def test_bare_legacy_number_is_rewritten_with_the_form_key():
+    out = bd.merge_keep(doc({}), doc({"F": form(5, camp("legacy-0"), camp("legacy-1"))}))
+    assert ids(out, "F") == ["legacy-F-0", "legacy-F-1"]

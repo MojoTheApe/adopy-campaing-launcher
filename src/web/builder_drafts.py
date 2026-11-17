@@ -17,6 +17,7 @@ Date.now() в браузере). Побеждает более новая; пр�
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -128,16 +129,69 @@ def _is_removed(removed: dict, key: str, campaign, touched: float, strict: bool 
     return ts > touched if strict else ts >= touched
 
 
+def _content(campaign) -> str:
+    """Содержимое кампании без `id` — для сопоставления (R13)."""
+    return json.dumps({k: v for k, v in campaign.items() if k != "id"}, sort_keys=True, ensure_ascii=False)
+
+
+def _adopt_ids(entry, other):
+    """R13: страница старой версии шлёт кампании без `id`. Если у другой копии
+    формы `id` есть, берём их оттуда: сначала по равному содержимому, потом по
+    порядку среди оставшихся; каждый id — не больше одного раза. Не нашлось
+    пары — остаётся без id (дальше получит `legacy-<форма>-<номер>`)."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("campaigns"), list):
+        return entry
+    if not isinstance(other, dict) or not isinstance(other.get("campaigns"), list):
+        return entry
+    camps = entry["campaigns"]
+    idless = [i for i, c in enumerate(camps) if isinstance(c, dict) and not _cid(c)]
+    if not idless:
+        return entry
+    own = {_cid(c) for c in camps if isinstance(c, dict) and _cid(c)}
+    free = [c for c in other["campaigns"] if isinstance(c, dict) and _cid(c) and _cid(c) not in own]
+    if not free:
+        return entry
+    given: dict = {}
+    for i in idless:
+        mine = _content(camps[i])
+        for c in free:
+            if _content(c) == mine:
+                given[i] = _cid(c)
+                free.remove(c)
+                break
+    for i in idless:
+        if i not in given and free:
+            given[i] = _cid(free.pop(0))
+    out = dict(entry)
+    out["campaigns"] = [{**c, "id": given[i]} if i in given else c for i, c in enumerate(camps)]
+    return out
+
+
+_BARE_LEGACY = re.compile(r"^legacy-(\d+)$")
+
+
 def _normalized(entry, key):
-    """Копия записи формы, где у каждой кампании без `id` он равен `legacy-<номер>`
-    (R9: так же называет их клиент при раскладке, см. cbKeep.restore)."""
+    """Копия записи формы, где у каждой кампании без `id` он равен
+    `legacy-<форма>-<номер>` (R9/R10: так же называет их клиент при раскладке,
+    см. cbKeep.restore); голый `legacy-<номер>` промежуточной сборки (F3)
+    переписывается в тот же вид."""
     if not isinstance(entry, dict) or not isinstance(entry.get("campaigns"), list):
         return entry
     out = dict(entry)
-    out["campaigns"] = [
-        c if (not isinstance(c, dict) or _cid(c)) else {**c, "id": f"legacy-{key}-{i}"}
-        for i, c in enumerate(entry["campaigns"])
-    ]
+    camps = []
+    for i, c in enumerate(entry["campaigns"]):
+        if not isinstance(c, dict):
+            camps.append(c)
+            continue
+        cid = _cid(c)
+        m = _BARE_LEGACY.match(cid)
+        if not cid:
+            camps.append({**c, "id": f"legacy-{key}-{i}"})
+        elif m:
+            camps.append({**c, "id": f"legacy-{key}-{m.group(1)}"})
+        else:
+            camps.append(c)
+    out["campaigns"] = camps
     return out
 
 
@@ -154,8 +208,9 @@ def merge_keep(current: dict, incoming: dict) -> dict:
     Остальные поля документа берутся из `incoming`."""
     cur_forms = current.get("forms") if isinstance(current.get("forms"), dict) else {}
     inc_forms = incoming.get("forms") if isinstance(incoming.get("forms"), dict) else {}
-    cur_forms = {k: _normalized(v, k) for k, v in cur_forms.items()}
-    inc_forms = {k: _normalized(v, k) for k, v in inc_forms.items()}
+    adopted_cur = {k: _normalized(_adopt_ids(v, inc_forms.get(k)), k) for k, v in cur_forms.items()}
+    adopted_inc = {k: _normalized(_adopt_ids(v, cur_forms.get(k)), k) for k, v in inc_forms.items()}
+    cur_forms, inc_forms = adopted_cur, adopted_inc
     removed: dict = {}
     for src in (current.get("removed"), incoming.get("removed")):
         if isinstance(src, dict):

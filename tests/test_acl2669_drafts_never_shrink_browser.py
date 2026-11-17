@@ -513,3 +513,19 @@ def test_server_entry_the_client_strips_does_not_make_it_repost_forever(make):
     p.wait_for_timeout(3000)
     assert len([x for x in prof.posts if x["name"] == "keep"]) == n
     assert n <= 3
+
+
+def test_account_label_with_a_quote_does_not_break_tree_selectors(make):
+    # F2: id кампании с `"` идёт в селектор атрибута
+    p = make().open()
+    p.evaluate("""() => {
+      const f = document.querySelectorAll('form.open-account-form')[0];
+      cbAddSlot(f);
+      const s = f.querySelector('.cb-slot');
+      s.dataset.cbdId = 'legacy-peru|Acc"x-0';
+    }""")
+    p.evaluate("cbDrawer.open()")
+    p.wait_for_function("document.querySelectorAll('.cbd-camp').length > 0", polling=100)
+    p.locator(".cbd-camp").first.click()
+    p.wait_for_timeout(300)
+    assert p.evaluate("!!document.querySelector('.cb-slot[data-cbd-id=\"' + CSS.escape('legacy-peru|Acc\"x-0') + '\"]')")
