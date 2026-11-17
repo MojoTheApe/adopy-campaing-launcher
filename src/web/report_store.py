@@ -273,11 +273,11 @@ _SCRIPT = """
 """
 
 
-#: Shown while a publish or a kept profile window is active (ACL-2260).
+#: Shown while the computer is short of memory (ACL-2668; was: publish / kept window, ACL-2260).
 DEFERRED_TEXT = (
-    "Showing the saved version because a profile window is open or a publish is running "
+    "Showing the saved version because the computer is short of memory "
     "(a rebuild now would take memory the profiles need). "
-    "Close the profile window or wait for the publish to finish and the page updates by itself; "
+    "The page updates by itself once memory is free; "
     "or press Refresh to build and show the fresh report now."
 )
 
@@ -297,7 +297,7 @@ def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool 
     """The stored page with a visible state bar; the stored text is untouched.
 
     ``error`` is a failed rebuild: shown in the bar, polling stops.
-    ``deferred``: the rebuild waits for the publish to finish (ACL-2260); polling
+    ``deferred``: the rebuild waits for free memory (ACL-2668); polling
     goes on and the page reloads once the new report is ready.
     """
     state = "outdated" if stored.outdated else "cached"

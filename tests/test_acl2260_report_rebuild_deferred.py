@@ -1,4 +1,8 @@
-"""ACL-2260: the report never starts a rebuild of its own while a publish is active."""
+"""ACL-2260 / ACL-2668 (#24): the report defers a rebuild of its own only while memory is short.
+
+A running publish or a kept profile window no longer defers it: the rebuild reads BI / the
+workbook, not Meta. The scheduled account-read sweep still waits for a publish (not changed here).
+"""
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +12,7 @@ import httpx
 import pytest
 
 from src.analysis_agent import account_refresh, bi_stats
-from src.web import app, cache, publish_jobs, report_store
+from src.web import app, cache, profile_slots, publish_jobs, report_store
 
 OLD, NEW = ("bi", 1, None), ("bi", 2, None)
 
@@ -32,9 +36,32 @@ def warm_cache(monkeypatch):
     return builds
 
 
+TOTAL_MB = 16384
+SETTINGS = profile_slots.SlotSettings(max_used_pct=92.0)
+
+
+def _memory(monkeypatch, available_mb):
+    monkeypatch.setattr(profile_slots, "load_settings", lambda *a: SETTINGS)
+    monkeypatch.setattr(cache, "_read_memory",
+                        lambda: profile_slots.MemoryReading(total_mb=TOTAL_MB, available_mb=available_mb))
+
+
+@pytest.fixture
+def short(monkeypatch):
+    """More than 92 % of memory is in use."""
+    _memory(monkeypatch, 500)
+
+
+@pytest.fixture
+def roomy(monkeypatch):
+    _memory(monkeypatch, 8000)
+
+
 @pytest.fixture
 def busy(monkeypatch):
+    """A publish job runs and a kept window holds a slot."""
     monkeypatch.setattr(publish_jobs, "_jobs", {"j1": {"status": "running", "account_label": "A"}})
+    monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: True)
 
 
 @pytest.fixture
@@ -43,37 +70,57 @@ def idle(monkeypatch):
     monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: False)
 
 
-def test_rebuild_is_deferred_while_a_publish_job_runs(warm_cache, busy):
+def test_rebuild_is_deferred_while_memory_is_short(warm_cache, idle, short):
     report, _df, _w = cache.get_cached_report()
     assert report["marker"] == "old"
     assert warm_cache == []
 
 
-def test_rebuild_is_deferred_while_a_kept_window_holds_a_slot(warm_cache, idle, monkeypatch):
-    monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: True)
-    assert cache.get_cached_report()[0]["marker"] == "old"
-    assert warm_cache == []
-
-
-def test_rebuild_runs_when_idle(warm_cache, idle):
+def test_rebuild_runs_during_a_publish_and_a_kept_window(warm_cache, busy, roomy):
+    assert publish_jobs.publishing_busy() is True
+    assert cache.rebuild_deferred() is False
     assert cache.get_cached_report()[0]["marker"] == "new"
     assert warm_cache == [NEW]
 
 
-def test_refresh_is_never_deferred(warm_cache, busy):
+def test_rebuild_runs_when_idle(warm_cache, idle, roomy):
+    assert cache.get_cached_report()[0]["marker"] == "new"
+    assert warm_cache == [NEW]
+
+
+def test_threshold_is_the_profile_memory_gate(monkeypatch):
+    # The same keep-free amount that holds a new profile back: at it - not short, one MB less - short.
+    keep = profile_slots.keep_free_mb(TOTAL_MB, SETTINGS)
+    _memory(monkeypatch, keep)
+    assert cache.rebuild_deferred() is False
+    _memory(monkeypatch, keep - 1)
+    assert cache.rebuild_deferred() is True
+
+
+def test_unreadable_memory_does_not_defer(monkeypatch):
+    monkeypatch.setattr(cache, "_read_memory", lambda: None)
+    assert cache.rebuild_deferred() is False
+
+    def boom():
+        raise RuntimeError("no psutil")
+
+    monkeypatch.setattr(cache, "_read_memory", boom)
+    assert cache.rebuild_deferred() is False
+
+
+def test_refresh_is_never_deferred(warm_cache, short):
     assert cache.get_cached_report(force_rebuild=True)[0]["marker"] == "new"
 
 
-def test_nothing_in_memory_still_builds(warm_cache, busy, monkeypatch):
+def test_nothing_in_memory_still_builds(warm_cache, short, monkeypatch):
     monkeypatch.setitem(cache._CACHE, "entry", None)
     assert cache.get_cached_report()[0]["marker"] == "new"
 
 
-def test_finished_jobs_do_not_defer(monkeypatch):
+def test_finished_jobs_are_not_busy(monkeypatch):
     monkeypatch.setattr(publish_jobs, "_jobs", {"j": {"status": "done"}, "k": {"status": "failed"}})
     monkeypatch.setattr(publish_jobs._slots, "occupied", lambda: False)
     assert publish_jobs.publishing_busy() is False
-    assert cache.rebuild_deferred() is False
 
 
 def test_slots_occupied_covers_running_waiting_and_kept():
@@ -109,19 +156,19 @@ def cold_page(monkeypatch, warm_cache):
     return started
 
 
-def test_status_does_not_start_a_rebuild_during_a_publish(cold_page, busy):
+def test_status_does_not_start_a_rebuild_while_memory_is_short(cold_page, short):
     body = _get("/report/status").json()
     assert body["deferred"] is True and body["ready"] is False
     assert cold_page == []
 
 
-def test_status_starts_the_rebuild_once_idle(cold_page, idle):
+def test_status_starts_the_rebuild_during_a_publish(cold_page, busy, roomy):
     body = _get("/report/status").json()
     assert body["deferred"] is False
     assert len(cold_page) == 1
 
 
-def test_page_shows_the_saved_report_and_waits_during_a_publish(cold_page, busy, monkeypatch):
+def test_page_shows_the_saved_report_and_waits_while_memory_is_short(cold_page, short, monkeypatch):
     stored = report_store.StoredPage("<html><body><h1>Saved</h1></body></html>", time.time() - 7200, ["source"])
     monkeypatch.setattr(app.report_store, "exists", lambda inputs: True)
     monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
@@ -131,7 +178,7 @@ def test_page_shows_the_saved_report_and_waits_during_a_publish(cold_page, busy,
     assert cold_page == []
 
 
-def test_page_starts_the_rebuild_when_idle(cold_page, idle, monkeypatch):
+def test_page_starts_the_rebuild_during_a_publish(cold_page, busy, roomy, monkeypatch):
     stored = report_store.StoredPage("<html><body><h1>Saved</h1></body></html>", time.time() - 7200, ["source"])
     monkeypatch.setattr(app.report_store, "exists", lambda inputs: True)
     monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
@@ -153,12 +200,12 @@ def test_scheduled_account_reads_wait_for_a_publish(busy, monkeypatch):
 def test_notice_states_saved_version_reason_and_action():
     text = report_store.DEFERRED_TEXT
     assert "saved version" in text
-    assert "profile window" in text and "publish" in text
-    assert "Close the profile window" in text and "wait for the publish" in text
+    assert "short of memory" in text
+    assert "profile window" not in text and "publish" not in text
     assert "Refresh" in text
 
 
-def test_notice_is_hidden_when_not_deferred(cold_page, idle, monkeypatch):
+def test_notice_is_hidden_when_not_deferred(cold_page, busy, roomy, monkeypatch):
     stored = report_store.StoredPage("<html><body><h1>Saved</h1></body></html>", time.time() - 60, [])
     monkeypatch.setattr(app.report_store, "exists", lambda inputs: True)
     monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
@@ -222,7 +269,7 @@ def test_refresh_ignores_malformed_period_and_never_caches_it(monkeypatch, bad):
     assert not app._PERIOD_CACHE
 
 
-def test_refresh_while_busy_makes_the_page_ready_and_serves_fresh(warm_cache, busy, monkeypatch):
+def test_refresh_while_short_makes_the_page_ready_and_serves_fresh(warm_cache, short, monkeypatch):
     """After Refresh the page is ready, so / renders the live page, not the saved one."""
     report, _df, _w = cache.get_cached_report(force_rebuild=True)
     assert report["marker"] == "new"

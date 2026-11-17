@@ -2972,9 +2972,9 @@ async def index(
         # and only when there is something to show.
         stored = await _in_report_pool(_stored_page, inputs) if report_store.exists(inputs) else None
         if failure is None and rebuild_deferred() and (stored is not None or report_has_entry()):
-            # ACL-2260: a publish or a kept profile window is active - no rebuild
-            # of its own. Show the saved page (or the older report in memory)
-            # and let the page ask again; it rebuilds once things are idle.
+            # ACL-2668: memory is short (the 92 % gate) - no rebuild of its own.
+            # Show the saved page (or the older report in memory) and let the
+            # page ask again; it rebuilds once memory is back.
             if stored is not None:
                 return HTMLResponse(report_store.decorate(stored, deferred=True))
         elif failure is None:
