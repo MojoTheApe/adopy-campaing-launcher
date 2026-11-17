@@ -2733,9 +2733,19 @@ class InPageGraph:
         """ACL-2746: close the lost clean upload tab and open a new one (same checks as `probe_worker`). None when
         none can be opened - the caller then uploads from this tab."""
         self.close_upload_context()
-        up, reason = self._open_upload_context()
+        try:
+            up, reason = self._open_upload_context()
+        except GraphStop as exc:
+            if type(exc) is not PageFailed:
+                raise
+            up, reason = None, "PageFailed"
         if up is not None:
-            ok, why, _ = up._probe_here()
+            try:
+                ok, why, _ = up._probe_here()
+            except GraphStop as exc:
+                if type(exc) is not PageFailed:
+                    raise
+                ok, why = False, "PageFailed"
             if not ok:
                 self.close_upload_context()
                 up, reason = None, why
