@@ -1270,44 +1270,43 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
-_targets_refresh_lock = threading.Lock()
-_targets_refreshing = False
+def _sync_team_library_in_background(*kinds: str) -> None:
+    """Обновить копии общей библиотеки в своих потоках — событие, не таймер.
 
-
-def _refresh_sheet_targets_in_background() -> None:
-    """Обновить копию библиотеки таргетингов в своём потоке, один раз за раз.
-
-    ACL-1380: раньше страница сама ходила в api.github.com (`pull(force=True)`,
-    таймаут 15 с) на каждом открытии и на каждом `/api/ref-data`. Теперь
-    отрисовка читает копию на машине, а обновление идёт рядом: свежие цели
-    коллег видны со следующего открытия. Без force — `pull` сам не ходит в сеть
-    чаще раза в PULL_EVERY_SECONDS; второй поток, пока первый ещё ждёт ответа,
-    не запускается.
+    ACL-1380: отрисовка читает копию на машине, обновление идёт рядом: свежие
+    правки коллег видны со следующего показа. ACL-2668 (решение владельца
+    17.11): обновление только по событиям — загрузка страницы и её Refresh,
+    открытие выбора в билдере; 15-секундного порога больше нет, каждое событие
+    идёт в GitHub. Пока прошлое обновление вида ещё ждёт ответа, второе не
+    запускается.
     """
-    global _targets_refreshing
-    with _targets_refresh_lock:
-        if _targets_refreshing:
-            return
-        _targets_refreshing = True
+    from src.analysis_agent import team_library as tl
 
-    def run() -> None:
-        global _targets_refreshing
+    def wrapper(kind: str):
+        def run() -> None:
+            # Импорт реестра подписывает его копию на свежие данные (on_update).
+            if kind == "targets":
+                from src.analysis_agent import targeting_registry as reg
+            elif kind == "ad_texts":
+                from src.analysis_agent import ad_text_registry as reg
+            else:
+                from src.fb_api import form_templates as reg
+            reg.pull(force=True)
+        return run
+
+    for kind in kinds or ("targets", "ad_texts", "form_templates"):
         try:
-            from src.analysis_agent import targeting_registry as tr
-            tr.pull()
+            tl.pull_in_background(kind, wrapper(kind))
         except Exception:
             pass
-        finally:
-            with _targets_refresh_lock:
-                _targets_refreshing = False
-
-    threading.Thread(target=run, daemon=True, name="acl-targets-refresh").start()
 
 
 def _load_sheet_targets() -> list[dict]:
     """The team targeting library from the machine's read copy (no network)."""
     from src.analysis_agent import targeting_registry as tr
-    _refresh_sheet_targets_in_background()
+    # Страница (и её Refresh) и /api/ref-data строят билдер: всё, что в нём
+    # выбирается из библиотеки, обновляется рядом, не задерживая ответ.
+    _sync_team_library_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -6586,9 +6585,13 @@ def api_form_templates_list(force: bool = False) -> JSONResponse:
     `templates` - годные к публикации (выбор в билдере); `rows` - все записи для
     вкладки Forms, в том числе invalid; `deleted`, `library`, `migration` - для неё же.
     `force` перечитывает библиотеку: вкладка открывается с ним, билдер - без.
+    ACL-2668: билдер отвечает по копии сразу, а открытие выбора — событие:
+    библиотека обновляется рядом, к следующему показу.
     """
     from src.fb_api import form_templates
 
+    if not force:
+        _sync_team_library_in_background("form_templates")
     try:
         view = form_templates.listing(force=force)
     except form_templates.TemplateError as exc:

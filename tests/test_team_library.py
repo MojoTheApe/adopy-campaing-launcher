@@ -32,7 +32,6 @@ def team(tmp_path, monkeypatch):
         d.mkdir(exist_ok=True)
         (d / "selected_cm.txt").write_text(machine, encoding="utf-8")
         monkeypatch.setenv("ACL_CONFIG_DIR", str(d))
-        tl._pulled.clear()
 
     yield backend, on
     tl.use_backend(None)
@@ -48,18 +47,28 @@ def test_a_target_added_on_one_machine_reaches_the_other(team):
     tr.add("Invest", "Finance, Trading")
     on("Boris")
     assert names() == []
-    tr.pull()
+    tr.pull(force=True)
     assert names() == ["Invest"]
     assert tr.lookup("Invest").added_by == "Anna"
     assert backend.commits == ["Add target Invest — Anna"]
 
 
-def test_publishing_refreshes_the_copy_before_resolving(team):
+def test_resolving_reads_the_copy_and_the_publish_start_refreshes_it(team, monkeypatch):
+    """ACL-2668: разрешение цели на каждое объявление в сеть не ходит; копию
+    обновляет событие — запуск публикации (`enrich_draft` тянет с force)."""
     _, on = team
     on("Anna")
     tr.add("Invest", "Finance", "Owners")
     on("Boris")
+    hits = []
+    real_fetch = tl.fetch
+    monkeypatch.setattr(tl, "fetch", lambda kind: hits.append(kind) or real_fetch(kind))
+    with pytest.raises(tr.TargetingError, match="not available in the team library copy"):
+        tr.resolve_interests("invest")
+    assert hits == []
+    tr.pull(force=True)
     assert tr.resolve_interests("invest") == "Finance [AND] Owners"
+    assert hits == ["targets"]
 
 
 def test_a_deletion_reaches_everyone_and_says_who_and_when(team):
@@ -67,10 +76,10 @@ def test_a_deletion_reaches_everyone_and_says_who_and_when(team):
     on("Anna")
     tr.add("Invest", "Finance")
     on("Boris")
-    tr.pull()
+    tr.pull(force=True)
     tr.remove("Invest")
     on("Anna")
-    tr.pull()
+    tr.pull(force=True)
     assert names() == []
     [gone] = tr.recently_deleted()
     assert gone["name"] == "Invest" and gone["deleted_by"] == "Boris" and gone["deleted_at"]
@@ -87,7 +96,7 @@ def test_a_restore_reaches_everyone(team):
     on("Boris")
     tr.restore("Invest")
     on("Anna")
-    tr.pull()
+    tr.pull(force=True)
     assert names() == ["Invest"] and tr.recently_deleted() == []
     assert tr.lookup("Invest").updated_by == "Boris"
 
@@ -108,7 +117,7 @@ def test_an_edit_reaches_everyone_and_a_rename_is_named_at_publish(team):
     on("Boris")
     tr.update("Invest", "Invest Pro", "Finance, Stocks")
     on("Anna")
-    tr.pull()
+    tr.pull(force=True)
     assert names() == ["Invest Pro"] and tr.recently_deleted() == []
     with pytest.raises(tr.TargetingError, match="renamed to “Invest Pro”"):
         tr.resolve_interests("Invest")
@@ -118,7 +127,7 @@ def test_the_duplicate_check_sees_what_others_added_since_the_last_refresh(team)
     """Копия у Бориса старая, но проверка идёт по свежей версии библиотеки."""
     _, on = team
     on("Boris")
-    tr.pull()
+    tr.pull(force=True)
     on("Anna")
     tr.add("Invest", "Finance, Trading")
     on("Boris")
@@ -133,7 +142,7 @@ def test_editing_something_removed_elsewhere_is_refused_by_name(team):
     on("Anna")
     tr.add("Invest", "Finance")
     on("Boris")
-    tr.pull()
+    tr.pull(force=True)
     on("Anna")
     tr.remove("Invest")
     on("Boris")
@@ -204,7 +213,6 @@ def test_without_github_nothing_is_saved_and_the_copy_still_publishes(tmp_path, 
     try:
         tr.add("Invest", "Finance")
         backend.down = True
-        tl._pulled.clear()
         with pytest.raises(tr.TargetingError, match="unreachable.*Nothing was saved"):
             tr.add("Crypto", "Bitcoin")
         with pytest.raises(tr.TargetingError, match="Nothing was saved"):
@@ -222,10 +230,10 @@ def test_ad_texts_travel_the_same_way(team):
     on("Anna")
     ar.add("ES how much", "¿Cómo funciona?", "Cuánto dinero\n\ntienes hoy", language="es")
     on("Boris")
-    assert [t.body for t in ar.builder_texts()] == ["Cuánto dinero\n\ntienes hoy"]
+    assert [t.body for t in ar.builder_texts(force=True)] == ["Cuánto dinero\n\ntienes hoy"]
     ar.remove("ES how much")
     on("Anna")
-    ar.pull()
+    ar.pull(force=True)
     assert names("ad_texts") == [] and ar.recently_deleted()[0]["deleted_by"] == "Boris"
     ar.restore("ES how much")
     assert json.loads(backend.files["ad_texts.json"][0])["texts"]["ES how much"]["language"] == "ES"
@@ -268,7 +276,7 @@ def test_seeding_uploads_this_machines_library_once(team):
     n, skipped = seed.seed("targets", add_missing=False, dry_run=False)
     assert n == 0 and "already has 1" in skipped[0]
     on("Anna")
-    tr.pull()
+    tr.pull(force=True)
     assert names() == ["Invest"]
 
 
@@ -500,7 +508,6 @@ def test_cache_age_survives_restart_during_an_outage(team, monkeypatch, kind):
     registry = tr if kind == "targets" else ar
     registry.pull(force=True)
     stamp = tl.status(kind)["synced_at"]
-    tl._pulled.clear()
     tl._status.clear()
     def unavailable(_):
         raise tl.LibraryError("offline")
@@ -581,11 +588,11 @@ def test_api_save_reports_its_actual_scope(team):
     assert target["scope"] == text["scope"] == "local"
 
 
-def test_offline_publish_retries_are_throttled_across_ads(team, monkeypatch):
+def test_publish_reads_per_ad_never_go_to_the_network(team, monkeypatch):
+    """ACL-2668: между событиями — ни одного похода в GitHub, даже без связи."""
     backend, on = team
     on('Anna')
     tr.add('Keep', 'Finance')
-    tl._pulled.clear()
     calls = []
     def offline(path):
         calls.append(path)
@@ -593,5 +600,7 @@ def test_offline_publish_retries_are_throttled_across_ads(team, monkeypatch):
     monkeypatch.setattr(backend, 'get', offline)
     for _ in range(3):
         assert tr.resolve_interests('Keep') == 'Finance'
+    assert calls == []
+    tr.pull(force=True)
     assert calls == ['targets.json']
     assert not tl.status('targets')['ok']
