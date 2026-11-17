@@ -110,7 +110,9 @@ def test_partly_different_maps_join_once_and_both_get_their_whole_list(dashboard
     select("two")
     assert second.page_open(now=NOW, port=9095)["sweep"] == "joined"
     assert second._drain_once() == 1
-    assert [account for _, account in reads] == ["A", "B", "C"]
+    # ACL-2668: A and B are read together in the first drain (order free); C comes in the second.
+    order = [account for _, account in reads]
+    assert sorted(order[:2]) == ["A", "B"] and order[2:] == ["C"], order
     assert all(ci.get_snapshot(account) is not None for account in ("B", "C"))
     assert second.state()["sweep"] == {"window": "2026-10-24/08:00", "done": 2, "total": 2}
 

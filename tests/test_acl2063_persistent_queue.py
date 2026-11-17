@@ -294,7 +294,7 @@ with profile_lease.profile_lock(profile), ars.target_activity(profile), MachineS
  while not (root/('start-'+other)).exists():
   assert time.monotonic()<deadline,'the other account read never started while this one ran'
   time.sleep(.02)
- with (root/'events.jsonl').open('a') as f:f.write(json.dumps(['overlap',label])+'\n')
+ (root/('overlap-'+label)).write_text('1')  # own file: concurrent appends to one file may lose a line
 '''
 
 
@@ -309,5 +309,4 @@ def test_reads_of_two_accounts_in_two_processes_run_at_the_same_time(tmp_path):
     finally:
         for proc in procs:
             if proc.poll() is None:proc.kill();proc.wait()
-    events=[json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
-    assert sorted(events)==[['overlap','A'],['overlap','B']]
+    assert sorted(p.name for p in tmp_path.glob('overlap-*'))==['overlap-A','overlap-B']
