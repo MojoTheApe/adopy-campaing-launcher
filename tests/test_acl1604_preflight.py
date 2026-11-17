@@ -112,9 +112,13 @@ def test_open_profile_only_notes():
     assert v.ready and [n.code for n in v.notes] == [pf.OPEN_NOW]
 
 
-def test_status_disabled_restricted_block_review_only_notes():
+def test_status_disabled_blocks_restricted_and_review_only_notes():
     assert codes(verdict(status={"status": "disabled", "at": iso(1)})) == [pf.DISABLED]
-    assert codes(verdict(status={"status": "restricted", "at": iso(1)})) == [pf.RESTRICTED]
+    # ACL-2668 №19: restricted (неоплата и т.п.) идёт в очередь заметкой — Meta откажет сама.
+    v = verdict(status={"status": "restricted", "at": iso(1),
+                        "status_text": "Ad account is restricted: payment is unsettled (Meta API: UNSETTLED)"})
+    assert v.ready and note_codes(v) == [pf.RESTRICTED]
+    assert v.notes[0].hint.startswith("will try")
     v = verdict(status={"status": "review", "at": iso(1)})
     assert v.ready and [n.code for n in v.notes] == [pf.REVIEW]
 
@@ -231,6 +235,30 @@ def test_old_or_stale_disabled_status_is_a_note_with_the_date():
     assert v.ready and note_codes(v) == [pf.RESTRICTED]
     # свежий — по-прежнему блок
     assert codes(verdict(status={"status": "disabled", "at": iso(2)})) == [pf.DISABLED]
+
+
+def test_disabled_block_shows_metas_reason_on_the_row():
+    # ACL-2668 №19: закрытый кабинет пропускается, а на строке — слова Meta.
+    text = "Ad account is disabled: closed (Meta API: CLOSED, reason PERMANENT_CLOSE)"
+    v = verdict(status={"status": "disabled", "at": iso(1), "status_text": text})
+    assert not v.ready and codes(v) == [pf.DISABLED]
+    assert v.blocking[0].message == "the ad account is disabled by Meta: " + text
+    assert "skipped" in v.blocking[0].hint
+    s = pf.summary([v])
+    assert s["not_ready"] == [v.account] and text in s["text"]
+
+
+def test_meta_account_status_codes_map_to_block_or_note():
+    """account_status Meta → слово статуса → решение проверки (ACL-2668 №19)."""
+    from src.analysis_agent.account_spend_api import map_status
+
+    blocked, noted = [], []
+    for code in (1, 2, 3, 7, 8, 9, 100, 101, 202):
+        kind, text = map_status(code)
+        v = verdict(status={"status": kind, "status_text": text, "at": iso(1)})
+        (noted if v.ready else blocked).append(code)
+    assert blocked == [2, 100, 101, 202]
+    assert noted == [1, 3, 7, 8, 9]
 
 
 def test_open_profile_lookup_is_capped_and_parallel(monkeypatch):
