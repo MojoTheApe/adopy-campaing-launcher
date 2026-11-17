@@ -243,7 +243,7 @@ def test_halt_without_cooldown_does_not_lift_by_time(env):
 
 def test_classify_variants():
     assert ar.classify(ci.Snapshot(account="A", state="ok")) == "ok"
-    assert ar.classify(_failed("A", "x", "call_budget")) == "global"
+    assert ar.classify(_failed("A", "x", "call_budget")) == "account"   # ACL-2668: never a machine halt
     assert ar.classify(_failed("A", "The A profile is on a Facebook checkpoint")) == "global"
     assert ar.classify(_failed("A", "Meta rate limit reached; the read was stopped.")) == "global"
     assert ar.classify(_failed("A", "x", "mlx_session_lost")) == "global"
@@ -325,12 +325,13 @@ def test_timed_stops_use_cooldown_table(env, kind, wait):
     assert q.state()["halt"]["until"] == NOW + wait
 
 
-def test_call_budget_stop_is_untimed(env):
+def test_call_budget_stop_is_not_a_machine_halt(env):
+    """ACL-2668 (решение 8): у чтений нет своего потолка; остаток `call_budget` - не общая пауза."""
     env.failures["A"] = _stop_partial("A", "call_budget")
     q = _queue(env)
     q.request("A", "attention")
     q._drain_once()
-    assert q.state()["halt"]["until"] is None
+    assert q.state()["halt"] is None
 
 
 def test_account_level_stop_kinds_do_not_halt():

@@ -225,7 +225,6 @@ _SAFE_FAILURES = {
     "mlx_session_lost": "Multilogin lost its session. Reopen Multilogin, then press Retry.",
     "mlx_token_expired": "The Multilogin token has expired. Update it in Multilogin, then press Retry.",
     "mlx_token_workspace": "The Multilogin token belongs to another workspace. Fix it, then press Retry.",
-    "call_budget": "The call budget for account reads is used up. Raise the limit, then press Retry.",
     "checkpoint": "This profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.",
     "rate_limited": "Meta asked to slow down. Wait for the account-read cooldown before retrying.",
     "policy_block": "Meta refused the account-list requests. Wait for the cooldown before retrying.",

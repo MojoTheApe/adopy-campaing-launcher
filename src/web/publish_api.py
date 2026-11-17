@@ -48,18 +48,9 @@ from src.fb_api.graph import AuthRequired, CallBudget, GraphClient, GraphError, 
 log = logging.getLogger(__name__)
 
 BACKEND_ENV = "ACL_FB_BACKEND"
-CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
-#: Потолок вызовов Graph на одну кампанию (ACL-1768): сам бюджет считается по плану
-#: (`creator.estimate_create_calls`: основа + за набор + за объявление + опросы видео +
-#: чтения форм Instant Form) и зажимается этим потолком. Он же верхняя граница для
-#: `ACL_FB_API_CREATE_MAX_CALLS`. Кампания, которой нужно больше, отклоняется заранее
-#: ("split it"), а не останавливается на полпути. Свой потолок кончает только эту
-#: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 250
-#: Бюджет вызовов на кампанию не опускается ниже прежнего фиксированного (ревью 833, раунд 2).
-CREATE_BUDGET_FLOOR = 150
-CREATE_CALLS_FLOOR = 20
+#: Своего потолка вызовов Graph на кампанию нет (решение владельца 16.11, ACL-2668: «надо безлимитно»):
+#: ни отказа заранее («split it»), ни остановки на полпути. Лимиты Meta - состояние аккаунта (охлаждение).
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -81,42 +72,6 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
     except ValueError:
         value = default
     return max(lo, min(hi, value))
-
-
-def create_call_budget(plan: Any) -> tuple[int, str]:
-    """(бюджет вызовов на кампанию, отказ). Бюджет - по плану, не больше потолка из окружения.
-
-    Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
-    остановка на полпути.
-    """
-    from src.fb_api.creator import estimate_create_calls, estimate_targeting_reads, estimate_upload_calls
-
-    # Записи кампании - не больше DEFAULT_CREATE_MAX_CALLS; сверх них бюджет несёт запас на чтения
-    # таргетинга (ACL-1771), которые идут из того же счётчика вызовов.
-    hard_max = DEFAULT_CREATE_MAX_CALLS + _tr_cap.JOB_READ_ABS_CAP
-    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, hard_max, CREATE_CALLS_FLOOR, hard_max))
-    need = estimate_create_calls(plan)
-    if need > DEFAULT_CREATE_MAX_CALLS:
-        return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
-                         "— split it. Nothing was created.")
-    # Не ниже прежних 150: малые планы не теряют запас на медленное видео. Нижний потолок в окружении -
-    # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
-    # ACL-1768 x ACL-1771: чтения таргетинга по всем наборам идут из того же бюджета. Запас сверх записей
-    # зажат тем же потолком; если после чтений записей не хватает, `_prepare` откажет до первой записи.
-    reads = estimate_targeting_reads(plan)
-    # ACL-2370: куски больших видео (>200 МБ) идут из того же счётчика вызовов; без них бюджет малого
-    # плана был полом 150, и видео 1,3 ГБ (158 вызовов) отказывалось. Без больших видео chunks = 0 и
-    # результат прежний. Пол 150 и потолок не меняются: растёт только сумма реальной ограниченной работы.
-    # ACL-2639: the fast upload is off by default: large videos are budgeted chunked at Meta's real windows, and the ones
-    # that would not fit the run are budgeted at the size of their compressed copy (`plan_upload_sizes`).
-    chunks = estimate_upload_calls(plan, spare=ceiling - need - reads)
-    if chunks and need + reads + chunks > ceiling:
-        total = need + reads + chunks
-        return ceiling, (f"This campaign needs about {total} Meta calls ({chunks} to upload large videos in "
-                         f"chunks, {need + reads} for the rest), more than ACL allows in one run ({ceiling}). "
-                         "This is ACL's own per-run limit, not Meta's. Let ACL compress the video "
-                         "(needs ffmpeg), use a shorter video, or split the campaign. Nothing was created.")
-    return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def journal_enabled() -> bool:
@@ -768,9 +723,6 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
-        budget, too_big = create_call_budget(plan)
-        if too_big:
-            return result_dict(Outcome(campaign_name=name), error=too_big)
         early_notes: list[str] = []
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
@@ -805,7 +757,7 @@ class ApiPublisher:
         journal = None
         if not self.dry_run and journal_enabled():
             journal = _oj.OperationJournal()      # a resume check adds its own reads to the budget (creator)
-        self._client.reset_budget(budget)
+        self._client.reset_budget(None)          # ACL-2668: без потолка; сбрасывает счётчик и свой стоп
 
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
         counter = None if self.dry_run else self._counter(plan)

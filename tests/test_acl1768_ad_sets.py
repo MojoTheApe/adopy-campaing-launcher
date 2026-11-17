@@ -560,44 +560,29 @@ def _publisher_for(meta, **kw):
     return _publisher(meta, **kw)
 
 
-def test_ten_ad_sets_of_three_image_ads_fit_in_one_run_and_the_budget_scales(tmp_path):
-    from src.web import publish_api
-
+def test_ten_ad_sets_of_three_image_ads_fit_in_one_run_without_a_call_budget(tmp_path):
     draft = _draft(tmp_path, sets=10, ads=3)
-    plan = cr.plan_from_draft(draft)
-    budget, refusal = publish_api.create_call_budget(plan)
-    assert refusal == "" and 184 < budget <= publish_api.DEFAULT_CREATE_MAX_CALLS + 90
-    small, _ = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=2, ads=3)))
-    assert small < budget                                    # растёт с планом, а не одно число
     meta = FakeMeta()
     pub = _publisher_for(meta)
     res = pub.publish_draft(draft)
     assert res["success"] is True, res["error"]
-    assert pub._client.calls <= budget
+    assert pub._client.max_calls is None                     # ACL-2668: своего потолка на кампанию нет
     assert len([o for o in meta.objects.values() if o["_kind"] == "adset"]) == 10
     assert len([o for o in meta.objects.values() if o["_kind"] == "ad"]) == 30
 
 
-def test_a_campaign_too_big_for_one_run_is_refused_up_front_in_check_plan_and_in_a_run(tmp_path):
-    draft = _draft(tmp_path, sets=10, ads=3)
-    for s in draft.ad_sets:                                  # те же 30 объявлений, но видео
-        for ad in s.ads:
-            ad.creative_path = str(Path(ad.creative_path).with_suffix(".mp4"))
+def test_a_big_campaign_is_never_refused_for_its_call_count_in_check_plan_or_in_a_run(tmp_path):
+    """ACL-2668 (решение 8): 10 x 4 объявления - записей больше старого потолка 250, раньше «split it»."""
+    draft = _draft(tmp_path, sets=10, ads=4)
+    assert cr.estimate_create_calls(cr.plan_from_draft(draft)) > 250
     for dry in (True, False):
         meta = FakeMeta()
         pub = _publisher_for(meta, dry_run=dry)
         res = pub.publish_draft(draft)
-        assert res["success"] is False
-        assert "This campaign needs about" in res["error"] and "more than one run allows — split it" in res["error"]
-        assert meta.posts == []
-
-
-def test_the_env_ceiling_still_clamps_the_budget(tmp_path, monkeypatch):
-    from src.web import publish_api
-
-    monkeypatch.setenv("ACL_FB_API_CREATE_MAX_CALLS", "60")
-    budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=10, ads=3)))
-    assert (budget, refusal) == (60, "")
+        assert "split it" not in (res["error"] or "") and "call budget" not in (res["error"] or "")
+        assert res["success"] is True, res["error"]
+        if not dry:
+            assert len([o for o in meta.objects.values() if o["_kind"] == "ad"]) == 40
 
 
 # ───────────────────── ревью 833: две карточки с одним именем ─────────────────────
@@ -677,38 +662,19 @@ def _video_draft(tmp_path, *, sets, ads=3):
 
 @pytest.mark.parametrize("sets", [1, 3, 5])
 def test_slow_video_processing_never_exhausts_the_call_budget(tmp_path, sets):
-    from src.web import publish_api
-
     draft = _video_draft(tmp_path, sets=sets)
-    budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(draft))
-    assert refusal == ""
     meta = FakeMeta(video_states=("processing",) * 7 + ("ready",))      # 8 опросов на каждое видео
     pub = _publisher_for(meta)
     res = pub.publish_draft(draft)
     assert res["success"] is True, res["error"]
-    assert pub._client.calls < budget
 
 
-def test_the_call_budget_is_never_below_the_old_fixed_150_for_small_plans(tmp_path):
-    from src.web import publish_api
-
-    for sets, ads in ((2, 1), (2, 3), (3, 3)):
-        budget, refusal = publish_api.create_call_budget(cr.plan_from_draft(_draft(tmp_path, sets=sets, ads=ads)))
-        assert refusal == "" and budget == 150
-    one = _draft(tmp_path, sets=2, ads=1)
-    one.ad_sets = one.ad_sets[:1]
-    assert publish_api.create_call_budget(cr.plan_from_draft(one)) == (150, "")
-
-
-def test_an_upper_limit_video_plan_is_refused_up_front_not_stopped_midway(tmp_path):
-    from src.web import publish_api
-
-    assert publish_api.create_call_budget(cr.plan_from_draft(_video_draft(tmp_path, sets=5)))[1] == ""
-    draft = _video_draft(tmp_path, sets=6)                    # 6 x 3 видео: больше 250 при 8 опросах на видео
-    assert "split it" in publish_api.create_call_budget(cr.plan_from_draft(draft))[1]
+def test_a_video_plan_over_the_old_250_cap_publishes(tmp_path):
+    """ACL-2668 (решение 8): 6 x 3 видео раньше отказывалось заранее («split it»), теперь публикуется."""
+    draft = _video_draft(tmp_path, sets=6)
     meta = FakeMeta()
     res = _publisher_for(meta).publish_draft(draft)
-    assert res["success"] is False and "split it" in res["error"] and meta.posts == []
+    assert res["success"] is True, res["error"]
 
 
 # ───────────────────── ревью 833, раунд 3: чтения таргетинга в бюджете кампании ─────────────────────
@@ -749,9 +715,6 @@ def test_inexact_targeting_of_many_sets_fits_the_budget_and_nothing_stops_after_
     draft = _draft(tmp_path, sets=10, ads=3)
     for i, s in enumerate(draft.ad_sets):
         s.targeting_label = ", ".join(f"Topic{i}x{j}" for j in range(3))
-    plan = cr.plan_from_draft(draft)
-    budget, refusal = publish_api.create_call_budget(plan)
-    assert refusal == "" and budget >= cr.estimate_create_calls(plan) + cr.estimate_targeting_reads(plan) - 1
     meta = SlowMeta()
     pub = _publisher_for(meta)
     res = pub.publish_draft(draft)
@@ -761,7 +724,7 @@ def test_inexact_targeting_of_many_sets_fits_the_budget_and_nothing_stops_after_
     if not res["success"]:
         assert meta.posts == [], res["error"]
     else:
-        assert pub._client.calls <= budget
+        assert pub._client.max_calls is None                     # ACL-2668: без потолка
 
 
 def test_every_ad_sets_unresolved_targeting_is_reported_in_one_go(tmp_path, monkeypatch):

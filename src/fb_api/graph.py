@@ -5,7 +5,8 @@
 
 Политика (решение владельца, ACL-1756):
 - ни опроса, ни таймеров — вызов только по явному запросу; между вызовами
-  пауза не меньше `min_interval_s`, всего не больше `max_calls`;
+  пауза не меньше `min_interval_s`; `max_calls` — потолок только там, где его
+  задали явно (`None` — без потолка: чтения аккаунтов и публикация, ACL-2668);
 - 190 (и 102) — токен умер: ОДИН раз переснять во вкладке и повторить; снова
   190 — стоп «logged out / checkpoint»; 190 с подкодом checkpoint (459, 464) —
   стоп сразу, без перезагрузки;
@@ -359,13 +360,13 @@ def usage_from_headers(headers: dict | None) -> dict:
 class GraphClient:
     """Чтения Graph API для пилота. Одна вкладка — один клиент."""
 
-    def __init__(self, transport: Any, *, min_interval_s: float = 2.0, max_calls: int = 40,
+    def __init__(self, transport: Any, *, min_interval_s: float = 2.0, max_calls: int | None = 40,
                  reacquire_timeout_s: float = 60.0, allow_writes: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
         self.transport = transport
         self.min_interval_s = float(min_interval_s)
-        self.max_calls = int(max_calls)
+        self.max_calls = None if max_calls is None else int(max_calls)
         self.reacquire_timeout_s = reacquire_timeout_s
         self._sleep = sleep
         self._clock = clock
@@ -387,14 +388,14 @@ class GraphClient:
         #: ACL-2301: сколько сетевых повторов чтения было за сессию (потолок-предохранитель).
         self.network_retries = 0
 
-    def reset_budget(self, max_calls: int) -> None:
-        """Новый потолок вызовов (на одну кампанию).
+    def reset_budget(self, max_calls: int | None) -> None:
+        """Новый потолок вызовов (на одну кампанию); `None` — без потолка (ACL-2668).
 
         Снимается только стоп по СВОЕМУ потолку (`CallBudget`, Meta молчала):
         он не должен кончать следующие кампании задания (ревью, minor 5).
         Стопы Meta (190/368/лимит/checkpoint) остаются.
         """
-        self.max_calls = int(max_calls)
+        self.max_calls = None if max_calls is None else int(max_calls)
         self.calls = 0
         if type(self.stopped) is CallBudget:
             self.stopped = None
@@ -410,6 +411,10 @@ class GraphClient:
         return False
 
     # -- служебное
+    def _budget_spent(self) -> bool:
+        """Свой потолок исчерпан. Без потолка (`max_calls is None`) — никогда (ACL-2668)."""
+        return self.max_calls is not None and self.calls >= self.max_calls
+
     def _stop(self, exc: GraphStop) -> GraphStop:
         self.stopped = exc
         return exc
@@ -427,7 +432,7 @@ class GraphClient:
     def optional_write_ok(self) -> bool:
         """ACL-2639: an optional write may be made now: no stop, no unreconciled write, a call left in the budget."""
         return (self.stopped is None and self.unreconciled is None and self.allow_writes
-                and self.calls < self.max_calls)
+                and not self._budget_spent())
 
     def resume_after_unsent(self, exc: GraphStop) -> bool:
         """ACL-2000: снять стоп, поставленный отказом ДО отправки (`no_file`: файл не лёг в страницу).
@@ -497,7 +502,7 @@ class GraphClient:
     def get(self, path: str, params: dict | None = None, *, _net_attempt: int = 0) -> dict:
         if self.stopped is not None:
             raise self.stopped
-        if self.calls >= self.max_calls:
+        if self._budget_spent():
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()
         self.calls += 1
@@ -586,7 +591,7 @@ class GraphClient:
             raise self.stopped
         if self.unreconciled is not None:
             raise WritesBlocked(self.unreconciled)
-        if self.calls >= self.max_calls:
+        if self._budget_spent():
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()
         self.calls += 1
@@ -652,7 +657,7 @@ class GraphClient:
             raise self.stopped
         if self.unreconciled is not None:
             raise WritesBlocked(self.unreconciled)
-        if self.calls >= self.max_calls:
+        if self._budget_spent():
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()
         self.calls += 1
@@ -884,7 +889,7 @@ class GraphClient:
         if self.stopped is not None:
             raise self.stopped
         self._leave_light_tab()          # ACL-2593: before anything is counted or sent
-        if self.calls >= self.max_calls:
+        if self._budget_spent():
             raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
         self._pace()
         self.calls += 1

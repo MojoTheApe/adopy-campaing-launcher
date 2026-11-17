@@ -1,10 +1,12 @@
-"""ACL-2244: `_prepare` checks the remaining call budget once more, right before the first write."""
+"""ACL-2244: `_prepare` checks the remaining call budget once more, right before the first write.
+
+ACL-2668 (decision 8): the buyer's publish run has no call budget (`max_calls=None`), so the check only
+applies to a client with an explicit cap."""
 from __future__ import annotations
 
 from src.fb_api import creator as cr
 from tests.test_acl1761_api_create import FakeMeta
 from src.fb_api import graph as g
-from src.web.publish_api import create_call_budget
 from tests.test_acl1761_api_create import ACT
 from tests.test_acl1768_ad_sets import _creator, _draft
 from tests.test_acl1775_instant_forms import FORM, FormMeta
@@ -42,9 +44,8 @@ def test_a_sufficient_budget_changes_nothing(tmp_path):
 
 
 def _sized(meta, plan, *, spend: int = 0):
-    """A creator with the budget the buyer's run gets (`create_call_budget`), and `spend` extra prepare reads."""
-    budget, refusal = create_call_budget(plan)
-    assert refusal == ""
+    """A creator as the buyer's run gets it (no call budget since ACL-2668), and `spend` extra prepare reads."""
+    budget = None
     client = g.GraphClient(meta, allow_writes=True, sleep=lambda s: None, min_interval_s=0.0, max_calls=budget)
     facts = cr.preflight_account(client, ACT)
     creator = cr.CampaignCreator(client, facts, cr.TargetingResolver(client), sleep=lambda s: None)
@@ -67,7 +68,7 @@ def test_a_big_plan_without_interests_still_publishes_when_prepare_spends_a_call
         need = cr.estimate_create_calls(plan)
         assert need > 150 and cr.estimate_targeting_reads(plan) == 0
         creator, client, budget = _sized(meta, plan, spend=spend)
-        assert budget == need
+        assert budget is None
         out = creator.run(plan)
         assert out.error == "", out.error
         assert out.campaign_id and meta.posts
@@ -90,11 +91,12 @@ def test_an_instant_form_plan_with_30_ads_still_publishes(tmp_path):
     assert out.campaign_id
 
 
-def test_a_budget_really_too_small_stops_with_the_message_and_no_post(tmp_path):
+def test_without_a_call_budget_a_long_prepare_never_stops_the_run(tmp_path):
+    """ACL-2668: before, prepare eating 60 extra calls stopped the run ("are missing"); now it publishes."""
     meta = FakeMeta()
     d = _draft(tmp_path, sets=6, ads=6)
     plan = cr.plan_from_draft(d)
     creator, client, budget = _sized(meta, plan, spend=60)          # prepare ate far more than was reserved
     out = creator.run(plan)
-    assert out.stop_kind == "plan" and "are missing" in out.error and "Nothing was created" in out.error
-    assert meta.posts == []
+    assert out.error == "", out.error
+    assert out.campaign_id and meta.posts

@@ -3,7 +3,7 @@
 Один рабочий поток читает аккаунты по одному. Порядок: action > retry > attention
 > schedule. Свежий аккаунт (снимок ok/partial/empty моложе часа) не читается. Сбой одного
 аккаунта не останавливает очередь; сбой, общий для всех (Multilogin, чекпоинт,
-потолок вызовов, остывание, выключенный API), ставит очередь на паузу с одной
+остывание, выключенный API), ставит очередь на паузу с одной
 причиной. Периода здесь нет: даты читать аккаунты не заставляют.
 """
 from __future__ import annotations
@@ -60,19 +60,17 @@ _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
     "mlx_session_lost": ("Multilogin lost its session. Reopen Multilogin, then press Retry.", None),
     "mlx_token_expired": ("The Multilogin token has expired. Update it in Multilogin, then press Retry.", None),
     "mlx_token_workspace": ("The Multilogin token belongs to another workspace. Fix it, then press Retry.", None),
-    "call_budget": ("The call budget for account reads is used up. Raise the limit, then press Retry.", None),
     "coordination_unavailable": ("The machine account-read state is unavailable. Restore access, then press Retry.", None),
 }
 
 _MINUTES = re.compile(r"about (\d+) min", re.I)
 
 #: Остановки Meta (`Snapshot.stop`), общие для всех аккаунтов: вид → (причина, ждать по таймеру?).
-#: Чекпоинт и потолок вызовов сами не проходят: только явный Retry, который удался.
+#: Чекпоинт сам не проходит: только явный Retry, который удался. Своего потолка вызовов у чтений нет (ACL-2668).
 _GLOBAL_STOPS: dict[str, tuple[str, bool]] = {
     "checkpoint": ("A profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.", False),
     "rate_limited": ("Meta asked to slow down. Account reads are paused for a while.", True),
     "policy_block": ("Meta refused the requests. Account reads are paused for a while.", True),
-    "call_budget": _GLOBAL_CODES["call_budget"][:1] + (False,),
 }
 
 
@@ -170,8 +168,6 @@ def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
         return _GLOBAL_STOPS["checkpoint"][0], None
     if "slow down" in text or "rate limit" in text:
         return _GLOBAL_STOPS["rate_limited"][0], _cooldown_s("rate_limited", text)
-    if "call budget" in text:
-        return _GLOBAL_CODES["call_budget"]
     return None
 
 
@@ -423,7 +419,7 @@ class RefreshQueue:
     # ───────── заявки ─────────
 
     def _persisted_halt(self) -> dict | None:
-        """Пауза, восстановленная из хранилища: чекпоинт и потолок вызовов переживают рестарт
+        """Пауза, восстановленная из хранилища: чекпоинт переживает рестарт
         и видны второму процессу дешборда (остановка записана в последней попытке аккаунта).
         """
         try:
@@ -434,7 +430,7 @@ class RefreshQueue:
         now = self._clock()
         found: dict | None = None
         for account, (kind, at_utc) in sorted(stops.items()):
-            if kind in ("checkpoint", "call_budget"):
+            if kind == "checkpoint":
                 until = None
             elif kind in ("rate_limited", "policy_block"):
                 at = _parse_utc(at_utc)
