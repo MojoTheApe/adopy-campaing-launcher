@@ -64,3 +64,24 @@ def test_found_video_step_names_the_content_match(tmp_path):
     meta._new("video", title=f"acl-x-{cr._md5(data)[:12]}", _polls=0)
     out, _client = _run(meta, draft)
     assert any("video already in the ad account" in s for s in out.steps)
+
+
+def test_cross_tag_reuse_passes_the_readback(tmp_path):
+    meta = FakeMeta()
+    draft = _draft(tmp_path, video=True, ads=3)
+    data = (tmp_path / "1002_clip.mp4").read_bytes()
+    meta._new("video", title=f"acl-othercampaign-{cr._md5(data)[:12]}", _polls=0)
+    out, _client = _run(meta, draft)
+    assert out.error == "", out.error
+    assert out.readback["ok"] is True, out.mismatches
+
+
+def test_video_of_another_ad_account_is_never_reused(tmp_path):
+    meta = FakeMeta()
+    draft = _draft(tmp_path, video=True, ads=3)
+    data = (tmp_path / "1002_clip.mp4").read_bytes()
+    # same content, but it lives in ANOTHER ad account: the list of this account does not show it
+    meta._new("video", title=f"acl-othercampaign-{cr._md5(data)[:12]}", _polls=0, _other=True)
+    out, _client = _run(meta, draft)
+    assert out.error == "", out.error
+    assert any(p.endswith("/advideos") for p, _ in meta.posts), "uploaded to this account"

@@ -6099,11 +6099,13 @@ class CampaignCreator:
         expected_title = video_title(tag, data) if data else ""
         actual_title = (self.client.get(f"/{actual_id}", {"fields": "title"}).get("title")
                         if data and actual_id else "")
-        verified = bool(expected_title and actual_title == expected_title)
+        # ACL-2744: a video reused from another campaign of this ad account carries that campaign's tag, same content hash.
+        reused = bool(data and actual_title and video_title_matches(str(actual_title), _md5(data)[:12]))
+        verified = bool(expected_title and (actual_title == expected_title or reused))
         if uploaded_id and (str(uploaded_id) == actual_id or not verified):
             check(aobj, id_field, str(uploaded_id), actual_id)
         if data:
-            check(aobj, content_field, expected_title, actual_title)
+            check(aobj, content_field, actual_title if reused else expected_title, actual_title)
         if identities is not None:
             identities.append({"object": aobj, "field": id_field,
                                "uploaded_id": str(uploaded_id or ""),
