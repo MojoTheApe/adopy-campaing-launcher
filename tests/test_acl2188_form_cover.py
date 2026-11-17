@@ -126,6 +126,7 @@ def test_team_library_round_trip(team):
     on("a")
     saved = ft.save(tpl(**COVER))
     on("b")
+    ft.pull(force=True)  # ACL-2668: другая машина видит правку после события
     assert ft.get(saved["id"])["cover_photo_id"] == PHOTO
 
 
