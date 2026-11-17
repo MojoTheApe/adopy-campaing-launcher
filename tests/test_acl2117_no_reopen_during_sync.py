@@ -60,7 +60,7 @@ def world(monkeypatch, tmp_path):
     monkeypatch.setattr(stop_log, "_DEFAULT", log)
     monkeypatch.setattr(stop_log, "_sleep", clock.sleep)
     monkeypatch.setattr(launch, "_record", events.append)
-    monkeypatch.setattr(launch, "_PACER", launch.StartPacer(gap=lambda: 0.0))
+    monkeypatch.setattr(launch, "_PACER", launch.StartPacer(limit=lambda: 0))
     monkeypatch.setattr(prof, "running_state", lambda l, p: ("not_running", None))
     monkeypatch.setenv(stop_log.RESTART_COOLDOWN_ENV, "180")
     monkeypatch.setenv(stop_log.RESTART_MAX_WAIT_ENV, "300")
