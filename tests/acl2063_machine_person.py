@@ -67,15 +67,16 @@ def main():
     def reader(account, trigger):
         trace = ipc / 'trace.json'
         with machine_file_lock(ipc / 'trace.lock', timeout=10):
-            value = read_json(trace) if trace.exists() else {'active': 0, 'max': 0, 'reads': []}
-            assert value['active'] == 0, 'two actual machine readers overlapped'
-            value['active'] += 1
-            value['max'] = max(value['max'], value['active'])
+            value = read_json(trace) if trace.exists() else {'active': {}, 'max': 0, 'reads': []}
+            # ACL-2668: different accounts may be read at once; the same account never.
+            assert value['active'].get(account, 0) == 0, 'two actual reads of one account overlapped'
+            value['active'][account] = 1
+            value['max'] = max(value['max'], sum(value['active'].values()))
             value['reads'].append([label, account, trigger])
             write(trace, value)
         time.sleep(.04)
         with machine_file_lock(ipc / 'trace.lock', timeout=10):
-            value = read_json(trace); value['active'] -= 1; write(trace, value)
+            value = read_json(trace); value['active'].pop(account, None); write(trace, value)
         if mode[0] == 'checkpoint':
             return ci.Snapshot(account=account, state='failed', stop='checkpoint',
                                finished_at_utc=stamp.isoformat(), error='synthetic checkpoint')
@@ -128,7 +129,7 @@ def main():
             sequence = value['sequence']; action = value['action']; extra = {}
             if action == 'crash':
                 from src.analysis_agent.account_refresh_machine import binding
-                with ars.read_session():
+                with queue._machine.fence(binding('B')).holding():
                     queue._machine.begin(binding('B'), queue._owner, 'retry')
                     write(status, {**identity, 'phase': 'crashed', 'sequence': sequence})
                     os._exit(77)  # own process only; kernel leases must release
