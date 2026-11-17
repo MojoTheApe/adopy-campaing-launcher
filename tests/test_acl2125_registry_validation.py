@@ -76,9 +76,15 @@ def test_form_ctas_are_scoped_to_form_conversion_location(goal):
 
 
 def test_form_ctas_reuse_existing_write_policy_values():
-    rule = next(r for r in mr.load_rules().rules if r["id"] == "acl2125.cta.instant_form")
-    assert set(rule["allowed"]) == set(wp.CTA_FORM)
-    assert all(not focused(call_to_action=cta) for cta in wp.CTA_FORM)
+    """CTA_FORM = документированное правило + живое правило ACL-2056 (SEE_DETAILS), без третьего источника."""
+    rules = {r["id"]: r for r in mr.load_rules().rules}
+    documented = set(rules["acl2125.cta.instant_form"]["allowed"])
+    live = set(rules["acl2056.cta_by_objective.instant_form_live"]["allowed"])
+    assert live == {"SEE_DETAILS"} and not documented & live
+    assert documented | live == set(wp.CTA_FORM)
+    # `focused` грузит только правила acl2125.*: документированные шесть проходят, SEE_DETAILS - только с acl2056.*
+    assert all(not focused(call_to_action=cta) for cta in documented)
+    assert focused(call_to_action="SEE_DETAILS")
 
 
 def test_only_proven_placement_restriction_is_enforced():
