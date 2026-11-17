@@ -6311,12 +6311,17 @@ window.cbSrv = (function () {
      и получить больше, чем у сервера (своя кампания, своё надгробие). Тогда
      слитое надо отправить — иначе сервер так и останется без него. Сервер
      слитое примет как есть (accepted=true), цикла нет. */
+  var reposted = {};      // имя → saved_at серверной копии, ради которой уже перепостили
   function afterApply(name, doc) {
     last[name] = snap(name);
     setStamp(name, doc.saved_at, doc.saved_at);
     var mine;
     try { mine = canon(regs[name].snapshot()); } catch (e) { return; }
     if (mine === canon(doc.data)) return;
+    /* сервер держит то, что клиент не принимает (validate вырезает): без этой метки пост→ответ→пост шёл бы по кругу */
+    var theirs = canon(doc.data);
+    if (reposted[name] && (reposted[name].at === doc.saved_at || reposted[name].data === theirs)) return;
+    reposted[name] = { at: doc.saved_at, data: theirs };
     generations[name] = (generations[name] || 0) + 1;
     setStamp(name, Math.max(Date.now(), doc.saved_at + 1));
     dirty[name] = true;
@@ -6932,11 +6937,17 @@ window.cbKeep = (function () {
   /* Запись формы без того, что человек сам убрал: кампании с надгробием
      новее правки и форма целиком, если надгробие ключа не старше записи.
      Вернёт null, если ничего не осталось. */
+  function isLegacyId(id) { return typeof id === 'string' && id.indexOf('legacy-') === 0; }
   function pruned(key, entry, removed) {
     var t = entry.touched || 0;
     if (typeof removed[key] === 'number' && removed[key] >= t) return null;
-    var kept = entry.campaigns.filter(function (c) {
-      return !(c.id && typeof removed[key + '#' + c.id] === 'number' && removed[key + '#' + c.id] > t);
+    var kept = entry.campaigns.filter(function (c, i) {
+      var cid = c.id || 'legacy-' + key + '-' + i;
+      var ts = removed[key + '#' + cid];
+      if (typeof ts !== 'number') return true;
+      /* R12: надгробие на настоящем id абсолютно; legacy-id держится на номере
+         и сравнивается с правкой формы */
+      return isLegacyId(cid) ? !(ts > t) : false;
     });
     if (!kept.length) return null;
     return kept.length === entry.campaigns.length ? entry : { touched: entry.touched, tracking: entry.tracking, campaigns: kept };
@@ -6985,8 +6996,7 @@ window.cbKeep = (function () {
   }
 
   /* Человек убрал кампанию (× или «Remove» в дереве; отмена копии). Только
-     эти пути пишут надгробие: `removed["<форма>#<id>"]`, а если в форме не
-     осталось карточек — и `removed["<форма>"]`. `slot` уже снят со страницы,
+     эти пути пишут надгробие: `removed["<форма>#<id>"]` (формы целиком — нет, R11). `slot` уже снят со страницы,
      `form` — форма, где она стояла. Пока cbKeep сам раскладывает копию
      (`restoring`), ничего не пишем. Позднейшая правка формы (touched новее
      надгробия) возвращает ключ — это решает слияние. */
@@ -6998,11 +7008,8 @@ window.cbKeep = (function () {
     var removed = state.removed = state.removed || {};
     var id = slot && slot.dataset ? slot.dataset.cbdId : '';
     if (id) removed[key + '#' + id] = now;
-    /* форма убрана целиком, если в записи не осталось других кампаний, кроме убранной:
-       карточек на странице может быть 0, а в записи — чужие (копия + отмена) */
-    var entry = state.forms[key];
-    var rest = entry && entry.campaigns ? entry.campaigns.filter(function (c, i) { return !(id && (c.id || 'legacy-' + i) === id); }).length : 0;
-    if (!form.querySelectorAll('.cb-slot').length && !rest) removed[key] = now;
+    /* R11: надгробие формы целиком не пишем — оно стирало кампании, которых человек
+       не видел; форма без кампаний и так уходит из слияния и из save() */
     saveSoon();
   }
 
@@ -7012,17 +7019,25 @@ window.cbKeep = (function () {
      `legacy-<номер>` (R9), дальше — по кампании: на форме побеждает копия с
      большим `touched` (при равенстве — `incoming`), чужие кампании дописываются
      в конец, исчезнуть кампания или форма может только по надгробию. */
+  function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (v && typeof v === 'object') {
+      return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+    }
+    return JSON.stringify(v);
+  }
   function numeric(x) { return typeof x === 'number' && isFinite(x); }
-  function normEntry(entry) {
+  function normEntry(entry, key) {
     if (!entry || typeof entry !== 'object' || !Array.isArray(entry.campaigns)) return entry;
     var out = Object.assign({}, entry);
     out.campaigns = entry.campaigns.map(function (c, i) {
       if (!c || typeof c !== 'object' || (typeof c.id === 'string' && c.id)) return c;
-      return Object.assign({}, c, { id: 'legacy-' + i });
+      return Object.assign({}, c, { id: 'legacy-' + key + '-' + i });
     });
     return out;
   }
   function touchedOf(entry) { return entry && typeof entry === 'object' && numeric(entry.touched) ? entry.touched : 0; }
+  function legacyId(id) { return id.indexOf('legacy-') === 0; }
   function cidOf(c) { return c && typeof c === 'object' && typeof c.id === 'string' ? c.id : ''; }
   function merge(current, incoming) {
     current = current || {}; incoming = incoming || {};
@@ -7039,7 +7054,7 @@ window.cbKeep = (function () {
     var keys = Object.keys(curForms).concat(Object.keys(incForms).filter(function (k) { return !has(curForms, k); }));
     var forms = {};
     keys.forEach(function (key) {
-      var a = normEntry(curForms[key]), b = normEntry(incForms[key]);
+      var a = normEntry(curForms[key], key), b = normEntry(incForms[key], key);
       var inCur = has(curForms, key), inInc = has(incForms, key);
       var newer, older;
       if (inCur && inInc) { if (touchedOf(a) > touchedOf(b)) { newer = a; older = b; } else { newer = b; older = a; } }
@@ -7054,12 +7069,17 @@ window.cbKeep = (function () {
       if (Array.isArray(nCamps) || Array.isArray(oCamps)) {
         nCamps = Array.isArray(nCamps) ? nCamps : [];
         var nT = touchedOf(newer), oT = touchedOf(older);
-        var kept = nCamps.filter(function (c) { return !(cidOf(c) && rem(key + '#' + cidOf(c)) > nT); });
+        var kept = nCamps.filter(function (c) {
+          var cid = cidOf(c);
+          if (!cid) return true;
+          var ts = rem(key + '#' + cid);
+          return legacyId(cid) ? !(ts > nT) : ts === -Infinity;   // R12: настоящий id — надгробие абсолютно
+        });
         var have = {};
         nCamps.forEach(function (c) { if (cidOf(c)) have[cidOf(c)] = true; });
         (Array.isArray(oCamps) ? oCamps : []).forEach(function (c) {
           var cid = cidOf(c);
-          if (cid && !have[cid] && rem(key + '#' + cid) < oT) { kept.push(c); have[cid] = true; }
+          if (cid && !have[cid] && (legacyId(cid) ? rem(key + '#' + cid) < oT : rem(key + '#' + cid) === -Infinity)) { kept.push(c); have[cid] = true; }
         });
         entry.campaigns = kept;
         if (!kept.length) return;
@@ -7097,7 +7117,7 @@ window.cbKeep = (function () {
         /* Старая запись без id: id по номеру карточки, одинаковый во всех вкладках.
            Случайные id в двух вкладках дали бы одной кампании две личности, и
            слияние на сервере оставило бы обе копии. */
-        writeSlot(slots[slots.length - 1], data.id ? data : Object.assign({}, data, { id: 'legacy-' + i }));
+        writeSlot(slots[slots.length - 1], data.id ? data : Object.assign({}, data, { id: 'legacy-' + key + '-' + i }));
         made += 1;
       });
     });
@@ -7170,7 +7190,7 @@ window.cbKeep = (function () {
         var merged = merge(state, incoming);
         var removedNow = merged.removed || {};
         var normOld = {};
-        Object.keys(state.forms).forEach(function (k) { normOld[k] = normEntry(state.forms[k]); });
+        Object.keys(state.forms).forEach(function (k) { normOld[k] = normEntry(state.forms[k], k); });
         if (Object.keys(state.forms).length && JSON.stringify(normOld) !== JSON.stringify(merged.forms)) {
           try { localStorage.setItem(KEY + '.older', JSON.stringify(state)); } catch (e) { /* не помним */ }
         }
@@ -7179,7 +7199,7 @@ window.cbKeep = (function () {
         var known = {};
         [state, incoming].forEach(function (d) {
           Object.keys(d.forms).forEach(function (k) {
-            var e = normEntry(d.forms[k]);
+            var e = normEntry(d.forms[k], k);
             if (e && Array.isArray(e.campaigns)) e.campaigns.forEach(function (c) { known[k + '#' + c.id] = true; });
           });
         });
@@ -7210,7 +7230,7 @@ window.cbKeep = (function () {
                   return;
                 }
                 var typing = active && slot.contains(active) && 'value' in active ? { el: active, value: active.value } : null;
-                if (JSON.stringify(readSlot(slot)) !== JSON.stringify(c)) {
+                if (canon(readSlot(slot)) !== canon(c)) {
                   writeSlot(slot, c);
                   changed = true;
                   /* тронут не весь слот: набираемое прямо сейчас поле остаётся как было */

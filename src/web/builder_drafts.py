@@ -112,14 +112,30 @@ def _count_campaigns(data: dict) -> int:
                if isinstance(e, dict) and isinstance(e.get("campaigns"), list))
 
 
-def _normalized(entry):
+def _is_removed(removed: dict, key: str, campaign, touched: float, strict: bool = True) -> bool:
+    """Убрана ли кампания человеком (R12). Надгробие на настоящем id абсолютно;
+    у `legacy-*` id опора на номер, поэтому надгробие сравнивается с `touched`
+    копии: для победителя оно должно быть новее правки (`strict`), для чужой
+    старой копии — не старше неё."""
+    cid = _cid(campaign)
+    if not cid:
+        return False
+    ts = removed.get(f"{key}#{cid}")
+    if ts is None:
+        return False
+    if not cid.startswith("legacy-"):
+        return True
+    return ts > touched if strict else ts >= touched
+
+
+def _normalized(entry, key):
     """Копия записи формы, где у каждой кампании без `id` он равен `legacy-<номер>`
     (R9: так же называет их клиент при раскладке, см. cbKeep.restore)."""
     if not isinstance(entry, dict) or not isinstance(entry.get("campaigns"), list):
         return entry
     out = dict(entry)
     out["campaigns"] = [
-        c if (not isinstance(c, dict) or _cid(c)) else {**c, "id": f"legacy-{i}"}
+        c if (not isinstance(c, dict) or _cid(c)) else {**c, "id": f"legacy-{key}-{i}"}
         for i, c in enumerate(entry["campaigns"])
     ]
     return out
@@ -138,8 +154,8 @@ def merge_keep(current: dict, incoming: dict) -> dict:
     Остальные поля документа берутся из `incoming`."""
     cur_forms = current.get("forms") if isinstance(current.get("forms"), dict) else {}
     inc_forms = incoming.get("forms") if isinstance(incoming.get("forms"), dict) else {}
-    cur_forms = {k: _normalized(v) for k, v in cur_forms.items()}
-    inc_forms = {k: _normalized(v) for k, v in inc_forms.items()}
+    cur_forms = {k: _normalized(v, k) for k, v in cur_forms.items()}
+    inc_forms = {k: _normalized(v, k) for k, v in inc_forms.items()}
     removed: dict = {}
     for src in (current.get("removed"), incoming.get("removed")):
         if isinstance(src, dict):
@@ -155,7 +171,7 @@ def merge_keep(current: dict, incoming: dict) -> dict:
             newer, older = (a, None) if key in cur_forms else (b, None)
         if not isinstance(newer, dict):
             # Не форма билдера (старый/чужой формат): берём как есть.
-            if removed.get(key, float("-inf")) < 0:
+            if key not in removed:
                 forms[key] = newer
             continue
         entry = dict(newer)
@@ -164,12 +180,11 @@ def merge_keep(current: dict, incoming: dict) -> dict:
         if isinstance(n_camps, list) or isinstance(o_camps, list):
             n_camps = n_camps if isinstance(n_camps, list) else []
             n_touched, o_touched = _touched(newer), _touched(older)
-            kept = [c for c in n_camps
-                    if not (_cid(c) and removed.get(f"{key}#{_cid(c)}", float("-inf")) > n_touched)]
+            kept = [c for c in n_camps if not _is_removed(removed, key, c, n_touched)]
             have = {_cid(c) for c in n_camps if _cid(c)}
             for c in (o_camps if isinstance(o_camps, list) else []):
                 cid = _cid(c)
-                if cid and cid not in have and removed.get(f"{key}#{cid}", float("-inf")) < o_touched:
+                if cid and cid not in have and not _is_removed(removed, key, c, o_touched, strict=False):
                     kept.append(c)
                     have.add(cid)
             entry["campaigns"] = kept

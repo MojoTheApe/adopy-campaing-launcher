@@ -72,9 +72,9 @@ CASES = {
     "idless older copy gets legacy ids": (
         doc({"A": form(20, camp(), camp())}), doc({"A": form(10, camp(), camp(), camp())})),
     "idless stored and legacy ids incoming": (
-        doc({"A": form(10, camp(), camp())}), doc({"A": form(20, camp("legacy-0"), camp("legacy-1"))})),
+        doc({"A": form(10, camp(), camp())}), doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))})),
     "legacy ids stored and idless incoming": (
-        doc({"A": form(20, camp("legacy-0"), camp("legacy-1"))}), doc({"A": form(30, camp(), camp())})),
+        doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))}), doc({"A": form(30, camp(), camp())})),
     "idless winner plus id in older": (
         doc({"A": form(10, camp("a1"))}), doc({"A": form(30, camp())})),
     "removed is a union with max, v is max": (
@@ -88,6 +88,15 @@ CASES = {
     "non-dict and non-string-id campaigns in older": (
         doc({"A": form(20, camp("a1"))}),
         doc({"A": form(10, camp("a1"), "junk", {"id": 5, "fields": {}}, None, camp("a2"))})),
+    "real-id tombstone is absolute against a later edit": (
+        doc({}, removed={"A#cx": 10}), doc({"A": form(20, camp("cx"), camp("cy"))})),
+    "legacy-id tombstone older than the edit lets it back": (
+        doc({"A": form(5, camp("legacy-A-0"))}, removed={"A#legacy-A-1": 10}),
+        doc({"A": form(20, camp("legacy-A-0"), camp("legacy-A-1"))})),
+    "form tombstone from an old document is still honoured": (
+        doc({"A": form(5, camp("cy"))}, removed={"A": 10}), doc({})),
+    "same position in two forms stays separate": (
+        doc({"A": form(5, camp(), camp()), "B": form(5, camp())}), doc({"B": form(9, camp(), camp())})),
     "one side has no forms": (
         {"v": 4}, doc({"A": form(1, camp("a1"))})),
 }
