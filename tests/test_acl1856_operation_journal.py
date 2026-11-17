@@ -471,7 +471,7 @@ def test_a_renamed_ad_set_stops_the_resume(tmp_path, journal):
     assert out.stop_kind == "resume_mismatch" and len(meta.posts) == posts
 
 
-def test_a_video_that_is_not_ready_stops_the_resume(tmp_path, journal):
+def test_a_failed_video_stops_the_resume(tmp_path, journal):
     meta = FakeMeta(video_states=("ready",))
     done, _ = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
     assert done.error == ""
@@ -481,8 +481,21 @@ def test_a_video_that_is_not_ready_stops_the_resume(tmp_path, journal):
             o["_polls"] = 0
     posts = len(meta.posts)
     out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
-    assert out.stop_kind == "resume_mismatch" and "still processing or was rejected" in out.error
+    assert out.stop_kind == "resume_mismatch" and "could not process the video" in out.error
     assert len(meta.posts) == posts
+
+
+def test_a_video_still_processing_does_not_stop_the_resume(tmp_path, journal):
+    """ACL-2668, решение 16: обработка у Meta - не стоп при повторе; ждём и дописываем."""
+    meta = FakeMeta(video_states=("ready",))
+    done, _ = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert done.error == ""
+    meta.video_states = ["processing", "processing", "ready"]
+    for o in meta.objects.values():
+        if o["_kind"] == "video":
+            o["_polls"] = 0
+    out, _c = _go(meta, _draft(tmp_path, video=True, ads=2), journal)
+    assert out.error == "" and out.stop_kind != "resume_mismatch", out.error
 
 
 def test_changed_file_bytes_are_a_new_operation(tmp_path, journal):
