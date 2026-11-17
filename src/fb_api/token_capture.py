@@ -2711,6 +2711,24 @@ class InPageGraph:
         self._upload_graph = up
         return up, ""
 
+    def _ready_or_drop(self, up: "InPageGraph | None") -> "InPageGraph | None":
+        """ACL-2746: the reopened clean tab must itself answer; if not, drop it (the caller falls back to this tab).
+        A real Meta stop (checkpoint / login / wrong origin) still propagates."""
+        if up is None:
+            return None
+        try:
+            up._ready_for_call()
+            return up
+        except GraphStop as exc:
+            if type(exc) is not PageFailed:
+                raise
+            why = type(exc).__name__
+        except Exception as exc:  # noqa: BLE001
+            why = type(exc).__name__
+        self._note_loss("clean_tab_reopen_failed:" + why)
+        self.close_upload_context()
+        return None
+
     def _reopen_clean_tab(self) -> "InPageGraph | None":
         """ACL-2746: close the lost clean upload tab and open a new one (same checks as `probe_worker`). None when
         none can be opened - the caller then uploads from this tab."""
@@ -2835,11 +2853,13 @@ class InPageGraph:
                     raise
                 self._note_loss("clean_tab_lost:PageFailed")
                 up = self._reopen_clean_tab()
+                up = self._ready_or_drop(up)
             except Exception as exc:  # noqa: BLE001 - nothing was sent; the tab is not used again
                 # ACL-2746: a lost clean tab is reopened (as `probe_worker` does) and the call retried here; if no
                 # clean tab can be opened, the upload continues in this (light) tab's own path below.
                 self._note_loss(f"clean_tab_lost:{type(exc).__name__}")
                 up = self._reopen_clean_tab()
+                up = self._ready_or_drop(up)
             if up is not None:
                 up._add_referrer(spec)
                 return up._write_served(spec, field_name, chunk, progress, cancelled, deadline_s)
@@ -3268,14 +3288,37 @@ class InPageGraph:
         """ACL-2746: take the Graph session again until it is back - no count limit, no overall time bound. Only a
         real Meta stop (login / checkpoint) or a light tab that is gone ends it; a plain miss is tried again."""
         while True:
+            self._raise_if_job_stopped()
             got = self._light_recapture(self.LIGHT_CAPTURE_WAIT_S)
             if got.get("has_token") or got.get("kind") in ("login", "checkpoint"):
                 return got
             if self.light_recapture is None:
                 raise PageFailed("the lightweight page lost its Graph session and there is no way to take it "
                                  "again; nothing more was sent")
+            if got.get("lost"):             # no capture tab can be opened: the browser / profile is gone
+                self._note_loss("capture_tab_unavailable")
+                raise self._stop_connection(PageIdentityError())
+            doc = getattr(self.tab, "light", None)
+            gone = doc.document_intact(timeout=5.0) if doc is not None else "work_tab_dead"
+            if gone in ("light_doc_wrong_origin", "work_tab_dead"):
+                self._note_loss("work_tab_lost:" + gone)
+                raise self._stop_connection(PageIdentityError())
             self._note_loss("recapture_no_token:" + str(got.get("kind") or "unknown"))
+            self._raise_if_job_stopped()
             self._sleep(1.0)
+
+    def _raise_if_job_stopped(self) -> None:
+        """ACL-2746: the user's Stop ends the wait (the job's cancel, as every other patient wait does)."""
+        try:
+            from src.fb_api import warm
+
+            job = warm._JOB_WAIT.get()
+        except Exception:  # noqa: BLE001
+            job = None
+        if job is not None and job.cancelled():
+            self._note_loss("job_stopped")
+            raise PageFailed("stopped by the user while the lightweight page took its Graph session again; "
+                             "nothing more was sent")
 
     def _note_loss(self, reason: str) -> None:
         """ACL-2746: one telemetry row with the reason code of a lost session / tab (codes only, never raises)."""

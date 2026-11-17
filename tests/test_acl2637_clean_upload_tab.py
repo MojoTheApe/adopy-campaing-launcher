@@ -176,6 +176,28 @@ def test_no_clean_tab_can_be_reopened_the_upload_continues_in_this_tab(clean, mo
     assert any(r.get("lost_reason", "").startswith("clean_tab_reopen_failed:") for r in rows)
 
 
+def test_a_reopened_clean_tab_that_is_lost_too_falls_back_to_this_tab(clean, monkeypatch):
+    main = ServingTab(probe_reply=CONTROLLED)
+    t = _graph(main)
+    t.upload_tab_factory = clean["factory"]
+    assert t.probe_worker()[0] is True
+    clean["made"][0].light.intact = "light_doc_replaced"
+    orig = clean["factory"]
+
+    def factory():
+        tab = orig()
+        tab.light.intact = "light_doc_replaced"                           # the new tab is lost at once
+        return tab
+
+    t.upload_tab_factory = factory
+    rows = []
+    monkeypatch.setattr(lt, "_record", rows.append)
+    _lose_and_write(t)
+    assert t._upload_graph is None and all(x.closed for x in clean["made"])
+    assert [s for s in main.specs if "files" in s]
+    assert any(r.get("lost_reason", "").startswith("clean_tab_reopen_failed:") for r in rows)
+
+
 def test_a_new_probe_closes_the_previous_clean_tab(clean):
     t = _graph(ServingTab(probe_reply=CONTROLLED))
     t.upload_tab_factory = clean["factory"]

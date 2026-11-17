@@ -311,7 +311,16 @@ def capture_into(work: Any, open_tab: Any, act: str, *, timeout: float = 90.0) -
     result: dict = {"kind": "unknown", "has_token": False, "light": True}
     reason = "work_tab_dead"
     try:
-        capture = open_tab()
+        try:
+            capture = open_tab()
+        except Exception as exc:  # noqa: BLE001 - ACL-2746: no capture tab at all = the browser/profile is gone
+            from src.fb_api.graph import GraphStop
+
+            if isinstance(exc, GraphStop):
+                raise
+            reason = "capture_tab_unavailable"
+            result = {"kind": "unknown", "has_token": False, "light": True, "lost": reason}
+            return result
         cap = InPageGraph(capture)
         cap.navigate(act, timeout=min(60.0, timeout))
         state = cap.wait_ready(timeout=timeout)
