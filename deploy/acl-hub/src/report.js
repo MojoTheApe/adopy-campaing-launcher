@@ -5,7 +5,8 @@ import { classify } from "./derive.js";
 // Время в формате клиента (`…+00:00`), чтобы строковые сравнения с ts в базе были честными.
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "+00:00");
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const cut = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+const text = (v) => (v === null || v === undefined ? "" : typeof v === "string" ? v : JSON.stringify(v));
+const cut = (s, n) => { s = text(s); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 const splitList = (s) => (s ? String(s).split(",").filter(Boolean).sort() : []);
 
 function dayWindow(url) {
@@ -30,19 +31,21 @@ export async function summary(env, url) {
   const db = env.DB;
   const all = async (sql, ...args) => (await db.prepare(sql).bind(...args).all()).results;
   const runs = await all(
-    "SELECT manager, outcome, duration_s FROM runs WHERE finished_at >= ? AND finished_at < ?", w.from, w.to);
+    "SELECT manager, job_id, outcome, duration_s FROM runs WHERE finished_at >= ? AND finished_at < ?", w.from, w.to);
+  // Задания дня: созданные в окне плюс те, чьи кампании закончились в окне (у старых сборок нет job.created).
   const jobs = await all(
-    "SELECT manager, count(*) AS n FROM jobs WHERE created_at >= ? AND created_at < ? GROUP BY manager", w.from, w.to);
+    "SELECT manager, job_id FROM jobs WHERE created_at >= ? AND created_at < ?", w.from, w.to);
+  // Активность — по событиям без сырых шагов (их на порядок больше, а границы дня они не меняют).
   const act = await all(
     "SELECT manager, min(ts) AS first_at, max(ts) AS last_at, group_concat(DISTINCT machine) AS machines "
-    + "FROM events WHERE ts >= ? AND ts < ? GROUP BY manager", w.from, w.to);
+    + "FROM events WHERE ts >= ? AND ts < ? AND type NOT LIKE 'raw.%' GROUP BY manager", w.from, w.to);
   const versions = await all("SELECT manager, flow_version FROM machines ORDER BY last_event_at");
 
   const by = new Map();
   const row = (manager) => {
     if (!by.has(manager)) {
       by.set(manager, { manager, machines: [], first_at: null, last_at: null, active_h: 0, jobs: 0,
-        campaigns: 0, ok: 0, failed: 0, not_started: 0, median_s: null, version: null, _d: [] });
+        campaigns: 0, ok: 0, failed: 0, not_started: 0, median_s: null, version: null, _d: [], _j: new Set() });
     }
     return by.get(manager);
   };
@@ -51,8 +54,9 @@ export async function summary(env, url) {
     b.campaigns++;
     if (r.outcome in b) b[r.outcome]++;
     if (r.duration_s !== null && r.duration_s !== undefined) b._d.push(r.duration_s);
+    if (r.job_id) b._j.add(r.job_id);
   }
-  for (const j of jobs) row(j.manager).jobs = j.n;
+  for (const j of jobs) row(j.manager)._j.add(j.job_id);
   for (const a of act) {
     const b = row(a.manager);
     Object.assign(b, { first_at: a.first_at, last_at: a.last_at, machines: splitList(a.machines) });
@@ -60,8 +64,8 @@ export async function summary(env, url) {
   }
   const latest = new Map(versions.map((v) => [v.manager, v.flow_version]));
   const buyers = [...by.values()].filter((b) => b.manager).map((b) => {
-    const { _d, ...rest } = b;
-    return { ...rest, median_s: median(_d), version: latest.get(b.manager) ?? null };
+    const { _d, _j, ...rest } = b;
+    return { ...rest, jobs: _j.size, median_s: median(_d), version: latest.get(b.manager) ?? null };
   }).sort((a, b) => b.campaigns - a.campaigns || a.manager.localeCompare(b.manager));
   return json({ day: w.day, tz: w.tz, buyers });
 }
@@ -100,12 +104,15 @@ const LIVE_SKIP = ["publish.spec", "publish.stats", "account.state", "test.ping"
 
 export async function live(env, url) {
   const limit = Math.min(Math.max(Number.parseInt(url.searchParams.get("limit") || "100", 10) || 100, 1), 300);
+  const manager = url.searchParams.get("manager") || "";
+  // Окно 48 ч: лента не проходит всю таблицу событий назад при каждом обновлении.
+  const since = iso(Date.now() - 48 * 3600000);
   const { results } = await env.DB.prepare(
     "SELECT e.ts, e.type, e.machine, e.manager, e.account, e.campaign, e.job_id, e.payload, "
     + "j.n_ok, j.n_failed, j.n_not_started FROM events e LEFT JOIN jobs j ON j.job_id = e.job_id "
-    + `WHERE e.type NOT LIKE 'raw.%' AND e.type NOT IN (${LIVE_SKIP.map(() => "?").join(", ")}) `
-    + "ORDER BY e.ts DESC LIMIT ?",
-  ).bind(...LIVE_SKIP, limit).all();
+    + `WHERE e.ts >= ? AND e.type NOT LIKE 'raw.%' AND e.type NOT IN (${LIVE_SKIP.map(() => "?").join(", ")}) `
+    + (manager ? "AND e.manager = ? " : "") + "ORDER BY e.ts DESC LIMIT ?",
+  ).bind(since, ...LIVE_SKIP, ...(manager ? [manager] : []), limit).all();
   const events = results.map((r) => {
     const p = JSON.parse(r.payload || "{}");
     const job = r.n_ok === null || r.n_ok === undefined ? null : { n_ok: r.n_ok, n_failed: r.n_failed, n_not_started: r.n_not_started };
@@ -126,10 +133,12 @@ export async function runDetail(env, url) {
   const spec = await db.prepare("SELECT min(ts) AS ts FROM events WHERE job_id = ? AND type = 'publish.spec' AND campaign = ?")
     .bind(run.job_id, run.campaign).first("ts");
   const from = spec || job?.created_at || "";
-  const to = run.finished_at || "9999";
+  // Шаги пишутся с микросекундами, итог — с миллисекундами: граница +1 с, чтобы последний шаг не терялся.
+  const to = run.finished_at ? iso(Date.parse(run.finished_at) + 1000) : "9999";
   const { results } = await db.prepare(
-    "SELECT ts, payload FROM events WHERE job_id = ? AND type = 'raw.run' AND ts >= ? AND ts <= ? ORDER BY ts LIMIT 500",
+    "SELECT ts, payload FROM events WHERE job_id = ? AND type = 'raw.run' AND ts >= ? AND ts <= ? ORDER BY ts DESC LIMIT 500",
   ).bind(run.job_id, from, to).all();
+  results.reverse();   // хвост важнее начала: провальный шаг обычно последний
   const steps = results.map((r) => {
     const p = JSON.parse(r.payload || "{}");
     const d = p.diag || {};

@@ -72,7 +72,8 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
 <script>
 (function () {
   "use strict";
-  var TZ = -new Date().getTimezoneOffset();
+  // Пояс — на выбранный день (переход на летнее время меняет смещение).
+  function tzFor(day) { return -new Date(day + "T12:00:00").getTimezoneOffset(); }
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, attrs) {
     var n = document.createElement(tag);
@@ -95,14 +96,15 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
   }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function hhmm(ts) { if (!ts) return "—"; var d = new Date(ts); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function stamp(ts) { var d = new Date(ts); return d.toDateString() === new Date().toDateString() ? hhmm(ts) : d.toLocaleDateString(undefined, { day: "2-digit", month: "short" }) + " " + hhmm(ts); }
   function when(ts) { if (!ts) return "—"; var d = new Date(ts); return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" }) + " " + hhmm(ts); }
   function dur(s) { if (s === null || s === undefined) return "—"; s = Math.round(s); return s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
   function today() { var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
   function outcomePill(o) { return el("span", { class: "pill " + (o === "ok" ? "ok" : o === "failed" ? "bad" : o === "not_started" ? "warn" : "mut") }, o === "not_started" ? "not started" : (o || "—")); }
   function empty(body, cols, text) { body.replaceChildren(el("tr", null, el("td", { class: "empty", colspan: String(cols) }, text))); }
 
-  var tab = "live", liveTimer = null, liveData = [];
-  $("day").value = today();
+  var tab = "live", liveTimer = null, liveData = [], known = {}, runToken = 0, dayAuto = today();
+  $("day").value = dayAuto;
   document.querySelectorAll("nav button").forEach(function (b) { b.addEventListener("click", function () { show(b.dataset.tab); }); });
   function show(name) {
     tab = name;
@@ -111,33 +113,42 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
     load();
   }
   function load() {
+    // Вкладка открыта с вечера: день по умолчанию переходит на сегодня, если его не меняли руками.
+    if ($("day").value === dayAuto && dayAuto !== today()) { dayAuto = today(); $("day").value = dayAuto; }
     if (tab === "live") loadLive(); else if (tab === "buyers") loadBuyers(); else if (tab === "failures") loadFailures(); else loadMachines();
   }
   $("day").addEventListener("change", function () { if (tab === "buyers") loadBuyers(); });
-  $("live-buyer").addEventListener("change", renderLive);
+  $("live-buyer").addEventListener("change", loadLive);
   $("live-problems").addEventListener("change", renderLive);
 
   // ── Live ──
+  function setBuyers(names) {
+    // Список байеров только растёт и не пересобирается, пока он открыт.
+    var sel = $("live-buyer"), added = false;
+    names.forEach(function (m) { if (m && !known[m]) { known[m] = 1; added = true; } });
+    if (!added || document.activeElement === sel) return;
+    var cur = sel.value;
+    sel.replaceChildren(el("option", { value: "" }, "All"));
+    Object.keys(known).sort().forEach(function (m) { sel.appendChild(el("option", { value: m }, m)); });
+    sel.value = cur;
+  }
   function loadLive() {
-    api("/api/live?limit=200").then(function (d) {
+    var who = $("live-buyer").value;
+    api("/api/live?limit=200" + (who ? "&manager=" + encodeURIComponent(who) : "")).then(function (d) {
       liveData = d.events;
-      var sel = $("live-buyer"), cur = sel.value, names = {};
-      liveData.forEach(function (e) { if (e.manager) names[e.manager] = 1; });
-      sel.replaceChildren(el("option", { value: "" }, "All"));
-      Object.keys(names).sort().forEach(function (m) { sel.appendChild(el("option", { value: m }, m)); });
-      sel.value = names[cur] ? cur : "";
-      $("live-upd").textContent = "Updated " + hhmm(new Date().toISOString()) + " · refreshes every 15 s";
+      setBuyers(liveData.map(function (e) { return e.manager; }));
+      $("live-upd").textContent = "Updated " + hhmm(new Date().toISOString()) + " · last 48 h · refreshes every 15 s";
       renderLive();
     }).catch(function (e) { $("live-upd").textContent = "Could not load: " + e.message; });
   }
   function renderLive() {
-    var who = $("live-buyer").value, problems = $("live-problems").checked, list = $("live-list");
-    var rows = liveData.filter(function (e) { return (!who || e.manager === who) && (!problems || e.level !== "info"); });
-    if (!rows.length) { list.replaceChildren(el("li", { class: "empty" }, "No events")); return; }
+    var problems = $("live-problems").checked, list = $("live-list");
+    var rows = liveData.filter(function (e) { return !problems || e.level !== "info"; });
+    if (!rows.length) { list.replaceChildren(el("li", { class: "empty" }, "No events in the last 48 hours")); return; }
     list.replaceChildren.apply(list, rows.map(function (e) {
       var meta = [e.manager, e.account, e.campaign].filter(Boolean).join(" · ");
       var li = el("li", e.run_id ? { class: "click", on: function () { openRun(e.run_id); } } : null,
-        el("span", { class: "t", title: e.ts }, hhmm(e.ts)), el("span", { class: "dot " + e.level }),
+        el("span", { class: "t", title: e.ts }, stamp(e.ts)), el("span", { class: "dot " + e.level }),
         el("div", null, el("div", { class: "txt" }, e.text), el("div", { class: "who" }, meta)));
       return li;
     }));
@@ -151,12 +162,13 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
   function loadBuyers() {
     var day = $("day").value || today();
     $("buyers-title").textContent = "Buyers on " + day;
-    api("/api/summary?day=" + encodeURIComponent(day) + "&tz=" + TZ).then(function (d) {
+    api("/api/summary?day=" + encodeURIComponent(day) + "&tz=" + tzFor(day)).then(function (d) {
       var body = $("buyers-body");
+      setBuyers(d.buyers.map(function (b) { return b.manager; }));
       if (!d.buyers.length) return empty(body, 9, "No activity on this day");
       body.replaceChildren.apply(body, d.buyers.map(function (b) {
         var active = b.first_at ? hhmm(b.first_at) + "–" + hhmm(b.last_at) + " (" + b.active_h + " h)" : "—";
-        return el("tr", { class: "click", on: function () { $("live-buyer").value = b.manager; show("live"); } },
+        return el("tr", { class: "click", on: function () { setBuyers([b.manager]); $("live-buyer").value = b.manager; show("live"); } },
           el("td", null, el("strong", null, b.manager), el("div", { class: "who" }, b.machines.join(", "))),
           el("td", { class: "num" }, active), el("td", { class: "num" }, b.jobs), el("td", { class: "num" }, b.campaigns),
           el("td", { class: "num" }, b.ok ? el("span", { class: "pill ok" }, b.ok) : "0"),
@@ -186,10 +198,11 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
     api("/api/machines").then(function (d) {
       var body = $("machines-body");
       if (!d.machines.length) return empty(body, 6, "No machines yet");
-      var now = Date.now(), dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      var now = Date.now();
       body.replaceChildren.apply(body, d.machines.map(function (m) {
         var last = m.last_heartbeat_at || m.last_event_at, t = last ? Date.parse(last) : 0;
-        var silent = t >= dayStart.getTime() && now - t > 30 * 60000;
+        // Молчит: последний сигнал старше 30 мин, а работала машина в последние сутки.
+        var silent = now - t > 30 * 60000 && now - t < 24 * 3600000;
         var p = m.profile, passport = p ? [p.ram_gb && p.ram_gb + " GB", p.cores_logical && p.cores_logical + " cores", p.windows, p.screen_w && (p.screen_w + "×" + p.screen_h)].filter(Boolean).join(" · ") : "—";
         return el("tr", null, el("td", null, m.machine || m.machine_id), el("td", null, m.manager || "—"),
           el("td", { class: "who" }, m.flow_version || "—"),
@@ -205,10 +218,12 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
   $("run-close").addEventListener("click", function () { dlg.close(); });
   function openRun(id) {
     if (!id) return;
+    var token = ++runToken;
     $("run-title").textContent = id.split("|").slice(1).join("|");
     $("run-sub").textContent = "Loading…"; $("run-pill").replaceChildren(); $("run-body").replaceChildren();
     if (!dlg.open) dlg.showModal();
     api("/api/run?id=" + encodeURIComponent(id)).then(function (d) {
+      if (token !== runToken) return;   // открыли другой прогон, пока грузился этот
       var r = d.run, j = d.job;
       $("run-sub").textContent = [r.manager, r.account, when(r.finished_at)].filter(Boolean).join(" · ");
       $("run-pill").replaceChildren(outcomePill(r.outcome));

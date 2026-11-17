@@ -13,7 +13,8 @@ import { clearCookie, makeSession, setCookie } from "./session.js";
 import { LOGIN_HTML, PAGE_HTML } from "./ui.js";
 
 const html = (body, status = 200, headers = {}) => new Response(body, { status,
-  headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...headers } });
+  headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer", "content-security-policy": "frame-ancestors 'none'", ...headers } });
 
 async function handleLogin(request, env) {
   if (request.method === "GET") return html(LOGIN_HTML());

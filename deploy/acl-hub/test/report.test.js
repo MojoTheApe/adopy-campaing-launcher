@@ -126,3 +126,42 @@ test("failures grouped by fingerprint", async () => {
   assert.deepEqual(tab.managers, ["Gil Zangi"]);
   assert.equal(tab.last_run_id, "job-gil|G_bad");
 });
+
+// ── Ревью части 2 ──
+test("run steps keep the tail and same-millisecond last step", async () => {
+  const evs = gil();
+  const res = evs.find((e) => e.campaign === "G_bad" && e.type === "publish.result");
+  const steps = Array.from({ length: 600 }, (_, i) => ({ ...evs[2], event_id: `s:${i}`,
+    ts: new Date(Date.parse("2026-11-16T22:00:01.000Z") + i * 1000).toISOString().replace("Z", "+00:00"),
+    payload: { step: "api_create_step", ok: true, diag: { step: `step ${i}` } } }));
+  const last = { ...evs[2], event_id: "s:last", ts: res.ts.replace(".000+", ".000777+"),
+    payload: { step: "api_create_step", ok: false, diag: { step: "final failing step" } } };
+  const env = await makeEnv([...evs, ...steps, last]);
+  const { body } = await get(env, `/api/run?id=${encodeURIComponent("job-gil|G_bad")}`);
+  assert.equal(body.steps.length, 500);
+  assert.equal(body.steps.at(-1).note, "final failing step");
+  assert.ok(body.steps[0].ts < body.steps.at(-1).ts);
+});
+
+test("live filters by manager on the server", async () => {
+  const noisy = Array.from({ length: 30 }, (_, i) => ({ ...gil()[0], event_id: `n:${i}`, type: "plan.checked",
+    ts: `2026-11-17T10:00:${String(i).padStart(2, "0")}.000+00:00`, job_id: null, payload: {} }));
+  const env = await makeEnv([...YOTAM, ...gil(), ...noisy]);
+  const { body } = await get(env, "/api/live?limit=10&manager=" + encodeURIComponent("Yotam Balteriski"));
+  assert.ok(body.events.length > 0);
+  assert.ok(body.events.every((e) => e.manager === "Yotam Balteriski"));
+});
+
+test("jobs counted from runs when job.created is missing", async () => {
+  const env = await makeEnv(gil().filter((e) => e.type !== "job.created"));
+  const g = (await get(env, "/api/summary?day=2026-11-16&tz=0")).body.buyers.find((b) => b.manager === "Gil Zangi");
+  assert.equal(g.jobs, 1);
+});
+
+test("object errors are shown as text", async () => {
+  const bad = { ...gil()[7], event_id: "o:1", campaign: "G_obj", payload: { campaign_name: "G_obj", success: false, error: { message: "boom" } } };
+  const env = await makeEnv([bad]);
+  const { body } = await get(env, "/api/live");
+  assert.ok(!body.events[0].text.includes("[object Object]"));
+  assert.match(body.events[0].text, /boom/);
+});

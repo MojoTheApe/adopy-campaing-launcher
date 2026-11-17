@@ -40,3 +40,12 @@ test("page script parses", () => {
   const script = PAGE_HTML.split("<script>")[1].split("</script>")[0];
   assert.doesNotThrow(() => new Function(script));
 });
+
+test("page sends anti-framing and referrer headers", async () => {
+  const res = await worker.fetch(new Request("https://hub/", { headers: { Authorization: `Bearer ${OWNER}` } }), env());
+  assert.equal(res.headers.get("x-frame-options"), "DENY");
+  assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+  assert.match(res.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  const login = await worker.fetch(new Request("https://hub/login"), env());
+  assert.equal(login.headers.get("x-frame-options"), "DENY");
+});
