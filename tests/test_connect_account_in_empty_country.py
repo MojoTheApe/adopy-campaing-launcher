@@ -53,7 +53,7 @@ def test_neither_place_keeps_its_own_copy():
 
 def test_a_country_from_the_map_links_by_its_key():
     """Ключ и имя различаются, когда в карте лежит код («KW»), а в отчёте имя."""
-    assert "{% with amap_value = mc.key %}" in COUNTRY.read_text(encoding="utf-8")
+    assert "{% with amap_value = mc.key or mc.country %}" in COUNTRY.read_text(encoding="utf-8")
 
 
 def test_a_country_from_the_workbook_links_by_its_name():
