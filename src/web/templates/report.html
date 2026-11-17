@@ -4638,6 +4638,7 @@ async function dashRefresh(ev) {
       btn.disabled = false;
       btn.textContent = prev;
       aclInlineError(btn, 'Refresh failed: ' + err);
+      dashRefreshUpdateCheck();
       return false;
     }
     btn.textContent = 'Reloading…';
@@ -4647,8 +4648,15 @@ async function dashRefresh(ev) {
     btn.disabled = false;
     btn.textContent = prev;
     aclInlineError(btn, 'Refresh failed: ' + (e && e.message ? e.message : e));
+    dashRefreshUpdateCheck();
   }
   return false;
+}
+// ACL-2668: Refresh — событие проверки выпуска. Успешный Refresh перезагружает
+// страницу, и проверка идёт при загрузке; здесь — когда перезагрузки не было.
+// Не ждём ответа: проверка не задерживает и не ломает Refresh.
+function dashRefreshUpdateCheck() {
+  try { if (typeof window.aclUpdateCheck === 'function') window.aclUpdateCheck(); } catch (_e) {}
 }
 
 // ── Update to a newer ACL release ────────────────────────────────────────
@@ -4663,9 +4671,11 @@ async function dashRefresh(ev) {
   var btn = document.getElementById('acl-update-btn');
   if (!btn) return;
 
-  // Дешборд держат открытым днями: первая проверка при загрузке страницы идёт
-  // с force=1 (свежий выпуск виден сразу, ACL-2655), ежеминутная берёт кэш
-  // сервера (до минуты). Сбой сети не стирает уже известный выпуск.
+  // ACL-2668 (решение 23): никакого таймера — проверяем только по событиям
+  // байера, всегда с force=1 (свежий выпуск виден сразу, ACL-2655). Загрузка
+  // страницы покрывает успешный Refresh и смену периода: оба перезагружают
+  // страницу. Refresh, который страницу не перезагрузил, зовёт
+  // window.aclUpdateCheck. Сбой сети не стирает уже известный выпуск.
   function aclCheck(force) {
     if (btn.disabled) return;
     fetch('/acl/update/check' + (force ? '?force=1' : ''), { credentials: 'same-origin' })
@@ -4689,8 +4699,8 @@ async function dashRefresh(ev) {
       })
       .catch(function () { /* offline, or not a git install — no button, no noise */ });
   }
+  window.aclUpdateCheck = function () { aclCheck(true); };
   aclCheck(true);
-  setInterval(function () { aclCheck(false); }, 60 * 1000);
 
   btn.addEventListener('click', function () {
     if (btn.disabled) return;
@@ -10723,9 +10733,17 @@ window.cbTree = (function () {
       else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
       else {
         if (setIdx < 1) return;
-        if (!window.confirm('Remove this ad set and its ads from the campaign?')) return;
-        window.cbRemoveAdset(cur.camp.slot, setIdx);
-        setIdx = Math.max(0, setIdx - 1);
+        /* Свой диалог дашборда вместо window.confirm (ACL-2668 #37). Ответ асинхронный:
+           за это время дерево могли перерисовать — проверяем, что кампания и набор те же. */
+        var askSlot = cur.camp.slot, askIdx = setIdx, askId = openId;
+        window.aclConfirm('', { title: 'Remove this ad set and its ads from the campaign?', okLabel: 'Remove', danger: true })
+          .then(function (yes) {
+            if (!yes || openId !== askId || setIdx !== askIdx || !findCampaign(askId)) return;
+            window.cbRemoveAdset(askSlot, askIdx);
+            setIdx = Math.max(0, setIdx - 1);
+            paint();
+          });
+        return;
       }
       paint();
     } else if (act === 'open-ad') {
@@ -16479,7 +16497,7 @@ else aclMlxExpiryBoot();
 async function amapMlLogout(btn) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
   var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
-  if (!window.confirm('Log out of Multilogin ' + label + ' on this computer?\n\nYou will need to sign in again to use it.')) return;
+  if (!await window.aclConfirm('You will need to sign in again to use it.', { title: 'Log out of Multilogin ' + label + ' on this computer?', okLabel: 'Log out', danger: true })) return;
   btn.disabled = true;
   try {
     var r = await fetch('/multilogin-logout', {method: 'POST', credentials: 'same-origin',
@@ -25394,7 +25412,7 @@ function aclPickerSearch(inst, text) {
   }
   async function post(body, ask) {
     if (pending) return;
-    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
+    if (ask && !await window.aclConfirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use.', { title: 'Save anyway?', okLabel: 'Save' })) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
