@@ -4506,7 +4506,7 @@
   <div class="head-meta">
     <dl class="brand-meta">
       <div><dt>Last updated:</dt>
-      <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
+      <dd id="acl-built-at" title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
       {%- if report.source_info %}
       <div><dt>Figures:</dt>
       <dd id="acl-source-info" data-source-name="{{ report.source_info.description }}" data-source-currency="{{ report.source_info.currency_code }}" data-source-prev-currency="{{ source_comparison_info().currency_code }}" data-source-comparable="{{ 'true' if source_comparison_info().comparable else 'false' }}" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} · incomplete metadata{% endif %}</dd></div>
