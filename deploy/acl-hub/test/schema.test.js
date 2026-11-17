@@ -10,7 +10,7 @@ test("migration creates all tables", async () => {
   const db = new FakeD1(); db.applyMigrations(MIGRATIONS);
   const { results } = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
   const names = results.map((r) => r.name).filter((n) => !n.startsWith("sqlite_"));
-  assert.deepEqual(names, ["events", "jobs", "machines", "runs", "tokens"]);
+  assert.deepEqual(names, ["alert_log", "bot_state", "events", "jobs", "machines", "mutes", "runs", "tokens"]);
 });
 
 test("batch rolls back on error", async () => {

@@ -245,6 +245,13 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
   }
 
   document.addEventListener("visibilitychange", function () { if (!document.hidden && tab === "live") loadLive(); });
-  load(); schedule();
+  // Ссылка из Telegram: /#run=<id> сразу открывает карточку прогона.
+  function fromHash() {
+    var m = /^#run=(.+)$/.exec(location.hash);
+    if (m) { try { openRun(decodeURIComponent(m[1])); } catch (_) { /* битая ссылка */ } }
+  }
+  window.addEventListener("hashchange", fromHash);
+  dlg.addEventListener("close", function () { if (/^#run=/.test(location.hash)) history.replaceState(null, "", location.pathname); });
+  load(); schedule(); fromHash();
 })();
 </script></body></html>`;

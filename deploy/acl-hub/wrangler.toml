@@ -5,6 +5,11 @@ compatibility_date = "2026-11-01"
 
 [vars]
 LIBRARY_REPO = "MojoTheApe/acl-lib"
+HUB_URL = "https://acl-hub.acl-hub.workers.dev"
+
+# Каждые 5 мин — зависшие задания; 05:00 UTC (07:00 Израиль зимой) — дайджест за вчера.
+[triggers]
+crons = ["*/5 * * * *", "0 5 * * *"]
 
 [[d1_databases]]
 binding = "DB"
@@ -13,4 +18,5 @@ database_name = "acl_hub"
 database_id = "75b520a8-b3aa-4396-8b8d-23a6fc2016d6"
 migrations_dir = "migrations"
 
-# Секрет OWNER_KEY задаётся `wrangler secret put OWNER_KEY`, в файл его не писать.
+# Секреты (только `wrangler secret put`, в файл не писать): OWNER_KEY, TG_BOT_TOKEN, TG_WEBHOOK_SECRET,
+# TG_ALLOWED_CHATS (id чатов через запятую).

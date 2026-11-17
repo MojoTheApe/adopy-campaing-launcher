@@ -2,7 +2,8 @@
 // Каждое событие пишется один раз (UNIQUE event_id); выводы строятся только для новых.
 import { json } from "./respond.js";
 import { authorize, bearer, isOwner } from "./auth.js";
-import { derivable, deriveStatements, machineStatement } from "./derive.js";
+import { classify, derivable, deriveStatements, machineStatement } from "./derive.js";
+import { notifyFailedRuns } from "./alerts.js";
 
 export const MAX_BODY = 1024 * 1024;
 const MAX_UNPACKED = 16 * 1024 * 1024;     // защита от «бомбы»: распакованная пачка не больше 16 МБ
@@ -71,7 +72,8 @@ async function runBatches(db, stmts) {
 
 // Общая часть приёма. Бросает исключение при сбое D1 (вызывающий отвечает 503, машина повторит).
 // Выводы строятся для событий с derived = 0 — и новых, и тех, чьи выводы сорвались в прошлой доставке.
-export async function ingestEvents(env, events, { batchId }) {
+// failedRuns (необязательно): сюда кладутся run_id новых сбоев — для алертов.
+export async function ingestEvents(env, events, { batchId, failedRuns = null }) {
   const out = { accepted: 0, duplicates: 0, rejected: 0 };
   const receivedAt = new Date().toISOString();
   const good = [];
@@ -117,6 +119,14 @@ export async function ingestEvents(env, events, { batchId }) {
     derived.push(env.DB.prepare(`UPDATE events SET derived = 1 WHERE event_id IN (${part.map(() => "?").join(", ")})`)
       .bind(...part.map((ev) => ev.event_id)));
     await env.DB.batch(derived);   // выводы и флаг — одной транзакцией
+    if (failedRuns) {
+      for (const ev of part) {
+        const campaign = ev.campaign || ev.payload?.campaign_name;
+        if (ev.type === "publish.result" && ev.job_id && campaign && classify(ev.payload || {}) === "failed") {
+          failedRuns.push(`${ev.job_id}|${campaign}`);
+        }
+      }
+    }
   }
   return out;
 }
@@ -159,7 +169,7 @@ export async function readBatchBody(request) {
   return { events: parseLines(text) };
 }
 
-export async function handleBatch(request, env) {
+export async function handleBatch(request, env, ctx) {
   const auth = await authorize(bearer(request), env);
   if (auth === "denied") return json({ error: "unauthorized" }, 401);
   if (auth === "unavailable") return json({ error: "auth unavailable" }, 503);
@@ -168,8 +178,15 @@ export async function handleBatch(request, env) {
   if (!MACHINE_RE.test(machine) || !BATCH_RE.test(batchId)) return json({ error: "bad headers" }, 400);
   const { error, events } = await readBatchBody(request);
   if (error) return error;
+  const failedRuns = [];
   try {
-    return json({ ok: true, ...(await ingestEvents(env, events, { batchId })) });
+    const out = await ingestEvents(env, events, { batchId, failedRuns });
+    // Алерт уходит после ответа машине: отправка не держит приём.
+    if (failedRuns.length) {
+      const job = notifyFailedRuns(env, failedRuns);
+      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(job); else await job;
+    }
+    return json({ ok: true, ...out });
   } catch (_) {
     // Сбой D1: машина повторит позже, события лежат в её ящике.
     return json({ error: "storage unavailable" }, 503);
