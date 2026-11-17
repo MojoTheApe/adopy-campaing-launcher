@@ -131,7 +131,7 @@ class Rig:
         self.reg = warm.WarmRegistry(
             store=self.store, wall=lambda: self.now[0], scan=self._scan, tab_factory=self._tab,
             start_profile=self._start, close_window=self._stop, slot_queue=lambda: FakeQueue(self),
-            gate=self.gate, sleep=self._sleep_fake, cpu=lambda: 10.0, stagger=lambda: 7.0, stops=self.stops,
+            gate=self.gate, sleep=self._sleep_fake, cpu=lambda: 10.0, stops=self.stops,
             pid_alive=lambda pid, created: pid in self.alive_pids,
             pending_close=lambda pid: self.pending.pop(pid, None),
             pending_restore=lambda pid, prev: self.pending.setdefault(pid, prev),
@@ -568,19 +568,20 @@ def test_already_open_profile_is_kept_warm_but_not_marked_as_ours(rig):
     assert rig.reg.session(PID).dashboard_started is False
 
 
-def test_starts_are_staggered_only_between_real_starts(rig):
+def test_starts_follow_each_other_without_a_pause(rig):
+    # ACL-2668 #14: случайной паузы 5–10 с между запусками больше нет.
     pids = [f"{i:08d}-0000-4000-8000-000000000000" for i in range(4)]
-    rig.scan_result[pids[1]] = ("port", 9555)       # этот уже открыт: пауза после него не нужна
+    rig.scan_result[pids[1]] = ("port", 9555)
     items = [(f"A{i}", entry(pid)) for i, pid in enumerate(pids)]
     results = rig.reg.open_many(items)
     assert [r["code"] for r in results.values()] == ["started", "already_open", "started", "started"]
-    assert rig.sleeps == [7.0, 7.0], rig.sleeps    # после 1-го и после 3-го настоящего запуска
+    assert rig.sleeps == [], rig.sleeps
 
 
-def test_default_stagger_is_between_five_and_ten_seconds(tmp_path):
+def test_registry_has_no_stagger(tmp_path):
     reg = warm.WarmRegistry(store=warm.WarmStore(tmp_path / "w.json"), scan=lambda ids: {})
-    values = [reg._stagger() for _ in range(200)]
-    assert min(values) >= 5.0 and max(values) <= 10.0 and len(set(values)) > 1
+    assert not hasattr(reg, "_stagger")
+    assert not hasattr(warm, "STAGGER_MIN_S") and not hasattr(warm, "STAGGER_MAX_S")
 
 
 # ───────────────────────── Close profiles ─────────────────────────

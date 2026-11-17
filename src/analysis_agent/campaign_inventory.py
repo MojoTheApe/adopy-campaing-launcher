@@ -1021,7 +1021,6 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
     сохраняет физическую аренду профиля на весь вызов.
     """
     from src.analysis_agent import account_spend_api as _api
-    from src.analysis_agent.account_refresh_state import read_session
     from src.fb_ads_rpa.profile_lease import require_profile_lease
     from src.fb_api.graph import GraphStop
 
@@ -1041,15 +1040,15 @@ def _read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
         if _api.normalize_act(str(getattr(entry, "ad_account_id", "") or "")) != sess.act:
             raise ValueError("The account map changed. Its list was not read with the previous session.")
         require_profile_lease(_as._profile_key(account))  # noqa: SLF001
-        with read_session(priority=trigger in {"action", "retry"}):
-            from src.analysis_agent.account_refresh_machine import verify_session
-            verify_session(sess)
-            read_into(snap, sess.client, sess.act, structure_only=True)
-            if getattr(sess.client, "stopped", None) is not None:
-                stop = sess.client.stopped.kind
-                _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
-            finalize(snap)
-            record_status(snap)
+        # ACL-2668: общего машинного замка чтений нет; тот же аккаунт исключает аренда профиля выше.
+        from src.analysis_agent.account_refresh_machine import verify_session
+        verify_session(sess)
+        read_into(snap, sess.client, sess.act, structure_only=True)
+        if getattr(sess.client, "stopped", None) is not None:
+            stop = sess.client.stopped.kind
+            _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
+        finalize(snap)
+        record_status(snap)
     except Exception as exc:  # noqa: BLE001 — исход команды не меняется
         snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
@@ -1137,13 +1136,15 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
             return _inner_operation()
 
     from src.analysis_agent.account_refresh_machine import MachineStore, binding
-    from src.analysis_agent.account_refresh_state import read_session, target_activity
+    from src.analysis_agent.account_refresh_state import target_activity
     coordinator = machine if machine is not None else MachineStore()
     clock = now if now is not None else time.time
     force = trigger.split(":")[0] in {"action", "retry"}
     try:
         profile = _as._profile_key(account)  # noqa: SLF001
-        with browser_operation.reading(), _as._lock_for(account), target_activity(profile), read_session(priority=force):
+        # ACL-2668: чтения разных аккаунтов идут параллельно; одно чтение на аккаунт
+        # держат аренда профиля, target_activity и coordinator.run (по binding).
+        with browser_operation.reading(), _as._lock_for(account), target_activity(profile):
             key = binding(account)
             coordinator.recover_running(now=clock())
             halt = coordinator.halt(now=clock())
@@ -1160,8 +1161,7 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
                 if is_status_only_ok(done):
                     done._machine_committed = True
                     return done
-            token = coordinator.begin(key, "inline", trigger)
-            with coordinator.executing(token, key):
+            with coordinator.run(key, "inline", trigger) as token:
                 own_recovery = coordinator.stop_generation(key)
                 if done is None:
                     done = operation()
