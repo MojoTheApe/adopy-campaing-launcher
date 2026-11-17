@@ -464,7 +464,7 @@
   // (open_by_hand, restart_cooldown, not_loopback, rpa), отдаётся как есть.
   var FRIENDLY = {
     mlx: "Multilogin isn't running — start it and try again",
-    hand: 'Profile is open in Multilogin by hand — close it there, wait about 3 minutes, then press Open profile',
+    hand: 'Profile is open in Multilogin by hand — close it there, then press Open profile',
     closing: 'Profile is closing — try again in a few seconds',
     loggedOut: 'Logged out in this profile — log in inside Multilogin, then retry',
     checkpoint: 'Facebook checkpoint — resolve it inside the profile',
