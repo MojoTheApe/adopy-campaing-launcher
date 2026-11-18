@@ -9,7 +9,7 @@ from src.fb_ads_rpa.profile_lease import profile_lock
 from src.fb_api import commands as cmd
 from src.web import campaign_commands as webcmd
 from tests.test_acl1784_api_review_window import api_job  # noqa: F401
-from tests.test_acl1800_campaign_commands import ACT, ACCOUNT, CAMP_A, FakeMeta, World, t
+from tests.test_acl1800_campaign_commands import ACT, ACCOUNT, CAMP_A, CAMP_CBO, FakeMeta, World, t
 
 
 class InventoryMeta(FakeMeta):
@@ -49,6 +49,7 @@ def world(tmp_path, monkeypatch):
     q = ar.RefreshQueue(accounts=lambda: [ACCOUNT])
     monkeypatch.setattr(ar, "_QUEUE", q)
     monkeypatch.setattr(q, "start", lambda: None)
+    monkeypatch.setattr(cmd, "get_store", lambda: w.store)
     return w, q
 
 
@@ -57,22 +58,100 @@ def execute(w, preview, **callbacks):
                        idempotency_key="refresh-key-0001", spawn=lambda fn: fn(), sleep=lambda _: None, **callbacks)
 
 
-def test_success_refresh_uses_exact_same_session_without_extra_open_or_write(world):
+def _seed_list(status="PAUSED"):
+    from tests.test_acl1798_campaign_inventory import camp
+    snap = ci.Snapshot(account=ACCOUNT, state="ok")
+    snap.campaigns, _ = ci.parse_inventory([camp(CAMP_A, "Camp A", status=status)], "campaign")
+    ci.put_result(snap)
+
+
+def test_confirmed_row_is_shown_after_readback_without_a_list_read_in_the_session(world):
+    # ACL-2789: the row follows the readback at once; the list read happens after the profile is released.
     w, q = world
+    _seed_list("PAUSED")
     preview = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
-    calls = []
-    def refresh(op, sess):
-        assert w.active and sess is w.current
-        calls.append(sess)
-        webcmd._refresh_after_write(op, sess)
-    execute(w, preview, after_write=refresh, on_stale=webcmd._refresh_stale)
+    released = []
+    def after_release(op):
+        released.append(w.active)
+        webcmd._refresh_after_release(op)
+    execute(w, preview, after_write=webcmd._refresh_after_write, after_release=after_release,
+            on_stale=webcmd._refresh_stale)
     assert w.final(preview)["state"] == cmd.SUCCEEDED
-    assert len(w.sessions) == 2 and len(calls) == 1
+    assert len(w.sessions) == 2 and released == [False]   # preview + execute; refresh came after release
     assert w.meta.posts == [(f"/{CAMP_A}", {"status": "ACTIVE"})]
-    snap = ci.get_snapshot(ACCOUNT)
-    assert snap.state == "ok" and snap.insights == {} and (snap.date_from, snap.date_to) == ("", "")
-    assert next(c for c in snap.campaigns if c["id"] == CAMP_A)["status"] == "ACTIVE"
-    assert q.state()["rows"][ACCOUNT]["state"] == "ok" and q.state()["queued"] == []
+    assert w.meta.gets == [] or all("/campaigns" not in g and "/adsets" not in g for g in w.meta.gets)
+    row = next(c for c in ci.get_snapshot(ACCOUNT).campaigns if c["id"] == CAMP_A)
+    assert row["status"] == "ACTIVE" and row["effective_status"] == "ACTIVE"
+    assert q.state()["queued"] == [{"account": ACCOUNT, "trigger": "action"}]
+
+
+def test_second_command_on_same_account_is_not_held_by_the_first_refresh(world):
+    import threading
+    w, _q = world
+    p1 = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    def slow_release(op):
+        entered.set()
+        assert release.wait(5)
+    def spawn(fn):
+        def work():
+            try: fn()
+            finally: finished.set()
+        threading.Thread(target=work).start()
+    cmd.execute(w.store, w.open_session, revision_id=p1["revision_id"], idempotency_key="refresh-key-0001",
+                spawn=spawn, sleep=lambda _: None, after_write=webcmd._refresh_after_write,
+                after_release=slow_release)
+    try:
+        assert entered.wait(5)
+        # The first command's refresh is still going, yet its profile lock is free.
+        got = threading.Event()
+        def second():
+            with profile_lock(fake_profile(ACCOUNT)):
+                got.set()
+        th = threading.Thread(target=second); th.start()
+        assert got.wait(2)
+        th.join()
+    finally:
+        release.set()
+        assert finished.wait(5)
+
+
+def test_back_to_back_commands_on_one_account_queue_one_refresh(world, monkeypatch):
+    w, q = world
+    requested = []
+    real = q.request
+    monkeypatch.setattr(q, "request", lambda *a, **k: requested.append(a) or real(*a, **k))
+    p1 = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    works = []
+    def spawn(fn):
+        works.append(fn)
+    def run(preview, key):
+        return cmd.execute(w.store, w.open_session, revision_id=preview["revision_id"], idempotency_key=key,
+                           spawn=spawn, sleep=lambda _: None, after_write=webcmd._refresh_after_write,
+                           after_release=webcmd._refresh_after_release)
+    w.meta.objs[CAMP_CBO]["status"] = "ACTIVE"
+    p2 = w.preview("set_status", "PAUSED", [t("campaign", CAMP_CBO)])
+    run(p1, "refresh-key-0001")
+    run(p2, "refresh-key-0002")      # both accepted before either runs
+    works[0]()
+    assert requested == []           # the second command is still queued: it will refresh for both
+    works[1]()
+    assert w.final(p1)["state"] == w.final(p2)["state"] == cmd.SUCCEEDED
+    assert len(requested) == 1 and q.state()["queued"] == [{"account": ACCOUNT, "trigger": "action"}]
+
+
+def test_commands_without_the_new_callbacks_make_the_same_graph_calls(world):
+    w, _q = world
+    _seed_list("PAUSED")
+    p1 = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    execute(w, p1)
+    plain = w.clients[-1].calls
+    w.meta.objs[CAMP_A]["status"] = "PAUSED"
+    p2 = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    cmd.execute(w.store, w.open_session, revision_id=p2["revision_id"], idempotency_key="refresh-key-0002",
+                spawn=lambda fn: fn(), sleep=lambda _: None, after_write=webcmd._refresh_after_write,
+                after_release=webcmd._refresh_after_release)
+    assert w.clients[-1].calls == plain
 
 
 def test_hand_edit_preserves_no_write_refusal_and_queues_immediate_action(world):
@@ -86,17 +165,6 @@ def test_hand_edit_preserves_no_write_refusal_and_queues_immediate_action(world)
     assert called == []
     assert q.state()["queued"] == [{"account": ACCOUNT, "trigger": "action"}]
     assert "Nothing was written" in final["message"]
-
-
-def test_post_write_call_ceiling_failure_keeps_success_and_does_not_reset_budget(world, monkeypatch):
-    w, q = world
-    monkeypatch.setenv(cmd.MAX_CALLS_ENV, "4")
-    preview = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
-    execute(w, preview, after_write=webcmd._refresh_after_write)
-    assert w.final(preview)["state"] == cmd.SUCCEEDED and len(w.meta.posts) == 1
-    assert w.clients[-1].calls == 4 and w.clients[-1].stopped.kind == "call_budget"
-    assert ci.get_attempt(ACCOUNT)["state"] == "failed"
-    assert q.state()["rows"][ACCOUNT]["state"] == "failed" and q.state()["halt"] is not None
 
 
 def test_unexpected_refresh_exception_cannot_rewrite_a_confirmed_command(world):
@@ -159,32 +227,30 @@ def test_publisher_never_reads_after_unconfirmed_cancelled_or_dry_publish(world,
     assert ci.get_snapshot(ACCOUNT) is None and w.sessions == []
 
 
-def test_terminal_command_keeps_ui_polling_until_same_session_refresh_finishes(world):
+def test_terminal_command_keeps_ui_polling_until_post_release_refresh_is_queued(world):
     import threading
     w, _q = world
     preview = w.preview('set_status', 'ACTIVE', [t('campaign', CAMP_A)])
     entered, release, finished = threading.Event(), threading.Event(), threading.Event()
-    def refresh(op, sess):
-        assert w.active
+    def refresh(op):
+        assert not w.active
         entered.set()
         assert release.wait(3)
-        webcmd._refresh_after_write(op, sess)
     def spawn(fn):
         def work():
             try: fn()
             finally: finished.set()
         threading.Thread(target=work).start()
     cmd.execute(w.store, w.open_session, revision_id=preview['revision_id'],
-                idempotency_key='refresh-pending-001', spawn=spawn, after_write=refresh)
+                idempotency_key='refresh-pending-001', spawn=spawn, after_release=refresh)
     try:
         assert entered.wait(3)
         visible = w.final(preview)
         assert visible['state'] == cmd.SUCCEEDED and visible.get('refresh_pending') is True
-        assert ci.get_snapshot(ACCOUNT) is None
     finally:
         release.set()
         assert finished.wait(3)
-    assert w.final(preview)['refresh_pending'] is False and ci.get_snapshot(ACCOUNT).state == 'ok'
+    assert w.final(preview)['refresh_pending'] is False
     assert len(w.sessions) == 2 and len(w.meta.posts) == 1
 
 
