@@ -1395,6 +1395,42 @@ def _load_ref_options() -> dict:
     return result
 
 
+def _builder_buyer_scope() -> dict:
+    """{name, suffix}: чьи черновики у страницы и как называть её ключи localStorage.
+
+    Суффикс пустой у байера по умолчанию: его ключи остаются прежними, и
+    существующие черновики в браузере не теряются."""
+    from src.web import builder_drafts as _bd
+    from src.web.buyer import get_selected_cm
+
+    name = (get_selected_cm() or "").strip()
+    suffix = _bd._suffix(name)
+    return {"name": name, "suffix": suffix}
+
+
+def _drop_other_buyers_builder_rows(report: dict) -> None:
+    """ACL-2780: в билдере только аккаунты выбранного байера.
+
+    Строки из отчёта (`open_recs`, `account_rows`) могут принадлежать другому
+    байеру той же машины: убираем их из этой отрисовки (отчёт уже скопирован).
+    Аккаунт без строки в карте никому не принадлежит и остаётся, как в списке."""
+    from src.web import account_buyer as _ab
+    from src.web.buyer import get_selected_cm
+
+    selected = (get_selected_cm() or "").strip()
+    tag_map = _ab.tags()
+    for country in report.get("countries", []):
+        recs = country.get("open_recs")
+        if isinstance(recs, dict):
+            country["open_recs"] = {k: v for k, v in recs.items() if _ab.is_visible(k, selected, tag_map)}
+        rows = country.get("account_rows")
+        if isinstance(rows, list):
+            country["account_rows"] = [
+                r for r in rows
+                if not isinstance(r, dict)
+                or _ab.is_visible(r.get("account_label") or r.get("account") or "", selected, tag_map)]
+
+
 def _add_linked_accounts_to_builder(report: dict) -> int:
     """Аккаунт, привязанный к стране на дешборде, виден и в её билдере.
 
@@ -2219,6 +2255,7 @@ def _render_report(
     # До сборки списка аккаунтов ниже: добавленные должны получить и проверку
     # готовности, и строку в билдере, а не одно из двух.
     _add_linked_accounts_to_builder(report)
+    _drop_other_buyers_builder_rows(report)
     _enrich_country_overview(report)
     period_cmp, compare_note = _build_compare(
         base_report, _df, date_from, date_to, span.strip(),
@@ -2266,6 +2303,8 @@ def _render_report(
             "account_preflight": account_preflight,
             "account_preflight_json": account_preflight,
             "account_alias_map_json": account_alias_map,
+            # ACL-2780: байер, чьи черновики билдера показывает страница.
+            "builder_buyer": _builder_buyer_scope(),
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
@@ -4492,9 +4531,12 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
 
 
 @app.get("/api/builder-state")
-def api_builder_state_get() -> JSONResponse:
-    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}."""
-    return JSONResponse({"ok": True, "docs": _builder_drafts.load()})
+def api_builder_state_get(buyer: str | None = None) -> JSONResponse:
+    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}.
+
+    ACL-2780: набор свой у каждого байера. `buyer` — тот, под кем открыта
+    страница (вкладка могла остаться от прежнего байера); нет — выбранный сейчас."""
+    return JSONResponse({"ok": True, "docs": _builder_drafts.load(buyer)})
 
 
 @app.post("/api/builder-state")
@@ -4512,7 +4554,8 @@ async def api_builder_state_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
     try:
         accepted, doc = _builder_drafts.save(body.get("name"), body.get("saved_at"),
-                                             body.get("data"), body.get("base"))
+                                             body.get("data"), body.get("base"),
+                                             buyer=body.get("buyer") if isinstance(body.get("buyer"), str) else None)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except OSError:
