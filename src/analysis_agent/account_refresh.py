@@ -66,6 +66,11 @@ _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
 
 _MINUTES = re.compile(r"about (\d+) min", re.I)
 
+#: ACL-2653: a read that stays "updating" longer than this ends as failed (the row then shows Retry).
+STUCK_UPDATING_S = 1200.0
+STUCK_TEXT = "The read did not finish in 20 minutes. Press Retry."
+
+
 #: Остановки Meta (`Snapshot.stop`), общие для всех аккаунтов: вид → (причина, ждать по таймеру?).
 #: Чекпоинт и потолок вызовов сами не проходят: только явный Retry, который удался.
 _GLOBAL_STOPS: dict[str, tuple[str, bool]] = {
@@ -74,6 +79,16 @@ _GLOBAL_STOPS: dict[str, tuple[str, bool]] = {
     "policy_block": ("Meta refused the requests. Account reads are paused for a while.", True),
     "call_budget": _GLOBAL_CODES["call_budget"][:1] + (False,),
 }
+
+
+def _action_text(trigger: str) -> str:
+    """Human text of the action that found a stop (`a background read`, `Retry`...)."""
+    try:
+        from src.fb_api import account_blocks
+
+        return account_blocks.ACTION_TEXT.get(account_blocks.action_for_trigger(trigger.split(":")[0]), "a read")
+    except Exception:  # noqa: BLE001
+        return "a read"
 
 
 def _parse_utc(value: str) -> float | None:
@@ -120,7 +135,7 @@ def _held_blocks(account: str, trigger: str) -> bool:
     The skip writes no attempt row, so `campaign_inventory.latest_stops()` and a persisted
     global halt stay exactly as they were.
     """
-    return trigger.split(":")[0] != "retry" and _profile_held(account)
+    return trigger.split(":")[0] not in ("retry", "open") and _profile_held(account)
 
 
 def recently_failed(account: str, *, now: float | None = None) -> bool:
@@ -175,7 +190,18 @@ def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
     return None
 
 
-def classify(snap: Snapshot) -> Literal["ok", "account", "global"]:
+def is_person_stop(snap: Snapshot) -> bool:
+    """ACL-2653: the read ended on a Facebook checkpoint/lock of ONE profile (a person's problem, not the machine's)."""
+    if (snap.error_code or "").strip() == "account_blocked":
+        return False
+    stop = _global_stop(snap)
+    return bool(stop) and stop[0] == _GLOBAL_STOPS["checkpoint"][0]
+
+
+def classify(snap: Snapshot) -> Literal["ok", "account", "global", "person"]:
+    # ACL-2653: a checkpoint holds only its own profile; reads of the other accounts go on.
+    if is_person_stop(snap):
+        return "person"
     if _global_stop(snap):
         return "global"
     # Любой иной обрыв (включая PageFailed и обычную ошибку транспорта) оставляет
@@ -434,7 +460,7 @@ class RefreshQueue:
         now = self._clock()
         found: dict | None = None
         for account, (kind, at_utc) in sorted(stops.items()):
-            if kind in ("checkpoint", "call_budget"):
+            if kind == "call_budget":
                 until = None
             elif kind in ("rate_limited", "policy_block"):
                 at = _parse_utc(at_utc)
@@ -447,14 +473,76 @@ class RefreshQueue:
                 continue
             halt = {"reason": _GLOBAL_STOPS[kind][0], "until": until, "kind": kind,
                     "account": account, "persisted": True}
-            if kind == "checkpoint":
-                return halt
             found = found or halt
         return found
 
+    def _prune_machine_stops(self) -> None:
+        """ACL-2653: drop machine stops that cannot lift on their own: an unmapped key (the account was removed)
+        and the old machine-wide `checkpoint` stop. A dropped checkpoint of a known account becomes that
+        profile's hold, so the profile itself stays untouched until a person presses Retry.
+        Runs under the machine read lease; if a read owns it, the next call tries again."""
+        if self._machine is None:
+            return
+        accounts = list(self._accounts()) if self._accounts is not None else []
+        keys = self._bindings(accounts) if accounts else {}
+        try:
+            hold = self._machine.lease("account-structure-read.lock").holding(timeout=0)
+            hold.__enter__()
+        except TimeoutError:
+            return
+        try:
+            dropped = self._machine.prune_stops()
+        finally:
+            hold.__exit__(None, None, None)
+        by_key = {key: account for account, key in keys.items()}
+        for stop in dropped:
+            log.info("Dropped a machine checkpoint stop (%s)", "known account" if stop["key"] in by_key else "other config")
+            account = by_key.get(stop["key"])
+            if account and stop["kind"] == "checkpoint":
+                self._hold_person_lock(account, "a background read")
+
+    def _hold_person_lock(self, account: str, action: str = "") -> None:
+        """ACL-2653: record the profile's Facebook lock as a hold (kept `at` if it exists). Never raises."""
+        try:
+            from src.analysis_agent import account_spend
+            from src.fb_api import account_blocks
+
+            account_blocks.note_person_lock(account_spend._profile_key(account), account, action)  # noqa: SLF001
+        except Exception:  # noqa: BLE001 - an unreadable map/hold file never stops the queue
+            log.debug("The Facebook lock hold was not written", exc_info=True)
+
+    def _expire_stuck(self) -> None:
+        """ACL-2653: the read that is RUNNING and stays so past STUCK_UPDATING_S ends as failed, so the row shows Retry.
+
+        Only the running row: queue and machine entries are never withdrawn. A running row without a start stamp
+        (saved by an older build) is stamped now. Under the state lock. The real read, if it is still alive,
+        overwrites this with its true result when it ends."""
+        now = self._clock()
+        for account in list(self._reading):
+            row = self._rows.get(account)
+            if not row or row.get("state") != "updating":
+                continue        # queued or paused rows are never expired: they are waiting, not reading
+            since = row.get("since")
+            if not isinstance(since, (int, float)):
+                row["since"] = now
+                continue
+            if now - since <= STUCK_UPDATING_S:
+                continue
+            self._rows[account] = {"list_at": row.get("list_at", ""), "state": "failed", "error": STUCK_TEXT}
+            self._reading.remove(account)
+
     def _maybe_lift(self) -> None:
+        self._expire_stuck()
+        if self._halt and self._halt.get("kind") == "checkpoint":
+            self._halt = None       # ACL-2653: an old saved checkpoint halt no longer stops anything
         if self._machine is not None:
             shared = self._machine.halt(now=self._clock())
+            if shared:
+                try:
+                    self._prune_machine_stops()
+                    shared = self._machine.halt(now=self._clock())
+                except Exception:  # noqa: BLE001 - a cleanup problem keeps the stop, never raises into the queue
+                    log.debug("Machine stops were not pruned", exc_info=True)
             if shared:
                 account = next((a for a, key in self._bindings(self._accounts() if self._accounts else []).items()
                                 if key == shared["key"]), "")
@@ -470,6 +558,19 @@ class RefreshQueue:
             self._bypass.clear()
         if self._halt is None:
             self._halt = self._persisted_halt()
+
+    def forget(self, accounts: list[str]) -> None:
+        """ACL-2653: a removed account leaves the queue, its row and its sweep slot."""
+        with self._state_guard():
+            for account in accounts:
+                self._entries.pop(account, None)
+                self._bypass.discard(account)
+                self._rows.pop(account, None)
+                if account in self._reading:
+                    self._reading.remove(account)
+                self._sweep_complete(account)
+                self._keys.pop(account, None)
+            self._maybe_lift()
 
     def request(self, account: str, trigger: str, *, force: bool = False, window: str = "") -> dict:
         """Поставить аккаунт в очередь.
@@ -510,7 +611,7 @@ class RefreshQueue:
                 # use their already-open session and settle separately.
                 self._push(account, trigger, label, force)
                 halted = self._halt is not None
-                if halted and force and trigger in ("retry", "action") and self._halt["until"] is None:
+                if halted and force and trigger in ("retry", "action", "open") and self._halt["until"] is None:
                     self._bypass.add(account)
                     halted = False
                 self._wake.notify()
@@ -707,7 +808,7 @@ class RefreshQueue:
         with self._state_guard():
             if account not in self._reading:
                 self._reading.append(account)
-            self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
+            self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": "", "since": self._clock()}
         snap = None
         try:
             snap = self._read(account, trigger)
@@ -891,7 +992,7 @@ class RefreshQueue:
                     if item is not None:
                         account, trigger, bypassed = item
                         self._reading.append(account)
-                        self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
+                        self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": "", "since": self._clock()}
                 for acc, label in skips:
                     self._telemetry_skipped(acc, label)
                 if item is None:
@@ -923,6 +1024,12 @@ class RefreshQueue:
         if paused:
             self._halt = {**paused, "account": account, "machine_generation": paused["generation"]}
             self._push(account, trigger.split(":")[0], trigger, bypassed)
+            if trigger.split(":")[0] in ("open", "retry", "action"):
+                # ACL-2653: a person's read held back by a timed stop says why, not "updating".
+                until = paused.get("until")
+                when = f" Until {datetime.fromtimestamp(until).strftime('%H:%M')}." if until else ""
+                prev = self._rows.get(account, {}).get("list_at", "")
+                self._rows[account] = {"list_at": prev, "state": "failed", "error": f"{paused['reason']}{when}"}
             return
         verdict = classify(snap)
         self._sweep_complete(account, trigger)
@@ -945,6 +1052,10 @@ class RefreshQueue:
             return
         why = snap.error or (snap.problems[-1] if snap.problems else "") or snap.error_code or snap.stop or "failed"
         self._rows[account] = {"list_at": prev_at, "state": "failed", "error": why}
+        if verdict == "person":
+            # ACL-2653: only this profile waits for a person; the queue of the other accounts is not halted.
+            self._hold_person_lock(account, _action_text(trigger))
+            return
         if verdict == "global":
             reason, wait = _global_stop(snap)  # type: ignore[misc]
             self._halt = {"reason": reason, "until": self._clock() + wait if wait else None,
@@ -1033,6 +1144,69 @@ def dashboard_accounts() -> list[str]:
     from config import paths
 
     return list(load_ad_account_map(paths.get_ad_account_map_path()))
+
+
+def removal_keys(accounts: list[str]) -> dict[str, tuple[str, str]]:
+    """ACL-2653: `{account: (machine binding, physical profile key)}` for accounts about to leave the map.
+
+    Taken BEFORE the map row is deleted: afterwards neither key can be derived. An invalid row gives no key."""
+    out: dict[str, tuple[str, str]] = {}
+    from src.analysis_agent import account_spend
+
+    for account in accounts:
+        try:
+            bound = binding(account)
+        except Exception:  # noqa: BLE001 - no valid binding: nothing machine-wide can exist for it
+            bound = ""
+        try:
+            profile = account_spend._profile_key(account)  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            profile = ""
+        if bound or profile:
+            out[account] = (bound, profile)
+    return out
+
+
+def forget_accounts(removed: dict[str, tuple[str, str]], remaining: list[str] | None = None) -> None:
+    """ACL-2653: Remove from ACL drops the machine stop and the hold of the account, so nothing waits for it forever.
+
+    The stop belongs to the binding and the hold to the physical profile: each is kept while another remaining
+    label (an alias) shares it. Blocking: call it off the event loop. Each step has its own try, so a lease
+    timeout still clears the hold and the queue entry. Never raises (the removal itself has already succeeded)."""
+    if not removed:
+        return
+    from src.analysis_agent import account_spend
+
+    shared_profiles, shared_bindings = set(), set()
+    for label in remaining or []:
+        try:
+            shared_profiles.add(account_spend._profile_key(label))  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            shared_bindings.add(binding(label))
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        keys = {b for b, _p in removed.values() if b and b not in shared_bindings}
+        if keys:
+            with MachineStore().lease("account-structure-read.lock").holding(timeout=10):
+                MachineStore().drop_stops(keys)
+    except Exception:  # noqa: BLE001
+        log.warning("Could not drop the machine stop of a removed account", exc_info=True)
+    try:
+        from src.fb_api import account_blocks
+
+        for _account, (_b, profile) in removed.items():
+            if profile and profile not in shared_profiles:
+                account_blocks.clear(profile, "removed")
+    except Exception:  # noqa: BLE001
+        log.warning("Could not clear the hold of a removed account", exc_info=True)
+    try:
+        if _QUEUE is not None:
+            _QUEUE.forget(list(removed))
+    except Exception:  # noqa: BLE001
+        log.warning("Could not drop a removed account from the queue", exc_info=True)
 
 
 def resolve_account(account: str) -> str | None:

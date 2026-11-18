@@ -235,25 +235,21 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     assert not retry.is_visible() and site.errors == []
 
 
-def test_global_checkpoint_has_one_banner_and_only_explicit_same_account_retry_resumes(dashboard):
+def test_a_checkpoint_on_one_account_never_stops_the_other_accounts_and_retry_reads_only_it(dashboard):
+    """ACL-2653/2660: the lock is that account's own state; the queue goes on, Retry reads the same account."""
     site, page = dashboard
     site.checkpoint.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
-    banner = page.locator('#account-refresh-status[role=alert]')
-    banner.wait_for(state='visible')
-    assert 'checkpoint' in banner.inner_text().lower()
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
+    assert sorted(a for a, _ in site.reads) == ['Acc', 'Fresh']
+    assert site.q.state()['halt'] is None and site.q.state()['queued'] == []
     assert page.locator('#account-refresh-status').count() == 1
-    assert [a for a, _ in site.reads] == ['Acc']
-    assert site.q.state()['queued'] == [{'account': 'Fresh', 'trigger': 'schedule:2026-10-24/08:00'}]
-    assert site.q.state()['sweep']['done'] == 1
     site.checkpoint.clear()
     page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
-    assert [a for a, _ in site.reads] == ['Acc', 'Acc', 'Fresh']
-    assert site.reads[1] == ('Acc', 'retry')
-    assert site.q.state()['halt'] is None and site.q.state()['sweep']['done'] == 2
-    assert banner.is_hidden() and site.errors == []
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    assert ('Acc', 'retry') in site.reads and [a for a, _ in site.reads].count('Fresh') == 1
+    assert site.q.state()['halt'] is None and site.errors == []
 
 
 @pytest.mark.parametrize('width', [1280, 390])

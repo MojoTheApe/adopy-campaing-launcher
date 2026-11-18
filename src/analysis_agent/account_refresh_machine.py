@@ -531,7 +531,8 @@ class MachineStore:
                         if key not in state["results"]:
                             state["results"][key] = _result_record({}, key, payload, state["revision"])
                         members[key] = {"owners": [owner], "done": state["revision"]}
-            if halt and not halt.get("machine_generation"):
+            if halt and not halt.get("machine_generation") and halt.get("kind") != "checkpoint":
+                # ACL-2653: a checkpoint belongs to its profile (a hold), never to the whole machine.
                 key = bindings.get(halt.get("account", ""))
                 if key and key not in state["stops"] and (halt.get("until") is None or halt["until"] > now):
                     state["revision"] += 1
@@ -752,6 +753,35 @@ class MachineStore:
         with self.transaction() as state:
             stop = state["stops"].get(key)
             return stop["generation"] if stop else None
+
+    def drop_stops(self, keys) -> list[dict]:
+        """ACL-2653: remove the machine stops of these bindings (an account was removed). Returns what was dropped."""
+        wanted = set(keys)
+        if not wanted:
+            return []
+        with self.transaction() as state:
+            dropped = [dict(v) for k, v in state["stops"].items() if k in wanted]
+            for item in dropped:
+                state["stops"].pop(item["key"], None)
+            if dropped:
+                state["halt"] = self._selected_stop(state)
+            return dropped
+
+    def prune_stops(self) -> list[dict]:
+        """ACL-2653: drop every `checkpoint` stop, of any key (owner decision: a checkpoint never stops the queue;
+        it holds only its own profile, see `account_holds.json`).
+
+        `state.json` is shared by all dashboards of the machine, so "removed" is never inferred from one config's
+        map: stops of other kinds go only through the explicit removal path (`drop_stops`).
+        The caller holds the machine read lease; the state transaction keeps the schema validation.
+        """
+        with self.transaction() as state:
+            dropped = [dict(v) for v in state["stops"].values() if v["kind"] == "checkpoint"]
+            for item in dropped:
+                state["stops"].pop(item["key"], None)
+            if dropped:
+                state["halt"] = self._selected_stop(state)
+            return dropped
 
     def result(self, key: str) -> dict | None:
         with self.transaction() as state:
