@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2742 — Fix flaky date-change browser test (null _hc) — 2026-11-18
+
+The browser test for ten date changes polled `document.querySelector('.amap-campaigns')._hc` right after `amapApply` started a page navigation. In the new document `.amap-campaigns` does not exist until `<body>` is parsed, so the poll threw "Cannot read properties of null (reading '_hc')". The test now waits for the navigation itself and its readiness check is null-safe. Test-only change, no dashboard behaviour change.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1742).
+
 ## ACL-2773 — Hub test: a tampered session signature always differs — 2026-11-18
 
 The Hub Worker test for a tampered session cookie sometimes left the signature unchanged (its last character was already "0") and failed at random. It now always flips that character to a different one. Test-only change.
