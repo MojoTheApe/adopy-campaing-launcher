@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
 from typing import Any
 
@@ -142,17 +143,42 @@ def run_execute(body: dict[str, Any]) -> tuple[dict, int]:
     try:
         op = _cmd.execute(_cmd.get_store(), _sessions(), revision_id=str(body.get("revision_id") or ""),
                           idempotency_key=str(body.get("idempotency_key") or ""),
-                          after_write=_refresh_after_write, on_stale=_refresh_stale)
+                          after_write=_refresh_after_write, on_stale=_refresh_stale,
+                          after_release=_refresh_after_release)
     except _cmd.CommandRefused as exc:
         return _refusal(exc)
     return op, 202 if op.get("state") in (_cmd.RUNNING, _cmd.VERIFYING) else 200
 
 
 def _refresh_after_write(op: dict, sess: Any) -> None:
-    from src.analysis_agent import account_refresh, campaign_inventory
+    """ACL-2789: внутри сессии только правим строку по результату сверки; Graph не трогаем.
 
-    snap = campaign_inventory.read_in_session(op["account"], sess, trigger="action")
-    account_refresh.queue().record_result(snap, trigger="action")
+    Полное чтение списка идёт после отпускания профиля (`_refresh_after_release`).
+    """
+    from src.analysis_agent import campaign_inventory
+
+    campaign_inventory.apply_confirmed(op["account"], op.get("affected") or [])
+
+
+_PENDING: set[str] = set()
+_PENDING_LOCK = threading.Lock()
+
+
+def _refresh_after_release(op: dict) -> None:
+    """ACL-2789: обновить список после отпускания профиля; одно чтение на серию команд.
+
+    Отложенное обновление принадлежит аккаунту: если после записи на нём ещё идёт другая
+    команда, пометка остаётся, и чтение делает та команда, что закончит последней, при любом
+    исходе (успех, отказ, сбой). Очередь к тому же склеивает заявки одного аккаунта.
+    """
+    account = op["account"]
+    with _PENDING_LOCK:
+        if _cmd.wrote(op):
+            _PENDING.add(account)
+        if account not in _PENDING or _cmd.get_store().others_running(account, op.get("op_id", "")):
+            return
+        _PENDING.discard(account)
+    _refresh_stale(op)
 
 
 def _refresh_stale(op: dict) -> None:
