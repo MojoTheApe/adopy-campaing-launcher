@@ -53,6 +53,7 @@ PROXY_PROBE_ENV = "ACL_PROXY_PROBE_URL"
 DEFAULT_PROXY_PROBE_URL = "https://api.ipify.org/"
 #: Через сколько секунд повторить пробу/первую навигацию после ERR_INVALID_AUTH_CREDENTIALS.
 PROXY_RETRY_S = 12.0
+PROXY_PROBE_POLL_S = 1.0  # ACL-2792: шаг повторных проб внутри бюджета PROXY_RETRY_S
 #: Пауза перед единственным повтором первой навигации при прокси/TLS-сбое (ACL-2321).
 PROXY_NET_RETRY_S = 30.0
 #: Сколько ждём, пока процесс остановленного профиля уйдёт (п. 8c).
