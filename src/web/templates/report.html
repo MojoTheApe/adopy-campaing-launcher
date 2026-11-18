@@ -6242,9 +6242,15 @@ function dashRefreshUpdateCheck() {
  *
  * Сервер недоступен — всё работает как раньше, на одном localStorage.
  */
+/* ACL-2780: черновики — у байера, под которым открыта страница. Суффикс пустой у
+ * байера по умолчанию (прежние ключи), у остальных свой: чужие черновики не
+ * всплывают в localStorage и не уходят в набор нового байера. */
+window.ACL_BUILDER_BUYER = {{ (builder_buyer|default({}))|tojson }};
+window.ACL_BSFX = window.ACL_BUILDER_BUYER.suffix || '';
 window.cbSrv = (function () {
-  var URL = '/api/builder-state';
-  var SYNC_KEY = 'acl.builder.sync';
+  var BUYER = (window.ACL_BUILDER_BUYER || {}).name || '';
+  var URL = '/api/builder-state' + (BUYER ? '?buyer=' + encodeURIComponent(BUYER) : '');
+  var SYNC_KEY = 'acl.builder.sync' + (window.ACL_BSFX || '');
   var DEBOUNCE_MS = 800;
   var regs = {};          // имя → {snapshot, legacyAt, apply}
   var last = {};          // имя → последний замеченный снимок (строкой)
@@ -6280,7 +6286,7 @@ window.cbSrv = (function () {
     var reg = regs[name];
     var at = stamp(name);
     var generation = generations[name] || 0;
-    var body = JSON.stringify({ name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() });
+    var body = JSON.stringify(Object.assign(BUYER ? { buyer: BUYER } : {}, { name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() }));
     var request = {};
     inFlight[name] = request;
     dirty[name] = false;
@@ -6424,10 +6430,10 @@ window.cbSrv = (function () {
  * Закрывают ящик ровно две вещи: язычок и крестик.
  */
 window.cbDrawer = (function () {
-  var KEY = 'acl.builder.open';
+  var KEY = 'acl.builder.open' + (window.ACL_BSFX || '');
   /* ACL-1871: размер ящика — отдельная запись: 'wide', 'normal' или число
      пикселей после перетаскивания. Закрытие размер не сбрасывает. */
-  var SIZE_KEY = 'acl.builder.width';
+  var SIZE_KEY = 'acl.builder.width' + (window.ACL_BSFX || '');
   var NORMAL_W = 480, MIN_W = 320, WIDE_AT = 800, DRAG_PX = 4, STEP = 40;
   var HANDLE_W = 40, EDGE = 16;
   /* Сколько страницы должно остаться видимым при протяжке (сайдбар 232 + не
@@ -6695,7 +6701,7 @@ window.cbDrawer = (function () {
  * подержать лишнее.
  */
 window.cbKeep = (function () {
-  var KEY = 'acl.builder.v2';
+  var KEY = 'acl.builder.v2' + (window.ACL_BSFX || '');
   var VERSION = 4;
   /* Срока годности нет (ACL-2669): черновик живёт, пока человек сам его не
      убрал. Выбросить чужую работу хуже, чем подержать лишнее. */
@@ -11900,7 +11906,7 @@ window.cbMove = (function () {
    больше не знает (404 после перезапуска), становится пустым кольцом без
    пульса — «неизвестно», а не «идёт». */
 window.cbBuild = (function () {
-  var KEY = 'acl.builder.jobs';
+  var KEY = 'acl.builder.jobs' + (window.ACL_BSFX || '');
   var KEEP_MS = 12 * 3600 * 1000;   // вчерашние задания не держим
   var POLL_MS = 3000;
   var ACTIVE = { pending: 1, queued: 1, running: 1, cancelling: 1 };
