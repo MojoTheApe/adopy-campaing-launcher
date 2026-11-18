@@ -248,9 +248,11 @@ def test_checkpoint_survives_restart_and_only_own_success_clears_it(dashboards):
     second.request("B", "retry", force=True)
     # Cross-config (the owner's dev setup only) is accepted: the second dashboard has no hold file of the first,
     # so its own admitted sweep reads A as well. Nothing halts, and the reads are exactly these two.
-    assert second._drain_once() == 2
+    # ACL-2668: reads of different accounts run together, so a drain may take both at once (order free).
+    while second._drain_once():
+        pass
     assert second.state()["halt"] is None
-    assert [a for _, a in reads] == ["B", "A"]
+    assert sorted(a for _, a in reads) == ["A", "B"]
     # Within the first config the hold keeps automatic reads off A's profile.
     select("one")
     assert first.request("A", "attention") == {"queued": False, "reason": "profile_held"}
