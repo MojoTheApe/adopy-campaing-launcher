@@ -29,7 +29,11 @@ test("tampered session rejected", async () => {
   const v = await makeSession(env, now());
   const [exp, sig] = v.split(".");
   assert.equal(await checkSession(env, `${Number(exp) + 999}.${sig}`, now()), false);
-  assert.equal(await checkSession(env, `${exp}.${sig.slice(0, -1)}0`, now()), false);
+  // Последний символ подписи меняем на заведомо другой: замена на "0" ничего не меняла, если там уже был "0".
+  const last = sig.slice(-1);
+  const tampered = `${sig.slice(0, -1)}${last === "0" ? "1" : "0"}`;
+  assert.notEqual(tampered, sig);
+  assert.equal(await checkSession(env, `${exp}.${tampered}`, now()), false);
   assert.equal(await checkSession(env, "garbage", now()), false);
   assert.equal(await checkSession(env, "", now()), false);
 });
