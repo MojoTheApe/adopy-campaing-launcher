@@ -1,6 +1,6 @@
 """ACL-2063: очередь обновления списка кампаний аккаунтов (только структура).
 
-Один рабочий поток читает аккаунты по одному. Порядок: action > retry > attention
+До «Profiles at once» аккаунтов читаются сразу, аккаунт - одним чтением (ACL-2668). Порядок: action > retry > attention
 > schedule. Свежий аккаунт (снимок ok/partial/empty моложе часа) не читается. Сбой одного
 аккаунта не останавливает очередь; сбой, общий для всех (Multilogin, чекпоинт,
 потолок вызовов, остывание, выключенный API), ставит очередь на паузу с одной
@@ -223,7 +223,7 @@ class RefreshQueue:
         self._owner = hashlib.sha256(str(store.root.resolve()).encode()).hexdigest() if store else ""
         self._lock = threading.Lock()
         self._wake = threading.Condition(self._lock)
-        #: Второй замок: два чтения одновременно не бывает ни при каком вызове _drain_once.
+        #: Один диспетчер на процесс; сами чтения идут параллельно в его потоках (ACL-2668).
         self._drain_lock = threading.Lock()
         self._heap: list[tuple[int, int, str]] = []
         #: account → (приоритет, номер, триггер, force); устаревшие записи кучи отбрасываются по номеру
@@ -231,7 +231,8 @@ class RefreshQueue:
         #: Аккаунты с явным Retry/действием: на паузе без таймера читаются в обход неё (только они).
         self._bypass: set[str] = set()
         self._seq = 0
-        self._running: str | None = None
+        #: Аккаунты, которые сейчас читаются этим процессом (ACL-2668: их может быть несколько).
+        self._reading: list[str] = []
         self._halt: dict | None = None
         self._sweep: dict | None = None
         self._rows: dict[str, dict] = {}
@@ -274,21 +275,15 @@ class RefreshQueue:
     def _pull_results(self, accounts=None) -> None:
         if self._machine is None:
             return
-        hold = self._machine.lease("account-structure-read.lock").holding(timeout=0)
-        try:
-            hold.__enter__()
-        except TimeoutError:
-            return  # status/admission remains responsive during a real profile read
-        try:
-            self._migrate_legacy()
-            self._machine.recover_running(now=self._clock())
-            members = list(accounts if accounts is not None else (self._accounts() if self._accounts else self._entries))
-            keys = self._bindings(members)
-            results = self._machine.results(list(keys.values()))
-            for account, key in keys.items():
-                self._import_result(account, shared=results.get(key), known=True)
-        finally:
-            hold.__exit__(None, None, None)
+        # ACL-2668: идущие чтения других аккаунтов не мешают: прерванным считается
+        # только чтение, чья аренда аккаунта свободна (`MachineStore.recover_running`).
+        self._migrate_legacy()
+        self._machine.recover_running(now=self._clock())
+        members = list(accounts if accounts is not None else (self._accounts() if self._accounts else self._entries))
+        keys = self._bindings(members)
+        results = self._machine.results(list(keys.values()))
+        for account, key in keys.items():
+            self._import_result(account, shared=results.get(key), known=True)
 
     def _import_result(self, account: str, *, shared=None, known: bool = False) -> None:
         if self._machine is None or not self._known_account(account):
@@ -316,16 +311,15 @@ class RefreshQueue:
     def _publish_result(self, snap: Snapshot, *, force: bool = False, recovery: int | None = None,
                         token: int | None = None, own_recovery: int | None = None) -> None:
         if self._machine is not None and not getattr(snap, "_machine_committed", False):
-            with self._machine.lease("account-structure-read.lock").holding():
-                key = binding(snap.account)
-                revision = self._machine.publish(key, snap, now=self._clock(), force=force, recovery=recovery, own_recovery=own_recovery, token=token)
-                snap._machine_revision = revision
-                snap._machine_binding = key
-                snap._machine_committed = True
-                try:
-                    campaign_inventory.put_result(snap)
-                except Exception:
-                    log.exception("The committed account result awaits its local cache projection")
+            key = binding(snap.account)
+            revision = self._machine.publish(key, snap, now=self._clock(), force=force, recovery=recovery, own_recovery=own_recovery, token=token)
+            snap._machine_revision = revision
+            snap._machine_binding = key
+            snap._machine_committed = True
+            try:
+                campaign_inventory.put_result(snap)
+            except Exception:
+                log.exception("The committed account result awaits its local cache projection")
 
     @contextmanager
     def _state_guard(self):
@@ -339,14 +333,20 @@ class RefreshQueue:
                 self._entries = {a: tuple(v) for a, v in state["entries"].items()}
                 self._heap = [(v[0], v[1], a) for a, v in self._entries.items()]
                 heapq.heapify(self._heap)
-                self._running = state.get("running")
+                reading = state.get("reading")
+                if not isinstance(reading, list):
+                    # Состояние прежней версии: одно поле `running`.
+                    reading = [state["running"]] if state.get("running") else []
+                self._reading = list(reading)
                 self._rows = state["rows"]
                 self._keys = state.get("machine_bindings", {})
                 self._halt = state.get("halt")
                 self._sweep = state.get("sweep")
                 self._bypass = set(state.get("bypass", []))
                 yield state
-                state.update(seq=self._seq, entries=self._entries, running=self._running,
+                # `running` (первый из читаемых) оставлен для прежних версий на том же каталоге настроек.
+                state.update(seq=self._seq, entries=self._entries, reading=self._reading,
+                             running=self._reading[0] if self._reading else None,
                              rows=self._rows, halt=self._halt, sweep=self._sweep,
                              bypass=sorted(self._bypass), machine_bindings=self._keys)
 
@@ -415,7 +415,7 @@ class RefreshQueue:
                 if self._machine and account not in bindings:
                     self._invalid_row(account)
                     continue
-                if self._running == account:
+                if account in self._reading:
                     continue
                 if self._machine and self._machine.satisfied(bindings[account], tag):
                     self._sweep_complete(account)
@@ -508,7 +508,7 @@ class RefreshQueue:
             if self._machine and account not in self._bindings([account]):
                 self._invalid_row(account)
                 return {"queued": False, "reason": "invalid_account_map"}
-            if self._running == account:
+            if account in self._reading:
                 return {"queued": False, "reason": "running"}
             if _held_blocks(account, trigger):
                 return {"queued": False, "reason": "profile_held"}
@@ -588,7 +588,9 @@ class RefreshQueue:
             self._maybe_lift()
             queued = [{"account": a, "trigger": e[2]}
                       for a, e in sorted(self._entries.items(), key=lambda kv: kv[1][:2])]
-            return {"running": self._running, "queued": queued,
+            # `running` - первый из читаемых (прежний вид ответа), `reading` - все (ACL-2668).
+            return {"running": self._reading[0] if self._reading else None,
+                    "reading": list(self._reading), "queued": queued,
                     "halt": dict(self._halt) if self._halt else None,
                     "sweep": {k: v for k, v in self._sweep.items() if not k.startswith("_")} if self._sweep else None,
                     "rows": {a: dict(r) for a, r in self._rows.items()}}
@@ -655,8 +657,7 @@ class RefreshQueue:
                 key = binding(account)
                 self._machine.recover_running(now=self._clock())
                 own_recovery = self._machine.stop_generation(key)
-                token = self._machine.begin(key, self._owner, trigger)
-                with self._machine.executing(token, key):
+                with self._machine.run(key, self._owner, trigger) as token:
                     try:
                         snap = self._reader(account, trigger)
                     except Exception as exc:
@@ -691,7 +692,7 @@ class RefreshQueue:
     def _execution_available(self, account: str):
         """Never occupy the machine dispatcher while waiting for a live target."""
         from src.analysis_agent import account_spend
-        from src.analysis_agent.account_refresh_state import target_lease, read_session
+        from src.analysis_agent.account_refresh_state import target_lease
         from src.fb_ads_rpa.operations import browser_operation
         stack = ExitStack()
         try:
@@ -703,7 +704,6 @@ class RefreshQueue:
             stack.callback(physical.release)
             try:
                 stack.enter_context(target_lease(account_spend._profile_key(account)).holding(timeout=0))
-                stack.enter_context(read_session(priority=False, timeout=0))
             except TimeoutError:
                 stack.close()
                 yield False
@@ -720,14 +720,16 @@ class RefreshQueue:
 
     def _execute_selected(self, account: str, trigger: str, bypassed: bool) -> Snapshot | None:
         with self._state_guard():
-            self._running = account
+            if account not in self._reading:
+                self._reading.append(account)
             self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
         snap = None
         try:
             snap = self._read(account, trigger)
         finally:
             with self._state_guard():
-                self._running = None
+                if account in self._reading:
+                    self._reading.remove(account)
                 if snap is not None:
                     self._settle(account, trigger, snap, bypassed)
                 else:
@@ -737,90 +739,144 @@ class RefreshQueue:
                     self._sweep_complete(account, trigger)
         return snap
 
+    def _interrupted_rows(self) -> None:
+        """Под замком: OS-аренда диспетчера свободна - сохранённые «читается» остались от прерванного процесса."""
+        for account in list(self._reading):
+            previous = self._rows.get(account, {}).get("list_at", "")
+            self._rows[account] = {"list_at": previous, "state": "failed",
+                                   "error": "The read was interrupted. Press Retry."}
+            self._sweep_complete(account)
+        self._reading = []
+
+    @staticmethod
+    def _read_limit() -> int:
+        """ACL-2668: сколько аккаунтов читать сразу - потолок «Profiles at once» (ACL_MAX_PROFILES).
+
+        Читается на каждое решение: смена в Settings действует на следующее чтение.
+        Память проверяет общая очередь профилей, когда чтению нужно открыть профиль.
+        """
+        from src.web.profile_slots import load_settings
+
+        return max(1, int(load_settings().ceiling))
+
+    def _dispatch_one(self, account: str, trigger: str, force: bool, bypassed: bool) -> str:
+        """Одна заявка в своём потоке. Итог: done | skipped | paused | blocked | yield."""
+        key = binding(account)
+        with self._execution_available(account) as available:
+            self._machine.availability(key, self._owner, available)
+            if not available:
+                self._requeue(account, trigger, force, bypassed)
+                self._machine.availability(key, self._owner, False)
+                return "blocked"
+            # Короткий машинный замок только на выбор: само чтение идёт без него,
+            # параллельно с чтениями других аккаунтов (ACL-2668).
+            dispatch = self._machine.lease("dispatch.lock").holding(timeout=5)
+            try:
+                dispatch.__enter__()
+            except TimeoutError:
+                self._requeue(account, trigger, force, bypassed)
+                return "yield"
+            try:
+                if not self._machine.may_dispatch(key):
+                    self._requeue(account, trigger, force, bypassed)
+                    return "yield"
+                self._import_result(account)
+                skip = (_held_blocks(account, trigger)      # ACL-2548: nothing is read, no attempt row
+                        or (force and not self._machine.pending(key, self._owner))
+                        or (not force and (is_fresh(account, now=self._clock())
+                                           or recently_failed(account, now=self._clock()))))
+            finally:
+                dispatch.__exit__(None, None, None)
+            if skip:
+                with self._state_guard():
+                    self._sweep_complete(account, trigger)
+                return "skipped"
+            snap = self._execute_selected(account, trigger, bypassed)
+            if campaign_inventory.is_status_only_ok(snap):
+                # ACL-2419: статус-чтение результата описи не публикует - заявку снимаем.
+                self._machine.withdraw(key, self._owner)
+                with self._state_guard():
+                    self._sweep_complete(account, trigger)
+                return "done"
+            if snap is not None and not getattr(snap, "_machine_paused", None):
+                self._machine.finish(key, getattr(snap, "_machine_revision", None))
+                return "done"
+            return "paused"
+
     def _drain_machine(self) -> int:
         if not self._drain_lock.acquire(blocking=False):
             return 0
         local = self._store.dispatch_lock.holding(timeout=0)
         entered = False
+        active: dict[str, threading.Thread] = {}
+        finished: list[tuple[str, str]] = []
+        changed = threading.Condition()
+
+        def work(account: str, trigger: str, force: bool, bypassed: bool) -> None:
+            outcome = "yield"
+            try:
+                outcome = self._dispatch_one(account, trigger, force, bypassed)
+            except Exception:  # noqa: BLE001 - сбой одного чтения не роняет диспетчер
+                log.exception("Account refresh read of %s failed", account)
+            finally:
+                with changed:
+                    finished.append((account, outcome))
+                    changed.notify_all()
+
         try:
             try:
                 local.__enter__()
                 entered = True
             except TimeoutError:
                 return 0
-            done, blocked = 0, set()
+            done, blocked, yielded = 0, set(), False
             with self._state_guard():
-                if self._running is not None:
-                    previous = self._rows.get(self._running, {}).get("list_at", "")
-                    self._rows[self._running] = {"list_at": previous, "state": "failed",
-                                                "error": "The read was interrupted. Press Retry."}
-                    self._sweep_complete(self._running)
-                    self._running = None
+                self._interrupted_rows()
             while True:
-                self._pull_results()
-                with self._state_guard():
-                    deferred = {a: self._entries.pop(a) for a in blocked if a in self._entries}
-                    self._heap = [(e[0], e[1], a) for a, e in self._entries.items()]
-                    heapq.heapify(self._heap)
-                    forces = {a: e[3] for a, e in self._entries.items()}
-                    item = self._pop()
-                    self._entries.update(deferred)
-                    skips, self._pending_skips = self._pending_skips, []
-                for acc, label in skips:
-                    self._telemetry_skipped(acc, label)
-                if item is None:
-                    return done
-                account, trigger, bypassed = item
-                force = forces[account]
-                try:
-                    key = binding(account)
-                except (ValueError, CoordinationError):
+                with changed:
+                    for account, outcome in finished:
+                        active.pop(account, None)
+                        done += outcome == "done"
+                        if outcome == "blocked":
+                            blocked.add(account)
+                        yielded = yielded or outcome == "yield"
+                    finished.clear()
+                if not yielded and len(active) < self._read_limit():
+                    self._pull_results()
                     with self._state_guard():
-                        self._invalid_row(account)
-                    continue
-                with self._execution_available(account) as available:
-                    self._machine.availability(key, self._owner, available)
-                    if not available:
-                        self._requeue(account, trigger, force, bypassed)
-                        self._machine.availability(key, self._owner, False)
-                        blocked.add(account)
+                        held_back = blocked | set(active)
+                        deferred = {a: self._entries.pop(a) for a in held_back if a in self._entries}
+                        self._heap = [(e[0], e[1], a) for a, e in self._entries.items()]
+                        heapq.heapify(self._heap)
+                        forces = {a: e[3] for a, e in self._entries.items()}
+                        item = self._pop()
+                        self._entries.update(deferred)
+                        skips, self._pending_skips = self._pending_skips, []
+                    for acc, label in skips:
+                        self._telemetry_skipped(acc, label)
+                    if item is not None:
+                        account, trigger, bypassed = item
+                        try:
+                            binding(account)
+                        except (ValueError, CoordinationError):
+                            with self._state_guard():
+                                self._invalid_row(account)
+                            continue
+                        thread = threading.Thread(target=work, args=(account, trigger, forces[account], bypassed),
+                                                  name=f"account-refresh-read-{len(active) + 1}", daemon=True)
+                        active[account] = thread
+                        thread.start()
                         continue
-                    dispatch = self._machine.lease("dispatch.lock").holding(timeout=0)
-                    try:
-                        dispatch.__enter__()
-                    except TimeoutError:
-                        self._requeue(account, trigger, force, bypassed)
+                with changed:
+                    if not active and not finished:
                         return done
-                    try:
-                        if not self._machine.may_dispatch(key):
-                            self._requeue(account, trigger, force, bypassed)
-                            return done
-                        self._import_result(account)
-                        if _held_blocks(account, trigger):
-                            with self._state_guard():
-                                self._sweep_complete(account, trigger)   # ACL-2548: nothing is read, no attempt row
-                            continue
-                        if force and not self._machine.pending(key, self._owner):
-                            with self._state_guard():
-                                self._sweep_complete(account, trigger)
-                            continue
-                        if not force and (is_fresh(account, now=self._clock()) or recently_failed(account, now=self._clock())):
-                            with self._state_guard():
-                                self._sweep_complete(account, trigger)
-                            continue
-                        snap = self._execute_selected(account, trigger, bypassed)
-                        if campaign_inventory.is_status_only_ok(snap):
-                            # ACL-2419: статус-чтение результата описи не публикует - заявку снимаем.
-                            self._machine.withdraw(key, self._owner)
-                            with self._state_guard():
-                                self._sweep_complete(account, trigger)
-                            done += 1
-                        elif snap is not None and not getattr(snap, "_machine_paused", None):
-                            self._machine.finish(key, getattr(snap, "_machine_revision", None))
-                            done += 1
-                    finally:
-                        dispatch.__exit__(None, None, None)
+                    if not finished:
+                        changed.wait(timeout=1.0)
         finally:
+            # Диспетчер не уходит, пока его чтения не закончились: аренда процесса
+            # держится всё время чтений, по ней другие видят, что они живы.
+            for thread in list(active.values()):
+                thread.join()
             if entered:
                 local.__exit__(None, None, None)
             self._drain_lock.release()
@@ -840,13 +896,8 @@ class RefreshQueue:
                     dispatch = None
                     return 0
                 with self._state_guard():
-                    # OS-аренда свободна: сохранённое running осталось от прерванного процесса.
-                    if self._running is not None:
-                        row = self._rows.get(self._running, {})
-                        self._rows[self._running] = {"list_at": row.get("list_at", ""), "state": "failed",
-                                                     "error": "The read was interrupted. Press Retry."}
-                        self._sweep_complete(self._running)
-                        self._running = None
+                    # OS-аренда свободна: сохранённое «читается» осталось от прерванного процесса.
+                    self._interrupted_rows()
             done = 0
             while True:
                 with self._state_guard():
@@ -854,7 +905,7 @@ class RefreshQueue:
                     skips, self._pending_skips = self._pending_skips, []
                     if item is not None:
                         account, trigger, bypassed = item
-                        self._running = account
+                        self._reading.append(account)
                         self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
                 for acc, label in skips:
                     self._telemetry_skipped(acc, label)
@@ -865,7 +916,8 @@ class RefreshQueue:
                     snap = self._read(account, trigger)
                 finally:
                     with self._state_guard():
-                        self._running = None
+                        if account in self._reading:
+                            self._reading.remove(account)
                         if snap is not None:
                             self._settle(account, trigger, snap, bypassed)
                         else:

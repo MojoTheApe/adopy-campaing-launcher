@@ -261,38 +261,67 @@ def test_reacquire_on_light_tab_recaptures_and_never_reloads(browser):  # noqa: 
         light_tab.settle_and_close(work)
 
 
-def test_call_on_lost_token_recaptures_once_then_stops(browser):  # noqa: F811
-    from src.fb_api.graph import PageFailed
-
+def test_call_on_lost_token_recaptures_until_the_token_is_back(browser):  # noqa: F811
+    """ACL-2746: no count limit - a plain miss is taken again."""
     work = PageTab.open(browser, call_s=60.0)
     try:
         assert light_tab.open_light_document(work)[1] == ""
         ig = InPageGraph(work)
+        ig._sleep = lambda s: None
         n = []
-        ig.light_recapture = lambda g, t: n.append(1) or {"kind": "ads_manager", "has_token": False}
-        with pytest.raises(PageFailed):
-            ig.request("GET", "/me", {"fields": "id"}, timeout=5)
-        assert n == [1]                                                   # one Ads Manager load, no loop
+
+        def cap(g, t):
+            n.append(1)
+            return {"kind": "ads_manager", "has_token": len(n) >= 4}
+
+        ig.light_recapture = cap
+        ig._light_check({"has_token": False}, timeout=5)
+        assert len(n) == 4 and ig.light_recaptures == 4
     finally:
         light_tab.settle_and_close(work)
 
 
-def test_recapture_bound_holds_on_every_path(browser):  # noqa: F811
-    from src.fb_api.graph import PageFailed
+def test_recapture_loop_ends_on_stop_dead_work_tab_and_dead_browser(browser, monkeypatch):  # noqa: F811
+    """ACL-2746: the loop has no count, but it has real ends: the user's Stop, a dead work tab, no capture tab."""
+    from src.fb_api import warm
+    from src.fb_api.graph import GraphStop, PageFailed
 
     work = PageTab.open(browser, call_s=60.0)
     try:
         assert light_tab.open_light_document(work)[1] == ""
-        ig = InPageGraph(work)
+        miss = {"kind": "ads_manager", "has_token": False}
+        ig = InPageGraph(work)                                           # 1. Stop of the job
+        ig._sleep = lambda s: None
         n = []
-        ig.light_recapture = lambda g, t: n.append(1) or {"kind": "ads_manager", "has_token": False}
-        ig.reacquire(timeout=5)
-        ig.reacquire(timeout=5)
-        with pytest.raises(PageFailed):
-            ig.reacquire(timeout=5)                                      # the third load is refused
-        with pytest.raises(PageFailed):
-            ig.request("GET", "/me", {"fields": "id"}, timeout=5)        # and the call path shares the bound
-        assert n == [1, 1]
+        flag = {"stop": False}
+
+        def cap(g, t):
+            n.append(1)
+            flag["stop"] = len(n) >= 3
+            return miss
+
+        ig.light_recapture = cap
+        with warm.job_wait(lambda: flag["stop"], lambda v: None):
+            with pytest.raises(PageFailed):
+                ig._recapture_until_settled(5)
+        assert len(n) == 3
+        ig = InPageGraph(work)                                           # 2. the work tab is dead
+        ig._sleep = lambda s: None
+        ig.light_recapture = lambda g, t: miss
+        monkeypatch.setattr(type(work.light), "document_intact", lambda self, timeout=10.0: "work_tab_dead")
+        with pytest.raises(GraphStop):
+            ig._recapture_until_settled(5)
+        monkeypatch.undo()
+        ig = InPageGraph(work)                                           # 3. no capture tab can be opened
+        ig._sleep = lambda s: None
+
+        def broken():
+            raise OSError("browser gone")
+
+        ig.light_recapture = lambda g, t: light_tab.capture_into(g, broken, "act_1", timeout=t)
+        with pytest.raises(GraphStop):
+            ig._recapture_until_settled(5)
+        assert ig.light_recaptures == 1
     finally:
         light_tab.settle_and_close(work)
 

@@ -1185,7 +1185,7 @@
     var previousRunning = S.running;
     S.running = {};
     (view.queued || []).forEach(function (r) { S.running[r.account] = true; });
-    if (view.running) S.running[view.running] = true;
+    (view.reading || (view.running ? [view.running] : [])).forEach(function (a) { S.running[a] = true; });   // ACL-2668: several reads at once
     var refreshes = [];
     Object.keys(S.accountCountries).forEach(function (a) {
       if (previousRunning[a] && !S.running[a] && (view.rows || {})[a]) delete S.uncertain[a];

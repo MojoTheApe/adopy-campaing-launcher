@@ -62,6 +62,7 @@ from src.web.cache import (
     rebuild_deferred,
     has_entry as report_has_entry,
     peek_cached_report,
+    recheck_bi_revision,
     start_background_build,
     verified_source_key,
 )
@@ -605,8 +606,14 @@ def _build_account_map_view(
 
     map_path = get_ad_account_map_path()
     map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
-    known = list(map_entries)
-    all_known = sorted(set(known) | labels_in_report, key=str.casefold)
+    # Per-buyer map: only the selected buyer's accounts are listed. The entries
+    # stay whole (profiles, ids) for lookups; only the lists below are narrowed.
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
+    _mine = lambda label: _ab.is_visible(label, tag_map=_tags)  # noqa: E731
+    known = [k for k in map_entries if _mine(k)]
+    all_known = sorted({a for a in (set(known) | labels_in_report) if _mine(a)}, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
     # отчёта. Отчёт строится за сегодня: 8 сентября книга заканчивалась 7-м, в
@@ -690,7 +697,12 @@ def _build_account_map_view(
         country_name = display_name.get(key) or wb_country.get(key, stored)
         todo = todo_by_country.get(key, {})
         rows = []
-        for label in account_links.accounts_for("country", stored):
+        _placed = account_links.accounts_for("country", stored)
+        _own = [a for a in _placed if _mine(a)]
+        if _placed and not _own:
+            # The country holds only other buyers' accounts: not this buyer's map.
+            continue
+        for label in _own:
             excel = _numbers(country_name, label) or stats.get(label) or {}
             # Имя из Multilogin (`KLD_BFL_X84`) с книжным (`FacebookMKTOBFLX84`)
             # не сходится ничем, кроме хвоста — того самого, которым аккаунт и
@@ -917,7 +929,7 @@ def _build_account_map_view(
     buckets = _avail.split_available(
         account_links.available_accounts(all_known),
         connected=known,
-        placed=[a for a, _v in account_links.all_pairs("country")],
+        placed=[a for a, _v in account_links.all_pairs("country") if _mine(a)],
         activity=activity,
         hidden=hidden,
     )
@@ -1269,44 +1281,43 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
-_targets_refresh_lock = threading.Lock()
-_targets_refreshing = False
+def _sync_team_library_in_background(*kinds: str) -> None:
+    """Обновить копии общей библиотеки в своих потоках — событие, не таймер.
 
-
-def _refresh_sheet_targets_in_background() -> None:
-    """Обновить копию библиотеки таргетингов в своём потоке, один раз за раз.
-
-    ACL-1380: раньше страница сама ходила в api.github.com (`pull(force=True)`,
-    таймаут 15 с) на каждом открытии и на каждом `/api/ref-data`. Теперь
-    отрисовка читает копию на машине, а обновление идёт рядом: свежие цели
-    коллег видны со следующего открытия. Без force — `pull` сам не ходит в сеть
-    чаще раза в PULL_EVERY_SECONDS; второй поток, пока первый ещё ждёт ответа,
-    не запускается.
+    ACL-1380: отрисовка читает копию на машине, обновление идёт рядом: свежие
+    правки коллег видны со следующего показа. ACL-2668 (решение владельца
+    17.11): обновление только по событиям — загрузка страницы и её Refresh,
+    открытие выбора в билдере; 15-секундного порога больше нет, каждое событие
+    идёт в GitHub. Пока прошлое обновление вида ещё ждёт ответа, второе не
+    запускается.
     """
-    global _targets_refreshing
-    with _targets_refresh_lock:
-        if _targets_refreshing:
-            return
-        _targets_refreshing = True
+    from src.analysis_agent import team_library as tl
 
-    def run() -> None:
-        global _targets_refreshing
+    def wrapper(kind: str):
+        def run() -> None:
+            # Импорт реестра подписывает его копию на свежие данные (on_update).
+            if kind == "targets":
+                from src.analysis_agent import targeting_registry as reg
+            elif kind == "ad_texts":
+                from src.analysis_agent import ad_text_registry as reg
+            else:
+                from src.fb_api import form_templates as reg
+            reg.pull(force=True)
+        return run
+
+    for kind in kinds or ("targets", "ad_texts", "form_templates"):
         try:
-            from src.analysis_agent import targeting_registry as tr
-            tr.pull()
+            tl.pull_in_background(kind, wrapper(kind))
         except Exception:
             pass
-        finally:
-            with _targets_refresh_lock:
-                _targets_refreshing = False
-
-    threading.Thread(target=run, daemon=True, name="acl-targets-refresh").start()
 
 
 def _load_sheet_targets() -> list[dict]:
     """The team targeting library from the machine's read copy (no network)."""
     from src.analysis_agent import targeting_registry as tr
-    _refresh_sheet_targets_in_background()
+    # Страница (и её Refresh) и /api/ref-data строят билдер: всё, что в нём
+    # выбирается из библиотеки, обновляется рядом, не задерживая ответ.
+    _sync_team_library_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -1384,6 +1395,42 @@ def _load_ref_options() -> dict:
     return result
 
 
+def _builder_buyer_scope() -> dict:
+    """{name, suffix}: чьи черновики у страницы и как называть её ключи localStorage.
+
+    Суффикс пустой у байера по умолчанию: его ключи остаются прежними, и
+    существующие черновики в браузере не теряются."""
+    from src.web import builder_drafts as _bd
+    from src.web.buyer import get_selected_cm
+
+    name = (get_selected_cm() or "").strip()
+    suffix = _bd._suffix(name)
+    return {"name": name, "suffix": suffix}
+
+
+def _drop_other_buyers_builder_rows(report: dict) -> None:
+    """ACL-2780: в билдере только аккаунты выбранного байера.
+
+    Строки из отчёта (`open_recs`, `account_rows`) могут принадлежать другому
+    байеру той же машины: убираем их из этой отрисовки (отчёт уже скопирован).
+    Аккаунт без строки в карте никому не принадлежит и остаётся, как в списке."""
+    from src.web import account_buyer as _ab
+    from src.web.buyer import get_selected_cm
+
+    selected = (get_selected_cm() or "").strip()
+    tag_map = _ab.tags()
+    for country in report.get("countries", []):
+        recs = country.get("open_recs")
+        if isinstance(recs, dict):
+            country["open_recs"] = {k: v for k, v in recs.items() if _ab.is_visible(k, selected, tag_map)}
+        rows = country.get("account_rows")
+        if isinstance(rows, list):
+            country["account_rows"] = [
+                r for r in rows
+                if not isinstance(r, dict)
+                or _ab.is_visible(r.get("account_label") or r.get("account") or "", selected, tag_map)]
+
+
 def _add_linked_accounts_to_builder(report: dict) -> int:
     """Аккаунт, привязанный к стране на дешборде, виден и в её билдере.
 
@@ -1406,10 +1453,14 @@ def _add_linked_accounts_to_builder(report: dict) -> int:
     from src.web import account_links
 
     account_links.seed_from_account_map()
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
     by_key: dict[str, list[str]] = {}
     for stored in account_links.all_values("country"):
         by_key.setdefault(stored.casefold(), []).extend(
-            account_links.accounts_for("country", stored)
+            a for a in account_links.accounts_for("country", stored)
+            if _ab.is_visible(a, tag_map=_tags)
         )
 
     # A newly linked country can have no statistics at all, including no report
@@ -2111,6 +2162,14 @@ def _no_data_message(exc: BaseException) -> str:
     return bi_stats.redact(str(exc))
 
 
+def _needs_bi_sign_in(exc: BaseException) -> bool:
+    """A computer with no BI connection and no stats workbook (fresh install, or an update from
+    the Excel era): the one step it needs is the Google sign-in, not an error page."""
+    if bi_stats.bi_enabled() or (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() == "excel":
+        return False
+    return str(exc).startswith("Excel file not found")
+
+
 def _after_connections_change() -> None:
     """ACL-2607: new connection settings mean a failed load may work now - drop the remembered
     failure and the stale BI revision so the next request rebuilds, no restart."""
@@ -2121,6 +2180,11 @@ def _after_connections_change() -> None:
         try:
             bi_stats.refresh_revision(force=True)
         except Exception:  # noqa: BLE001 - the next page load decides
+            pass
+        # Start building now, so the page that opens after sign-in is already on its way.
+        try:
+            _start_warm("", "", "")
+        except Exception:  # noqa: BLE001 - the next page load starts it anyway
             pass
 
 
@@ -2138,6 +2202,16 @@ def _render_report(
     try:
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
+        if _needs_bi_sign_in(e):
+            from src.analysis_agent import connection_settings as cs
+
+            return templates.TemplateResponse(
+                request,
+                "error.html",
+                {"request": request, "title": "Connect statistics", "onboarding": True,
+                 "auto_sign_in": cs.has_google_token()},
+                status_code=200,
+            )
         # ACL-2607: first run with no stats data - the page offers the Connections
         # sign-in, because that is how a fresh computer gets its BI credentials.
         return templates.TemplateResponse(
@@ -2181,6 +2255,7 @@ def _render_report(
     # До сборки списка аккаунтов ниже: добавленные должны получить и проверку
     # готовности, и строку в билдере, а не одно из двух.
     _add_linked_accounts_to_builder(report)
+    _drop_other_buyers_builder_rows(report)
     _enrich_country_overview(report)
     period_cmp, compare_note = _build_compare(
         base_report, _df, date_from, date_to, span.strip(),
@@ -2228,6 +2303,8 @@ def _render_report(
             "account_preflight": account_preflight,
             "account_preflight_json": account_preflight,
             "account_alias_map_json": account_alias_map,
+            # ACL-2780: байер, чьи черновики билдера показывает страница.
+            "builder_buyer": _builder_buyer_scope(),
             "draft_status": draft_status,
             "mlx_labels": mlx_instance_labels(),
             "installed_release": _installed_release(),
@@ -2957,12 +3034,34 @@ def _render_and_remember(request: Request, inputs: dict, **kwargs) -> HTMLRespon
     return response
 
 
+# ACL-2668 #21: последний показанный период по менеджеру. Новые данные BI
+# проверяются, когда байер сменил период или сравнение (и по Refresh), а не
+# фоновым опросом раз в пять минут.
+_PERIOD_FIELDS = ("date_from", "date_to", "span", "compare", "cmp_from", "cmp_to")
+_LAST_PERIOD: dict[str, tuple] = {}
+_LAST_PERIOD_LOCK = threading.Lock()
+
+
+def _period_changed(inputs: dict) -> bool:
+    """Этот запрос меняет период/сравнение относительно прошлого показа. Без сети."""
+    period = tuple(inputs[name] for name in _PERIOD_FIELDS)
+    with _LAST_PERIOD_LOCK:
+        previous = _LAST_PERIOD.get(inputs["cm"])
+        _LAST_PERIOD[inputs["cm"]] = period
+    return previous is not None and previous != period
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request, date_from: str = "", date_to: str = "", span: str = "",
     compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
     inputs = _store_inputs(date_from, date_to, span, compare, cmp_from, cmp_to)
+    if _period_changed(inputs) and bi_stats.bi_enabled():
+        # Смена периода — событие байера: спросить BI о новых данных в пуле
+        # (ограниченное ожидание). Новая ревизия меняет ключ, и ниже
+        # страница уйдёт в фоновую пересборку, как после Refresh.
+        await _in_report_pool(recheck_bi_revision)
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
     # а сразу ответить и собрать его в фоне. ACL-2207: отвечаем последней
     # сохранённой страницей, если она есть, а не экраном ожидания.
@@ -3757,6 +3856,9 @@ def api_accounts_overview() -> JSONResponse:
     country_by_alias = primary_country(_resolved)
 
     selected_cm = (get_selected_cm() or "").strip()
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
     open_detail = open_profiles_detailed()
     open_ids = [p["profile_id"] for p in open_detail]
     # Profiles already spoken for, so the picker can say so instead of letting
@@ -3772,6 +3874,9 @@ def api_accounts_overview() -> JSONResponse:
     for row in sheet_rows:
         label = (row.get("account_label") or row.get("alias") or "").strip()
         entry = resolve_account_entry(account_map, label) if label else None
+        # Connected under another buyer: not on this buyer's screen.
+        if entry is not None and not _ab.is_visible(label, selected_cm, _tags):
+            continue
         ad_id = (getattr(entry, "ad_account_id", "") or "").strip() if entry else ""
         profile_id = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
         missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
@@ -3810,6 +3915,8 @@ def api_accounts_overview() -> JSONResponse:
     for label, entry in account_map.items():
         label = (label or "").strip()
         if not label or label in listed:
+            continue
+        if not _ab.is_visible(label, selected_cm, _tags):
             continue
         owner = owner_by_alias.get(normalize_account_alias(label), "")
         # ACL-1588: подключён здесь — виден всегда, чьим бы ни назвала его книга.
@@ -4424,9 +4531,12 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
 
 
 @app.get("/api/builder-state")
-def api_builder_state_get() -> JSONResponse:
-    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}."""
-    return JSONResponse({"ok": True, "docs": _builder_drafts.load()})
+def api_builder_state_get(buyer: str | None = None) -> JSONResponse:
+    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}.
+
+    ACL-2780: набор свой у каждого байера. `buyer` — тот, под кем открыта
+    страница (вкладка могла остаться от прежнего байера); нет — выбранный сейчас."""
+    return JSONResponse({"ok": True, "docs": _builder_drafts.load(buyer)})
 
 
 @app.post("/api/builder-state")
@@ -4444,7 +4554,8 @@ async def api_builder_state_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
     try:
         accepted, doc = _builder_drafts.save(body.get("name"), body.get("saved_at"),
-                                             body.get("data"), body.get("base"))
+                                             body.get("data"), body.get("base"),
+                                             buyer=body.get("buyer") if isinstance(body.get("buyer"), str) else None)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except OSError:
@@ -4509,7 +4620,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
     _FIELDNAMES = [
         "account_name", "ad_account_id", "page_id", "multilogin_instance",
         "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
-        "proxy_user", "proxy_pass", "country", "page_name",
+        "proxy_user", "proxy_pass", "country", "page_name", "buyer",
     ]
 
     try:
@@ -4592,6 +4703,11 @@ async def account_map_patch(request: Request) -> JSONResponse:
         if existing_idx is not None:
             rows[existing_idx] = new_row
         else:
+            # A new account belongs to the buyer selected while it is connected.
+            # An existing row keeps its tag: editing a profile is not a re-tag.
+            from src.web import account_buyer as _ab
+
+            new_row[_ab.COLUMN] = _ab.tag_for_new_row()
             rows.append(new_row)
 
         write_csv_atomic(map_path, fieldnames, rows)
@@ -6574,9 +6690,13 @@ def api_form_templates_list(force: bool = False) -> JSONResponse:
     `templates` - годные к публикации (выбор в билдере); `rows` - все записи для
     вкладки Forms, в том числе invalid; `deleted`, `library`, `migration` - для неё же.
     `force` перечитывает библиотеку: вкладка открывается с ним, билдер - без.
+    ACL-2668: билдер отвечает по копии сразу, а открытие выбора — событие:
+    библиотека обновляется рядом, к следующему показу.
     """
     from src.fb_api import form_templates
 
+    if not force:
+        _sync_team_library_in_background("form_templates")
     try:
         view = form_templates.listing(force=force)
     except form_templates.TemplateError as exc:
