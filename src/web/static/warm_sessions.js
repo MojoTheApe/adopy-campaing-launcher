@@ -522,26 +522,79 @@
 
   // ACL-2560: после «Take out of <country>» страна на Home перерисовывается из свежего /account-map:
   // блок страны (таблица), её строка плиток, строка фильтров и итог. Раскрытие других стран и фильтр остаются.
-  function homeAfterTakeOut(ckey) {
-    return homeFresh().then(function (fresh) {
-      ['#aov .aov-block', '#aov .aov-crow'].forEach(function (sel) {
-        var cur = null, nw = null;
-        document.querySelectorAll(sel).forEach(function (n) { if (n.getAttribute('data-aov-country') === ckey) cur = n; });
-        fresh.querySelectorAll(sel).forEach(function (n) { if (n.getAttribute('data-aov-country') === ckey) nw = n; });
-        if (cur && nw) cur.replaceWith(nw.cloneNode(true));
-      });
-      ['#aov .aov-fbar', '#amap-totals'].forEach(function (sel) {
-        var a = document.querySelector(sel), b = fresh.querySelector(sel);
-        if (a && b) a.innerHTML = b.innerHTML;
-      });
-      var pop = document.getElementById('aov-pop');
-      if (pop) pop.hidden = true;
-      if (typeof window.amapCampaignMountVisible === 'function' && window.AMAP_CAMPAIGN_TABLE) {
-        try { window.amapCampaignMountVisible(); } catch (e) { /* дерево подтянется при следующем открытии */ }
+  // ACL-2671: узлы билдера и всё, что он держит, подменять нельзя: черновик, форма «Open account»,
+  // ящик #cbd-root и строка/форма, взятые на время borrowConnect.
+  var KEEP_SEL = '#cbd-root, details.manage-builder, form.open-account-form';
+  function swapKept(node) {
+    if (!node) return true;
+    if (node.closest && node.closest(KEEP_SEL)) return true;
+    if (node.querySelector && node.querySelector(KEEP_SEL)) return true;
+    var b = window.cbDrawer && typeof window.cbDrawer.borrowed === 'function' ? window.cbDrawer.borrowed() : null;
+    if (b) {
+      for (var i = 0; i < 2; i++) {
+        var held = i ? b.form : b.row;
+        if (held && node.contains && node.contains(held)) return true;
       }
-      if (typeof window.aovApply === 'function') window.aovApply();
-      homePaint();
-    }).catch(function () { window.location.reload(); });
+    }
+    return false;
+  }
+
+  // Заменить блоки Home и строки стран из свежего фрагмента; ckey — одна страна, без него все.
+  // Раскрытие стран, фильтр, билдер и очередь публикаций остаются как были.
+  function swapFresh(fresh, ckey) {
+    ['#aov .aov-block', '#aov .aov-crow'].forEach(function (sel) {
+      var olds = {};
+      document.querySelectorAll(sel).forEach(function (n) { olds[n.getAttribute('data-aov-country')] = n; });
+      fresh.querySelectorAll(sel).forEach(function (nw) {
+        var key = nw.getAttribute('data-aov-country');
+        if (ckey && key !== ckey) return;
+        var cur = olds[key];
+        if (cur && !swapKept(cur)) cur.replaceWith(nw.cloneNode(true));
+      });
+    });
+    ['#aov .aov-fbar', '#amap-totals'].forEach(function (sel) {
+      var a = document.querySelector(sel), b = fresh.querySelector(sel);
+      if (a && b && !swapKept(a)) a.innerHTML = b.innerHTML;
+    });
+    if (!ckey) {
+      // Строки «Account read» стран в карте аккаунтов (тот же путь, что amapRefreshCountryLines).
+      fresh.querySelectorAll('details.amap-country[data-country]').forEach(function (blk) {
+        var live = null;
+        document.querySelectorAll('#amap-slot details.amap-country[data-country]').forEach(function (n) {
+          if (n.getAttribute('data-country') === blk.getAttribute('data-country')) live = n;
+        });
+        var holder = live && live.querySelector('.amap-live-summary');
+        if (!holder) return;
+        var was = holder.querySelector('.amap-country-read'), now = blk.querySelector('.amap-country-read');
+        if (was && now) { if (!swapKept(was)) was.replaceWith(now.cloneNode(true)); }
+        else if (now) holder.appendChild(now.cloneNode(true));
+        else if (was && !swapKept(was)) was.remove();
+      });
+    }
+    var pop = document.getElementById('aov-pop');
+    if (pop) pop.hidden = true;
+    if (typeof window.amapCampaignMountVisible === 'function' && window.AMAP_CAMPAIGN_TABLE) {
+      try { window.amapCampaignMountVisible(); } catch (e) { /* дерево подтянется при следующем открытии */ }
+    }
+    if (typeof window.aovApply === 'function') window.aovApply();
+    if (typeof window.amapSearchApply === 'function') { try { window.amapSearchApply(); } catch (e) { /* поиск применится при вводе */ } }
+    homePaint();
+  }
+
+  // ACL-2671: страница из сохранённой копии получила свежий отчёт — цифры карты аккаунтов
+  // меняются на месте. Разбор до первой замены: негодный ответ ничего не трогает.
+  function swapAccountMap(html) {
+    var fresh = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    if (!fresh.querySelector('#aov') && !fresh.querySelector('.amap')) throw new Error('refresh');
+    swapFresh(fresh, '');
+  }
+  window.aclSwapAccountMap = swapAccountMap;
+
+  // ACL-2560: после «Take out of <country>» страна на Home перерисовывается из свежего /account-map:
+  // блок страны (таблица), её строка плиток, строка фильтров и итог. Раскрытие других стран и фильтр остаются.
+  // ACL-2671: при сбое страница остаётся как была — перезагрузкой она не лечится и съела бы черновик билдера.
+  function homeAfterTakeOut(ckey) {
+    return homeFresh().then(function (fresh) { swapFresh(fresh, ckey); }).catch(function () {});
   }
 
   document.addEventListener('click', function (e) {
