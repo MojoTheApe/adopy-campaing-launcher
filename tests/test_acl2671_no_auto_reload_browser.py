@@ -133,7 +133,7 @@ def test_ready_report_updates_numbers_without_reloading(browser, home):
     ctx, p, rig, errors = open_page(browser, stored(['source']), home)
     loads = []
     p.on('load', lambda: loads.append(1))
-    assert p.evaluate("document.getElementById('acl-stored-frame') !== null"), 'the OUTDATED frame is the case under test'
+    assert p.evaluate("document.getElementById('acl-stored-bar') !== null"), 'the stored page is the case under test'
     before = home_now(p)
     make_ready(rig)
     p.wait_for_function(SWAPPED, timeout=10000)
@@ -142,7 +142,6 @@ def test_ready_report_updates_numbers_without_reloading(browser, home):
     assert now['block'] != before['block'], 'the country block did not change'
     assert p.evaluate("document.getElementById('acl-built-at').textContent") == '2026-11-17 12:00'
     assert p.evaluate("document.getElementById('acl-stored-bar')") is None
-    assert p.evaluate("document.getElementById('acl-stored-frame')") is None, 'the red frame stayed'
     assert p.evaluate('window.__alive') == 1, 'the page was reloaded'
     assert rig.documents == 1 and loads == []
     ctx.close()
@@ -204,7 +203,6 @@ def test_fragment_error_changes_nothing_and_does_not_reload(browser, home):
     p.wait_for_timeout(4500)
     assert home_now(p) == p.evaluate('window.__before')
     assert p.evaluate("document.getElementById('acl-stored-bar') !== null")
-    assert p.evaluate("document.getElementById('acl-stored-frame') !== null")
     assert p.evaluate("document.getElementById('acl-built-at').textContent") == BUILT_BEFORE
     assert rig.documents == 1 and p.evaluate('window.__alive') == 1
     calls = rig.status_calls

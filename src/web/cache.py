@@ -129,6 +129,17 @@ def rebuild_deferred() -> bool:
         return False
 
 
+def rebuild_deferred_facts() -> Dict[str, Any]:
+    """ACL-2782: что именно держит отложенную пересборку (имена аккаунтов и число окон)."""
+    module = sys.modules.get("src.web.publish_jobs")
+    if module is None:
+        return {}
+    try:
+        return dict(module.busy_facts())
+    except Exception:  # noqa: BLE001 - плашка не должна ломать страницу
+        return {}
+
+
 def has_entry(my_cm: Optional[str] = None) -> bool:
     """Some report (possibly of an older source) is in memory for this manager."""
     entry = _CACHE["entry"]

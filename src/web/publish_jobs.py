@@ -510,6 +510,21 @@ def slots_snapshot() -> dict[str, Any]:
     return snap
 
 
+def busy_facts() -> dict[str, Any]:
+    """Что именно задерживает пересборку отчёта: аккаунты живых заданий и число открытых окон (ACL-2782).
+
+    Дёшево: два коротких замка, без решения по памяти (в отличие от slots_snapshot).
+    """
+    with _jobs_lock:
+        labels = [str(j.get("account_label") or "") for j in _jobs.values()
+                  if j.get("status") in _LIVE_STATUSES]
+    seen: list[str] = []
+    for label in labels:
+        if label and label not in seen:
+            seen.append(label)
+    return {"publishes": seen, "publish_count": len(labels), "windows": _slots.kept_windows()}
+
+
 def _account_state(job: dict[str, Any]) -> str:
     """running / waiting_memory / waiting_slot / waiting_profile — для дешборда."""
     if job.get("status") in ("running", "cancelling"):

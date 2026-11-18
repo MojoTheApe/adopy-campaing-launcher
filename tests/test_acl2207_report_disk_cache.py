@@ -287,23 +287,23 @@ def test_the_installer_and_support_bundle_never_pick_the_cache_up():
 
 def test_cached_badge():
     out = report_store.decorate(report_store.StoredPage(PAGE, time.time() - 300))
-    assert 'data-state="cached"' in out and "From cache, refreshing" in out
+    assert 'data-state="cached"' in out and "Saved 5 min ago" in out and "refreshing" in out
     assert "OUTDATED" not in out
     assert out.index("acl-stored-bar") > out.index("<body")
     assert out.endswith("</body></html>") and "<h1>Report 42</h1>" in out
 
 
-def test_outdated_marker_is_prominent_and_says_why():
+def test_outdated_marker_is_compact_and_says_why():
     out = report_store.decorate(report_store.StoredPage(PAGE, time.time() - 7200, ["source", "code"]))
-    assert 'data-state="outdated"' in out and "OUTDATED" in out
-    assert "newer statistics may be available" in out and "dashboard has been updated" in out
-    assert "Do not rely on these numbers" in out
-    assert "inset 0 0 0 4px" in out  # red frame around the whole page
+    # ACL-2782: одна короткая строка, без рамки вокруг страницы
+    assert 'data-state="outdated"' in out and "Saved 2 h ago" in out
+    assert "newer statistics may exist" in out and "dashboard updated since" in out
+    assert "inset 0 0 0" not in out and "acl-stored-frame" not in out
 
 
 def test_error_is_shown_and_polling_stops():
     out = report_store.decorate(report_store.StoredPage(PAGE, time.time()), error="<b>boom</b>")
-    assert 'data-polling="0"' in out and "Refresh failed: &lt;b&gt;boom&lt;/b&gt;" in out
+    assert 'data-polling="0"' in out and "refresh failed: &lt;b&gt;boom&lt;/b&gt;" in out
     assert "<b>boom</b>" not in out
 
 
@@ -347,7 +347,7 @@ def test_no_stored_page_still_shows_the_loading_screen(route):
 def test_matching_stored_page_is_served_at_once_while_rebuilding(route):
     report_store.save(INPUTS, KEY, PAGE)
     response = get_page(**QUERY)
-    assert "Report 42" in response.text and "From cache, refreshing" in response.text
+    assert "Report 42" in response.text and "refreshing" in response.text and "Saved " in response.text
     assert "OUTDATED" not in response.text
     assert route["warm"] == 1 and route["rendered"] == 0
 
@@ -377,7 +377,7 @@ def test_rebuild_failure_keeps_the_stored_report_and_shows_the_error(route):
     route["error"] = "Stats workbook not found"
     response = get_page(**QUERY)
     assert "Report 42" in response.text
-    assert "Refresh failed: Stats workbook not found" in response.text
+    assert "refresh failed: Stats workbook not found" in response.text
     assert route["rendered"] == 0 and route["warm"] == 0
 
 
@@ -396,7 +396,7 @@ def test_warm_report_is_rendered_live_so_templates_reload_without_restart(route,
     report_store.save(INPUTS, KEY, PAGE)
     monkeypatch.setattr(app, "_page_ready", lambda *a: True)
     response = get_page(**QUERY)
-    assert "LIVE PAGE" in response.text and "From cache" not in response.text and route["warm"] == 0
+    assert "LIVE PAGE" in response.text and "acl-stored-bar" not in response.text and route["warm"] == 0
 
 
 # ── remembering the live page ──────────────────────────────────────────

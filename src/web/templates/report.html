@@ -555,6 +555,7 @@
     }
     .brand-meta > div { display: flex; align-items: center; gap: 6px; min-width: 0; }
     .brand-meta dt { color: var(--muted); }
+    .acl-status-slot:empty { display: none; }
     .brand-meta dd {
       margin: 0; color: var(--text); font-weight: 500;
       font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
@@ -4515,6 +4516,8 @@
       {%- endif %}
       <div><dt>Version:</dt>
       <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
+      {#- ACL-2782: сюда скрипт сохранённой страницы переносит строку «Saved ... · waiting for ...». -#}
+      <div id="acl-status-slot" class="acl-status-slot"></div>
       {%- set st = stage_status or {} %}
       {%- if st.channel == 'stage' %}
       <div><dd id="acl-stage" class="acl-stage{% if not st.known %} unknown{% endif %}"

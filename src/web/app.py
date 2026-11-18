@@ -60,6 +60,7 @@ from src.web.cache import (
     forget_background_error,
     get_cached_report,
     rebuild_deferred,
+    rebuild_deferred_facts,
     has_entry as report_has_entry,
     peek_cached_report,
     recheck_bi_revision,
@@ -3036,7 +3037,7 @@ async def index(
             # of its own. Show the saved page (or the older report in memory)
             # and let the page ask again; it rebuilds once things are idle.
             if stored is not None:
-                return HTMLResponse(report_store.decorate(stored, deferred=True))
+                return HTMLResponse(report_store.decorate(stored, deferred=True, waiting=rebuild_deferred_facts()))
         elif failure is None:
             _start_warm(date_from, date_to, span)
             if stored is not None:
@@ -3083,6 +3084,8 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
         "stage": "ready" if ready else state["stage"] if own_build else None,
         "waiting": not ready and state["building"] and not own_build,
         "deferred": deferred,
+        # ACL-2782: что именно ждём - готовая фраза для строки статуса, без новых опросов.
+        "waiting_text": report_store.waiting_phrase(rebuild_deferred_facts()) if deferred else "",
     })
 
 

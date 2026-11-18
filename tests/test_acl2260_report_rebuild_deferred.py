@@ -127,7 +127,7 @@ def test_page_shows_the_saved_report_and_waits_during_a_publish(cold_page, busy,
     monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
     response = _get("/")
     assert response.status_code == 200
-    assert "Saved" in response.text and ">" + report_store.DEFERRED_TEXT + "<" in response.text
+    assert "Saved" in response.text and "waiting for" in response.text and "updates by itself" in response.text
     assert cold_page == []
 
 
@@ -136,7 +136,7 @@ def test_page_starts_the_rebuild_when_idle(cold_page, idle, monkeypatch):
     monkeypatch.setattr(app.report_store, "exists", lambda inputs: True)
     monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
     response = _get("/")
-    assert ">" + report_store.DEFERRED_TEXT + "<" not in response.text
+    assert "· waiting for" not in response.text
     assert len(cold_page) == 1
 
 
@@ -150,19 +150,19 @@ def test_scheduled_account_reads_wait_for_a_publish(busy, monkeypatch):
 
 # ── ACL-2508: the notice says what and why; Refresh ends in the fresh page ──
 
-def test_notice_states_saved_version_reason_and_action():
-    text = report_store.DEFERRED_TEXT
-    assert "saved version" in text
-    assert "profile window" in text and "publish" in text
-    assert "Close the profile window" in text and "wait for the publish" in text
-    assert "Refresh" in text
+def test_notice_states_age_reason_and_that_it_updates_itself():
+    # ACL-2782: одна строка вместо абзаца; детали - в tests/test_acl_2782_compact_status.py
+    out = report_store.decorate(report_store.StoredPage("<html><body></body></html>", time.time() - 7200),
+                                deferred=True, waiting={"publishes": ["A1"], "publish_count": 1, "windows": 1})
+    assert "Saved 2 h ago" in out and "waiting for 1 publish (A1) and 1 open profile window" in out
+    assert "updates by itself" in out
 
 
 def test_notice_is_hidden_when_not_deferred(cold_page, idle, monkeypatch):
     stored = report_store.StoredPage("<html><body><h1>Saved</h1></body></html>", time.time() - 60, [])
     monkeypatch.setattr(app.report_store, "exists", lambda inputs: True)
     monkeypatch.setattr(app, "_stored_page", lambda inputs: stored)
-    assert ">" + report_store.DEFERRED_TEXT + "<" not in _get("/").text
+    assert "· waiting for" not in _get("/").text
 
 
 def test_refresh_warms_the_period_of_the_page(monkeypatch):

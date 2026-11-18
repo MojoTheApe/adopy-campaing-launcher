@@ -49,14 +49,14 @@ def _open(p, width):
 
 
 def test_docked_panel_ignores_stored_banner(layout_page):
-    # ACL-2260: the banner is out of the flow (fixed, bottom-left, under the drawer).
+    # ACL-2782: the status chip is out of the flow (one line in the header status row, or fixed at the top, under the drawer).
     p=layout_page
     _open(p, 370)
     panel=p.locator('.cbd-panel').bounding_box()
     bar=p.locator('#acl-stored-bar').bounding_box()
     print({'panel': panel, 'banner': bar})
     assert panel['y'] == 0
-    assert bar['y'] > panel['y'] + panel['height'] / 2
+    assert bar['height'] <= 30 and bar['y'] < 120
 
 
 @pytest.mark.parametrize('width', [320, 370, 480])

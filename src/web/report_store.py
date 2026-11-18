@@ -53,9 +53,9 @@ _LOCK = threading.Lock()  # one writer/pruner at a time inside this process
 
 # Which differing key part says what to the person looking at the page.
 REASON_TEXT = {
-    "code": "the dashboard has been updated since",
-    "source": "newer statistics may be available",
-    "settings": "currency, timezone, hidden accounts or the account map changed",
+    "code": "dashboard updated since",
+    "source": "newer statistics may exist",
+    "settings": "settings changed",
 }
 
 
@@ -229,31 +229,41 @@ def _prune(directory: Path) -> None:
 
 # ── The marker injected into a stored page ─────────────────────────────
 
-# ACL-2260: the bar is out of the page flow (fixed, bottom-left) and sits under
-# the Builder drawer (z-index 880). It used to be a sticky strip at the top that
-# pushed the header down; the Builder is independent of the report, so it must
-# look the same with and without the bar.
-_BAR_STYLE = (
-    "position:fixed;left:1rem;bottom:1rem;z-index:870;display:flex;flex-wrap:wrap;gap:4px 12px;"
-    "align-items:center;box-sizing:border-box;max-width:min(40rem,calc(100vw - 2rem));"
-    "padding:8px 14px;font:600 13px/1.4 system-ui,sans-serif;border-radius:8px;"
-    "border:2px solid {border};background:{bg};color:{fg};box-shadow:0 4px 16px rgba(0,0,0,.25);"
+# ACL-2782: вместо большой красной плашки внизу слева и красной рамки страницы —
+# одна короткая строка факта. Новая страница несёт слот #acl-status-slot в верхней
+# строке статуса (рядом с Last updated / Version): скрипт переносит чип туда.
+# Страница от старой сборки слота не имеет — чип остаётся маленьким, закреплённым
+# сверху (под ящиком билдера, z-index 880). Ни рамки, ни тени, ни абзацев.
+_STYLE_BLOCK = (
+    '<style id="acl-stored-style">'
+    "#acl-stored-bar{position:fixed;top:6px;right:12px;z-index:870;box-sizing:border-box;"
+    "width:max-content;max-width:calc(100vw - 24px);white-space:nowrap;overflow:hidden;"
+    "text-overflow:ellipsis;padding:2px 8px;border-radius:999px;font:500 12px/1.5 system-ui,sans-serif;"
+    "background:#fff4d6;color:#5c4300}"
+    '#acl-stored-bar[data-state="error"]{color:#b42318;background:#fdecea}'
+    "#acl-stored-bar.in-line{position:static;max-width:100%;white-space:normal;font:inherit;padding:1px 6px;border-radius:5px}"
+    "#acl-stored-bar a{color:inherit;text-decoration:underline;cursor:pointer;margin-left:2px}"
+    "</style>"
 )
-_STYLES = {
-    "cached": dict(bg="#fff4d6", fg="#5c4300", border="#d9a400"),
-    "outdated": dict(bg="#b91c1c", fg="#ffffff", border="#7f1212"),
-}
 
 _SCRIPT = """
 <script>
 (function () {
-  var DEFERRED_TEXT = __DEFERRED__;
   // ACL-2671: полный reload — только если страница отрисована другим кодом, чем работает сервер;
   // во всех остальных случаях цифры карты аккаунтов обновляются на месте.
   var RELOAD_ON_READY = __RELOAD_ON_READY__;
+  var bar = document.getElementById('acl-stored-bar');
   var note = document.getElementById('acl-stored-note');
   var original = note.textContent;
+  var prefix = bar.getAttribute('data-prefix') || '';
   var timer = null;
+  // ACL-2782: слот в верхней строке статуса есть только у новой страницы.
+  // Скрипт стоит в начале body, слот ниже по странице: переносим, когда разметка разобрана.
+  function toSlot() {
+    var slot = document.getElementById('acl-status-slot');
+    if (slot && bar.parentNode) { slot.appendChild(bar); bar.classList.add('in-line'); }
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', toSlot); } else { toSlot(); }
   function stop() { if (timer) { clearInterval(timer); timer = null; } }
   // Свежий фрагмент /account-map вместо перезагрузки: черновики билдера и идущие задания не трогаем.
   // Любая ошибка — опрос уже остановлен, страница остаётся как была.
@@ -265,10 +275,7 @@ _SCRIPT = """
         window.aclSwapAccountMap(html);
         var at = document.getElementById('acl-built-at');
         if (at && s.built_at) { at.textContent = s.built_at; }
-        var bar = document.getElementById('acl-stored-bar');
-        if (bar) { bar.remove(); }
-        var frame = document.getElementById('acl-stored-frame');
-        if (frame) { frame.remove(); }
+        bar.remove();
       })
       .catch(function () {});
   }
@@ -277,31 +284,25 @@ _SCRIPT = """
       .then(function (r) { return r.json(); })
       .then(function (s) {
         if (s.ready) { stop(); if (RELOAD_ON_READY) { window.location.reload(); } else { swapInPlace(s); } }
-        else if (s.deferred) { note.textContent = DEFERRED_TEXT; }
-        else if (note.textContent === DEFERRED_TEXT) { note.textContent = original; }
+        else if (s.deferred) {
+          note.textContent = prefix + ' \\u00b7 ' + (s.waiting_text || 'waiting for publishes to finish') + ' \\u00b7 updates by itself';
+        }
         else if (s.error) {
           stop();
-          note.textContent = 'Refresh failed: ' + s.error + ' This is the last saved report.';
+          bar.setAttribute('data-state', 'error');
+          note.textContent = prefix + ' \\u00b7 refresh failed: ' + s.error;
         }
+        else { note.textContent = original; }
       })
       .catch(function () {});
   }
-  if (document.getElementById('acl-stored-bar').getAttribute('data-polling') === '1') {
+  if (bar.getAttribute('data-polling') === '1') {
     timer = setInterval(poll, 3000);
     poll();
   }
 })();
 </script>
 """
-
-
-#: Shown while a publish or a kept profile window is active (ACL-2260).
-DEFERRED_TEXT = (
-    "Showing the saved version because a profile window is open or a publish is running "
-    "(a rebuild now would take memory the profiles need). "
-    "Close the profile window or wait for the publish to finish and the page updates by itself; "
-    "or press Refresh to build and show the fresh report now."
-)
 
 
 def _age_text(saved_at: float) -> str:
@@ -315,50 +316,65 @@ def _age_text(saved_at: float) -> str:
     return f"{round(seconds / 86400)} days ago"
 
 
-def decorate(stored: StoredPage, *, error: Optional[str] = None, deferred: bool = False) -> str:
-    """The stored page with a visible state bar; the stored text is untouched.
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
 
-    ``error`` is a failed rebuild: shown in the bar, polling stops.
-    ``deferred``: the rebuild waits for the publish to finish (ACL-2260); polling
-    goes on and the numbers update in place once the new report is ready; a full
-    reload happens only when the stored page was rendered by different code (ACL-2671).
+
+def waiting_phrase(facts: Optional[Dict[str, Any]]) -> str:
+    """«waiting for 2 publishes (A, B) and 1 open profile window» из фактов publish_jobs.busy_facts."""
+    facts = facts or {}
+    names = [str(n) for n in facts.get("publishes") or []]
+    count = int(facts.get("publish_count") or len(names))
+    windows = int(facts.get("windows") or 0)
+    parts = []
+    if count:
+        shown = ", ".join(names[:3]) + (f" +{len(names) - 3} more" if len(names) > 3 else "")
+        parts.append(_plural(count, "publish", "publishes") + (f" ({shown})" if shown else ""))
+    if windows:
+        parts.append(_plural(windows, "open profile window", "open profile windows"))
+    if not parts:
+        return "waiting for publishes to finish"
+    return "waiting for " + " and ".join(parts)
+
+
+def decorate(
+    stored: StoredPage, *, error: Optional[str] = None, deferred: bool = False,
+    waiting: Optional[Dict[str, Any]] = None,
+) -> str:
+    """The stored page with one compact status line; the stored text is untouched.
+
+    ``error`` is a failed rebuild: shown in red, polling stops.
+    ``deferred``: the rebuild waits for the publish to finish (ACL-2260); ``waiting`` are
+    the facts (names, window count) for the line. Polling goes on and the numbers update
+    in place once the new report is ready; a full reload happens only when the stored
+    page was rendered by different code (ACL-2671).
     """
     state = "outdated" if stored.outdated else "cached"
+    prefix = f"Saved {_age_text(stored.saved_at)}"
     if state == "outdated":
-        why = "; ".join(REASON_TEXT[r] for r in stored.reasons if r in REASON_TEXT)
-        head = "OUTDATED"
-        text = (
-            f"Saved report from {_age_text(stored.saved_at)} - {why}. "
-            "Do not rely on these numbers; the report is being rebuilt."
-        )
+        why = "; ".join(REASON_TEXT[r] for r in stored.reasons if r in REASON_TEXT) or "outdated"
+        text = f"{prefix} · outdated: {why} · updates by itself"
     else:
-        head = "From cache, refreshing…"
-        text = f"Saved report from {_age_text(stored.saved_at)}. The numbers update here when the new report is ready."
+        text = f"{prefix} · refreshing · updates by itself"
     if deferred and not error:
-        text = DEFERRED_TEXT
+        text = f"{prefix} · {waiting_phrase(waiting)} · updates by itself"
     if error:
-        text = f"Refresh failed: {error} This is the last saved report ({_age_text(stored.saved_at)})."
-    style = _BAR_STYLE.format(**_STYLES[state])
+        state = "error"
+        text = f"{prefix} · refresh failed: {error}"
     bar = (
         f'<div id="acl-stored-bar" data-state="{state}" data-polling="{0 if error else 1}" '
-        f'role="status" style="{style}">'
-        f'<span style="letter-spacing:.04em">{html_lib.escape(head)}</span>'
-        f'<span id="acl-stored-note" style="font-weight:400">{html_lib.escape(text)}</span>'
+        f'data-prefix="{html_lib.escape(prefix, quote=True)}" role="status">'
+        f'<span id="acl-stored-note">{html_lib.escape(text)}</span> '
         # ACL-2311: the saved page is from the previous build and may not have the
         # Connections button; the dialog code comes from /static (always current).
-        '<button type="button" id="acl-stored-connections" '
-        'style="font:600 12px system-ui,sans-serif;padding:2px 10px;cursor:pointer" '
-        'onclick="if(window.aclConnections){window.aclConnections.open()}">Connections</button>'
+        '<a id="acl-stored-connections" role="button" tabindex="0" '
+        'onclick="if(window.aclConnections){window.aclConnections.open()}return false;">Connections</a>'
         "</div>"
         '<script src="/static/connections.js"></script>'
     )
-    frame = (
-        '<style id="acl-stored-frame">html{box-shadow:inset 0 0 0 4px #b91c1c}</style>' if state == "outdated" else ""
-    )
     page = stored.html
     reload_on_ready = "true" if "code" in stored.reasons else "false"
-    marker = bar + frame + _SCRIPT.replace(
-        "__DEFERRED__", json.dumps(DEFERRED_TEXT)).replace("__RELOAD_ON_READY__", reload_on_ready)
+    marker = _STYLE_BLOCK + bar + _SCRIPT.replace("__RELOAD_ON_READY__", reload_on_ready)
     lower = page.lower()
     body = lower.find("<body")
     end = lower.find(">", body) + 1 if body != -1 else 0

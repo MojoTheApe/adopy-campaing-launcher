@@ -1186,6 +1186,11 @@ class ProfileSlots:
         with self._cond:
             return bool(self._running or self._waiting)
 
+    def kept_windows(self) -> int:
+        """Сколько открытых оставленных окон профилей держат место (ACL-2782). Без решения по памяти."""
+        with self._cond:
+            return sum(1 for r in self._running.values() if r.get("kept"))
+
     def snapshot(self) -> dict[str, Any]:
         """Что идёт, что ждёт и что решилось бы для следующего — для дешборда."""
         with self._cond:

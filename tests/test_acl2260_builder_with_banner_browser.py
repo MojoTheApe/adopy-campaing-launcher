@@ -1,4 +1,4 @@
-"""ACL-2260: the OUTDATED banner does not push or break the Builder.
+"""ACL-2260 / ACL-2782: the stored-report status line does not push or break the Builder.
 
 The same page is rendered with and without the stored-report bar; every Builder
 rectangle and the page header must be identical, at docked, overlay and phone widths.
@@ -62,8 +62,18 @@ def test_builder_and_header_are_identical_with_the_banner(browser, pages, size, 
     without, no_bar = measure(browser, pages['plain'], size)
     with_bar, bar = measure(browser, pages[state], size)
     assert no_bar is None
-    assert bar['position'] == 'fixed' and bar['visible'], bar
-    assert with_bar == without, {'with': with_bar, 'without': without}
+    # ACL-2782: на странице с новым шаблоном чип живёт в строке статуса шапки (не fixed)
+    assert bar['position'] == 'static' and bar['visible'], bar
+    # ACL-2782: чип стоит в строке статуса шапки, поэтому шапка может стать выше на одну строку
+    # (на узких экранах), а билдер остаётся ровно там, где был, относительно шапки.
+    assert 0 <= with_bar['header'][3] - without['header'][3] <= 45, {'with': with_bar, 'without': without}
+    for key in ('tab', 'root'):
+        assert with_bar[key][0] == without[key][0] and with_bar[key][2] == without[key][2], key
+    if without['panel'][1] > 0:  # панель под шапкой: зазор до шапки прежний
+        gap = lambda d: d['panel'][1] - (d['header'][1] + d['header'][3])
+        assert gap(with_bar) == gap(without), {'with': with_bar, 'without': without}
+    else:  # панель у верхнего края окна: не сдвинулась
+        assert with_bar['panel'] == without['panel'], {'with': with_bar, 'without': without}
     assert with_bar['panel'] is not None and with_bar['panel'][3] > 0
 
 
