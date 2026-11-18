@@ -4,13 +4,18 @@
 // POST /v1/backfill — владелец переносит историю (OWNER_KEY).
 // GET  /api/*       — владелец читает события и выводы (OWNER_KEY).
 //
-// Привязка: D1 `DB`. Секрет: `OWNER_KEY`. Переменная: `LIBRARY_REPO`.
+// POST /tg/webhook — команды Telegram-бота (секрет webhook).
+//
+// Привязка: D1 `DB`. Секреты: `OWNER_KEY`, `TG_BOT_TOKEN`, `TG_WEBHOOK_SECRET`. Переменные: `LIBRARY_REPO`,
+// `TG_ALLOWED_CHATS`, `HUB_URL`.
 import { json } from "./respond.js";
 import { handleBackfill, handleBatch } from "./ingest.js";
-import { handleApi } from "./api.js";
+import { closeTaskRequest, handleApi } from "./api.js";
 import { isOwner, sameSecret } from "./auth.js";
 import { clearCookie, makeSession, setCookie } from "./session.js";
 import { LOGIN_HTML, PAGE_HTML } from "./ui.js";
+import { handleWebhook } from "./bot.js";
+import { runScheduled } from "./alerts.js";
 
 const html = (body, status = 200, headers = {}) => new Response(body, { status,
   headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY",
@@ -37,9 +42,16 @@ export default {
       if (!(await isOwner(request, env))) return new Response(null, { status: 302, headers: { location: "/login" } });
       return html(PAGE_HTML);
     }
-    if (method === "POST" && url.pathname === "/v1/batch") return handleBatch(request, env);
+    if (method === "POST" && url.pathname === "/v1/batch") return handleBatch(request, env, ctx);
+    if (method === "POST" && url.pathname === "/tg/webhook") return handleWebhook(request, env);
     if (method === "POST" && url.pathname === "/v1/backfill") return handleBackfill(request, env);
     if (method === "GET" && url.pathname.startsWith("/api/")) return handleApi(request, env, url);
+    if (method === "POST" && url.pathname.startsWith("/api/task-requests/")) return closeTaskRequest(request, env, url);
     return json({ error: "not found" }, 404);
+  },
+
+  // Cron: каждые 5 мин — зависшие задания; 05:00 UTC (07:00 Израиль) — дайджест за вчера.
+  async scheduled(event, env, ctx) {
+    await runScheduled(env, event.cron, event.scheduledTime || Date.now());
   },
 };

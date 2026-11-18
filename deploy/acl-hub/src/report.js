@@ -31,7 +31,7 @@ export async function summary(env, url) {
   const db = env.DB;
   const all = async (sql, ...args) => (await db.prepare(sql).bind(...args).all()).results;
   const runs = await all(
-    "SELECT manager, job_id, outcome, duration_s FROM runs WHERE finished_at >= ? AND finished_at < ?", w.from, w.to);
+    "SELECT manager, job_id, outcome, duration_s, issues FROM runs WHERE finished_at >= ? AND finished_at < ?", w.from, w.to);
   // Задания дня: созданные в окне плюс те, чьи кампании закончились в окне (у старых сборок нет job.created).
   const jobs = await all(
     "SELECT manager, job_id FROM jobs WHERE created_at >= ? AND created_at < ?", w.from, w.to);
@@ -45,7 +45,7 @@ export async function summary(env, url) {
   const row = (manager) => {
     if (!by.has(manager)) {
       by.set(manager, { manager, machines: [], first_at: null, last_at: null, active_h: 0, jobs: 0,
-        campaigns: 0, ok: 0, failed: 0, not_started: 0, median_s: null, version: null, _d: [], _j: new Set() });
+        campaigns: 0, ok: 0, issues: 0, failed: 0, not_started: 0, median_s: null, version: null, _d: [], _j: new Set() });
     }
     return by.get(manager);
   };
@@ -53,6 +53,7 @@ export async function summary(env, url) {
     const b = row(r.manager);
     b.campaigns++;
     if (r.outcome in b) b[r.outcome]++;
+    if (r.outcome === "ok" && r.issues > 0) b.issues++;
     if (r.duration_s !== null && r.duration_s !== undefined) b._d.push(r.duration_s);
     if (r.job_id) b._j.add(r.job_id);
   }
@@ -75,6 +76,10 @@ export function describe(ev, p, job) {
   switch (ev.type) {
     case "publish.result": {
       const outcome = classify(p);
+      const problems = Array.isArray(p.blocking_failures) ? p.blocking_failures : [];
+      if (outcome === "ok" && problems.length) {
+        return { level: "warn", text: `Published with problems (${problems.length}): ` + cut(problems[0], 140) };
+      }
       if (outcome === "ok") return { level: "info", text: p.reused && Object.keys(p.reused).length && !(p.created && Object.keys(p.created).length) ? "Published (reused existing)" : "Published PAUSED" };
       if (outcome === "not_started") return { level: "warn", text: cut(p.error, 160) };
       return { level: "error", text: "Failed: " + cut(p.error || (p.blocking_failures || [])[0] || "unknown error", 140) };

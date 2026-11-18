@@ -100,7 +100,11 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
   function when(ts) { if (!ts) return "—"; var d = new Date(ts); return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" }) + " " + hhmm(ts); }
   function dur(s) { if (s === null || s === undefined) return "—"; s = Math.round(s); return s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
   function today() { var d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
-  function outcomePill(o) { return el("span", { class: "pill " + (o === "ok" ? "ok" : o === "failed" ? "bad" : o === "not_started" ? "warn" : "mut") }, o === "not_started" ? "not started" : (o || "—")); }
+  // ok + issues = «опубликовано с проблемами»: жёлтая, как в ACL.
+  function outcomePill(o, issues) {
+    if (o === "ok" && issues > 0) return el("span", { class: "pill warn" }, "ok · with problems");
+    return el("span", { class: "pill " + (o === "ok" ? "ok" : o === "failed" ? "bad" : o === "not_started" ? "warn" : "mut") }, o === "not_started" ? "not started" : (o || "—"));
+  }
   function empty(body, cols, text) { body.replaceChildren(el("tr", null, el("td", { class: "empty", colspan: String(cols) }, text))); }
 
   var tab = "live", liveTimer = null, liveData = [], known = {}, runToken = 0, dayAuto = today();
@@ -171,7 +175,8 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
         return el("tr", { class: "click", on: function () { setBuyers([b.manager]); $("live-buyer").value = b.manager; show("live"); } },
           el("td", null, el("strong", null, b.manager), el("div", { class: "who" }, b.machines.join(", "))),
           el("td", { class: "num" }, active), el("td", { class: "num" }, b.jobs), el("td", { class: "num" }, b.campaigns),
-          el("td", { class: "num" }, b.ok ? el("span", { class: "pill ok" }, b.ok) : "0"),
+          el("td", { class: "num" }, b.ok ? el("span", { class: "pill ok" }, b.ok) : "0",
+            b.issues ? el("div", null, el("span", { class: "pill warn", title: "published with problems" }, b.issues + " with problems")) : null),
           el("td", { class: "num" }, b.failed ? el("span", { class: "pill bad" }, b.failed) : "0"),
           el("td", { class: "num" }, b.not_started ? el("span", { class: "pill warn" }, b.not_started) : "0"),
           el("td", { class: "num hide-sm" }, dur(b.median_s)), el("td", { class: "hide-sm who" }, b.version || "—"));
@@ -226,7 +231,7 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
       if (token !== runToken) return;   // открыли другой прогон, пока грузился этот
       var r = d.run, j = d.job;
       $("run-sub").textContent = [r.manager, r.account, when(r.finished_at)].filter(Boolean).join(" · ");
-      $("run-pill").replaceChildren(outcomePill(r.outcome));
+      $("run-pill").replaceChildren(outcomePill(r.outcome, r.issues));
       var parts = [];
       if (r.error) parts.push(el("div", { class: "note err-line" }, r.error));
       function f(label, v) { return el("div", null, el("span", null, label), v === null || v === undefined || v === "" ? "—" : String(v)); }
@@ -245,6 +250,13 @@ dialog::backdrop{background:rgba(16,24,40,.45)}.dhead{display:flex;gap:10px;alig
   }
 
   document.addEventListener("visibilitychange", function () { if (!document.hidden && tab === "live") loadLive(); });
-  load(); schedule();
+  // Ссылка из Telegram: /#run=<id> сразу открывает карточку прогона.
+  function fromHash() {
+    var m = /^#run=(.+)$/.exec(location.hash);
+    if (m) { try { openRun(decodeURIComponent(m[1])); } catch (_) { /* битая ссылка */ } }
+  }
+  window.addEventListener("hashchange", fromHash);
+  dlg.addEventListener("close", function () { if (/^#run=/.test(location.hash)) history.replaceState(null, "", location.pathname); });
+  load(); schedule(); fromHash();
 })();
 </script></body></html>`;
