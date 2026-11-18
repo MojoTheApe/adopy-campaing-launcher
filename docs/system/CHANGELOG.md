@@ -1,5 +1,11 @@
 # System history
 
+## ACL-2768 — Telemetry Hub part 3: Telegram bot for buyers' runs — 2026-11-18
+
+The Hub now has a Telegram bot for the owner. It sends one grouped alert per failed buyer run, with Explain, Mute and Task buttons, and the same failure is not repeated within 30 minutes. It also sends a one-time alert for a stuck job and a morning digest after 07:00 Israel time. It answers /today /yesterday /failures /unfinished /buyer /machine /tasks /done /cleared /hint /mute /unmute. Runs that published with problems count as "ok (N with problems)" and show yellow in the Hub. The bot answers only the owner's chat, and its token lives only in Worker secrets.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1768
+
 ## ACL-2767 — Telemetry Hub part 2: the owner's Control Center for buyers' runs — 2026-11-18
 
 The Hub Worker now serves an owner-only Control Center: a per-buyer day summary (campaigns, ok / failed / not started, active hours, median duration, version), a live feed of run lines, and a run detail view with steps, timings and a plain-English explanation of each failure. The owner signs in once with the owner key; the session is kept in a signed cookie for 30 days. No Meta requests, no external scripts.

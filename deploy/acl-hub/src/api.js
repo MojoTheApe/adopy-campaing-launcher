@@ -64,8 +64,28 @@ async function machines(env) {
   return json({ machines: results.map((m) => ({ ...m, profile: m.profile ? JSON.parse(m.profile) : null })) });
 }
 
-const ROUTES = { "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines,
+async function taskRequests(env) {
+  const { results } = await env.DB.prepare(
+    "SELECT t.*, r.manager, r.account, r.campaign, r.stop_kind, r.error, fh.hint FROM task_requests t "
+    + "LEFT JOIN runs r ON r.run_id = t.run_id LEFT JOIN failure_hints fh ON fh.fingerprint = t.fingerprint "
+    + "WHERE t.status = 'open' ORDER BY t.created_at").all();
+  return json({ requests: results });
+}
+
+const ROUTES = { "/api/task-requests": taskRequests, "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines,
   "/api/summary": summary, "/api/live": live, "/api/run": runDetail, "/api/failures": failures };
+
+// POST /api/task-requests/<id>/done — сессия трекера закрывает запрос, когда задача заведена.
+export async function closeTaskRequest(request, env, url) {
+  if (!(await isOwner(request, env))) return json({ error: "unauthorized" }, 401);
+  const m = /^\/api\/task-requests\/(\d+)\/done$/.exec(url.pathname);
+  if (!m) return json({ error: "not found" }, 404);
+  let note = null;
+  try { note = String((await request.json())?.note || "").slice(0, 300) || null; } catch (_) { /* без заметки */ }
+  const r = await env.DB.prepare("UPDATE task_requests SET status = 'done', note = coalesce(?, note) WHERE id = ? AND status = 'open'")
+    .bind(note, Number(m[1])).run();
+  return json({ ok: true, closed: r.meta.changes });
+}
 
 export async function handleApi(request, env, url) {
   const route = ROUTES[url.pathname];

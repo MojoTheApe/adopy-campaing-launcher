@@ -127,7 +127,10 @@ export async function deriveStatements(db, ev) {
   } else if (ev.type === "publish.result") {
     const outcome = classify(p);
     const error = errorText(p);
+    const blocking = Array.isArray(p.blocking_failures) ? p.blocking_failures.length : 0;
     own = { finished_at: ev.ts, outcome, error: error || null,
+      // ok + blocking_failures = «опубликовано с проблемами» (в ACL — жёлтая).
+      issues: outcome === "ok" ? blocking : 0,
       fingerprint: outcome === "failed" ? await fingerprint(error) : null,
       campaign_id: p.campaign_id ?? null, published_as: p.published_as || null,
       created_any: nonEmpty(p.created) ? 1 : 0, reused_any: nonEmpty(p.reused) ? 1 : 0 };

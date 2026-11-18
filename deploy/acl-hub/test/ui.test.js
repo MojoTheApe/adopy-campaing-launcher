@@ -49,3 +49,8 @@ test("page sends anti-framing and referrer headers", async () => {
   const login = await worker.fetch(new Request("https://hub/login"), env());
   assert.equal(login.headers.get("x-frame-options"), "DENY");
 });
+
+test("page opens a run from the #run= link", () => {
+  assert.match(PAGE_HTML, /location\.hash/);
+  assert.match(PAGE_HTML, /#run=/);
+});
