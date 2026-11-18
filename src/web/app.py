@@ -606,8 +606,14 @@ def _build_account_map_view(
 
     map_path = get_ad_account_map_path()
     map_entries = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
-    known = list(map_entries)
-    all_known = sorted(set(known) | labels_in_report, key=str.casefold)
+    # Per-buyer map: only the selected buyer's accounts are listed. The entries
+    # stay whole (profiles, ids) for lookups; only the lists below are narrowed.
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
+    _mine = lambda label: _ab.is_visible(label, tag_map=_tags)  # noqa: E731
+    known = [k for k in map_entries if _mine(k)]
+    all_known = sorted({a for a in (set(known) | labels_in_report) if _mine(a)}, key=str.casefold)
 
     # Названия стран и имена аккаунтов берём из самой книги, а не только из
     # отчёта. Отчёт строится за сегодня: 8 сентября книга заканчивалась 7-м, в
@@ -691,7 +697,12 @@ def _build_account_map_view(
         country_name = display_name.get(key) or wb_country.get(key, stored)
         todo = todo_by_country.get(key, {})
         rows = []
-        for label in account_links.accounts_for("country", stored):
+        _placed = account_links.accounts_for("country", stored)
+        _own = [a for a in _placed if _mine(a)]
+        if _placed and not _own:
+            # The country holds only other buyers' accounts: not this buyer's map.
+            continue
+        for label in _own:
             excel = _numbers(country_name, label) or stats.get(label) or {}
             # Имя из Multilogin (`KLD_BFL_X84`) с книжным (`FacebookMKTOBFLX84`)
             # не сходится ничем, кроме хвоста — того самого, которым аккаунт и
@@ -918,7 +929,7 @@ def _build_account_map_view(
     buckets = _avail.split_available(
         account_links.available_accounts(all_known),
         connected=known,
-        placed=[a for a, _v in account_links.all_pairs("country")],
+        placed=[a for a, _v in account_links.all_pairs("country") if _mine(a)],
         activity=activity,
         hidden=hidden,
     )
@@ -1406,10 +1417,14 @@ def _add_linked_accounts_to_builder(report: dict) -> int:
     from src.web import account_links
 
     account_links.seed_from_account_map()
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
     by_key: dict[str, list[str]] = {}
     for stored in account_links.all_values("country"):
         by_key.setdefault(stored.casefold(), []).extend(
-            account_links.accounts_for("country", stored)
+            a for a in account_links.accounts_for("country", stored)
+            if _ab.is_visible(a, tag_map=_tags)
         )
 
     # A newly linked country can have no statistics at all, including no report
@@ -3802,6 +3817,9 @@ def api_accounts_overview() -> JSONResponse:
     country_by_alias = primary_country(_resolved)
 
     selected_cm = (get_selected_cm() or "").strip()
+    from src.web import account_buyer as _ab
+
+    _tags = _ab.tags()
     open_detail = open_profiles_detailed()
     open_ids = [p["profile_id"] for p in open_detail]
     # Profiles already spoken for, so the picker can say so instead of letting
@@ -3817,6 +3835,9 @@ def api_accounts_overview() -> JSONResponse:
     for row in sheet_rows:
         label = (row.get("account_label") or row.get("alias") or "").strip()
         entry = resolve_account_entry(account_map, label) if label else None
+        # Connected under another buyer: not on this buyer's screen.
+        if entry is not None and not _ab.is_visible(label, selected_cm, _tags):
+            continue
         ad_id = (getattr(entry, "ad_account_id", "") or "").strip() if entry else ""
         profile_id = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
         missing = [n for n, v in (("ad_account_id", ad_id), ("profile_id", profile_id)) if not v]
@@ -3855,6 +3876,8 @@ def api_accounts_overview() -> JSONResponse:
     for label, entry in account_map.items():
         label = (label or "").strip()
         if not label or label in listed:
+            continue
+        if not _ab.is_visible(label, selected_cm, _tags):
             continue
         owner = owner_by_alias.get(normalize_account_alias(label), "")
         # ACL-1588: подключён здесь — виден всегда, чьим бы ни назвала его книга.
@@ -4554,7 +4577,7 @@ async def account_map_patch(request: Request) -> JSONResponse:
     _FIELDNAMES = [
         "account_name", "ad_account_id", "page_id", "multilogin_instance",
         "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
-        "proxy_user", "proxy_pass", "country", "page_name",
+        "proxy_user", "proxy_pass", "country", "page_name", "buyer",
     ]
 
     try:
@@ -4637,6 +4660,11 @@ async def account_map_patch(request: Request) -> JSONResponse:
         if existing_idx is not None:
             rows[existing_idx] = new_row
         else:
+            # A new account belongs to the buyer selected while it is connected.
+            # An existing row keeps its tag: editing a profile is not a re-tag.
+            from src.web import account_buyer as _ab
+
+            new_row[_ab.COLUMN] = _ab.tag_for_new_row()
             rows.append(new_row)
 
         write_csv_atomic(map_path, fieldnames, rows)
