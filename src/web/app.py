@@ -2111,6 +2111,14 @@ def _no_data_message(exc: BaseException) -> str:
     return bi_stats.redact(str(exc))
 
 
+def _needs_bi_sign_in(exc: BaseException) -> bool:
+    """A computer with no BI connection and no stats workbook (fresh install, or an update from
+    the Excel era): the one step it needs is the Google sign-in, not an error page."""
+    if bi_stats.bi_enabled() or (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() == "excel":
+        return False
+    return str(exc).startswith("Excel file not found")
+
+
 def _after_connections_change() -> None:
     """ACL-2607: new connection settings mean a failed load may work now - drop the remembered
     failure and the stale BI revision so the next request rebuilds, no restart."""
@@ -2121,6 +2129,11 @@ def _after_connections_change() -> None:
         try:
             bi_stats.refresh_revision(force=True)
         except Exception:  # noqa: BLE001 - the next page load decides
+            pass
+        # Start building now, so the page that opens after sign-in is already on its way.
+        try:
+            _start_warm("", "", "")
+        except Exception:  # noqa: BLE001 - the next page load starts it anyway
             pass
 
 
@@ -2138,6 +2151,16 @@ def _render_report(
     try:
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
+        if _needs_bi_sign_in(e):
+            from src.analysis_agent import connection_settings as cs
+
+            return templates.TemplateResponse(
+                request,
+                "error.html",
+                {"request": request, "title": "Connect statistics", "onboarding": True,
+                 "auto_sign_in": cs.has_google_token()},
+                status_code=200,
+            )
         # ACL-2607: first run with no stats data - the page offers the Connections
         # sign-in, because that is how a fresh computer gets its BI credentials.
         return templates.TemplateResponse(
