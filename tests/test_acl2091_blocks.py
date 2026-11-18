@@ -367,6 +367,6 @@ def test_the_action_survives_the_real_read_session_in_the_same_thread(world):  #
     key = api._as._profile_key(ACCOUNT)
     world.page.state_value = {"kind": "checkpoint", "has_token": False}
     with blocks.problem_action("attention"):
-        api.read_via_api(ACCOUNT, D, D)          # goes through api._session -> read_session -> _open_session
+        api.read_via_api(ACCOUNT, D, D)          # goes through api._session -> target_activity -> _open_session
     assert blocks.hold_of(key)["action"] == "a background read"
     assert "found during a background read" in api.read_via_api(ACCOUNT, D, D).error

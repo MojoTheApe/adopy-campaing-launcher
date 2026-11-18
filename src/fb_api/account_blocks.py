@@ -46,7 +46,7 @@ _TIMED_META_TTL_S = 3600.0
 
 _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_action", default="")
 #: True when an entry point named the action itself (not a `only_if_unset` default). The var lives in the
-#: thread that runs the operation: `read_session`/the queued dispatcher run it in the caller's thread.
+#: thread that runs the operation: the queued dispatcher runs each read (and sets this) in that read's own thread.
 _EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
 #: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
 BUYER_ACTIONS = ("retry", "read", "open")

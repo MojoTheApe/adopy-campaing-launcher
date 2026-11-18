@@ -114,7 +114,7 @@ def test_5_foreign_different_or_turned_on_gets_a_new_copy(tmp_path):
     _campaign(meta, BASE + " copy 1")["daily_budget"] = "999"
     assert _run(meta, _draft(tmp_path, ads=1))[0].published_as == BASE + " copy 2"
     _end_job()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     broken, _ = _run(meta, _draft(tmp_path, ads=1))
     assert broken.published_as == BASE + " copy 3"
     meta.fail_next.clear()
@@ -182,7 +182,7 @@ def test_8_readback_passes_with_counter_names(tmp_path):
 
 def test_14_receipt_missing_and_top_row_partial_resumes(tmp_path):
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     broken, _ = _run(meta, _draft(tmp_path, ads=1))
     assert broken.stop_kind == "unknown"
     meta.fail_next.clear()
@@ -229,7 +229,7 @@ def _creatives(meta):
 def test_19_several_identical_creatives_under_one_tag_on_resume_use_the_oldest(tmp_path):
     from src.fb_api import creative_recovery as recovery
     meta = FakeMeta()
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, _draft(tmp_path, ads=1), reconcile_wait_s=0)
     assert first.error and len(_creatives(meta)) == 1
     old = _creatives(meta)[0]

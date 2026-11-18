@@ -11,8 +11,12 @@
 
 * узнаёт эту ошибку (и отказ входа в прокси) по тексту/атрибутам исключения и
   даёт устойчивые коды `mlx_session_lost` / `proxy_auth`;
-* держит «защёлку» пачки: после первого `mlx_session_lost` на слоте B остальные
-  старты слота B в этой пачке пропускаются с той же причиной, слот A идёт дальше;
+* держит «защёлку» пачки (ACL-2668, решение владельца 16.11): после первого
+  `mlx_session_lost` / протухшего токена слот один раз перепроверяется — офлайн
+  токен и один следующий старт этого слота (это вызов MLX, не Meta). Жив —
+  пачка идёт дальше; снова отказ — остальные старты слота в пачке пропускаются
+  с одной общей короткой причиной. Защёлка живёт до первого удачного старта
+  слота или нового входа (сменился токен), а не по часам. Слот A идёт дальше;
 * пишет каждое событие в телеметрию и в Sentry (время, слот, аккаунт);
 * до пачки на слоте B офлайн проверяет токен: пространство и срок (только
   claims JWT, подпись и сам токен никуда не выводятся).
@@ -60,7 +64,11 @@ MESSAGES = {
 #: Коды, после которых остальные старты слота в пачке пропускаются.
 BATCH_STOPS = frozenset({SESSION_LOST, TOKEN_EXPIRED, TOKEN_WORKSPACE})
 
-BATCH_TTL_S = 3 * 3600.0
+#: ACL-2668: одна общая причина у всех пропущенных стартов слота (полный текст —
+#: только у настоящего отказа), чтобы не было потока одинаковых ошибок.
+SLOT_SKIP_MESSAGE = "Multilogin: sign in again, then press Retry."
+
+#: Сколько пачек помнить (только предел памяти; срока жизни у защёлки нет).
 BATCH_MAX = 64
 #: Запас до `exp`, при котором токен ещё считается рабочим.
 TOKEN_MARGIN_S = 60.0
@@ -158,11 +166,24 @@ def _clock() -> float:
     return time.monotonic()
 
 
-def _prune(now: float) -> None:
-    for key in [k for k, v in _BATCHES.items() if now - v["t"] > BATCH_TTL_S]:
-        _BATCHES.pop(key, None)
+def _prune() -> None:
+    # ACL-2668: срока в 3 ч больше нет — защёлку снимает удачный старт или новый вход.
     while len(_BATCHES) > BATCH_MAX:
         _BATCHES.popitem(last=False)
+
+
+def _token_mark(instance: str) -> str:
+    """Отпечаток токена слота: сменился — значит, вошли заново. Сам токен не хранится."""
+    import hashlib
+
+    token = (os.environ.get(f"MULTILOGIN_AUTOMATION_TOKEN_{instance}") or "").strip()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16] if token else ""
+
+
+def _new_state(now: float) -> dict:
+    # suspect: был отказ, перепроверки ещё не было; probing: перепроверка
+    # (один следующий старт) уже пущена; stopped: перепроверка подтвердила отказ.
+    return {"t": now, "stopped": {}, "suspect": {}, "probing": {}, "checked": set()}
 
 
 def begin_batch(batch_id: str) -> None:
@@ -170,29 +191,55 @@ def begin_batch(batch_id: str) -> None:
     batch_id = (batch_id or "").strip()[:80]
     if not batch_id:
         return
-    now = _clock()
     with _LOCK:
-        _prune(now)
-        _BATCHES.setdefault(batch_id, {"t": now, "stopped": {}, "checked": set()})
+        _BATCHES.setdefault(batch_id, _new_state(_clock()))
+        _prune()
 
 
-def note_failure(code: str, instance: str, account: str = "", *, detail: str = "") -> None:
-    """Зафиксировать отказ старта: запись + защёлка всех живых пачек этого слота."""
+def note_failure(code: str, instance: str, account: str = "", *, detail: str = "",
+                 checked: bool = False) -> None:
+    """Зафиксировать отказ старта: запись + защёлка всех живых пачек этого слота.
+
+    Первый отказ только помечает слот «под подозрением»: следующий его старт
+    станет перепроверкой. Отказ на перепроверке (или `checked=True` — отказ
+    самой проверки, например офлайн-токена) защёлкивает слот до удачного старта
+    или нового входа.
+    """
     instance = (instance or "").strip().upper()
     record_event(code, instance, account, detail=detail)
     if code not in BATCH_STOPS:
         return
+    mark = _token_mark(instance)
     with _LOCK:
-        _prune(_clock())
         for state in _BATCHES.values():
-            state["stopped"].setdefault(instance, code)
+            if instance in state["stopped"]:
+                continue
+            if checked or instance in state["probing"]:
+                state["stopped"][instance] = {"code": code, "token": mark}
+                state["suspect"].pop(instance, None)
+                state["probing"].pop(instance, None)
+            else:
+                state["suspect"].setdefault(instance, code)
+
+
+def note_started(instance: str) -> None:
+    """Старт слота прошёл: сессия MLX жива — снять подозрение и защёлку во всех пачках."""
+    instance = (instance or "").strip().upper()
+    if not instance:
+        return
+    with _LOCK:
+        for state in _BATCHES.values():
+            for key in ("stopped", "suspect", "probing"):
+                state[key].pop(instance, None)
 
 
 def refusal(batch_id: str, instance: str, account: str = "") -> dict | None:
     """Пропустить ли старт: `{code, message, skipped: True}` или None.
 
-    Первый вопрос про слот B в пачке заодно прогоняет офлайн-проверку токена;
-    провал защёлкивает слот на всю пачку (все B-аккаунты получают причину).
+    Первый вопрос про слот B в пачке заодно прогоняет офлайн-проверку токена.
+    После отказа слот перепроверяется один раз: офлайн-токен и затем этот
+    старт (вызов MLX, к Meta не ходим). Если и перепроверка не прошла,
+    остальные старты слота получают одну общую причину `SLOT_SKIP_MESSAGE`.
     """
     batch_id = (batch_id or "").strip()[:80]
     instance = (instance or "").strip().upper()
@@ -207,14 +254,34 @@ def refusal(batch_id: str, instance: str, account: str = "") -> dict | None:
     if need_check:
         verdict = token_preflight("B")
         if not verdict["ok"]:
-            note_failure(verdict["code"], "B", account, detail="preflight")
+            note_failure(verdict["code"], "B", account, detail="preflight", checked=True)
     with _LOCK:
         state = _BATCHES.get(batch_id)
-        code = state["stopped"].get(instance) if state else None
-    if not code:
+        stop = state["stopped"].get(instance) if state else None
+        if stop and stop["token"] != _token_mark(instance):
+            # Человек вошёл заново (токен другой) — защёлка снята, начинаем с чистого.
+            state["stopped"].pop(instance, None)
+            stop = None
+        recheck = None if stop or not state else state["suspect"].pop(instance, None)
+    if recheck:
+        # Перепроверка: офлайн-токен (сеть не нужна). Плохой — отказ подтверждён.
+        verdict = token_preflight(instance)
+        if not verdict["ok"]:
+            note_failure(verdict["code"], instance, account, detail="recheck", checked=True)
+        else:
+            with _LOCK:
+                state = _BATCHES.get(batch_id)
+                if state is not None and instance not in state["stopped"]:
+                    # Токен цел — этот старт и есть проверка сессии MLX.
+                    state["probing"][instance] = recheck
+        with _LOCK:
+            state = _BATCHES.get(batch_id)
+            stop = state["stopped"].get(instance) if state else None
+    if not stop:
         return None
+    code = stop["code"]
     record_event(code, instance, account, skipped=True)
-    return {"ok": False, "code": code, "message": message_for(code), "skipped": True}
+    return {"ok": False, "code": code, "message": SLOT_SKIP_MESSAGE, "skipped": True}
 
 
 # Аккаунт и пачка «в воздухе»: места, где старт глубоко, не знают, чей он, а

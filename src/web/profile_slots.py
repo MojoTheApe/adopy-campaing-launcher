@@ -15,7 +15,7 @@
 * ничего не идёт — старт всегда (пол: одна работа идёт при любой памяти);
 * `ACL_MAX_PARALLEL_PROFILES=N` в машинном `.env` — ровно N разом, память
   не спрашивается (ручное переопределение);
-* иначе потолок `ACL_MAX_PARALLEL_CEILING` (4) и память: новый профиль
+* иначе потолок `ACL_MAX_PROFILES` (без него — по памяти машины, ACL-2668) и память: новый профиль
   стартует, если свободно не меньше «профиль + запас»
   (`ACL_PROFILE_MEMORY_GB` 1,5 + `ACL_MEMORY_RESERVE_GB` 1,5). Профиль,
   стартовавший меньше `ACL_PROFILE_WARMUP_S` (90 с) назад, свою память ещё
@@ -87,9 +87,17 @@ TICK_S = 2.0
 #: Сколько разом, когда память прочитать не удалось: осторожно, но не один.
 FALLBACK_LIMIT = 2
 
-#: ACL-1603: жёсткий потолок — не больше двух профилей разом, что бы ни
+#: ACL-1603: жёсткий потолок — не больше стольких профилей разом, что бы ни
 #: показывала оценка памяти. Меняется на машине через `ACL_MAX_PROFILES`.
+#: ACL-2668 (решение владельца 16.11): без настройки потолок зависит от памяти
+#: машины (`ceiling_for_memory`); 2 — только когда память прочитать не удалось.
 DEFAULT_CEILING = 2
+#: ACL-2668: ступени «вся память машины → потолок». Границы с запасом: Windows
+#: показывает меньше номинала (8 ГБ ≈ 7,8 ГБ, 16 ГБ ≈ 15,8 ГБ).
+#: До 12 ГБ (машина 8 ГБ) → 2; до 24 ГБ (16 ГБ) → 4; до 48 ГБ (32 ГБ) → 5; больше → 6.
+#: Сверху всё равно стоит порог занятой памяти 92 % (`DEFAULT_MAX_USED_PCT`).
+RAM_CEILING_STEPS = ((12 * 1024, 2), (24 * 1024, 4), (48 * 1024, 5))
+RAM_CEILING_TOP = 6
 DEFAULT_PROFILE_MEMORY_GB = 3.5
 #: ACL-1603: замер профиля не ниже 3,5 ГБ, запас под ОС и чужие программы — 3 ГБ.
 DEFAULT_PROFILE_FLOOR_GB = 3.5
@@ -179,13 +187,42 @@ def _env_number(env: dict[str, str] | Any, key: str, default: float, *, minimum:
     return value
 
 
+def ceiling_for_memory(total_mb: int | None) -> int:
+    """ACL-2668: потолок по умолчанию для машины с такой памятью; None → `DEFAULT_CEILING`."""
+    if not total_mb or total_mb <= 0:
+        return DEFAULT_CEILING
+    for below_mb, ceiling in RAM_CEILING_STEPS:
+        if total_mb < below_mb:
+            return ceiling
+    return RAM_CEILING_TOP
+
+
+_machine_total_mb_cache: int | None = None
+
+
+def machine_total_mb() -> int | None:
+    """Вся физическая память машины (МБ); читается один раз — она не меняется на ходу."""
+    global _machine_total_mb_cache
+    if _machine_total_mb_cache is None:
+        memory = read_memory()
+        if memory is not None and memory.total_mb > 0:
+            _machine_total_mb_cache = int(memory.total_mb)
+    return _machine_total_mb_cache
+
+
+def default_ceiling() -> int:
+    """ACL-2668: потолок этой машины, если байер не задал свой в Settings."""
+    return ceiling_for_memory(machine_total_mb())
+
+
 def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
     """Настройки из окружения (машинный `.env`). Мусор в значении — умолчание."""
     env = os.environ if env is None else env
-    # ACL-1603: потолок — `ACL_MAX_PROFILES` (по умолчанию 2). Прежние имена
+    # ACL-1603: потолок — `ACL_MAX_PROFILES`. Прежние имена
     # `ACL_MAX_PARALLEL_PROFILES` / `ACL_MAX_PARALLEL_CEILING` читаются как
     # его запасные: ручное число больше не отменяет память и потолок.
-    ceiling = DEFAULT_CEILING
+    # ACL-2668: без числа в настройках — потолок по памяти машины.
+    ceiling = default_ceiling()
     for key in ("ACL_MAX_PROFILES", "ACL_MAX_PARALLEL_PROFILES", "ACL_MAX_PARALLEL_CEILING"):
         raw = str(env.get(key, "") or "").strip().lower()
         if not raw or raw in ("auto", "0"):

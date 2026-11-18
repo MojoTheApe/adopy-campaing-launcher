@@ -516,7 +516,7 @@ def test_publish_labels_follow_the_backend():
     label = text[i:text.index("\n  }", i)]
     assert "window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts'" in label
     assert "'Publish selected → ' + what" in label and "'Publish all → ' + what" in label
-    assert "confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget()" in text
+    assert "confirmLabel: (onlyWord ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget()" in text
     assert "(cbApiMode() ? 'Publish → PAUSED campaign' : 'Publish → draft')" in text
     # Дважды в прежних окнах подтверждения и дважды в блоке ревью ACL-2353 (те же вопросы под Graph API).
     assert text.count("'Create the selected campaigns as PAUSED campaigns?'") == 4

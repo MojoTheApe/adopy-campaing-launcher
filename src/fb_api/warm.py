@@ -43,7 +43,6 @@ from contextvars import ContextVar
 import contextlib
 import logging
 import os
-import random
 import threading
 import time
 import urllib.parse
@@ -148,9 +147,6 @@ DEFAULT_RESTART_COOLDOWN_S = _stop_log.DEFAULT_RESTART_COOLDOWN_S
 MAX_HEAVY_ENV = "ACL_WARM_MAX_HEAVY"
 GATE_WAIT_ENV = "ACL_WARM_GATE_WAIT_S"
 DEFAULT_GATE_WAIT_S = 300.0
-#: Пауза между запусками профилей «на сегодня» (секунды, случайно в диапазоне).
-STAGGER_MIN_S = 5.0
-STAGGER_MAX_S = 10.0
 #: Сколько ждём места по памяти под запуск одного профиля.
 START_SLOT_WAIT_S = 120.0
 #: Сколько ждём памяти под запуск следующего профиля и сколько профиль «приживается».
@@ -654,8 +650,7 @@ class WarmRegistry:
                  usage: Any = None,
                  cpu: Callable[[], float | None] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
-                 mono: Callable[[], float] = time.monotonic,
-                 stagger: Callable[[], float] = lambda: random.uniform(STAGGER_MIN_S, STAGGER_MAX_S)):
+                 mono: Callable[[], float] = time.monotonic):
         self._store = store or WarmStore()
         self._wall = wall
         self._scan = scan or scan_local
@@ -676,7 +671,6 @@ class WarmRegistry:
         self._cpu = cpu or _default_cpu
         self._sleep = sleep
         self._mono = mono
-        self._stagger = stagger
         self._lock = threading.RLock()
         self._sessions: dict[str, WarmSession] = {}
         #: Записи, которые держит ДРУГОЙ живой процесс дешборда: не трогаем ни их, ни их вкладки.
@@ -1320,9 +1314,9 @@ class WarmRegistry:
     def open_many(self, items: list[tuple[str, Any]], *, job_id: str = "",
                   on_result: Callable[[str, dict], None] | None = None,
                   cancelled: Callable[[], bool] = lambda: False) -> dict[str, dict]:
-        """Запуск по очереди; между настоящими запусками — пауза 5–10 с. Не больше одного профиля за раз."""
+        """Запуск по очереди, без паузы между запусками (ACL-2668 #14): следующий профиль стартует сразу,
+        как только позволяет потолок мест. Не больше одного профиля за раз."""
         results: dict[str, dict] = {}
-        pending_pause = False
         from src.fb_api import mlx_session as _mlx
 
         # ACL-1826: пачка = это задание. После потери общей сессии слота B остальные B-старты
@@ -1337,12 +1331,9 @@ class WarmRegistry:
             if skip:
                 res = _result(False, skip["message"], skip["code"], skipped=True)
             else:
-                if pending_pause:
-                    self._sleep(self._stagger())
                 with _mlx.scope(account=label, batch=batch):
                     res = self.open_one(label, entry, job_id=job_id, cancelled=cancelled)
             results[label] = res
-            pending_pause = bool(res.get("started")) and not skip
             if on_result is not None:
                 try:
                     on_result(label, res)
