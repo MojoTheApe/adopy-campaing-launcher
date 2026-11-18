@@ -1,6 +1,8 @@
 // Авторизация хаба: машины — токеном библиотеки команды (проверка через GitHub),
 // владелец — секретом OWNER_KEY. Сам токен нигде не хранится: в D1 только sha256.
 
+import { checkSession, readCookie } from "./session.js";
+
 const FRESH_MS = 60 * 60 * 1000;          // запись о токене свежа 1 час
 const GRACE_MS = 24 * 60 * 60 * 1000;     // при падении GitHub верим записи до 24 часов
 const DEFAULT_REPO = "MojoTheApe/acl-lib";
@@ -24,8 +26,10 @@ export async function sameSecret(a, b) {
   return diff === 0;
 }
 
+// Владелец: Bearer OWNER_KEY (скрипты) или подписанная cookie страницы.
 export async function isOwner(request, env) {
-  return sameSecret(bearer(request), env.OWNER_KEY || "");
+  if (await sameSecret(bearer(request), env.OWNER_KEY || "")) return true;
+  return checkSession(env, readCookie(request), Math.floor(Date.now() / 1000));
 }
 
 // "ok" | "denied" | "unavailable".
