@@ -5096,6 +5096,10 @@ class CampaignCreator:
         self._writes_base = getattr(self.client, "writes", 0)
         out.warnings += resolve_page_pixel(plan, self.facts)
         out.warnings += self.schedule_shift_warnings(plan)
+        for ad_set in plan.ad_sets:  # ACL-2666: Check plan называет пояс кабинета и разницу часов
+            note = self.schedule_zone_note(ad_set)
+            if note and note not in out.warnings:
+                out.warnings.append(note)
         self.check_profile_page(plan)
         try:
             # ACL-1768: таргетинг ВСЕХ наборов разбирается до отказа - Check plan показывает все термины,

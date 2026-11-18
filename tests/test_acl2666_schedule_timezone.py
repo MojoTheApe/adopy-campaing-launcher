@@ -115,3 +115,14 @@ def test_a_run_across_the_dst_change_uses_the_start_date_and_warns(tmp_path):
     creator2, plan2, later = _payload(tmp_path, "America/New_York", "2026-11-17T00:00", "2026-11-30T23:59")
     assert later["adset_schedule"] != params["adset_schedule"]
     assert creator2.schedule_shift_warnings(plan2) == []
+
+
+def test_prepare_puts_the_zone_note_into_the_check_plan_warnings(tmp_path):
+    from src.fb_api import creator as cr
+    creator, plan, _ = _payload(tmp_path, "America/New_York", "2026-11-17T00:00", "2026-11-30T23:59")
+    out = cr.Outcome(campaign_name="x")
+    try:
+        creator._prepare(plan, out, writing=False)
+    except Exception:
+        pass  # later checks (page, files) may refuse on the stub; the zone note is added before them
+    assert any("America/New_York" in w and "-7 h" in w for w in out.warnings)
