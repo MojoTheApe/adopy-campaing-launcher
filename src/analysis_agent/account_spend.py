@@ -1259,7 +1259,7 @@ def _keep_for_problem(opened: _ReadOpen, problem: str, stop: Any = None) -> None
 
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
                     grace_s: float | None = None, convenience: bool = False,
-                    problem: Any = None, read_ok: bool | None = None) -> None:
+                    problem: Any = None) -> None:
     """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
 
     `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
@@ -1283,18 +1283,6 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         except Exception:
             log.exception("Could not mark the kept window of %s", opened.account)
         return
-    # Только API-чтение передаёт `read_ok`; путь RPA (`read_ok is None`) закрывает по-прежнему.
-    if (read_ok and not keep_for_next and not problem and opened.slot_id and may_open_closed_profile()
-            and _keep_profiles_open() and not _publish_touched(opened)):
-        # ACL-2790: чтение запустил сам покупатель (кнопка, а не фон) — окно остаётся «удобным»
-        # kept-окном: следующая команда на аккаунте не платит за повторный запуск. Простой и нехватка
-        # памяти решает очередь (`kept_idle_close_s`, вытеснение): новому заданию окно уступает место.
-        try:
-            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
-        except Exception:
-            log.exception("Could not mark the kept window of %s", opened.account)
-        opened.started = False
-        return
     grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
     if keep_for_next and grace > 0 and opened.profile_id:
         if grace_s is not None and opened.slot_id:
@@ -1311,16 +1299,6 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         timer.start()
         return
     _close_started(opened)
-
-
-def _keep_profiles_open() -> bool:
-    """Включено ли «держать профили открытыми» (по умолчанию да; ACL-2113)."""
-    try:
-        from src.fb_ads_rpa.rpa_publisher import keep_profiles_open
-
-        return bool(keep_profiles_open())
-    except Exception:
-        return True
 
 
 def _logged_out(page, *, deep: bool = False) -> bool:

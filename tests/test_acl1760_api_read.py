@@ -576,14 +576,12 @@ def test_started_profile_is_softly_stopped_and_its_slot_released(world):
     world.started_now = True
     r = api.read_via_api(ACCOUNT, D, D)
     assert r.state == "ok"
-    # ACL-2790: the read the buyer started leaves the window as a kept "convenience" window: the next
-    # command on this account does not reopen it; idle / memory eviction in the queue closes it later.
     kinds = [c[0] for c in world.queue.calls]
-    assert kinds == ["acquire", "keep"], "same queue, slot kept (not released) for the next action"
-    acquire, keep = world.queue.calls
+    assert kinds == ["acquire", "release"], "same queue, slot given back; not kept"
+    acquire, release = world.queue.calls
     assert acquire[2] == PROFILE_UUID and acquire[3] is True, "same queue, shared with Publish"
-    assert keep[1] == acquire[1]
-    assert world.soft_stops == [], "not stopped right after the read"
+    assert release[1] == acquire[1]
+    assert world.soft_stops == [ACCOUNT], "stopped once, only this profile, through the soft MLX stop"
     assert sp.STARTING_NOTE.format(account=ACCOUNT) in world.notes and world.notes[-1] == ""
 
 
@@ -713,12 +711,11 @@ def test_grace_window_lets_the_split_reuse_the_started_profile(world):
     split = api.read_country_split_via_api(ACCOUNT, D, D)
     assert split.state == "ok" and split.source == "api"
     assert len(world.opened_profiles) == 2 and [c[0] for c in world.queue.calls].count("acquire") == 1
-    # ACL-2790: the split took the window over and, being the buyer's read, leaves it kept (not stopped).
-    assert world.soft_stops == []
-    assert [c[0] for c in world.queue.calls] == ["acquire", "keep"]
-    # Таймер срабатывает позже: окно уже не ждёт закрытия, остановки нет.
+    assert world.soft_stops == [ACCOUNT], "the split took the window over and closed it at its end"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"]
+    # Таймер срабатывает позже: профиль уже закрыт, второй остановки нет.
     sp._close_if_still_pending(pending)
-    assert world.soft_stops == []
+    assert world.soft_stops == [ACCOUNT]
 
 
 def test_grace_window_closes_the_profile_when_nobody_takes_it(world):
@@ -736,32 +733,26 @@ def test_profile_is_not_held_when_the_split_was_read_in_the_same_session(world):
     world.local = ("none", None)
     world.started_now = True
     api.read_via_api(ACCOUNT, D, D)
-    assert world.timers == [] and world.soft_stops == []      # ACL-2790: kept, no timer
-    assert [c[0] for c in world.queue.calls] == ["acquire", "keep"]
+    assert world.timers == [] and world.soft_stops == [ACCOUNT]
 
 
-def _real_slots_rig(monkeypatch, tmp_path, *, available_mb=60000):
-    """Живая очередь с потолком 2 и вытеснением простаивающих kept-окон (как в проде)."""
+def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
+    """Живая очередь с потолком 2: прежнее «оставить окно» вешало третье чтение навсегда."""
     import dataclasses
+    import threading
 
     from src.web import profile_slots as ps
 
     w = World(monkeypatch, tmp_path)
-    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=2, kept_idle_close_s=0.0)
+    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=2)
     open_profiles: set[str] = set()
-    closed_for_slot: list[str] = []
     usage = ps.ProfileUsage(lambda profiles: {p: 3000 for p in profiles if p in open_profiles},
                             clock=lambda: 1000.0, background=False)
-
-    def evictor(job_id, label, profile, idle_s):
-        open_profiles.discard(profile)
-        closed_for_slot.append(profile)
-        return True
-
     queue = ps.ProfileSlots(
-        memory=lambda: ps.MemoryReading(total_mb=64000, available_mb=available_mb),
-        settings=lambda: settings, clock=lambda: 1000.0, tick_s=0.05, usage=usage, evictor=evictor)
+        memory=lambda: ps.MemoryReading(total_mb=64000, available_mb=60000),
+        settings=lambda: settings, clock=lambda: 1000.0, tick_s=0.05, usage=usage)
     monkeypatch.setattr(sp, "_slot_queue", lambda: queue)
+
     profiles = {f"Acc{i}": SimpleNamespace(profile_id=fake_profile(f"Acc{i}"), folder_id="", multilogin_instance="A",
                                            ad_account_id=ACT) for i in (1, 2, 3)}
     monkeypatch.setattr(sp, "_entry_for", lambda account: profiles.get(account))
@@ -772,50 +763,24 @@ def _real_slots_rig(monkeypatch, tmp_path, *, available_mb=60000):
         return prof.OpenedProfile(pid, folder, instance, "9222", None, True, None, started_now=True)
 
     monkeypatch.setattr(api, "_open_profile", start)
-    return w, queue, open_profiles, closed_for_slot
+    from src.fb_ads_rpa import browser as rpa_browser
 
-
-def test_real_slots_kept_windows_yield_to_the_next_read(monkeypatch, tmp_path):
-    """ACL-2790: kept windows of earlier reads are closed by the queue when a slot is needed (ceiling 2)."""
-    import threading
-
-    _w, queue, open_profiles, closed_for_slot = _real_slots_rig(monkeypatch, tmp_path)
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request",
+                        lambda e, label: open_profiles.discard(e.profile_id) or "closed")
     done: list[str] = []
 
     def run():
         for name in ("Acc1", "Acc2", "Acc3"):
-            done.append(f"{name}:{api.read_via_api(name, D, D).state}")
+            r = api.read_via_api(name, D, D)
+            done.append(f"{name}:{r.state}")
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
     t.join(20)
     assert not t.is_alive(), "the third read must not wait forever for a kept window"
     assert done == ["Acc1:ok", "Acc2:ok", "Acc3:ok"]
-    assert len(closed_for_slot) == 1, "one idle kept window was closed to make room"
-    assert len(open_profiles) == 2, "the other two reads' windows stay open until a slot is needed"
-
-
-def test_memory_pressure_closes_a_window_kept_after_a_read(monkeypatch, tmp_path):
-    """ACL-2790: the memory gate still closes kept windows - low free memory makes a new job evict one."""
-    import threading
-
-    from src.web import profile_slots as ps
-
-    _w, queue, open_profiles, closed_for_slot = _real_slots_rig(monkeypatch, tmp_path)
-    assert api.read_via_api("Acc1", D, D).state == "ok"
-    assert len(open_profiles) == 1 and closed_for_slot == [], "kept after the read"
-    queue._memory = lambda: ps.MemoryReading(total_mb=64000, available_mb=500)   # pressure
-    res: dict[str, object] = {}
-
-    def need_slot():
-        grant = queue.acquire("publish-1", fake_profile("Acc2"), cancelled=lambda: False)
-        res["grant"] = grant
-
-    t = threading.Thread(target=need_slot, daemon=True)
-    t.start()
-    t.join(20)
-    queue.release("publish-1")
-    assert closed_for_slot == [fake_profile("Acc1")], "the kept window was evicted for the new job"
+    assert open_profiles == set(), "every window the reads opened was closed again"
+    assert queue.snapshot()["running"] == [] or not queue.snapshot().get("running")
 
 
 def test_failed_read_still_closes_our_tab(world):

@@ -15,8 +15,9 @@ sys.path.insert(0, str(ROOT))
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
 from src.fb_ads_rpa import browser as rpa_browser  # noqa: E402
+from tests.profile_lease_fakes import fake_profile  # noqa: E402
 
-PID = "11111111-2222-3333-4444-555555555555"
+PID = fake_profile("acl2790")
 ACC = "Acc 1"
 
 
