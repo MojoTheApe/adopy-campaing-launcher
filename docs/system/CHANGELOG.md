@@ -1,5 +1,9 @@
 # System history
 
+## ACL-2780 — Campaign Builder follows the selected buyer — 2026-11-18
+
+After you switch "Logged as" to another buyer, the Campaign Builder now shows only that buyer's accounts and drafts, like the Accounts list. Builder drafts are stored separately for each buyer: existing drafts stay with the machine's default buyer, switching never deletes anyone's drafts, and switching back brings them back. Accounts of other buyers no longer appear in the builder's account rows and recommendations. https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1780
+
 ## ACL-2764 — One-step statistics sign-in instead of the "No data file" page — 2026-11-18
 
 A computer with no BI connection and no stats workbook (fresh install, or an update from the Excel era) now opens a single "Connect statistics" step: one Google sign-in button, no Excel path or environment-variable text. After sign-in the dashboard starts building and opens on its own, with no "Check again" or manual refresh; if the connection appears another way the page opens by itself. Updates keep the BI settings in the machine `.env`, so sign-in is needed once per computer.

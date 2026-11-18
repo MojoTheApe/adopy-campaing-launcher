@@ -11,6 +11,11 @@
 Date.now() в браузере). Побеждает более новая; проигравшая копия не пропадает —
 она лежит в `builder_drafts.<имя>.older.json` (одна, последняя).
 
+ACL-2780: набор документов свой у каждого байера. Набор байера по умолчанию
+(`default_cm()`) лежит в прежнем `builder_drafts.json` — существующие черновики
+остаются за ним без переноса; у остальных — `builder_drafts.<байер>.json`.
+Переключение байера ничего не стирает и не переписывает у других.
+
 Запись атомарная и идёт под машинным замком. Испорченный файл читается как
 пустой, а при записи откладывается в `builder_drafts.json.corrupt-<время>`.
 """
@@ -18,9 +23,11 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from config.paths import _atomic_write, get_local_config_dir, machine_file_lock
@@ -32,12 +39,47 @@ MAX_DOC_BYTES = 2_000_000
 _lock = threading.RLock()
 
 
+_BUYER: ContextVar[str | None] = ContextVar("builder_drafts_buyer", default=None)
+
+
+def _key(name: str) -> str:
+    return " ".join(str(name or "").split()).casefold()
+
+
+def _buyer_now() -> str:
+    """Чей набор сейчас: заданный вызовом или выбранный в «Logged as»."""
+    from src.web.buyer import get_selected_cm
+
+    chosen = _BUYER.get()
+    return (get_selected_cm() if chosen is None else chosen).strip()
+
+
+def _suffix(buyer: str) -> str:
+    """"" для байера по умолчанию (прежний файл), иначе безопасное имя + хэш."""
+    from src.web.buyer import default_cm
+
+    if not _key(buyer) or _key(buyer) == _key(default_cm()):
+        return ""
+    slug = re.sub(r"[^\w-]+", "_", _key(buyer)).strip("_")[:40]
+    return f".{slug}-{hashlib.sha1(_key(buyer).encode('utf-8')).hexdigest()[:8]}"
+
+
+@contextmanager
+def for_buyer(buyer: str | None):
+    """Все вызовы внутри работают с набором этого байера (None — выбранного)."""
+    token = _BUYER.set(None if buyer is None else str(buyer).strip())
+    try:
+        yield
+    finally:
+        _BUYER.reset(token)
+
+
 def path() -> Path:
-    return Path(get_local_config_dir()) / "builder_drafts.json"
+    return Path(get_local_config_dir()) / f"builder_drafts{_suffix(_buyer_now())}.json"
 
 
 def _older_path(name: str) -> Path:
-    return path().with_name(f"builder_drafts.{name}.older.json")
+    return path().with_name(f"{path().stem}.{name}.older.json")
 
 
 @contextmanager
@@ -59,12 +101,13 @@ def _clean(raw) -> dict[str, dict]:
     return {n: d for n, d in docs.items() if n in NAMES and _valid_doc(d)}
 
 
-def load() -> dict[str, dict]:
+def load(buyer: str | None = None) -> dict[str, dict]:
     """Все документы. Нет файла или он испорчен — пусто (страница не падает)."""
-    try:
-        return _clean(json.loads(path().read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        return {}
+    with for_buyer(buyer):
+        try:
+            return _clean(json.loads(path().read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return {}
 
 
 def _load_strict() -> dict[str, dict]:
@@ -382,7 +425,13 @@ def merge_keep(current: dict, incoming: dict, untrusted: str = "incoming") -> di
     return merged
 
 
-def save(name: str, saved_at: float, data: dict, base=None) -> tuple[bool, dict]:
+def save(name: str, saved_at: float, data: dict, base=None,
+         buyer: str | None = None) -> tuple[bool, dict]:
+    with for_buyer(buyer):
+        return _save(name, saved_at, data, base)
+
+
+def _save(name: str, saved_at: float, data: dict, base=None) -> tuple[bool, dict]:
     """Записать документ. (принят, документ на сервере после вызова).
 
     `jobs` и `ui`: входящая копия старше серверной — не принимается (серверная
@@ -440,9 +489,10 @@ def _save_keep(docs: dict, stored: dict, incoming: dict, base) -> tuple[bool, di
     return (merged_data == data and incoming["saved_at"] >= stored["saved_at"]), merged
 
 
-def load_older(name: str) -> dict | None:
+def load_older(name: str, buyer: str | None = None) -> dict | None:
     try:
-        doc = json.loads(_older_path(name).read_text(encoding="utf-8"))
+        with for_buyer(buyer):
+            doc = json.loads(_older_path(name).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return doc if _valid_doc(doc) else None
