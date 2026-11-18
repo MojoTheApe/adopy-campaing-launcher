@@ -84,7 +84,7 @@ def _videos(monkeypatch, meta, lengths):
 def _earlier(tmp_path, meta):
     """The creative is confirmed in the receipt, the ad is not: the repeat finds it by receipt."""
     draft = _draft(tmp_path, ads=1)
-    meta.fail_next["ads"] = "unsent"
+    meta.fail_next["ads"] = "unsent_stuck"
     first, _ = _run(meta, draft, reconcile_wait_s=0)
     assert first.error and len(creatives(meta)) == 1
     return draft, creatives(meta)[0]

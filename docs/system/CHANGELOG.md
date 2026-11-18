@@ -1,5 +1,29 @@
 # System history
 
+## ACL-2752 — Publish popup: publish the ready campaigns, not-ready ones stay in the builder — 2026-11-17
+
+When some selected campaigns are not ready, the publish popup now offers "Publish N ready" (N counts only ready campaigns) and an x to take a not-ready campaign or account out of this publish. Removing only unticks it; the draft stays in the builder.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1752
+
+## ACL-2748 — An unknown write result no longer stops a publish — 2026-11-17
+
+Owner rule 12.11 (publishing beats blocking). An unknown write result of any kind (no answer, a bare
+`call_unknown` of the page helper, a 5xx or code 1/2 answer, non-JSON, an answer without an id) whose two readbacks find
+nothing is sent again once, uploads included (a duplicate is acceptable, a lost publish is not). If the re-send is
+unknown too, only that campaign stops; the next campaigns of the run still publish. A definite Meta error with a real
+code, and a deterministic rejection subcode, still stop without a re-send.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1748).
+
+The 15-minute refusal of a rerun after an unresolved creative write is removed (owner decision 17.11): the rerun reads
+back, adopts the creative if it is found, otherwise writes it again (a duplicate is acceptable). An unreadable or
+incomplete creative listing still stops, since absence cannot be proven.
+
+## ACL-2744 — Video reuse by content hash, upload size and speed in the log — 2026-11-17
+
+A video already in the ad account is reused by its content hash whatever campaign tag it was uploaded under, so it is not uploaded again across ads, campaigns and runs. Each upload now reports its size, duration and MB/s in the live status and in the run log (`mb_s`), so a slow proxy is visible.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1744).
+
 ## ACL-2750 — Connecting an account from the builder links it to a country that has no accounts yet — 2026-11-17
 
 The connect block of a country with spend but no linked account rendered an empty country, so a connect from the builder's "+ Account" saved the account without linking it and the builder lost it after the reload. The block now carries the country name, like the Home view does.

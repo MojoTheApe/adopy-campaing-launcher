@@ -1405,6 +1405,14 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
                        campaign=res.get("campaign_name"))
         except Exception:
             pass
+        if res.get("success") is not True:
+            # Хаб телеметрии: сбой кампании уходит владельцу сразу, а не в следующем цикле отправки.
+            try:
+                from src.acl_event_log import wake_shipper
+
+                wake_shipper()
+            except Exception:
+                pass
 
 
 def _mlx_text(job_id: str, msg: str) -> str:
