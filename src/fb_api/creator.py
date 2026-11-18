@@ -46,6 +46,7 @@ from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api import targeting_resolver as _tr
 from src.fb_api import instagram as _ig
+from src.fb_api import page_backed_ui as _pbu
 from src.fb_api import write_policy as _wpol
 from src.fb_api import team_time as _tt
 
@@ -2004,8 +2005,13 @@ class CampaignCreator:
                  live_progress: Callable[[str], None] = lambda _s: None,
                  compress_video: Callable[[str], Any] | None = None,
                  compress_to_fit: Callable[[str, float, float], Any] | None = None,
-                 journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0):
+                 journal: "_oj.OperationJournal | None" = None, request_key: str = "", slot: int = 0,
+                 use_facebook_page: Callable[[str, str], str] | None = None):
         self.client = client
+        #: ACL-2787: нажать «Use Facebook Page» в профиле (act, page_id) -> "" при успехе, иначе причина.
+        self._use_facebook_page = use_facebook_page or _pbu.press
+        #: ACL-2787: Страницы, для которых нажатие уже пробовали в этом прогоне (один раз на Страницу).
+        self._ig_pressed: set[str] = set()
         #: ACL-1856: журнал операции на диске; None - прежнее поведение (поиск по имени и метке, без файла).
         self.journal = journal
         #: ACL-1856: the submit key of the page (bound per campaign); the journal refuses its reuse for another plan.
@@ -2055,7 +2061,24 @@ class CampaignCreator:
         got = self._ig_cache.get(plan.page_id)
         if got is None:
             got = self._ig_cache[plan.page_id] = _ig.read_identity(self.client, plan.act, plan.page_id)
+            if got.status == _ig.NONE:
+                got = self._ig_cache[plan.page_id] = self._press_use_facebook_page(plan, got)
         return got
+
+    def _press_use_facebook_page(self, plan: CampaignPlan, got: _ig.IgIdentity) -> _ig.IgIdentity:
+        """ACL-2787: только для `none` и один раз на Страницу; успех -> перечитать; отказ -> прежнее сообщение."""
+        if plan.page_id in self._ig_pressed:
+            return got
+        self._ig_pressed.add(plan.page_id)
+        try:
+            why = self._use_facebook_page(plan.act, plan.page_id)
+        except Exception as exc:  # noqa: BLE001 - отказ нажатия не должен ронять проверку; остаётся ручное сообщение
+            why = str(exc) or type(exc).__name__
+        if why:
+            self.progress(f"Instagram identity: 'Use Facebook Page' was not pressed ({why})")
+            return got
+        self.progress("Instagram identity: 'Use Facebook Page' pressed in Ads Manager; reading the identity again")
+        return _ig.read_page_backed(self.client, plan.page_id)
 
     def _require_instagram(self, plan: CampaignPlan, targetings: list[dict], out: Outcome) -> None:
         """Instagram-площадки без подтверждённого аккаунта Страницы - отказ ДО записи (Doc120)."""
