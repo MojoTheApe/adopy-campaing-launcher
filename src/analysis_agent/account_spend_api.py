@@ -1,6 +1,6 @@
 """Чтение спенда, состояния кабинета и дерева через Graph API внутри профиля (ACL-1760).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+По умолчанию (ACL-2785) работает API; `ACL_FB_BACKEND=rpa` в `.env` машины включает RPA вручную. Тогда
 «Read spend» / «Read all spend» и разбивка по странам идут не кликами по Ads
 Manager, а GET-запросами `fetch()` из своей вкладки профиля (`src/fb_api`,
 ACL-1756). Ответ — ровно тот же `SpendReading` / `CountrySplit`, что отдаёт
@@ -84,9 +84,10 @@ COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — это `rpa`."""
-    value = (os.environ.get(BACKEND_ENV) or "").strip().lower()
-    return "api" if value == "api" else "rpa"
+    """`api` (по умолчанию, ACL-2785) или `rpa` — только при явном `ACL_FB_BACKEND=rpa`."""
+    from src.fb_api import backend as _backend
+
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
