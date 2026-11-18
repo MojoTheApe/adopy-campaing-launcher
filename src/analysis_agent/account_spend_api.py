@@ -897,7 +897,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
             _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
                                 grace_s=(sess.keep_grace_s if sess else None),
                                 convenience=bool(sess and sess.keep_convenience),
-                                problem=problem)
+                                problem=problem, read_ok=problem is None)
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 
