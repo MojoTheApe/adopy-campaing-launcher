@@ -23,10 +23,13 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
     aclConfirm: () => Promise.resolve(true),
     aclInlineError: (_a, s) => { if (s) alerts.push(s); },
     localStorage: { getItem: () => null, setItem: () => {} },
-    location: { reload: () => reloads++ }, Date,
+    location: { reload: () => reloads++ }, Date, window: {},
   };
   vm.runInNewContext(code, context);
   await flush(); await flush();
+  // ACL-2668: проверка выпуска только по событиям — таймера нет.
+  assert.equal(intervals.length, 0, 'no timed release check');
+  assert.equal(typeof context.window.aclUpdateCheck, 'function');
   assert.equal(button.hidden, false);
   assert.equal(button.dataset.target, '2026-09-20');
   handlers.click();
@@ -35,7 +38,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   button.disabled = false;
   status = { available: false, supervised: true, last_attempt: {
     result: 'rollback_failed', finished_at: '2026-09-20T00:00:00Z', reason: 'previous executable is blocked' } };
-  intervals[0]();
+  context.window.aclUpdateCheck();  // Refresh без перезагрузки страницы
   await flush(); await flush();
   assert.equal(button.hidden, true, 'an obsolete offer is hidden');
   assert.match(alerts[0], /could not fully restore/);

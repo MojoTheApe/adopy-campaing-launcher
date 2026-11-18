@@ -65,8 +65,8 @@ def test_ticked_campaigns_only_are_sent_one_job_per_account(ui):
     for a, s in ((0, 0), (0, 1), (1, 0), (1, 1)):
         expect(box(p, a, s)).not_to_be_checked()
     expect(publish_button(p)).to_have_text('Publish all → drafts (4)')
-    # Галочки только у кампаний — не у аккаунтов и не у объявлений.
-    expect(p.locator('.cbd-account input[type="checkbox"]')).to_have_count(0)
+    # Галочки у кампаний и у аккаунтов (ACL-2658) — не у объявлений.
+    expect(p.locator('.cbd-account input[type="checkbox"]')).to_have_count(2)  # ACL-2658: по галочке на аккаунт
 
     # Одна — мышью, вторая — с клавиатуры: настоящий чекбокс, Space его ставит.
     box(p, 0, 1).click()

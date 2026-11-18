@@ -467,7 +467,7 @@ def wait_gone(profile_id: str, *, timeout_s: float | None = None,
 def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instance: str, *,
                           local_probe: Callable[[str], tuple[str, int | None]],
                           sleep: Callable[[float], None]) -> tuple[Any, int | None, bool]:
-    """MLX `start` в общем темпе (`launch.StartPacer`); обрыв 10053/10054 — один повтор.
+    """MLX `start` через `launch.StartPacer` (потолка по умолчанию нет); обрыв 10053/10054 — один повтор.
 
     Ответ — `(started, None, повторяли)` или `(None, порт, True)`, если после
     обрыва профиль поднялся сам (его и берём, второй старт не шлём). Вход в
@@ -494,9 +494,11 @@ def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instan
             if port:
                 _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt,
                                      pace=pace, adopted=True)
+                _mlx.note_started(instance)   # ACL-2668: сессия MLX слота жива
                 return None, port, True
             continue
         _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt, pace=pace)
+        _mlx.note_started(instance)   # ACL-2668: сессия MLX слота жива — защёлку пачек снять
         return started, None, attempt == 2
     raise AssertionError("unreachable")
 
