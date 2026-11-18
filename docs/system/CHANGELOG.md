@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2789 — Release the profile before the list refresh after a campaign command — 2026-11-18
+
+A campaign command now frees the account's profile as soon as readback confirms the write: the changed row is updated from the readback at once, and the list refresh runs after the release as one refresh for a run of commands on the same account.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1789).
+
 ## ACL-2780 — Campaign Builder follows the selected buyer — 2026-11-18
 
 After you switch "Logged as" to another buyer, the Campaign Builder now shows only that buyer's accounts and drafts, like the Accounts list. Builder drafts are stored separately for each buyer: existing drafts stay with the machine's default buyer, switching never deletes anyone's drafts, and switching back brings them back. Accounts of other buyers no longer appear in the builder's account rows and recommendations. https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1780
