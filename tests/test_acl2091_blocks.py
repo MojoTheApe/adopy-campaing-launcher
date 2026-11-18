@@ -181,7 +181,7 @@ def test_the_1732_case_a_background_read_froze_and_a_publish_at_1734_explains_it
         pub.open("B97")
     text = str(err.value)
     assert "stopped answering during a background read" in text and "Nothing was created." in text
-    assert err.value.code == "account_blocked"
+    assert err.value.code == "page_unresponsive"   # ACL-2652: not account_blocked
 
 
 # ───────────────────────── refusals in the read path ─────────────────────────

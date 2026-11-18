@@ -482,3 +482,44 @@ def test_publish_still_refuses_a_timed_pause_on_top_of_an_auth_hold(monkeypatch,
     with pytest.raises(publish_api.ApiPublishError):
         publish_api.ApiPublisher().open(LABEL)
     assert blocks.is_held("prof-1")
+
+
+# ───────────────────────── frozen-tab hold (KLD_BFL_I04, 2026-11-18): Open lifts it, the code is the tab's own ─────────────────────────
+
+def test_a_frozen_tab_hold_is_refused_with_the_tabs_code_not_account_blocked():
+    _hold(g.PageUnresponsive("f"))
+    msg, code = blocks.refusal(KEY, LABEL, "publish")
+    assert "stopped answering" in msg and code == "page_unresponsive"
+    assert blocks.refusal(KEY, LABEL, "publish")[1] != "account_blocked"
+
+
+def test_open_profile_lifts_only_the_frozen_tab_hold(monkeypatch, keyed):
+    from src.web import warm_api
+
+    monkeypatch.setattr(ar, "queue", lambda: type("Q", (), {"request": lambda self, *a, **k: {"queued": True}})())
+    _hold(g.PageUnresponsive("f"))
+    assert warm_api.request_status_read(LABEL) == "queued"
+    assert not blocks.is_held(KEY)
+    blocks._PERSON_OPEN.clear()
+    _hold(g.PolicyBlocked("p", code=368))
+    warm_api.request_status_read(LABEL)
+    assert blocks.is_held(KEY), "Open never lifts a policy block"
+    blocks._PERSON_OPEN.clear()
+
+
+def test_a_persons_edit_does_not_lift_a_frozen_tab_hold(world):  # noqa: F811
+    key = api._as._profile_key(ACCOUNT)
+    _hold(g.PageUnresponsive("f"), key=key)
+    with pytest.raises(api.ApiReadError) as err:
+        with blocks.person_edit(), api._session(ACCOUNT):
+            pass
+    assert err.value.code == "page_unresponsive" and blocks.is_held(key) and world.page.specs == []
+
+
+def test_retry_on_a_frozen_tab_hold_clears_it_once_the_page_answers(world):  # noqa: F811
+    key = api._as._profile_key(ACCOUNT)
+    _hold(g.PageUnresponsive("f"), key=key)
+    with blocks.problem_action("retry"):
+        done = api.read_via_api(ACCOUNT, D, D)
+    assert done.state == "ok", done.error
+    assert not blocks.is_held(key)

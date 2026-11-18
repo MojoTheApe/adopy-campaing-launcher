@@ -309,6 +309,12 @@ def settle_person_probe(key: str, client: Any, by: str = "command") -> bool:
     return clear_auth_hold(key, by)
 
 
+def lift_frozen_hold(key: str, by: str = "open") -> bool:
+    """ACL-2652: the owner reopened the profile (Open profile) or its tab answered: a persisted "tab stopped answering"
+    hold ends. Only that kind; a still-frozen tab sets the hold again on the very next read."""
+    return clear(key, by, kind="page_unresponsive")
+
+
 def forget_timed(key: str) -> None:
     """Drop the action/label kept beside a timer (called when the timer ends or is replaced)."""
     with _LOCK:
@@ -385,7 +391,9 @@ def refusal(key: str, label: str, verb: str = "", *, timed: tuple[float, str] | 
         reason, step = describe(held["kind"], held.get("label") or label, held.get("action") or _FALLBACK_ACTION,
                                 held.get("code"), same_profile=bool(label and held.get("label") not in ("", label)))
         _event("profile_block_refused", kind=held["kind"], verb=verb, action_of_block=held.get("action"))
-        return f"{reason} {step}{_suffix(verb)}", ACCOUNT_BLOCKED_CODE
+        # ACL-2652: a frozen tab is not a problem of the account; its code stays the tab's own.
+        code_out = "page_unresponsive" if held["kind"] == "page_unresponsive" else ACCOUNT_BLOCKED_CODE
+        return f"{reason} {step}{_suffix(verb)}", code_out
     if timed is not None and timed[0] > 0:
         left, kind = timed
         with _LOCK:
