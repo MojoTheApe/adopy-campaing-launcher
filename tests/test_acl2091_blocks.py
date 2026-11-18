@@ -176,12 +176,18 @@ def test_the_1732_case_a_background_read_froze_and_a_publish_at_1734_explains_it
     api._FROZEN_RELEASED.add(key)                       # the replacement was already spent
     with blocks.problem_action("attention"):
         api._start_cooldown(key, PageUnresponsive("f"), "B97")
+    # ACL-2652: a frozen-tab hold is not a refusal for Publish / Check plan: it opens a fresh tab itself.
+    monkeypatch.setattr(publish_api.ApiPublisher, "_open_warm", lambda self, *a: (_ for _ in ()).throw(
+        publish_api.ApiPublishError("fresh tab attempted", code="page_unresponsive")))
     pub = publish_api.ApiPublisher()
     with pytest.raises(publish_api.ApiPublishError) as err:
         pub.open("B97")
-    text = str(err.value)
+    assert str(err.value) == "fresh tab attempted" and err.value.code == "page_unresponsive"
+    assert blocks.is_held(key)
+    # the refusal text of the hold itself (shown by Retry / reads) still explains it and is not account_blocked
+    text, code = blocks.refusal(key, "B97", "publish")
     assert "stopped answering during a background read" in text and "Nothing was created." in text
-    assert err.value.code == "page_unresponsive"   # ACL-2652: not account_blocked
+    assert code == "page_unresponsive"
 
 
 # ───────────────────────── refusals in the read path ─────────────────────────

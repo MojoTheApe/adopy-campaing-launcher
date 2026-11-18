@@ -523,3 +523,40 @@ def test_retry_on_a_frozen_tab_hold_clears_it_once_the_page_answers(world):  # n
         done = api.read_via_api(ACCOUNT, D, D)
     assert done.state == "ok", done.error
     assert not blocks.is_held(key)
+
+
+def test_check_plan_after_a_fresh_reopen_lifts_the_frozen_tab_hold_and_proceeds(monkeypatch, tmp_path):
+    from tests.test_acl1761_api_create import FakeMeta
+    from tests.test_acl2595_auth_checkpoint import _rig
+
+    publish_api = _rig(monkeypatch, tmp_path, FakeMeta())
+    api._start_cooldown("prof-1", g.PageUnresponsive("f"), "KLD_BFL_I04")
+    assert blocks.is_held("prof-1")
+    pub = publish_api.ApiPublisher()
+    pub.open("KLD_BFL_I04")                       # no refusal, no buyer click
+    assert not blocks.is_held("prof-1") and pub._client is not None
+
+
+def test_a_reopen_that_is_still_unresponsive_keeps_the_hold_with_the_tabs_code_on_that_account_only(monkeypatch, tmp_path):
+    from tests.test_acl1761_api_create import FakeMeta
+    from tests.test_acl2595_auth_checkpoint import _rig
+
+    publish_api = _rig(monkeypatch, tmp_path, FakeMeta())
+    api._start_cooldown("prof-1", g.PageUnresponsive("f"), "KLD_BFL_I04")
+    monkeypatch.setattr(publish_api.ApiPublisher, "_open_warm", lambda self, *a: (_ for _ in ()).throw(
+        publish_api.ApiPublishError("The Ads Manager tab stopped answering.", code="page_unresponsive")))
+    with pytest.raises(publish_api.ApiPublishError) as err:
+        publish_api.ApiPublisher().open("KLD_BFL_I04")
+    assert err.value.code == "page_unresponsive" and blocks.is_held("prof-1")
+    assert not blocks.is_held("prof-other"), "only that profile carries the hold"
+
+
+def test_a_fresh_reopen_never_lifts_a_checkpoint_hold(monkeypatch, tmp_path):
+    from tests.test_acl1761_api_create import FakeMeta
+    from tests.test_acl2595_auth_checkpoint import _rig
+
+    publish_api = _rig(monkeypatch, tmp_path, FakeMeta())
+    api._start_cooldown("prof-1", g.Checkpoint("c"), "KLD_BFL_I04")
+    with pytest.raises(publish_api.ApiPublishError):
+        publish_api.ApiPublisher().open("KLD_BFL_I04")
+    assert blocks.is_held("prof-1")

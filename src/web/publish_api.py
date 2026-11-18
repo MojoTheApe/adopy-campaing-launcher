@@ -544,7 +544,10 @@ class ApiPublisher:
         # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab after its one replacement)
         # and a timed pause are explained by the one owner of that state.
         # ACL-2652: only a bare hold is passed; a timed pause (rate limit, frozen tab) still refuses
-        blocked = None if self._auth_probe and left == float("inf") else _blocks.refusal(
+        # ACL-2652: a held frozen tab is about the tab, not the account: Publish / Check plan opens a fresh tab itself and the
+        # hold ends in `_note_tab_recovered` once the page answers; a page that is still frozen sets it again (code page_unresponsive).
+        frozen_probe = left == float("inf") and why == "page_unresponsive"
+        blocked = None if (self._auth_probe or frozen_probe) and left == float("inf") else _blocks.refusal(
             key, account_label, "publish", timed=(left, why) if left > 0 and not frozen_deferred else None)
         if blocked:
             held = _blocks.is_held(key)
@@ -563,7 +566,7 @@ class ApiPublisher:
 
         if self._open_warm(account_label, profile_id):
             return
-        if frozen_deferred:
+        if frozen_deferred or frozen_probe:
             raise frozen_error()      # not the warm path: nothing replaces the hung tab, the pause stands
         self._load_before = self._load_now()
         from src.fb_api import mlx_session as _mlx
@@ -619,6 +622,7 @@ class ApiPublisher:
             min_interval_s=_env_number(MIN_INTERVAL_ENV, 1.0, 0.5, 10.0),
             max_calls=PREFLIGHT_MAX_CALLS)
         self.progress("Ads Manager session ready")
+        _note_tab_recovered(account_label)     # ACL-2652: the fresh tab answers: a frozen-tab hold (only that kind) ends
         try:
             self._facts = preflight_account(self._client, self.act)
         except PlanError as exc:
