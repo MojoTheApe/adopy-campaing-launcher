@@ -1,6 +1,7 @@
 // API владельца (OWNER_KEY; Cloudflare Access добавляется в части 2). Только чтение.
 import { json } from "./respond.js";
 import { isOwner } from "./auth.js";
+import { failures, live, runDetail, summary } from "./report.js";
 
 const EVENT_COLS = ["event_id", "stream_id", "seq", "type", "ts", "machine_id", "machine", "manager",
   "flow_version", "channel", "job_id", "account", "campaign"];
@@ -63,7 +64,8 @@ async function machines(env) {
   return json({ machines: results.map((m) => ({ ...m, profile: m.profile ? JSON.parse(m.profile) : null })) });
 }
 
-const ROUTES = { "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines };
+const ROUTES = { "/api/events": events, "/api/runs": runs, "/api/jobs": jobs, "/api/machines": machines,
+  "/api/summary": summary, "/api/live": live, "/api/run": runDetail, "/api/failures": failures };
 
 export async function handleApi(request, env, url) {
   const route = ROUTES[url.pathname];
