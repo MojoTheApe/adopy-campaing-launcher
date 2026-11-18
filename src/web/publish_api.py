@@ -119,6 +119,13 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
     return min(max(need + reads + chunks, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
+def blocks_run(outcome: Any, client: Any) -> bool:
+    """An unknown write result blocks the next campaigns of the run, unless it stayed unknown after the one re-send
+    (owner rule 12.11, ACL-2748): that stops only its own campaign. A write nobody reconciled always blocks."""
+    return ((outcome.stop_kind == "unknown" and not getattr(outcome, "run_continues", False))
+            or client.unreconciled is not None)
+
+
 def journal_enabled() -> bool:
     """ACL-1856: durable operation journal; `ACL_OPERATION_JOURNAL=0` turns it off."""
     return os.environ.get("ACL_OPERATION_JOURNAL", "1").strip().lower() not in ("0", "false", "off", "no")
@@ -860,7 +867,7 @@ class ApiPublisher:
                 _start_cooldown(self.account_label, exc)
             raise
         # ACL-2392: a deterministic rejection proven by readback ("rejected") does not block the next campaigns.
-        if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
+        if blocks_run(outcome, self._client):
             self.blocked = outcome.campaign_name
         if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
             self.stop = self._client.stopped
