@@ -227,6 +227,12 @@ class OperationStore:
                     return op
         return None
 
+    def others_running(self, account: str, op_id: str) -> bool:
+        """ACL-2789: есть ли другая принятая, ещё не завершённая команда этого аккаунта."""
+        with self._lock:
+            return any(o.get("account") == account and o.get("op_id") != op_id
+                       and o.get("state") in (RUNNING, VERIFYING) for o in self._ops.values())
+
     def save(self, op: dict) -> None:
         """Обязательное сохранение: перед любой записью в Meta. Бросает `HistoryUnavailable`."""
         with self._lock:
@@ -573,7 +579,8 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
             idempotency_key: str, spawn: Callable[[Callable[[], None]], None] | None = None,
             sleep: Callable[[float], None] = time.sleep,
             after_write: Callable[[dict, Any], None] | None = None,
-            on_stale: Callable[[dict], None] | None = None) -> dict:
+            on_stale: Callable[[dict], None] | None = None,
+            after_release: Callable[[dict], None] | None = None) -> dict:
     """Принять подтверждение человека и запустить операцию. Возвращает её состояние.
 
     Тот же ключ — тот же ответ, записей больше нет. Превью исполняется один раз.
@@ -603,7 +610,7 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
         op["idempotency_key"] = key
         op["state"] = RUNNING
         op["message"] = "Re-reading current values"
-        if after_write is not None or on_stale is not None:
+        if after_write is not None or on_stale is not None or after_release is not None:
             op["refresh_pending"] = True
         for item in op["affected"]:
             item["result"] = "pending"
@@ -627,9 +634,17 @@ def execute(store: OperationStore, open_session: OpenSession, *, revision_id: st
                 callbacks["after_write"] = after_write
             if on_stale is not None:
                 callbacks["on_stale"] = on_stale
+            if after_release is not None:
+                callbacks["after_release"] = after_release
             run_op(store, op_id, open_session, sleep=sleep, **callbacks)
         except BaseException as exc:  # noqa: BLE001 — операция не должна остаться в Running
             _finish_after_crash(store, op_id, exc)
+            crashed = store.get(op_id)
+            if after_release is not None and crashed is not None:
+                try:
+                    after_release(crashed)   # ACL-2789: отложенное обновление списка не должно пропасть
+                except Exception:  # noqa: BLE001
+                    log.warning("The campaign list could not be queued for refresh after a command crash.")
 
     with store._lock:
         started = snapshot(op)  # ответ — состояние на момент принятия (Running), не итог
@@ -665,7 +680,8 @@ RUNNERS: dict[str, Callable[..., None]] = {}
 def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
            sleep: Callable[[float], None] = time.sleep,
            after_write: Callable[[dict, Any], None] | None = None,
-           on_stale: Callable[[dict], None] | None = None) -> None:
+           on_stale: Callable[[dict], None] | None = None,
+           after_release: Callable[[dict], None] | None = None) -> None:
     op = store.get(op_id)
     assert op is not None
     try:
@@ -697,9 +713,22 @@ def run_op(store: OperationStore, op_id: str, open_session: OpenSession, *,
                 on_stale(op)
             except Exception:  # noqa: BLE001 — отказ записи остаётся отказом
                 log.warning("The stale campaign list could not be queued for refresh. Nothing was retried.")
+        if after_release is not None:
+            # ACL-2789: профиль уже отпущен (выход из `with open_session`); обновление списка
+            # идёт после этого и не держит следующую команду того же аккаунта. Зовётся при любом
+            # исходе: колбэк сам решает, нужно ли чтение (`wrote`) и не его ли очередь.
+            try:
+                after_release(op)
+            except Exception:  # noqa: BLE001 — результат записи не меняется
+                log.warning("The campaign list could not be queued for refresh after a command; its result is unchanged.")
         if op.get("refresh_pending"):
             op["refresh_pending"] = False
             store.try_save(op)
+
+
+def wrote(op: dict) -> bool:
+    """Хоть одна запись ушла (или могла уйти): список аккаунта мог измениться."""
+    return any(a.get("result") in ("saved", "mismatch", "unknown", "sent") for a in op.get("affected", []))
 
 
 def _stopped(op: dict, message: str) -> None:
