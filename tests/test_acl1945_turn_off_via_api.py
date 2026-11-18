@@ -97,7 +97,7 @@ def world(tmp_path, monkeypatch, meta):
     state = SimpleNamespace(sessions=0, clients=[])
 
     @contextmanager
-    def fake_session(account, *, commands=False):
+    def fake_session(account, *, commands=False, **_kw):
         state.sessions += 1
         client = g.GraphClient(meta, allow_writes=commands, min_interval_s=0.0, max_calls=80,
                                sleep=lambda s: None)
