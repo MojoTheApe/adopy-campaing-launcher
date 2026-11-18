@@ -50,6 +50,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(ar, "_QUEUE", q)
     monkeypatch.setattr(q, "start", lambda: None)
     monkeypatch.setattr(cmd, "get_store", lambda: w.store)
+    webcmd._PENDING.clear()
     return w, q
 
 
@@ -138,6 +139,30 @@ def test_back_to_back_commands_on_one_account_queue_one_refresh(world, monkeypat
     works[1]()
     assert w.final(p1)["state"] == w.final(p2)["state"] == cmd.SUCCEEDED
     assert len(requested) == 1 and q.state()["queued"] == [{"account": ACCOUNT, "trigger": "action"}]
+
+
+def test_pending_refresh_survives_when_the_last_command_fails(world, monkeypatch):
+    # A writes while B is accepted; B then fails without a write: A's refresh must still happen, once.
+    w, q = world
+    requested = []
+    real = q.request
+    monkeypatch.setattr(q, "request", lambda *a, **k: requested.append(a) or real(*a, **k))
+    p1 = w.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    w.meta.objs[CAMP_CBO]["status"] = "ACTIVE"
+    p2 = w.preview("set_status", "PAUSED", [t("campaign", CAMP_CBO)])
+    works = []
+    def run(preview, key):
+        cmd.execute(w.store, w.open_session, revision_id=preview["revision_id"], idempotency_key=key,
+                    spawn=works.append, sleep=lambda _: None, after_write=webcmd._refresh_after_write,
+                    after_release=webcmd._refresh_after_release)
+    run(p1, "refresh-key-0001")
+    run(p2, "refresh-key-0002")
+    w.meta.objs[CAMP_CBO]["status"] = "PAUSED"   # a human changed it: B is refused as stale, nothing written
+    works[0]()
+    assert requested == []
+    works[1]()
+    assert w.final(p1)["state"] == cmd.SUCCEEDED and w.final(p2)["state"] == cmd.FAILED
+    assert len(requested) == 1
 
 
 def test_commands_without_the_new_callbacks_make_the_same_graph_calls(world):

@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
 from typing import Any
 
@@ -159,14 +160,24 @@ def _refresh_after_write(op: dict, sess: Any) -> None:
     campaign_inventory.apply_confirmed(op["account"], op.get("affected") or [])
 
 
+_PENDING: set[str] = set()
+_PENDING_LOCK = threading.Lock()
+
+
 def _refresh_after_release(op: dict) -> None:
     """ACL-2789: обновить список после отпускания профиля; одно чтение на серию команд.
 
-    Если другая команда этого аккаунта уже принята и ждёт профиль, чтение за неё сделает она,
-    когда закончит, а очередь и так склеивает заявки одного аккаунта.
+    Отложенное обновление принадлежит аккаунту: если после записи на нём ещё идёт другая
+    команда, пометка остаётся, и чтение делает та команда, что закончит последней, при любом
+    исходе (успех, отказ, сбой). Очередь к тому же склеивает заявки одного аккаунта.
     """
-    if _cmd.get_store().others_running(op["account"], op.get("op_id", "")):
-        return
+    account = op["account"]
+    with _PENDING_LOCK:
+        if _cmd.wrote(op):
+            _PENDING.add(account)
+        if account not in _PENDING or _cmd.get_store().others_running(account, op.get("op_id", "")):
+            return
+        _PENDING.discard(account)
     _refresh_stale(op)
 
 
