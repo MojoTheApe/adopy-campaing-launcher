@@ -205,6 +205,7 @@ def open_session(account: str, commands: bool):
     from src.fb_api.connection import user_started_action
 
     # ACL-2272: preview/execute are started by the person, so they may bring up a closed profile.
-    with browser_operation.reading(), profile_lock(_as._profile_key(account)):
+    # ACL-2790: команда стоит в очереди с момента ожидания замка — профиль после чтения не закрывается.
+    with _as.action_queued(account), browser_operation.reading(), profile_lock(_as._profile_key(account)):
         with user_started_action(), _api._session(account, commands=commands) as sess:
             yield sess

@@ -955,6 +955,75 @@ _READ_OPEN: ContextVar["_ReadOpen | None"] = ContextVar("acl_read_open", default
 _PENDING_CLOSE: dict[str, _ReadOpen] = {}
 _PENDING_LOCK = threading.Lock()
 
+#: ACL-2790: профиль → сколько действий (команда, Check plan, Publish) стоят или идут на его
+#: аккаунте. Пока счётчик не ноль, закрытие после чтения окно не останавливает: следующему
+#: действию не платить за повторный запуск (MLX + прокси + токен, в среднем 18 с).
+_QUEUED_ACTIONS: dict[str, int] = {}
+
+
+def _action_key(profile: str) -> str:
+    """Один ключ и для аккаунта действия, и для профиля чтения (физический UUID, иначе строка)."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError, physical_profile_key
+
+    try:
+        return physical_profile_key(profile)
+    except ProfileLeaseError:
+        return str(profile or "").strip().lower()
+
+
+@contextmanager
+def action_queued(account: str):
+    """Действие на аккаунте поставлено в очередь (или идёт): не закрывать его профиль после чтения.
+
+    Ставится ДО ожидания замка профиля, снимается, когда действие кончилось. Таймеров и опроса
+    Meta нет — только счётчик в памяти. Не нашли профиль аккаунта — действие просто не отмечается.
+    """
+    try:
+        key = _profile_key(account)
+    except Exception:  # noqa: BLE001 — отметка не должна ломать само действие
+        key = ""
+    if not key:
+        yield
+        return
+    with _PENDING_LOCK:
+        _QUEUED_ACTIONS[key] = _QUEUED_ACTIONS.get(key, 0) + 1
+    try:
+        yield
+    finally:
+        with _PENDING_LOCK:
+            left = _QUEUED_ACTIONS.get(key, 0) - 1
+            if left > 0:
+                _QUEUED_ACTIONS[key] = left
+            else:
+                _QUEUED_ACTIONS.pop(key, None)
+
+
+def action_pending(profile_id: str) -> bool:
+    """Ждёт ли или идёт действие на аккаунте этого профиля (ACL-2790)."""
+    if not profile_id:
+        return False
+    with _PENDING_LOCK:
+        return _QUEUED_ACTIONS.get(_action_key(profile_id), 0) > 0
+
+
+def _keep_open_for_action(opened: _ReadOpen) -> bool:
+    """ACL-2790: действие ждёт этот профиль — окно остаётся открытым как «удобное» kept-окно.
+
+    Его дальше ведёт очередь: простой и нехватка памяти закрывают его, как любое kept-окно
+    (`kept_idle_close_s`, вытеснение). Своего таймера нет.
+    """
+    if not action_pending(opened.profile_id):
+        return False
+    if opened.slot_id:
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
+    _record("spend_profile_kept_for_action", True, 0.0,
+            {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)})
+    opened.started = False
+    return True
+
 
 @contextmanager
 def opening_closed_profile(opened: _ReadOpen):
@@ -1095,6 +1164,8 @@ def _close_started(opened: _ReadOpen) -> None:
     from src.fb_ads_rpa import browser as rpa_browser
 
     began = time.monotonic()
+    if _keep_open_for_action(opened):
+        return
     if _publish_touched(opened):
         # Ревью PR #583 (F1): профилем пользуется (или воспользовалось) другое
         # задание — окно его: Publish сам решает, закрывать ли (ACL-1444).
