@@ -1,5 +1,17 @@
 # System history
 
+## ACL-2767 — Telemetry Hub part 2: the owner's Control Center for buyers' runs — 2026-11-18
+
+The Hub Worker now serves an owner-only Control Center: a per-buyer day summary (campaigns, ok / failed / not started, active hours, median duration, version), a live feed of run lines, and a run detail view with steps, timings and a plain-English explanation of each failure. The owner signs in once with the owner key; the session is kept in a signed cookie for 30 days. No Meta requests, no external scripts.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1767
+
+## ACL-2763 — Per-buyer account map: the accounts connected under the selected buyer — 2026-11-18
+
+When "Logged as" switches to another buyer, the stats already came from BI for that buyer, but the account map still showed the machine's own accounts. An account connected while a buyer is selected is now tagged with that buyer, and the account map, builder accounts and Home show only the selected buyer's accounts. Rows without a tag belong to the machine's default buyer, so nothing existing moves.
+
+Issue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1763
+
 ## ACL-2752 — Publish popup: publish the ready campaigns, not-ready ones stay in the builder — 2026-11-17
 
 When some selected campaigns are not ready, the publish popup now offers "Publish N ready" (N counts only ready campaigns) and an x to take a not-ready campaign or account out of this publish. Removing only unticks it; the draft stays in the builder.
