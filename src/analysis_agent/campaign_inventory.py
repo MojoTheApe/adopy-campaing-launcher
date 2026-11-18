@@ -658,6 +658,48 @@ def _put_result(done: Snapshot) -> None:
         _notify_result(done)
 
 
+_CONFIRMED_FIELDS = {"status": "status", "daily_budget": "daily_budget", "bid_amount": "bid_amount"}
+_LEVEL_LIST = {"campaign": "campaigns", "adset": "adsets", "ad": "ads"}
+
+
+def apply_confirmed(account: str, items: list[dict]) -> int:
+    """ACL-2789: показать подтверждённое сверкой значение строки сразу, без чтения списка.
+
+    Берёт только значения, которые сверка прочитала и признала сохранёнными (`result == saved`).
+    Ни одного вызова Meta; машинная ревизия снимка не трогается, полное чтение придёт позже.
+    Возвращает, сколько строк изменено.
+    """
+    changes = [i for i in items if i.get("result") == "saved" and i.get("field") in _CONFIRMED_FIELDS
+               and i.get("level") in _LEVEL_LIST and "saved" in i]
+    if not changes:
+        return 0
+    done = 0
+    with _LOCK, paths.machine_file_lock(_store_path().with_suffix(".lock"), timeout=10):
+        data = _load_all()
+        rec = data.get(account)
+        snap = rec.get("snapshot") if isinstance(rec, dict) and _record_matches(rec, account) else None
+        if not isinstance(snap, dict):
+            return 0
+        for item in changes:
+            for obj in snap.get(_LEVEL_LIST[item["level"]]) or []:
+                if str(obj.get("id")) != str(item["id"]):
+                    continue
+                field_name = _CONFIRMED_FIELDS[item["field"]]
+                value = item["saved"]
+                if field_name == "status":
+                    value = str(value or "").upper()
+                    # Доставка своего уровня следует за выключателем, пока не пришло полное чтение.
+                    if obj.get("effective_status") in ("ACTIVE", "PAUSED", ""):
+                        obj["effective_status"] = value
+                else:
+                    value = _to_int(value)
+                obj[field_name] = value
+                done += 1
+        if done:
+            _save_all(data)
+    return done
+
+
 # ACL-1816: слушатели «человек прочитал опись аккаунта» (удачное чтение). Rules ставит
 # здесь только задание в очередь: оценка ничего не читает у Meta.
 _RESULT_LISTENERS: list[Callable[[Snapshot], None]] = []
