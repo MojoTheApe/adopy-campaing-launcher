@@ -5,8 +5,9 @@
 // GET  /api/*       — владелец читает события и выводы (OWNER_KEY).
 //
 // POST /tg/webhook — команды Telegram-бота (секрет webhook).
+// POST /api/refresh — владелец: забрать новые пачки из старого журнала acl-event-log.
 //
-// Привязка: D1 `DB`. Секреты: `OWNER_KEY`, `TG_BOT_TOKEN`, `TG_WEBHOOK_SECRET`. Переменные: `LIBRARY_REPO`,
+// Привязка: D1 `DB`. Секреты: `OWNER_KEY`, `TG_BOT_TOKEN`, `TG_WEBHOOK_SECRET`, `LEGACY_LOG_URL`, `LEGACY_READ_KEY`. Переменные: `LIBRARY_REPO`,
 // `TG_ALLOWED_CHATS`, `HUB_URL`.
 import { json } from "./respond.js";
 import { handleBackfill, handleBatch } from "./ingest.js";
@@ -16,6 +17,7 @@ import { clearCookie, makeSession, setCookie } from "./session.js";
 import { LOGIN_HTML, PAGE_HTML } from "./ui.js";
 import { handleWebhook } from "./bot.js";
 import { runScheduled } from "./alerts.js";
+import { handleRefresh } from "./legacy.js";
 
 const html = (body, status = 200, headers = {}) => new Response(body, { status,
   headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY",
@@ -45,6 +47,7 @@ export default {
     if (method === "POST" && url.pathname === "/v1/batch") return handleBatch(request, env, ctx);
     if (method === "POST" && url.pathname === "/tg/webhook") return handleWebhook(request, env);
     if (method === "POST" && url.pathname === "/v1/backfill") return handleBackfill(request, env);
+    if (method === "POST" && url.pathname === "/api/refresh") return handleRefresh(request, env);
     if (method === "GET" && url.pathname.startsWith("/api/")) return handleApi(request, env, url);
     if (method === "POST" && url.pathname.startsWith("/api/task-requests/")) return closeTaskRequest(request, env, url);
     return json({ error: "not found" }, 404);
