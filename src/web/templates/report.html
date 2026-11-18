@@ -3485,6 +3485,8 @@
     .rv-grey { color: var(--muted); font-size: var(--adopy-text-sm); }
     .rv-edit { display: inline-block; margin: 0.2rem 0 0.2rem 1rem; font-size: var(--adopy-text-sm); color: var(--accent); }
     .rv-btn { margin-left: 0.4rem; cursor: pointer; }
+    .rv-x { margin-left: 0.4rem; cursor: pointer; border: 0; background: transparent; color: inherit; font-size: 1.1em; line-height: 1; padding: 0 0.3rem; opacity: 0.7; }
+    .rv-x:hover, .rv-x:focus-visible { opacity: 1; }
     .rv-vis { margin: 0.2rem 0 0 1rem; }
     .pc-budget, .pc-checked { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
     .rv-foot-wrap { flex: none; margin-top: 0.5rem; font-size: var(--adopy-text-sm); color: var(--muted); }
@@ -4506,7 +4508,7 @@
   <div class="head-meta">
     <dl class="brand-meta">
       <div><dt>Last updated:</dt>
-      <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
+      <dd id="acl-built-at" title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
       {%- if report.source_info %}
       <div><dt>Figures:</dt>
       <dd id="acl-source-info" data-source-name="{{ report.source_info.description }}" data-source-currency="{{ report.source_info.currency_code }}" data-source-prev-currency="{{ source_comparison_info().currency_code }}" data-source-comparable="{{ 'true' if source_comparison_info().comparable else 'false' }}" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} · incomplete metadata{% endif %}</dd></div>
@@ -4636,6 +4638,7 @@ async function dashRefresh(ev) {
       btn.disabled = false;
       btn.textContent = prev;
       aclInlineError(btn, 'Refresh failed: ' + err);
+      dashRefreshUpdateCheck();
       return false;
     }
     btn.textContent = 'Reloading…';
@@ -4645,8 +4648,15 @@ async function dashRefresh(ev) {
     btn.disabled = false;
     btn.textContent = prev;
     aclInlineError(btn, 'Refresh failed: ' + (e && e.message ? e.message : e));
+    dashRefreshUpdateCheck();
   }
   return false;
+}
+// ACL-2668: Refresh — событие проверки выпуска. Успешный Refresh перезагружает
+// страницу, и проверка идёт при загрузке; здесь — когда перезагрузки не было.
+// Не ждём ответа: проверка не задерживает и не ломает Refresh.
+function dashRefreshUpdateCheck() {
+  try { if (typeof window.aclUpdateCheck === 'function') window.aclUpdateCheck(); } catch (_e) {}
 }
 
 // ── Update to a newer ACL release ────────────────────────────────────────
@@ -4661,9 +4671,11 @@ async function dashRefresh(ev) {
   var btn = document.getElementById('acl-update-btn');
   if (!btn) return;
 
-  // Дешборд держат открытым днями: первая проверка при загрузке страницы идёт
-  // с force=1 (свежий выпуск виден сразу, ACL-2655), ежеминутная берёт кэш
-  // сервера (до минуты). Сбой сети не стирает уже известный выпуск.
+  // ACL-2668 (решение 23): никакого таймера — проверяем только по событиям
+  // байера, всегда с force=1 (свежий выпуск виден сразу, ACL-2655). Загрузка
+  // страницы покрывает успешный Refresh и смену периода: оба перезагружают
+  // страницу. Refresh, который страницу не перезагрузил, зовёт
+  // window.aclUpdateCheck. Сбой сети не стирает уже известный выпуск.
   function aclCheck(force) {
     if (btn.disabled) return;
     fetch('/acl/update/check' + (force ? '?force=1' : ''), { credentials: 'same-origin' })
@@ -4687,8 +4699,8 @@ async function dashRefresh(ev) {
       })
       .catch(function () { /* offline, or not a git install — no button, no noise */ });
   }
+  window.aclUpdateCheck = function () { aclCheck(true); };
   aclCheck(true);
-  setInterval(function () { aclCheck(false); }, 60 * 1000);
 
   btn.addEventListener('click', function () {
     if (btn.disabled) return;
@@ -10721,9 +10733,17 @@ window.cbTree = (function () {
       else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
       else {
         if (setIdx < 1) return;
-        if (!window.confirm('Remove this ad set and its ads from the campaign?')) return;
-        window.cbRemoveAdset(cur.camp.slot, setIdx);
-        setIdx = Math.max(0, setIdx - 1);
+        /* Свой диалог дашборда вместо window.confirm (ACL-2668 #37). Ответ асинхронный:
+           за это время дерево могли перерисовать — проверяем, что кампания и набор те же. */
+        var askSlot = cur.camp.slot, askIdx = setIdx, askId = openId;
+        window.aclConfirm('', { title: 'Remove this ad set and its ads from the campaign?', okLabel: 'Remove', danger: true })
+          .then(function (yes) {
+            if (!yes || openId !== askId || setIdx !== askIdx || !findCampaign(askId)) return;
+            window.cbRemoveAdset(askSlot, askIdx);
+            setIdx = Math.max(0, setIdx - 1);
+            paint();
+          });
+        return;
       }
       paint();
     } else if (act === 'open-ad') {
@@ -16477,7 +16497,7 @@ else aclMlxExpiryBoot();
 async function amapMlLogout(btn) {
   var block = amapMlBlock(btn), inst = amapMlInstance(block);
   var label = (window.ACL_MLX_LABELS && window.ACL_MLX_LABELS[inst]) || inst;
-  if (!window.confirm('Log out of Multilogin ' + label + ' on this computer?\n\nYou will need to sign in again to use it.')) return;
+  if (!await window.aclConfirm('You will need to sign in again to use it.', { title: 'Log out of Multilogin ' + label + ' on this computer?', okLabel: 'Log out', danger: true })) return;
   btn.disabled = true;
   try {
     var r = await fetch('/multilogin-logout', {method: 'POST', credentials: 'same-origin',
@@ -23486,16 +23506,55 @@ function _doCbPublish(form) {
       + bad.map(function (a) {
           return '<div>' + esc(a.account) + ' — ' + esc((a.reasons || []).map(function (r) {
             return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
-          }).join('; ')) + '</div>';
+          }).join('; ')) + ' ' + dropButton('data-rv-drop-acct="' + esc(a.account) + '"', a.account) + '</div>';
         }).join('')
       + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway" data-rv-anyway="1"'
       + (model.anyway ? ' checked' : '') + '> Run anyway</label></div>';
+  }
+  /* «Publish N ready»: крестик выводит кампанию только из ЭТОЙ публикации и снимает с неё галочку;
+     черновик остаётся (стирает черновики только Remove человека в билдере). */
+  function dropButton(attr, what) {
+    return '<button type="button" class="rv-x" ' + attr + ' title="Take out of this publish — the draft stays in the builder" '
+      + 'aria-label="Take ' + esc(what) + ' out of this publish">×</button>';
+  }
+  function dropCamps(pairs) {
+    if (!model || !pairs.length) return;
+    var drop = [];
+    pairs.forEach(function (x) {
+      /* карточки одного имени — одна кампания: уходят вместе */
+      x.e.camps.forEach(function (c) { if ((c === x.c || c.name === x.c.name) && drop.indexOf(c) < 0) drop.push(c); });
+    });
+    var slots = drop.map(function (c) { return c.slot; });
+    model.removed = model.removed.concat(slots);
+    model.entries.forEach(function (e) {
+      var skip = {}, any = false;
+      e.camps.forEach(function (c, i) { if (slots.indexOf(c.slot) >= 0) { skip[i] = true; any = true; } });
+      if (!any) return;
+      e.fd = cbFormDataSkipping(e.form, skip, e.fd).body;
+      e.camps = e.camps.filter(function (c) { return slots.indexOf(c.slot) < 0; });
+      e.slots = e.slots.filter(function (s) { return slots.indexOf(s) < 0; });
+      var seen = {};
+      e.camps.forEach(function (c) { c.rep = !seen[c.name]; seen[c.name] = true; });
+      e.reps = e.camps.filter(function (c) { return c.rep; });
+    });
+    model.entries = model.entries.filter(function (e) { return e.slots.length; });
+    try { window.cbTree.untick(slots); } catch (err) { /* без отметок — просто вне этой публикации */ }
+    paint();
+  }
+  function dropAccount(account) {
+    var key = String(account).toLowerCase(), pairs = [];
+    model.entries.forEach(function (e) {
+      if (String(e.account).toLowerCase() === key) e.camps.forEach(function (c) { pairs.push({ e: e, c: c }); });
+    });
+    model.badList = model.badList.filter(function (a) { return String(a.account).toLowerCase() !== key; });
+    dropCamps(pairs);
+    paint();
   }
   function blockedHtml(ev) {
     if (!ev.blocked.length) return '';
     return '<div class="pc-note pc-block rv-blocked"><strong>✕ Will not be created (' + ev.blocked.length + ')</strong><ul>'
       + ev.blocked.map(function (x) {
-          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + '</li>';
+          return '<li>' + esc(x.c.name) + ' — ' + esc(blockedReason(x.e, x.c)) + ' ' + dropButton('data-rv-drop="' + esc(slotId(x.c.slot)) + '"', x.c.name) + '</li>';
         }).join('') + '</ul></div>';
   }
   function warningsHtml(ev) {
@@ -23583,6 +23642,9 @@ function _doCbPublish(form) {
       + (!model.checking && !ev.create.length ? '<div class="rv-nothing">' + esc(NOTHING) + '</div>' : '');
     var ok = box.querySelector('#sfc-ok');
     if (ok) {
+      if (model.okLabel == null) model.okLabel = ok.textContent;
+      var notReady = ev.blocked.length + (model.badList || []).length + model.removed.length;
+      ok.textContent = notReady ? 'Publish ' + ev.create.length + ' ready' : model.okLabel;
       ok.disabled = !!(model.checking || !ev.create.length);
       ok.title = model.checking ? 'Checking with Meta…' : (!ev.create.length ? NOTHING : '');
     }
@@ -23715,6 +23777,7 @@ function _doCbPublish(form) {
     });
     m.badList = badList;
     m.entries.forEach(function (e) { e.notReady = !!bad[e.account.toLowerCase()]; });
+    m.removed = []; m.okLabel = null;
     m.anyway = false; m.checking = false; m.stale = null; m.checkedAt = 0; m.closeReason = '';
     model = m;
     var opts = m.opts;
@@ -23731,6 +23794,12 @@ function _doCbPublish(form) {
         m.closeReason = 'edit';
         overlay.remove();
         try { window.cbTree.open(edit.getAttribute('data-rv-edit')); } catch (err) { /* карточка могла уйти */ }
+      } else if (t.closest('[data-rv-drop]')) {
+        var id = t.closest('[data-rv-drop]').getAttribute('data-rv-drop'), hit = null;
+        (m.ev ? m.ev.blocked : []).forEach(function (x) { if (!hit && slotId(x.c.slot) === id) hit = x; });
+        if (hit) dropCamps([hit]);
+      } else if (t.closest('[data-rv-drop-acct]')) {
+        dropAccount(t.closest('[data-rv-drop-acct]').getAttribute('data-rv-drop-acct'));
       } else if (t.closest('[data-rv-recheck]')) {
         runChecks();
       } else if (t.closest('[data-rv-again]')) {
@@ -23758,7 +23827,9 @@ function _doCbPublish(form) {
 
   /* ── Confirm ────────────────────────────────────────────────────────── */
   function staleNames() {
-    var fresh = model.reselect(), names = [];
+    var fresh = model.reselect().map(function (it) {
+      return { form: it.form, slots: it.slots.filter(function (s) { return model.removed.indexOf(s) < 0; }) };
+    }).filter(function (it) { return it.slots.length; }), names = [];
     var byKey = {};
     fresh.forEach(function (it) { byKey[cbFormKey(it.form)] = it; });
     model.entries.forEach(function (e) {
@@ -25341,7 +25412,7 @@ function aclPickerSearch(inst, text) {
   }
   async function post(body, ask) {
     if (pending) return;
-    if (ask && !window.confirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use. Save anyway?')) return;
+    if (ask && !await window.aclConfirm('This can overload your computer: more than 3 profiles at once or more than 80% memory in use.', { title: 'Save anyway?', okLabel: 'Save' })) return;
     pending = true; el('rl-save').disabled = true; el('rl-reset').disabled = true; say('Saving…');
     try {
       var r = await fetch('/api/run-limits', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
