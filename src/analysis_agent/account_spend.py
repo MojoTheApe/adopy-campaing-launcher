@@ -810,10 +810,9 @@ HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
 
 def hand_message() -> str:
     """Текст отказа «открыто руками» для текущего бэкенда."""
-    import os
+    from src.fb_api import backend as _backend
 
-    return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
-        else HAND_OPEN_MESSAGE
+    return HAND_OPEN_MESSAGE_API if _backend.api_enabled() else HAND_OPEN_MESSAGE
 
 
 def _running_by_hand(direct, udd, profile_id: str) -> bool:

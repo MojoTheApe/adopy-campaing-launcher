@@ -1,6 +1,6 @@
 """«Publish selected» через Graph API в профиле — кампании на паузе (ACL-1761).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+По умолчанию (ACL-2785) работает API; `ACL_FB_BACKEND=rpa` в `.env` машины включает RPA вручную. Тогда
 задание публикации (`publish_jobs._run_job_inner`) вместо робота Ads Manager
 зовёт `ApiPublisher`: тот же черновик билдера (`slots_to_campaign_drafts` →
 `enrich_campaign_drafts`), та же очередь мест по памяти и замок профиля (их
@@ -67,8 +67,10 @@ PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are created and pa
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — `rpa`."""
-    return "api" if (os.environ.get(BACKEND_ENV) or "").strip().lower() == "api" else "rpa"
+    """`api` (по умолчанию, ACL-2785) или `rpa` — только при явном `ACL_FB_BACKEND=rpa`."""
+    from src.fb_api import backend as _backend
+
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
