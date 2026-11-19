@@ -1983,7 +1983,7 @@ MSG_OTHER_ACCOUNT = ('"{name}" belongs to a different ad account than this campa
                      "Delete or move it, then publish again.")
 MSG_VIDEO_NOT_READY = ("The video for {name} is still processing or was rejected by Meta. "
                        "Publish again once it is ready, or replace the video.")
-MSG_BUSY = ("Another run is creating {what} right now. Wait for it to finish, then publish again. "
+MSG_BUSY = ("Another run is creating {what} right now. Publish again when it is done. "
             "Nothing was created twice.")
 MSG_SUPERSEDED = ("The saved progress of an earlier campaign with this name was set aside because that campaign "
                   "is no longer in Ads Manager; this is a new publish.")

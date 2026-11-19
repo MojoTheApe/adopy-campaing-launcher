@@ -58,7 +58,7 @@ def test_inner_session_exit_cannot_admit_same_account_before_result_and_stop(mon
     assert result.stop == "checkpoint" and result.state == "failed"
     # The same account stays fenced until its outcome is durable; another account is not.
     assert after_inner == ["same blocked", "other admitted"]
-    assert MachineStore().halt()["kind"] == "checkpoint"
+    assert MachineStore().halt() is None       # ACL-2653: a checkpoint is no machine-wide stop
     assert ci.get_attempt("A")["stop"] == "checkpoint"
 
 

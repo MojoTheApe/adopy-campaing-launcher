@@ -20145,7 +20145,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       /* Пиксель кампании выбирается тут же, как Страница; у кампании только с Instant Form поле скрыто (ACL-1775). */
       '<span class="cb-label" data-pixel-label>Pixel</span>' +
       '<div class="cb-page-choice cb-pixel-choice"><input type="hidden" name="camp_' + idx + '_pixel_id" value="">' +
-      '<select class="cb-input cb-pixel-select" aria-label="Pixel" onfocus="cbLoadPixels(this.closest(\'.cb-slot\'))" onchange="cbPixelChanged(this)"><option value="">Automatic — the only pixel of this account</option></select>' +
+      '<select class="cb-input cb-pixel-select" aria-label="Pixel" onfocus="cbLoadPixels(this.closest(\'.cb-slot\'))" onchange="cbPixelChanged(this)"><option value="">Automatic</option></select>' +
       '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-pixel-note role="status"></div>' +
       '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPixels(this.closest(\'.cb-slot\'), true)">Refresh pixels</button></div>' +
       '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
