@@ -34,7 +34,7 @@ def test_upper_case_profile_id_in_the_map_does_not_make_a_job_wait_for_its_own_s
 
 
 def test_waiting_for_a_closing_profile_does_not_restart_the_cooldown_clock(tmp_path, monkeypatch):
-    monkeypatch.delenv("ACL_PROFILE_RESTART_COOLDOWN_S", raising=False)       # code default: 180 s
+    monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "180")     # ACL-2818: the code default is now 0 s
     rig = Rig(tmp_path)
     rig.warm_up()
     rig.checkout().release()                                  # the registry knows the profile
