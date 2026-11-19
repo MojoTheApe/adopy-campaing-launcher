@@ -15,6 +15,8 @@ from src.fb_api import plain_errors as _plain
 #: Failures without a Meta reason of their own: the account signal explains them better.
 OVERRIDABLE = ("tab_unresponsive", "unknown", "graph_read_timeout", "graph_write_unconfirmed", "internal")
 AUTH_SHORT, AUTH_NEXT = _plain.AUTH_REQUIRED_SHORT, _plain.AUTH_REQUIRED_NEXT
+#: Stored statuses that carry no Meta reason: not looked at, looked and clear, or the read learned nothing.
+NOT_A_REASON = ("", "clear", "unknown")
 BLOCKED_NEXT = "check it in Ads Manager, then Publish again"
 
 
@@ -32,10 +34,10 @@ def latest_signal(account: str) -> dict[str, str]:
 
 
 def reason_failure(signal: dict[str, Any], base: Any = None) -> Any | None:
-    """`Failure` from a stored status that names a reason; None when Meta named none (clear / unknown)."""
+    """`Failure` from a stored status that names a reason; None when Meta named none (empty / clear / unknown)."""
     status = str((signal or {}).get("status") or "")
     text = str((signal or {}).get("status_text") or "")
-    if status in ("", "clear"):
+    if status in NOT_A_REASON:   # a read that learned nothing ("unknown") is not a Meta signal
         return None
     try:
         from src.analysis_agent.account_spend_api import AUTH_RESTRICTED_TEXT

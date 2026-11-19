@@ -172,6 +172,22 @@ def test_a_clean_signal_does_not_erase_a_reason(store, jobs):
     assert repr(jobs["j-g88"]) == shown
 
 
+def test_stored_unknown_status_is_not_a_meta_reason(store):
+    _put("unknown", "")
+    out = stop_reason.explain(_frozen(), ACCOUNT)
+    assert out.key == "tab_unresponsive" and out.line() == "The Ads Manager tab stopped answering - Publish again"
+    _put("unknown", "Meta API returned an unrecognised account_status 999")
+    assert stop_reason.explain(_frozen(), ACCOUNT).line() == out.line()
+    assert not WAIT.search(out.text())
+
+
+def test_unknown_status_write_does_not_rewrite_stopped_rows(store, jobs):
+    before = repr(jobs["j-g88"])
+    assert pj.apply_account_signal(ACCOUNT, "unknown", "") == 0
+    assert pj.apply_account_signal(ACCOUNT, "unknown", "Meta API returned an unrecognised account_status 999") == 0
+    assert repr(jobs["j-g88"]) == before
+
+
 def test_a_running_job_is_not_rewritten(store, jobs):
     jobs["j-g88"]["status"] = "running"
     assert pj.apply_account_signal(ACCOUNT, "restricted", api.AUTH_RESTRICTED_TEXT) == 0
