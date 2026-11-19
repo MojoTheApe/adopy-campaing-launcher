@@ -442,14 +442,22 @@ def test_proxy_auth_race_on_the_probe_is_retried_once_and_facebook_is_never_hit_
     tab, cdp, slept = _nav_tab([AUTH, ""])
     tab.navigate(FB)
     assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, launch.DEFAULT_PROXY_PROBE_URL, FB]
-    assert slept == [launch.PROXY_RETRY_S]
+    assert slept == [launch.PROXY_PROBE_POLL_S]      # ACL-2792: быстрая проба, не 12 с
 
 
-def test_proxy_auth_error_on_the_retry_is_final():
-    tab, cdp, slept = _nav_tab([AUTH, AUTH])
+def test_proxy_that_answers_two_seconds_after_the_first_failure_is_accepted_fast():
+    tab, cdp, slept = _nav_tab([AUTH, AUTH, ""])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL] * 3 + [FB]
+    assert sum(slept) <= 2.0
+
+
+def test_dead_proxy_fails_with_the_same_message_after_the_same_total_budget():
+    tab, cdp, slept = _nav_tab([AUTH] * 50)
     with pytest.raises(cdp_mod.PageError, match="ERR_INVALID_AUTH_CREDENTIALS"):
         tab.navigate(FB)
-    assert FB not in cdp.urls and len(slept) == 1
+    assert sum(slept) == launch.PROXY_RETRY_S
+    assert set(cdp.urls) == {launch.DEFAULT_PROXY_PROBE_URL}    # только нейтральный хост, не Meta
 
 
 def test_proxy_auth_error_on_a_warm_profile_is_final():

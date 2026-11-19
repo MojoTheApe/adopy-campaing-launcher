@@ -1,5 +1,17 @@
 # System history
 
+## ACL-2792 — Fast proxy probe retry — 2026-11-19
+
+When the profile proxy probe fails its first attempt, ACL now re-probes the same neutral host every second within the same 12 s budget instead of sleeping the whole time.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1792).
+
+## ACL-2666 — Ad schedule hours converted with real time zone rules — 2026-11-19
+
+Hours ticked in Israel time are converted to the ad account time zone with real zone rules for the
+run dates (not a fixed offset), so a New York account in November gets a 7 hour difference, not 8.
+Check plan now states the account zone and the difference used.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1666).
+
 ## ACL-2791 — One light tab from command preview to execute — 2026-11-18
 
 A command preview now uses the same read-only helper mode as its execute, so confirming reuses the kept light tab and token instead of opening a capture tab or handing the token over again; the pre-write re-read is unchanged and a lost tab is replaced as before.
