@@ -945,6 +945,8 @@ class _ReadOpen:
     keep_tab: bool = False
     #: Сколько мест очередь выдала профилю к моменту запуска (`grants`).
     grants_seen: int = 0
+    #: ACL-2790: окно подняло API-чтение/команда (не RPA) — его можно оставить «уступающим».
+    api: bool = False
 
 
 #: Чтение просит запускать закрытый профиль (`opening_closed_profile`). Флагом
@@ -1006,23 +1008,33 @@ def action_pending(profile_id: str) -> bool:
         return _QUEUED_ACTIONS.get(_action_key(profile_id), 0) > 0
 
 
-def _keep_open_for_action(opened: _ReadOpen) -> bool:
-    """ACL-2790: действие ждёт этот профиль — окно остаётся открытым как «удобное» kept-окно.
+def _keep_preemptible(opened: _ReadOpen, why: str) -> bool:
+    """ACL-2790: окно остаётся открытым как «уступающее» kept-окно (`preemptible`).
 
-    Его дальше ведёт очередь: простой и нехватка памяти закрывают его, как любое kept-окно
-    (`kept_idle_close_s`, вытеснение). Своего таймера нет.
+    Следующая команда на аккаунте берёт его без повторного запуска. Любое задание, которому нужно
+    место (чтение, команда, Check plan, Publish, открытие профиля) или память, закрывает такое окно
+    сразу — самое давнее первым (`ProfileSlots._idle_candidate`). Таймеров и настроек нет.
     """
-    if not action_pending(opened.profile_id):
+    try:
+        _slot_queue().keep(opened.slot_id, opened.account, kind="convenience", preemptible=True)
+    except Exception:
+        # Очередь окна не видит — оставлять его нельзя (держало бы память мимо потолка): закрываем.
+        log.exception("Could not mark the kept window of %s", opened.account)
         return False
-    if opened.slot_id:
-        try:
-            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
-        except Exception:
-            log.exception("Could not mark the kept window of %s", opened.account)
-    _record("spend_profile_kept_for_action", True, 0.0,
+    _record(why, True, 0.0,
             {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)})
     opened.started = False
     return True
+
+
+def _keep_open_for_action(opened: _ReadOpen) -> bool:
+    """ACL-2790: действие ждёт этот профиль — окно остаётся открытым как «уступающее» kept-окно.
+
+    Только путь API (`opened.api`); путь RPA закрывает, как раньше.
+    """
+    if not (opened.api and opened.slot_id) or not action_pending(opened.profile_id):
+        return False
+    return _keep_preemptible(opened, "spend_profile_kept_for_action")
 
 
 @contextmanager
@@ -1259,8 +1271,12 @@ def _keep_for_problem(opened: _ReadOpen, problem: str, stop: Any = None) -> None
 
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
                     grace_s: float | None = None, convenience: bool = False,
-                    problem: Any = None) -> None:
+                    problem: Any = None, api: bool = False) -> None:
     """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `api` (ACL-2790) — окно подняло API-чтение или команда. Если её начал сам покупатель и она
+    кончилась без ошибки, окно остаётся «уступающим» kept-окном (`_keep_preemptible`): команда,
+    нажатая следом, его переиспользует, а любому заданию, которому нужно место, оно уступает сразу.
 
     `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
     человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
@@ -1270,6 +1286,8 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
     """
     if not opened.started:
         return
+    if api:
+        opened.api = True
     kind = keep_open_problem(problem)
     if kind:
         _keep_for_problem(opened, kind, problem)
@@ -1282,6 +1300,10 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
             _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
         except Exception:
             log.exception("Could not mark the kept window of %s", opened.account)
+        return
+    if (api and problem is None and not keep_for_next and opened.slot_id and may_open_closed_profile()
+            and _keep_profiles_open() and not _publish_touched(opened)
+            and _keep_preemptible(opened, "spend_profile_kept_preemptible")):
         return
     grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
     if keep_for_next and grace > 0 and opened.profile_id:
@@ -1299,6 +1321,16 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         timer.start()
         return
     _close_started(opened)
+
+
+def _keep_profiles_open() -> bool:
+    """Включено ли «держать профили открытыми» (по умолчанию да; ACL-2113)."""
+    try:
+        from src.fb_ads_rpa.rpa_publisher import keep_profiles_open
+
+        return bool(keep_profiles_open())
+    except Exception:
+        return True
 
 
 def _logged_out(page, *, deep: bool = False) -> bool:
