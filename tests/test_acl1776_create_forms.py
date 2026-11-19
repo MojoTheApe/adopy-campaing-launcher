@@ -699,7 +699,7 @@ def test_a_rerun_after_an_unknown_write_waits_instead_of_creating_a_second_form(
     assert fc.is_pending(ACT, PAGE, name)
     # Список всё ещё без формы, прошло мало времени: повторный запуск стоит.
     again, _ = _run(meta, _tpl_draft(tmp_path, [tid]))
-    assert "may still be appearing at Meta" in again.error and "wait a few minutes" in again.error
+    assert "may still be appearing at Meta" in again.error and "Publish again" in again.error
     assert len(meta.form_posts) == 2, "новая форма не создана"
     # Check plan говорит то же и ничего не пишет.
     creator, _c = _creator(meta, writes=False)

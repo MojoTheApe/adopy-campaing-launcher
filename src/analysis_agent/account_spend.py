@@ -464,6 +464,26 @@ def _merge_status_locked(data: dict, account: str, rec: dict) -> bool:
     return True
 
 
+#: ACL-2811: those who must hear that a status of an account was stored (the publish rows show Meta's reason).
+#: Called after the store is saved but still under _STORE_LOCK (RLock held by _put's callers), so listeners run with
+#: the lock order store -> jobs: a listener must never take _STORE_LOCK-dependent locks in the other order.
+#: A listener's failure never touches the store.
+_STATUS_LISTENERS: list = []
+
+
+def add_status_listener(fn) -> None:
+    if fn not in _STATUS_LISTENERS:
+        _STATUS_LISTENERS.append(fn)
+
+
+def _notify_status(account: str, status: str, text: str) -> None:
+    for fn in list(_STATUS_LISTENERS):
+        try:
+            fn(account, status, text)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def put_status(account: str, status: str, status_text: str, *, source: str = "api", at: str = "",
                disable_reason: str = "", account_status: int | None = None) -> bool:
     """Записать статус кабинета отдельно от показаний спенда (ACL-2419).
@@ -482,6 +502,7 @@ def put_status(account: str, status: str, status_text: str, *, source: str = "ap
         if not _merge_status_locked(data, account, rec):
             return False
         _save_all(data)
+    _notify_status(account, status, status_text)
     return True
 
 
@@ -494,8 +515,9 @@ def _put(reading: SpendReading) -> None:
             # со своей датой, а не исчезает вместе с неудачей.
             reading.objects_prev = _last_good_tree(data, reading.account)
         data[key] = reading.to_dict()
+        merged = False
         if reading.status:
-            _merge_status_locked(data, reading.account, {
+            merged = _merge_status_locked(data, reading.account, {
                 "status": reading.status,
                 "status_text": reading.status_text,
                 "at": reading.finished_at or _now(),
@@ -507,6 +529,8 @@ def _put(reading: SpendReading) -> None:
             })
         _save_all(data)
         _UNSAVED.pop(key, None)
+    if merged:
+        _notify_status(reading.account, reading.status, reading.status_text)
 
 
 def _next_step(status: str, status_text: str) -> str:

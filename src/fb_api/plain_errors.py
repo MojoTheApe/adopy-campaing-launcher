@@ -38,9 +38,8 @@ class Plain:
     retry: str = "after_fix"     # after_fix | later | never | now
 
 
-AUTH_REQUIRED_SHORT = "Meta asks to confirm this account (security check)"
-AUTH_REQUIRED_NEXT = ("Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
-                      "Existing ads keep running.")
+AUTH_REQUIRED_SHORT = "Meta asks to authenticate this account"
+AUTH_REQUIRED_NEXT = "open the profile in Multilogin, pass the check, then Publish again"
 #: A campaign that was never begun because its account is waiting for that check.
 AUTH_NOT_STARTED = "Not started: account needs authentication. Nothing was created for it."
 
@@ -59,27 +58,27 @@ TABLE: dict[str, Plain] = {
     "account_blocked": Plain("This ad account cannot run ads right now (disabled, restricted or at its spending limit)",
                              "check it in Ads Manager"),
     "profile_locked": Plain("The Multilogin profile is busy or locked",
-                            "wait for the other action or close the window, then republish", "hold", "later"),
+                            "close the other window or action that uses it, then Publish again", "hold", "later"),
     # ACL-2820: closed before or during an action is not a lock; the next Open/Retry opens it again.
     "profile_closed": Plain("The profile was closed", "press Open (or Retry) to open it again", "hold", "later"),
     "profile_not_started": Plain("The Multilogin profile did not start", "open it in Multilogin, then republish",
                                  "blocking", "later"),
     "mlx_token_rejected": Plain("", "", "blocking", "after_fix"),  # text comes from mlx_session
     "tab_unresponsive": Plain("The Ads Manager tab stopped answering",
-                              "wait {wait}, then republish", "hold", "later"),
+                              "Publish again", "hold", "later"),
     "proxy_error": Plain("The profile's proxy or secure connection failed",
                          "check the proxy of this profile in Multilogin and republish"),
-    "graph_read_timeout": Plain("Meta did not answer in time{stage}", "nothing was changed, republish in a few minutes",
+    "graph_read_timeout": Plain("Meta did not answer in time{stage}", "nothing was changed, Publish again",
                                 "blocking", "later"),
     "graph_write_unconfirmed": Plain("Meta did not confirm this step{stage}",
                                      "check the campaign in Ads Manager, then republish (it will not duplicate)",
                                      "blocking", "later"),
-    "rate_limited": Plain("Meta is limiting requests", "wait {wait} and republish", "hold", "later"),
-    "policy_block": Plain("Meta temporarily blocked this action", "wait before trying again, do not retry now",
+    "rate_limited": Plain("Meta is limiting requests", "Publish again", "hold", "later"),
+    "policy_block": Plain("Meta temporarily blocked this action", "check this account in Ads Manager, then Publish again",
                           "blocking", "never"),
     # ACL-2400: the same words as warm.MEMORY_HOLD_MESSAGE, so the two can never show different texts.
     "memory_hold": Plain("Not enough free memory", "close a profile and retry", "blocking", "later"),
-    "account_hold": Plain("Another action is still running", "wait for it to finish and republish", "hold",
+    "account_hold": Plain("Another action is still running", "Publish again when it has finished", "hold",
                           "later"),
     "file_type_refused": Plain("Meta refused the file{adn}{file}: " + "The type of file is not supported",
                                "convert it to JPG or PNG and republish (re-publishing reuses what was created)"),
@@ -132,7 +131,7 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     if key == "mlx_token_rejected":
         short = str(ctx.get("text") or _mlx.SESSION_LOST_MESSAGE)
     return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry,
-                   **({"sep": ". "} if key == "auth_required" else {}), stage=str(ctx.get("stage") or ""), **over)
+                   stage=str(ctx.get("stage") or ""), **over)
 
 
 FILE_REFUSED_REASON = "The type of file is not supported"
