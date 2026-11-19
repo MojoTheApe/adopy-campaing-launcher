@@ -38,9 +38,8 @@ class Plain:
     retry: str = "after_fix"     # after_fix | later | never | now
 
 
-AUTH_REQUIRED_SHORT = "Meta asks to confirm this account (security check)"
-AUTH_REQUIRED_NEXT = ("Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
-                      "Existing ads keep running.")
+AUTH_REQUIRED_SHORT = "Meta asks to authenticate this account"
+AUTH_REQUIRED_NEXT = "open the profile in Multilogin, pass the check, then Publish again"
 #: A campaign that was never begun because its account is waiting for that check.
 AUTH_NOT_STARTED = "Not started: account needs authentication. Nothing was created for it."
 
@@ -130,7 +129,7 @@ def _make(key: str, ctx: dict | None = None, **over: Any) -> Failure:
     if key == "mlx_token_rejected":
         short = str(ctx.get("text") or _mlx.SESSION_LOST_MESSAGE)
     return Failure(key=key, short=short, next_step=nxt, severity=plain.severity, retry=plain.retry,
-                   **({"sep": ". "} if key == "auth_required" else {}), stage=str(ctx.get("stage") or ""), **over)
+                   stage=str(ctx.get("stage") or ""), **over)
 
 
 FILE_REFUSED_REASON = "The type of file is not supported"

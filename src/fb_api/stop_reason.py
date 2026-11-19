@@ -14,8 +14,7 @@ from src.fb_api import plain_errors as _plain
 
 #: Failures without a Meta reason of their own: the account signal explains them better.
 OVERRIDABLE = ("tab_unresponsive", "unknown", "graph_read_timeout", "graph_write_unconfirmed", "internal")
-AUTH_SHORT = "Meta asks to authenticate this account"
-AUTH_NEXT = "open the profile in Multilogin, pass the check, then Publish again"
+AUTH_SHORT, AUTH_NEXT = _plain.AUTH_REQUIRED_SHORT, _plain.AUTH_REQUIRED_NEXT
 BLOCKED_NEXT = "check it in Ads Manager, then Publish again"
 
 
