@@ -44,6 +44,8 @@ PROXY_AUTH = "proxy_auth"
 #: Предполётная проверка токена слота B не прошла (срок / чужое пространство).
 TOKEN_EXPIRED = "mlx_token_expired"
 TOKEN_WORKSPACE = "mlx_token_workspace"
+#: ACL-2821: приложение Multilogin вошло в пространство другого слота — лаунчер отвечает 403.
+WORKSPACE_MISMATCH = "mlx_workspace_mismatch"
 
 SESSION_LOST_MESSAGE = (
     "Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). "
@@ -54,7 +56,14 @@ TOKEN_EXPIRED_MESSAGE = "Multilogin token expired — sign in again"
 TOKEN_WORKSPACE_MESSAGE = ("The Multilogin token for this slot belongs to another workspace. "
                            "Connect Multilogin again and choose the right workspace, then press Retry.")
 
+#: Имена пространств по умолчанию, если в .env их нет (слот A = Inhouse, B = KLD).
+SLOT_NAMES = {"A": "Inhouse", "B": "KLD"}
+WORKSPACE_MISMATCH_TEMPLATE = ("Multilogin app is signed in to {app} - switch it to {want} "
+                               "to open this account")
+WORKSPACE_MISMATCH_MESSAGE = WORKSPACE_MISMATCH_TEMPLATE.format(app="the other workspace", want="this one")
+
 MESSAGES = {
+    WORKSPACE_MISMATCH: WORKSPACE_MISMATCH_MESSAGE,
     SESSION_LOST: SESSION_LOST_MESSAGE,
     PROXY_AUTH: PROXY_AUTH_MESSAGE,
     TOKEN_EXPIRED: TOKEN_EXPIRED_MESSAGE,
@@ -62,7 +71,7 @@ MESSAGES = {
 }
 
 #: Коды, после которых остальные старты слота в пачке пропускаются.
-BATCH_STOPS = frozenset({SESSION_LOST, TOKEN_EXPIRED, TOKEN_WORKSPACE})
+BATCH_STOPS = frozenset({SESSION_LOST, TOKEN_EXPIRED, TOKEN_WORKSPACE, WORKSPACE_MISMATCH})
 
 #: ACL-2668: одна общая причина у всех пропущенных стартов слота (полный текст —
 #: только у настоящего отказа), чтобы не было потока одинаковых ошибок.
@@ -74,8 +83,28 @@ BATCH_MAX = 64
 TOKEN_MARGIN_S = 60.0
 
 
-def message_for(code: str) -> str:
+def message_for(code: str, instance: str = "") -> str:
+    if code == WORKSPACE_MISMATCH and instance:
+        return mismatch_message(instance)
     return MESSAGES.get(code or "", "")
+
+
+def _slot_name(slot: str) -> str:
+    slot = (slot or "").strip().upper()
+    try:
+        from src.web import mlx_slots as _slots
+
+        name = _slots.trusted_name(slot) or _slots.workspace_name(slot)
+    except Exception:
+        name = ""
+    return name or SLOT_NAMES.get(slot, slot or "another workspace")
+
+
+def mismatch_message(instance: str) -> str:
+    """ACL-2821: «приложение в пространстве другого слота» — только для аккаунтов этого слота."""
+    want = (instance or "").strip().upper()
+    other = "B" if want == "A" else "A"
+    return WORKSPACE_MISMATCH_TEMPLATE.format(app=_slot_name(other), want=_slot_name(want))
 
 
 # ───────────────────────── распознавание ─────────────────────────
@@ -95,7 +124,8 @@ def classify(err: Any, instance: str = "") -> str:
     status401 = getattr(err, "status", None) or getattr(err, "status_code", None)
     if status401 == 401 or "start profile failed http 401" in low:
         return TOKEN_EXPIRED
-    if (instance or "").strip().upper() != "B":
+    slot = (instance or "").strip().upper()
+    if slot not in ("A", "B"):
         return ""
     status = getattr(err, "status", None) or getattr(err, "status_code", None)
     error_code = str(getattr(err, "error_code", "") or "").upper()
@@ -103,6 +133,11 @@ def classify(err: Any, instance: str = "") -> str:
                  or "forbidden_request" in low)
     if forbidden and ("restricted permission" in low or "forbidden_request" in low
                       or error_code == "FORBIDDEN_REQUEST"):
+        # ACL-2821: оба слота. Слот A отказ получает, когда приложение вошло в KLD;
+        # слот B — когда приложение в Inhouse (тогда A только что работал) либо
+        # когда общую сессию KLD забрал другой компьютер.
+        if slot == "A" or _last_ok() == "A":
+            return WORKSPACE_MISMATCH
         return SESSION_LOST
     return ""
 
@@ -160,6 +195,15 @@ def record_event(code: str, instance: str, account: str, *, skipped: bool = Fals
 
 _LOCK = threading.Lock()
 _BATCHES: "OrderedDict[str, dict]" = OrderedDict()
+#: ACL-2821: слот последнего удачного старта — приложение сейчас в его пространстве.
+_LAST_OK: dict = {"slot": "", "token": ""}
+#: ACL-2821: слоты, которым лаунчер отказал из-за чужого пространства (слот -> токен на тот момент).
+_MISMATCH: dict[str, str] = {}
+
+
+def _last_ok() -> str:
+    with _LOCK:
+        return _LAST_OK["slot"]
 
 
 def _clock() -> float:
@@ -183,7 +227,7 @@ def _token_mark(instance: str) -> str:
 def _new_state(now: float) -> dict:
     # suspect: был отказ, перепроверки ещё не было; probing: перепроверка
     # (один следующий старт) уже пущена; stopped: перепроверка подтвердила отказ.
-    return {"t": now, "stopped": {}, "suspect": {}, "probing": {}, "checked": set()}
+    return {"t": now, "stopped": {}, "suspect": {}, "probing": {}, "checked": set(), "app": ""}
 
 
 def begin_batch(batch_id: str) -> None:
@@ -210,7 +254,13 @@ def note_failure(code: str, instance: str, account: str = "", *, detail: str = "
     if code not in BATCH_STOPS:
         return
     mark = _token_mark(instance)
+    if code == WORKSPACE_MISMATCH:
+        checked = True      # ACL-2821: пространство приложения — не случайный сбой, повторять старт незачем
     with _LOCK:
+        if code == WORKSPACE_MISMATCH:
+            _MISMATCH[instance] = mark
+            if _LAST_OK["slot"] == instance:
+                _LAST_OK.update(slot="", token="")
         for state in _BATCHES.values():
             if instance in state["stopped"]:
                 continue
@@ -228,7 +278,10 @@ def note_started(instance: str) -> None:
     if not instance:
         return
     with _LOCK:
+        _LAST_OK.update(slot=instance, token=_token_mark(instance))
+        _MISMATCH.pop(instance, None)
         for state in _BATCHES.values():
+            state["app"] = instance
             for key in ("stopped", "suspect", "probing"):
                 state[key].pop(instance, None)
 
@@ -278,10 +331,22 @@ def refusal(batch_id: str, instance: str, account: str = "") -> dict | None:
             state = _BATCHES.get(batch_id)
             stop = state["stopped"].get(instance) if state else None
     if not stop:
+        # ACL-2821: в этой пачке слот другого пространства уже стартовал (приложение там),
+        # а этому слоту лаунчер уже отказывал при том же токене — старт не зовём.
+        with _LOCK:
+            state = _BATCHES.get(batch_id)
+            app = state["app"] if state else ""
+            known = _MISMATCH.get(instance)
+        if app and app != instance and known is not None and known == _token_mark(instance):
+            record_event(WORKSPACE_MISMATCH, instance, account, skipped=True)
+            return {"ok": False, "code": WORKSPACE_MISMATCH, "message": mismatch_message(instance),
+                    "skipped": True}
         return None
     code = stop["code"]
     record_event(code, instance, account, skipped=True)
-    return {"ok": False, "code": code, "message": SLOT_SKIP_MESSAGE, "skipped": True}
+    # Причина пространства своя у каждого слота и нужна на строке аккаунта целиком.
+    message = mismatch_message(instance) if code == WORKSPACE_MISMATCH else SLOT_SKIP_MESSAGE
+    return {"ok": False, "code": code, "message": message, "skipped": True}
 
 
 # Аккаунт и пачка «в воздухе»: места, где старт глубоко, не знают, чей он, а
@@ -313,6 +378,8 @@ def scope(*, account: str = "", batch: str = ""):
 def reset_for_tests() -> None:
     with _LOCK:
         _BATCHES.clear()
+        _LAST_OK.update(slot="", token="")
+        _MISMATCH.clear()
 
 
 # ───────────────────────── предполётная проверка токена ─────────────────────────
@@ -397,4 +464,4 @@ def humanize(err: Any, instance: str = "", account: str = "") -> tuple[str, str]
     if not code:
         return "", ""
     note_failure(code, slot, account)
-    return message_for(code), code
+    return message_for(code, slot), code

@@ -81,7 +81,7 @@ def _jwt(claims: dict) -> str:
 @pytest.mark.parametrize("text,slot,want", [
     (E403, "B", mlx.SESSION_LOST),
     ("Start profile failed HTTP 403: Request is not allowed FORBIDDEN_REQUEST", "B", mlx.SESSION_LOST),
-    (E403, "A", ""),                                    # слот A: тот же текст не подменяем
+    (E403, "A", mlx.WORKSPACE_MISMATCH),                # ACL-2821: слот A тоже узнаётся
     ("Start profile failed HTTP 500: internal error", "B", ""),
     ("Start profile failed HTTP 403: some other reason", "B", ""),
     ("cant lock profile", "B", ""),
@@ -110,7 +110,7 @@ def test_launcher_error_carries_status_and_code(monkeypatch):
         launcher.start_profile("F", _pid(1))
     assert ei.value.status == 403 and ei.value.error_code == "FORBIDDEN_REQUEST"
     assert mlx.classify(ei.value, "B") == mlx.SESSION_LOST
-    assert mlx.classify(ei.value, "A") == ""
+    assert mlx.classify(ei.value, "A") == mlx.WORKSPACE_MISMATCH
 
 
 # ───────────────────────── API-путь: open_profile ─────────────────────────
@@ -139,10 +139,11 @@ def test_slot_b_403_gets_stable_code_and_message(sentry):
     assert ei.value.code == "mlx_session_lost" and str(ei.value) == LOST_TEXT
 
 
-def test_slot_a_403_is_not_reclassified():
+def test_slot_a_403_is_classified_as_workspace_mismatch():
     launcher = FakeLauncher("A", MultiloginLauncherError(E403, status=403))
-    with pytest.raises(MultiloginLauncherError):
+    with pytest.raises(prof.ProfileError) as ei:
         _open("A", launcher)
+    assert ei.value.code == "mlx_workspace_mismatch"
 
 
 def test_other_start_errors_pass_through_untouched():
@@ -201,10 +202,11 @@ def test_batch_rechecks_once_then_skips_remaining_slot_b_and_slot_a_continues(tm
     results = b.rig.reg.open_many(_items(["B", "A", "B", "B", "B", "A"]), job_id="job1")
     assert results["B1"]["code"] == "mlx_session_lost" and not results["B1"].get("skipped")
     # ACL-2668: следующий старт слота — перепроверка; он тоже отказал по-настоящему.
-    assert results["B3"]["code"] == "mlx_session_lost" and not results["B3"].get("skipped")
+    # ACL-2821: A2 к тому времени стартовал, приложение в Inhouse: это не потеря сессии KLD.
+    assert results["B3"]["code"] == "mlx_workspace_mismatch" and not results["B3"].get("skipped")
     for label in ("B4", "B5"):
-        assert results[label]["code"] == "mlx_session_lost" and results[label]["skipped"] is True
-        assert results[label]["message"] == SKIP_TEXT        # одна общая причина, не поток ошибок
+        assert results[label]["code"] == "mlx_workspace_mismatch" and results[label]["skipped"] is True
+        assert "signed in to Inhouse" in results[label]["message"]
     assert results["A2"]["ok"] and results["A6"]["ok"]
     assert len(b.launchers["B"].calls) == 2            # отказ + одна перепроверка
     assert len(b.launchers["A"].calls) == 2            # слот A не затронут
