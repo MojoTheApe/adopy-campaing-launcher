@@ -163,7 +163,7 @@ class World:
             tr, sleep=lambda s: None, **kw))
         monkeypatch.setattr(tm, "record", lambda event, path=None: self.journal.append(event))
         monkeypatch.setattr(tm, "report_stop", lambda kind, msg, ctx=None: self.stops.append((kind, msg)) or "")
-        monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+        monkeypatch.setenv(api.BACKEND_ENV, "rpa")  # ACL-2785: стенд проверяет RPA-ветку явно
         api._COOLDOWN.clear()
         sp._PENDING_CLOSE.clear()
         # Мягкая остановка профиля (ACL-1580) — записываем, MLX не трогаем.
@@ -211,8 +211,8 @@ def world(monkeypatch, tmp_path):
 # ───────────────────────── выбор бэкенда ─────────────────────────
 
 def test_backend_selection(monkeypatch):
-    for value, expected in [(None, "rpa"), ("", "rpa"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"),
-                            ("Api", "api"), ("graph", "rpa"), ("1", "rpa")]:
+    for value, expected in [(None, "api"), ("", "api"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"),
+                            ("Api", "api"), ("graph", "api"), ("1", "api")]:  # ACL-2785: по умолчанию api
         if value is None:
             monkeypatch.delenv(api.BACKEND_ENV, raising=False)
         else:
