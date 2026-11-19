@@ -619,6 +619,8 @@ class WarmRegistry:
                  scan: Callable[[list[str]], dict] | None = None,
                  tab_factory: Callable[[str], Any] | None = None,
                  start_profile: Callable[..., Any] | None = None,
+                 lock_state: Callable[[str, str], str | None] | None = None,
+                 release_lock: Callable[[str, str, str], Any] | None = None,
                  close_window: Callable[[Any, str], Any] | None = None,
                  slot_queue: Callable[[], Any] | None = None,
                  gate: HeavyGate | None = None,
@@ -637,6 +639,9 @@ class WarmRegistry:
         self._scan = scan or scan_local
         self._tab_factory = tab_factory or _default_tab
         self._start_profile = start_profile or _default_start
+        #: ACL-2819: локальный статус MLX профиля ("stopped"/"running"/None) и снятие замка (stop-вызов).
+        self._lock_state = lock_state or _default_lock_state
+        self._release_lock = release_lock or _default_release_lock
         #: Закрытие окна профиля подаёт дешборд (`set_closer`): пилот в `src/fb_api` профили не останавливает.
         self._close_window = close_window
         self._slot_queue = slot_queue or _default_slot_queue
@@ -1058,11 +1063,20 @@ class WarmRegistry:
                 return _result(False, msg, code)
             except Exception as exc:  # noqa: BLE001 — MLX/сеть
                 if "lock profile" in str(exc).lower():
-                    # ACL-2262: process is gone but Multilogin still holds the profile lock. No retry loop.
-                    return _result(False, f"Multilogin still holds the {label} profile after it closed; "
-                                   "nothing was started. Try again in a minute.", "profile_locked")
-                return _result(False, f"The profile could not be started with automation: "
-                                      f"{scrub(str(exc))}", "start_failed")
+                    # ACL-2819: замок Multilogin после остановки снимаем сами (локальный MLX, не Meta).
+                    try:
+                        opened = self._start_after_lock(pid, folder, instance, cancelled)
+                        turn_kept = bool(getattr(opened, "started_now", False))
+                    except _fb_profile.ProfileError as exc2:
+                        return _result(False, str(exc2), getattr(exc2, "code", "") or "profile_error")
+                    except Exception:  # noqa: BLE001
+                        opened = None
+                    if opened is None:
+                        return _result(False, f"Multilogin still holds the {label} profile after it closed; "
+                                       "nothing was started. Try again in a minute.", "profile_locked")
+                else:
+                        return _result(False, f"The profile could not be started with automation: "
+                                          f"{scrub(str(exc))}", "start_failed")
         finally:
             if took_turn and not turn_kept:
                 with self._lock:
@@ -1085,6 +1099,27 @@ class WarmRegistry:
         return _result(True, "Opened; ready for the next action." if started
                        else "Already open with automation; kept warm.",
                        "started" if started else "already_open", started=started)
+
+    def _start_after_lock(self, pid: str, folder: str, instance: str, cancelled: Callable[[], bool]) -> Any:
+        """ACL-2819: «can't lock profile» после остановки. Только локальный MLX (statuses/stop), Meta не трогаем.
+
+        Остановлен → снимаем замок (тот же stop, что у RPA) и стартуем один раз. Работает/синхронизируется
+        (или статус не прочитан) → ждём по локальному статусу MLX, как только «stopped» — то же самое.
+        Возвращает None, если замок не снялся (вызывающий покажет profile_locked); иначе OpenedProfile.
+        """
+        deadline = self._mono() + CLOSE_WAIT_S
+        state = self._lock_state(pid, instance)
+        while state != "stopped" and not cancelled() and self._mono() < deadline:
+            self._sleep(CLOSE_POLL_S)
+            state = self._lock_state(pid, instance)
+        if state != "stopped":
+            return None
+        try:
+            self._release_lock(pid, folder, instance)
+        except Exception:  # noqa: BLE001 — MLX отказал: замок остаётся, скажем об этом на аккаунте
+            log.warning("warm: stale lock of %s could not be released", pid)
+            return None
+        return self._start_profile(pid, folder, instance)
 
     def _wait_until_closed(self, pid: str, cancelled: Callable[[], bool]) -> str:
         """Local process look every `CLOSE_POLL_S` until the profile is gone (`none`) or the wait ends."""
@@ -2235,6 +2270,18 @@ def _default_tab(cdp_url: str) -> Any:
 
 def _default_start(profile_id: str, folder_id: str, instance: str) -> Any:
     return _fb_profile.open_profile(profile_id, folder_id, instance)
+
+
+def _default_lock_state(profile_id: str, instance: str) -> str | None:
+    from src.fb_api import profile as _p
+
+    return _p._default_launcher(instance).profile_run_state(profile_id)
+
+
+def _default_release_lock(profile_id: str, folder_id: str, instance: str) -> None:
+    from src.fb_api import profile as _p
+
+    _p._default_launcher(instance).release_stale_lock(profile_id, folder_id=folder_id or None)
 
 
 def _default_pending_close(profile_id: str) -> Any:

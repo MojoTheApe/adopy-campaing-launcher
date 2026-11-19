@@ -349,3 +349,64 @@ def test_messages_do_not_depend_on_the_button_or_a_three_minute_wait():
     for text in (warm.HAND_MESSAGE, sp.HAND_OPEN_MESSAGE_API):
         assert "Open profiles for today" not in text and "3 minutes" not in text
     assert warm.HAND_MESSAGE == sp.HAND_OPEN_MESSAGE_API
+
+
+# ACL-2819: "can't lock profile" after a stop is released / waited out on the local MLX, never Meta.
+def _lock_rig(tmp_path, states):
+    rig = Rig(tmp_path)
+    rig.scan_result[PID] = ("none", None)
+    calls = {"start": 0, "release": 0, "state": 0}
+    ok_start = rig._start
+
+    def start(pid, folder, instance):
+        calls["start"] += 1
+        if calls["start"] == 1:
+            raise RuntimeError("Start profile failed HTTP 500: can't lock profile")
+        return ok_start(pid, folder, instance)
+
+    def lock_state(pid, instance):
+        calls["state"] += 1
+        return states[min(calls["state"], len(states)) - 1]
+
+    def release(pid, folder, instance):
+        calls["release"] += 1
+
+    rig.reg._start_profile = start
+    rig.reg._lock_state = lock_state
+    rig.reg._release_lock = release
+    rig.reg._sleep = lambda s: rig.now.__setitem__(0, rig.now[0] + s)
+    return rig, calls
+
+
+def test_cant_lock_with_mlx_stopped_releases_the_lock_and_opens(tmp_path):
+    rig, calls = _lock_rig(tmp_path, ["stopped"])
+    result = rig.reg.open_one("Acc", _entry())
+    assert result["ok"], result
+    assert calls["release"] == 1 and calls["start"] == 2
+
+
+def test_cant_lock_while_mlx_runs_waits_for_stopped_then_opens(tmp_path):
+    rig, calls = _lock_rig(tmp_path, ["running", None, "running", "stopped"])
+    result = rig.reg.open_one("Acc", _entry())
+    assert result["ok"], result
+    assert calls["state"] == 4 and calls["release"] == 1 and calls["start"] == 2
+
+
+def test_cant_lock_is_retried_once_only(tmp_path):
+    rig, calls = _lock_rig(tmp_path, ["stopped"])
+
+    def always_locked(pid, folder, instance):
+        calls["start"] += 1
+        raise RuntimeError("HTTP 500: can't lock profile")
+
+    rig.reg._start_profile = always_locked
+    result = rig.reg.open_one("Acc", _entry())
+    assert not result["ok"] and result["code"] == "profile_locked"
+    assert calls["start"] == 2 and calls["release"] == 1
+
+
+def test_plain_errors_recognises_cant_lock_profile():
+    from src.fb_api import plain_errors
+
+    for text in ("Start profile failed HTTP 500: can't lock profile", "cannot lock profile"):
+        assert plain_errors.classify(text).key == "profile_locked", text
