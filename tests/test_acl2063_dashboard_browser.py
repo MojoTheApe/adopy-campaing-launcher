@@ -237,25 +237,22 @@ def test_proxy_failure_has_one_row_retry_and_does_not_stop_other_accounts(dashbo
     assert not retry.is_visible() and site.errors == []
 
 
-def test_global_checkpoint_has_one_banner_and_only_explicit_same_account_retry_resumes(dashboard):
+def test_checkpoint_shows_on_its_account_only_and_other_reads_continue(dashboard):
+    # ACL-2661: a checkpoint holds only its own account. No page banner, no machine-wide halt.
     site, page = dashboard
     site.checkpoint.add('Acc')
     site.save('Acc', age=7200); site.save('Fresh', age=7200)
     goto(page, 'http://acl.test/'); wait_ready(page)
-    banner = page.locator('#account-refresh-status[role=alert]')
-    banner.wait_for(state='visible')
-    assert 'checkpoint' in banner.inner_text().lower()
-    assert page.locator('#account-refresh-status').count() == 1
-    assert [a for a, _ in site.reads] == ['Acc']
-    assert site.q.state()['queued'] == [{'account': 'Fresh', 'trigger': 'schedule:2026-10-24/08:00'}]
-    assert site.q.state()['sweep']['done'] == 1
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
+    assert sorted(a for a, _ in site.reads) == ['Acc', 'Fresh']
+    assert site.q.state()['halt'] is None
+    assert page.locator('#account-refresh-status[role=alert]').count() == 0
+    assert page.locator('#account-lock-status').count() == 0
     site.checkpoint.clear()
     page.locator('tr:has(td[data-account="Acc"]) button.hc-rc').click()
-    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Fresh?.state === 'ok'")
-    assert [a for a, _ in site.reads] == ['Acc', 'Acc', 'Fresh']
-    assert site.reads[1] == ('Acc', 'retry')
-    assert site.q.state()['halt'] is None and site.q.state()['sweep']['done'] == 2
-    assert banner.is_hidden() and site.errors == []
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.refreshRows.Acc?.state === 'ok'")
+    assert [r for r in site.reads if r[0] == 'Acc'][-1] == ('Acc', 'retry')
+    assert [a for a, _ in site.reads].count('Fresh') == 1 and site.errors == []
 
 
 @pytest.mark.parametrize('width', [1280, 390])

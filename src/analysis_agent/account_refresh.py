@@ -140,19 +140,7 @@ def _held_blocks(account: str, trigger: str, force: bool = False) -> bool:
         return False
     if kind == "open" and force:
         return False        # ACL-2653: a person's Open profile reads the status right away, through any hold
-    if not _profile_held(account):
-        return False
-    if kind == "open":
-        # ACL-2652: the status read after a person's Open profile may pass a code-31 hold (one attempt).
-        try:
-            from src.analysis_agent import account_spend
-            from src.fb_api import account_blocks
-
-            key = account_spend._profile_key(account)  # noqa: SLF001
-            return not (account_blocks.person_open_pending(key) and account_blocks.is_auth_hold(key))
-        except Exception:  # noqa: BLE001
-            return True
-    return True
+    return _profile_held(account)
 
 
 def recently_failed(account: str, *, now: float | None = None) -> bool:
