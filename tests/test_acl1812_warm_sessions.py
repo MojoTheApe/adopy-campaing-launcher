@@ -719,7 +719,7 @@ def test_closed_profile_gives_a_clear_refusal_and_forgets_the_record(rig):
 def test_everything_is_switched_off_without_the_api_backend(monkeypatch):
     from src.web import warm_api
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     out = warm_api.state(["Acc"])
     assert out["available"] is False and out["accounts"] == {}
     data, code = warm_api.start_open(["Acc"])
@@ -893,7 +893,7 @@ def test_routes_are_registered_and_refuse_under_rpa(monkeypatch):
 
     from src.web import app as web
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     paths = {(r.path, tuple(sorted(r.methods))) for r in web.app.routes if hasattr(r, "methods")}
     for want in (("/warm/state", ("GET",)), ("/warm/open", ("POST",)),
                  ("/warm/job/{job_id}", ("GET",)), ("/warm/close", ("POST",))):
@@ -1513,7 +1513,7 @@ def test_hand_message_names_the_right_button_per_backend(monkeypatch):
     monkeypatch.setenv("ACL_FB_BACKEND", "api")
     # ACL-2262: on the API backend nothing depends on the button; the dashboard opens the profile itself.
     assert sp.hand_message() == warm.HAND_MESSAGE and "Open profiles for today" not in sp.hand_message()
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     assert "open profile button on this row" in sp.hand_message()
     assert "Open profiles for today" not in sp.hand_message()
 
