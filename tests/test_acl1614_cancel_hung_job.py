@@ -772,3 +772,9 @@ def test_a_job_queued_before_the_abandon_gives_its_slot_back(env):
     assert _until(lambda: pj.get_job(other)["status"] == "done", timeout=8)
     assert pj.get_job(same)["status"] == "queued" and len(started) == 2
     assert same not in _running_ids(env.slots)
+
+
+@pytest.fixture(autouse=True)
+def _rpa_backend_explicit(monkeypatch):
+    """ACL-2785: по умолчанию теперь api; эти тесты проверяют ветку RPA, поэтому выбирают её явно."""
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")

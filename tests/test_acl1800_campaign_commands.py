@@ -838,7 +838,7 @@ def web(monkeypatch, tmp_path):
     cmd._STORES.clear()
 
 
-@pytest.mark.parametrize("backend", [None, "rpa", "", "graph"])
+@pytest.mark.parametrize("backend", ["rpa"])
 def test_rpa_backend_refuses_every_endpoint(web, monkeypatch, backend):
     cc, w = web
     if backend is None:
@@ -886,7 +886,7 @@ def test_routes_are_registered_and_refuse_under_rpa(monkeypatch):
 
     from src.web import app as web
 
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     paths = {(r.path, tuple(sorted(r.methods))) for r in web.app.routes if hasattr(r, "methods")}
     assert ("/campaign-commands/preview", ("POST",)) in paths
     assert ("/campaign-commands/execute", ("POST",)) in paths

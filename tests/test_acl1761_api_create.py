@@ -1206,10 +1206,10 @@ def test_backend_switch(monkeypatch):
     from src.web import publish_api
 
     monkeypatch.delenv("ACL_FB_BACKEND", raising=False)
-    assert publish_api.backend() == "rpa"
+    assert publish_api.backend() == "api"                                       # ACL-2785: по умолчанию api
     monkeypatch.setenv("ACL_FB_BACKEND", "API")
     assert publish_api.backend() == "api"
-    monkeypatch.setenv("ACL_FB_BACKEND", "bogus")
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")
     assert publish_api.backend() == "rpa"
 
 
