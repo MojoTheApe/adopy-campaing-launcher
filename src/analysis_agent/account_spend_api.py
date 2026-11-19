@@ -580,7 +580,8 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
             _as._set_wait_note(account, _as.STARTING_NOTE.format(account=account))
         from src.fb_api import mlx_session as _mlx
 
-        with _mlx.scope(account=account):
+        # ACL-2821: у чтения своя пачка — отказанный слот в её пределах не стартуем снова и снова.
+        with _mlx.scope(account=account, batch=f"read-{uuid.uuid4().hex[:12]}"):
             opened = _open_profile(profile_id, folder_id, instance)
     except BaseException:
         if gated and not shared:
