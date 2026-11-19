@@ -60,6 +60,8 @@ TABLE: dict[str, Plain] = {
                              "check it in Ads Manager"),
     "profile_locked": Plain("The Multilogin profile is busy or locked",
                             "wait for the other action or close the window, then republish", "hold", "later"),
+    # ACL-2820: closed before or during an action is not a lock; the next Open/Retry opens it again.
+    "profile_closed": Plain("The profile was closed", "press Open (or Retry) to open it again", "hold", "later"),
     "profile_not_started": Plain("The Multilogin profile did not start", "open it in Multilogin, then republish",
                                  "blocking", "later"),
     "mlx_token_rejected": Plain("", "", "blocking", "after_fix"),  # text comes from mlx_session
@@ -186,7 +188,7 @@ _CODE_KEYS = {
 _POLICY_CODES = {368}
 #: Codes WE put on ApiPublishError / WarmError / GraphStop.kind (not Meta codes).
 _API_CODE_KEYS = {
-    "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_locked", "profile_locked": "profile_locked",
+    "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_closed", "profile_locked": "profile_locked",
     "gate_wait": "account_hold", "below_reserve": "memory_hold", "memory_low": "memory_hold",
     "limit": "account_hold", "cdp": "profile_not_started", "launch": "profile_not_started",
     "cdp_timeout": "graph_read_timeout",
