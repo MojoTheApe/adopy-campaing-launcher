@@ -940,7 +940,24 @@ class WarmRegistry:
 
     # -- открыть профили на сегодня
     def open_one(self, label: str, entry: Any, *, job_id: str = "", cancelled: Callable[[], bool] = lambda: False) -> dict:
-        """Поднять один профиль с автоматизацией. Ответ — `{ok, state, message, code, started}`."""
+        """Поднять один профиль с автоматизацией. Ответ — `{ok, state, message, code, started}`.
+
+        ACL-2822: на каждое открытие одно событие `profile.open` (исход и секунды по шагам).
+        """
+        from src.fb_api import open_timing
+
+        slot = (getattr(entry, "multilogin_instance", "") or "A").strip().upper() or "A"
+        timer = open_timing.OpenTimer(label, slot, "warm")
+        outcome = "error"
+        try:
+            with open_timing.activate(timer):
+                result = self._open_one(label, entry, job_id=job_id, cancelled=cancelled)
+            outcome = str(result.get("code") or "") if isinstance(result, dict) else "error"
+            return result
+        finally:
+            timer.emit(outcome)
+
+    def _open_one(self, label: str, entry: Any, *, job_id: str = "", cancelled: Callable[[], bool] = lambda: False) -> dict:
         pid = (getattr(entry, "profile_id", "") or "").strip()
         folder = (getattr(entry, "folder_id", "") or "").strip()
         instance = (getattr(entry, "multilogin_instance", "") or "A").strip() or "A"
@@ -948,10 +965,12 @@ class WarmRegistry:
             return _result(False, "No Multilogin profile is linked to this account.", "no_profile")
         # ACL-1138: профиль без прокси в Multilogin не берём и не поднимаем — ни
         # чужой уже открытый (`_adopt`), ни свой запуск.
-        refusal = _proxy_refusal(pid, instance, label)
+        with _open_step("proxy_gate"):
+            refusal = _proxy_refusal(pid, instance, label)
         if refusal:
             return _result(False, refusal, "profile_no_proxy")
-        kind, port = self._scan([pid]).get(pid, ("unknown", None))
+        with _open_step("local_scan"):
+            kind, port = self._scan([pid]).get(pid, ("unknown", None))
         if kind == "port" and port:
             return self._adopt(label, pid, int(port))
         if kind == "no_port":
@@ -1050,7 +1069,8 @@ class WarmRegistry:
             if refusal:
                 return refusal
             try:
-                opened = self._start_profile(pid, folder, instance)
+                with _open_step("start_profile"):
+                    opened = self._start_profile(pid, folder, instance)
                 turn_kept = bool(getattr(opened, "started_now", False))
             except _fb_profile.ProfileError as exc:
                 code = getattr(exc, "code", "") or "profile_error"
@@ -1381,7 +1401,8 @@ class WarmRegistry:
             raise WarmError("This profile is not kept warm.", "not_warm")
         # ACL-1138: и сессия, взятая в пул до гейта (старая сборка), — через гейт.
         # Пространство у сессии не записано: гейт спросит оба; «есть» кэшируется.
-        refusal = _proxy_refusal(profile_id, "", account)
+        # ACL-2822: only the profile's own slot is asked (the map knows it); no slot known -> both, as before.
+        refusal = _proxy_refusal(profile_id, _slot_of(account), account)
         if refusal:
             raise WarmError(refusal, "profile_no_proxy")
         if sess.owner == threading.get_ident():
@@ -2105,6 +2126,22 @@ def _chip(state: str, text: str, title: str, *, since: str = "", closable: bool 
           busy: bool = False) -> dict:
     return {"state": state, "text": text, "title": title, "since": since,
             "closable": bool(closable), "busy": bool(busy)}
+
+
+def _open_step(name: str):
+    from src.fb_api import open_timing
+
+    return open_timing.step(name)
+
+
+def _slot_of(account: str) -> str:
+    """ACL-2822: слот Multilogin аккаунта из карты ("A"/"B"); пусто — карта не знает аккаунта."""
+    try:
+        from src.fb_api import mlx_session
+
+        return mlx_session.instance_of(account) if account else ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
