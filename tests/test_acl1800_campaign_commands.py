@@ -181,7 +181,8 @@ class FakeMeta:
             camp = self.objs.get(obj.get("campaign_id", ""))
             if camp:
                 row["campaign"] = {k: camp.get(k) for k in
-                                   ("id", "name", "status", "effective_status", "daily_budget", "bid_strategy")
+                                   ("id", "name", "status", "effective_status", "daily_budget", "lifetime_budget",
+                                    "bid_strategy")
                                    if camp.get(k) is not None}
         if kind == "ad":
             ads = self.objs.get(obj.get("adset_id", ""))
@@ -342,10 +343,85 @@ def test_budget_skips_objects_that_do_not_own_one(world):
     assert reasons[CAMP_A] == "No daily budget on this object"
 
 
-def test_budget_lifetime_is_not_edited(world):
-    world.meta.objs[SET_BID]["lifetime_budget"] = "90000"
+def _lifetime_world(world):
+    """Кампания и ад-сет (не CBO) с lifetime-бюджетом, плюс CBO-кампания и её ад-сет."""
+    world.meta.objs[CAMP_A]["lifetime_budget"] = "90000"
+    world.meta.objs[SET_BID].pop("daily_budget")
+    world.meta.objs[SET_BID]["lifetime_budget"] = "60000"
+    world.meta.objs[CAMP_CBO].pop("daily_budget")
+    world.meta.objs[CAMP_CBO]["lifetime_budget"] = "80000"
+
+
+def test_budget_lifetime_campaign_and_adset_are_listed_with_lifetime_wording(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "10", [t("campaign", CAMP_A), t("adset", SET_BID)])
+    assert pv["skipped"] == []
+    rows = {a["id"]: a for a in pv["affected"]}
+    assert rows[CAMP_A]["field"] == "lifetime_budget"
+    assert rows[CAMP_A]["before_display"] == "900.00 USD lifetime" and rows[CAMP_A]["after_display"] == "10.00 USD lifetime"
+    assert rows[SET_BID]["before_display"] == "600.00 USD lifetime"
+
+
+def test_budget_daily_wording_is_unchanged(world):
     pv = world.preview("set_budget", "10", [t("adset", SET_BID)])
-    assert pv["affected"] == [] and "Lifetime" in pv["skipped"][0]["reason"]
+    assert pv["affected"][0]["field"] == "daily_budget"
+    assert "lifetime" not in pv["affected"][0]["before_display"] + pv["affected"][0]["after_display"]
+
+
+def test_budget_adset_under_cbo_lifetime_campaign_is_skipped(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "10", [t("adset", SET_CBO)])
+    assert pv["affected"] == [] and pv["skipped"][0]["reason"] == "Budget is set on the campaign"
+
+
+def test_budget_lifetime_execute_writes_lifetime_and_reads_it_back(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "25.50", [t("campaign", CAMP_A), t("adset", SET_BID)])
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == "Succeeded"
+    assert sorted(world.meta.posts) == sorted([(f"/{CAMP_A}", {"lifetime_budget": "2550"}),
+                                               (f"/{SET_BID}", {"lifetime_budget": "2550"})])
+    assert all(a["result"] == "saved" and a["saved"] == 2550 for a in done["affected"])
+    assert world.meta.objs[CAMP_A]["lifetime_budget"] == "2550"
+
+
+def test_budget_lifetime_revision_id_follows_the_field(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "10", [t("campaign", CAMP_A)])
+    other = {**pv, "affected": [{**pv["affected"][0], "field": "daily_budget"}]}
+    assert cmd._revision_id(other) != pv["revision_id"]
+
+
+def test_budget_lifetime_readback_mismatch_is_failed(world):
+    _lifetime_world(world)
+    world.meta.fail_next[CAMP_A] = "drop"
+    pv = world.preview("set_budget", "20", [t("campaign", CAMP_A)])
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["affected"][0]["result"] == "mismatch" and done["affected"][0]["saved"] == 1
+
+
+def test_budget_lifetime_meta_refusal_stays_on_its_row_and_others_proceed(world):
+    _lifetime_world(world)
+    world.meta.fail_next[CAMP_A] = "refuse"
+    pv = world.preview("set_budget", "20", [t("campaign", CAMP_A), t("adset", SET_BID)])
+    world.execute(pv)
+    done = world.final(pv)
+    rows = {a["id"]: a for a in done["affected"]}
+    assert rows[CAMP_A]["result"] == "refused" and "Meta refused" in rows[CAMP_A]["note"]
+    assert rows[SET_BID]["result"] == "saved" and rows[SET_BID]["note"] == ""
+    assert world.meta.objs[CAMP_A]["lifetime_budget"] == "90000"
+    assert world.meta.objs[SET_BID]["lifetime_budget"] == "2000"
+
+
+def test_budget_lifetime_changed_since_preview_writes_nothing(world):
+    _lifetime_world(world)
+    pv = world.preview("set_budget", "20", [t("campaign", CAMP_A)])
+    world.meta.objs[CAMP_A]["lifetime_budget"] = "95000"        # кто-то поменял в Ads Manager
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == "Failed" and world.meta.posts == []
 
 
 @pytest.mark.parametrize("value", ["0", "0.00", "-5", "abc", "", "1.234", "1e3", "10,5", "  "])
