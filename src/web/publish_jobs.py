@@ -1434,8 +1434,10 @@ def apply_account_signal(account: str, status: str, text: str) -> int:
             if isinstance(det, dict) and det.get("failure_key") in stop_reason.OVERRIDABLE:
                 new = stop_reason.reason_failure({"status": status, "status_text": text}, SimpleNamespace(
                     details=det, left=[], stage=""))
+                if job["errors"][i] == new.text():
+                    continue   # already rewritten for this reason: nothing to persist
                 job["errors"][i] = new.text()
-                rows[i] = new.details
+                rows[i] = dict(new.details, failure_key=new.key)
                 changed += 1
         if not changed:
             return 0

@@ -12,7 +12,7 @@ from src.fb_api import graph as g
 from src.web import publish_api
 
 ACCOUNT = "KLD_BFL_G88"
-WAIT = re.compile(r"\bwait", re.I)
+WAIT = re.compile(r"\bwait", re.I)  # linux-ok: regex word boundary, not a path
 
 
 @pytest.fixture()
@@ -195,3 +195,15 @@ def test_publish_again_with_a_frozen_tab_and_a_stored_3858385_shows_the_reason(s
     assert out.key == "auth_required" and "Publish again" in out.line()
     other = stop_reason.explain(_frozen(), "Doc120")
     assert other.key == "tab_unresponsive"
+
+
+def test_two_identical_status_writes_rewrite_once_and_bump_the_revision_once(store, jobs, monkeypatch):
+    saved = []
+    monkeypatch.setattr(pj, "_persist_job", lambda *a, **k: saved.append(1))
+    first = pj.apply_account_signal(ACCOUNT, "restricted", api.AUTH_RESTRICTED_TEXT)
+    revision = jobs["j-g88"]["status_revision"]
+    second = pj.apply_account_signal(ACCOUNT, "restricted", api.AUTH_RESTRICTED_TEXT)
+    assert first >= 1 and second == 0
+    assert len(saved) == 1
+    assert jobs["j-g88"]["status_revision"] == revision == 1
+    assert jobs["j-g88"]["error_details"][0]["failure_key"] not in stop_reason.OVERRIDABLE

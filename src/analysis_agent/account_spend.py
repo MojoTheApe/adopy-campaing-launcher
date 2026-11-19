@@ -465,7 +465,9 @@ def _merge_status_locked(data: dict, account: str, rec: dict) -> bool:
 
 
 #: ACL-2811: those who must hear that a status of an account was stored (the publish rows show Meta's reason).
-#: Called after the store, outside its lock; a listener's failure never touches the store.
+#: Called after the store is saved but still under _STORE_LOCK (RLock held by _put's callers), so listeners run with
+#: the lock order store -> jobs: a listener must never take _STORE_LOCK-dependent locks in the other order.
+#: A listener's failure never touches the store.
 _STATUS_LISTENERS: list = []
 
 
