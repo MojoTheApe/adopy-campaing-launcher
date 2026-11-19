@@ -1198,7 +1198,7 @@ def _machine_read(account: str, trigger: str, operation, *, machine=None, now=No
     from src.analysis_agent.account_refresh_state import target_activity
     coordinator = machine if machine is not None else MachineStore()
     clock = now if now is not None else time.time
-    force = trigger.split(":")[0] in {"action", "retry"}
+    force = trigger.split(":")[0] in {"action", "retry", "open"}      # ACL-2653: a person's Open reads past an untimed stop
     try:
         profile = _as._profile_key(account)  # noqa: SLF001
         # ACL-2668: чтения разных аккаунтов идут параллельно; одно чтение на аккаунт

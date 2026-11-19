@@ -324,11 +324,13 @@ def test_state_shows_the_auto_status_and_the_reason_for_the_tooltip(api, monkeyp
 def test_telemetry_row_and_event_carry_codes_and_numbers_only(api):
     ensure()
     run_queue()
-    kinds = [e[0] for e in api.events]
+    # ACL-2822: the open path also writes its own profile.open summary; this test checks only the auto-warm event.
+    events = [e for e in api.events if not (e[0] == "event" and e[1] and e[1][0] == "profile.open")]
+    kinds = [e[0] for e in events]
     assert kinds.count("row") == 1 and kinds.count("event") == 1
-    blob = json.dumps([e[1:] for e in api.events], default=str)
+    blob = json.dumps([e[1:] for e in events], default=str)
     assert PID not in blob and "token" not in blob.lower() and "http" not in blob
-    row = next(e for e in api.events if e[0] == "row")
+    row = next(e for e in events if e[0] == "row")
     assert row[2]["note"] == "auto_warm" and row[2]["diag"]["outcome"] == "started"
 
 

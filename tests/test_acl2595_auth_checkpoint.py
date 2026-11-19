@@ -9,8 +9,9 @@ from src.fb_api import graph as g
 from src.fb_api import plain_errors as pe
 from tests.test_acl1761_api_create import FakeMeta, _draft, _publisher
 
-WANT = ("Meta asks to confirm this account (security check). Open Ads Manager in this profile and complete "
-        "the check, then press Retry on this profile. Existing ads keep running.")
+PANEL = ("Meta asks to confirm this account (security check). Open Ads Manager in this profile and complete "
+         "the check, then press Retry on this profile. Existing ads keep running.")      # account panel (account_blocks)
+WANT = "Meta asks to authenticate this account - open the profile in Multilogin, pass the check, then Publish again"
 
 
 class AuthMeta(FakeMeta):
@@ -79,7 +80,7 @@ def test_the_result_card_says_what_to_do_and_keeps_the_raw_text_in_details(tmp_p
     assert "Meta refused this step" not in res["error"]
     assert res["failure"]["line"] == WANT
     assert "Please authenticate your account" in str(res["failure"]["details"])
-    assert "authenticate" not in res["error"].lower()
+    assert "please authenticate your account" not in res["error"].lower()    # Meta's raw text stays in details
     # what was already created stays and is named
     assert any("Left in Meta" in x for x in res["failure"]["left"])
 
@@ -92,9 +93,9 @@ def test_the_block_is_persisted_and_shown_in_the_account_panel(tmp_path):
     held = blocks.hold_of("prof-1")
     assert held and held["kind"] == "checkpoint" and held["code"] == 31
     shown = blocks.view({"KLD_BFL_F91": "prof-1"})["KLD_BFL_F91"]
-    assert f"{shown['reason']} {shown['next']}" == WANT
+    assert f"{shown['reason']} {shown['next']}" == PANEL
     msg, code = blocks.refusal("prof-1", "KLD_BFL_F91", "publish")
-    assert code == "account_blocked" and msg.startswith(WANT)
+    assert code == "account_blocked" and msg.startswith(PANEL)
     # a plain checkpoint keeps its own text
     api._start_cooldown("prof-2", g.Checkpoint("c"), "B97")
     assert "Solve the checkpoint" in blocks.view({"B97": "prof-2"})["B97"]["next"]
