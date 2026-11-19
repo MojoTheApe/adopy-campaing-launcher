@@ -172,11 +172,25 @@ def test_dead_folder_endpoint_is_not_asked_again(folder_world):
     assert folder_world.calls == [API]          # the endpoint that answered goes first, the dead one is skipped
 
 
-def test_both_dead_folder_endpoints_are_never_both_skipped(folder_world):
+def test_all_endpoints_failing_on_the_first_call_marks_none_dead(folder_world):
     assert folder_world.launcher._resolve_folder_id(PID) is None
+    assert ml._folder_dead == {}                # nobody answered, so nobody is blamed for 600 s
     folder_world.calls.clear()
     folder_world.launcher._resolve_folder_id(PID)
-    assert len(folder_world.calls) == 1         # one is always tried, so a blip cannot disable the lookup
+    assert folder_world.calls == [ROOT, API]    # a blip on both addresses does not disable the lookup
+
+
+def test_failing_endpoint_is_dead_only_when_the_other_one_answered(folder_world):
+    folder_world.answers[API] = _Resp(200, {"data": {"profiles": []}})
+    folder_world.launcher._resolve_folder_id(PID)
+    assert ROOT in ml._folder_dead and API not in ml._folder_dead
+
+
+def test_an_endpoint_that_answers_later_is_remembered_not_dead(folder_world):
+    folder_world.launcher._resolve_folder_id(PID)          # both fail: nothing remembered
+    folder_world.answers[ROOT] = _Resp(200, {"data": {"profiles": []}})
+    folder_world.launcher._resolve_folder_id(PID)          # ROOT answers now
+    assert ROOT in ml._folder_ok and ROOT not in ml._folder_dead
 
 
 def test_dead_folder_endpoint_is_retried_after_the_ttl(folder_world, monkeypatch):

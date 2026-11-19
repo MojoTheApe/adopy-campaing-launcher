@@ -80,6 +80,14 @@ def _note_folder_endpoint(endpoint: str, *, answered: bool) -> None:
         _folder_dead[endpoint] = time.monotonic()
 
 
+def _retire_failed_folder_endpoints(failed: list[str], any_answered: bool) -> None:
+    """ACL-2822: адрес помечаем мёртвым только если другой адрес в этом же поиске ответил успешно.
+    Если не ответил ни один — это сбой сети или самого поиска, а не адреса, и ничего не запоминаем."""
+    if any_answered:
+        for ep in failed:
+            _note_folder_endpoint(ep, answered=False)
+
+
 class MultiloginLauncher:
     def __init__(self, config: MultiloginInstanceConfig, *, timeout: float = 120.0):
         self.config = config
@@ -102,12 +110,15 @@ class MultiloginLauncher:
             f"{self.config.launcher_base_v2.split('/api/')[0]}/profile?limit=100",
             f"https://api.multilogin.com/profile?limit=100",
         ])
+        failed: list[str] = []
+        any_answered = False
         for ep in endpoints:
             try:
                 r = requests.get(ep, headers=self._headers(), timeout=15)
                 if r.status_code != 200:
-                    _note_folder_endpoint(ep, answered=False)
+                    failed.append(ep)
                     continue
+                any_answered = True
                 _note_folder_endpoint(ep, answered=True)
                 body = r.json()
                 data = body.get("data") or {}
@@ -115,10 +126,12 @@ class MultiloginLauncher:
                 for p in (profiles or []):
                     pid = p.get("profile_id") or p.get("id") or ""
                     if pid == profile_id:
+                        _retire_failed_folder_endpoints(failed, any_answered)
                         return p.get("folder_id") or p.get("folderID") or None
             except Exception:
-                _note_folder_endpoint(ep, answered=False)
+                failed.append(ep)
                 continue
+        _retire_failed_folder_endpoints(failed, any_answered)
         return None
 
     def start_profile(self, folder_id: str | None, profile_id: str, *, headless: bool = False) -> StartedProfile:
