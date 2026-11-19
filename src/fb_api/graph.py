@@ -296,12 +296,12 @@ _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", 
 AUTH_REQUIRED_TITLE = "please authenticate your account"
 
 
-def is_definite_refusal(subcode: int | None, details: dict) -> bool:
+def is_definite_refusal(subcode: int | None, details: dict, text_rule: bool = True) -> bool:
     """ACL-2814: Meta's definite refusal, even with HTTP 500: `is_transient=False` together with Meta's own text
     (error_user_title / error_user_msg), or a known refusal subcode that is not marked transient."""
     if str(details.get("is_transient", "")).lower() != "false" or subcode in FILE_REFUSAL_SUBCODES:
         return False  # a file refusal off the image upload path keeps its ACL-2575 behaviour
-    return bool(details.get("error_user_title") or details.get("error_user_msg")
+    return bool((text_rule and (details.get("error_user_title") or details.get("error_user_msg")))
                 or subcode in DEFINITE_REFUSAL_SUBCODES)
 
 
@@ -738,7 +738,9 @@ class GraphClient:
                 raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
                                  details=details)
             if code in UNKNOWN_RESULT_CODES or (isinstance(status, int) and status >= 500):
-                if is_definite_refusal(sub, details):
+                # the text rule is only for 5xx answers; Graph codes 1/2 keep unknown/readback behaviour
+                if is_definite_refusal(sub, details, text_rule=(isinstance(status, int) and status >= 500
+                                                                and code not in UNKNOWN_RESULT_CODES)):
                     # ACL-2814: Meta said no, in so many words: nothing was written, so no readback and no resend.
                     raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
                                      details=details)
