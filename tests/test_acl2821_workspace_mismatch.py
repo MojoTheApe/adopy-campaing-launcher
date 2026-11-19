@@ -21,8 +21,10 @@ from src.fb_api import profile as prof  # noqa: E402
 from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError  # noqa: E402
 
 E403 = "Start profile failed HTTP 403: restricted permission"
-TO_KLD = "Multilogin app is signed in to Inhouse - switch it to KLD to open this account"
-TO_INHOUSE = "Multilogin app is signed in to KLD - switch it to Inhouse to open this account"
+TO_KLD = ("Multilogin refused to open this KLD profile - the Multilogin app may be signed in to "
+          "Inhouse (switch it to KLD), or the KLD sign-in is in use on another computer")
+TO_INHOUSE = ("Multilogin refused to open this Inhouse profile - the Multilogin app may be signed in to "
+              "KLD (switch it to Inhouse), or the Inhouse sign-in is in use on another computer")
 
 
 def _pid(n: int) -> str:
@@ -68,8 +70,8 @@ def test_403_is_classified_on_both_slots():
     assert mlx.classify(E403, "A") == mlx.WORKSPACE_MISMATCH
     assert mlx.classify("Start profile failed HTTP 403: x FORBIDDEN_REQUEST", "A") == mlx.WORKSPACE_MISMATCH
     assert mlx.classify(E403, "B") == mlx.SESSION_LOST
-    mlx.note_started("A")
-    assert mlx.classify(E403, "B") == mlx.WORKSPACE_MISMATCH
+    mlx.note_started("A")                          # прошлые старты ничего не меняют: причину 403 не узнать
+    assert mlx.classify(E403, "B") == mlx.SESSION_LOST
     assert mlx.classify("Start profile failed HTTP 500: boom", "A") == ""
 
 
@@ -80,60 +82,53 @@ def test_slot_a_refusal_names_the_workspaces_on_that_account():
     assert ei.value.code == "mlx_workspace_mismatch" and str(ei.value) == TO_INHOUSE
 
 
-def test_slot_b_refusal_after_slot_a_worked_means_the_app_is_in_inhouse():
-    mlx.note_started("A")
-    with mlx.scope(account="KLD B93"):
-        with pytest.raises(prof.ProfileError) as ei:
-            _open("B", Launcher(fail=True))
-    assert ei.value.code == "mlx_workspace_mismatch" and str(ei.value) == TO_KLD
+def test_slot_b_refusal_is_hedged_whatever_started_before():
+    for earlier in ("", "A"):
+        mlx.reset_for_tests()
+        if earlier:
+            mlx.note_started(earlier)
+        with mlx.scope(account="KLD B93"):
+            with pytest.raises(prof.ProfileError) as ei:
+                _open("B", Launcher(fail=True))
+        assert ei.value.code == "mlx_session_lost" and str(ei.value) == TO_KLD
 
 
-def test_slot_b_refusal_without_evidence_stays_a_lost_session():
-    with pytest.raises(prof.ProfileError) as ei:
-        _open("B", Launcher(fail=True))
-    assert ei.value.code == "mlx_session_lost"
-
-
-def test_known_mismatch_skips_the_start_and_leaves_the_other_slot_alone():
-    a, b = Launcher(), Launcher(fail=True)
+def test_slot_a_refusal_rechecks_once_then_skips_and_leaves_slot_b_alone():
+    a, b = Launcher(fail=True), Launcher()
     mlx.begin_batch("job")
-    mlx.note_started("A")
+    for n in (1, 2, 3):
+        with mlx.scope(account=f"Doc12{n}", batch="job"):
+            with pytest.raises(prof.ProfileError) as ei:
+                _open("A", a, n)
+        assert ei.value.code == "mlx_workspace_mismatch" and str(ei.value) == TO_INHOUSE
+    assert len(a.calls) == 2                       # отказ + одна перепроверка, третий не звался
     with mlx.scope(account="KLD B90", batch="job"):
-        with pytest.raises(prof.ProfileError):
-            _open("B", b, 1)
-    assert len(b.calls) == 1
-    with mlx.scope(account="KLD B91", batch="job"):
-        with pytest.raises(prof.ProfileError) as ei:
-            _open("B", b, 2)
-    assert str(ei.value) == TO_KLD and ei.value.code == "mlx_workspace_mismatch"
-    assert len(b.calls) == 1                      # второй старт не звался
-    with mlx.scope(account="Doc120", batch="job"):
-        assert _open("A", a, 3).port == "9333"    # слот A не затронут
+        assert _open("B", b, 4).port == "9333"     # другой слот не затронут
 
 
-def test_a_new_call_skips_without_a_start_once_the_other_slot_has_started():
-    mlx.note_started("A")
-    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "B", "KLD B90")
-    mlx.begin_batch("read-2")
-    mlx.note_started("A")                          # в этой пачке приложение уже показало себя в Inhouse
-    skip = mlx.refusal("read-2", "B", "KLD B92")
-    assert skip and skip["skipped"] and skip["code"] == "mlx_workspace_mismatch" and skip["message"] == TO_KLD
+def test_first_refusal_is_not_latched_it_gets_one_recheck():
+    mlx.begin_batch("job")
+    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "A", "Doc120")
+    assert mlx.refusal("job", "A", "Doc121") is None            # перепроверка: старт зовётся
+    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "A", "Doc121")
+    skip = mlx.refusal("job", "A", "Doc122")
+    assert skip and skip["skipped"] and skip["code"] == "mlx_workspace_mismatch" and skip["message"] == TO_INHOUSE
 
 
-def test_a_new_call_without_evidence_still_tries_once_so_a_switched_app_is_noticed():
-    mlx.note_started("A")
-    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "B", "KLD B90")
+def test_a_start_elsewhere_does_not_skip_a_new_batch():
+    mlx.note_started("B")
     mlx.begin_batch("later")
-    assert mlx.refusal("later", "B", "KLD B91") is None
+    assert mlx.refusal("later", "A", "Doc120") is None
 
 
 def test_one_successful_start_clears_the_refusal():
     mlx.begin_batch("job")
-    mlx.note_started("A")
-    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "B", "KLD B90")
-    assert mlx.refusal("job", "B", "KLD B91")["skipped"] is True
-    mlx.note_started("B")                          # пространство сменили — старт прошёл
-    assert mlx.refusal("job", "B", "KLD B91") is None
+    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "A", "Doc120")
+    mlx.refusal("job", "A", "Doc121")
+    mlx.note_failure(mlx.WORKSPACE_MISMATCH, "A", "Doc121")
+    assert mlx.refusal("job", "A", "Doc122")["skipped"] is True
+    mlx.note_started("A")                          # пространство сменили - старт прошёл
+    assert mlx.refusal("job", "A", "Doc122") is None
 
 
 def test_workspace_names_come_from_the_machine_env(monkeypatch):

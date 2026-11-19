@@ -27,8 +27,8 @@ from src.fb_api import profile as prof  # noqa: E402
 from src.meta_campaign_agent.multilogin_launcher import MultiloginLauncherError  # noqa: E402
 from tests.test_acl1812_warm_sessions import Rig  # noqa: E402
 
-LOST_TEXT = ("Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). "
-             "Sign in again in the Multilogin app here, then press Retry.")
+LOST_TEXT = ("Multilogin refused to open this KLD profile - the Multilogin app may be signed in to "
+             "Inhouse (switch it to KLD), or the KLD sign-in is in use on another computer")
 SKIP_TEXT = "Multilogin: sign in again, then press Retry."   # ACL-2668: одна общая причина пропуска
 PROXY_TEXT = "The proxy login for this profile is wrong or expired — update it in Multilogin"
 E403 = "Start profile failed HTTP 403: restricted permission"
@@ -202,11 +202,10 @@ def test_batch_rechecks_once_then_skips_remaining_slot_b_and_slot_a_continues(tm
     results = b.rig.reg.open_many(_items(["B", "A", "B", "B", "B", "A"]), job_id="job1")
     assert results["B1"]["code"] == "mlx_session_lost" and not results["B1"].get("skipped")
     # ACL-2668: следующий старт слота — перепроверка; он тоже отказал по-настоящему.
-    # ACL-2821: A2 к тому времени стартовал, приложение в Inhouse: это не потеря сессии KLD.
-    assert results["B3"]["code"] == "mlx_workspace_mismatch" and not results["B3"].get("skipped")
+    assert results["B3"]["code"] == "mlx_session_lost" and not results["B3"].get("skipped")
     for label in ("B4", "B5"):
-        assert results[label]["code"] == "mlx_workspace_mismatch" and results[label]["skipped"] is True
-        assert "signed in to Inhouse" in results[label]["message"]
+        assert results[label]["code"] == "mlx_session_lost" and results[label]["skipped"] is True
+        assert results[label]["message"] == SKIP_TEXT        # одна общая причина, не поток ошибок
     assert results["A2"]["ok"] and results["A6"]["ok"]
     assert len(b.launchers["B"].calls) == 2            # отказ + одна перепроверка
     assert len(b.launchers["A"].calls) == 2            # слот A не затронут
