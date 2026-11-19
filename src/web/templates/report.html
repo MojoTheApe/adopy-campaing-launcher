@@ -8561,38 +8561,39 @@ window.cbLifetime = (function () {
     return out.join(' · ');
   }
 
-  /* "00:00–18:00, 22:00–24:00" для окон одного дня. */
-  function runsText(wins) {
-    return wins.slice().sort(function (x, y) { return x.start_minute - y.start_minute; }).map(function (w) {
-      return pad2(w.start_minute / 60) + ':00–' + pad2(w.end_minute / 60) + ':00';
-    }).join(', ');
-  }
-  /* "Every day: 00:00–18:00, 22:00–24:00" или "Mon–Fri 00:00–18:00; Sat–Sun 02:00–24:00": дни с одинаковыми часами сжаты. */
-  function convertedText(conv) {
-    var perDay = {}, groups = {}, order = [];
-    conv.forEach(function (w) { w.days.forEach(function (d) { (perDay[d] = perDay[d] || []).push(w); }); });
-    UI_DAYS.forEach(function (d) {
-      if (!perDay[d]) return;
-      var t = runsText(perDay[d]);
-      if (!groups[t]) { groups[t] = []; order.push(t); }
-      groups[t].push(d);
+  /* ACL-2839: часы в поясе кабинета так, как их покажет Ads Manager: "Mon–Thu 08–19, Fri–Sat 08–17, Sun 08–19".
+     Окна уже переведены convertWindows (тот же алгоритм, что у Publish); здесь только запись: дни окна
+     режутся на подряд идущие отрезки, порядок - как у строки Израиля (первый день, начало). */
+  function adsManagerText(conv) {
+    var parts = [];
+    conv.forEach(function (w) {
+      var pos = w.days.map(function (d) { return UI_DAYS.indexOf(d); }).sort(function (x, y) { return x - y; });
+      var i = 0;
+      while (i < pos.length) {
+        var j = i;
+        while (j + 1 < pos.length && pos[j + 1] === pos[j] + 1) j += 1;
+        parts.push({ first: pos[i], start: w.start_minute,
+          text: (j === i ? DAY_NAMES[UI_DAYS[pos[i]]] : DAY_NAMES[UI_DAYS[pos[i]]] + '–' + DAY_NAMES[UI_DAYS[pos[j]]])
+            + ' ' + pad2(w.start_minute / 60) + '–' + pad2(w.end_minute / 60) });
+        i = j + 1;
+      }
     });
-    if (order.length === 1 && groups[order[0]].length === 7) return 'Every day: ' + order[0];
-    return order.map(function (t) { return daysText(groups[t]) + ' ' + t; }).join('; ');
+    return parts.sort(function (x, y) { return x.first - y.first || x.start - y.start; })
+      .map(function (p) { return p.text; }).join(', ');
   }
-  /* Что получит Meta: сетка Израиля в часах кабинета (разница поясов - на дату старта). */
+  /* Что покажет Ads Manager: сетка Израиля в часах кабинета (разница поясов - на дату старта). */
   function accountPreview(slot) {
     if (!isLifetime(slot) || !scheduleOn(slot)) return '';
     var wins = parseWindows(slot);
     if (!wins.length) return '';
     var f = builderAccountFacts(accountOf(slot));
-    if (!validZone(f.timezone_name)) return 'Account time zone is read on Check plan; hours are converted then.';
+    if (!validZone(f.timezone_name)) return 'Ads Manager hours appear after Check plan reads the account time zone';
     var ms = isoToMs(String((fld(slot, 'start_time') || {}).value || '').trim(), teamZone());
     var shift = shiftHoursAt(f.timezone_name, ms == null ? Date.now() : ms);
     if (shift !== Math.round(shift)) {
       return 'The time difference to the account (' + f.timezone_name + ') is not a whole number of hours; Check plan will refuse this schedule.';
     }
-    return 'Meta gets account time (' + f.timezone_name + '): ' + convertedText(convertWindows(wins, shift));
+    return 'In Ads Manager (' + f.timezone_name + '): ' + adsManagerText(convertWindows(wins, shift));
   }
 
   /* Клиентская предпроверка (зеркало серверной): [{id, text}]. */
