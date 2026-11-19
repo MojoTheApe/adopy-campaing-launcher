@@ -48,8 +48,10 @@ def cached_pixels(account: str, *, now: float | None = None) -> dict | None:
 
 
 def remember_pixels(account: str, result: dict, *, now: float | None = None) -> None:
-    """Запомнить только удачное чтение (ready/empty); ошибки не кэшируются."""
-    if not (isinstance(result, dict) and result.get("ok") and result.get("state") in ("ready", "empty")):
+    """Запомнить только непустое удачное чтение (ready); пустой ответ и ошибки не кэшируются:
+    после подключения пикселя в Business Settings следующий клик перечитывает список (ACL-2835)."""
+    if not (isinstance(result, dict) and result.get("ok") and result.get("state") == "ready"
+            and result.get("pixels")):
         return
     from config.paths import _atomic_write
 
