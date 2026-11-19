@@ -5397,7 +5397,7 @@ def _lock_holds(accounts) -> dict:
     try:
         from src.fb_api import account_blocks
 
-        return {a: {k: v.get(k) for k in ("kind", "code", "reason", "next", "at", "seen", "person_lock")}
+        return {a: {k: v.get(k) for k in ("kind", "code", "reason", "next", "at", "seen", "person_lock", "page", "title")}
                 for a, v in account_blocks.view(list(accounts)).items() if v.get("person_lock")}
     except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the page
         return {}

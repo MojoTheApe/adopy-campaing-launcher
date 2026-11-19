@@ -132,11 +132,20 @@ def _person_lock(hold) -> dict | None:
         seen = datetime.fromtimestamp(float(hold.get("seen") or hold.get("at"))).strftime("%d.%m %H:%M")
     except (TypeError, ValueError, OverflowError, OSError):
         seen = ""
+    login = hold.get("page") == "login"
+    word = "Logged out of Facebook" if login else "Facebook locked"
+    title = " ".join(str(hold.get("title") or "").split())
+    if title:
+        # ACL-2841: Meta's own text from the tab title; without a readable title the fixed wording stays.
+        head = f'Facebook says: "{title}".'
+    elif login:
+        head = "The profile is logged out of Facebook (log in inside the open profile window)."
+    else:
+        head = "The Facebook user of this profile is locked (for example: log in with another device to unlock it)."
     return {
-        "word": "Facebook locked",
-        "line": "Facebook locked" + (f" · since {since}" if since else "") + (f" · read {seen}" if seen else ""),
-        "tip": ("The Facebook user of this profile is locked (for example: log in with another device to unlock it). "
-                + str(hold.get("next") or "Solve it in the open profile window, then press Retry.")).strip(),
+        "word": word,
+        "line": word + (f" · since {since}" if since else "") + (f" · read {seen}" if seen else ""),
+        "tip": (head + " " + str(hold.get("next") or "Solve it in the open profile window, then press Retry.")).strip(),
     }
 
 

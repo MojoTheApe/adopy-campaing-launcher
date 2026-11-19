@@ -455,3 +455,74 @@ def test_a_timed_stop_that_holds_back_a_persons_open_says_why_with_the_time(env)
         q._settle("B", "open", paused, False)
     row = q.state()["rows"]["B"]
     assert row["state"] == "failed" and "Until " in row["error"] and halt["reason"] in row["error"]
+
+
+# ───────── ACL-2841: login-page hold and Meta's own text ─────────
+
+LOGIN_URL = "https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2F"
+RECOVER_URL = "https://www.facebook.com/recover/initiate"
+
+
+@pytest.mark.parametrize("url", [LOGIN_URL, RECOVER_URL])
+def test_a_login_or_recover_tab_records_a_hold_shown_red_as_logged_out(url, monkeypatch):
+    import socket
+
+    def no_network(*a, **k):
+        raise AssertionError("nothing may be called")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    assert blocks.note_tab_url(KEY, LABEL, url, "Open profile") is True
+    held = blocks.hold_of(KEY)
+    assert blocks.is_person_lock(held) and held["page"] == "login"
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    state = astate.account_state({"account": LABEL, "status": {}, "has_data": False, "hold": hold})
+    assert state["key"] == "issue"
+    assert state["status_line"].startswith("Logged out of Facebook")
+    assert "logged out of Facebook" in state["status_tip"]
+
+
+def test_the_row_shows_metas_title_and_falls_back_without_one():
+    assert blocks.note_tab_url(KEY, LABEL, CHECKPOINT_URL, "Open profile", "  Your account has been\n locked  ") is True
+    hold = blocks.view({LABEL: KEY})[LABEL]
+    assert hold["title"] == "Your account has been locked"
+    state = astate.account_state({"account": LABEL, "status": {}, "has_data": False, "hold": hold})
+    assert 'Facebook says: "Your account has been locked".' in state["status_tip"]
+    # No readable title: the current wording.
+    blocks.note_tab_url("k-nt", "NT", CHECKPOINT_URL, "Open profile", "")
+    plain = astate.account_state({"account": "NT", "status": {}, "has_data": False,
+                                  "hold": blocks.view({"NT": "k-nt"})["NT"]})
+    assert "Facebook says" not in plain["status_tip"] and "is locked" in plain["status_tip"]
+    blocks.note_tab_url("k-lg", "LG", LOGIN_URL, "Open profile", "")
+    login = astate.account_state({"account": "LG", "status": {}, "has_data": False,
+                                  "hold": blocks.view({"LG": "k-lg"})["LG"]})
+    assert "logged out of Facebook" in login["status_tip"]
+
+
+def test_a_later_sight_updates_the_title_and_keeps_the_first_date():
+    blocks.note_tab_url(KEY, LABEL, LOGIN_URL, "Open profile")
+    first = blocks.hold_of(KEY)["at"]
+    blocks.note_tab_url(KEY, LABEL, LOGIN_URL, "Open profile", "Log in to Facebook")
+    held = blocks.hold_of(KEY)
+    assert held["at"] == first and held["title"] == "Log in to Facebook" and held["page"] == "login"
+
+
+def test_open_profile_passes_the_tab_title_and_local_targets_read_it(monkeypatch):
+    from src.fb_api import warm
+    from src.web import warm_api
+
+    monkeypatch.setattr(warm_api, "_profile_id", lambda label: "pid")
+    monkeypatch.setattr(account_spend, "_profile_key", lambda label, *a, **k: KEY)
+    assert warm_api.note_tab_lock(LABEL, urls=[("about:blank", ""), (LOGIN_URL, "Log in to Facebook")]) is True
+    assert blocks.hold_of(KEY)["title"] == "Log in to Facebook"
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self):
+            return json.dumps([{"type": "page", "url": LOGIN_URL, "title": "Log in to Facebook"},
+                               {"type": "service_worker", "url": "x", "title": "y"}]).encode()
+
+    import urllib.request
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open", lambda self, req, timeout=None: Resp())
+    assert warm.local_page_targets(9222) == [(LOGIN_URL, "Log in to Facebook")]
+    assert warm.local_page_urls(9222) == [LOGIN_URL]
