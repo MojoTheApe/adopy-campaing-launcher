@@ -468,7 +468,7 @@ def test_instant_form_needs_no_pixel_on_the_account(tmp_path):
     web_dir = tmp_path / "w"
     web_dir.mkdir()
     out2, _ = _run(meta2, _draft(web_dir))
-    assert "pixels/datasets" in out2.error, "сайтовому пути пиксель по-прежнему нужен"
+    assert "no pixel/dataset" in out2.error, "сайтовому пути пиксель по-прежнему нужен"
 
 
 def test_readback_checks_the_form_ownership_and_the_ad_set_destination(tmp_path):
