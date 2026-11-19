@@ -158,7 +158,8 @@ RULES: list[dict[str, Any]] = [
        "the ad is set for Instagram placements: in Ads Manager press 'Use Facebook Page' for this Page "
        "(or connect an Instagram account), then run Check plan again; or choose Manual Facebook-only placements"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
-       "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
+       "website conversions need a pixel: choose it in the Pixel field of this campaign "
+       "(Automatic works only when the ad account has exactly one)", sel=".cb-pixel-select",
        applies="website"),
     _r("form_active", "Instant Form of the Page", ERROR, "server",
        "pick an ACTIVE form of this Page (Refresh forms)", sel=".cb-form-select", level="ad",
