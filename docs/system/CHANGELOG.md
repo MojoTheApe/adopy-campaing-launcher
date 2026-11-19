@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2652 — A profile hold is lifted by the owner — 2026-11-19
+
+Open profile (single and "Open profiles for today") and a person's budget/status edit lift the "Meta asks to confirm this account" hold (code 31) and make one status call; if Meta asks again the hold returns. Retry shows for any held profile (Home row, Manage, the red banner) and is a status-only read. Open profile also ends a "tab stopped answering" hold, and that refusal no longer carries the `account_blocked` code. Background reads never lift a hold; policy, logged-out and checkpoint holds are never lifted by an edit.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1652).
+
 ## ACL-2792 — Fast proxy probe retry — 2026-11-19
 
 When the profile proxy probe fails its first attempt, ACL now re-probes the same neutral host every second within the same 12 s budget instead of sleeping the whole time.

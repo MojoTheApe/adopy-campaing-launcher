@@ -709,6 +709,7 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
                 _start_cooldown(key, client.stopped, account)
                 stop = stop or client.stopped
             sess.notes["calls"] = client.calls
+            _blocks.settle_person_probe(key, client)      # ACL-2652: Meta answered a person's write: the code-31 hold ends
     finally:
         lease.release(stop)
 
@@ -773,7 +774,8 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False, 
     # ACL-2091: a held profile (checkpoint, login page, policy block, frozen tab) is refused for everything
     # except a read a person started on purpose (Retry / Read): that one looks at the page, and lifts the hold
     # below once the page is healthy.
-    probing = left == float("inf") and _blocks.buyer_started()
+    # ACL-2652: a person's own write may also pass a code-31 hold (one attempt; the hold is cleared only after Meta answers).
+    probing = left == float("inf") and (_blocks.buyer_started() or _blocks.person_auth_probe(key))
     blocked = None if probing else _blocks.refusal(
         key, account, "read", timed=(left, why) if left > 0 and not frozen_deferred else None, replaceable=False)
     if blocked:
@@ -894,6 +896,7 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False, 
                 _start_cooldown(key, client.stopped, account)
                 problem = client.stopped
             sess.notes["calls"] = client.calls
+            _blocks.settle_person_probe(key, client)      # ACL-2652: Meta answered a person's write: the code-31 hold ends
     except BaseException as exc:
         problem = problem or exc
         raise
@@ -1410,7 +1413,8 @@ def _turn_off_locked(account: str, level: str, object_id: str, *, parent_id: str
     wrote = [False]
     try:
         # Читатель браузера: обновление программы видит запись в полёте (как у команд ACL-1800).
-        with browser_operation.reading(), _session(account, commands=True) as sess:
+        # ACL-2652: the shut-off is a person's write: it may pass a code-31 hold, only after the busy check above.
+        with _blocks.person_edit(), browser_operation.reading(), _session(account, commands=True) as sess:
             _turn_off_in_session(out, sess, parent_id, expected_name, wrote)
     except Exception as exc:  # noqa: BLE001 — любой исход оставляет след в журнале
         if out.state not in ("off", "already_off"):
