@@ -116,8 +116,11 @@
   // ── Модель диалога (чистая функция — её и тестируем) ──
   function titleFor(op) {
     var n = (op.affected || []).length;
+    var kinds = {};
+    (op.affected || []).forEach(function (a) { kinds[a.field === 'lifetime_budget' ? 'lifetime' : 'daily'] = true; });
+    var budgetWord = kinds.lifetime && kinds.daily ? 'budget' : kinds.lifetime ? 'lifetime budget' : 'daily budget';
     var what = { set_status: op.value === 'ACTIVE' ? 'Switch on' : 'Switch off',
-                 set_budget: 'Change daily budget of', set_bid: 'Change bid of' }[op.command] || 'Change';
+                 set_budget: 'Change ' + budgetWord + ' of', set_bid: 'Change bid of' }[op.command] || 'Change';
     return what + ' ' + n + ' object' + (n === 1 ? '' : 's');
   }
 
@@ -261,14 +264,13 @@
   function budgetState(row) {
     if (row.level === 'ad') return { enabled: false, reason: 'Ads have no budget' };
     var b = row.budget || { kind: 'none' };
-    if (b.kind === 'daily') return { enabled: true, reason: '' };
+    if (b.kind === 'daily' || b.kind === 'lifetime') return { enabled: true, reason: '' };
     if (b.kind === 'ad_sets') {   // у кампании бюджета нет: показываем бюджеты её ad set
       return { enabled: true, reason: '', openKids: true, label: 'View ad set budgets' };
     }
     if (b.kind === 'inherited') return { enabled: false, reason: 'Budget is set on the campaign' };
-    if (b.kind === 'lifetime') return { enabled: false, reason: 'Lifetime budget is not supported here' };
     if (b.kind === 'unit_unknown') return { enabled: false, reason: 'The budget unit of this currency is not confirmed' };
-    return { enabled: false, reason: 'No daily budget on this object' };
+    return { enabled: false, reason: 'No budget on this object' };
   }
 
   function bidState(row) {
@@ -356,6 +358,8 @@
       row.status_raw = item.saved;
     } else if (item.field === 'daily_budget') {
       row.budget = { kind: 'daily', amount: item.saved / item.unit };
+    } else if (item.field === 'lifetime_budget') {
+      row.budget = { kind: 'lifetime', amount: item.saved / item.unit };
     } else if (item.field === 'bid_amount') {
       row.bid_amount = item.saved / item.unit;
     }
