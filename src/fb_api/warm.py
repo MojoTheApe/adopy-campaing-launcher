@@ -294,8 +294,8 @@ def _url_stop(url: str) -> GraphStop | None:
     return None
 
 
-def local_page_urls(port: int, *, timeout: float = 2.0) -> list[str]:
-    """ACL-2653: addresses of the open tabs of a profile from its LOCAL debugging port (`/json/list`).
+def local_page_targets(port: int, *, timeout: float = 2.0) -> list[tuple[str, str]]:
+    """ACL-2653/2841: `(address, title)` of the open tabs of a profile from its LOCAL debugging port (`/json/list`).
 
     One request to 127.0.0.1, no Graph call, no Meta, no script in a page. Unreachable: an empty list."""
     import urllib.request
@@ -310,7 +310,13 @@ def local_page_urls(port: int, *, timeout: float = 2.0) -> list[str]:
         return []
     if not isinstance(targets, list):
         return []
-    return [str(t.get("url") or "") for t in targets if isinstance(t, dict) and t.get("type") == "page"]
+    return [(str(t.get("url") or ""), str(t.get("title") or ""))
+            for t in targets if isinstance(t, dict) and t.get("type") == "page"]
+
+
+def local_page_urls(port: int, *, timeout: float = 2.0) -> list[str]:
+    """ACL-2653: addresses of the open tabs of a profile (see `local_page_targets`)."""
+    return [url for url, _title in local_page_targets(port, timeout=timeout)]
 
 
 def _url_act(url: str) -> str:
