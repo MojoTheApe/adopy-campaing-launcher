@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2790 — Keep a profile open for the next action without holding a slot — 2026-11-18
+
+After a buyer-started read, command or Check plan on the API path, the profile it opened stays open as a "preemptible" kept window, so a command pressed next on that account does not reopen the profile. Any job that needs a slot or memory (read, command, Check plan, Publish, Open profile) closes such a window at once, least recently used first — nobody waits for it. Post-publish kept windows (ACL-2113) and the RPA path are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1790).
+
 ## ACL-2652 — A profile hold is lifted by the owner — 2026-11-19
 
 Open profile (single and "Open profiles for today") and a person's budget/status edit lift the "Meta asks to confirm this account" hold (code 31) and make one status call; if Meta asks again the hold returns. Retry shows for any held profile (Home row, Manage, the red banner) and is a status-only read. Open profile also ends a "tab stopped answering" hold, and that refusal no longer carries the `account_blocked` code. Background reads never lift a hold; policy, logged-out and checkpoint holds are never lifted by an edit.

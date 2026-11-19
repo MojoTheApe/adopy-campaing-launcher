@@ -732,7 +732,11 @@ def _run_job(job_id: str, slots: list[dict[str, Any]], **kwargs: Any) -> None:
     """
     ended = _job_ended.setdefault(job_id, threading.Event())
     try:
-        _run_job_inner(job_id, slots, **kwargs)
+        # ACL-2790: Publish стоит в очереди на аккаунте с отправки — профиль после чтения не закрывается.
+        from src.analysis_agent import account_spend as _as
+
+        with _as.action_queued(str(kwargs.get("account_label") or "")):
+            _run_job_inner(job_id, slots, **kwargs)
     except job_cancel.JobCancelled:
         with _jobs_lock:
             live = not _abandoned(job_id)

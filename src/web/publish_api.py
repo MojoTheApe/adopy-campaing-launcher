@@ -1182,7 +1182,11 @@ def _plan_in_read_session(account_label: str, drafts: list[Any], *,
     # ACL-2272: Check plan is pressed by the person: an allowed path that may start a closed profile
     # (and keeps it `plan_keep_open_s()` for the Publish that usually follows).
     # ACL-2299 (C): nothing is written here, so a silent tab is waited for / the read asked again, not failed.
-    with user_started_action(), read_patience(), _api._session(account_label) as sess:
+    from src.analysis_agent import account_spend as _as
+
+    # ACL-2790: Check plan стоит в очереди на аккаунте — профиль после чтения не закрывается.
+    with _as.action_queued(account_label), user_started_action(), read_patience(), \
+            _api._session(account_label) as sess:
         client = sess.client
         if client.allow_writes:
             raise _PlanReadContractError("the read session must not be able to write")

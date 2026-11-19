@@ -231,7 +231,8 @@ def open_session(account: str, commands: bool):
     from src.fb_api.connection import user_started_action
 
     # ACL-2272: preview/execute are started by the person, so they may bring up a closed profile.
-    with browser_operation.reading(), profile_lock(_as._profile_key(account)):
+    # ACL-2790: команда стоит в очереди с момента ожидания замка — профиль после чтения не закрывается.
+    with _as.action_queued(account), browser_operation.reading(), profile_lock(_as._profile_key(account)):
         # ACL-2652: a budget/status/bulk edit is a person's write: it may pass an auth hold (code 31) and make one
         # real attempt. The hold file is cleared only after Meta answers; a failure before any call keeps it.
         from src.fb_api import account_blocks as _blocks
