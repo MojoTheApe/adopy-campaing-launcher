@@ -237,6 +237,14 @@ _OWN_TEXT = ("PlanError", "ApiPublishError", "CreationStopped", "ProfileLeaseErr
 _QUOTED = re.compile(r"'([^']{1,60})'")
 
 
+def _meta_said(exc: BaseException | None) -> str:
+    """ACL-2814: Meta's own title/message of a non-transient refusal (scrubbed); empty if it gave none."""
+    det = getattr(exc, "details", None)
+    if not isinstance(det, dict) or str(det.get("is_transient", "")).lower() != "false":
+        return ""
+    return _tm.scrub(str(det.get("error_user_title") or det.get("error_user_msg") or "")).strip()
+
+
 def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
     """Last-resort free-text match. `own`: our message with user data inside: quoted parts removed, phrases only."""
     if own:
@@ -322,6 +330,10 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
             return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+        said = _meta_said(exc)
+        if said:  # ACL-2814: a definite refusal with Meta's own words: show them
+            return Failure("meta_refusal", "Meta: " + said.rstrip("."), "Fix it in the draft, then Publish again.",
+                           details=details, stage=stage)
         return _make("unknown", ctx, details=details)
     if exc is not None and raw and own:
         return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details, stage=stage)

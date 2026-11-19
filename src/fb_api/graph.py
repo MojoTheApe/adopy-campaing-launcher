@@ -283,6 +283,9 @@ REJECTION_SUBCODES = frozenset({1870226})
 #: ACL-2575: Meta's definite refusal of an uploaded file (1487411 FileTypeNotSupported, HTTP 500, is_transient=False):
 #: a refusal of that file, never "the write result is unknown".
 FILE_REFUSAL_SUBCODES = frozenset({1487411})
+#: ACL-2814: подкоды, с которыми Meta отвечает определённым отказом при любом пути записи (1784033: пиксель, который
+#: продвигает объявление, больше недоступен; HTTP 500, is_transient=False). Отказ, а не «результат неизвестен».
+DEFINITE_REFUSAL_SUBCODES = frozenset({1784033})
 #: Отказы помощника страницы ДО отправки: к Meta ничего не ушло.
 #: ACL-2338: `reason` of a `call_unknown` reply that is carried into `WriteUnknown.reason`.
 _UNKNOWN_REASONS = {"cdp_timeout", "context_stale", "page_closed"}
@@ -291,6 +294,15 @@ _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", 
 
 
 AUTH_REQUIRED_TITLE = "please authenticate your account"
+
+
+def is_definite_refusal(subcode: int | None, details: dict) -> bool:
+    """ACL-2814: Meta's definite refusal, even with HTTP 500: `is_transient=False` together with Meta's own text
+    (error_user_title / error_user_msg), or a known refusal subcode that is not marked transient."""
+    if str(details.get("is_transient", "")).lower() != "false" or subcode in FILE_REFUSAL_SUBCODES:
+        return False  # a file refusal off the image upload path keeps its ACL-2575 behaviour
+    return bool(details.get("error_user_title") or details.get("error_user_msg")
+                or subcode in DEFINITE_REFUSAL_SUBCODES)
 
 
 def is_auth_required(code: int | None, subcode: int | None = None, title: str = "") -> bool:
@@ -726,6 +738,10 @@ class GraphClient:
                 raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
                                  details=details)
             if code in UNKNOWN_RESULT_CODES or (isinstance(status, int) and status >= 500):
+                if is_definite_refusal(sub, details):
+                    # ACL-2814: Meta said no, in so many words: nothing was written, so no readback and no resend.
+                    raise GraphError(f"Graph API error {code}: {msg}", code=code, subcode=sub, status=status,
+                                     details=details)
                 self.unreconciled = path
                 raise WriteUnknown(f"Graph API error {code} — the write result is unknown: {msg}", path=path,
                                    code=code, subcode=sub, status=status if isinstance(status, int) else None,

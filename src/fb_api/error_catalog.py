@@ -102,6 +102,7 @@ CATALOG: dict[tuple[int, int | None], Entry] = {
     (100, None): _e("Meta rejected a parameter as invalid.", _FIX_FIELD, False, "validation"),
     (100, 33): _e("Meta rejected the request: the token is not a system user of this object.", _FIX_PERM, False, "permission"),
     (100, 1487694): _e("A targeting category you selected is no longer available.", "Pick another targeting option and publish again.", False, "validation"),
+    (100, 1784033): _e("Meta: the pixel this ad promotes is no longer available.", "Choose a different pixel, then Publish again.", False, "validation", "tests/test_acl2814_definite_refusal.py", False),
     (100, 1752129): _e("This task combination is not supported for the user role.", _FIX_PERM, False, "permission"),
     (100, 3858258): _e("Meta could not download the image.", "Check that the image URL is public and not blocked, then retry.", True, "validation"),
     (104, None): _e("Meta says the request signature is incorrect.", "Report this to the ACL team.", False, "other"),
