@@ -484,9 +484,11 @@ def note_tab_lock(label: str, *, urls=None) -> bool:
         pid = _profile_id(label)
         if urls is None:
             sess = _registry().session(pid) if pid else None
-            urls = warm.local_page_urls(getattr(sess, "port", 0)) if sess is not None else []
+            urls = warm.local_page_targets(getattr(sess, "port", 0)) if sess is not None else []
         key = account_spend._profile_key(label)  # noqa: SLF001
-        return any([account_blocks.note_tab_url(key, label, u, "Open profile") for u in urls])
+        # ACL-2841: a tab is an address or an `(address, title)` pair; the title is Meta's own text for the lock.
+        pairs = [(u, "") if isinstance(u, str) else (str(u[0]), str(u[1])) for u in urls]
+        return any([account_blocks.note_tab_url(key, label, u, "Open profile", t) for u, t in pairs])
     except Exception:  # noqa: BLE001 - the open already worked; a failed look is only "not detected"
         log.debug("The profile tab was not checked for a Facebook lock", exc_info=True)
         return False

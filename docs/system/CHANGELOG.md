@@ -1,5 +1,14 @@
 # System history
 
+## ACL-2841 — Facebook lock: login-page hold and Meta's own text — 2026-11-19
+
+A profile tab on the Facebook login or recover page now holds that account (red, "Logged out of Facebook"), and the row shows the tab title Meta wrote, read from the local tab list. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1841).
+
+## ACL-2839 — Builder schedule shows the hours as Ads Manager will — 2026-11-19
+
+Under the lifetime schedule grid the line now reads "In Ads Manager (<time zone>): Mon–Thu 08–19, ..." using the same Israel-to-account conversion Publish writes (account time zone and DST of the campaign dates); it waits for Check plan while the zone is unknown.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1839).
+
 ## ACL-2835 — Pixel field: empty list wording and no caching of empty answers — 2026-11-19
 
 An account with no pixel now shows "No pixel found on this account" instead of "the only pixel", and an empty answer is no longer cached, so the next open or Refresh pixels re-reads it.

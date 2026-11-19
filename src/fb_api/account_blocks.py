@@ -173,7 +173,8 @@ def is_hold_stop(stop: Any, *, replacement_spent: bool = True) -> bool:
     return False
 
 
-def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_spent: bool = True) -> bool:
+def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_spent: bool = True,
+              page: str = "", title: str = "") -> bool:
     """Record a stop. Returns True when a persisted hold was set (False: timed or ignored).
 
     `action` defaults to the one named by the entry point (`problem_action`). Timed kinds only remember
@@ -198,6 +199,11 @@ def note_stop(key: str, label: str, stop: Any, action: str = "", *, replacement_
         again = old.get("kind") == kind and old.get("code") == _code_of(stop)
         holds[key] = {"kind": kind, "code": _code_of(stop), "label": str(label or ""), "action": action,
                       "at": old.get("at", now) if again else now, "target_id": str(getattr(stop, "target_id", "") or "")}
+        # ACL-2841: the tab it was seen on (`login`) and Meta's own page title, shown on the row.
+        if page:
+            holds[key]["page"] = page
+        if title:
+            holds[key]["title"] = title
         if again:
             holds[key]["seen"] = now
         if not _save(holds):
@@ -212,33 +218,44 @@ def is_person_lock(held: dict[str, Any] | None) -> bool:
     return bool(held) and held.get("kind") == "checkpoint" and held.get("code") != AUTH_REQUIRED_CODE
 
 
-def note_person_lock(key: str, label: str, action: str = "") -> bool:
+def _clean_title(title: str) -> str:
+    """ACL-2841: the tab title as Meta wrote it: one line, no control characters, bounded."""
+    return " ".join(str(title or "").split())[:200]
+
+
+def note_person_lock(key: str, label: str, action: str = "", *, page: str = "", title: str = "") -> bool:
     """Record a person-level Facebook lock (no Graph code). Keeps the original `at` of a hold that already exists.
 
+    `page="login"`: the tab is on the Facebook login page (the profile is logged out). `title`: Meta's page title.
     Returns True when a new hold was written. Nothing here talks to Meta; only a person's Retry clears it.
     """
     if not key:
         return False
+    title = _clean_title(title)
     if is_held(key):
-        _touch_seen(key)
+        _touch_seen(key, title)
         return False
     from src.fb_api.graph import Checkpoint
 
-    return note_stop(key, label, Checkpoint("the profile is on a Facebook checkpoint"), action or current_action())
+    text = "the profile is logged out of Facebook" if page == "login" else "the profile is on a Facebook checkpoint"
+    return note_stop(key, label, Checkpoint(text), action or current_action(), page=page, title=title)
 
 
-def _touch_seen(key: str) -> None:
+def _touch_seen(key: str, title: str = "") -> None:
     """The time the lock was last seen (read time of the refusal); the first date `at` stays."""
     with _LOCK:
         holds = _load()
         if key in holds:
             holds[key]["seen"] = time.time()
+            if title and holds[key].get("kind") == "checkpoint":
+                holds[key]["title"] = title
             _save(holds)
 
 
-def note_tab_url(key: str, label: str, url: str, action: str = "") -> bool:
+def note_tab_url(key: str, label: str, url: str, action: str = "", title: str = "") -> bool:
     """ACL-2653: a profile tab on facebook.com/checkpoint/... is a Facebook lock: record the hold (once) and say so.
 
+    ACL-2841: the login/recover page counts too (the profile is logged out); `title` is the tab title, Meta's own text.
     No Graph call, only the address. True when the address is a lock."""
     import urllib.parse
 
@@ -251,9 +268,10 @@ def note_tab_url(key: str, label: str, url: str, action: str = "") -> bool:
     host = (parts.hostname or "").lower()
     if not (host == "facebook.com" or host.endswith(".facebook.com")):
         return False
-    if classify_stop_url(parts.path) != "checkpoint":
+    where = classify_stop_url(parts.path)
+    if where not in ("checkpoint", "login"):
         return False
-    note_person_lock(key, label, action)    # keeps the `at` of an existing hold
+    note_person_lock(key, label, action, page="login" if where == "login" else "", title=title)    # keeps the `at` of an existing hold
     return True
 
 
@@ -480,7 +498,8 @@ def view(labels: dict[str, str] | list[str]) -> dict[str, dict[str, Any]]:
         out[label] = {"kind": held["kind"], "code": held.get("code"), "reason": reason, "next": step,
                       "action": held.get("action") or "", "at": held.get("at"), "left_s": None,
                       "window_open": None, "can_retry": True, "needs_confirm": held["kind"] == "policy_block",
-                      "person_lock": is_person_lock(held), "seen": held.get("seen") or held.get("at")}
+                      "person_lock": is_person_lock(held), "seen": held.get("seen") or held.get("at"),
+                      "page": held.get("page") or "", "title": held.get("title") or ""}
     return out
 
 

@@ -433,7 +433,7 @@
     var lock = ((view || {}).locks || {})[account], hold = ((view || {}).holds || {})[account], row = ((view || {}).rows || {})[account] || {};
     if (lock) {
       var seen = lock.seen ? new Date(lock.seen * 1000) : null, when = seen && !isNaN(seen) ? ' (read ' + seen.toLocaleString() + ')' : '';
-      return { text: 'Facebook locked' + when + '. ' + (lock.next || 'Solve it in the open profile window, then press Retry.'), bad: true };
+      return { text: (lock.page === 'login' ? 'Logged out of Facebook' : 'Facebook locked') + (lock.title ? ' ("' + lock.title + '")' : '') + when + '. ' + (lock.next || 'Solve it in the open profile window, then press Retry.'), bad: true };
     }
     if (after && after !== before) return { text: 'Status updated.', bad: false };
     if (row.state === 'failed' && row.error) return { text: 'The status was not read: ' + row.error, bad: true };
