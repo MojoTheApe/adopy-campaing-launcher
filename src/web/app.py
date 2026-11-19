@@ -902,8 +902,12 @@ def _build_account_map_view(
     from src.web import account_state as _astate
 
     seen_accounts: dict[str, dict] = {}
+    # ACL-2653: a profile held by a Facebook lock is shown from its hold (local file, no Meta call).
+    _row_holds = _lock_holds(sorted({r["account"] for mc in countries for r in mc.get("rows") or []
+                                     if r.get("account")}))
     for mc in countries:
         for r in mc.get("rows") or []:
+            r["hold"] = _row_holds.get(r.get("account"))
             r["state"] = _astate.account_state(r)
             seen_accounts.setdefault(r["account"], r["state"])
         mc["rows_aov"] = _astate.sort_rows(mc.get("rows") or [])
@@ -5388,6 +5392,17 @@ async def account_refresh_request(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, **result})
 
 
+def _lock_holds(accounts) -> dict:
+    """ACL-2653: `{account: {reason, next, at, seen, person_lock}}` of the profiles held by a Facebook lock (local file only)."""
+    try:
+        from src.fb_api import account_blocks
+
+        return {a: {k: v.get(k) for k in ("kind", "code", "reason", "next", "at", "seen", "person_lock")}
+                for a, v in account_blocks.view(list(accounts)).items() if v.get("person_lock")}
+    except Exception:  # noqa: BLE001 - an unreadable hold file never breaks the page
+        return {}
+
+
 def _account_holds(accounts) -> dict:
     """ACL-2652: `{account: {kind, reason, next, at}}` of the profiles that wait for a person (local file only)."""
     try:
@@ -5410,7 +5425,8 @@ def account_refresh_state() -> JSONResponse:
     except (OSError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "Saved account refresh state is unavailable. Check the settings backup."}, status_code=503)
     state["rows"] = {a: value for a, value in state["rows"].items() if a in accounts}
-    return JSONResponse({"ok": True, **state, "holds": _account_holds(accounts), "accounts": ci.summaries(accounts),
+    return JSONResponse({"ok": True, **state, "holds": _account_holds(accounts), "locks": _lock_holds(accounts),
+                         "accounts": ci.summaries(accounts),
                          "needs_api": not ci.backend_ready()})
 
 
@@ -6113,6 +6129,15 @@ async def account_map_remove(request: Request) -> JSONResponse:
         # Ordinary map-only removals retain their exact-name matching.
         return name.lower() if also_unlink else name
 
+    # ACL-2653: the machine stop and the profile hold of a removed account are keyed by its map row, so the keys
+    # are taken before the row goes.
+    try:
+        from src.analysis_agent import account_refresh as _refresh
+
+        _removal = _refresh.removal_keys(list(dict.fromkeys(wanted)))
+    except Exception:  # noqa: BLE001 - a key problem never blocks the removal
+        _removal = {}
+
     try:
         if map_path.is_file():
             with open(map_path, encoding="utf-8-sig", newline="") as f:
@@ -6155,6 +6180,15 @@ async def account_map_remove(request: Request) -> JSONResponse:
             _hidden.set_hidden(name, True)
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    if _removal:
+        try:
+            from starlette.concurrency import run_in_threadpool
+
+            await run_in_threadpool(_refresh.forget_accounts, _removal,
+                                    [(r.get("account_name") or "").strip() for r in kept])
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Removed account stop was not dropped", exc_info=True)
 
     # `missing` is reported rather than treated as failure: the rest were
     # removed, and pretending otherwise would invite a confused retry.

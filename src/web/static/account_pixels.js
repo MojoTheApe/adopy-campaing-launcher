@@ -37,7 +37,8 @@
     // При нескольких пикселях «Automatic» не сработает: первая строка просит выбрать.
     select.replaceChildren(new Option(only ? 'Automatic: ' + label(only)
       : pixels.length > 1 ? 'Choose a pixel (' + pixels.length + ' on this account)'
-      : 'Automatic — the only pixel of this account', ''));
+      : state && state.state === 'empty' ? 'No pixel found on this account'
+      : 'Automatic', ''));
     pixels.forEach(function (p) { select.add(new Option(label(p), p.id)); });
     var chosen = pixels.find(function (p) { return p.id === hidden.value; });
     if (hidden.value && !chosen) select.add(new Option('Unavailable pixel (' + hidden.value + ')', hidden.value));

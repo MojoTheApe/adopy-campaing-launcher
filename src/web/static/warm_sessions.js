@@ -276,7 +276,7 @@
         // ACL-2419: после Open идёт одно статус-чтение через очередь; его исход видно в строке аккаунта.
         var reads = Object.keys(job.results || {}).map(function (a) { return job.results[a].status_read; });
         var statusNote = reads.indexOf('queued') >= 0 ? ' Opened. Checking the account status…'
-          : (reads.indexOf('skipped') >= 0 ? ' Opened. The status was not read now; it updates with the next list read.' : '');
+          : (reads.indexOf('skipped') >= 0 ? ' Opened. The status of some accounts could not be queued.' : '');
         say(grid, s.ok + ' of ' + total + ' ready.' + statusNote + (s.bad.length ? ' ' + s.bad.join(' · ') : ''),
             s.bad.length > 0 || s.stopped.length > 0);
         sayStopped(grid, s);
@@ -408,26 +408,50 @@
     btn.disabled = true;
     btn.textContent = 'Opening…';
     homeSay(btn, '', false);
+    var before = homeReadMark(account);
     post('/warm/open', { accounts: [account], confirm_reopen: confirmed === true }).then(function (res) {
       if (res.status >= 400 || !res.body.job_id) {
         homeFinish(btn, res.body.error || 'Could not start opening the profile.', true);
         return;
       }
-      homePoll(btn, account, res.body.job_id);
+      homePoll(btn, account, res.body.job_id, before);
     }).catch(function () { homeFinish(btn, 'Could not reach the dashboard.', true); });
   }
 
-  function homePoll(btn, account, jobId) {
+  // ACL-2653: the time of the last status read as the row shows it (the state cell carries it).
+  function homeReadMark(account) {
+    var mark = '';
+    document.querySelectorAll('.aov-row').forEach(function (tr) {
+      var c = tr.querySelector('td.amap-list[data-account]');
+      if (c && c.getAttribute('data-account') === account) mark = (tr.firstElementChild && tr.firstElementChild.getAttribute('data-read-at')) || '';
+    });
+    return mark;
+  }
+
+  // ACL-2653: "Status updated." only when the read time really moved; otherwise say why nothing was read.
+  function homeStatusNote(before, after, view, account) {
+    var lock = ((view || {}).locks || {})[account], hold = ((view || {}).holds || {})[account], row = ((view || {}).rows || {})[account] || {};
+    if (lock) {
+      var seen = lock.seen ? new Date(lock.seen * 1000) : null, when = seen && !isNaN(seen) ? ' (read ' + seen.toLocaleString() + ')' : '';
+      return { text: 'Facebook locked' + when + '. ' + (lock.next || 'Solve it in the open profile window, then press Retry.'), bad: true };
+    }
+    if (after && after !== before) return { text: 'Status updated.', bad: false };
+    if (row.state === 'failed' && row.error) return { text: 'The status was not read: ' + row.error, bad: true };
+    if (hold) return { text: 'The status was not read: ' + hold.reason, bad: true };
+    return { text: 'The status was not read: no newer read arrived.', bad: true };
+  }
+
+  function homePoll(btn, account, jobId, before) {
     fetch('/warm/job/' + encodeURIComponent(jobId), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (job) {
-        if (job.state === 'running') { setTimeout(function () { homePoll(btn, account, jobId); }, 2000); return; }
+        if (job.state === 'running') { setTimeout(function () { homePoll(btn, account, jobId, before); }, 2000); return; }
         var r = (job.results || {})[account] || {};
         if (r.state === 'ok' || r.ok) {
           var queued = r.status_read === 'queued';
           homeFinish(btn, queued ? 'Opened. Checking the account status…'
-            : 'Opened. The status was not read now; it updates with the next list read.', false);
-          if (queued) homeAwaitStatus(btn, account, 0);
+            : 'Opened. The status was not read: ' + (r.status_reason || 'it could not be queued') + '.', !queued);
+          if (queued) homeAwaitStatus(btn, account, 0, before);
           else homeRepaint(account);
           return;
         }
@@ -447,17 +471,21 @@
   }
 
   // Исход статус-чтения ждём только по локальной очереди (GET своего сервера), не по Meta.
-  function homeAwaitStatus(btn, account, tries) {
+  function homeAwaitStatus(btn, account, tries, before) {
     fetch('/account-refresh/state', { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (v) {
         var waiting = (v.queued || []).some(function (q) { return q.account === account; });
         if ((waiting || v.running) && tries < 45) {
-          setTimeout(function () { homeAwaitStatus(btn, account, tries + 1); }, 2000);
+          setTimeout(function () { homeAwaitStatus(btn, account, tries + 1, before); }, 2000);
           return;
         }
+        var gaveUp = (waiting || v.running);
         homeRepaint(account).then(function (ok) {
-          homeSay(btn, ok ? 'Status updated.' : 'Opened. Reload the page to see the new status.', !ok);
+          if (!ok) { homeSay(btn, 'Opened. Reload the page to see the new status.', true); return; }
+          if (gaveUp) { homeSay(btn, 'Still waiting for the read \u2014 it will update when the read runs.', false); return; }
+          var note = homeStatusNote(before, homeReadMark(account), v, account);
+          homeSay(btn, note.text, note.bad);
         });
       })
       .catch(function () { homeSay(btn, 'Opened. Reload the page to see the new status.', true); });
@@ -610,7 +638,8 @@
     homeOpen(t, t.getAttribute('data-aov-open'), false);
   });
 
-  window.aclWarmHome = { paint: homePaint, refresh: homeRefresh, repaint: homeRepaint, afterTakeOut: homeAfterTakeOut };
+  window.aclWarmHome = { paint: homePaint, refresh: homeRefresh, repaint: homeRepaint, afterTakeOut: homeAfterTakeOut,
+                         statusNote: homeStatusNote };
 
   addStyle();
   document.addEventListener('DOMContentLoaded', function () { refresh(); homeRefresh(); });

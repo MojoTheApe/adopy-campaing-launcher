@@ -1,5 +1,25 @@
 # System history
 
+## ACL-2835 — Pixel field: empty list wording and no caching of empty answers — 2026-11-19
+
+An account with no pixel now shows "No pixel found on this account" instead of "the only pixel", and an empty answer is no longer cached, so the next open or Refresh pixels re-reads it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1835).
+
+## ACL-2834 — Pixel refusal text: drop "(inactive)" — 2026-11-19
+
+When Meta refuses an ad because its pixel is no longer available, the message now says "activate it or check access in Events Manager" instead of claiming the pixel is inactive.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1834).
+
+## ACL-2822 — Faster profile open — 2026-11-19
+
+The proxy check asks only the profile's own slot, the running-profiles lookup stops at the first endpoint that answers, a dead folder-id endpoint is skipped, and every open writes one `profile.open` summary (outcome and per-step seconds) to the event log.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1822).
+
+## ACL-2811 — A stopped publish shows Meta's reason, never "wait" — 2026-11-19
+
+A publish that stops shows the account's Meta reason (for example "authenticate this account") with what to do, also when Meta's signal is stored after the stop; no publish text tells the buyer to wait, and with no reason it says "Publish again".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1811).
+
 ## ACL-2821 — Multilogin refusal names the likely workspace mismatch on the account — 2026-11-19
 
 When Multilogin refuses to open a profile (403), the account row now says the Multilogin app may be signed in to the other workspace (Inhouse vs KLD), or that this sign-in is in use on another computer - it is a hint, not a certainty, and works for both slots. A refused slot gets one recheck, is then not started again within the same publish, read or batch, and one successful start clears it.
