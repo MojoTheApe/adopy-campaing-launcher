@@ -145,18 +145,19 @@ def _mapped(series: pd.Series, fn) -> pd.Series:
     return series.map(cache)
 
 
-def build_cube(df: pd.DataFrame, country: str) -> pd.DataFrame:
-    """Страна в мелком разрезе: сумма Spend/Leads/FTDs на комбинацию измерений."""
+def _cube_frame(df_c: pd.DataFrame, country: pd.Series) -> pd.DataFrame:
+    """Строки стран в мелком разрезе (ещё без суммирования); Country — первая колонка."""
     from src.analysis_agent.morning_report import _display_offer
     from src.analysis_agent.section_filters import interest_bucket_display, interest_bucket_key
 
-    df_c = df[df["Country Final"] == country]
-    if df_c.empty:
-        return pd.DataFrame(columns=_CUBE_KEYS + ["Spend", "Leads", "FTDs"])
-
     ident = _mapped(_text(df_c, "Ad Title"), creative_identity)
-    frame = pd.DataFrame({
-        "Asset": _mapped(_text(df_c, "Offer"), lambda v: _display_offer(v, country)),
+    offer = _text(df_c, "Offer")
+    # Название ассета зависит от пары (страна, оффер): функция — раз на пару.
+    pairs = pd.MultiIndex.from_arrays([country, offer])
+    named = {p: _display_offer(p[1], p[0]) for p in pairs.unique()}
+    return pd.DataFrame({
+        "Country": country,
+        "Asset": pd.Series(pairs.map(named), index=country.index),
         "CM": _text(df_c, "CM"),
         "Account": _text(df_c, "Account Alias"),
         "Adset": _text(df_c, "Adset Name"),
@@ -174,8 +175,30 @@ def build_cube(df: pd.DataFrame, country: str) -> pd.DataFrame:
         "Leads": pd.to_numeric(df_c["# Leads"], errors="coerce").fillna(0.0),
         "FTDs": pd.to_numeric(df_c["# FTDs"], errors="coerce").fillna(0.0),
     })
+
+
+def build_cube_all(df: pd.DataFrame, countries: List[str]) -> pd.DataFrame:
+    """Куб сразу по всем странам: одна группировка вместо одной на страну (ACL-2808).
+
+    Порядок строк внутри страны тот же, что у `build_cube` этой страны: группы идут
+    в порядке первого появления, а страны между собой не перемешиваются в пределах
+    своих строк.
+    """
+    keys = ["Country"] + _CUBE_KEYS
+    df_c = df[df["Country Final"].isin(list(countries))]
+    if df_c.empty:
+        return pd.DataFrame(columns=keys + ["Spend", "Leads", "FTDs"])
+    frame = _cube_frame(df_c, df_c["Country Final"].astype(str))
     frame = frame[frame["Asset"] != ""]
-    return frame.groupby(_CUBE_KEYS, dropna=False, sort=False)[["Spend", "Leads", "FTDs"]].sum().reset_index()
+    return frame.groupby(keys, dropna=False, sort=False)[["Spend", "Leads", "FTDs"]].sum().reset_index()
+
+
+def build_cube(df: pd.DataFrame, country: str) -> pd.DataFrame:
+    """Страна в мелком разрезе: сумма Spend/Leads/FTDs на комбинацию измерений."""
+    cube = build_cube_all(df, [country])
+    if cube.empty:
+        return pd.DataFrame(columns=_CUBE_KEYS + ["Spend", "Leads", "FTDs"])
+    return cube.drop(columns="Country")
 
 
 # ── Вкладки ────────────────────────────────────────────────────────────────
@@ -296,12 +319,153 @@ def _creative_keys(first: pd.Series) -> Dict[str, Any]:
     }
 
 
-def build_slice(cube: pd.DataFrame, country: str, asset: str, my_cm: str) -> Dict[str, Any]:
+#: Вкладки страницы: ключи группировки внутри среза.
+_SETUP_KEYS = ["Device", "Age", "Target", "Pack", "Landing"]
+
+
+def _grouped(cube: pd.DataFrame, prefix: List[str], keys: List[str], mask=None,
+             raw: bool = False) -> Dict[tuple, List[tuple]]:
+    """Те же строки, что `_aggregate`, но сразу для всех срезов: ключи `prefix` — это (страна, ассет).
+
+    Одна группировка по `prefix + keys` вместо отдельной на каждый срез.
+    Возвращает {значения prefix: [(значения keys, строка[, первая сырая строка])]};
+    порядок групп внутри среза — порядок первого появления, как у `_aggregate`.
+    """
+    part = cube if mask is None else cube[mask]
+    if part.empty:
+        return {}
+    every = prefix + keys
+    work = part[every].copy()
+    mine = part["_mine"]
+    work["_s"] = part["Spend"]
+    work["_l"] = part["Leads"]
+    work["_f"] = part["FTDs"]
+    work["_ys"] = part["Spend"].where(mine, 0.0)
+    work["_yl"] = part["Leads"].where(mine, 0.0)
+    work["_yf"] = part["FTDs"].where(mine, 0.0)
+    work["_cm"] = part["_cm"].where(part["_cm"] != "")
+    grouped = work.groupby(every, dropna=False, sort=False)
+    agg = grouped[["_s", "_l", "_f", "_ys", "_yl", "_yf"]].sum()
+    buyers = grouped["_cm"].nunique()
+    firsts = part.groupby(every, dropna=False, sort=False)["Raw"].first() if raw else None
+    n = len(prefix)
+    out: Dict[tuple, List[tuple]] = {}
+    items = zip(agg.index, agg["_s"], agg["_l"], agg["_f"], agg["_ys"], agg["_yl"], agg["_yf"], buyers)
+    for i, (vals, s, l, f, ys, yl, yf, b) in enumerate(items):
+        k = weighted_kpis(s, l, f)
+        k["you"] = {"spend": float(ys), "leads": int(yl), "ftds": int(yf)}
+        k["buyers"] = int(b)
+        entry = (vals[n:], k, firsts.iloc[i]) if raw else (vals[n:], k)
+        out.setdefault(vals[:n], []).append(entry)
+    return out
+
+
+def _setup_creatives(cube: pd.DataFrame, prefix: List[str], winning) -> Dict[tuple, List[tuple]]:
+    """{prefix + комбинация: [(CKey, FTD, первая сырая строка)]} по выигравшим строкам."""
+    part = cube[winning]
+    if part.empty:
+        return {}
+    every = prefix + _SETUP_KEYS + ["CKey"]
+    grouped = part.groupby(every, dropna=False, sort=False)
+    ftds, firsts = grouped["FTDs"].sum(), grouped["Raw"].first()
+    n = len(prefix) + len(_SETUP_KEYS)
+    out: Dict[tuple, List[tuple]] = {}
+    for vals, f, raw in zip(ftds.index, ftds, firsts):
+        out.setdefault(vals[:n], []).append((vals[n], f, raw))
+    return out
+
+
+class _Tables:
+    """Все группировки Workbench, посчитанные по кубу всех стран за один заход."""
+
+    def __init__(self, cube: pd.DataFrame):
+        winning = cube["FTDs"] > 0
+        known = cube["Pack"] != ""
+        self.by_scope: Dict[str, Dict[str, Dict[tuple, List[tuple]]]] = {}
+        # Два набора: по (страна, ассет) и по стране («все ассеты»).
+        for scope, prefix in (("asset", ["Country", "Asset"]), ("all", ["Country"])):
+            self.by_scope[scope] = {
+                "campaigns": _grouped(cube, prefix, ["Account", "Adset"]),
+                "setups": _grouped(cube, prefix, _SETUP_KEYS, winning),
+                # Лучшая версия креатива внутри комбинации: сумма FTD по CKey.
+                "setup_creative": _setup_creatives(cube, prefix, winning),
+                "landings": _grouped(cube, prefix, ["Landing"]),
+                "targets": _grouped(cube, prefix, ["Target"], cube["Target"] != ""),
+                "packs": _grouped(cube, prefix, ["Pack"], known),
+                "versions": _grouped(cube, prefix, ["Pack", "CKey"], known, raw=True),
+                "buyers": _grouped(cube, prefix, ["CM"], cube["CM"].str.strip() != ""),
+            }
+
+
+def _best_creative(options: List[tuple]) -> Optional[Dict[str, Any]]:
+    """Версия с наибольшим числом FTD; при равенстве — как у `sort_values(ascending=False)`."""
+    if not options:
+        return None
+    top = max(o[1] for o in options)
+    tied = [o for o in options if o[1] == top]
+    if len(tied) == 1:
+        raw = tied[0][2]
+    else:
+        # Порядок среди равных задаёт pandas; повторяем его тем же вызовом.
+        best = pd.Series([o[1] for o in options], index=[o[0] for o in options]) \
+            .sort_values(ascending=False)
+        raw = next(o[2] for o in options if o[0] == best.index[0])
+    return _creative_keys({"Raw": raw})
+
+
+def _rows_from_pairs(pairs: List[tuple], make, limit: int) -> List[Dict[str, Any]]:
+    """Ранжирование и обрезка: как `_group`, но по готовым строкам."""
+    order = sorted(range(len(pairs)), key=lambda i: (-pairs[i][1]["ftds"], -pairs[i][1]["spend"]))
+    rows = []
+    for i in order[:limit]:
+        k = dict(pairs[i][1])
+        k["you"] = dict(k["you"])
+        k.update(make(pairs[i][0]))
+        rows.append(k)
+    return rows
+
+
+def _creative_rows_from(tables: Dict[str, Dict[tuple, List[tuple]]], scope_key: tuple,
+                        part: pd.DataFrame, me: str, limit: int) -> List[Dict[str, Any]]:
+    """Пакеты с версиями внутри (как `_creative_rows`), из готовых группировок."""
+    packs: List[Dict[str, Any]] = []
+    for (pack,), row in tables["packs"].get(scope_key, []):
+        row = dict(row)
+        row["you"] = dict(row["you"])
+        row["pack"] = pack
+        packs.append(row)
+    packs = _rank(packs, limit)
+    if packs:
+        by_pack: Dict[Any, List[tuple]] = {}
+        for (pack, ckey), k, raw in tables["versions"].get(scope_key, []):
+            by_pack.setdefault(pack, []).append((ckey, k, raw))
+        for row in packs:
+            items = by_pack.get(row["pack"], [])
+            order = sorted(range(len(items)),
+                           key=lambda i: (-items[i][1]["ftds"], -items[i][1]["spend"]))
+            versions = []
+            for i in order[:50]:
+                _ckey, k, raw = items[i]
+                k = dict(k)
+                k["you"] = dict(k["you"])
+                k.update(_creative_keys({"Raw": raw}))
+                versions.append(k)
+            row["versions"] = versions
+    unresolved = part[part["Pack"] == ""]
+    if not unresolved.empty and unresolved["Spend"].sum() > 0:
+        row = _row({"pack": "", "unresolved": True}, unresolved, me)
+        row["versions"] = []
+        packs.append(row)
+    return packs
+
+
+def _slice(tables: "_Tables", part: pd.DataFrame, country: str, asset: str, my_cm: str) -> Dict[str, Any]:
     """Всё, что показывает страница для (страна, ассет); asset == '' — все ассеты."""
     from config.benchmarks import get_benchmark
 
-    part = cube if not asset else cube[cube["Asset"] == asset]
     me = (my_cm or "").strip().casefold()
+    scope, key = ("asset", (country, asset)) if asset else ("all", (country,))
+    t = tables.by_scope[scope]
     cmp_ = you_vs_others(part, my_cm)
 
     bench = get_benchmark(country, asset or None)
@@ -321,44 +485,32 @@ def build_slice(cube: pd.DataFrame, country: str, asset: str, my_cm: str) -> Dic
         device, age, target, pack, landing = vals
         return {"device": device, "age": age, "target": target, "pack": pack, "landing": landing}
 
-    winning = part[part["FTDs"] > 0]
-    setups = _group(winning, ["Device", "Age", "Target", "Pack", "Landing"], _setup, me, ROWS_PER_TAB)
-    # Лучшая версия креатива внутри комбинации — то, что можно взять в билдер.
+    setups = _rows_from_pairs(t["setups"].get(key, []), _setup, ROWS_PER_TAB)
     for s in setups:
-        sub = winning[(winning["Device"] == s["device"]) & (winning["Age"] == s["age"])
-                      & (winning["Target"] == s["target"]) & (winning["Pack"] == s["pack"])
-                      & (winning["Landing"] == s["landing"])]
-        best = sub.groupby("CKey", sort=False)["FTDs"].sum().sort_values(ascending=False)
-        s["creative"] = _creative_keys(sub[sub["CKey"] == best.index[0]].iloc[0]) if len(best) else None
+        combo = key + (s["device"], s["age"], s["target"], s["pack"], s["landing"])
+        s["creative"] = _best_creative(t["setup_creative"].get(combo, []))
 
     return {
         "asset": asset,
         "totals": weighted_kpis(**_sum(part)),
         "compare": cmp_,
         "reference": reference,
-        "campaigns": _group(part, ["Account", "Adset"],
-                            lambda v: {"account": v[0], "name": v[1]}, me, ROWS_PER_TAB),
+        "campaigns": _rows_from_pairs(t["campaigns"].get(key, []),
+                                      lambda v: {"account": v[0], "name": v[1]}, ROWS_PER_TAB),
         "setups": setups,
-        "landings": _group(part, ["Landing"], lambda v: {"landing": v[0]}, me, ROWS_PER_TAB),
-        "targets": _group(part[part["Target"] != ""], ["Target"],
-                          lambda v: {"target": v[0]}, me, ROWS_PER_TAB),
-        "creatives": _creative_rows(part, me, ROWS_PER_TAB),
-        "buyers": _group(part[part["CM"].str.strip() != ""], ["CM"],
-                         lambda v: {"cm": v[0], "is_you": bool(me) and v[0].strip().casefold() == me},
-                         me, 30),
+        "landings": _rows_from_pairs(t["landings"].get(key, []),
+                                     lambda v: {"landing": v[0]}, ROWS_PER_TAB),
+        "targets": _rows_from_pairs(t["targets"].get(key, []),
+                                    lambda v: {"target": v[0]}, ROWS_PER_TAB),
+        "creatives": _creative_rows_from(t, key, part, me, ROWS_PER_TAB),
+        "buyers": _rows_from_pairs(
+            t["buyers"].get(key, []),
+            lambda v: {"cm": v[0], "is_you": bool(me) and v[0].strip().casefold() == me}, 30),
     }
 
 
-def build_country_workbench(df: pd.DataFrame, country: str, my_cm: str) -> Dict[str, Any]:
-    """Данные Workbench одной страны: ассеты и срез на каждый (плюс «все»)."""
-    cube = build_cube(df, country)
-    if cube.empty:
-        return {}
-    me = (my_cm or "").strip().casefold()
-    # Срезы — подмножества куба: байер считается один раз, а не в каждой группировке.
-    cube["_cm"], cube["_mine"] = _cm_columns(cube, me)
-    by_asset = cube.groupby("Asset", sort=False).agg(
-        Spend=("Spend", "sum"), FTDs=("FTDs", "sum")).reset_index()
+def _country(cube: pd.DataFrame, tables: "_Tables", country: str, my_cm: str, me: str) -> Dict[str, Any]:
+    by_asset = cube.groupby("Asset", sort=False)[["Spend", "FTDs"]].sum().reset_index()
     mine = cube[cube["CM"].str.strip().str.casefold() == me] if me else cube.iloc[0:0]
     my_ftds = mine.groupby("Asset")["FTDs"].sum()
     by_asset = by_asset.sort_values(["FTDs", "Spend"], ascending=[False, False])
@@ -369,13 +521,40 @@ def build_country_workbench(df: pd.DataFrame, country: str, my_cm: str) -> Dict[
     for _, r in shown.iterrows():
         assets.append({"name": r["Asset"], "label": r["Asset"], "ftds": int(r["FTDs"]),
                        "you_ftds": int(my_ftds.get(r["Asset"], 0))})
+    slices = {}
+    for a in assets:
+        part = cube if not a["name"] else cube[cube["Asset"] == a["name"]]
+        slices[a["name"]] = _slice(tables, part, country, a["name"], my_cm)
     return {
         "country": country,
         "my_cm": my_cm or "",
         "assets": assets,
         "assets_total": int(len(by_asset)),
-        "slices": {a["name"]: build_slice(cube, country, a["name"], my_cm) for a in assets},
+        "slices": slices,
     }
+
+
+def build_country_workbenches(df: pd.DataFrame, countries: List[str], my_cm: str) -> Dict[str, Dict[str, Any]]:
+    """Workbench каждой страны за один проход (ACL-2808): {страна: данные}; пустая страна -> {}.
+
+    Куб и все группировки считаются один раз на все страны и ассеты, а не по
+    ~700 мелких группировок на отчёт.
+    """
+    out: Dict[str, Dict[str, Any]] = {c: {} for c in countries}
+    cube_all = build_cube_all(df, countries)
+    if cube_all.empty:
+        return out
+    me = (my_cm or "").strip().casefold()
+    cube_all["_cm"], cube_all["_mine"] = _cm_columns(cube_all, me)
+    tables = _Tables(cube_all)
+    for country, cube in cube_all.groupby("Country", sort=False):
+        out[country] = _country(cube, tables, country, my_cm, me)
+    return out
+
+
+def build_country_workbench(df: pd.DataFrame, country: str, my_cm: str) -> Dict[str, Any]:
+    """Данные Workbench одной страны: ассеты и срез на каждый (плюс «все»)."""
+    return build_country_workbenches(df, [country], my_cm).get(country, {})
 
 
 # ── ACL-1827: Home — «Вы / Другие» по всем странам сразу ───────────────────
