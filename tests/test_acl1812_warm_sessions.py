@@ -217,6 +217,12 @@ def rig(tmp_path):
     return Rig(tmp_path)
 
 
+@pytest.fixture(autouse=True)
+def _three_minute_cooldown(monkeypatch):
+    # ACL-2818: код по умолчанию — 0 с. Этот файл проверяет паузу в 3 минуты, поэтому включает её явно.
+    monkeypatch.setenv(warm.RESTART_COOLDOWN_ENV, "180")
+
+
 # ───────────────────────── одна вкладка на все действия ─────────────────────────
 
 def test_three_actions_reuse_one_tab_without_reload(rig):
