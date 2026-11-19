@@ -39,7 +39,7 @@ class Plain:
 
 
 AUTH_REQUIRED_SHORT = "Meta asks to confirm this account (security check)"
-AUTH_REQUIRED_NEXT = ("Open Ads Manager in this profile and complete the check, then publish again. "
+AUTH_REQUIRED_NEXT = ("Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
                       "Existing ads keep running.")
 #: A campaign that was never begun because its account is waiting for that check.
 AUTH_NOT_STARTED = "Not started: account needs authentication. Nothing was created for it."

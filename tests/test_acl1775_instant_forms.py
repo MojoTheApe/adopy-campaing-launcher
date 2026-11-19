@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -689,6 +690,9 @@ def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(
     assert flags == [{"object": "ad set MX Leads 1", "field": "dynamic_creative",
                       "expected": False, "actual": False, "ok": True, "not_read": False}]
     assert got != want, "creative identity and safety verification must be present"
+    # ACL-2744: the video steps now carry size, time and speed: compare them without that tail.
+    got["steps"] = [re.sub(r"^(.*video (?:uploaded|already in the ad account)) \(.*\)$", r"\1", st)
+                    for st in got["steps"]]
     unchanged = _without_multi_advertiser(_without_instagram(got))
     unchanged["readback_checks"] = [c for c in unchanged["readback_checks"] if c not in flags]
     assert unchanged == want

@@ -2,7 +2,7 @@
 
 Только при `ACL_FB_BACKEND=api`; при `rpa` — чёткий отказ, а состояние отвечает
 `available: false`. Логика — в `src/fb_api/warm.py`; здесь проводка, коды ответов
-и фоновое задание запуска (запуски идут по одному, с паузой 5–10 с).
+и фоновое задание запуска (запуски идут по одному, без паузы между ними — ACL-2668 #14).
 
 Состояние строк (`state`) берётся только из реестра и процессов на машине — ни
 одного вызова к Meta, MLX или CDP, поэтому его безопасно просить при открытии
@@ -367,8 +367,6 @@ def _auto_one(label: str) -> None:
         return
     numbers["duration_s"] = round(time.monotonic() - began, 1)
     _finish(label, code, started=started, **numbers)
-    if started:
-        _sleep(reg._stagger())  # noqa: SLF001 - the same 5-10 s gap as «Open profiles for today»
 
 
 _WARM_CODES = {"memory_low": "memory", "profile_closing": "closing", "busy": "busy", "profile_lease": "busy",
@@ -508,6 +506,16 @@ def request_status_read(label: str) -> str:
     try:
         from src.analysis_agent import account_refresh
 
+        try:
+            from src.analysis_agent import account_spend
+            from src.fb_api import account_blocks
+
+            key_ = account_spend._profile_key(label)  # noqa: SLF001 - ACL-2652
+            # A reopened profile has a fresh tab: a "tab stopped answering" hold (never another kind) ends here.
+            account_blocks.lift_frozen_hold(key_, "open")
+            account_blocks.mark_person_open(key_)
+        except Exception:  # noqa: BLE001
+            log.debug("could not mark the person's open", exc_info=True)
         got = account_refresh.queue().request(label, "open", force=True)
         reason = str(got.get("reason") or "")
         with _SKIP_LOCK:

@@ -46,7 +46,7 @@ _TIMED_META_TTL_S = 3600.0
 
 _ACTION: contextvars.ContextVar[str] = contextvars.ContextVar("acl_problem_action", default="")
 #: True when an entry point named the action itself (not a `only_if_unset` default). The var lives in the
-#: thread that runs the operation: `read_session`/the queued dispatcher run it in the caller's thread.
+#: thread that runs the operation: the queued dispatcher runs each read (and sets this) in that read's own thread.
 _EXPLICIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_problem_action_explicit", default=False)
 #: Actions a person starts on purpose; only these may probe a held profile (and lift the hold).
 BUYER_ACTIONS = ("retry", "read", "open")
@@ -285,7 +285,7 @@ def clear(key: str, by: str = "retry", *, kind: str = "") -> bool:
 
 
 def lift_auth_hold(key: str, by: str = "publish") -> bool:
-    """ACL-2595: a person-started Publish lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
+    """ACL-2595/2652: a person-started Publish, budget/status edit or shut-off lifts the "Meta asks to confirm this account" hold (code 31) and goes on.
 
     Only that kind of hold: every other checkpoint still clears through Retry. If the check is still pending, Meta
     answers 31/3858385 again, the sticky `AuthRequired` stop sets the hold again after at most one refused call.
@@ -294,6 +294,80 @@ def lift_auth_hold(key: str, by: str = "publish") -> bool:
     if not held or held.get("kind") != "checkpoint" or held.get("code") != AUTH_REQUIRED_CODE:
         return False
     return clear(key, by, kind="checkpoint")
+
+
+_PERSON_EDIT: contextvars.ContextVar[bool] = contextvars.ContextVar("acl_person_edit", default=False)
+
+
+@contextlib.contextmanager
+def person_edit() -> Iterator[None]:
+    """ACL-2652: the running action is a person's own write (budget/status edit, shut-off). Only inside it may
+    a session pass a code-31 hold; the file is cleared afterwards, and only once Meta has answered (`settle_person_probe`)."""
+    token = _PERSON_EDIT.set(True)
+    try:
+        yield
+    finally:
+        _PERSON_EDIT.reset(token)
+
+
+#: key -> monotonic time of a person's "Open profile" press whose one status read is still to run.
+_PERSON_OPEN: dict[str, float] = {}
+_PERSON_OPEN_TTL_S = 600.0
+
+
+def mark_person_open(key: str) -> None:
+    """ACL-2652: a person pressed Open profile (single or `open_many`); its one status read may pass a code-31 hold."""
+    if key:
+        with _LOCK:
+            _PERSON_OPEN[key] = time.monotonic()
+
+
+def person_open_pending(key: str) -> bool:
+    with _LOCK:
+        at = _PERSON_OPEN.get(key)
+        if at is not None and time.monotonic() - at > _PERSON_OPEN_TTL_S:
+            _PERSON_OPEN.pop(key, None)
+            at = None
+    return at is not None
+
+
+def consume_person_open(key: str) -> bool:
+    """True once for each pressed Open: the status read that follows it runs as the person's own."""
+    pending = person_open_pending(key)
+    if pending:
+        with _LOCK:
+            _PERSON_OPEN.pop(key, None)
+    return pending
+
+
+def is_auth_hold(key: str) -> bool:
+    held = hold_of(key)
+    return bool(held and held.get("kind") == "checkpoint" and held.get("code") == AUTH_REQUIRED_CODE)
+
+
+def person_auth_probe(key: str) -> bool:
+    """A person-started write meets an auth-required hold: it may make its one attempt."""
+    return _PERSON_EDIT.get() and is_auth_hold(key)
+
+
+def clear_auth_hold(key: str, by: str = "command") -> bool:
+    """Clear the code-31 hold after Meta answered without a stop. Other holds are never cleared here."""
+    return is_auth_hold(key) and clear(key, by, kind="checkpoint")
+
+
+def settle_person_probe(key: str, client: Any, by: str = "command") -> bool:
+    """End of a person's write session: no Graph call, or a stop, keeps (a stop re-notes) the hold; a clean answer ends it."""
+    if not _PERSON_EDIT.get() or client is None or getattr(client, "stopped", None) is not None:
+        return False
+    if not int(getattr(client, "calls", 0) or 0):
+        return False
+    return clear_auth_hold(key, by)
+
+
+def lift_frozen_hold(key: str, by: str = "open") -> bool:
+    """ACL-2652: the owner reopened the profile (Open profile) or its tab answered: a persisted "tab stopped answering"
+    hold ends. Only that kind; a still-frozen tab sets the hold again on the very next read."""
+    return clear(key, by, kind="page_unresponsive")
 
 
 def forget_timed(key: str) -> None:
@@ -325,7 +399,7 @@ def _reason(kind: str, label: str, action: str, code: int | None, same_profile: 
 
 def _next_step(kind: str, code: int | None, *, mins: int = 0, replaceable: bool = False) -> str:
     if kind == "checkpoint" and code == AUTH_REQUIRED_CODE:
-        return ("Open Ads Manager in this profile and complete the check, then publish again. "
+        return ("Open Ads Manager in this profile and complete the check, then press Retry on this profile. "
                 "Existing ads keep running.")
     if kind == "checkpoint":
         return "Solve the checkpoint in the open profile window, then press Retry."
@@ -372,7 +446,9 @@ def refusal(key: str, label: str, verb: str = "", *, timed: tuple[float, str] | 
         reason, step = describe(held["kind"], held.get("label") or label, held.get("action") or _FALLBACK_ACTION,
                                 held.get("code"), same_profile=bool(label and held.get("label") not in ("", label)))
         _event("profile_block_refused", kind=held["kind"], verb=verb, action_of_block=held.get("action"))
-        return f"{reason} {step}{_suffix(verb)}", ACCOUNT_BLOCKED_CODE
+        # ACL-2652: a frozen tab is not a problem of the account; its code stays the tab's own.
+        code_out = "page_unresponsive" if held["kind"] == "page_unresponsive" else ACCOUNT_BLOCKED_CODE
+        return f"{reason} {step}{_suffix(verb)}", code_out
     if timed is not None and timed[0] > 0:
         left, kind = timed
         with _LOCK:

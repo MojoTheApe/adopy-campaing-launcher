@@ -63,15 +63,15 @@ def _country_html(monkeypatch, backend):
 
 
 def test_the_backend_decides_which_campaign_ui_renders(monkeypatch):
-    """rpa (по умолчанию): прежний список из Read spend; api: таблица страны. Обе — никогда для одной страны."""
+    """rpa (явно): прежний список из Read spend; api: таблица страны. Обе — никогда для одной страны."""
     rpa = _country_html(monkeypatch, "rpa")
     assert "amap-campaigns" in rpa and "Read campaigns in" not in rpa and "data-hc-mount" in rpa
     assert '<span class="amap-caret-off">·</span>' in rpa                       # стрелку, как раньше, рисует JS из чтения спенда
     api = _country_html(monkeypatch, "api")
     assert api.count('class="hc hc-scoped amap-campaigns"') == 1 and "Read campaigns in Chile" not in api
     assert '<span class="amap-caret-off">·</span>' in api                        # строка аккаунта одна и та же
-    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)                          # по умолчанию — rpa
-    assert "amap-campaigns" in _country_html(monkeypatch, "")
+    monkeypatch.delenv("ACL_FB_BACKEND", raising=False)                          # ACL-2785: по умолчанию — api
+    assert _country_html(monkeypatch, "") == api
 
 
 def test_the_page_flag_and_the_component_follow_the_backend(monkeypatch):

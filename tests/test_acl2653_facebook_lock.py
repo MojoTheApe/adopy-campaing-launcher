@@ -304,7 +304,7 @@ def test_status_updated_is_only_said_when_the_read_time_moved():
 def test_a_read_stuck_in_updating_ends_as_failed_with_retry_text(env):
     q = _queue(env)
     q._rows["A"] = {"list_at": "2026-11-14 00:13:00", "state": "updating", "error": "", "since": NOW - ar.STUCK_UPDATING_S - 5}
-    q._running = "A"
+    q._reading = ["A"]
     assert ar.STUCK_UPDATING_S == 1200.0
     state = q.state()
     assert state["rows"]["A"]["state"] == "failed" and state["rows"]["A"]["error"] == ar.STUCK_TEXT
@@ -316,7 +316,7 @@ def test_a_recent_or_unstamped_updating_row_is_left_alone_then_stamped(env):
     q = _queue(env)
     q._rows["A"] = {"state": "updating", "error": "", "since": NOW - 30}
     q._rows["B"] = {"state": "updating", "error": ""}                  # saved by an older build
-    q._running = "B"
+    q._reading = ["B"]
     state = q.state()
     assert state["rows"]["A"]["state"] == "updating"
     assert state["rows"]["B"]["state"] == "updating" and state["rows"]["B"]["since"] == NOW

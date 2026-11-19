@@ -754,17 +754,27 @@ class PageTab:
                     probe = ""            # проба не про вход в прокси — не решает
                 else:
                     retried = True
-                    self._sleep(_launch.PROXY_RETRY_S)
-                    try:
-                        self._navigate_once(probe, min(timeout, 30.0))
-                    except CdpTimeout:
-                        probe = ""
-                    except PageError as again:
-                        _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
-                                         "took_s": round(time.monotonic() - began, 1)})
-                        if _launch.is_proxy_auth_error(str(again)):
-                            raise
-                        probe = ""
+                    # ACL-2792: вместо одного сна PROXY_RETRY_S — короткие повторные пробы
+                    # на тот же нейтральный хост в рамках того же общего бюджета.
+                    waited = 0.0
+                    while True:
+                        step = min(_launch.PROXY_PROBE_POLL_S, _launch.PROXY_RETRY_S - waited)
+                        self._sleep(step)
+                        waited += step
+                        try:
+                            self._navigate_once(probe, min(timeout, 30.0))
+                            break
+                        except CdpTimeout:
+                            probe = ""
+                            break
+                        except PageError as again:
+                            if not _launch.is_proxy_auth_error(str(again)):
+                                probe = ""
+                                break
+                            if waited >= _launch.PROXY_RETRY_S:
+                                _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
+                                                 "took_s": round(time.monotonic() - began, 1)})
+                                raise
         if probe:
             _launch._record({"event": "fb_api_proxy_probe", "ok": True, "retried": retried,
                              "took_s": round(time.monotonic() - began, 1)})
