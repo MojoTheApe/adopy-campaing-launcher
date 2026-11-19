@@ -18664,6 +18664,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
   window.cbSyncDestination = function (slot) {
     if (window.cbSyncPlacements) window.cbSyncPlacements(slot);
     if (window.cbSyncPages) window.cbSyncPages(slot);
+    if (window.cbSyncPixels) window.cbSyncPixels(slot);
     var L = window.cbLayout;
     if (!L || !slot || !slot.querySelectorAll) return;
     var secs = Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec'));
@@ -19651,7 +19652,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
     // Пропускаются только те, у которых своя логика: имя собирается само,
     // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
     // скопированы выше вместе со своим видимым текстом.
-    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1, page_id: 1 };
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1, page_id: 1, pixel_id: 1 };
     var prefix = 'camp_' + srcIdx + '_';
     srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
       var field = srcInput.name.slice(prefix.length);
@@ -20140,6 +20141,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
       '<select class="cb-input cb-page-select" aria-label="Facebook Page" onfocus="cbLoadPages(this.closest(\'.cb-slot\'))" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
       '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-page-note role="status"></div>' +
       '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPages(this.closest(\'.cb-slot\'), true)">Refresh pages</button></div>' +
+      /* Пиксель кампании выбирается тут же, как Страница; у кампании только с Instant Form поле скрыто (ACL-1775). */
+      '<span class="cb-label" data-pixel-label>Pixel</span>' +
+      '<div class="cb-page-choice cb-pixel-choice"><input type="hidden" name="camp_' + idx + '_pixel_id" value="">' +
+      '<select class="cb-input cb-pixel-select" aria-label="Pixel" onfocus="cbLoadPixels(this.closest(\'.cb-slot\'))" onchange="cbPixelChanged(this)"><option value="">Automatic — the only pixel of this account</option></select>' +
+      '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-pixel-note role="status"></div>' +
+      '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPixels(this.closest(\'.cb-slot\'), true)">Refresh pixels</button></div>' +
       '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
       '</div>' +
       /* Дублирование кампании живёт в её карточке (ACL-1459). */
@@ -23340,7 +23347,7 @@ function _doCbPublish(form) {
     });
     var sum = summaryOf(c);
     if (sum && sum.pixel_source === 'account default') {
-      out.push({ level: 'warn', rule: 'pixel_source', label: 'No pixel in the account map',
+      out.push({ level: 'warn', rule: 'pixel_source', label: 'Automatic pixel',
         hint: 'the only pixel on the ad account will be used (' + (sum.pixel_id || '—') + ').', detail: '', campaign: c.name });
     }
     if (trackingText) out.push({ level: 'warn', rule: 'tracking_link', label: trackingText, hint: '', detail: '', campaign: c.name });
@@ -27219,6 +27226,7 @@ window.cwWorkbench = (function () {
 </script>
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
 <script src="/static/account_pages.js"></script>
+<script src="/static/account_pixels.js"></script>
 <script src="/static/warm_sessions.js"></script>
 <script src="/static/warm_auto.js"></script>
 <script src="/static/recent_runs.js"></script>

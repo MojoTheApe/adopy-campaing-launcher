@@ -137,9 +137,9 @@
       "applies": "website",
       "field": {
         "level": "campaign",
-        "sel": ""
+        "sel": ".cb-pixel-select"
       },
-      "hint": "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
+      "hint": "website conversions need a pixel: choose it in the Pixel field of this campaign (Automatic works only when the ad account has exactly one)",
       "id": "pixel_ok",
       "label": "Pixel for conversions",
       "severity": "error",
