@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2806 — Budget command changes lifetime budgets — 2026-11-19
+
+The manual budget command now raises or lowers the lifetime budget of a campaign or ad set (preview "X lifetime → Y lifetime", readback checks `lifetime_budget`); a Meta refusal stays on that object's row. Daily budgets and automatic rules are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1806).
+
 ## ACL-2790 — Keep a profile open for the next action without holding a slot — 2026-11-18
 
 After a buyer-started read, command or Check plan on the API path, the profile it opened stays open as a "preemptible" kept window, so a command pressed next on that account does not reopen the profile. Any job that needs a slot or memory (read, command, Check plan, Publish, Open profile) closes such a window at once, least recently used first — nobody waits for it. Post-publish kept windows (ACL-2113) and the RPA path are unchanged.

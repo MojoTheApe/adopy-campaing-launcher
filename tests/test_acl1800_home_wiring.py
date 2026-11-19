@@ -246,7 +246,7 @@ def test_budget_controls_follow_who_owns_the_budget(page_out):
     assert b["owner_adset"]["enabled"] and b["owner_campaign"]["enabled"]
     assert b["campaign_no_budget"] == {"enabled": True, "reason": "", "openKids": True, "label": "View ad set budgets"}
     assert b["under_cbo"] == {"enabled": False, "reason": "Budget is set on the campaign"}
-    assert b["lifetime"]["enabled"] is False and "Lifetime" in b["lifetime"]["reason"]
+    assert b["lifetime"] == {"enabled": True, "reason": ""}   # ACL-2806: lifetime-владелец бюджета редактируется
     assert b["none"]["enabled"] is False and b["unit"]["enabled"] is False
     assert b["ad"] == {"enabled": False, "reason": "Ads have no budget"}
 
