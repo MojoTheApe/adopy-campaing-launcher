@@ -211,7 +211,7 @@ _SNIFFERS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"earlier write has an unknown result|write result is unknown|readback", re.I),
      "graph_write_unconfirmed"),
     (re.compile(r"timed out|timeout", re.I), "graph_read_timeout"),
-    (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy", re.I), "profile_locked"),
+    (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy|can.?t lock profile|cannot lock profile", re.I), "profile_locked"),
     (re.compile(r"could not be opened with automation|profile .*did not start", re.I), "profile_not_started"),
 ]
 #: Own-text exceptions (PlanError, ApiPublishError, ...) carry user data (interest, ad set, Page names), so they are
