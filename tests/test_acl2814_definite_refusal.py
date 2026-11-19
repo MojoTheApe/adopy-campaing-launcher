@@ -87,8 +87,8 @@ def test_pixel_refusal_on_ad_create_stops_with_metas_text_and_no_resend(tmp_path
     assert out.stop_kind == "graph_error" and out.campaign_id
     assert not client.unreconciled
     line = out.failure.text()
-    assert "pixel" in line.lower() and "no longer available" in line
-    assert "activate it in Events Manager or choose a different pixel in the builder, then Publish again" in line
+    assert "pixel" in line.lower() and "no longer available" in line and "(inactive)" not in line
+    assert "activate it or check access in Events Manager, or choose a different pixel in the builder, then Publish again" in line
     assert "did not confirm" not in line and "unknown" not in line.lower()
     assert "campaign" in out.failure.text().lower()  # the "Left in Meta" part is kept
     assert out.failure.left
@@ -128,8 +128,8 @@ def test_1784033_names_the_pixel_when_the_account_read_gave_a_name(tmp_path):
     meta = PixelGoneMeta()
     meta.pixel_rows = [{"id": "222", "name": "doc409"}]
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.failure.line() == ("Meta: pixel doc409 is no longer available to this ad account (inactive) - "
-                                  "activate it in Events Manager or choose a different pixel in the builder, "
+    assert out.failure.line() == ("Meta: pixel doc409 is no longer available to this ad account - "
+                                  "activate it or check access in Events Manager, or choose a different pixel in the builder, "
                                   "then Publish again.")
     assert meta.ad_posts == 1 and meta.ad_readbacks == 0
 
@@ -137,8 +137,8 @@ def test_1784033_names_the_pixel_when_the_account_read_gave_a_name(tmp_path):
 def test_1784033_names_the_pixel_by_id_when_it_has_no_name(tmp_path):
     meta = PixelGoneMeta()      # the fake's pixel 222 has no name
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.failure.line() == ("Meta: pixel 222 is no longer available to this ad account (inactive) - "
-                                  "activate it in Events Manager or choose a different pixel in the builder, "
+    assert out.failure.line() == ("Meta: pixel 222 is no longer available to this ad account - "
+                                  "activate it or check access in Events Manager, or choose a different pixel in the builder, "
                                   "then Publish again.")
 
 

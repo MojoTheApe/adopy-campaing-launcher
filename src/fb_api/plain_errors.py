@@ -265,8 +265,8 @@ def _pixel_gone(sub: Any, ctx: dict, x: Any) -> tuple[str, str]:
     """ACL-2814: 1784033 names the pixel the plan used (name, else id); no pixel known -> the catalog text."""
     pixel = str(ctx.get("pixel") or "").strip()
     if sub == 1784033 and pixel:
-        return (f"Meta: pixel {pixel} is no longer available to this ad account (inactive) -",
-                "activate it in Events Manager or choose a different pixel in the builder, then Publish again.")
+        return (f"Meta: pixel {pixel} is no longer available to this ad account -",
+                "activate it or check access in Events Manager, or choose a different pixel in the builder, then Publish again.")
     return x.message_en, x.action_en
 
 
