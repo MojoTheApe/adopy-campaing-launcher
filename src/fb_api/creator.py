@@ -1388,15 +1388,19 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
         if plan.pixel_id not in facts.pixels:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
-                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.", key="pixel_unavailable")
+                            f"({len(facts.pixels)} found). Choose another pixel in the Pixel field "
+                            "instead of letting another one be picked.", key="pixel_unavailable")
     elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
         return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
     else:
-        raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
-                        "the API backend needs exactly one", key="pixel_unavailable")
+        if facts.pixels:
+            raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets. "
+                            "Choose one in the Pixel field of the campaign, then Check again.", key="pixel_unavailable")
+        raise PlanError("The ad account has no pixel/dataset. Website ad sets need one: create a pixel "
+                        "in Events Manager, then Refresh pixels in the Pixel field.", key="pixel_unavailable")
 
 
 def resolve_page_pixel(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
