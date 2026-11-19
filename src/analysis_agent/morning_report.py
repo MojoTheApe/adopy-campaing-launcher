@@ -1991,8 +1991,13 @@ def build_country_section(
     account_rows: List[Dict[str, Any]],
     my_cm: str,
     trend_days: int = 7,
+    workbench: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build all country sub-sections (rendered as §0–§10 in Markdown)."""
+    """Build all country sub-sections (rendered as §0–§10 in Markdown).
+
+    ``workbench`` — готовый Workbench этой страны (ACL-2808: отчёт считает все
+    страны за один проход). Не передан — страна считается здесь, как раньше.
+    """
     top_combos = build_top_combos(combos, country)
     targeting_all = build_targeting_breakdown(df, country)
     targeting = [r for r in targeting_all if r.get("deposits", 0) > 0]
@@ -2049,12 +2054,13 @@ def build_country_section(
 
     # ACL-1799: Country Workbench. Новый вид не должен ронять отчёт: если срез
     # не собрался, страна остаётся с прежними разделами.
-    try:
-        from src.analysis_agent.country_workbench import build_country_workbench
-        workbench = build_country_workbench(df, country, my_cm)
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger(__name__).warning("country workbench %s: %s", country, exc)
-        workbench = {}
+    if workbench is None:
+        try:
+            from src.analysis_agent.country_workbench import build_country_workbench
+            workbench = build_country_workbench(df, country, my_cm)
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning("country workbench %s: %s", country, exc)
+            workbench = {}
 
     return {
         "country": country,
@@ -2204,6 +2210,15 @@ def build_morning_report(
             matched.append(r)
         return matched
 
+    # ACL-2808: Workbench всех стран — одним проходом, а не по ~700 мелких
+    # группировок. Не собрался — каждая страна пробует сама и остаётся без него.
+    try:
+        from src.analysis_agent.country_workbench import build_country_workbenches
+        workbenches = build_country_workbenches(df, all_countries, my_cm)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("country workbench (all countries): %s", exc)
+        workbenches = {}
+
     country_sections = []
     for country in all_countries:
         acc_for_country = _accounts_for_country(country)
@@ -2212,7 +2227,8 @@ def build_morning_report(
         # заранее строки те же, а повторный отбор по ним дешёвый.
         df_country = df[df["Country Final"] == country]
         section = build_country_section(
-            df_country, combos, country, acc_for_country, my_cm, trend_days
+            df_country, combos, country, acc_for_country, my_cm, trend_days,
+            workbench=workbenches.get(country),
         )
         country_sections.append(section)
 
