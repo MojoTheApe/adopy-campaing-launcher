@@ -66,7 +66,7 @@ AUTOMATIC_BID_TEXT = "Automatic · no manual bid"
 READ_FIELDS = {
     "campaign": "name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_strategy",
     "adset": ("name,account_id,status,effective_status,daily_budget,lifetime_budget,bid_amount,"
-              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,bid_strategy}"),
+              "bid_strategy,campaign_id,campaign{id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy}"),
     "ad": ("name,account_id,status,effective_status,adset_id,campaign_id,"
            "adset{id,name,status,effective_status},campaign{id,name,status,effective_status}"),
 }
@@ -361,6 +361,7 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
                             "status": str(p.get("status") or ""),
                             "effective_status": str(p.get("effective_status") or ""),
                             "daily_budget": _int(p.get("daily_budget")),
+                            "lifetime_budget": _int(p.get("lifetime_budget")),
                             "bid_strategy": str(p.get("bid_strategy") or "")})
     return {"id": oid, "level": level, "name": str(raw.get("name") or oid)[:160],
             "status": str(raw.get("status") or ""),
@@ -372,11 +373,11 @@ def read_object(client: Any, act: str, level: str, oid: str) -> dict:
             "parents": parents}
 
 
-def current_value(command: str, snap: dict) -> Any:
+def current_value(command: str, snap: dict, field: str = "daily_budget") -> Any:
     if command == "set_status":
         return snap["status"]
     if command == "set_budget":
-        return snap["daily_budget"]
+        return snap[field if field in ("daily_budget", "lifetime_budget") else "daily_budget"]
     return snap["bid_amount"]
 
 
@@ -412,18 +413,20 @@ def plan_one(command: str, snap: dict, new: Any, currency: str) -> tuple[dict | 
     if command == "set_budget":
         if level == "ad":
             return None, "Ads have no budget"
-        if snap["lifetime_budget"]:
-            return None, "Lifetime budget is not supported here"
-        before = snap["daily_budget"]
+        # Дневной бюджет приоритетнее; иначе объект владеет lifetime-бюджетом (как в bulk_edit).
+        field = "daily_budget" if snap["daily_budget"] else "lifetime_budget" if snap["lifetime_budget"] else ""
+        before = snap[field] if field else None
         if not before:
             camp = next((p for p in snap["parents"] if p["level"] == "campaign"), None)
-            if level == "adset" and camp and camp["daily_budget"]:
+            if level == "adset" and camp and (camp["daily_budget"] or camp.get("lifetime_budget")):
                 return None, "Budget is set on the campaign"
             return None, "No daily budget on this object"
         if before == new:
             return None, "Already at this budget"
-        entry = {**head, "field": "daily_budget", "before": before, "after": new,
-                 "before_display": fmt_minor(before, currency), "after_display": fmt_minor(new, currency),
+        kind = " lifetime" if field == "lifetime_budget" else ""
+        entry = {**head, "field": field, "before": before, "after": new,
+                 "before_display": fmt_minor(before, currency) + kind,
+                 "after_display": fmt_minor(new, currency) + kind,
                  "constraints": []}
         return entry, ""
     # set_bid
@@ -535,7 +538,7 @@ def preview(store: OperationStore, open_session: OpenSession, *, account: str, a
                                           f"(Graph error {exc.code})"})
                 continue
             saved = (baseline or {}).get(t["level"] + ":" + t["id"], {})
-            for field in ("status", "daily_budget", "bid_amount", "bid_strategy"):
+            for field in ("status", "daily_budget", "lifetime_budget", "bid_amount", "bid_strategy"):
                 known = saved.get(field)
                 if known not in (None, "") and snap.get(field) != known:
                     raise CommandRefused(
@@ -763,7 +766,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         if (entry is None or entry["before"] != item["before"] or entry["after"] != item["after"]
                 or entry["constraints"] != item["constraints"]
                 or entry.get("strategy") != item.get("strategy")):
-            now_value = current_value(command, snap)
+            now_value = current_value(command, snap, item["field"])
             item["note"] = (f"was {item['before_display']}, now "
                             f"{why or _display(command, now_value, currency)}")
             _fail_all(op, f"{LEVEL_WORD[item['level']]} \"{item['name']}\" changed since the "
@@ -799,7 +802,8 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             stop_rest = True
         except GraphError as exc:
             item["result"], item["note"] = "refused", f"Meta refused: {exc}"[:240]
-            stop_rest = True
+            # ACL-2806: отказ Meta по сумме lifetime-бюджета остаётся на строке объекта, остальные идут дальше.
+            stop_rest = item["field"] != "lifetime_budget"
         except (GraphStop, WritesBlocked, ValueError) as exc:
             item["result"], item["note"] = "not_sent", f"Not sent: {exc}"[:240]
             stop_rest = True
@@ -820,7 +824,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
             item["result"] = "unknown"
             item["note"] = f"Could not read it back: {exc}"[:240]
             continue
-        saved = current_value(command, snap)
+        saved = current_value(command, snap, item["field"])
         item["saved"] = saved
         if saved == item["after"]:
             item["result"] = "saved"

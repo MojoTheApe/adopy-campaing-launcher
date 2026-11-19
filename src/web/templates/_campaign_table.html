@@ -1011,11 +1011,14 @@
   function editThenRun(rows, kind, dir) {
     var one = rows.length === 1 ? rows[0] : null, cur = currencyOf(rows);
     var budget = kind === 'budget';
-    var base = one ? (budget ? (one.budget && one.budget.kind === 'daily' ? one.budget.amount : null) : one.bid_amount) : null;
+    var lts = budget ? rows.filter(function (r) { return r.budget && r.budget.kind === 'lifetime'; }).length : 0;
+    var bword = lts === 0 ? 'daily budget' : lts === rows.length ? 'lifetime budget' : 'budget';
+    var Bword = bword.charAt(0).toUpperCase() + bword.slice(1);
+    var base = one ? (budget ? (one.budget && (one.budget.kind === 'daily' || one.budget.kind === 'lifetime') ? one.budget.amount : null) : one.bid_amount) : null;
     var prefill = base == null ? '' : (dir ? ACM.home.stepValue(base, dir, cur) : String(base));
     return ACM.home.editValue({
-      title: budget ? 'Daily budget' : 'Bid', label: budget ? 'New daily budget' : 'New bid', currency: cur || '?',
-      value: prefill, hint: (one ? one.name + ' · ' : rows.length + ' objects · ') + (budget ? 'Daily budget, ' : (one ? one.bid_strategy + ', ' : '')) +
+      title: budget ? Bword : 'Bid', label: budget ? 'New ' + bword : 'New bid', currency: cur || '?',
+      value: prefill, hint: (one ? one.name + ' · ' : rows.length + ' objects · ') + (budget ? Bword + ', ' : (one ? one.bid_strategy + ', ' : '')) +
         (base == null ? 'current value unknown' : 'now ' + base)
     }).then(function (v) {
       if (v == null) return;
