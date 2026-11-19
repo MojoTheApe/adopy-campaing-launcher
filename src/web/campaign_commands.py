@@ -233,5 +233,7 @@ def open_session(account: str, commands: bool):
     # ACL-2272: preview/execute are started by the person, so they may bring up a closed profile.
     # ACL-2790: команда стоит в очереди с момента ожидания замка — профиль после чтения не закрывается.
     with _as.action_queued(account), browser_operation.reading(), profile_lock(_as._profile_key(account)):
-        with user_started_action(), _api._session(account, commands=commands) as sess:
+        # ACL-2791: превью (commands=False) берёт тот же режим графа, что и выполнение, - без повторной передачи токена
+        extra = {} if commands else {"preview": True}
+        with user_started_action(), _api._session(account, commands=commands, **extra) as sess:
             yield sess

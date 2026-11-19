@@ -810,10 +810,9 @@ HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
 
 def hand_message() -> str:
     """Текст отказа «открыто руками» для текущего бэкенда."""
-    import os
+    from src.fb_api import backend as _backend
 
-    return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
-        else HAND_OPEN_MESSAGE
+    return HAND_OPEN_MESSAGE_API if _backend.api_enabled() else HAND_OPEN_MESSAGE
 
 
 def _running_by_hand(direct, udd, profile_id: str) -> bool:
@@ -1286,8 +1285,9 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
     """
     if not opened.started:
         return
-    if api:
+    if api and _api_backend():
         opened.api = True
+    api = opened.api
     kind = keep_open_problem(problem)
     if kind:
         _keep_for_problem(opened, kind, problem)
@@ -1321,6 +1321,19 @@ def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
         timer.start()
         return
     _close_started(opened)
+
+
+def _api_backend() -> bool:
+    """ACL-2785: бэкенд API (по умолчанию) — единственный источник `src.fb_api.backend`.
+
+    При явном `ACL_FB_BACKEND=rpa` окна ACL-2790 не оставляются: путь RPA как раньше.
+    """
+    try:
+        from src.fb_api import backend as _backend
+
+        return bool(_backend.api_enabled())
+    except Exception:
+        return False
 
 
 def _keep_profiles_open() -> bool:

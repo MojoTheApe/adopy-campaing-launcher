@@ -169,6 +169,9 @@ def _live_rig(monkeypatch, tmp_path, accounts):
     from tests.test_acl1760_api_read import ACT, World
 
     World(monkeypatch, tmp_path)
+    from src.fb_api import backend
+
+    monkeypatch.setenv(backend.BACKEND_ENV, "api")   # ACL-2785: the default backend (the stand sets rpa)
     settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=2)
     assert settings.kept_idle_close_s == ps.DEFAULT_KEPT_IDLE_CLOSE_S == 600.0
     rig = SimpleNamespace(open=set(), starts=[], evicted=[], busy=[], settings=settings, api=api, low=False)
@@ -345,3 +348,15 @@ def test_live_window_still_under_its_lock_is_retried_not_parked(monkeypatch, tmp
     threading.Thread(target=lambda: (threading.Event().wait(0.5), free.set()), daemon=True).start()
     assert _in_thread(lambda: _read(rig, "Acc3"), timeout=8) == "ok"
     assert rig.busy and rig.evicted, "tried while busy, closed as soon as the lock was free"
+
+
+def test_explicit_rpa_backend_keeps_the_old_close(world, monkeypatch):
+    """ACL-2785: бэкенд — из `src.fb_api.backend`; явный `rpa` — окна не оставляются."""
+    from src.fb_api import backend
+
+    q, stops = world
+    monkeypatch.setattr(sp, "may_open_closed_profile", lambda: True)
+    monkeypatch.setenv(backend.BACKEND_ENV, "rpa")
+    with sp.action_queued(ACC):
+        sp._finish_started(opened(api=False), api=True)
+    assert stops == [ACC] and q.kept == []

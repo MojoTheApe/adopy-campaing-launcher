@@ -122,7 +122,8 @@ def test_open_new_profile_reaches_the_real_provider_without_a_local_folder(real_
     assert events == [("start", "B", "new-folder", fake_profile("New Demo")), ("detach",)]
 
 
-def test_api_lock_conflict_never_stops_or_restarts_a_profile(real_provider, tmp_path):
+def test_api_lock_conflict_never_stops_or_restarts_a_profile(real_provider, tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_FB_BACKEND", "rpa")  # ACL-2785: текст про «profile» — ручное открытие RPA; у api он другой
     sp, state, events = real_provider
     state.update(folder=tmp_path, locked=True)
     ok, message = sp.open_profile_for_automation(fake_profile("New Demo"), "new-folder", "B", "New Demo")

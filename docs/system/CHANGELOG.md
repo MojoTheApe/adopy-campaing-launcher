@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2791 — One light tab from command preview to execute — 2026-11-18
+
+A command preview now uses the same read-only helper mode as its execute, so confirming reuses the kept light tab and token instead of opening a capture tab or handing the token over again; the pre-write re-read is unchanged and a lost tab is replaced as before.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1791).
+
+## ACL-2785 — Graph API is the default backend — 2026-11-18
+
+A missing or empty `ACL_FB_BACKEND` in the machine `.env` now means the Graph API backend (from inside the profile), so publish, reads, campaign commands, inventory and the builder no longer fall back to RPA after an update or on a fresh machine. Only an explicit `ACL_FB_BACKEND=rpa` selects RPA, kept for manual intervention on an account. All readers share one helper, `src/fb_api/backend.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1785).
+
 ## ACL-2789 — Release the profile before the list refresh after a campaign command — 2026-11-18
 
 A campaign command now frees the account's profile as soon as readback confirms the write: the changed row is updated from the readback at once, and the list refresh runs after the release as one refresh for a run of commands on the same account.

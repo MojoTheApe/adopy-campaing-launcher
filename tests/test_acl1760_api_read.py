@@ -164,7 +164,7 @@ class World:
             tr, sleep=lambda s: None, **kw))
         monkeypatch.setattr(tm, "record", lambda event, path=None: self.journal.append(event))
         monkeypatch.setattr(tm, "report_stop", lambda kind, msg, ctx=None: self.stops.append((kind, msg)) or "")
-        monkeypatch.delenv(api.BACKEND_ENV, raising=False)
+        monkeypatch.setenv(api.BACKEND_ENV, "rpa")  # ACL-2785: стенд проверяет RPA-ветку явно
         api._COOLDOWN.clear()
         sp._PENDING_CLOSE.clear()
         # Мягкая остановка профиля (ACL-1580) — записываем, MLX не трогаем.
@@ -212,8 +212,8 @@ def world(monkeypatch, tmp_path):
 # ───────────────────────── выбор бэкенда ─────────────────────────
 
 def test_backend_selection(monkeypatch):
-    for value, expected in [(None, "rpa"), ("", "rpa"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"),
-                            ("Api", "api"), ("graph", "rpa"), ("1", "rpa")]:
+    for value, expected in [(None, "api"), ("", "api"), ("rpa", "rpa"), ("api", "api"), (" API ", "api"),
+                            ("Api", "api"), ("graph", "api"), ("1", "api")]:  # ACL-2785: по умолчанию api
         if value is None:
             monkeypatch.delenv(api.BACKEND_ENV, raising=False)
         else:
@@ -573,6 +573,7 @@ def test_running_profile_is_attached_without_a_slot_and_never_stopped(world):
 
 
 def test_started_profile_is_softly_stopped_and_its_slot_released(world):
+    world.mp.setenv(api.BACKEND_ENV, "api")   # ACL-2785/2790: the default API backend keeps the window
     world.local = ("none", None)
     world.started_now = True
     r = api.read_via_api(ACCOUNT, D, D)
@@ -695,6 +696,7 @@ def test_a_hand_opened_profile_is_never_stopped(world, monkeypatch):
 
 def test_grace_window_lets_the_split_reuse_the_started_profile(world):
     """Спенд принят, страны в той же вкладке не прочитались: окно держим и отдаём странам."""
+    world.mp.setenv(api.BACKEND_ENV, "api")   # ACL-2785/2790: the default API backend keeps the window
     world.local = ("none", None)
     world.started_now = True
     world.page.routes["/ACT/insights|account|country"] = err(100)
@@ -734,6 +736,7 @@ def test_grace_window_closes_the_profile_when_nobody_takes_it(world):
 
 
 def test_profile_is_not_held_when_the_split_was_read_in_the_same_session(world):
+    world.mp.setenv(api.BACKEND_ENV, "api")   # ACL-2785/2790: the default API backend keeps the window
     world.local = ("none", None)
     world.started_now = True
     api.read_via_api(ACCOUNT, D, D)
@@ -752,6 +755,7 @@ def test_real_slots_a_third_sequential_read_is_granted(monkeypatch, tmp_path):
     from src.web import profile_slots as ps
 
     w = World(monkeypatch, tmp_path)
+    monkeypatch.setenv(api.BACKEND_ENV, "api")   # ACL-2785: the default backend
     settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=2)
     open_profiles: set[str] = set()
     usage = ps.ProfileUsage(lambda profiles: {p: 3000 for p in profiles if p in open_profiles},
