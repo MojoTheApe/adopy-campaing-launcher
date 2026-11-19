@@ -54,7 +54,7 @@ def test_waiting_for_a_closing_profile_does_not_restart_the_cooldown_clock(tmp_p
 
 
 def test_a_profile_that_vanished_without_our_wait_still_gets_the_cooldown(tmp_path, monkeypatch):
-    monkeypatch.delenv("ACL_PROFILE_RESTART_COOLDOWN_S", raising=False)
+    monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "180")     # ACL-2818: the code default is now 0 s
     rig = Rig(tmp_path)
     rig.warm_up()
     rig.checkout().release()
