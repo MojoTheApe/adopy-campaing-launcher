@@ -2842,6 +2842,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 # Страница - на кампании: ключ есть только когда поле пришло в форме.
                 if f"camp_{idx}_page_id" in form:
                     slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
+                # Пиксель кампании (поле Pixel рядом со Страницей): пусто = Automatic, ключа нет.
+                campaign_pixel = str(form.get(f"camp_{idx}_pixel_id") or "").strip()
+                if campaign_pixel:
+                    slot["campaign_pixel_id"] = campaign_pixel
                 if sf["adset_name"]:
                     slot["adset_name"] = sf["adset_name"]
                 if sf["pixel"]:
@@ -6618,6 +6622,21 @@ async def api_account_pages(request: Request) -> JSONResponse:
     # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
     force = str(form.get("force") or "") == "1"
     return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
+
+
+@app.post("/api/account-pixels")
+async def api_account_pixels(request: Request) -> JSONResponse:
+    """Пиксели кабинета для поля Pixel кампании; та же сессия профиля на чтение, без записей в Meta."""
+    from src.web.account_pixels import cached_only, read_pixels
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    if str(form.get("cached") or "") == "1":
+        return JSONResponse(await asyncio.to_thread(cached_only, account))
+    force = str(form.get("force") or "") == "1"
+    return JSONResponse(await asyncio.to_thread(read_pixels, account, force=force))
 
 
 @app.post("/api/page-forms")
