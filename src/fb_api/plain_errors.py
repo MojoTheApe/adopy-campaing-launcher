@@ -259,6 +259,15 @@ def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
     return ""
 
 
+def _pixel_gone(sub: Any, ctx: dict, x: Any) -> tuple[str, str]:
+    """ACL-2814: 1784033 names the pixel the plan used (name, else id); no pixel known -> the catalog text."""
+    pixel = str(ctx.get("pixel") or "").strip()
+    if sub == 1784033 and pixel:
+        return (f"Meta: pixel {pixel} is no longer available to this ad account (inactive) -",
+                "activate it in Events Manager or choose a different pixel in the builder, then Publish again.")
+    return x.message_en, x.action_en
+
+
 def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | None = None) -> Failure:
     """Our exception (or legacy text) -> the buyer-facing `Failure`. Order is fixed, see the spec."""
     ctx = dict(ctx or {})
@@ -306,7 +315,7 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         # The catalog (Meta's own code) wins over any free-text match: error_user_title is Meta/user data.
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+            return Failure("catalog", *_pixel_gone(sub, ctx, x), sep=" ", details=details, stage=stage)
     if not key and raw and "TargetingUnresolved" not in names:
         key = _by_text(raw, ctx, own=own)
     if key in ("tab_unresponsive", "rate_limited") and not ctx.get("minutes"):
@@ -329,7 +338,7 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
     if isinstance(exc, (GraphError, GraphStop)) or isinstance(code, int):
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+            return Failure("catalog", *_pixel_gone(sub, ctx, x), sep=" ", details=details, stage=stage)
         said = _meta_said(exc)
         if said:  # ACL-2814: a definite refusal with Meta's own words: show them
             return Failure("meta_refusal", "Meta: " + said.rstrip("."), "Fix it in the draft, then Publish again.",

@@ -1252,6 +1252,8 @@ class AccountFacts:
     #: Минимальный дневной бюджет кабинета в мелких единицах (`min_daily_budget` Meta); None - не прочитан (ACL-1443).
     min_daily_budget: int | None = None
     page_names: dict[str, str] = field(default_factory=dict)
+    #: ACL-2814: имена пикселей кабинета (уже прочитаны в preflight, без нового запроса) - для текста отказа Meta.
+    pixel_names: dict[str, str] = field(default_factory=dict)
     # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
     page_sources: dict[str, str] = field(default_factory=dict)
     profile_loader: Callable[["AccountFacts"], None] | None = field(default=None, repr=False, compare=False)
@@ -1299,6 +1301,8 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
         offset = None
     facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                          pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                         pixel_names={str(p.get("id")): str(p.get("name") or "").strip() for p in pixels
+                                      if p.get("id") and str(p.get("name") or "").strip()},
                          pages=[], page_names={}, page_sources={},
                          utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip(),
                          min_daily_budget=_minor_or_none(acc.get("min_daily_budget")))
@@ -4871,11 +4875,12 @@ class CampaignCreator:
         if problem:
             raise CreationStopped(problem, kind="review_stale")
 
-    @staticmethod
-    def _failure(plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
+    def _failure(self, plan: CampaignPlan, out: Outcome, exc: BaseException, *, kind: str) -> Any:
         """ACL-2392: the plain-English version of a stop, with what it left in Meta (raw text only in `details`)."""
         stage = getattr(exc, "stage", "") or CampaignCreator._stage_from_outcome(out)
-        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage})
+        pid = str(plan.pixel_id or next((s_.pixel_id for s_ in plan.ad_sets if s_.pixel_id), "") or "")
+        names = getattr(getattr(self, "facts", None), "pixel_names", None) or {}
+        failure = _plain.classify(exc, kind=kind, ctx={"stage": stage, "pixel": names.get(pid) or pid})
         if failure.key == "targeting_merged":
             planned = [str(n) for s_ in plan.ad_sets for g in s_.interest_groups for n in g]
             hits, note = _plain.offending_note(planned, str((failure.details or {}).get("error_user_msg") or ""))

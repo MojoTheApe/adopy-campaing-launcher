@@ -30,12 +30,18 @@ class PixelGoneMeta(FakeMeta):
     """Meta refuses the ad POST the way it did for the owner; counts the ad POSTs and the ad readbacks made after the first POST."""
 
     refuse = True
+    pixel_rows = None   # replace the account's pixel list (the fake gives id 222 without a name)
 
     def __init__(self, reply=None):
         super().__init__()
         self.reply = reply or _pixel_error()
         self.ad_posts = 0
         self.ad_readbacks = 0
+
+    def _get(self, path, params):
+        if self.pixel_rows is not None and path.rstrip("/").endswith("/adspixels"):
+            return {"data": self.pixel_rows}
+        return super()._get(path, params)
 
     def request(self, method, path, params=None):
         if self.ad_posts and method.upper() == "GET" and path.rstrip("/").endswith("/ads"):
@@ -82,7 +88,7 @@ def test_pixel_refusal_on_ad_create_stops_with_metas_text_and_no_resend(tmp_path
     assert not client.unreconciled
     line = out.failure.text()
     assert "pixel" in line.lower() and "no longer available" in line
-    assert "check the pixel in Events Manager (status and access), then Publish again" in line
+    assert "activate it in Events Manager or choose a different pixel in the builder, then Publish again" in line
     assert "did not confirm" not in line and "unknown" not in line.lower()
     assert "campaign" in out.failure.text().lower()  # the "Left in Meta" part is kept
     assert out.failure.left
@@ -112,3 +118,34 @@ def test_a_textless_5xx_on_ad_create_keeps_readback_and_resend(tmp_path):
     meta = PixelGoneMeta(reply)
     out, _ = _run(meta, _draft(tmp_path, ads=1))
     assert meta.ad_posts == 2                      # unknown: readback found nothing, sent once more
+
+
+_NOPIXEL_LINE = ("Meta: the pixel this ad promotes is no longer available to this ad account - "
+                 "check the pixel in Events Manager (status and access), then Publish again")
+
+
+def test_1784033_names_the_pixel_when_the_account_read_gave_a_name(tmp_path):
+    meta = PixelGoneMeta()
+    meta.pixel_rows = [{"id": "222", "name": "doc409"}]
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.failure.line() == ("Meta: pixel doc409 is no longer available to this ad account (inactive) - "
+                                  "activate it in Events Manager or choose a different pixel in the builder, "
+                                  "then Publish again.")
+    assert meta.ad_posts == 1 and meta.ad_readbacks == 0
+
+
+def test_1784033_names_the_pixel_by_id_when_it_has_no_name(tmp_path):
+    meta = PixelGoneMeta()      # the fake's pixel 222 has no name
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.failure.line() == ("Meta: pixel 222 is no longer available to this ad account (inactive) - "
+                                  "activate it in Events Manager or choose a different pixel in the builder, "
+                                  "then Publish again.")
+
+
+def test_1784033_without_any_known_pixel_keeps_the_general_text():
+    from src.fb_api import plain_errors as pe
+    c = _client(_pixel_error())
+    with pytest.raises(g.GraphError) as caught:
+        c.post(f"/{ACT}/ads", {"name": "x"})
+    for ctx in (None, {"pixel": ""}):
+        assert pe.classify(caught.value, kind="graph_error", ctx=ctx).line() == _NOPIXEL_LINE + "."
