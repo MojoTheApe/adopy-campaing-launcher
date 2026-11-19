@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2831 — Ad texts form: no example placeholders — 2026-11-19
+
+Removed grey example placeholders from the Ad title, Language, Headline and Description fields so they are not mistaken for filled values.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1831).
+
 ## ACL-2841 — Facebook lock: login-page hold and Meta's own text — 2026-11-19
 
 A profile tab on the Facebook login or recover page now holds that account (red, "Logged out of Facebook"), and the row shows the tab title Meta wrote, read from the local tab list. [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1841).
