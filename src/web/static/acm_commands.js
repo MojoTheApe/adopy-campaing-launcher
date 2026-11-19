@@ -61,7 +61,7 @@
 
   /* ACL-1826: понятные тексты устойчивых кодов Multilogin (те же, что отдаёт сервер). */
   var FRIENDLY = {
-    mlx_session_lost: 'Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). Sign in again in the Multilogin app here, then press Retry.',
+    mlx_session_lost: 'Multilogin refused to open this KLD profile - the Multilogin app may be signed in to Inhouse (switch it to KLD), or the KLD sign-in is in use on another computer',
     proxy_auth: 'The proxy login for this profile is wrong or expired — update it in Multilogin'
   };
 

@@ -44,17 +44,30 @@ PROXY_AUTH = "proxy_auth"
 #: Предполётная проверка токена слота B не прошла (срок / чужое пространство).
 TOKEN_EXPIRED = "mlx_token_expired"
 TOKEN_WORKSPACE = "mlx_token_workspace"
+#: ACL-2821: приложение Multilogin вошло в пространство другого слота — лаунчер отвечает 403.
+WORKSPACE_MISMATCH = "mlx_workspace_mismatch"
 
+# ACL-2821: отказ 403 лаунчера не говорит, какая из двух причин настоящая, поэтому
+# текст называет обе (слот B = KLD, слот A = Inhouse; имена слотов подставляются).
 SESSION_LOST_MESSAGE = (
-    "Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). "
-    "Sign in again in the Multilogin app here, then press Retry."
+    "Multilogin refused to open this KLD profile - the Multilogin app may be signed in to "
+    "Inhouse (switch it to KLD), or the KLD sign-in is in use on another computer"
 )
 PROXY_AUTH_MESSAGE = "The proxy login for this profile is wrong or expired — update it in Multilogin"
 TOKEN_EXPIRED_MESSAGE = "Multilogin token expired — sign in again"
 TOKEN_WORKSPACE_MESSAGE = ("The Multilogin token for this slot belongs to another workspace. "
                            "Connect Multilogin again and choose the right workspace, then press Retry.")
 
+#: Имена пространств по умолчанию, если в .env их нет (слот A = Inhouse, B = KLD).
+SLOT_NAMES = {"A": "Inhouse", "B": "KLD"}
+WORKSPACE_MISMATCH_TEMPLATE = ("Multilogin refused to open this {want} profile - the Multilogin app may be "
+                               "signed in to {app} (switch it to {want}), or the {want} sign-in is in use "
+                               "on another computer")
+WORKSPACE_MISMATCH_MESSAGE = ("Multilogin refused to open this profile - the Multilogin app may be signed in to "
+                              "the other workspace, or this sign-in is in use on another computer")
+
 MESSAGES = {
+    WORKSPACE_MISMATCH: WORKSPACE_MISMATCH_MESSAGE,
     SESSION_LOST: SESSION_LOST_MESSAGE,
     PROXY_AUTH: PROXY_AUTH_MESSAGE,
     TOKEN_EXPIRED: TOKEN_EXPIRED_MESSAGE,
@@ -62,7 +75,7 @@ MESSAGES = {
 }
 
 #: Коды, после которых остальные старты слота в пачке пропускаются.
-BATCH_STOPS = frozenset({SESSION_LOST, TOKEN_EXPIRED, TOKEN_WORKSPACE})
+BATCH_STOPS = frozenset({SESSION_LOST, TOKEN_EXPIRED, TOKEN_WORKSPACE, WORKSPACE_MISMATCH})
 
 #: ACL-2668: одна общая причина у всех пропущенных стартов слота (полный текст —
 #: только у настоящего отказа), чтобы не было потока одинаковых ошибок.
@@ -74,8 +87,28 @@ BATCH_MAX = 64
 TOKEN_MARGIN_S = 60.0
 
 
-def message_for(code: str) -> str:
+def message_for(code: str, instance: str = "") -> str:
+    if code == WORKSPACE_MISMATCH and instance:
+        return mismatch_message(instance)
     return MESSAGES.get(code or "", "")
+
+
+def _slot_name(slot: str) -> str:
+    slot = (slot or "").strip().upper()
+    try:
+        from src.web import mlx_slots as _slots
+
+        name = _slots.trusted_name(slot) or _slots.workspace_name(slot)
+    except Exception:
+        name = ""
+    return name or SLOT_NAMES.get(slot, slot or "another workspace")
+
+
+def mismatch_message(instance: str) -> str:
+    """ACL-2821: осторожный текст отказа 403 — только для аккаунтов этого слота, без утверждений."""
+    want = (instance or "").strip().upper()
+    other = "B" if want == "A" else "A"
+    return WORKSPACE_MISMATCH_TEMPLATE.format(app=_slot_name(other), want=_slot_name(want))
 
 
 # ───────────────────────── распознавание ─────────────────────────
@@ -95,7 +128,8 @@ def classify(err: Any, instance: str = "") -> str:
     status401 = getattr(err, "status", None) or getattr(err, "status_code", None)
     if status401 == 401 or "start profile failed http 401" in low:
         return TOKEN_EXPIRED
-    if (instance or "").strip().upper() != "B":
+    slot = (instance or "").strip().upper()
+    if slot not in ("A", "B"):
         return ""
     status = getattr(err, "status", None) or getattr(err, "status_code", None)
     error_code = str(getattr(err, "error_code", "") or "").upper()
@@ -103,7 +137,11 @@ def classify(err: Any, instance: str = "") -> str:
                  or "forbidden_request" in low)
     if forbidden and ("restricted permission" in low or "forbidden_request" in low
                       or error_code == "FORBIDDEN_REQUEST"):
-        return SESSION_LOST
+        # ACL-2821: слот A отказ получает, когда приложение вошло в KLD (или вход
+        # занят на другом компьютере). Слот B остаётся ACL-1826 `mlx_session_lost`,
+        # его текст теперь называет обе причины. Состояния «что стартовало раньше»
+        # не используем: из 403 причину не узнать.
+        return WORKSPACE_MISMATCH if slot == "A" else SESSION_LOST
     return ""
 
 
@@ -281,7 +319,9 @@ def refusal(batch_id: str, instance: str, account: str = "") -> dict | None:
         return None
     code = stop["code"]
     record_event(code, instance, account, skipped=True)
-    return {"ok": False, "code": code, "message": SLOT_SKIP_MESSAGE, "skipped": True}
+    # Причина пространства своя у каждого слота и нужна на строке аккаунта целиком.
+    message = mismatch_message(instance) if code == WORKSPACE_MISMATCH else SLOT_SKIP_MESSAGE
+    return {"ok": False, "code": code, "message": message, "skipped": True}
 
 
 # Аккаунт и пачка «в воздухе»: места, где старт глубоко, не знают, чей он, а
@@ -397,4 +437,4 @@ def humanize(err: Any, instance: str = "", account: str = "") -> tuple[str, str]
     if not code:
         return "", ""
     note_failure(code, slot, account)
-    return message_for(code), code
+    return message_for(code, slot), code
