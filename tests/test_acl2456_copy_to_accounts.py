@@ -77,7 +77,7 @@ def test_targets_are_checked_against_the_account_map():
 def test_the_target_pixel_comes_from_its_own_map_row_never_from_the_source():
     rows = {r["label"]: r for r in _describe(["UsdTwo", "Eur"])["targets"]}
     assert rows["UsdTwo"]["pixel"] == "PX200" and "PX200" in " ".join(rows["UsdTwo"]["notes"])
-    assert rows["Eur"]["pixel"] == "" and "No pixel in the account map" in " ".join(rows["Eur"]["notes"])
+    assert rows["Eur"]["pixel"] == "" and "Pixel: Automatic" in " ".join(rows["Eur"]["notes"])
     blob = json.dumps(_describe(["UsdTwo", "Eur"]))
     for source_value in ("SRC_PAGE", "SRC_PIXEL", "src.example"):
         assert source_value not in blob, f"the source {source_value} leaked into the answer for a target"
