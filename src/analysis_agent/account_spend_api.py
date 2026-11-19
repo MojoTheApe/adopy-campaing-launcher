@@ -1,6 +1,6 @@
 """Чтение спенда, состояния кабинета и дерева через Graph API внутри профиля (ACL-1760).
 
-Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+По умолчанию (ACL-2785) работает API; `ACL_FB_BACKEND=rpa` в `.env` машины включает RPA вручную. Тогда
 «Read spend» / «Read all spend» и разбивка по странам идут не кликами по Ads
 Manager, а GET-запросами `fetch()` из своей вкладки профиля (`src/fb_api`,
 ACL-1756). Ответ — ровно тот же `SpendReading` / `CountrySplit`, что отдаёт
@@ -84,9 +84,10 @@ COOLDOWN_S = {"rate_limited": 300.0, "checkpoint": 600.0, "policy_block": 1800.0
 
 
 def backend() -> str:
-    """`api` или `rpa` (по умолчанию). Незнакомое значение — это `rpa`."""
-    value = (os.environ.get(BACKEND_ENV) or "").strip().lower()
-    return "api" if value == "api" else "rpa"
+    """`api` (по умолчанию, ACL-2785) или `rpa` — только при явном `ACL_FB_BACKEND=rpa`."""
+    from src.fb_api import backend as _backend
+
+    return _backend.backend()
 
 
 def api_enabled() -> bool:
@@ -623,7 +624,8 @@ def _warm_registry():
 
 
 @contextmanager
-def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False):
+def _warm_session(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False,
+                  preview: bool = False):
     """ACL-1862 (G1): сессия на тёплой вкладке всегда под замком физического профиля.
 
     Замок реентерантный: чтение/команда/публикация, уже державшие его, не ждут и не берут другой ключ;
@@ -640,6 +642,8 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
         raise ApiReadError(str(exc), code="profile_lease") from exc
     try:
         extra = {"photo": True} if photo else {}        # ACL-2533: only when set, so older call shapes stay valid
+        if preview:
+            extra["preview"] = True
         with _warm_session_held(account, act, key, profile_id, commands, **extra) as sess:
             yield sess
     finally:
@@ -647,7 +651,8 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
 
 
 @contextmanager
-def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False):
+def _warm_session_held(account: str, act: str, key: str, profile_id: str, commands: bool, photo: bool = False,
+                       preview: bool = False):
     """Сессия поверх тёплой вкладки: замок профиля, ворота, проверка живости, клиент.
 
     Вкладку после действия НЕ закрываем и профиль НЕ останавливаем. Охлаждения,
@@ -656,12 +661,16 @@ def _warm_session_held(account: str, act: str, key: str, profile_id: str, comman
     """
     from src.fb_api import warm as _warm
 
-    mode = "photo" if photo else (f"commands:{act}" if commands else "read")
+    # ACL-2791: the preview of a command takes the SAME graph mode as its execute (reads only: the client
+    # below stays without writes), so the kept light tab already holds that graph and execute needs no new
+    # capture tab and no second token hand-over. A lost tab simply gets one lease as before.
+    with_object_edits = bool(commands or preview)
+    mode = "photo" if photo else (f"commands:{act}" if with_object_edits else "read")
 
     def make(tab):
         if photo:
             return _make_graph(tab, photo=True)
-        return _make_graph(tab, commands_act=act) if commands else _make_graph(tab)
+        return _make_graph(tab, commands_act=act) if with_object_edits else _make_graph(tab)
 
     release_frozen_tab_cooldown(key)
     try:
@@ -715,7 +724,7 @@ def _touch_kept_window(account: str) -> None:
 
 
 @contextmanager
-def _session(account: str, *, commands: bool = False, photo: bool = False):
+def _session(account: str, *, commands: bool = False, photo: bool = False, preview: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
     from src.analysis_agent.account_refresh_state import target_activity
 
@@ -725,6 +734,8 @@ def _session(account: str, *, commands: bool = False, photo: bool = False):
         with (target_activity(_as._profile_key(account)),
               _blocks.problem_action("command" if commands else "read", only_if_unset=True)):
             extra = {"photo": True} if photo else {}    # ACL-2533: only when set
+            if preview:
+                extra["preview"] = True                  # ACL-2791: only when set
             with _open_session(account, commands=commands, **extra) as sess:
                 yield sess
     finally:
@@ -732,7 +743,7 @@ def _session(account: str, *, commands: bool = False, photo: bool = False):
 
 
 @contextmanager
-def _open_session(account: str, *, commands: bool = False, photo: bool = False):
+def _open_session(account: str, *, commands: bool = False, photo: bool = False, preview: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
     ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
@@ -781,6 +792,8 @@ def _open_session(account: str, *, commands: bool = False, photo: bool = False):
         raise
     if managed:
         extra = {"photo": True} if photo else {}
+        if preview:
+            extra["preview"] = True
         with _warm_session(account, act, key, profile_id, commands, **extra) as warm_sess:
             yield warm_sess
         return
