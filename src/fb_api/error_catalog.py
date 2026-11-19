@@ -53,8 +53,8 @@ class Explanation:
         return text
 
 
-_WAIT = "Wait a few minutes and try again."
-_SLOW = "Wait, then retry; if it keeps happening, send fewer requests."
+_WAIT = "Publish again."
+_SLOW = "Publish again; if it keeps happening, send fewer requests."
 _FIX_PERM = "Check that this account has the needed permission for the ad account or Page."
 _FIX_FIELD = "Fix the value in the campaign settings and publish again."
 _REJECTED = "Update the ad to meet Meta's policies and create a new ad."
@@ -74,27 +74,27 @@ CATALOG: dict[tuple[int, int | None], Entry] = {
     (190, 467): _e("The access token is invalid or has been revoked.", "Sign in to the account again, then retry.", False, "token", GRAPH_ERR),
     # --- лимиты ---
     (4, None): _e("Meta says the app made too many requests.", _SLOW, True, "rate_limit", GRAPH_ERR),
-    (4, 1504022): _e("Meta says there have been too many calls from this app.", "Wait a bit and try again; send fewer requests.", True, "rate_limit", RATE_REF),
-    (4, 1504039): _e("Meta says there have been too many calls from this app.", "Wait a bit and try again; send fewer requests.", True, "rate_limit", RATE_REF),
+    (4, 1504022): _e("Meta says there have been too many calls from this app.", "Publish again; send fewer requests.", True, "rate_limit", RATE_REF),
+    (4, 1504039): _e("Meta says there have been too many calls from this app.", "Publish again; send fewer requests.", True, "rate_limit", RATE_REF),
     (17, None): _e("Meta says the user request limit was reached.", _SLOW, True, "rate_limit", GRAPH_ERR),
     (17, 2446079): _e("The ad account request limit was reached.", "Space out requests and retry later.", True, "rate_limit", RATE_REF),
     (17, 1885172): _e("An account spending limit can be changed only 10 times per day.", "Space out spending limit changes through the day.", False, "rate_limit", RATE_REF),
-    (613, None): _e("Calls to this API have exceeded the rate limit.", "Wait and retry; if it keeps happening, contact Meta support.", True, "rate_limit", RATE_REF),
-    (613, 1487742): _e("Too many calls from this ad account.", "Wait a bit and try again.", True, "rate_limit", RATE_REF),
-    (613, 5044001): _e("The ad account exceeded the allowed rate of changes.", "Wait and retry; spread changes over time.", True, "rate_limit", RATE_REF),
-    (613, 1487632): _e("An ad set budget can be changed only 4 times per hour.", "Wait before changing the budget again.", True, "rate_limit", RATE_REF),
+    (613, None): _e("Calls to this API have exceeded the rate limit.", "Publish again; if it keeps happening, contact Meta support.", True, "rate_limit", RATE_REF),
+    (613, 1487742): _e("Too many calls from this ad account.", "Publish again.", True, "rate_limit", RATE_REF),
+    (613, 5044001): _e("The ad account exceeded the allowed rate of changes.", "Publish again; spread changes over time.", True, "rate_limit", RATE_REF),
+    (613, 1487632): _e("An ad set budget can be changed only 4 times per hour.", "Change the budget again later; it can change only 4 times per hour.", True, "rate_limit", RATE_REF),
     (613, 1487225): _e("The ad-level request limit was reached.", "Make fewer changes to the ad.", True, "rate_limit", RATE_REF),
     (341, None): _e("Meta says the application limit was reached.", _SLOW, True, "rate_limit", GRAPH_ERR),
     # --- политика ---
-    (368, None): _e("Meta temporarily blocked this action for a policy violation.", "Do not retry now; wait and check the account in Meta Business Support.", False, "policy", GRAPH_ERR),
-    (1404078, None): _e("Meta temporarily blocked this action.", "Wait before trying again.", False, "policy"),
-    (2859015, None): _e("Meta temporarily blocked this action.", "Wait before trying again.", False, "policy"),
+    (368, None): _e("Meta temporarily blocked this action for a policy violation.", "Check the account in Meta Business Support, then Publish again.", False, "policy", GRAPH_ERR),
+    (1404078, None): _e("Meta temporarily blocked this action.", "Check the account in Ads Manager, then Publish again.", False, "policy"),
+    (2859015, None): _e("Meta temporarily blocked this action.", "Check the account in Ads Manager, then Publish again.", False, "policy"),
     (1404163, None): _e("This account is no longer allowed to advertise on Meta.", "Check the account status in Meta Business Support.", False, "account"),
     (2708008, None): _e("The account is not authorized to run ads about social issues.", "Complete Meta's ad authorization for this account.", False, "policy"),
     (2490427, None): _e("Meta rejected this ad in review and it is disabled.", _REJECTED, False, "policy"),
     (2490468, None): _e("Meta rejected this ad in review and it is disabled.", _REJECTED, False, "policy"),
     # --- общие ---
-    (1, None): _e("Meta returned an unknown error (possibly a temporary issue).", "Wait and retry once; if it repeats, check the request.", True, "transient", GRAPH_ERR),
+    (1, None): _e("Meta returned an unknown error (possibly a temporary issue).", "Publish again; if it repeats, check the request.", True, "transient", GRAPH_ERR),
     (1, 99): _e("Meta returned an unknown error (can happen when the level is set to ad set).", "Retry; if it repeats, check the reporting level.", True, "transient"),
     (2, None): _e("Meta had a temporary service problem.", _WAIT, True, "transient", GRAPH_ERR),
     (3, None): _e("The app lacks a capability or permission for this call.", _FIX_PERM, False, "permission", GRAPH_ERR),
@@ -176,7 +176,7 @@ CATALOG: dict[tuple[int, int | None], Entry] = {
 _UNDOC_RATE = _e("Meta is limiting requests (rate limit).", _SLOW, True, "rate_limit", GRAPH_PY, False)
 for _c in sorted(RATE_CODES):
     if _c in (80000, 80003, 80004, 80014):
-        CATALOG[(_c, None)] = _e("Too many calls from this ad account.", "Wait a bit and try again; scale back changes to the ad account.", True, "rate_limit", RATE_REF)
+        CATALOG[(_c, None)] = _e("Too many calls from this ad account.", "Publish again; scale back changes to the ad account.", True, "rate_limit", RATE_REF)
     elif (_c, None) not in CATALOG:
         CATALOG[(_c, None)] = _UNDOC_RATE
 

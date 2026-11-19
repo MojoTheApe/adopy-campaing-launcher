@@ -1441,7 +1441,7 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
     if exc is None:
         return text, None
     try:
-        from src.fb_api import plain_errors
+        from src.fb_api import plain_errors, stop_reason
         from src.fb_api.creator import PlanError
         from src.fb_api.graph import GraphError, GraphStop
 
@@ -1450,6 +1450,10 @@ def _plain_error(job_id: str, msg: str, exc: BaseException | None) -> tuple[str,
             cause = exc
         stage = getattr(exc, "stage", "") or getattr(cause, "stage", "")
         failure = plain_errors.classify(cause, ctx={"stage": stage} if stage else None)
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        # ACL-2811: no Meta reason of its own -> the account's latest known Meta signal (no new read, no waiting).
+        failure = stop_reason.explain(failure, account)
         if text != msg:  # Multilogin session / proxy text is already plain
             return text, failure.details
         return failure.text(), failure.details

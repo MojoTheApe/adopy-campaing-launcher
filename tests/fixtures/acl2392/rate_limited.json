@@ -5,7 +5,7 @@
   "expect": {
     "key": "rate_limited",
     "short": "Meta is limiting requests",
-    "next": "wait about 11 min and republish",
+    "next": "Publish again",
     "severity": "hold",
     "retry": "later"
   },
