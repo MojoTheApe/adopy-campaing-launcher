@@ -30,6 +30,7 @@ from typing import Any, Callable
 
 from src.fb_api import targeting_resolver as _tr_cap
 from src.fb_api import plain_errors as _plain
+from src.fb_api import stop_reason as _stop_reason
 from src.fb_api import operation_journal as _oj
 from src.fb_api import telemetry as _tm
 from src.fb_api.creator import (
@@ -771,7 +772,7 @@ class ApiPublisher:
                 # ACL-2595: the account waits for its security check; no write and no read for this campaign.
                 return result_dict(Outcome(campaign_name=name), not_started=True, error=_plain.AUTH_NOT_STARTED)
             return result_dict(Outcome(campaign_name=name), not_started=True,
-                               error=f"Not started: Graph API stopped earlier ({self.stop.kind}). Nothing was created for it.")
+                               error=_stop_reason.not_started_text(self.account_label, self.stop.kind))
         if self.blocked or (self._client is not None and self._client.unreconciled is not None):
             # Ревью M4: пока прошлая неизвестная запись не сверена, новых нет.
             return result_dict(Outcome(campaign_name=name), not_started=True, error=(
@@ -892,6 +893,9 @@ class ApiPublisher:
                 self.stop = exc
                 _start_cooldown(self.account_label, exc)
             raise
+        if outcome.failure is not None:
+            # ACL-2811: a stop with no Meta reason of its own shows the account's latest known Meta signal.
+            outcome.failure = _stop_reason.explain(outcome.failure, self.account_label)
         # ACL-2392: a deterministic rejection proven by readback ("rejected") does not block the next campaigns.
         if blocks_run(outcome, self._client):
             self.blocked = outcome.campaign_name

@@ -5,7 +5,7 @@
   "expect": {
     "key": "profile_locked",
     "short": "The Multilogin profile is busy or locked",
-    "next": "wait for the other action or close the window, then republish",
+    "next": "close the other window or action that uses it, then Publish again",
     "severity": "hold",
     "retry": "later"
   },
