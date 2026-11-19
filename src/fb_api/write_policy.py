@@ -602,6 +602,11 @@ def _check_website_labelled_feed(spec: dict, media_kind: str, refuse: Any) -> No
         for key, name in label_keys.items():
             if rule[key] != {"name": name}:
                 refuse(f"rule {key} must name {name!r}")
+        if n == 0:
+            # Live 19.11: the main rule is the empty catch-all (default rule), like Ads Manager and the Instant Form.
+            if rule["customization_spec"] != {}:
+                refuse("the main rule must be the empty catch-all")
+            continue
         _check_customization_spec(rule["customization_spec"], refuse)
 
 

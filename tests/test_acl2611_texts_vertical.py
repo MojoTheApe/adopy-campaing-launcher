@@ -141,6 +141,17 @@ def test_instant_form_several_texts_with_a_vertical_file_publish_labelled(tmp_pa
     assert fs["call_to_actions"][0]["value"]["lead_gen_form_id"] == FORM
 
 
+@pytest.mark.parametrize("video", [False, True], ids=["image", "video"])
+def test_website_labelled_main_rule_is_the_empty_catch_all(tmp_path, video):
+    """Live 19.11 (Doc341, I03): Meta refused 3 Arabic texts + a vertical file with 2490266 "Missing Default Rule in
+    Language Asset Feed". The Ads Manager HAR shows the default rule is the one with an empty customization_spec."""
+    meta, out = run_website(website(tmp_path, extra=2, video=video), video)
+    assert out.error == "" and out.readback["ok"], out.error or out.mismatches
+    rules = _creative(meta)["asset_feed_spec"]["asset_customization_rules"]
+    assert rules[0]["customization_spec"] == {}
+    assert "story" in rules[1]["customization_spec"]["facebook_positions"]
+
+
 def test_the_plan_has_no_texts_vertical_refusal(tmp_path):
     for build in (website, instant):
         plan = cr.plan_from_draft(build(tmp_path, extra=2))

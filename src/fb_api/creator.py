@@ -4562,7 +4562,9 @@ class CampaignCreator:
         spec["call_to_action_types"] = [ad.cta]
         spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
         present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
-        main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
+        # Live 19.11: Meta refuses non-Latin (Arabic) texts here with 2490266 "Missing Default Rule in Language Asset
+        # Feed" unless the main rule is the empty catch-all, as Ads Manager sends it (HAR) and the Instant Form already does.
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
         spec["asset_customization_rules"] = [
             {"customization_spec": positions,
              **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
@@ -6245,8 +6247,7 @@ class CampaignCreator:
                       sorted(str(x.get("text")) for x in got if main in names_of(x)))
                 check(aobj, kind + "_vertical_label", [base[0]],
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
-            main_pos, vert_pos = (self.instant_rule_positions(ad.placements) if instant
-                                  else self.rule_positions(ad.placements))
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
             media_key = "videos" if ad.kind == "video" else "images"
             # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),

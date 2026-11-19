@@ -594,6 +594,7 @@ _HELPER_JS = r"""
         const lab = rule[k];
         if (!(isObj(lab) && Object.keys(lab).length === 1 && lab.name === keys[k])) return false;
       }
+      if (n === 0) { if (isObj(rule.customization_spec) && Object.keys(rule.customization_spec).length === 0) continue; return false; }  // main rule: empty catch-all only
       if (!csOk(rule.customization_spec)) return false;
     }
     return true;
