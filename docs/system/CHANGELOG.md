@@ -1,5 +1,15 @@
 # System history
 
+## ACL-2816 — Pixel field in the builder — 2026-11-19
+
+The builder has a Pixel field next to the Facebook Page: the account's pixels are read inside the profile (Refresh pixels), several pixels require a choice, Instant Form-only campaigns need none.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1816).
+
+## ACL-2811 — A stopped publish shows Meta's reason, never "wait" — 2026-11-19
+
+A publish that stops shows the account's Meta reason (for example "authenticate this account") with what to do, also when Meta's signal is stored after the stop; no publish text tells the buyer to wait, and with no reason it says "Publish again".
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1811).
+
 ## ACL-2808 — Date change opens faster — 2026-11-19
 
 The Country Workbench for all countries is now computed in one vectorized pass instead of ~700 small groupings per report, so a period that was never opened builds much faster. Numbers, rows and order on screen are unchanged.
