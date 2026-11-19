@@ -526,8 +526,13 @@ def _build_account_map_view(
     date_from: str = "",
     date_to: str = "",
     span: str = "",
+    compare_only: bool = False,
 ) -> dict:
     """The account map on Home: every country, its accounts, and what they did.
+
+    ``compare_only`` (ACL-2808): карта прошлого периода для PeriodCompare. Сравнение
+    читает только страны, их строки и итоги; источник статистики по каждому
+    аккаунту из списка Available на странице не рисуется, и его не считаем.
 
     Countries come from the links store, not from the workbook, because the two
     answer different questions. The workbook says where money was spent; the
@@ -937,7 +942,7 @@ def _build_account_map_view(
     from src.analysis_agent import bi_compare
 
     activity_sources = {}
-    if activity is not None and df is not None:
+    if activity is not None and df is not None and not compare_only:
         window = bi_compare.period_rows(df, activity.window_from, activity.window_to)
         if "Account Alias" in window:
             activity_sources = {
@@ -2148,7 +2153,7 @@ def _build_compare(
         prev = deepcopy(report_for_period(base_report, df, info["date_from"], info["date_to"]))
         _enrich_country_overview(prev)
         # span="all": чтения с аккаунтов сравнению не нужны, только книжные числа.
-        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all")
+        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all", compare_only=True)
         return period_compare.PeriodCompare(info, prev, prev_amap), ""
     except Exception:
         return None, "Could not calculate the earlier period; showing the selected period only."

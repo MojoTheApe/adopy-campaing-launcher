@@ -94,6 +94,17 @@ def _map_unique(series: pd.Series, fn) -> pd.Series:
     return series.map(cache)
 
 
+def _sum_agg(df: pd.DataFrame, keys, **cols: str) -> pd.DataFrame:
+    """`groupby(keys).agg(Name=(col, "sum"), ...).reset_index()` без разбора именованных агрегатов.
+
+    Именованный `agg` на каждый вызов разбирает аргументы (~4 мс); стран много,
+    вызовов сотни (ACL-2808). Суммы те же, колонки в том же порядке.
+    """
+    out = df.groupby(keys, dropna=False)[list(cols.values())].sum()
+    out.columns = list(cols)
+    return out.reset_index()
+
+
 def _safe_float(v) -> float:
     try:
         f = float(v)
@@ -255,16 +266,7 @@ def build_cm_comparison(df: pd.DataFrame, country: str, my_cm: str) -> List[Dict
     if df_c.empty:
         return []
 
-    grouped = (
-        df_c.groupby("CM", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-            Net=("$ Net", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_c, "CM", Deposits="# FTDs", Leads="# Leads", Spend="$ Spend", Net="$ Net")
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
     grouped["ROI"] = grouped["Net"] / grouped["Spend"].replace(0, pd.NA)
     grouped = grouped.sort_values(by=["Net", "Deposits"], ascending=[False, False])
@@ -302,16 +304,7 @@ def build_asset_summary(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]:
     if df_c.empty or "Offer" not in df_c.columns:
         return []
 
-    grouped = (
-        df_c.groupby("Offer", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-            Net=("$ Net", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_c, "Offer", Deposits="# FTDs", Leads="# Leads", Spend="$ Spend", Net="$ Net")
     grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
     grouped["ROI"] = grouped["Net"] / grouped["Spend"].replace(0, pd.NA)
@@ -347,16 +340,7 @@ def build_variant_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, An
     if df_c.empty or "Variant" not in df_c.columns:
         return []
 
-    grouped = (
-        df_c.groupby("Variant", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-            Net=("$ Net", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_c, "Variant", Deposits="# FTDs", Leads="# Leads", Spend="$ Spend", Net="$ Net")
     grouped["CPL"] = grouped["Spend"] / grouped["Leads"].replace(0, pd.NA)
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
     grouped["CR"] = (grouped["Deposits"] / grouped["Leads"].replace(0, pd.NA)) * 100.0
@@ -390,16 +374,7 @@ def build_asset_variants(df: pd.DataFrame, country: str) -> List[Dict[str, Any]]
     if df_c.empty or "Offer" not in df_c.columns or "Variant" not in df_c.columns:
         return []
 
-    grouped = (
-        df_c.groupby(["Offer", "Variant"], dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-            Net=("$ Net", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_c, ["Offer", "Variant"], Deposits="# FTDs", Leads="# Leads", Spend="$ Spend", Net="$ Net")
 
     rows = []
     for _, r in grouped.iterrows():
@@ -460,15 +435,7 @@ def build_trend(
     combo_cols = ["Offer", "Device", "Interest", "Creative"]
 
     def _agg(sub: pd.DataFrame) -> pd.DataFrame:
-        return (
-            sub.groupby(combo_cols, dropna=False)
-            .agg(
-                Deposits=("# FTDs", "sum"),
-                Leads=("# Leads", "sum"),
-                Spend=("$ Spend", "sum"),
-            )
-            .reset_index()
-        )
+        return _sum_agg(sub, combo_cols, Deposits="# FTDs", Leads="# Leads", Spend="$ Spend")
 
     recent = _agg(df_c[df_c["Date"] >= cutoff])
     overall = _agg(df_c)
@@ -689,15 +656,7 @@ def build_targeting_breakdown(df: pd.DataFrame, country: str) -> List[Dict[str, 
 
     df_c["_interest_bucket"] = _map_unique(df_c["Interest"], interest_bucket_key)
 
-    grouped = (
-        df_c.groupby("_interest_bucket", dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_c, "_interest_bucket", Deposits="# FTDs", Leads="# Leads", Spend="$ Spend")
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
     grouped = grouped.sort_values(["Deposits", "Spend"], ascending=[False, False])
 
@@ -749,15 +708,7 @@ def build_creative_breakdown(
     df_c["_CreativeId"] = _parsed.map(lambda t: t[0])
     df_c["_TextName"] = _parsed.map(lambda t: t[1])
 
-    grouped = (
-        df_c.groupby(["_CreativeId", "_TextName"], dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_c, ["_CreativeId", "_TextName"], Deposits="# FTDs", Leads="# Leads", Spend="$ Spend")
     # Написания заголовка на группу — простым проходом: лямбда в agg строила
     # Series на каждую из тысяч групп года.
     _spellings: Dict[tuple, set] = {}
@@ -780,11 +731,7 @@ def build_creative_breakdown(
     variants_by_group: Dict[tuple, List[Dict[str, Any]]] = {}
     if has_variant_col:
         df_c["_VariantId"] = df_c["VariantId"].fillna("").astype(str).str.strip()
-        vgrouped = (
-            df_c.groupby(["_CreativeId", "_TextName", "_VariantId"], dropna=False)
-            .agg(Deposits=("# FTDs", "sum"), Leads=("# Leads", "sum"), Spend=("$ Spend", "sum"))
-            .reset_index()
-        )
+        vgrouped = _sum_agg(df_c, ["_CreativeId", "_TextName", "_VariantId"], Deposits="# FTDs", Leads="# Leads", Spend="$ Spend")
         for vr in vgrouped.to_dict("records"):
             gkey = (vr["_CreativeId"], vr["_TextName"])
             deposits = _safe_int(vr.get("Deposits"))
@@ -936,15 +883,7 @@ def build_audience_portrait(df: pd.DataFrame, country: str) -> Dict[str, Any]:
     if df_valid.empty:
         return empty
 
-    grouped = (
-        df_valid.groupby(["Interest", "TextSegment"], dropna=False)
-        .agg(
-            Deposits=("# FTDs", "sum"),
-            Leads=("# Leads", "sum"),
-            Spend=("$ Spend", "sum"),
-        )
-        .reset_index()
-    )
+    grouped = _sum_agg(df_valid, ["Interest", "TextSegment"], Deposits="# FTDs", Leads="# Leads", Spend="$ Spend")
     grouped["CPA"] = grouped["Spend"] / grouped["Deposits"].replace(0, pd.NA)
 
     matrix_rows = grouped.sort_values(
