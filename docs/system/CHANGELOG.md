@@ -1,5 +1,10 @@
 # System history
 
+## ACL-2808 — Date change opens faster — 2026-11-19
+
+The Country Workbench for all countries is now computed in one vectorized pass instead of ~700 small groupings per report, so a period that was never opened builds much faster. Numbers, rows and order on screen are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1808).
+
 ## ACL-2806 — Budget command changes lifetime budgets — 2026-11-19
 
 The manual budget command now raises or lowers the lifetime budget of a campaign or ad set (preview "X lifetime → Y lifetime", readback checks `lifetime_budget`); a Meta refusal stays on that object's row. Daily budgets and automatic rules are unchanged.
