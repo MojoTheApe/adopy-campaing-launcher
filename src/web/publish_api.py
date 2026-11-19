@@ -25,6 +25,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -577,7 +578,10 @@ class ApiPublisher:
         try:
             from src.fb_api import stop_log as _stop_log
 
-            with _mlx.scope(account=account_label), _stop_log.cancel_scope(self.cancelled):
+            # ACL-2821: у публикации своя пачка — отказанный слот в её пределах не стартуем снова и снова.
+            if not getattr(self, "_mlx_batch", ""):
+                self._mlx_batch = f"publish-{uuid.uuid4().hex[:12]}"
+            with _mlx.scope(account=account_label, batch=self._mlx_batch), _stop_log.cancel_scope(self.cancelled):
                 earlier = self._opened
                 self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
                                              (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")

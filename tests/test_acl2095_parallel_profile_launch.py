@@ -296,7 +296,8 @@ def test_mlx_listing_a_profile_we_just_stopped_is_not_attached(monkeypatch):
     assert err.value.code == "restart_cooldown"
 
 
-def test_recent_stop_is_only_reported_during_the_cooldown(tmp_path):
+def test_recent_stop_is_only_reported_during_the_cooldown(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACL_PROFILE_RESTART_COOLDOWN_S", "180")     # ACL-2818: the code default is now 0 s
     now = [1000.0]
     log = stop_log.StopLog(tmp_path / "stops.json", wall=lambda: now[0])
     log.record("P1")

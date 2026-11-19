@@ -59,6 +59,8 @@ TABLE: dict[str, Plain] = {
                              "check it in Ads Manager"),
     "profile_locked": Plain("The Multilogin profile is busy or locked",
                             "close the other window or action that uses it, then Publish again", "hold", "later"),
+    # ACL-2820: closed before or during an action is not a lock; the next Open/Retry opens it again.
+    "profile_closed": Plain("The profile was closed", "press Open (or Retry) to open it again", "hold", "later"),
     "profile_not_started": Plain("The Multilogin profile did not start", "open it in Multilogin, then republish",
                                  "blocking", "later"),
     "mlx_token_rejected": Plain("", "", "blocking", "after_fix"),  # text comes from mlx_session
@@ -185,7 +187,7 @@ _CODE_KEYS = {
 _POLICY_CODES = {368}
 #: Codes WE put on ApiPublishError / WarmError / GraphStop.kind (not Meta codes).
 _API_CODE_KEYS = {
-    "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_locked", "profile_locked": "profile_locked",
+    "page_unresponsive": "tab_unresponsive", "profile_closed": "profile_closed", "profile_locked": "profile_locked",
     "gate_wait": "account_hold", "below_reserve": "memory_hold", "memory_low": "memory_hold",
     "limit": "account_hold", "cdp": "profile_not_started", "launch": "profile_not_started",
     "cdp_timeout": "graph_read_timeout",
@@ -210,7 +212,7 @@ _SNIFFERS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"earlier write has an unknown result|write result is unknown|readback", re.I),
      "graph_write_unconfirmed"),
     (re.compile(r"timed out|timeout", re.I), "graph_read_timeout"),
-    (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy", re.I), "profile_locked"),
+    (re.compile(r"profile .*(locked|already used)|Multilogin profile .*busy|can.?t lock profile|cannot lock profile", re.I), "profile_locked"),
     (re.compile(r"could not be opened with automation|profile .*did not start", re.I), "profile_not_started"),
 ]
 #: Own-text exceptions (PlanError, ApiPublishError, ...) carry user data (interest, ad set, Page names), so they are
@@ -236,6 +238,14 @@ _OWN_TEXT = ("PlanError", "ApiPublishError", "CreationStopped", "ProfileLeaseErr
 _QUOTED = re.compile(r"'([^']{1,60})'")
 
 
+def _meta_said(exc: BaseException | None) -> str:
+    """ACL-2814: Meta's own title/message of a non-transient refusal (scrubbed); empty if it gave none."""
+    det = getattr(exc, "details", None)
+    if not isinstance(det, dict) or str(det.get("is_transient", "")).lower() != "false":
+        return ""
+    return _tm.scrub(str(det.get("error_user_title") or det.get("error_user_msg") or "")).strip()
+
+
 def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
     """Last-resort free-text match. `own`: our message with user data inside: quoted parts removed, phrases only."""
     if own:
@@ -248,6 +258,15 @@ def _by_text(text: str, ctx: dict, *, own: bool = False) -> str:
         if pat.search(text):
             return key
     return ""
+
+
+def _pixel_gone(sub: Any, ctx: dict, x: Any) -> tuple[str, str]:
+    """ACL-2814: 1784033 names the pixel the plan used (name, else id); no pixel known -> the catalog text."""
+    pixel = str(ctx.get("pixel") or "").strip()
+    if sub == 1784033 and pixel:
+        return (f"Meta: pixel {pixel} is no longer available to this ad account (inactive) -",
+                "activate it in Events Manager or choose a different pixel in the builder, then Publish again.")
+    return x.message_en, x.action_en
 
 
 def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | None = None) -> Failure:
@@ -297,7 +316,7 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
         # The catalog (Meta's own code) wins over any free-text match: error_user_title is Meta/user data.
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+            return Failure("catalog", *_pixel_gone(sub, ctx, x), sep=" ", details=details, stage=stage)
     if not key and raw and "TargetingUnresolved" not in names:
         key = _by_text(raw, ctx, own=own)
     if key in ("tab_unresponsive", "rate_limited") and not ctx.get("minutes"):
@@ -320,7 +339,11 @@ def classify(exc: BaseException | str | None, *, kind: str = "", ctx: dict | Non
     if isinstance(exc, (GraphError, GraphStop)) or isinstance(code, int):
         x = _catalog.explain(code if isinstance(code, int) else None, sub, raw)
         if x.known:
-            return Failure("catalog", x.message_en, x.action_en, sep=" ", details=details, stage=stage)
+            return Failure("catalog", *_pixel_gone(sub, ctx, x), sep=" ", details=details, stage=stage)
+        said = _meta_said(exc)
+        if said:  # ACL-2814: a definite refusal with Meta's own words: show them
+            return Failure("meta_refusal", "Meta: " + said.rstrip("."), "Fix it in the draft, then Publish again.",
+                           details=details, stage=stage)
         return _make("unknown", ctx, details=details)
     if exc is not None and raw and own:
         return Failure("plan_text", _tm.scrub(raw).strip().rstrip("."), details=details, stage=stage)

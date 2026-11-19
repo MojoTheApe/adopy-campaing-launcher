@@ -1,5 +1,30 @@
 # System history
 
+## ACL-2821 — Multilogin refusal names the likely workspace mismatch on the account — 2026-11-19
+
+When Multilogin refuses to open a profile (403), the account row now says the Multilogin app may be signed in to the other workspace (Inhouse vs KLD), or that this sign-in is in use on another computer - it is a hint, not a certainty, and works for both slots. A refused slot gets one recheck, is then not started again within the same publish, read or batch, and one successful start clears it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1821).
+
+## ACL-2820 — Closed profile says "closed", not "busy or locked" — 2026-11-19
+
+A profile closed before or during an action now shows "The profile was closed - press Open (or Retry) to open it again" on that account's row. Real Multilogin locks keep their own text.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1820).
+
+## ACL-2819 — Can't-lock-profile after a stop is released and opened — 2026-11-19
+
+On "can't lock profile" the API open now asks local Multilogin for the profile status: stopped means release the stale lock and start once; running or syncing means wait for stopped, then start. Local calls only, never Meta.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1819).
+
+## ACL-2818 — Profile restart cooldown defaults to 0 — 2026-11-19
+
+The pause after a profile stop (`ACL_PROFILE_RESTART_COOLDOWN_S`) now defaults to 0 s, per the owner's 23.10 decision, so a closed profile reopens at once without the sync-wait or "can be started again" text. The env variable still overrides it.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1818).
+
+## ACL-2814 — Meta's definite refusal is shown, not "did not confirm" — 2026-11-19
+
+A non-transient Graph refusal with Meta's own text (e.g. 100/1784033 "pixel is no longer available", even with HTTP 500) now stops that campaign with Meta's reason and the action, with no readback and no second send.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1814).
+
 ## ACL-2816 — Pixel field in the builder — 2026-11-19
 
 The builder has a Pixel field next to the Facebook Page: the account's pixels are read inside the profile (Refresh pixels), several pixels require a choice, Instant Form-only campaigns need none.

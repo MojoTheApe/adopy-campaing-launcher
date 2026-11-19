@@ -9,5 +9,5 @@
     "severity": "hold",
     "retry": "later"
   },
-  "code": "profile_closed"
+  "code": "profile_locked"
 }
