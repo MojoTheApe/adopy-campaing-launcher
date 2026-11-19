@@ -10,7 +10,7 @@ from src.fb_api import plain_errors as pe
 from tests.test_acl1761_api_create import FakeMeta, _draft, _publisher
 
 WANT = ("Meta asks to confirm this account (security check). Open Ads Manager in this profile and complete "
-        "the check, then publish again. Existing ads keep running.")
+        "the check, then press Retry on this profile. Existing ads keep running.")
 
 
 class AuthMeta(FakeMeta):

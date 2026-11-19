@@ -190,13 +190,18 @@ def test_publish_open_on_a_frozen_profile_replaces_the_tab_once_then_keeps_the_p
     hang["on"] = True
     rig.reg._drop_tab(rig.reg.session(PID))      # the old tab is gone; every new one hangs
     _freeze(key)
+    tabs_before_first = len(rig.tabs)
     with pytest.raises(publish_api.ApiPublishError):
         publish_api.ApiPublisher(dry_run=True).open("Acc")
     tabs_after_first = len(rig.tabs)
+    per_press = tabs_after_first - tabs_before_first      # tabs one press opens (the one replacement)
+    assert per_press > 0
     assert account_blocks.is_held(key)
     with pytest.raises(publish_api.ApiPublishError) as ei:
         publish_api.ApiPublisher(dry_run=True).open("Acc")
-    assert ei.value.code == "account_blocked" and len(rig.tabs) == tabs_after_first, "no new tab while paused"
+    # ACL-2652: a person's Check plan / Publish tries one fresh tab on a frozen-tab hold; a tab that is still
+    # frozen leaves the hold in place and the code is the tab's own, not account_blocked.
+    assert ei.value.code == "page_unresponsive" and account_blocks.is_held(key) and len(rig.tabs) - tabs_after_first == per_press, "the held press opens exactly as many tabs as one replacement"
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
 
 
@@ -215,7 +220,7 @@ def test_a_frozen_pause_stands_when_the_profile_is_not_on_the_warm_path(monkeypa
     _freeze("k-" + PID)
     with pytest.raises(publish_api.ApiPublishError) as ei:
         publish_api.ApiPublisher(dry_run=True).open("Acc")
-    assert ei.value.code == "account_blocked" and not rig.started
+    assert ei.value.code == "page_unresponsive" and not rig.started   # ACL-2652: the tab's own code
     api._COOLDOWN.clear(); api._FROZEN_RELEASED.clear()
 
 
