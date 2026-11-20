@@ -488,7 +488,7 @@ _HELPER_JS = r"""
     const AF = WRITE.asset_feed;
     if (!isObj(spec)) return false;
     const allowed = ['bodies', 'titles', 'descriptions', 'images', 'videos', 'link_urls',
-                     'call_to_action_types', 'ad_formats', 'asset_customization_rules'];
+                     'call_to_action_types', 'ad_formats', 'asset_customization_rules', AF.instant.optimization_key];
     if (!onAd) for (const k of Object.keys(spec)) if (allowed.indexOf(k) < 0) return false;
     const story = creative.object_story_spec;
     if (!(isObj(story) && Object.keys(story).every(k => ['page_id', IGK()].includes(k))
@@ -503,6 +503,7 @@ _HELPER_JS = r"""
     // ACL-2611: Website, тексты с метками правил + два файла (зеркало write_policy._check_website_labelled_feed).
     if (media.length > 1 && ['bodies', 'titles', 'descriptions'].some((k) => Array.isArray(spec[k])
       && spec[k].some((x) => isObj(x) && 'adlabels' in x))) return websiteLabelledOk(spec, kind);
+    if (AF.instant.optimization_key in spec) return false;  // ACL-2845: only the labelled Website feed sends it
     const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
     // ACL-2474: основной текст можно не давать (зеркало write_policy); заголовок обязателен.
     if (('bodies' in spec && !textListOk(spec.bodies, 'bodies', true, cap)) || !textListOk(spec.titles, 'titles', true, cap)) return false;
@@ -581,6 +582,7 @@ _HELPER_JS = r"""
     if (!(Array.isArray(ctas) && ctas.length === 1 && WRITE.cta_website.indexOf(ctas[0]) >= 0)) return false;
     const want = mediaKind === 'images' ? 'SINGLE_IMAGE' : 'SINGLE_VIDEO';
     if (!(Array.isArray(spec.ad_formats) && spec.ad_formats.length === 1 && spec.ad_formats[0] === want)) return false;
+    if (spec[I.optimization_key] !== I.optimization) return false;  // ACL-2845
     const rules = spec.asset_customization_rules;
     if (!(Array.isArray(rules) && rules.length === 2)) return false;
     for (let n = 0; n < 2; n++) {
@@ -594,6 +596,7 @@ _HELPER_JS = r"""
         const lab = rule[k];
         if (!(isObj(lab) && Object.keys(lab).length === 1 && lab.name === keys[k])) return false;
       }
+      if (n === 0) { if (isObj(rule.customization_spec) && Object.keys(rule.customization_spec).length === 0) continue; return false; }  // main rule: empty catch-all only
       if (!csOk(rule.customization_spec)) return false;
     }
     return true;

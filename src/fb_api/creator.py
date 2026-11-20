@@ -4555,14 +4555,18 @@ class CampaignCreator:
         первый текст каждого вида - ещё и вертикальная; ссылка несёт обе метки. Площадки правил - как у Website с
         двумя файлами (`rule_positions`). Набор не Dynamic Creative.
         """
-        spec: dict[str, Any] = {}
+        # Live 20.11 (KLD_BFL_I03): without `optimization_type: PLACEMENT` Meta takes Arabic texts for a language
+        # asset feed and refuses with 2490266 "Missing Default Rule"; Ads Manager (HAR) and the Instant Form send it.
+        spec: dict[str, Any] = {"optimization_type": _wpol.INSTANT_OPTIMIZATION}
         media_key = CampaignCreator._labelled_texts_and_files(ad, media, spec)
         main_l, vert_l = _wpol.instant_labels("link_urls")
         spec["link_urls"] = [{"website_url": plan.link, "adlabels": [{"name": main_l}, {"name": vert_l}]}]
         spec["call_to_action_types"] = [ad.cta]
         spec["ad_formats"] = ["SINGLE_VIDEO" if ad.kind == "video" else "SINGLE_IMAGE"]
         present = [k for k in ("bodies", "titles", "descriptions") if k in spec] + ["link_urls", media_key]
-        main_pos, vert_pos = CampaignCreator.rule_positions(ad.placements)
+        # Live 19.11: Meta refuses non-Latin (Arabic) texts here with 2490266 "Missing Default Rule in Language Asset
+        # Feed" unless the main rule is the empty catch-all, as Ads Manager sends it (HAR) and the Instant Form already does.
+        main_pos, vert_pos = CampaignCreator.instant_rule_positions(ad.placements)
         spec["asset_customization_rules"] = [
             {"customization_spec": positions,
              **{_wpol.INSTANT_ASSET_KINDS[k][1]: {"name": _wpol.instant_labels(k)[n]} for k in present}}
@@ -6234,8 +6238,7 @@ class CampaignCreator:
 
         if labelled:
             # ACL-2584: mode, label sharing and rule -> label mapping of the Ads Manager shape.
-            if instant:
-                check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
+            check(aobj, "optimization_type", _wpol.INSTANT_OPTIMIZATION, fs.get("optimization_type") or "")
             for kind, base in (("bodies", ad.bodies), ("titles", ad.titles), ("descriptions", ad.descriptions)):
                 if not nonblank(list(base)):
                     continue  # ACL-2584: an empty title (sent on purpose) is compared by `headlines` only
@@ -6245,8 +6248,7 @@ class CampaignCreator:
                       sorted(str(x.get("text")) for x in got if main in names_of(x)))
                 check(aobj, kind + "_vertical_label", [base[0]],
                       [str(x.get("text")) for x in got if vertical in names_of(x)])
-            main_pos, vert_pos = (self.instant_rule_positions(ad.placements) if instant
-                                  else self.rule_positions(ad.placements))
+            main_pos, vert_pos = self.instant_rule_positions(ad.placements)
             media_key = "videos" if ad.kind == "video" else "images"
             # The empty title is sent with its label in both rules, so the rules always name it.
             present = [k for k, base in (("bodies", ad.bodies), ("titles", ad.titles),
