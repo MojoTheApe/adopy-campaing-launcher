@@ -6659,7 +6659,7 @@ async def api_account_pages(request: Request) -> JSONResponse:
 
 
 @app.post("/api/account-pixels")
-async def api_account_pixels(request: Request) -> JSONResponse:
+async def api_account_pixels(request: Request) -> Response:
     """Пиксели кабинета для поля Pixel кампании; та же сессия профиля на чтение, без записей в Meta."""
     from src.web.account_pixels import cached_only, read_pixels
 
@@ -6670,6 +6670,16 @@ async def api_account_pixels(request: Request) -> JSONResponse:
     if str(form.get("cached") or "") == "1":
         return JSONResponse(await asyncio.to_thread(cached_only, account))
     force = str(form.get("force") or "") == "1"
+    if str(form.get("stream") or "") == "1":
+        # ACL-2850: строки ожидания («Waiting for a free profile slot», «Opening ...») едут строками JSON
+        # по ходу чтения, а не опросом: поле Pixel не молчит, пока профиль не открыт.
+        from src.web.account_pixels import stream_pixels
+
+        def lines():
+            import json as _json
+            for item in stream_pixels(account, force=force):
+                yield _json.dumps(item, ensure_ascii=False) + "\n"
+        return StreamingResponse(lines(), media_type="application/x-ndjson")
     return JSONResponse(await asyncio.to_thread(read_pixels, account, force=force))
 
 
